@@ -5,7 +5,6 @@ import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 
 export class ProjectChainRunner extends CopilotPlusChainRunner {
   protected async getSystemPrompt(): Promise<string> {
-    // NOTE: Currently memory is not enabled for project mode, so we don't need to use getSystemPromptWithMemory
     let finalPrompt = getSystemPrompt();
     const projectConfig = getCurrentProject();
     if (!projectConfig) {

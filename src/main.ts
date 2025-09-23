@@ -19,7 +19,6 @@ import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { logFileManager } from "@/logFileManager";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -58,7 +57,6 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
-  userMemoryManager: UserMemoryManager;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -96,9 +94,6 @@ export default class CopilotPlugin extends Plugin {
     const chainManager = this.projectManager.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
     this.chatUIState = new ChatUIState(chatManager);
-
-    // Initialize UserMemoryManager
-    this.userMemoryManager = new UserMemoryManager(this.app);
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
@@ -386,18 +381,6 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async handleNewChat() {
-    // Analyze chat messages for memory if enabled
-    if (getSettings().enableRecentConversations) {
-      try {
-        // Get the current chat model from the chain manager
-        const chainManager = this.projectManager.getCurrentChainManager();
-        const chatModel = chainManager.chatModelManager.getChatModel();
-        this.userMemoryManager.addRecentConversation(this.chatUIState.getMessages(), chatModel);
-      } catch (error) {
-        logInfo("Failed to analyze chat messages for memory:", error);
-      }
-    }
-
     // First autosave the current chat if the setting is enabled
     await this.autosaveCurrentChat();
 

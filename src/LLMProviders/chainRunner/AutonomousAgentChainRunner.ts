@@ -1,8 +1,7 @@
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
+import { getSettings, getSystemPrompt } from "@/settings/model";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -79,12 +78,11 @@ ${params}
       .join("\n\n");
   }
 
-  public static async generateSystemPrompt(
+  public static generateSystemPrompt(
     availableTools: SimpleTool<any, any>[],
-    adapter: ModelAdapter,
-    userMemoryManager?: UserMemoryManager
-  ): Promise<string> {
-    const basePrompt = await getSystemPromptWithMemory(userMemoryManager);
+    adapter: ModelAdapter
+  ): string {
+    const basePrompt = getSystemPrompt();
     const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
 
     const toolNames = availableTools.map((tool) => tool.name);
@@ -98,18 +96,14 @@ ${params}
     return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
   }
 
-  private async generateSystemPrompt(): Promise<string> {
+  private generateSystemPrompt(): string {
     const availableTools = this.getAvailableTools();
 
     // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
-    return AutonomousAgentChainRunner.generateSystemPrompt(
-      availableTools,
-      adapter,
-      this.chainManager.userMemoryManager
-    );
+    return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter);
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {
@@ -150,7 +144,7 @@ ${params}
       const rawHistory = memoryVariables.history || [];
 
       // Build initial conversation messages
-      const customSystemPrompt = await this.generateSystemPrompt();
+      const customSystemPrompt = this.generateSystemPrompt();
 
       const chatModel = this.chainManager.chatModelManager.getChatModel();
       const adapter = ModelAdapterFactory.createAdapter(chatModel);

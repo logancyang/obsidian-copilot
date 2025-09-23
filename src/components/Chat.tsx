@@ -10,7 +10,7 @@ import {
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
-import { logInfo, logError } from "@/logger";
+import { logInfo } from "@/logger";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -255,7 +255,7 @@ const Chat: React.FC<ChatProps> = ({
         handleSaveAsNote();
       }
     } catch (error) {
-      logError("Error sending message:", error);
+      console.error("Error sending message:", error);
       new Notice("Failed to send message. Please try again.");
     } finally {
       safeSet.setLoading(false);
@@ -265,7 +265,7 @@ const Chat: React.FC<ChatProps> = ({
 
   const handleSaveAsNote = useCallback(async () => {
     if (!app) {
-      logError("App instance is not available.");
+      console.error("App instance is not available.");
       return;
     }
 
@@ -273,7 +273,7 @@ const Chat: React.FC<ChatProps> = ({
       // Use the new ChatManager persistence functionality
       await chatUIState.saveChat(currentModelKey);
     } catch (error) {
-      logError("Error saving chat as note:", err2String(error));
+      console.error("Error saving chat as note:", err2String(error));
       new Notice("Failed to save chat as note. Check console for details.");
     }
   }, [app, chatUIState, currentModelKey]);
@@ -338,7 +338,7 @@ const Chat: React.FC<ChatProps> = ({
           handleSaveAsNote();
         }
       } catch (error) {
-        logError("Error regenerating message:", error);
+        console.error("Error regenerating message:", error);
         new Notice("Failed to regenerate message. Please try again.");
       } finally {
         safeSet.setLoading(false);
@@ -399,7 +399,7 @@ const Chat: React.FC<ChatProps> = ({
                 );
               }
             } catch (error) {
-              logError("Error regenerating AI response:", error);
+              console.error("Error regenerating AI response:", error);
               new Notice("Failed to regenerate AI response. Please try again.");
             } finally {
               safeSet.setLoading(false);
@@ -412,7 +412,7 @@ const Chat: React.FC<ChatProps> = ({
           handleSaveAsNote();
         }
       } catch (error) {
-        logError("Error editing message:", error);
+        console.error("Error editing message:", error);
         new Notice("Failed to edit message. Please try again.");
       }
     },
@@ -459,7 +459,7 @@ const Chat: React.FC<ChatProps> = ({
             new Notice(`${project.name} added and context loaded`);
           })
           .catch((error: Error) => {
-            logError("Error loading project context:", error);
+            console.error("Error loading project context:", error);
             new Notice(`${project.name} added but context loading failed`);
           });
       } else {
@@ -494,7 +494,7 @@ const Chat: React.FC<ChatProps> = ({
             new Notice(`${originP.name} updated and context reloaded`);
           })
           .catch((error: Error) => {
-            logError("Error reloading project context:", error);
+            console.error("Error reloading project context:", error);
             new Notice(`${originP.name} updated but context reload failed`);
           });
       } else {
@@ -528,7 +528,7 @@ const Chat: React.FC<ChatProps> = ({
           new Notice("Failed to delete message. Please try again.");
         }
       } catch (error) {
-        logError("Error deleting message:", error);
+        console.error("Error deleting message:", error);
         new Notice("Failed to delete message. Please try again.");
       }
     },
@@ -537,17 +537,6 @@ const Chat: React.FC<ChatProps> = ({
 
   const handleNewChat = useCallback(async () => {
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
-
-    // Analyze chat messages for memory if enabled
-    if (settings.enableRecentConversations) {
-      try {
-        // Get the current chat model from the chain manager
-        const chatModel = chainManager.chatModelManager.getChatModel();
-        plugin.userMemoryManager.addRecentConversation(chatUIState.getMessages(), chatModel);
-      } catch (error) {
-        logInfo("Failed to analyze chat messages for memory:", error);
-      }
-    }
 
     // First autosave the current chat if the setting is enabled
     if (settings.autosaveChat) {
@@ -570,15 +559,12 @@ const Chat: React.FC<ChatProps> = ({
     }
   }, [
     handleStopGenerating,
-    chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
-    settings.enableRecentConversations,
     settings.includeActiveNoteAsContext,
     selectedChain,
     handleSaveAsNote,
     safeSet,
-    plugin.userMemoryManager,
   ]);
 
   const handleLoadHistory = useCallback(() => {
