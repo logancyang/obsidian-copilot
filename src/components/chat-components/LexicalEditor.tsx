@@ -10,7 +10,6 @@ import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 import { NoteCommandPlugin } from "./plugins/NoteCommandPlugin";
 import { TagCommandPlugin } from "./plugins/TagCommandPlugin";
 import { AtMentionCommandPlugin } from "./plugins/AtMentionCommandPlugin";
-import { NotePillPlugin } from "./plugins/NotePillPlugin";
 import { NotePillNode } from "./pills/NotePillNode";
 import { URLPillNode } from "./pills/URLPillNode";
 import { ToolPillNode } from "./pills/ToolPillNode";
@@ -167,7 +166,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         <NoteCommandPlugin />
         <TagCommandPlugin />
         <AtMentionCommandPlugin isCopilotPlus={isCopilotPlus} />
-        <NotePillPlugin />
         <TextInsertionPlugin />
       </div>
     </LexicalComposer>
