@@ -65,6 +65,12 @@ describe("ChatPersistenceManager", () => {
         read: jest.fn(),
         getMarkdownFiles: jest.fn().mockReturnValue([]),
       },
+      metadataCache: {
+        getFileCache: jest.fn(),
+      },
+      fileManager: {
+        processFrontMatter: jest.fn(),
+      },
     };
 
     // Setup mock message repository
@@ -287,6 +293,8 @@ Nature's quiet song`);
         "test-folder/Hello@20240923_221800.md",
         expect.stringContaining("**user**: Hello")
       );
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).not.toContain("topic:");
     });
 
     it("should use AI topic text from structured responses without object artifacts", async () => {
@@ -329,15 +337,36 @@ Nature's quiet song`);
       } as any;
 
       persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
+      const mockFile = {
+        path: "test-folder/Summarize_weather_data@20240923_221800.md",
+      } as unknown as TFile;
+      mockApp.vault.create.mockResolvedValue(mockFile);
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      const frontmatterState: Record<string, unknown> = {};
+      mockApp.fileManager.processFrontMatter.mockImplementation(
+        async (file: TFile, updater: (frontmatter: Record<string, unknown>) => void) => {
+          void file;
+          updater(frontmatterState);
+        }
+      );
 
       await persistenceManager.saveChat("gpt-4");
 
       expect(mockApp.vault.create).toHaveBeenCalledWith(
-        "test-folder/Forecast_Insights@20240923_221800.md",
-        expect.stringContaining("Forecast Insights")
+        "test-folder/Summarize_weather_data@20240923_221800.md",
+        expect.stringContaining("Summarize weather data")
       );
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).not.toContain("topic:");
+      await Promise.resolve();
+      await Promise.resolve();
+
       expect(invoke).toHaveBeenCalled();
+      expect(mockApp.fileManager.processFrontMatter).toHaveBeenCalledWith(
+        mockFile,
+        expect.any(Function)
+      );
+      expect(frontmatterState.topic).toBe("Forecast Insights");
     });
 
     it("should not save when there are no messages", async () => {
