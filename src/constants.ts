@@ -14,6 +14,7 @@ export const AI_SENDER = "ai";
 export const COPILOT_FOLDER_ROOT = "copilot";
 export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
 export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
+export const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
@@ -782,9 +783,14 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "youtubeTranscription",
     "writeToFile",
     "replaceInFile",
+    "memoryTool",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
+  memoryFolderName: DEFAULT_MEMORY_FOLDER,
+  enableRecentConversations: false,
+  maxRecentConversations: 30,
+  enableSavedMemory: false,
   enableInlineCitations: true,
 };
 

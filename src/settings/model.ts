@@ -1,6 +1,7 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { type ChainType } from "@/chainFactory";
@@ -14,6 +15,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
+import { logInfo } from "@/logger";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -136,6 +138,14 @@ export interface CopilotSettings {
   reasoningEffort: "minimal" | "low" | "medium" | "high";
   /** Default verbosity level for models that support it */
   verbosity: "low" | "medium" | "high";
+  /** Folder where memory data is stored */
+  memoryFolderName: string;
+  /** Reference recent conversation history to provide more contextually relevant responses */
+  enableRecentConversations: boolean;
+  /** Maximum number of recent conversations to remember (10-50) */
+  maxRecentConversations: number;
+  /** Reference saved memories that user explicitly asked to remember */
+  enableSavedMemory: boolean;
   /** Enable inline citations in AI responses with footnote-style references */
   enableInlineCitations: boolean;
 }
@@ -353,6 +363,32 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
 
+  // Ensure memoryFolderName has a default value
+  if (
+    !sanitizedSettings.memoryFolderName ||
+    typeof sanitizedSettings.memoryFolderName !== "string"
+  ) {
+    sanitizedSettings.memoryFolderName = DEFAULT_SETTINGS.memoryFolderName;
+  }
+
+  // Ensure enableRecentConversations has a default value
+  if (typeof sanitizedSettings.enableRecentConversations !== "boolean") {
+    sanitizedSettings.enableRecentConversations = DEFAULT_SETTINGS.enableRecentConversations;
+  }
+
+  // Ensure enableSavedMemory has a default value
+  if (typeof sanitizedSettings.enableSavedMemory !== "boolean") {
+    sanitizedSettings.enableSavedMemory = DEFAULT_SETTINGS.enableSavedMemory;
+  }
+
+  // Ensure maxRecentConversations has a valid value (10-50 range)
+  const maxRecentConversations = Number(settingsToSanitize.maxRecentConversations);
+  if (isNaN(maxRecentConversations) || maxRecentConversations < 10 || maxRecentConversations > 50) {
+    sanitizedSettings.maxRecentConversations = DEFAULT_SETTINGS.maxRecentConversations;
+  } else {
+    sanitizedSettings.maxRecentConversations = maxRecentConversations;
+  }
+
   // Ensure folder settings fall back to defaults when empty/whitespace
   const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
   sanitizedSettings.defaultSaveFolder =
@@ -378,6 +414,25 @@ ${userPrompt}
 </user_custom_instructions>`;
   }
   return basePrompt;
+}
+
+export async function getSystemPromptWithMemory(
+  userMemoryManager: UserMemoryManager | undefined
+): Promise<string> {
+  const systemPrompt = getSystemPrompt();
+
+  if (!userMemoryManager) {
+    logInfo("No UserMemoryManager provided to getSystemPromptWithMemory");
+    return systemPrompt;
+  }
+  const memoryPrompt = await userMemoryManager.getUserMemoryPrompt();
+
+  // Only include user_memory section if there's actual memory content
+  if (!memoryPrompt) {
+    return systemPrompt;
+  }
+
+  return `${memoryPrompt}\n${systemPrompt}`;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
