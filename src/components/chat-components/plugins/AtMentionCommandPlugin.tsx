@@ -38,6 +38,12 @@ export function AtMentionCommandPlugin({
   // Load note content for preview
   const loadNoteContentForPreview = useCallback(async (file: TFile) => {
     try {
+      // Handle PDF files - treat as empty content (no preview)
+      if (file.extension === "pdf") {
+        setCurrentPreviewContent("");
+        return;
+      }
+
       const content = await app.vault.cachedRead(file);
       const contentWithoutFrontmatter = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").trim();
       const truncatedContent =

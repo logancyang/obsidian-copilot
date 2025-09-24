@@ -4,6 +4,7 @@ import fuzzysort from "fuzzysort";
 import { TFile, App } from "obsidian";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
+import { useAllNotes } from "@/components/chat-components/hooks/useAllNotes";
 import {
   useTypeaheadPlugin,
   TypeaheadState,
@@ -20,7 +21,11 @@ interface NoteOption extends TypeaheadOption {
   file: TFile;
 }
 
-export function NoteCommandPlugin(): JSX.Element {
+interface NoteCommandPluginProps {
+  isCopilotPlus?: boolean;
+}
+
+export function NoteCommandPlugin({ isCopilotPlus = false }: NoteCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
 
@@ -36,6 +41,16 @@ export function NoteCommandPlugin(): JSX.Element {
       }
 
       try {
+        // Handle PDF files differently - treat as empty content (no preview)
+        if (file.extension === "pdf") {
+          setNotePreviewContent((prev) => {
+            const newMap = new Map(prev);
+            newMap.set(file.path, "");
+            return newMap;
+          });
+          return "";
+        }
+
         const content = await app.vault.cachedRead(file);
 
         // Strip frontmatter (YAML front matter) from the content
@@ -69,22 +84,19 @@ export function NoteCommandPlugin(): JSX.Element {
     [notePreviewContent]
   );
 
-  // Get all available notes from the vault
+  // Get all available notes from the vault (including PDFs in Plus mode)
+  const files = useAllNotes(isCopilotPlus);
+
+  // Transform files into NoteOption objects
   const allNotes = useMemo(() => {
-    if (!app?.vault) {
-      return [];
-    }
-
-    const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
-
-    return markdownFiles.map((file, index) => ({
+    return files.map((file, index) => ({
       key: `${file.basename}-${index}`,
       title: file.basename,
       subtitle: file.path,
       content: "", // Will be loaded async when needed
       file,
     }));
-  }, []);
+  }, [files]);
 
   // Filter notes based on query using fuzzysort and add preview content
   const filteredNotes = useMemo(() => {
@@ -150,7 +162,7 @@ export function NoteCommandPlugin(): JSX.Element {
     onStateChange: (newState: TypeaheadState) => {
       setCurrentQuery(newState.query);
     },
-    onHighlight: (index: number, option: NoteOption) => {
+    onHighlight: (_index: number, option: NoteOption) => {
       // Load content for the highlighted note if not already loaded
       if (option && !notePreviewContent.has(option.file.path)) {
         loadNoteContent(option.file);

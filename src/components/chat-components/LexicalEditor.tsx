@@ -163,7 +163,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         <PillDeletionPlugin />
         <PastePlugin enableURLPills={!!onURLsChange} />
         <SlashCommandPlugin />
-        <NoteCommandPlugin />
+        <NoteCommandPlugin isCopilotPlus={isCopilotPlus} />
         <TagCommandPlugin />
         <AtMentionCommandPlugin isCopilotPlus={isCopilotPlus} />
         <TextInsertionPlugin />

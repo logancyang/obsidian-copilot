@@ -351,9 +351,28 @@ function resolveNoteReference(noteName: string): TFile | null {
       }
     }
 
-    // Another fallback: search by basename
+    // Fallback: try with .pdf extension if not already present
+    if (!noteName.endsWith(".pdf")) {
+      const pdfFile = app.metadataCache.getFirstLinkpathDest(noteName + ".pdf", "");
+      if (pdfFile && pdfFile instanceof TFile) {
+        return pdfFile;
+      }
+    }
+
+    // Another fallback: search by basename in markdown files
     const markdownFiles = app.vault.getMarkdownFiles();
     for (const file of markdownFiles) {
+      if (file.basename === noteName || file.name === noteName) {
+        return file;
+      }
+    }
+
+    // Final fallback: search by basename in PDF files
+    const allFiles = app.vault.getFiles();
+    const pdfFiles = allFiles.filter(
+      (file): file is TFile => file instanceof TFile && file.extension === "pdf"
+    );
+    for (const file of pdfFiles) {
       if (file.basename === noteName || file.name === noteName) {
         return file;
       }

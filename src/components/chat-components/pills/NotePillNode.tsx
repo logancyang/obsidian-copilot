@@ -87,12 +87,18 @@ export class NotePillNode extends BasePillNode {
     element.setAttribute("data-lexical-note-pill", "true");
     element.setAttribute("data-note-title", this.__noteTitle);
     element.setAttribute("data-note-path", this.__notePath);
-    element.textContent = `[[${this.__noteTitle}]]`;
+    const displayName = this.__notePath.toLowerCase().endsWith(".pdf")
+      ? `${this.__noteTitle}.pdf`
+      : this.__noteTitle;
+    element.textContent = `[[${displayName}]]`;
     return { element };
   }
 
   getTextContent(): string {
-    return `[[${this.__noteTitle}]]`;
+    const displayName = this.__notePath.toLowerCase().endsWith(".pdf")
+      ? `${this.__noteTitle}.pdf`
+      : this.__noteTitle;
+    return `[[${displayName}]]`;
   }
 
   setActive(isActive: boolean): void {
@@ -133,7 +139,9 @@ interface NotePillComponentProps {
 
 function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   const noteTitle = node.getNoteTitle();
+  const notePath = node.getNotePath();
   const isActive = node.getActive();
+  const isPdf = notePath.toLowerCase().endsWith(".pdf");
 
   return (
     <Badge
@@ -143,6 +151,7 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
       <div className="tw-flex tw-items-center tw-gap-1">
         <span className="tw-max-w-40 tw-truncate">[[{noteTitle}]]</span>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
+        {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
     </Badge>
   );

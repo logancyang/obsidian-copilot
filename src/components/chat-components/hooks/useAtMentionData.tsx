@@ -5,6 +5,7 @@ import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { useAllNotes } from "./useAllNotes";
 
 export type AtMentionCategory = "notes" | "tools" | "folders" | "tags";
 
@@ -50,11 +51,8 @@ export const CATEGORY_OPTIONS: CategoryOption[] = [
 ];
 
 export function useAtMentionData(isCopilotPlus: boolean = false) {
-  // Get all available notes
-  const allNotes = useMemo(() => {
-    if (!app?.vault) return [];
-    return app.vault.getMarkdownFiles() as TFile[];
-  }, []);
+  // Get all available notes (including PDFs in Plus mode)
+  const allNotes = useAllNotes(isCopilotPlus);
 
   // Get all folders
   const allFolders = useMemo(() => {
