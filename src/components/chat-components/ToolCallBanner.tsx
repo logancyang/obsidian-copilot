@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from "react";
-import { ChevronRight, Check, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
+import { Check, ChevronRight, X } from "lucide-react";
+import React, { useMemo, useState } from "react";
 
 // Animation constants
 // The shimmer keyframe is defined in the global CSS (see styles.css)
@@ -78,7 +78,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
 
   return (
     <Collapsible
-      open={isOpen}
+      open={canExpand ? isOpen : false}
       onOpenChange={setIsOpen}
       disabled={!canExpand}
       aria-disabled={!canExpand}
@@ -160,17 +160,15 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
           </div>
         </CollapsibleTrigger>
 
-        {isOpen && canExpand && (
-          <CollapsibleContent>
-            <div className="tw-border-t tw-border-border tw-px-3 tw-py-2.5 sm:tw-px-4 sm:tw-py-3">
-              <div className="tw-text-sm tw-text-muted">
-                <pre className="tw-overflow-x-auto tw-whitespace-pre-wrap tw-font-mono tw-text-xs">
-                  {formattedResult ?? "No result available"}
-                </pre>
-              </div>
+        <CollapsibleContent>
+          <div className="tw-border-t tw-border-border tw-px-3 tw-py-2.5 sm:tw-px-4 sm:tw-py-3">
+            <div className="tw-text-sm tw-text-muted">
+              <pre className="tw-overflow-x-auto tw-whitespace-pre-wrap tw-font-mono tw-text-xs">
+                {formattedResult ?? "No result available"}
+              </pre>
             </div>
-          </CollapsibleContent>
-        )}
+          </div>
+        </CollapsibleContent>
       </div>
     </Collapsible>
   );
