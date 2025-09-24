@@ -2,7 +2,7 @@ import { App, Notice, TFile, TFolder } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { MessageRepository } from "./MessageRepository";
 import { logInfo, logError } from "@/logger";
-import { formatDateTime } from "@/utils";
+import { extractTextFromChunk, formatDateTime } from "@/utils";
 import { USER_SENDER, AI_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
@@ -250,8 +250,13 @@ Conversation:
 ${conversationSummary}`;
 
       const response = await chatModel.invoke(prompt);
-      const topic = response.content
-        .toString()
+      const responseContent =
+        typeof response === "string"
+          ? response
+          : ((response as { content?: unknown; text?: unknown }).content ??
+            (response as { content?: unknown; text?: unknown }).text ??
+            response);
+      const topic = extractTextFromChunk(responseContent)
         .trim()
         .replace(/^["']|["']$/g, "") // Remove quotes if present
         .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters

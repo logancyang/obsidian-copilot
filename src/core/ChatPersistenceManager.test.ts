@@ -16,13 +16,29 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn().mockReturnValue({
     defaultSaveFolder: "test-folder",
     defaultConversationTag: "copilot-conversation",
-    defaultConversationNoteName: "{$date}_{$time}__{$topic}",
+    defaultConversationNoteName: "{$topic}@{$date}_{$time}",
+    generateAIChatTitleOnSave: true,
   }),
 }));
 jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
 }));
 jest.mock("@/utils", () => ({
+  extractTextFromChunk: jest.fn((content) => {
+    if (typeof content === "string") {
+      return content;
+    }
+    if (Array.isArray(content)) {
+      return content
+        .filter((item) => item?.type === "text")
+        .map((item) => item?.text || "")
+        .join("");
+    }
+    if (content && typeof content === "object" && "text" in content) {
+      return String((content as { text?: unknown }).text ?? "");
+    }
+    return String(content ?? "");
+  }),
   formatDateTime: jest.fn((date) => ({
     fileName: "20240923_221800",
     display: "2024/09/23 22:18:00",
@@ -268,9 +284,60 @@ Nature's quiet song`);
       await persistenceManager.saveChat("gpt-4");
 
       expect(mockApp.vault.create).toHaveBeenCalledWith(
-        "test-folder/20240923_221800__Hello.md",
+        "test-folder/Hello@20240923_221800.md",
         expect.stringContaining("**user**: Hello")
       );
+    });
+
+    it("should use AI topic text from structured responses without object artifacts", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Summarize weather data",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+        {
+          id: "2",
+          message: "Here is the summary...",
+          sender: AI_SENDER,
+          timestamp: {
+            epoch: 1695513481000,
+            display: "2024/09/23 22:18:01",
+            fileName: "2024_09_23_221801",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const invoke = jest.fn().mockResolvedValue({
+        content: [
+          { type: "text", text: "Forecast Insights" },
+          { type: "tool_call", id: "ignored", name: "analysis" },
+        ],
+      });
+
+      const chainManager = {
+        chatModelManager: {
+          getChatModel: jest.fn().mockReturnValue({ invoke }),
+        },
+      } as any;
+
+      persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.create).toHaveBeenCalledWith(
+        "test-folder/Forecast_Insights@20240923_221800.md",
+        expect.stringContaining("Forecast Insights")
+      );
+      expect(invoke).toHaveBeenCalled();
     });
 
     it("should not save when there are no messages", async () => {
