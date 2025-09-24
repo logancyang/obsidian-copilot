@@ -2,7 +2,7 @@ import { App, Notice, TFile, TFolder } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { MessageRepository } from "./MessageRepository";
 import { logInfo, logError } from "@/logger";
-import { formatDateTime } from "@/utils";
+import { extractTextFromChunk, formatDateTime } from "@/utils";
 import { USER_SENDER, AI_SENDER } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
@@ -45,23 +45,20 @@ export class ChatPersistenceManager {
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);
-      let topic: string | undefined;
+      const existingTopic = existingFile
+        ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter?.topic
+        : undefined;
 
-      if (existingFile) {
-        // If file exists, preserve the existing topic
-        const frontmatter = this.app.metadataCache.getFileCache(existingFile)?.frontmatter;
-        topic = frontmatter?.topic;
-      } else {
-        // If new file, generate AI topic only if enabled in settings
-        if (settings.generateAIChatTitleOnSave) {
-          topic = await this.generateAITopic(messages);
-        } else {
-          topic = undefined; // fallback to first 10 words will be used in filename
-        }
-      }
-
-      const fileName = this.generateFileName(messages, firstMessageEpoch, topic);
-      const noteContent = this.generateNoteContent(chatContent, firstMessageEpoch, modelKey, topic);
+      const fileName = existingFile
+        ? existingFile.path
+        : this.generateFileName(messages, firstMessageEpoch, undefined);
+      const noteContent = this.generateNoteContent(
+        chatContent,
+        firstMessageEpoch,
+        modelKey,
+        existingTopic
+      );
+      let targetFile: TFile | null = existingFile;
 
       if (existingFile) {
         // If the file exists, update its content
@@ -69,10 +66,12 @@ export class ChatPersistenceManager {
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
       } else {
         // If the file doesn't exist, create a new one
-        await this.app.vault.create(fileName, noteContent);
+        targetFile = await this.app.vault.create(fileName, noteContent);
         new Notice(`Chat saved as note: ${fileName}`);
         logInfo(`[ChatPersistenceManager] Created new chat file: ${fileName}`);
       }
+
+      this.generateTopicAsyncIfNeeded(messages, targetFile, existingTopic);
     } catch (error) {
       logError("[ChatPersistenceManager] Error saving chat:", error);
       new Notice("Failed to save chat as note. Check console for details.");
@@ -250,8 +249,13 @@ Conversation:
 ${conversationSummary}`;
 
       const response = await chatModel.invoke(prompt);
-      const topic = response.content
-        .toString()
+      const responseContent =
+        typeof response === "string"
+          ? response
+          : ((response as { content?: unknown; text?: unknown }).content ??
+            (response as { content?: unknown; text?: unknown }).text ??
+            response);
+      const topic = extractTextFromChunk(responseContent)
         .trim()
         .replace(/^["']|["']$/g, "") // Remove quotes if present
         .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
@@ -337,5 +341,56 @@ tags:
 ---
 
 ${chatContent}`;
+  }
+
+  /**
+   * Trigger asynchronous topic generation and apply it to the saved note once available
+   */
+  private generateTopicAsyncIfNeeded(
+    messages: ChatMessage[],
+    file: TFile | null,
+    existingTopic?: string
+  ): void {
+    const settings = getSettings();
+
+    if (!settings.generateAIChatTitleOnSave || !file || existingTopic) {
+      return;
+    }
+
+    void (async () => {
+      try {
+        const topic = await this.generateAITopic(messages);
+        if (!topic) {
+          return;
+        }
+        await this.applyTopicToFrontmatter(file, topic);
+      } catch (error) {
+        logError("[ChatPersistenceManager] Error during async topic generation:", error);
+      }
+    })();
+  }
+
+  /**
+   * Apply the AI-generated topic to the note's YAML frontmatter
+   */
+  private async applyTopicToFrontmatter(file: TFile, topic: string): Promise<void> {
+    try {
+      if (!this.app.fileManager?.processFrontMatter) {
+        return;
+      }
+
+      const sanitizedTopic = topic.trim();
+
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        if (frontmatter.topic === sanitizedTopic) {
+          return;
+        }
+        frontmatter.topic = sanitizedTopic;
+      });
+
+      logInfo(`[ChatPersistenceManager] Applied AI topic to chat file: ${file.path}`);
+    } catch (error) {
+      logError("[ChatPersistenceManager] Error applying AI topic to file:", error);
+    }
   }
 }
