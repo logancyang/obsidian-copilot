@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronRight, Check, X } from "lucide-react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
@@ -19,6 +19,46 @@ interface ToolCallBannerProps {
   onReject?: () => void;
 }
 
+/**
+ * Produce a display-friendly tool result, falling back to raw strings when they are already concise.
+ * @param toolName Name of the tool that produced the result
+ * @param result Raw tool result string (possibly null if tool still running)
+ * @returns Formatted result or null when there is nothing to show yet
+ */
+const MAX_DISPLAY_CHARS = 5_000;
+
+/**
+ * Produce a display-friendly tool result while guarding against oversized payloads.
+ * Large strings are summarized instead of rendered to keep the UI responsive.
+ * @param toolName Name of the tool that produced the result
+ * @param result Raw tool result string (possibly null if tool still running)
+ * @returns Formatted result or a guardrail message; null when there is nothing to show yet
+ */
+const formatToolResult = (toolName: string, result: string | null): string | null => {
+  if (!result) {
+    return null;
+  }
+
+  if (result.length > MAX_DISPLAY_CHARS) {
+    return `Tool '${toolName}' returned ${result.length.toLocaleString()} characters. The full output is preserved in chat history but omitted here to keep the UI responsive.`;
+  }
+
+  try {
+    const formatted = ToolResultFormatter.format(toolName, result);
+    if (formatted.length > MAX_DISPLAY_CHARS) {
+      return (
+        formatted.slice(0, MAX_DISPLAY_CHARS) +
+        `\n\n… (truncated ${(formatted.length - MAX_DISPLAY_CHARS).toLocaleString()} characters for display)`
+      );
+    }
+    return formatted;
+  } catch {
+    return result.length > MAX_DISPLAY_CHARS
+      ? `Tool '${toolName}' returned ${result.length.toLocaleString()} characters. The full output is preserved in chat history but omitted here to keep the UI responsive.`
+      : result;
+  }
+};
+
 export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
   toolName,
   displayName,
@@ -31,8 +71,10 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
 }) => {
   const [isOpen, setIsOpen] = useState(false);
 
+  const formattedResult = useMemo(() => formatToolResult(toolName, result), [toolName, result]);
+
   // Don't allow expanding while executing
-  const canExpand = !isExecuting && result !== null;
+  const canExpand = !isExecuting && formattedResult !== null;
 
   return (
     <Collapsible
@@ -118,15 +160,17 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
           </div>
         </CollapsibleTrigger>
 
-        <CollapsibleContent>
-          <div className="tw-border-t tw-border-border tw-px-3 tw-py-2.5 sm:tw-px-4 sm:tw-py-3">
-            <div className="tw-text-sm tw-text-muted">
-              <pre className="tw-overflow-x-auto tw-whitespace-pre-wrap tw-font-mono tw-text-xs">
-                {result ? ToolResultFormatter.format(toolName, result) : "No result available"}
-              </pre>
+        {isOpen && canExpand && (
+          <CollapsibleContent>
+            <div className="tw-border-t tw-border-border tw-px-3 tw-py-2.5 sm:tw-px-4 sm:tw-py-3">
+              <div className="tw-text-sm tw-text-muted">
+                <pre className="tw-overflow-x-auto tw-whitespace-pre-wrap tw-font-mono tw-text-xs">
+                  {formattedResult ?? "No result available"}
+                </pre>
+              </div>
             </div>
-          </div>
-        </CollapsibleContent>
+          </CollapsibleContent>
+        )}
       </div>
     </Collapsible>
   );

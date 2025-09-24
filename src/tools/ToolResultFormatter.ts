@@ -3,19 +3,6 @@
  * Each formatter should return a user-friendly representation of the tool result
  */
 export class ToolResultFormatter {
-  /**
-   * Try to parse JSON string, returns array of parsed objects
-   * @param json JSON string to parse
-   * @returns Array containing parsed object(s), or empty array if parsing fails
-   */
-  private static tryParseJson(json: string): any[] {
-    try {
-      const parsed = JSON.parse(json);
-      return Array.isArray(parsed) ? parsed : [parsed];
-    } catch {
-      return [];
-    }
-  }
   static format(toolName: string, result: string): string {
     try {
       // Decode tool marker encoding if present (ENC:...)
@@ -60,6 +47,36 @@ export class ToolResultFormatter {
     }
   }
 
+  /**
+   * Create a condensed summary for local search documents suitable for UI rendering.
+   * @param documents Array of parsed local search documents
+   * @returns Display-friendly summary string
+   */
+  static formatLocalSearchDocuments(documents: any[]): string {
+    if (!Array.isArray(documents) || documents.length === 0) {
+      return "📚 Found 0 relevant notes\n\nNo matching notes found.";
+    }
+
+    const total = documents.length;
+    const topResults = documents.slice(0, 10);
+    const hasScoringData = topResults.some(
+      (item) =>
+        typeof item?.rerank_score === "number" || typeof item?.score === "number" || item?.source
+    );
+
+    const formattedItems = topResults
+      .map((item, index) =>
+        hasScoringData
+          ? this.formatSearchItem(item, index)
+          : this.formatBasicSearchItem(item, index)
+      )
+      .join("\n\n");
+
+    const footer = total > 10 ? `\n\n... and ${total - 10} more results` : "";
+
+    return `📚 Found ${total} relevant notes\n\nTop results:\n\n${formattedItems}${footer}`;
+  }
+
   private static formatLocalSearch(result: any): string {
     // Handle XML-wrapped results from chain runners
     if (typeof result === "string") {
@@ -91,27 +108,7 @@ export class ToolResultFormatter {
           const mtime = (modifiedMatch?.[1] || "").trim();
           documents.push({ title, path, mtime: mtime || null });
         }
-
-        const topResults = documents.slice(0, 10);
-        const formattedItems = topResults
-          .map((item, index) => {
-            const lines = [`${index + 1}. ${item.title}`];
-
-            if (item.mtime) {
-              lines.push(`   🕒 Modified: ${item.mtime}`);
-            }
-
-            if (item.path && item.path !== item.title) {
-              lines.push(`   📁 ${item.path}`);
-            }
-
-            return lines.join("\n");
-          })
-          .join("\n\n");
-
-        const footer = count > 10 ? `\n\n... and ${count - 10} more results` : "";
-
-        return `📚 Found ${count} relevant notes\n\nTop results:\n\n${formattedItems}${footer}`;
+        return this.formatLocalSearchDocuments(documents);
       }
     }
 
@@ -121,20 +118,17 @@ export class ToolResultFormatter {
     if (!Array.isArray(searchResults)) {
       return typeof result === "string" ? result : JSON.stringify(result, null, 2);
     }
-
-    const count = searchResults.length;
-    if (count === 0) {
+    if (searchResults.length === 0) {
+      if (
+        typeof result === "string" &&
+        !result.includes("<localSearch") &&
+        !result.includes('"type":"local_search"')
+      ) {
+        return result;
+      }
       return "📚 Found 0 relevant notes\n\nNo matching notes found.";
     }
-
-    const topResults = searchResults.slice(0, 10);
-    const formattedItems = topResults
-      .map((item, index) => this.formatSearchItem(item, index))
-      .join("\n\n");
-
-    const footer = count > 10 ? `\n\n... and ${count - 10} more results` : "";
-
-    return `📚 Found ${count} relevant notes\n\nTop results:\n\n${formattedItems}${footer}`;
+    return this.formatLocalSearchDocuments(searchResults);
   }
 
   private static parseSearchResults(result: any): any[] {
@@ -195,6 +189,22 @@ export class ToolResultFormatter {
     }
 
     if (item.path && !item.path.endsWith(`/${filename}.md`)) {
+      lines.push(`   📁 ${item.path}`);
+    }
+
+    return lines.join("\n");
+  }
+
+  private static formatBasicSearchItem(item: any, index: number): string {
+    const title = item.title || item.path || `Result ${index + 1}`;
+    const lines = [`${index + 1}. ${title}`];
+
+    const modified = item.mtime || item.modified || item.modified_at || item.updated_at;
+    if (modified) {
+      lines.push(`   🕒 Modified: ${String(modified)}`);
+    }
+
+    if (item.path && item.path !== title) {
       lines.push(`   📁 ${item.path}`);
     }
 

@@ -408,6 +408,7 @@ ${params}
 
             // Update result with formatted text for LLM
             result.result = processed.formattedForLLM;
+            result.displayResult = processed.formattedForDisplay;
           }
 
           toolResults.push(result);
@@ -422,7 +423,7 @@ ${params}
               currentIterationToolCallMessages[messageIndex] = updateToolCallMarker(
                 currentIterationToolCallMessages[messageIndex],
                 toolCallId,
-                result.result
+                result.displayResult ?? result.result
               );
             }
 
