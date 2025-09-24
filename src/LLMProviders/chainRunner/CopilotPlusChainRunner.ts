@@ -15,7 +15,7 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { getSettings, getSystemPrompt } from "@/settings/model";
+import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
@@ -847,6 +847,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPrompt();
+    return getSystemPromptWithMemory(this.chainManager.userMemoryManager);
   }
 }

@@ -31,6 +31,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 
 import { cn } from "@/lib/utils";
+import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
@@ -311,7 +312,7 @@ export const CommandSettings: React.FC = () => {
 
       new Notice(`Command "${command.title}" deleted successfully!`);
     } catch (error) {
-      console.error("Failed to delete command:", error);
+      logError("Failed to delete command:", error);
       new Notice("Failed to delete command. Please try again.");
       throw error;
     }
@@ -331,7 +332,7 @@ export const CommandSettings: React.FC = () => {
         autoOrder: false,
       });
     } catch (error) {
-      console.error("Failed to copy command:", error);
+      logError("Failed to copy command:", error);
       new Notice("Failed to copy command. Please try again.");
     }
   };
