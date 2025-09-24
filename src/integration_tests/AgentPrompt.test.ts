@@ -140,7 +140,7 @@ async function generateSystemPrompt(availableTools: any[]): Promise<string> {
   });
 
   const adapter = ModelAdapterFactory.createAdapter(mockModel);
-  return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter);
+  return AutonomousAgentChainRunner.generateSystemPrompt(availableTools, adapter, undefined);
 }
 
 // Helper function to mock tool execution
