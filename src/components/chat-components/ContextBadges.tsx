@@ -3,6 +3,7 @@ import { ExternalLink, FileText, Folder, Hash, X } from "lucide-react";
 import { TFile } from "obsidian";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { TruncatedText } from "@/components/TruncatedText";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
@@ -26,13 +27,17 @@ interface ContextFolderBadgeProps extends BaseContextBadgeProps {
 }
 
 export function ContextNoteBadge({ note, isActive = false, onRemove }: ContextNoteBadgeProps) {
+  const tooltipContent = <div className="tw-text-left">{note.path}</div>;
+
   return (
     <Badge
       className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <FileText className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
+        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent}>
+          {note.basename}
+        </TruncatedText>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {note.extension === "pdf" && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
@@ -68,7 +73,9 @@ export function ContextUrlBadge({ url, onRemove }: ContextUrlBadgeProps) {
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <ExternalLink className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{getDomain(url)}</span>
+        <TruncatedText className="tw-max-w-40" tooltipContent={url}>
+          {getDomain(url)}
+        </TruncatedText>
       </div>
       {onRemove && (
         <Button
@@ -95,7 +102,9 @@ export function ContextTagBadge({ tag, onRemove }: ContextTagBadgeProps) {
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <Hash className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{displayTag}</span>
+        <TruncatedText className="tw-max-w-40" tooltipContent={tag}>
+          {displayTag}
+        </TruncatedText>
       </div>
       {onRemove && (
         <Button
@@ -119,7 +128,9 @@ export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps
     >
       <div className="tw-flex tw-items-center tw-gap-1">
         <Folder className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{folder}</span>
+        <TruncatedText className="tw-max-w-40" tooltipContent={folder}>
+          {folder}
+        </TruncatedText>
       </div>
       {onRemove && (
         <Button

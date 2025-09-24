@@ -144,13 +144,20 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   const isActive = node.getActive();
   const isPdf = notePath.toLowerCase().endsWith(".pdf");
 
+  const tooltipContent = <div className="tw-text-left">{notePath}</div>;
+
   return (
     <Badge
       variant="secondary"
-      className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs")}
+      className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-align-middle tw-text-xs")}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
-        <TruncatedPillText content={noteTitle} openBracket="[[" closeBracket="]]" />
+        <TruncatedPillText
+          content={noteTitle}
+          openBracket="[["
+          closeBracket="]]"
+          tooltipContent={tooltipContent}
+        />
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
