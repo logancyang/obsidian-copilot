@@ -561,9 +561,8 @@ const Chat: React.FC<ChatProps> = ({
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
     clearSelectedTextContexts();
-    // Only modify includeActiveNote if in a non-COPILOT_PLUS_CHAIN mode
-    // In COPILOT_PLUS_CHAIN mode, respect the settings.includeActiveNoteAsContext value
-    if (selectedChain !== ChainType.COPILOT_PLUS_CHAIN) {
+    // Respect the includeActiveNote setting for all non-project chains
+    if (selectedChain === ChainType.PROJECT_CHAIN) {
       setIncludeActiveNote(false);
     } else {
       setIncludeActiveNote(settings.includeActiveNoteAsContext);
@@ -604,11 +603,10 @@ const Chat: React.FC<ChatProps> = ({
   useEffect(() => {
     if (settings.includeActiveNoteAsContext !== undefined) {
       // Only apply the setting if not in Project mode
-      if (selectedChain === ChainType.COPILOT_PLUS_CHAIN) {
-        setIncludeActiveNote(settings.includeActiveNoteAsContext);
-      } else {
-        // In other modes, always disable including active note
+      if (selectedChain === ChainType.PROJECT_CHAIN) {
         setIncludeActiveNote(false);
+      } else {
+        setIncludeActiveNote(settings.includeActiveNoteAsContext);
       }
     }
   }, [settings.includeActiveNoteAsContext, selectedChain]);

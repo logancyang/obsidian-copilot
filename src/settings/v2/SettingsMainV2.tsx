@@ -49,7 +49,7 @@ const SettingsContent: React.FC = () => {
 
   return (
     <div className="tw-flex tw-flex-col">
-      <div className="tw-inline-flex tw-rounded-lg">
+      <div className="tw-flex tw-flex-wrap tw-rounded-lg">
         {tabs.map((tab, index) => (
           <TabItem
             key={tab.id}

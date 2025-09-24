@@ -1,7 +1,8 @@
-import { useCustomCommands } from "@/commands/state";
+import React, { useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Copy, GripVertical, Info, Lightbulb, PenLine, Plus, Trash2 } from "lucide-react";
-import React, { useMemo } from "react";
+import { useCustomCommands } from "@/commands/state";
+import { MobileCard, MobileCardDropdownAction } from "@/components/ui/mobile-card";
+import { Copy, GripVertical, Lightbulb, PenLine, Plus, Trash2 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -12,10 +13,6 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { cn } from "@/lib/utils";
-import { logError } from "@/logger";
-import { updateSetting, useSettingsValue } from "@/settings/model";
-import { PromptSortStrategy } from "@/types";
 import {
   closestCenter,
   DndContext,
@@ -33,6 +30,10 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+import { cn } from "@/lib/utils";
+import { updateSetting, useSettingsValue } from "@/settings/model";
+import { PromptSortStrategy } from "@/types";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { EMPTY_COMMAND } from "@/commands/constants";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
@@ -45,8 +46,123 @@ import { generateDefaultCommands } from "@/commands/migrator";
 import { CustomCommand } from "@/commands/type";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { SettingItem } from "@/components/ui/setting-item";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Notice } from "obsidian";
+
+const MobileCommandCard: React.FC<{
+  command: CustomCommand;
+  commands: CustomCommand[];
+  onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void;
+  onRemove: (command: CustomCommand) => void;
+  onCopy: (command: CustomCommand) => void;
+  containerRef: React.RefObject<HTMLDivElement>;
+}> = ({ command, commands, onUpdate, onRemove, onCopy, containerRef }) => {
+  const handleEdit = (cmd: CustomCommand) => {
+    const modal = new CustomCommandSettingsModal(app, commands, cmd, async (updatedCommand) => {
+      await onUpdate(updatedCommand, cmd.title);
+    });
+    modal.open();
+  };
+
+  const dropdownActions: MobileCardDropdownAction<CustomCommand>[] = [
+    {
+      icon: <PenLine className="tw-size-4" />,
+      label: "Edit",
+      onClick: handleEdit,
+    },
+    {
+      icon: <Copy className="tw-size-4" />,
+      label: "Copy",
+      onClick: onCopy,
+    },
+    {
+      icon: <Trash2 className="tw-size-4" />,
+      label: "Delete",
+      onClick: (cmd) => {
+        new ConfirmModal(
+          app,
+          () => onRemove(cmd),
+          `Are you sure you want to delete the command "${cmd.title}"? This will permanently remove the command file and cannot be undone.`,
+          "Delete Command",
+          "Delete",
+          "Cancel"
+        ).open();
+      },
+      variant: "destructive",
+    },
+  ];
+
+  const expandedContent = (
+    <div className="tw-flex tw-flex-wrap tw-justify-around">
+      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+        <div className="tw-flex tw-items-center tw-gap-1">
+          <span className="tw-text-sm tw-font-medium">In Menu</span>
+          <HelpTooltip
+            content={
+              <div className="tw-max-w-xs tw-text-xs">
+                If enabled, the command will be available in the context menu when you right-click
+                in the editor.
+              </div>
+            }
+          />
+        </div>
+        <Checkbox
+          checked={command.showInContextMenu}
+          onCheckedChange={(checked) => {
+            onUpdate(
+              {
+                ...command,
+                showInContextMenu: checked === true,
+              },
+              command.title
+            );
+          }}
+        />
+      </div>
+      <div className="tw-flex tw-items-center tw-justify-between  tw-gap-2">
+        <div className="tw-flex tw-items-center tw-gap-1">
+          <span className="tw-text-sm tw-font-medium">In Slash</span>
+          <HelpTooltip
+            content={
+              <div className="tw-max-w-xs tw-text-xs">
+                If enabled, the command will be available as a slash command in the chat.
+              </div>
+            }
+          />
+        </div>
+        <Checkbox
+          checked={command.showInSlashMenu}
+          onCheckedChange={(checked) =>
+            onUpdate(
+              {
+                ...command,
+                showInSlashMenu: checked === true,
+              },
+              command.title
+            )
+          }
+        />
+      </div>
+    </div>
+  );
+
+  return (
+    <MobileCard
+      id={command.title}
+      item={command}
+      title={command.title}
+      isDraggable
+      isExpandable
+      expandedContent={expandedContent}
+      primaryAction={{
+        icon: <PenLine className="tw-size-4" />,
+        onClick: handleEdit,
+        tooltip: "Edit Command",
+      }}
+      dropdownActions={dropdownActions}
+      containerRef={containerRef}
+    />
+  );
+};
 
 const SortableTableRow: React.FC<{
   command: CustomCommand;
@@ -169,6 +285,7 @@ export const CommandSettings: React.FC = () => {
   }, [rawCommands]);
 
   const settings = useSettingsValue();
+  const containerRef = useRef<HTMLDivElement>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -241,8 +358,40 @@ export const CommandSettings: React.FC = () => {
     await CustomCommandManager.getInstance().reorderCommands(newCommands);
   };
 
+  // Mobile view rendering
+  const renderMobileView = () => (
+    <div className="tw-relative md:tw-hidden">
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext
+          items={commands.map((command) => command.title)}
+          strategy={verticalListSortingStrategy}
+        >
+          <div className="tw-space-y-2">
+            {commands.length === 0 ? (
+              <div className="tw-rounded-lg tw-border tw-border-border tw-bg-primary tw-p-8 tw-text-center tw-text-muted">
+                No custom prompt files found.
+              </div>
+            ) : (
+              commands.map((command) => (
+                <MobileCommandCard
+                  key={command.title}
+                  command={command}
+                  commands={commands}
+                  onUpdate={handleUpdate}
+                  onRemove={handleRemove}
+                  onCopy={handleCopy}
+                  containerRef={containerRef}
+                />
+              ))
+            )}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+
   return (
-    <div className="tw-space-y-4">
+    <div className="tw-space-y-4" ref={containerRef}>
       <section>
         <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-xl tw-font-bold">Custom Commands</div>
@@ -296,7 +445,7 @@ export const CommandSettings: React.FC = () => {
         </div>
 
         <div className="tw-flex tw-flex-col tw-gap-4">
-          <div className="tw-flex tw-w-full tw-justify-between">
+          <div className="tw-flex tw-w-full tw-justify-between tw-gap-2 md:tw-justify-end">
             <div>
               <Button
                 variant="secondary"
@@ -309,7 +458,7 @@ export const CommandSettings: React.FC = () => {
                   ).open()
                 }
               >
-                Generate Default Commands
+                Generate Default
               </Button>
             </div>
             <Button
@@ -330,82 +479,83 @@ export const CommandSettings: React.FC = () => {
                 modal.open();
               }}
             >
-              <Plus className="tw-size-4" />
-              Add Command
+              <Plus className="tw-size-2 md:tw-size-4" />
+              Add Cmd
             </Button>
           </div>
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragEnd={handleDragEnd}
-          >
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="tw-w-10"></TableHead>
-                  <TableHead>Name</TableHead>
-                  <TableHead className="tw-w-24 tw-text-center">
-                    <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
-                      In Menu
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="tw-size-4" />
-                          </TooltipTrigger>
-                          <TooltipContent className="tw-max-w-xs tw-text-xs">
-                            If enabled, the command will be available in the context menu when you
-                            right-click in the editor.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableHead>
-                  <TableHead className="tw-w-28 tw-text-center">
-                    <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
-                      Slash Cmd
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Info className="tw-size-4" />
-                          </TooltipTrigger>
-                          <TooltipContent className="tw-max-w-xs tw-text-xs">
-                            If enabled, the command will be available as a slash command in the
-                            chat.
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                    </div>
-                  </TableHead>
-                  <TableHead className="tw-w-32 tw-text-center">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <SortableContext
-                items={commands.map((command) => command.title)}
-                strategy={verticalListSortingStrategy}
-              >
-                <TableBody>
-                  {commands.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
-                        No custom prompt files found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    commands.map((command) => (
-                      <SortableTableRow
-                        key={command.title}
-                        command={command}
-                        commands={commands}
-                        onUpdate={handleUpdate}
-                        onRemove={handleRemove}
-                        onCopy={handleCopy}
-                      />
-                    ))
-                  )}
-                </TableBody>
-              </SortableContext>
-            </Table>
-          </DndContext>
+
+          {/* Desktop view */}
+          <div className="tw-hidden md:tw-block">
+            <DndContext
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="tw-w-10"></TableHead>
+                    <TableHead>Name</TableHead>
+                    <TableHead className="tw-w-24 tw-text-center">
+                      <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
+                        In Menu
+                        <HelpTooltip
+                          content={
+                            <div className="tw-max-w-xs tw-text-xs">
+                              If enabled, the command will be available in the context menu when you
+                              right-click in the editor.
+                            </div>
+                          }
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="tw-w-28 tw-text-center">
+                      <div className="tw-flex tw-items-center tw-justify-center tw-gap-1">
+                        Slash Cmd
+                        <HelpTooltip
+                          content={
+                            <div className="tw-max-w-xs tw-text-xs">
+                              If enabled, the command will be available as a slash command in the
+                              chat.
+                            </div>
+                          }
+                        />
+                      </div>
+                    </TableHead>
+                    <TableHead className="tw-w-32 tw-text-center">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <SortableContext
+                  items={commands.map((command) => command.title)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  <TableBody>
+                    {commands.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={5} className="tw-py-8 tw-text-center tw-text-muted">
+                          No custom prompt files found.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      commands.map((command) => (
+                        <SortableTableRow
+                          key={command.title}
+                          command={command}
+                          commands={commands}
+                          onUpdate={handleUpdate}
+                          onRemove={handleRemove}
+                          onCopy={handleCopy}
+                        />
+                      ))
+                    )}
+                  </TableBody>
+                </SortableContext>
+              </Table>
+            </DndContext>
+          </div>
+
+          {/* Mobile view */}
+          {renderMobileView()}
         </div>
       </section>
     </div>

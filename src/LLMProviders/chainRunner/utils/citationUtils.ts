@@ -151,7 +151,7 @@ export function hasExistingCitations(response: string): boolean {
   const content = response || "";
   const hasMarkdownHeading = /(^|\n)\s*#{1,6}\s*Sources\b/i.test(content);
   const hasPlainLabel = /(^|\n)\s*Sources\s*(?:[:-]\s*)?(\n|$)/i.test(content);
-  const hasSummaryTag = /<summary>\s*Sources\s*<\/summary>/i.test(content);
+  const hasSummaryTag = /<summary[^>]*>\s*Sources\s*<\/summary>/i.test(content);
   // More robust detection: look for ANY line starting with [^digits]:
   const hasFootnoteDefinitions = /(^|\n)\s*\[\^\d+\]:\s*/.test(content);
   return hasMarkdownHeading || hasPlainLabel || hasSummaryTag || hasFootnoteDefinitions;
@@ -403,6 +403,93 @@ export function updateCitationsForConsolidation(
   });
 }
 
+interface SourcesDisplayItem {
+  index: number;
+  html: string;
+}
+
+/**
+ * Escapes HTML-sensitive characters to avoid unintended markup injection.
+ */
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Type guard that filters out nullish values when mapping optional entries.
+ */
+function isNonNull<T>(value: T | null | undefined): value is T {
+  return value !== null && value !== undefined;
+}
+
+/**
+ * Converts a normalized sources block into display-ready list items.
+ */
+function parseSimpleSources(sourcesBlock: string): SourcesDisplayItem[] {
+  const lines = sourcesBlock.split("\n");
+  const items: SourcesDisplayItem[] = [];
+
+  lines.forEach((rawLine) => {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const content = trimmed
+      .replace(/^<li>/i, "")
+      .replace(/<\/li>$/i, "")
+      .replace(/^[-*]\s*/, "")
+      .trim();
+
+    if (!content) {
+      return;
+    }
+
+    const markdownLink = content.match(/\[([^\]]+)\]\(([^)]+)\)/);
+    const wikiLink = content.match(/\[\[(.*?)\]\]/);
+
+    let html: string;
+    if (markdownLink) {
+      html = `<a href="${markdownLink[2]}">${markdownLink[1]}</a>`;
+    } else if (wikiLink) {
+      html = `[[${wikiLink[1]}]]`;
+    } else {
+      html = escapeHtml(content);
+    }
+
+    items.push({ index: items.length + 1, html });
+  });
+
+  return items;
+}
+
+/**
+ * Appends a styled, collapsible sources list to the main message content.
+ */
+function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): string {
+  if (items.length === 0) {
+    return mainContent;
+  }
+
+  const listItems = items
+    .map(
+      ({ index, html }) =>
+        `<li class="copilot-sources__item"><span class="copilot-sources__index">[${index}]</span><span class="copilot-sources__text">${html}</span></li>`
+    )
+    .join("\n");
+
+  return (
+    `${mainContent}\n\n<br/>\n` +
+    `<details class="copilot-sources"><summary class="copilot-sources__summary">Sources</summary>\n` +
+    `<ul class="copilot-sources__list">\n${listItems}\n</ul>\n</details>`
+  );
+}
+
 /**
  * Main function to process inline citations in content.
  * Uses settings to determine if inline citations should be processed.
@@ -416,46 +503,15 @@ export function processInlineCitations(content: string, useInlineCitations: bool
 
   // If inline citations are disabled, use simple expandable sources list
   if (!useInlineCitations) {
-    const sourceLinks = sourcesBlock
-      .split("\n")
-      .map((line) => {
-        const match = line.match(/- \[\[(.*?)\]\]/);
-        if (match) {
-          return `<li>[[${match[1]}]]</li>`;
-        }
-        return line;
-      })
-      .join("\n");
-
-    return (
-      mainContent +
-      "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-      sourceLinks +
-      "\n</ul>\n</details>"
-    );
+    const simpleItems = parseSimpleSources(sourcesBlock);
+    return buildSourcesDetails(mainContent, simpleItems);
   }
 
   // Process inline citations
   const footnoteLines = parseFootnoteDefinitions(sourcesBlock);
   if (footnoteLines.length === 0) {
-    // Not footnote format, use simple sources list
-    const sourceLinks = sourcesBlock
-      .split("\n")
-      .map((line) => {
-        const match = line.match(/- \[\[(.*?)\]\]/);
-        if (match) {
-          return `<li>[[${match[1]}]]</li>`;
-        }
-        return line;
-      })
-      .join("\n");
-
-    return (
-      mainContent +
-      "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-      sourceLinks +
-      "\n</ul>\n</details>"
-    );
+    const simpleItems = parseSimpleSources(sourcesBlock);
+    return buildSourcesDetails(mainContent, simpleItems);
   }
 
   // Process footnote-style citations
@@ -471,31 +527,16 @@ export function processInlineCitations(content: string, useInlineCitations: bool
     items = uniqueItems;
   }
 
-  // Build sources list maintaining proper citation mapping
-  // The old code used .filter().map() which destroyed the mapping by renumbering
-  // Now we build the list respecting the citation numbers used in the text
-  const maxCitationNum = Math.max(
-    ...Array.from(citationMap.values()).concat(
-      consolidationMap.size > 0 ? Array.from(consolidationMap.values()) : []
-    )
-  );
+  const detailedItems = items
+    .map<SourcesDisplayItem | null>((item, index) => {
+      if (!item) {
+        return null;
+      }
+      return { index: index + 1, html: item };
+    })
+    .filter(isNonNull);
 
-  const sourcesList: string[] = [];
-  for (let i = 1; i <= maxCitationNum; i++) {
-    const item = items[i - 1];
-    if (item) {
-      sourcesList.push(`<li><strong>[${i}]</strong> ${item}</li>`);
-    }
-  }
-
-  const formattedSourcesList = sourcesList.join("\n");
-
-  return (
-    mainContent +
-    "\n\n<br/>\n<details><summary>Sources</summary>\n<ul>\n" +
-    formattedSourcesList +
-    "\n</ul>\n</details>"
-  );
+  return buildSourcesDetails(mainContent, detailedItems);
 }
 
 // ===== SOURCE CATALOG UTILITIES =====

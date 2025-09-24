@@ -881,3 +881,85 @@ If your plugin does not need CSS, delete this file.
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
   padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8)) !important;
 }
+
+/* Collapsible sources styling */
+.copilot-sources {
+  margin-top: var(--size-4-1);
+  padding: calc(var(--size-4-2) / 2) var(--size-4-2);
+  border-radius: var(--radius-s);
+  border: 1px solid color-mix(in srgb, var(--background-modifier-border) 70%, transparent);
+  background-color: color-mix(
+    in srgb,
+    var(--background-primary) 94%,
+    var(--background-modifier-border) 6%
+  );
+  width: min(100%, 32rem);
+}
+
+.copilot-sources__summary {
+  font-size: var(--font-ui-smaller);
+  color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--size-4-2);
+  padding: calc(var(--size-4-2) / 4) 0;
+  padding-left: var(--size-4-2);
+  padding-right: var(--size-4-2);
+  margin: 0;
+}
+
+.copilot-sources__summary::-webkit-details-marker {
+  color: color-mix(in srgb, var(--text-muted) 80%, transparent);
+}
+
+.copilot-sources__summary::after {
+  content: ">";
+  font-size: var(--font-ui-smaller);
+  color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  transition: transform 0.15s ease;
+}
+
+.copilot-sources[open] .copilot-sources__summary {
+  margin-bottom: calc(var(--size-4-2) / 2);
+}
+
+.copilot-sources[open] .copilot-sources__summary::after {
+  transform: rotate(90deg);
+}
+
+.copilot-sources__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  padding-left: var(--size-4-2);
+  padding-right: var(--size-4-2);
+  display: flex;
+  flex-direction: column;
+  gap: calc(var(--size-4-2) / 2);
+  font-size: var(--font-ui-smaller);
+  color: color-mix(in srgb, var(--text-muted) 85%, transparent);
+}
+
+.copilot-sources__item {
+  display: flex;
+  gap: var(--size-4-2);
+  align-items: baseline;
+}
+
+.copilot-sources__index {
+  color: color-mix(in srgb, var(--text-muted) 65%, transparent);
+  font-weight: var(--font-medium);
+  min-width: var(--size-4-3);
+  text-align: right;
+}
+
+.copilot-sources__text {
+  color: color-mix(in srgb, var(--text-muted) 90%, transparent);
+  line-height: 1.4;
+}
+
+.copilot-sources__text a {
+  color: var(--text-accent);
+}

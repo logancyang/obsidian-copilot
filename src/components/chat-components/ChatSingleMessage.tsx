@@ -2,7 +2,7 @@ import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -10,7 +10,6 @@ import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citatio
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
-import { Bot, User } from "lucide-react";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import ReactDOM, { Root } from "react-dom/client";
@@ -66,24 +65,18 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
-        <Tooltip key={`${index}-${note.path}`}>
-          <TooltipTrigger asChild>
-            <Badge variant="secondary">
-              <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{note.path}</TooltipContent>
-        </Tooltip>
+        <HelpTooltip key={`${index}-${note.path}`} content={note.path} side="top">
+          <Badge variant="secondary">
+            <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
+          </Badge>
+        </HelpTooltip>
       ))}
       {context.urls.map((url, index) => (
-        <Tooltip key={`${index}-${url}`}>
-          <TooltipTrigger asChild>
-            <Badge variant="secondary">
-              <span className="tw-max-w-40 tw-truncate">{url}</span>
-            </Badge>
-          </TooltipTrigger>
-          <TooltipContent>{url}</TooltipContent>
-        </Tooltip>
+        <HelpTooltip key={`${index}-${url}`} content={url} side="top">
+          <Badge variant="secondary">
+            <span className="tw-max-w-40 tw-truncate">{url}</span>
+          </Badge>
+        </HelpTooltip>
       ))}
     </div>
   );
@@ -644,14 +637,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
       <div
         className={cn(
-          "tw-group tw-mx-2 tw-flex tw-gap-2 tw-rounded-md tw-p-2",
+          "tw-group tw-mx-2 tw-rounded-md tw-p-2",
           message.sender === USER_SENDER && "tw-border tw-border-solid tw-border-border"
         )}
+        style={
+          message.sender === USER_SENDER
+            ? { backgroundColor: "var(--background-modifier-hover)" }
+            : undefined
+        }
       >
-        <div className="tw-w-6 tw-shrink-0">
-          {message.sender === USER_SENDER ? <User /> : <Bot />}
-        </div>
-        <div className="tw-flex tw-max-w-full tw-grow tw-flex-col tw-gap-2 tw-overflow-hidden">
+        <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
 

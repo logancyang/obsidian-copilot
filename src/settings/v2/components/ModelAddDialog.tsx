@@ -19,7 +19,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
-import { ChevronDown, HelpCircle, Loader2 } from "lucide-react";
+import { ChevronDown, Loader2 } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { FormField } from "@/components/ui/form-field";
 
 interface FormErrors {
@@ -422,25 +422,21 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             label={
               <div className="tw-flex tw-items-center tw-gap-1.5">
                 <span className="tw-leading-none">Display Name</span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                      <div className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm tw-text-muted">
-                        <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
-                        <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
-                        <div className="tw-text-[12px]">
-                          Example:
-                          <li>Direct-Paid:Ds-r1</li>
-                          <li>OpenRouter-Paid:Ds-r1</li>
-                          <li>Perplexity-Paid:lg</li>
-                        </div>
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm tw-text-muted">
+                      <div className="tw-text-[12px] tw-font-bold">Suggested format:</div>
+                      <div className="tw-text-accent">[Source]-[Payment]:[Pretty Model Name]</div>
+                      <div className="tw-text-[12px]">
+                        Example:
+                        <li>Direct-Paid:Ds-r1</li>
+                        <li>OpenRouter-Paid:Ds-r1</li>
+                        <li>Perplexity-Paid:lg</li>
                       </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                    </div>
+                  }
+                  contentClassName="tw-max-w-96"
+                />
               </div>
             }
           >
@@ -501,18 +497,14 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             label={
               <div className="tw-flex tw-items-center tw-gap-1.5">
                 <span className="tw-leading-none">Model Capabilities</span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                      <div className="tw-text-sm tw-text-muted">
-                        Only used to display model capabilities, does not affect model functionality
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <HelpTooltip
+                  content={
+                    <div className="tw-text-sm tw-text-muted">
+                      Only used to display model capabilities, does not affect model functionality
+                    </div>
+                  }
+                  contentClassName="tw-max-w-96"
+                />
               </div>
             }
           >
@@ -532,16 +524,11 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                       });
                     }}
                   />
-                  <Label htmlFor={id} className="tw-text-sm">
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <span>{label}</span>
-                        </TooltipTrigger>
-                        <TooltipContent side="bottom">{description}</TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </Label>
+                  <HelpTooltip content={description}>
+                    <Label htmlFor={id} className="tw-text-sm">
+                      {label}
+                    </Label>
+                  </HelpTooltip>
                 </div>
               ))}
             </div>
@@ -550,39 +537,35 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           {renderProviderSpecificFields()}
         </div>
 
-        <div className="tw-flex tw-items-center tw-justify-end tw-gap-4">
+        <div className="tw-flex tw-items-center  tw-justify-between tw-gap-4">
           <div className="tw-flex tw-items-center tw-gap-2">
             <Checkbox
               id="enable-cors"
               checked={model.enableCors || false}
               onCheckedChange={(checked: boolean) => setModel({ ...model, enableCors: checked })}
             />
-            <Label htmlFor="enable-cors" className="tw-text-sm">
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span>Enable CORS</span>
-                <TooltipProvider delayDuration={0}>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <HelpCircle className="tw-size-4" />
-                    </TooltipTrigger>
-                    <TooltipContent align="start" className="tw-max-w-96" side="bottom">
-                      <div className="tw-text-sm tw-text-muted">
-                        Only check this option when prompted that CORS is needed
-                      </div>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+            <Label htmlFor="enable-cors">
+              <div className="tw-flex tw-items-center tw-gap-0.5">
+                <span className="tw-text-xs md:tw-text-sm">CORS</span>
+                <HelpTooltip
+                  content={
+                    <div className="tw-text-sm tw-text-muted">
+                      Only check this option when prompted that CORS is needed
+                    </div>
+                  }
+                  contentClassName="tw-max-w-96"
+                />
               </div>
             </Label>
           </div>
-          <div className="tw-flex tw-gap-2">
+          <div className="tw-flex tw-gap-2 tw-text-xs md:tw-text-sm">
             <Button variant="secondary" onClick={handleAdd} disabled={isButtonDisabled()}>
               Add Model
             </Button>
             <Button variant="secondary" onClick={handleVerify} disabled={isButtonDisabled()}>
               {isVerifying ? (
                 <>
-                  <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
+                  <Loader2 className="tw-mr-2 tw-size-2 tw-animate-spin md:tw-size-4 " />
                   Verify
                 </>
               ) : (
