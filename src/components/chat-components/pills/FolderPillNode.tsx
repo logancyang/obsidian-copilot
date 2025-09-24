@@ -9,6 +9,7 @@ import {
 } from "lexical";
 import { Badge } from "@/components/ui/badge";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
+import { TruncatedPillText } from "./TruncatedPillText";
 
 export interface SerializedFolderPillNode extends SerializedBasePillNode {
   type: "folder-pill";
@@ -69,11 +70,8 @@ export class FolderPillNode extends BasePillNode {
    */
   decorate(): JSX.Element {
     return (
-      <Badge
-        variant="secondary"
-        className="tw-inline-flex tw-items-center tw-gap-1 tw-whitespace-nowrap tw-text-xs"
-      >
-        {`{${this.getFolderPath()}}`}
+      <Badge variant="secondary" className="tw-inline-flex tw-items-center tw-gap-1 tw-text-xs">
+        <TruncatedPillText content={this.getFolderPath()} openBracket="{" closeBracket="}" />
       </Badge>
     );
   }

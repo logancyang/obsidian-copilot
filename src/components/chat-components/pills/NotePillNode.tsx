@@ -11,6 +11,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
+import { TruncatedPillText } from "./TruncatedPillText";
 
 export interface SerializedNotePillNode extends SerializedBasePillNode {
   noteTitle: string;
@@ -149,7 +150,7 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
       className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-text-xs")}
     >
       <div className="tw-flex tw-items-center tw-gap-1">
-        <span className="tw-max-w-40 tw-truncate">[[{noteTitle}]]</span>
+        <TruncatedPillText content={noteTitle} openBracket="[[" closeBracket="]]" />
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
