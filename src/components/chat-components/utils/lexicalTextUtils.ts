@@ -366,6 +366,12 @@ function resolveNoteReference(noteName: string): TFile | null {
   }
 }
 
+interface PatternInfo {
+  type: "notes" | "urls" | "tools" | "tags" | "folders";
+  groupCount: number;
+  startIndex: number;
+}
+
 /**
  * Parses text content to extract [[note name]], @tool, #tag patterns and optionally URLs, converting them to appropriate pills
  * @param text The text content to parse
@@ -391,13 +397,36 @@ export function parseTextForPills(
   } = options;
   const segments: ParsedContent[] = [];
 
-  // Build regex pattern based on enabled options
+  // Build regex pattern based on enabled options and track group indices
   const patterns: string[] = [];
-  if (includeNotes) patterns.push("(\\[\\[([^\\]]+)\\]\\])"); // Group 1,2: [[note name]]
-  if (includeURLs) patterns.push("(https?:\\/\\/[^\\s\"'<>]+)"); // Group 3: URLs
-  if (includeTools) patterns.push("(@[a-zA-Z][a-zA-Z0-9_]*)"); // Group 4: @tool
-  if (includeTags) patterns.push("(#[a-zA-Z][a-zA-Z0-9_\\-]*)"); // Group 5: #tag
-  if (includeFolders) patterns.push("(\\{([^}]+)\\})"); // Group 6,7: {folderName}
+  const patternInfo: PatternInfo[] = [];
+  let currentGroupIndex = 1;
+
+  if (includeNotes) {
+    patterns.push("(\\[\\[([^\\]]+)\\]\\])"); // 2 groups: full match and note name
+    patternInfo.push({ type: "notes", groupCount: 2, startIndex: currentGroupIndex });
+    currentGroupIndex += 2;
+  }
+  if (includeURLs) {
+    patterns.push("(https?:\\/\\/[^\\s\"'<>]+)"); // 1 group: URL
+    patternInfo.push({ type: "urls", groupCount: 1, startIndex: currentGroupIndex });
+    currentGroupIndex += 1;
+  }
+  if (includeTools) {
+    patterns.push("(@[a-zA-Z][a-zA-Z0-9_]*)"); // 1 group: @tool
+    patternInfo.push({ type: "tools", groupCount: 1, startIndex: currentGroupIndex });
+    currentGroupIndex += 1;
+  }
+  if (includeTags) {
+    patterns.push("(#[a-zA-Z][a-zA-Z0-9_\\-]*)"); // 1 group: #tag
+    patternInfo.push({ type: "tags", groupCount: 1, startIndex: currentGroupIndex });
+    currentGroupIndex += 1;
+  }
+  if (includeFolders) {
+    patterns.push("(\\{([^}]+)\\})"); // 2 groups: full match and folder name
+    patternInfo.push({ type: "folders", groupCount: 2, startIndex: currentGroupIndex });
+    currentGroupIndex += 2;
+  }
 
   if (patterns.length === 0) {
     // No patterns to match, return as plain text
@@ -420,9 +449,24 @@ export function parseTextForPills(
       }
     }
 
-    if (match[1] && includeNotes) {
+    // Determine which pattern matched by checking which groups are defined
+    let matchedPattern: PatternInfo | null = null;
+    for (const pattern of patternInfo) {
+      if (match[pattern.startIndex]) {
+        matchedPattern = pattern;
+        break;
+      }
+    }
+
+    if (!matchedPattern) {
+      // Fallback: treat as plain text
+      segments.push({
+        type: "text",
+        content: match[0],
+      });
+    } else if (matchedPattern.type === "notes") {
       // This is a note link [[note name]]
-      const noteName = match[2].trim();
+      const noteName = match[matchedPattern.startIndex + 1].trim();
       const file = resolveNoteReference(noteName);
 
       if (file && file instanceof TFile) {
@@ -443,9 +487,9 @@ export function parseTextForPills(
           content: match[0], // Keep the full [[note name]] syntax
         });
       }
-    } else if (match[3] && includeURLs) {
+    } else if (matchedPattern.type === "urls") {
       // This is a URL
-      const url = match[3].replace(/,+$/, ""); // Remove trailing commas
+      const url = match[matchedPattern.startIndex].replace(/,+$/, ""); // Remove trailing commas
       if (isValidURL(url)) {
         segments.push({
           type: "url-pill",
@@ -459,9 +503,9 @@ export function parseTextForPills(
           content: match[0],
         });
       }
-    } else if (match[4] && includeTools) {
+    } else if (matchedPattern.type === "tools") {
       // This is a tool reference @tool
-      const toolName = match[4];
+      const toolName = match[matchedPattern.startIndex];
       const resolvedTool = resolveToolReference(toolName);
 
       if (resolvedTool) {
@@ -477,9 +521,9 @@ export function parseTextForPills(
           content: match[0],
         });
       }
-    } else if (match[5] && includeTags) {
+    } else if (matchedPattern.type === "tags") {
       // This is a tag reference #tag
-      const tagName = match[5];
+      const tagName = match[matchedPattern.startIndex];
       const resolvedTag = resolveTagReference(tagName);
 
       if (resolvedTag) {
@@ -495,9 +539,9 @@ export function parseTextForPills(
           content: match[0],
         });
       }
-    } else if (match[6] && includeFolders) {
+    } else if (matchedPattern.type === "folders") {
       // This is a folder reference {folderName}
-      const folderName = match[7].trim();
+      const folderName = match[matchedPattern.startIndex + 1].trim();
       const resolvedFolder = resolveFolderReference(folderName);
 
       if (resolvedFolder) {

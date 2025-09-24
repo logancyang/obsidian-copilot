@@ -67,6 +67,10 @@ module.exports = {
     this.basename = this.name.replace(/\.[^/.]+$/, "");
     this.extension = path.split(".").pop();
   }),
+  TFolder: jest.fn().mockImplementation(function (path) {
+    this.path = path || "";
+    this.name = this.path.split("/").pop() || "";
+  }),
   WorkspaceLeaf: jest.fn().mockImplementation(function () {
     this.view = null;
     this.setViewState = jest.fn();
@@ -84,11 +88,17 @@ global.app = {
     }),
     read: jest.fn().mockResolvedValue("test content"),
     modify: jest.fn().mockResolvedValue(undefined),
+    getMarkdownFiles: jest.fn().mockReturnValue([]),
+    getAllLoadedFiles: jest.fn().mockReturnValue([]),
   },
   workspace: {
     getActiveFile: jest.fn().mockReturnValue(null),
     getLeaf: jest.fn().mockReturnValue({
       openFile: jest.fn().mockResolvedValue(undefined),
     }),
+  },
+  metadataCache: {
+    getFirstLinkpathDest: jest.fn().mockReturnValue(null),
+    getFileCache: jest.fn().mockReturnValue(null),
   },
 };
