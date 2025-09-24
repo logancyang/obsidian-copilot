@@ -18,6 +18,7 @@ import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
+import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ChatMessage } from "@/types/message";
 import {
   extractYoutubeUrl,
@@ -795,14 +796,17 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     timeExpression?: string
   ): {
     formattedForLLM: string;
+    formattedForDisplay: string;
     sources: { title: string; path: string; score: number; explanation?: any }[];
   } {
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
     let formattedForLLM: string;
+    let formattedForDisplay: string;
 
     if (!toolResult.success) {
       formattedForLLM = "<localSearch>\nSearch failed.\n</localSearch>";
-      return { formattedForLLM, sources };
+      formattedForDisplay = `Search failed: ${toolResult.result}`;
+      return { formattedForLLM, formattedForDisplay, sources };
     }
 
     try {
@@ -816,7 +820,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
           : null;
       if (!Array.isArray(searchResults)) {
         formattedForLLM = "<localSearch>\nInvalid search results format.\n</localSearch>";
-        return { formattedForLLM, sources };
+        formattedForDisplay = "Search results were in an unexpected format.";
+        return { formattedForLLM, formattedForDisplay, sources };
       }
 
       // Log a concise debug table of results with explanations (title, ctime, mtime)
@@ -827,6 +832,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
       // Prepare and format results for LLM (include stable ids)
       formattedForLLM = this.prepareLocalSearchResult(searchResults, timeExpression || "");
+      formattedForDisplay = ToolResultFormatter.format("localSearch", formattedForLLM);
     } catch (error) {
       logWarn("Failed to parse localSearch results:", error);
       // Fallback: try to format as text
@@ -834,9 +840,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       formattedForLLM = timeExpression
         ? `<localSearch timeRange="${timeExpression}">\n${formatted}\n</localSearch>`
         : `<localSearch>\n${formatted}\n</localSearch>`;
+      formattedForDisplay = ToolResultFormatter.format("localSearch", formattedForLLM);
     }
 
-    return { formattedForLLM, sources };
+    return { formattedForLLM, formattedForDisplay, sources };
   }
 
   protected async getSystemPrompt(): Promise<string> {

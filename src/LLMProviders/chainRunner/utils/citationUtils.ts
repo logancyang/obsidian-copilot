@@ -472,11 +472,12 @@ function parseSimpleSources(sourcesBlock: string): SourcesDisplayItem[] {
  * Appends a styled, collapsible sources list to the main message content.
  */
 function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): string {
-  if (items.length === 0) {
+  const nonEmptyItems = items.filter((item) => item.html.trim().length > 0);
+  if (nonEmptyItems.length === 0) {
     return mainContent;
   }
 
-  const listItems = items
+  const listItems = nonEmptyItems
     .map(
       ({ index, html }) =>
         `<li class="copilot-sources__item"><span class="copilot-sources__index">[${index}]</span><span class="copilot-sources__text">${html}</span></li>`

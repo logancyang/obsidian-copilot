@@ -9,6 +9,11 @@ export interface ToolExecutionResult {
   toolName: string;
   result: string;
   success: boolean;
+  /**
+   * Optional display-friendly version of the tool result for UI rendering.
+   * When absent, fallback to `result` for display purposes.
+   */
+  displayResult?: string;
 }
 
 /**
