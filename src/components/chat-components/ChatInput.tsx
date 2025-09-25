@@ -21,12 +21,13 @@ import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
+import { $getSelection, $isRangeSelection } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removePillsByURL } from "./pills/URLPillNode";
 import { $removePillsByTag } from "./pills/TagPillNode";
 import { $removePillsByFolder } from "./pills/FolderPillNode";
-import { $removePillsByToolName } from "./pills/ToolPillNode";
+import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNode";
 import LexicalEditor from "./LexicalEditor";
 
 interface ChatInputProps {
@@ -374,14 +375,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
         }
         break;
       case "tools":
-        // Always add tool - popover selection should turn ON, not toggle
-        if (typeof data === "string") {
-          setToolsFromPills((prev) => {
-            if (!prev.includes(data)) {
-              return [...prev, data];
+        // Add tool pill to lexical editor when selected from @ mention typeahead
+        if (typeof data === "string" && lexicalEditorRef.current) {
+          lexicalEditorRef.current.update(() => {
+            // Insert tool pill at current cursor position
+            const selection = $getSelection();
+            if ($isRangeSelection(selection)) {
+              const toolPill = $createToolPillNode(data);
+              selection.insertNodes([toolPill]);
             }
-            return prev; // Already on, keep it on
           });
+          // Note: toolsFromPills will be updated automatically via ToolPillSyncPlugin
         }
         break;
       case "tags":
@@ -396,12 +400,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
         }
         break;
       case "folders":
-        // Update foldersFromPills - sync will update contextFolders
-        if (data && typeof data === "string") {
-          setFoldersFromPills((prev) => {
-            const exists = prev.find((f) => f === data);
+        // For folders from context menu, update contextFolders directly (no pills in editor)
+        if (data && data.path) {
+          const folderPath = data.path;
+          setContextFolders((prev) => {
+            const exists = prev.find((f) => f === folderPath);
             if (!exists) {
-              return [...prev, data];
+              return [...prev, folderPath];
             }
             return prev;
           });
