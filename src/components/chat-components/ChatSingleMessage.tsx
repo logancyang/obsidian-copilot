@@ -11,8 +11,12 @@ import {
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
-import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
+import {
+  parseToolCallMarkers,
+  type ToolCallMarker,
+} from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { logWarn } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
@@ -27,6 +31,22 @@ declare global {
 }
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
+
+/**
+ * Render a tool call banner inside the provided React root.
+ */
+const renderToolCallBanner = (root: Root, toolCall: ToolCallMarker): void => {
+  root.render(
+    <ToolCallBanner
+      toolName={toolCall.toolName}
+      displayName={toolCall.displayName}
+      emoji={toolCall.emoji}
+      isExecuting={toolCall.isExecuting}
+      result={toolCall.result || null}
+      confirmationMessage={toolCall.confirmationMessage}
+    />
+  );
+};
 
 /**
  * Normalizes rendered markdown footnotes to align with inline citation UX.
@@ -383,26 +403,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
-            const existingDiv = document.getElementById(`tool-call-${toolCallId}`);
+            let container = document.getElementById(`tool-call-${toolCallId}`);
 
-            if (existingDiv) {
-              // Update existing tool call
-              const root = rootsRef.current.get(toolCallId);
-              if (root && !isUnmountingRef.current) {
-                root.render(
-                  <ToolCallBanner
-                    toolName={segment.toolCall.toolName}
-                    displayName={segment.toolCall.displayName}
-                    emoji={segment.toolCall.emoji}
-                    isExecuting={segment.toolCall.isExecuting}
-                    result={segment.toolCall.result || null}
-                    confirmationMessage={segment.toolCall.confirmationMessage}
-                  />
-                );
-              }
-              currentIndex++;
-            } else {
-              // Create new tool call
+            if (!container) {
               const insertBefore = contentRef.current!.children[currentIndex];
               const toolDiv = document.createElement("div");
               toolDiv.className = "tool-call-container";
@@ -414,23 +417,20 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 contentRef.current!.appendChild(toolDiv);
               }
 
-              const root = ReactDOM.createRoot(toolDiv);
-              rootsRef.current.set(toolCallId, root);
-
-              if (!isUnmountingRef.current) {
-                root.render(
-                  <ToolCallBanner
-                    toolName={segment.toolCall.toolName}
-                    displayName={segment.toolCall.displayName}
-                    emoji={segment.toolCall.emoji}
-                    isExecuting={segment.toolCall.isExecuting}
-                    result={segment.toolCall.result || null}
-                    confirmationMessage={segment.toolCall.confirmationMessage}
-                  />
-                );
-              }
-              currentIndex++;
+              container = toolDiv;
             }
+
+            let root = rootsRef.current.get(toolCallId);
+            if (!root) {
+              root = ReactDOM.createRoot(container as HTMLElement);
+              rootsRef.current.set(toolCallId, root);
+            }
+
+            if (!isUnmountingRef.current) {
+              renderToolCallBanner(root, segment.toolCall);
+            }
+
+            currentIndex++;
           }
         });
 
@@ -448,13 +448,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               const root = rootsRef.current.get(id);
               if (root) {
                 // Defer unmounting to avoid React rendering conflicts
+                rootsRef.current.delete(id);
                 setTimeout(() => {
                   try {
                     root.unmount();
                   } catch (error) {
-                    console.debug("Error unmounting tool call root:", error);
+                    logWarn("Error unmounting tool call root", id, error);
                   }
-                  rootsRef.current.delete(id);
                 }, 0);
               }
               element.remove();
@@ -481,21 +481,24 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const oneHourAgo = Date.now() - 60 * 60 * 1000;
 
       globalMap.forEach((roots, msgId) => {
-        // Extract timestamp from message ID if it's in epoch format
-        const timestamp = parseInt(msgId);
-        if (!isNaN(timestamp) && timestamp < oneHourAgo) {
-          // Defer cleanup to avoid React rendering conflicts
-          setTimeout(() => {
-            roots.forEach((root) => {
-              try {
-                root.unmount();
-              } catch {
-                // Ignore errors
-              }
-            });
-            globalMap.delete(msgId);
-          }, 0);
+        const timestamp = parseInt(msgId, 10);
+        if (Number.isNaN(timestamp) || timestamp >= oneHourAgo) {
+          return;
         }
+
+        const rootsToCleanup = Array.from(roots.entries());
+        roots.clear();
+        globalMap.delete(msgId);
+
+        setTimeout(() => {
+          rootsToCleanup.forEach(([toolId, root]) => {
+            try {
+              root.unmount();
+            } catch (error) {
+              logWarn("Error unmounting stale tool call root", toolId, error);
+            }
+          });
+        }, 0);
       });
     };
 
@@ -526,7 +529,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 root.unmount();
               } catch (error) {
                 // Ignore unmount errors during cleanup
-                console.debug("Error unmounting React root during cleanup:", error);
+                logWarn("Error unmounting React root during cleanup", error);
               }
             });
             globalMap.delete(currentMessageId);
