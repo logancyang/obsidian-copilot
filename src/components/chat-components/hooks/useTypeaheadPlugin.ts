@@ -10,6 +10,7 @@ import {
   KEY_ENTER_COMMAND,
   KEY_ESCAPE_COMMAND,
   KEY_TAB_COMMAND,
+  BLUR_COMMAND,
 } from "lexical";
 import { tryToPositionRange } from "../TypeaheadMenuPortal";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
@@ -158,14 +159,26 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
       COMMAND_PRIORITY_HIGH
     );
 
+    const removeBlurCommand = editor.registerCommand(
+      BLUR_COMMAND,
+      () => {
+        if (state.isOpen) {
+          closeMenu();
+        }
+        return false;
+      },
+      COMMAND_PRIORITY_HIGH
+    );
+
     return () => {
       removeKeyDownCommand();
       removeKeyUpCommand();
       removeEnterCommand();
       removeTabCommand();
       removeEscapeCommand();
+      removeBlurCommand();
     };
-  }, [editor, handleKeyDown]);
+  }, [editor, handleKeyDown, state.isOpen, closeMenu]);
 
   // Detect trigger patterns in text
   const detectTrigger = useCallback(

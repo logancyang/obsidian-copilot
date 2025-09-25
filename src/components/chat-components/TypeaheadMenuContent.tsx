@@ -127,7 +127,12 @@ export function TypeaheadMenuContent({
                     "tw-flex tw-cursor-pointer tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm tw-text-normal",
                     isSelected ? "tw-bg-secondary" : "hover:tw-bg-secondary"
                   )}
-                  onClick={() => onSelect(option)}
+                  // Use onMouseDown instead of onClick to prevent triggering
+                  // onblur events of the typeahead menu
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onSelect(option);
+                  }}
                   onMouseEnter={() => onHighlight(index)}
                 >
                   {isCategory ? (
