@@ -129,7 +129,37 @@ export class ChatPersistenceManager {
     return messages
       .map((message) => {
         const timestamp = message.timestamp ? message.timestamp.display : "Unknown time";
-        return `**${message.sender}**: ${message.message}\n[Timestamp: ${timestamp}]`;
+        let content = `**${message.sender}**: ${message.message}`;
+
+        // Include context information if present
+        if (message.context) {
+          const contextParts: string[] = [];
+
+          if (message.context.notes?.length) {
+            contextParts.push(
+              `Notes: ${message.context.notes.map((note) => note.basename).join(", ")}`
+            );
+          }
+
+          if (message.context.urls?.length) {
+            contextParts.push(`URLs: ${message.context.urls.join(", ")}`);
+          }
+
+          if (message.context.tags?.length) {
+            contextParts.push(`Tags: ${message.context.tags.join(", ")}`);
+          }
+
+          if (message.context.folders?.length) {
+            contextParts.push(`Folders: ${message.context.folders.join(", ")}`);
+          }
+
+          if (contextParts.length > 0) {
+            content += `\n[Context: ${contextParts.join(" | ")}]`;
+          }
+        }
+
+        content += `\n[Timestamp: ${timestamp}]`;
+        return content;
       })
       .join("\n\n");
   }
@@ -157,21 +187,36 @@ export class ChatPersistenceManager {
       const sender = match[1] === "user" ? USER_SENDER : AI_SENDER;
       const fullContent = match[2].trim();
 
-      // Split content into lines to extract timestamp and message
+      // Split content into lines to extract timestamp, context, and message
       const contentLines = fullContent.split("\n");
       let messageText = fullContent;
       let timestamp = "Unknown time";
+      let contextInfo: any = undefined;
+
+      // Check for context and timestamp lines
+      let endIndex = contentLines.length;
 
       // Check if last line is a timestamp
-      const lastLineIndex = contentLines.length - 1;
-      if (lastLineIndex > 0 && contentLines[lastLineIndex].startsWith("[Timestamp: ")) {
-        const timestampMatch = contentLines[lastLineIndex].match(/\[Timestamp: (.*?)\]/);
+      if (contentLines[endIndex - 1]?.startsWith("[Timestamp: ")) {
+        const timestampMatch = contentLines[endIndex - 1].match(/\[Timestamp: (.*?)\]/);
         if (timestampMatch) {
           timestamp = timestampMatch[1];
-          // Message is everything except the timestamp line
-          messageText = contentLines.slice(0, lastLineIndex).join("\n").trim();
+          endIndex--;
         }
       }
+
+      // Check if second-to-last line is context
+      if (endIndex > 0 && contentLines[endIndex - 1]?.startsWith("[Context: ")) {
+        const contextMatch = contentLines[endIndex - 1].match(/\[Context: (.*?)\]/);
+        if (contextMatch) {
+          const contextStr = contextMatch[1];
+          contextInfo = this.parseContextString(contextStr);
+          endIndex--;
+        }
+      }
+
+      // Message is everything before context and timestamp
+      messageText = contentLines.slice(0, endIndex).join("\n").trim();
 
       // Parse the timestamp
       let epoch: number | undefined;
@@ -193,10 +238,69 @@ export class ChatPersistenceManager {
               fileName: "",
             }
           : null,
+        context: contextInfo,
       });
     }
 
     return messages;
+  }
+
+  /**
+   * Parse context string back into context object
+   */
+  private parseContextString(contextStr: string): any {
+    const context: any = {
+      notes: [],
+      urls: [],
+      tags: [],
+      folders: [],
+    };
+
+    // Split by | to get different context types
+    const parts = contextStr.split(" | ");
+
+    for (const part of parts) {
+      const trimmed = part.trim();
+
+      if (trimmed.startsWith("Notes: ")) {
+        const notesStr = trimmed.substring(7); // Remove "Notes: "
+        if (notesStr) {
+          // For notes, we only have basenames. Create TFile-like objects with path = basename
+          // This is a limitation since we don't save full paths, but it's better than nothing
+          context.notes = notesStr.split(", ").map((basename) => ({
+            basename: basename.trim(),
+            path: basename.trim(), // Use basename as path since we don't have the full path
+          }));
+        }
+      } else if (trimmed.startsWith("URLs: ")) {
+        const urlsStr = trimmed.substring(6); // Remove "URLs: "
+        if (urlsStr) {
+          context.urls = urlsStr.split(", ").map((url) => url.trim());
+        }
+      } else if (trimmed.startsWith("Tags: ")) {
+        const tagsStr = trimmed.substring(6); // Remove "Tags: "
+        if (tagsStr) {
+          context.tags = tagsStr.split(", ").map((tag) => tag.trim());
+        }
+      } else if (trimmed.startsWith("Folders: ")) {
+        const foldersStr = trimmed.substring(9); // Remove "Folders: "
+        if (foldersStr) {
+          context.folders = foldersStr.split(", ").map((folder) => folder.trim());
+        }
+      }
+    }
+
+    // Only return context if it has any content
+    if (
+      context.notes.length > 0 ||
+      context.urls.length > 0 ||
+      context.tags.length > 0 ||
+      context.folders.length > 0
+    ) {
+      return context;
+    }
+
+    return undefined;
   }
 
   /**

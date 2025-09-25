@@ -4,7 +4,6 @@ import {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  pomodoroTool,
   convertTimeBetweenTimezonesTool,
 } from "./TimeTools";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
@@ -179,16 +178,6 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 </use_tool>`,
     },
   },
-  {
-    tool: pomodoroTool,
-    metadata: {
-      id: "pomodoro",
-      displayName: "Pomodoro Timer",
-      description: "Manage time with Pomodoro technique",
-      category: "time",
-      copilotCommands: ["@pomodoro"],
-    },
-  },
 
   // File tools
   {
@@ -256,7 +245,6 @@ Example usage:
       displayName: "YouTube Transcription",
       description: "Get transcripts from YouTube videos",
       category: "media",
-      copilotCommands: ["@youtube"],
       customPromptInstructions: `For youtubeTranscription:
 - Use when user provides YouTube URLs
 - No parameters needed - the tool will process URLs from the conversation

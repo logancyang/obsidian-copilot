@@ -12,22 +12,16 @@ import {
   ImageProcessingResult,
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logError, logInfo, logWarn } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ChatMessage } from "@/types/message";
-import {
-  extractYoutubeUrl,
-  getApiErrorMessage,
-  getMessageRole,
-  withSuppressedTokenWarnings,
-} from "@/utils";
+import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
+import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import {
   formatSourceCatalog,
@@ -50,21 +44,9 @@ import {
 } from "./utils/searchResultUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
-  private isYoutubeOnlyMessage(message: string): boolean {
-    const trimmedMessage = message.trim();
-    const hasYoutubeCommand = trimmedMessage.includes("@youtube");
-    const youtubeUrl = extractYoutubeUrl(trimmedMessage);
-
-    // Check if message only contains @youtube command and a valid URL
-    const words = trimmedMessage
-      .split(/\s+/)
-      .filter((word) => word !== "@youtube" && word.length > 0);
-
-    return hasYoutubeCommand && youtubeUrl !== null && words.length === 1;
-  }
-
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
     const failedImages: string[] = [];
     const processedImages = await ImageBatchProcessor.processUrlBatch(
@@ -402,44 +384,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     };
 
     try {
-      // Check if this is a YouTube-only message
-      if (this.isYoutubeOnlyMessage(userMessage.message)) {
-        const url = extractYoutubeUrl(userMessage.message);
-        const failMessage =
-          "Transcript not available. Only videos with the auto transcript option turned on are supported at the moment.";
-        if (url) {
-          try {
-            const response = await BrevilabsClient.getInstance().youtube4llm(url);
-            if (response.response.transcript) {
-              return this.handleResponse(
-                response.response.transcript,
-                userMessage,
-                abortController,
-                addMessage,
-                updateCurrentAiMessage
-              );
-            }
-            return this.handleResponse(
-              failMessage,
-              userMessage,
-              abortController,
-              addMessage,
-              updateCurrentAiMessage
-            );
-          } catch (error) {
-            logError("Error processing YouTube video:", error);
-            return this.handleResponse(
-              failMessage,
-              userMessage,
-              abortController,
-              addMessage,
-              updateCurrentAiMessage
-            );
-          }
-        }
-      }
-
-      logInfo("Step 1: Analyzing intent");
+      logInfo("==== Step 1: Analyzing intent ====");
       let toolCalls;
       // Use the original message for intent analysis
       const messageForAnalysis = userMessage.originalMessage || userMessage.message;
@@ -458,7 +403,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Use the same removeAtCommands logic as IntentAnalyzer
       const cleanedUserMessage = userMessage.message
         .split(" ")
-        .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
+        .filter((word) => !AVAILABLE_TOOLS.includes(word.toLowerCase()))
         .join(" ")
         .trim();
 

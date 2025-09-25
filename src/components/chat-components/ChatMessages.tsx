@@ -17,7 +17,6 @@ interface ChatMessagesProps {
   onRegenerate: (messageIndex: number) => void;
   onEdit: (messageIndex: number, newMessage: string) => void;
   onDelete: (messageIndex: number) => void;
-  onInsertToChat: (prompt: string) => void;
   onReplaceChat: (prompt: string) => void;
   showHelperComponents: boolean;
 }
@@ -32,7 +31,6 @@ const ChatMessages = memo(
     onRegenerate,
     onEdit,
     onDelete,
-    onInsertToChat,
     onReplaceChat,
     showHelperComponents = true,
   }: ChatMessagesProps) => {
@@ -61,11 +59,7 @@ const ChatMessages = memo(
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
           {showHelperComponents && settings.showRelevantNotes && (
-            <RelevantNotes
-              onInsertToChat={onInsertToChat}
-              defaultOpen={true}
-              key="relevant-notes-before-chat"
-            />
+            <RelevantNotes defaultOpen={true} key="relevant-notes-before-chat" />
           )}
           {showHelperComponents && settings.showSuggestedPrompts && (
             <SuggestedPrompts onClick={onReplaceChat} />
@@ -81,12 +75,7 @@ const ChatMessages = memo(
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
         {showHelperComponents && settings.showRelevantNotes && (
-          <RelevantNotes
-            className="tw-mb-4"
-            onInsertToChat={onInsertToChat}
-            defaultOpen={false}
-            key="relevant-notes-in-chat"
-          />
+          <RelevantNotes className="tw-mb-4" defaultOpen={false} key="relevant-notes-in-chat" />
         )}
         <div
           ref={scrollContainerCallbackRef}
@@ -116,7 +105,6 @@ const ChatMessages = memo(
                     onRegenerate={() => onRegenerate(index)}
                     onEdit={(newMessage) => onEdit(index, newMessage)}
                     onDelete={() => onDelete(index)}
-                    chatHistory={chatHistory}
                   />
                 </div>
               )
@@ -140,7 +128,6 @@ const ChatMessages = memo(
                 app={app}
                 isStreaming={true}
                 onDelete={() => {}}
-                chatHistory={chatHistory}
               />
             </div>
           )}

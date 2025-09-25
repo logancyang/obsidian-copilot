@@ -456,5 +456,92 @@ ${formattedContent}`;
       expect(parsedMessages[1].message).toBe(originalMessages[1].message);
       expect(parsedMessages[1].sender).toBe(originalMessages[1].sender);
     });
+
+    it("should preserve context information through save and load cycle", async () => {
+      const originalMessages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "What are the files about TypeScript?",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+          context: {
+            notes: [{ basename: "typescript-guide.md", path: "docs/typescript-guide.md" } as any],
+            urls: ["https://typescriptlang.org"],
+            tags: ["programming", "typescript"],
+            folders: ["docs/"],
+          },
+        },
+        {
+          id: "2",
+          message: "Here's what I found about TypeScript in your files...",
+          sender: AI_SENDER,
+          timestamp: {
+            epoch: 1695513481000,
+            display: "2024/09/23 22:18:01",
+            fileName: "2024_09_23_221801",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Format the content
+      const formattedContent = (persistenceManager as any).formatChatContent(originalMessages);
+
+      // Add frontmatter
+      const fullContent = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+${formattedContent}`;
+
+      // Parse it back
+      const parsedMessages = (persistenceManager as any).parseChatContent(fullContent);
+
+      // Verify the messages match
+      expect(parsedMessages).toHaveLength(2);
+      expect(parsedMessages[0].message).toBe(originalMessages[0].message);
+      expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
+
+      // Verify context is preserved
+      expect(parsedMessages[0].context).toBeDefined();
+      expect(parsedMessages[0].context.notes).toHaveLength(1);
+      expect(parsedMessages[0].context.notes[0].basename).toBe("typescript-guide.md");
+      expect(parsedMessages[0].context.urls).toEqual(["https://typescriptlang.org"]);
+      expect(parsedMessages[0].context.tags).toEqual(["programming", "typescript"]);
+      expect(parsedMessages[0].context.folders).toHaveLength(1);
+      expect(parsedMessages[0].context.folders[0]).toBe("docs/");
+
+      // Second message should not have context
+      expect(parsedMessages[1].context).toBeUndefined();
+    });
+
+    it("should handle messages without context (backward compatibility)", async () => {
+      const content = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+**user**: Hello without context
+[Timestamp: 2024/09/23 22:18:00]
+
+**ai**: Hi there!
+[Timestamp: 2024/09/23 22:18:01]`;
+
+      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+
+      expect(parsedMessages).toHaveLength(2);
+      expect(parsedMessages[0].context).toBeUndefined();
+      expect(parsedMessages[1].context).toBeUndefined();
+    });
   });
 });

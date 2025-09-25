@@ -7,7 +7,6 @@ import {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  pomodoroTool,
   TimeInfo,
 } from "@/tools/TimeTools";
 import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
@@ -16,16 +15,7 @@ import { extractAllYoutubeUrls, extractChatHistory } from "@/utils";
 import { Vault } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
 import { memoryTool } from "@/tools/memoryTools";
-
-// TODO: Add @index with explicit pdf files in chat context menu
-export const COPILOT_TOOL_NAMES = [
-  "@vault",
-  "@composer",
-  "@websearch",
-  "@youtube",
-  "@memory",
-  "@pomodoro",
-];
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 type ToolCall = {
   tool: any;
@@ -44,7 +34,6 @@ export class IntentAnalyzer {
         getTimeRangeMsTool,
         localSearchTool,
         indexTool,
-        pomodoroTool,
         webSearchTool,
         simpleYoutubeTranscriptionTool,
         createGetFileTreeTool(vault.getRoot()),
@@ -144,7 +133,7 @@ export class IntentAnalyzer {
       });
     }
 
-    // Handle @websearch command and also support @web for backward compatibility
+    // Handle @memory command
     if (message.includes("@memory")) {
       const cleanQuery = this.removeAtCommands(originalMessage);
 
@@ -156,17 +145,7 @@ export class IntentAnalyzer {
       });
     }
 
-    // Handle @pomodoro command
-    if (message.includes("@pomodoro")) {
-      const pomodoroMatch = originalMessage.match(/@pomodoro\s+(\S+)/i);
-      const interval = pomodoroMatch ? pomodoroMatch[1] : "25min";
-      processedToolCalls.push({
-        tool: pomodoroTool,
-        args: { interval },
-      });
-    }
-
-    // Auto-detect YouTube URLs (handles both @youtube command and auto-detection)
+    // Auto-detect YouTube URLs
     const youtubeUrls = extractAllYoutubeUrls(originalMessage);
     for (const url of youtubeUrls) {
       // Check if we already have a YouTube tool call for this URL
@@ -186,7 +165,7 @@ export class IntentAnalyzer {
   private static removeAtCommands(message: string): string {
     return message
       .split(" ")
-      .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
+      .filter((word) => !AVAILABLE_TOOLS.includes(word.toLowerCase()))
       .join(" ")
       .trim();
   }

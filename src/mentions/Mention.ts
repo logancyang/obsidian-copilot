@@ -54,6 +54,62 @@ export class Mention {
   }
 
   /**
+   * Process a list of URLs directly for url4llm endpoint.
+   *
+   * @param urls Array of URLs to process
+   * @returns Processed URL context and any errors
+   */
+  async processUrlList(urls: string[]): Promise<{
+    urlContext: string;
+    imageUrls: string[];
+    processedErrorUrls: Record<string, string>;
+  }> {
+    let urlContext = "";
+    const imageUrls: string[] = [];
+    const processedErrorUrls: Record<string, string> = {};
+
+    // Return empty string if no URLs to process
+    if (urls.length === 0) {
+      return { urlContext, imageUrls, processedErrorUrls };
+    }
+
+    // Process all URLs concurrently
+    const processPromises = urls.map(async (url) => {
+      // Check if it's an image URL
+      if (await ImageProcessor.isImageUrl(url, app.vault)) {
+        imageUrls.push(url);
+        return null;
+      }
+
+      if (!this.mentions.has(url)) {
+        const processed = await this.processUrl(url);
+        this.mentions.set(url, {
+          type: "url",
+          original: url,
+          processed: processed.response,
+          error: processed.error,
+        });
+      }
+      return this.mentions.get(url);
+    });
+
+    const processedUrls = await Promise.all(processPromises);
+
+    // Append all processed content
+    processedUrls.forEach((urlData) => {
+      if (urlData?.processed) {
+        urlContext += `\n\n<url_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</url_content>`;
+      }
+
+      if (urlData?.error) {
+        processedErrorUrls[urlData.original] = urlData.error;
+      }
+    });
+
+    return { urlContext, imageUrls, processedErrorUrls };
+  }
+
+  /**
    * Process URLs from user input text for url4llm endpoint.
    *
    * IMPORTANT: This method should ONLY be called with the user's direct chat input,

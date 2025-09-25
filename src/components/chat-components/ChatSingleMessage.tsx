@@ -1,8 +1,14 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
-import { Badge } from "@/components/ui/badge";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  ContextNoteBadge,
+  ContextUrlBadge,
+  ContextTagBadge,
+  ContextFolderBadge,
+} from "@/components/chat-components/ContextBadges";
+import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -58,25 +64,57 @@ export const normalizeFootnoteRendering = (root: HTMLElement): void => {
 };
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
-  if (!context || (!context.notes?.length && !context.urls?.length)) {
+  if (
+    !context ||
+    (!context.notes?.length &&
+      !context.urls?.length &&
+      !context.tags?.length &&
+      !context.folders?.length)
+  ) {
     return null;
   }
 
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
-        <HelpTooltip key={`${index}-${note.path}`} content={note.path} side="top">
-          <Badge variant="secondary">
-            <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
-          </Badge>
-        </HelpTooltip>
+        <Tooltip key={`note-${index}-${note.path}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextNoteBadge note={note} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{note.path}</TooltipContent>
+        </Tooltip>
       ))}
       {context.urls.map((url, index) => (
-        <HelpTooltip key={`${index}-${url}`} content={url} side="top">
-          <Badge variant="secondary">
-            <span className="tw-max-w-40 tw-truncate">{url}</span>
-          </Badge>
-        </HelpTooltip>
+        <Tooltip key={`url-${index}-${url}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextUrlBadge url={url} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{url}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.tags?.map((tag, index) => (
+        <Tooltip key={`tag-${index}-${tag}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextTagBadge tag={tag} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{tag}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.folders?.map((folder, index) => (
+        <Tooltip key={`folder-${index}-${folder}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextFolderBadge folder={folder} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{folder}</TooltipContent>
+        </Tooltip>
       ))}
     </div>
   );
@@ -89,7 +127,6 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
-  chatHistory?: ChatMessage[];
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -99,15 +136,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
-  chatHistory = [],
 }) => {
   const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [editedMessage, setEditedMessage] = useState<string>(message.message);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isUnmountingRef = useRef<boolean>(false);
   // Use a stable ID for the message to preserve tool call roots across re-renders
   const messageId = useRef(
@@ -171,7 +205,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-          content = content.replace(completeRegex, (match, sectionContent) => {
+          content = content.replace(completeRegex, (_match, sectionContent) => {
             return `<details style="${detailsStyle}">
               <summary style="${summaryStyle}">${summaryText}</summary>
               <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
@@ -182,7 +216,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (match, partialContent) => `<div style="${detailsStyle}">
+            (_match, partialContent) => `<div style="${detailsStyle}">
               <div style="${summaryStyle}">${streamingSummaryText}</div>
               <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
             </div>`
@@ -192,7 +226,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-        return content.replace(regex, (match, sectionContent) => {
+        return content.replace(regex, (_match, sectionContent) => {
           return `<details style="${detailsStyle}">
             <summary style="${summaryStyle}">${summaryText}</summary>
             <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
@@ -211,7 +245,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
 
-          return text.replace(xmlCodeblockRegex, (match, xmlContent) => {
+          return text.replace(xmlCodeblockRegex, (_match, xmlContent) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -224,7 +258,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           // Pattern to match XML codeblocks that contain unclosed writeToFile tags
           const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?)$/g;
 
-          return text.replace(streamingXmlCodeblockRegex, (match, xmlContent) => {
+          return text.replace(streamingXmlCodeblockRegex, (_match, xmlContent) => {
             // Extract the content and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -330,7 +364,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Process segments and only update what's needed
         let currentIndex = 0;
-        parsedMessage.segments.forEach((segment, index) => {
+        parsedMessage.segments.forEach((segment) => {
           if (segment.type === "text" && segment.content.trim()) {
             // Find where to insert this text segment
             const insertBefore = contentRef.current!.children[currentIndex];
@@ -502,50 +536,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     };
   }, []); // Empty dependency array ensures this only runs on unmount
 
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      adjustTextareaHeight(textareaRef.current);
-    }
-  }, [isEditing]);
-
-  useEffect(() => {
-    setEditedMessage(message.message);
-  }, [message.message]);
-
-  const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  };
-
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditedMessage(e.target.value);
-    adjustTextareaHeight(e.target);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault(); // Prevents adding a newline to the textarea
-      handleSaveEdit();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      handleCancelEdit();
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditedMessage(message.message);
-  };
-
   const handleEdit = () => {
     setIsEditing(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = (newText: string) => {
     setIsEditing(false);
     if (onEdit) {
-      onEdit(editedMessage);
+      onEdit(newText);
     }
   };
 
@@ -576,16 +578,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (item.type === "text") {
               return (
                 <div key={index}>
-                  {message.sender === USER_SENDER && isEditing ? (
-                    <textarea
-                      ref={textareaRef}
-                      value={editedMessage}
-                      onChange={handleTextareaChange}
-                      onKeyDown={handleKeyDown}
-                      autoFocus
-                      className="edit-textarea"
-                    />
-                  ) : message.sender === USER_SENDER ? (
+                  {message.sender === USER_SENDER ? (
                     <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
                       {message.message}
                     </div>
@@ -615,16 +608,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
 
     // Fallback for messages without content array
-    return message.sender === USER_SENDER && isEditing ? (
-      <textarea
-        ref={textareaRef}
-        value={editedMessage}
-        onChange={handleTextareaChange}
-        onKeyDown={handleKeyDown}
-        autoFocus
-        className="edit-textarea"
-      />
-    ) : message.sender === USER_SENDER ? (
+    return message.sender === USER_SENDER ? (
       <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
         {message.message}
       </div>
@@ -632,6 +616,21 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );
   };
+
+  // If editing a user message, replace the entire message container with the inline editor
+  if (isEditing && message.sender === USER_SENDER) {
+    return (
+      <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
+        <InlineMessageEditor
+          initialValue={message.message}
+          initialContext={message.context}
+          onSave={handleSaveEdit}
+          onCancel={handleCancelEdit}
+          app={app}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">

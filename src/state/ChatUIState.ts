@@ -2,6 +2,7 @@ import { ChainType } from "@/chainFactory";
 import { logInfo } from "@/logger";
 import { ChatManager } from "@/core/ChatManager";
 import { ChatMessage, MessageContext } from "@/types/message";
+import { TFile } from "obsidian";
 
 /**
  * ChatUIState - Clean UI-only state manager
@@ -272,5 +273,13 @@ export class ChatUIState {
    */
   async saveChat(modelKey: string): Promise<void> {
     await this.chatManager.saveChat(modelKey);
+  }
+
+  /**
+   * Load chat history from a file
+   */
+  async loadChatHistory(file: TFile): Promise<void> {
+    await this.chatManager.loadChatHistory(file);
+    this.notifyListeners();
   }
 }

@@ -83,18 +83,20 @@ export const QASettings: React.FC = () => {
                     it.
                   </span>
                   <HelpTooltip
-                    content={<div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                      <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                        This model converts text into vector representations, essential for
-                        semantic search and Question Answering (QA) functionality. Changing the
-                        embedding model will:
+                    content={
+                      <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
+                          This model converts text into vector representations, essential for
+                          semantic search and Question Answering (QA) functionality. Changing the
+                          embedding model will:
+                        </div>
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                          <li>Require rebuilding your vault&#39;s vector index</li>
+                          <li>Affect semantic search quality</li>
+                          <li>Impact Question Answering feature performance</li>
+                        </ul>
                       </div>
-                      <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                        <li>Require rebuilding your vault&#39;s vector index</li>
-                        <li>Affect semantic search quality</li>
-                        <li>Impact Question Answering feature performance</li>
-                      </ul>
-                    </div>}
+                    }
                   />
                 </div>
               </div>

@@ -1,6 +1,5 @@
 import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
-import { Notice } from "obsidian";
 import { z } from "zod";
 import { createTool } from "./SimpleTool";
 
@@ -514,62 +513,6 @@ const getTimeInfoByEpochTool = createTool({
   isBackground: true,
 });
 
-function parseTimeInterval(interval: string): number {
-  const match = interval.match(/^(\d+)\s*(s|sec|seconds?|m|min|minutes?|h|hr|hours?)$/i);
-  if (!match) {
-    throw new Error(`Invalid time interval format: ${interval}`);
-  }
-
-  const value = parseInt(match[1], 10);
-  const unit = match[2].toLowerCase();
-
-  switch (unit) {
-    case "s":
-    case "sec":
-    case "second":
-    case "seconds":
-      return value * 1000;
-    case "m":
-    case "min":
-    case "minute":
-    case "minutes":
-      return value * 60 * 1000;
-    case "h":
-    case "hr":
-    case "hour":
-    case "hours":
-      return value * 60 * 60 * 1000;
-    default:
-      throw new Error(`Unsupported time unit: ${unit}`);
-  }
-}
-
-async function startPomodoro(interval = "25min"): Promise<void> {
-  const duration = parseTimeInterval(interval);
-
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      new Notice(`Pomodoro timer (${interval}) completed! Take a break!`);
-      resolve();
-    }, duration);
-  });
-}
-
-const pomodoroTool = createTool({
-  name: "startPomodoro",
-  description: "Start a Pomodoro timer with a customizable interval",
-  schema: z.object({
-    interval: z
-      .string()
-      .default("25min")
-      .describe("Time interval (e.g., '25min', '5s', '1h'). Default is 25min."),
-  }),
-  handler: async ({ interval }) => {
-    startPomodoro(interval);
-    return `Pomodoro timer started. It will end in ${interval}.`;
-  },
-});
-
 /**
  * Convert a time from one UTC offset to another
  * @param time - Time expression like "6pm", "18:00", "3:30 PM"
@@ -651,6 +594,5 @@ export {
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  pomodoroTool,
   convertTimeBetweenTimezonesTool,
 };

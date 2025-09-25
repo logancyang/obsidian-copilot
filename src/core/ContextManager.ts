@@ -6,7 +6,7 @@ import { logInfo } from "@/logger";
 import { Mention } from "@/mentions/Mention";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage, MessageContext } from "@/types/message";
-import { extractNoteFiles } from "@/utils";
+import { extractNoteFiles, getNotesFromTags } from "@/utils";
 import { TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -62,13 +62,13 @@ export class ContextManager {
       );
 
       // 2. Extract URLs and process them (for Copilot Plus chain)
-      // IMPORTANT: Only process URLs from the user's direct chat input message,
-      // NOT from the content of context notes. This ensures url4llm is only called
-      // for URLs explicitly typed by the user in the chat, similar to how YouTube
-      // transcription only processes YouTube URLs from user input.
+      // Process URLs from context (only URLs explicitly added to context via URL pills)
+      // This ensures url4llm is only called for URLs that appear in the context menu,
+      // not for all URLs found in the message text.
+      const contextUrls = message.context?.urls || [];
       const urlContextAddition =
         chainType === ChainType.COPILOT_PLUS_CHAIN
-          ? await this.mention.processUrls(processedMessage)
+          ? await this.mention.processUrlList(contextUrls)
           : { urlContext: "", imageUrls: [] };
 
       // 3. Process context notes
@@ -96,14 +96,41 @@ export class ContextManager {
         chainType
       );
 
-      // 4. Process selected text contexts
+      // 4. Process context tags
+      const contextTags = message.context?.tags || [];
+      let tagContextAddition = "";
+
+      if (contextTags.length > 0) {
+        // Get all notes that have any of the specified tags (in frontmatter)
+        const taggedNotes = getNotesFromTags(vault, contextTags);
+
+        // Filter out already processed notes to avoid duplication
+        const filteredTaggedNotes = taggedNotes.filter(
+          (note) => !excludedNotePaths.has(note.path) && !notes.some((n) => n.path === note.path)
+        );
+
+        if (filteredTaggedNotes.length > 0) {
+          tagContextAddition = await this.contextProcessor.processContextNotes(
+            new Set(), // Don't exclude any notes since we already filtered
+            fileParserManager,
+            vault,
+            filteredTaggedNotes,
+            false, // Don't include active note again
+            null,
+            chainType
+          );
+        }
+      }
+
+      // 5. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 5. Combine everything
+      // 6. Combine everything
       const finalProcessedMessage =
         processedUserMessage +
         urlContextAddition.urlContext +
         noteContextAddition +
+        tagContextAddition +
         selectedTextContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
