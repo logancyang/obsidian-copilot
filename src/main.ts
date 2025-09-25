@@ -16,7 +16,7 @@ import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/c
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
@@ -43,6 +43,8 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
+import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
+import { extractChatTitle, extractChatDate } from "@/utils/chatHistoryUtils";
 
 // Removed unused FileTrackingState interface
 
@@ -338,7 +340,7 @@ export default class CopilotPlugin extends Plugin {
       return [];
     }
 
-    const files = await this.app.vault.getMarkdownFiles();
+    const files = this.app.vault.getMarkdownFiles();
     const folderFiles = files.filter((file) => file.path.startsWith(folder.path));
 
     // Get current project ID if in a project
@@ -357,6 +359,15 @@ export default class CopilotPlugin extends Plugin {
         return !file.basename.match(/^[a-zA-Z0-9-]+__/);
       });
     }
+  }
+
+  async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
+    const files = await this.getChatHistoryFiles();
+    return files.map((file) => ({
+      id: file.path,
+      title: extractChatTitle(file),
+      createdAt: extractChatDate(file),
+    }));
   }
 
   async loadChatHistory(file: TFile) {
@@ -378,6 +389,69 @@ export default class CopilotPlugin extends Plugin {
       ?.view as CopilotView;
     if (copilotView) {
       copilotView.updateView();
+    }
+  }
+
+  async loadChatById(fileId: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(fileId);
+    if (file instanceof TFile) {
+      await this.loadChatHistory(file);
+    } else {
+      new Notice("Chat file not found.");
+    }
+  }
+
+  async updateChatTitle(fileId: string, newTitle: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(fileId);
+    if (file instanceof TFile) {
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        frontmatter.topic = newTitle;
+      });
+
+      // Wait for metadata cache to update with improved error handling
+      // This ensures that subsequent calls to extractChatTitle will get the updated data
+      await new Promise<void>((resolve) => {
+        const handler = (updatedFile: TFile) => {
+          if (updatedFile.path === fileId) {
+            this.app.metadataCache.off("changed", handler);
+            clearTimeout(timeoutId);
+            resolve();
+          }
+        };
+
+        this.app.metadataCache.on("changed", handler);
+
+        // Fallback timeout with shorter duration and better error handling
+        const timeoutId = setTimeout(() => {
+          this.app.metadataCache.off("changed", handler);
+          // Don't reject, just resolve - the frontmatter update might have worked
+          // even if we didn't catch the event
+          resolve();
+        }, 500); // Reduced timeout for better performance
+      });
+
+      new Notice("Chat title updated.");
+    } else {
+      const errorMsg = "Chat file not found.";
+      throw new Error(errorMsg);
+    }
+  }
+
+  async deleteChatHistory(fileId: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(fileId);
+    if (file instanceof TFile) {
+      try {
+        await this.app.vault.delete(file);
+        new Notice("Chat deleted.");
+      } catch (error) {
+        logError("Error deleting chat:", error);
+        new Notice("Failed to delete chat.");
+        throw error; // Re-throw to let the caller handle the error
+      }
+    } else {
+      const errorMsg = "Chat file not found.";
+      new Notice(errorMsg);
+      throw new Error(errorMsg);
     }
   }
 

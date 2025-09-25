@@ -1,4 +1,4 @@
-import { formatDateTime, FormattedDateTime } from "@/utils";
+import { getChatDisplayText } from "@/utils/chatHistoryUtils";
 import { App, FuzzySuggestModal, TFile } from "obsidian";
 
 export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
@@ -29,42 +29,10 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
   }
 
   getItemText(file: TFile): string {
-    // Read the file's front matter
-    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-
-    let title: string;
-
-    // First check if there's a custom topic in frontmatter
-    if (frontmatter?.topic && typeof frontmatter.topic === "string" && frontmatter.topic.trim()) {
-      title = frontmatter.topic.trim();
-    } else {
-      // Fallback to extracting from filename
-      // First, remove project ID prefix if it exists (format: projectId__)
-      const basename = file.basename.replace(/^[a-zA-Z0-9-]+__/, "");
-
-      // Remove {$date} and {$time} parts from the filename
-      title = basename
-        .replace(/\{\$date}|\d{8}/g, "") // Remove {$date} or date in format YYYYMMDD
-        .replace(/\{\$time}|\d{6}/g, "") // Remove {$time} or time in format HHMMSS
-        .replace(/[@_]/g, " ") // Replace @ and _ with spaces
-        .replace(/\s+/g, " ") // Replace multiple spaces with single space
-        .trim();
-    }
-
-    let formattedDateTime: FormattedDateTime;
-
-    if (frontmatter && frontmatter.epoch) {
-      // Use the epoch from front matter if available
-      formattedDateTime = formatDateTime(new Date(frontmatter.epoch));
-    } else {
-      // Fallback to file creation time if epoch is not in front matter
-      formattedDateTime = formatDateTime(new Date(file.stat.ctime));
-    }
-
-    return `${title} - ${formattedDateTime.display}`;
+    return getChatDisplayText(file);
   }
 
-  onChooseItem(file: TFile, evt: MouseEvent | KeyboardEvent) {
+  onChooseItem(file: TFile, _evt: MouseEvent | KeyboardEvent) {
     this.onChooseFile(file);
   }
 }
