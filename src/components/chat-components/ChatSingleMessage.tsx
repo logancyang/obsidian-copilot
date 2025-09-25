@@ -1,5 +1,4 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
-import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -9,44 +8,26 @@ import {
   ContextFolderBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
+import {
+  cleanupMessageToolCallRoots,
+  cleanupStaleToolCallRoots,
+  ensureToolCallRoot,
+  getMessageToolCallRoots,
+  renderToolCallBanner,
+  removeToolCallRoot,
+  type ToolCallRootRecord,
+} from "@/components/chat-components/toolCallRootManager";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
-import {
-  parseToolCallMarkers,
-  type ToolCallMarker,
-} from "@/LLMProviders/chainRunner/utils/toolCallParser";
+import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
-import { logWarn } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ReactDOM, { Root } from "react-dom/client";
-
-declare global {
-  interface Window {
-    __copilotToolCallRoots?: Map<string, Map<string, Root>>;
-  }
-}
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
-
-/**
- * Render a tool call banner inside the provided React root.
- */
-const renderToolCallBanner = (root: Root, toolCall: ToolCallMarker): void => {
-  root.render(
-    <ToolCallBanner
-      toolName={toolCall.toolName}
-      displayName={toolCall.displayName}
-      emoji={toolCall.emoji}
-      isExecuting={toolCall.isExecuting}
-      result={toolCall.result || null}
-      confirmationMessage={toolCall.confirmationMessage}
-    />
-  );
-};
 
 /**
  * Normalizes rendered markdown footnotes to align with inline citation UX.
@@ -171,22 +152,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   );
 
   // Store roots in a global map to preserve them across component instances
-  const getGlobalRootsMap = () => {
-    if (!window.__copilotToolCallRoots) {
-      window.__copilotToolCallRoots = new Map<string, Map<string, Root>>();
-    }
-    return window.__copilotToolCallRoots;
-  };
-
-  const getRootsForMessage = () => {
-    const globalMap = getGlobalRootsMap();
-    if (!globalMap.has(messageId.current)) {
-      globalMap.set(messageId.current, new Map<string, Root>());
-    }
-    return globalMap.get(messageId.current)!;
-  };
-
-  const rootsRef = useRef<Map<string, Root>>(getRootsForMessage());
+  const rootsRef = useRef<Map<string, ToolCallRootRecord>>(
+    getMessageToolCallRoots(messageId.current)
+  );
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -420,14 +388,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               container = toolDiv;
             }
 
-            let root = rootsRef.current.get(toolCallId);
-            if (!root) {
-              root = ReactDOM.createRoot(container as HTMLElement);
-              rootsRef.current.set(toolCallId, root);
-            }
+            const rootRecord = ensureToolCallRoot(
+              messageId.current,
+              rootsRef.current,
+              toolCallId,
+              container as HTMLElement,
+              "render refresh"
+            );
 
-            if (!isUnmountingRef.current) {
-              renderToolCallBanner(root, segment.toolCall);
+            if (!isUnmountingRef.current && !rootRecord.isUnmounting) {
+              renderToolCallBanner(rootRecord, segment.toolCall);
             }
 
             currentIndex++;
@@ -445,18 +415,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           if (!currentToolCallIds.has(id)) {
             const element = document.getElementById(`tool-call-${id}`);
             if (element) {
-              const root = rootsRef.current.get(id);
-              if (root) {
-                // Defer unmounting to avoid React rendering conflicts
-                rootsRef.current.delete(id);
-                setTimeout(() => {
-                  try {
-                    root.unmount();
-                  } catch (error) {
-                    logWarn("Error unmounting tool call root", id, error);
-                  }
-                }, 0);
-              }
+              removeToolCallRoot(messageId.current, rootsRef.current, id, "tool call removal");
               element.remove();
             }
           }
@@ -474,32 +433,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   useEffect(() => {
     const currentComponentRef = componentRef;
     const currentMessageId = messageId.current;
+    const messageRootsSnapshot = rootsRef.current;
 
     // Clean up old message roots to prevent memory leaks (older than 1 hour)
     const cleanupOldRoots = () => {
-      const globalMap = getGlobalRootsMap();
-      const oneHourAgo = Date.now() - 60 * 60 * 1000;
-
-      globalMap.forEach((roots, msgId) => {
-        const timestamp = parseInt(msgId, 10);
-        if (Number.isNaN(timestamp) || timestamp >= oneHourAgo) {
-          return;
-        }
-
-        const rootsToCleanup = Array.from(roots.entries());
-        roots.clear();
-        globalMap.delete(msgId);
-
-        setTimeout(() => {
-          rootsToCleanup.forEach(([toolId, root]) => {
-            try {
-              root.unmount();
-            } catch (error) {
-              logWarn("Error unmounting stale tool call root", toolId, error);
-            }
-          });
-        }, 0);
-      });
+      cleanupStaleToolCallRoots();
     };
 
     // Run cleanup on mount
@@ -520,20 +458,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Only clean up roots if this is a temporary message (streaming message)
         // Permanent messages keep their roots to preserve tool call banners
         if (currentMessageId.startsWith("temp-")) {
-          const globalMap = getGlobalRootsMap();
-          const messageRoots = globalMap.get(currentMessageId);
-
-          if (messageRoots) {
-            messageRoots.forEach((root) => {
-              try {
-                root.unmount();
-              } catch (error) {
-                // Ignore unmount errors during cleanup
-                logWarn("Error unmounting React root during cleanup", error);
-              }
-            });
-            globalMap.delete(currentMessageId);
-          }
+          cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
         }
       }, 0);
     };
