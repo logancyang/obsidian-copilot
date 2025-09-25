@@ -112,6 +112,8 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     uniqueNotes.length > 0 ||
     uniqueUrls.length > 0 ||
     selectedTextContexts.length > 0 ||
+    contextTags.length > 0 ||
+    contextFolders.length > 0 ||
     !!activeNote;
 
   // Get contextStatus from the shared hook
