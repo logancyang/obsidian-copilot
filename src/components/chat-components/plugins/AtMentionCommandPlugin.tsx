@@ -5,11 +5,12 @@ import { TypeaheadMenuPortal } from "../TypeaheadMenuPortal";
 import { useTypeaheadPlugin } from "../hooks/useTypeaheadPlugin";
 import { $replaceTriggeredTextWithPill, PillData } from "../utils/lexicalTextUtils";
 import {
-  useAtMentionData,
+  useAtMentionCategories,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-} from "../hooks/useAtMentionData";
+} from "../hooks/useAtMentionCategories";
+import { useAtMentionSearch } from "../hooks/useAtMentionSearch";
 
 // Get app instance
 declare const app: App;
@@ -32,10 +33,10 @@ export function AtMentionCommandPlugin({
   // State to track preview content for the currently highlighted note
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
-  // Use the shared at-mention data hook
-  const { getSearchResults } = useAtMentionData(isCopilotPlus);
+  // Use the shared at-mention categories hook
+  const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
 
-  // Load note content for preview
+  // Load note content for preview using shared utilities
   const loadNoteContentForPreview = useCallback(async (file: TFile) => {
     try {
       // Handle PDF files - treat as empty content (no preview)
@@ -60,11 +61,13 @@ export function AtMentionCommandPlugin({
   // Temporary state for query to resolve circular dependency
   const [currentQuery, setCurrentQuery] = useState("");
 
-  // Get search results using the shared hook
-  const searchResults = getSearchResults(
+  // Get search results using the unified search hook
+  const searchResults = useAtMentionSearch(
     currentQuery,
     extendedState.mode,
-    extendedState.selectedCategory
+    extendedState.selectedCategory,
+    isCopilotPlus,
+    availableCategoryOptions
   );
 
   // Type guard functions

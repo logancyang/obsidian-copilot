@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { TypeaheadMenuPopover } from "./TypeaheadMenuPopover";
 import {
-  useAtMentionData,
+  useAtMentionCategories,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-} from "./hooks/useAtMentionData";
+} from "./hooks/useAtMentionCategories";
+import { useAtMentionSearch } from "./hooks/useAtMentionSearch";
 
 interface AtMentionTypeaheadProps {
   isOpen: boolean;
@@ -38,13 +39,15 @@ export function AtMentionTypeahead({
     mode: "category",
   });
 
-  const { getSearchResults } = useAtMentionData(isCopilotPlus);
+  const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
 
-  // Get search results based on current state
-  const searchResults = getSearchResults(
+  // Get search results based on current state using unified search
+  const searchResults = useAtMentionSearch(
     searchQuery,
     extendedState.mode,
-    extendedState.selectedCategory
+    extendedState.selectedCategory,
+    isCopilotPlus,
+    availableCategoryOptions
   );
 
   // Handle selection

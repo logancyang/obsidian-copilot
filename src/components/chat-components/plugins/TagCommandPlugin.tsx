@@ -1,8 +1,6 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import fuzzysort from "fuzzysort";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
-import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import {
   useTypeaheadPlugin,
   TypeaheadState,
@@ -11,11 +9,7 @@ import {
   $replaceTriggeredTextWithPill,
   PillData,
 } from "@/components/chat-components/utils/lexicalTextUtils";
-import { getTagsFromNote } from "@/utils";
-
-interface TagOption extends TypeaheadOption {
-  tag: string;
-}
+import { useTagSearch, TagSearchOption } from "@/components/chat-components/hooks/useTagSearch";
 
 /**
  * TagCommandPlugin provides # typeahead functionality for tags
@@ -25,48 +19,13 @@ export function TagCommandPlugin(): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
 
-  // Get all available tags from the vault
-  const allTags = useMemo(() => {
-    if (!app?.vault) {
-      return [];
-    }
-
-    const tags = new Set<string>();
-
-    // Use existing utility to get frontmatter tags from all markdown files
-    app.vault.getMarkdownFiles().forEach((file) => {
-      const fileTags = getTagsFromNote(file, true); // true = frontmatter only
-      fileTags.forEach((tag) => tags.add(tag));
-    });
-
-    return Array.from(tags).map((tag, index) => ({
-      key: `tag-${tag}-${index}`,
-      title: tag,
-      subtitle: `#${tag}`,
-      content: "", // Tags don't have preview content
-      tag: tag,
-    }));
-  }, []);
-
-  // Filter tags based on query using fuzzysort
-  const filteredTags = useMemo(() => {
-    if (!currentQuery) {
-      return allTags.slice(0, 10); // Show first 10 tags when no query
-    }
-
-    // Use fuzzysort to search through tag names
-    const results = fuzzysort.go(currentQuery, allTags, {
-      key: "title",
-      limit: 10,
-      threshold: -10000, // Allow more lenient matching
-    });
-
-    return results.map((result) => result.obj);
-  }, [allTags, currentQuery]);
+  const filteredTags = useTagSearch(currentQuery, {
+    limit: 10,
+  });
 
   // Handle tag selection
   const handleSelect = useCallback(
-    (option: TagOption) => {
+    (option: TagSearchOption) => {
       const pillData: PillData = {
         type: "tags",
         title: option.tag,
