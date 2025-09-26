@@ -1,5 +1,4 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
-import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -9,6 +8,15 @@ import {
   ContextFolderBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
+import {
+  cleanupMessageToolCallRoots,
+  cleanupStaleToolCallRoots,
+  ensureToolCallRoot,
+  getMessageToolCallRoots,
+  renderToolCallBanner,
+  removeToolCallRoot,
+  type ToolCallRootRecord,
+} from "@/components/chat-components/toolCallRootManager";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -18,13 +26,6 @@ import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ReactDOM, { Root } from "react-dom/client";
-
-declare global {
-  interface Window {
-    __copilotToolCallRoots?: Map<string, Map<string, Root>>;
-  }
-}
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
@@ -151,22 +152,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   );
 
   // Store roots in a global map to preserve them across component instances
-  const getGlobalRootsMap = () => {
-    if (!window.__copilotToolCallRoots) {
-      window.__copilotToolCallRoots = new Map<string, Map<string, Root>>();
-    }
-    return window.__copilotToolCallRoots;
-  };
-
-  const getRootsForMessage = () => {
-    const globalMap = getGlobalRootsMap();
-    if (!globalMap.has(messageId.current)) {
-      globalMap.set(messageId.current, new Map<string, Root>());
-    }
-    return globalMap.get(messageId.current)!;
-  };
-
-  const rootsRef = useRef<Map<string, Root>>(getRootsForMessage());
+  const rootsRef = useRef<Map<string, ToolCallRootRecord>>(
+    getMessageToolCallRoots(messageId.current)
+  );
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -383,26 +371,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
-            const existingDiv = document.getElementById(`tool-call-${toolCallId}`);
+            let container = document.getElementById(`tool-call-${toolCallId}`);
 
-            if (existingDiv) {
-              // Update existing tool call
-              const root = rootsRef.current.get(toolCallId);
-              if (root && !isUnmountingRef.current) {
-                root.render(
-                  <ToolCallBanner
-                    toolName={segment.toolCall.toolName}
-                    displayName={segment.toolCall.displayName}
-                    emoji={segment.toolCall.emoji}
-                    isExecuting={segment.toolCall.isExecuting}
-                    result={segment.toolCall.result || null}
-                    confirmationMessage={segment.toolCall.confirmationMessage}
-                  />
-                );
-              }
-              currentIndex++;
-            } else {
-              // Create new tool call
+            if (!container) {
               const insertBefore = contentRef.current!.children[currentIndex];
               const toolDiv = document.createElement("div");
               toolDiv.className = "tool-call-container";
@@ -414,23 +385,22 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 contentRef.current!.appendChild(toolDiv);
               }
 
-              const root = ReactDOM.createRoot(toolDiv);
-              rootsRef.current.set(toolCallId, root);
-
-              if (!isUnmountingRef.current) {
-                root.render(
-                  <ToolCallBanner
-                    toolName={segment.toolCall.toolName}
-                    displayName={segment.toolCall.displayName}
-                    emoji={segment.toolCall.emoji}
-                    isExecuting={segment.toolCall.isExecuting}
-                    result={segment.toolCall.result || null}
-                    confirmationMessage={segment.toolCall.confirmationMessage}
-                  />
-                );
-              }
-              currentIndex++;
+              container = toolDiv;
             }
+
+            const rootRecord = ensureToolCallRoot(
+              messageId.current,
+              rootsRef.current,
+              toolCallId,
+              container as HTMLElement,
+              "render refresh"
+            );
+
+            if (!isUnmountingRef.current && !rootRecord.isUnmounting) {
+              renderToolCallBanner(rootRecord, segment.toolCall);
+            }
+
+            currentIndex++;
           }
         });
 
@@ -445,18 +415,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           if (!currentToolCallIds.has(id)) {
             const element = document.getElementById(`tool-call-${id}`);
             if (element) {
-              const root = rootsRef.current.get(id);
-              if (root) {
-                // Defer unmounting to avoid React rendering conflicts
-                setTimeout(() => {
-                  try {
-                    root.unmount();
-                  } catch (error) {
-                    console.debug("Error unmounting tool call root:", error);
-                  }
-                  rootsRef.current.delete(id);
-                }, 0);
-              }
+              removeToolCallRoot(messageId.current, rootsRef.current, id, "tool call removal");
               element.remove();
             }
           }
@@ -474,29 +433,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   useEffect(() => {
     const currentComponentRef = componentRef;
     const currentMessageId = messageId.current;
+    const messageRootsSnapshot = rootsRef.current;
 
     // Clean up old message roots to prevent memory leaks (older than 1 hour)
     const cleanupOldRoots = () => {
-      const globalMap = getGlobalRootsMap();
-      const oneHourAgo = Date.now() - 60 * 60 * 1000;
-
-      globalMap.forEach((roots, msgId) => {
-        // Extract timestamp from message ID if it's in epoch format
-        const timestamp = parseInt(msgId);
-        if (!isNaN(timestamp) && timestamp < oneHourAgo) {
-          // Defer cleanup to avoid React rendering conflicts
-          setTimeout(() => {
-            roots.forEach((root) => {
-              try {
-                root.unmount();
-              } catch {
-                // Ignore errors
-              }
-            });
-            globalMap.delete(msgId);
-          }, 0);
-        }
-      });
+      cleanupStaleToolCallRoots();
     };
 
     // Run cleanup on mount
@@ -517,20 +458,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Only clean up roots if this is a temporary message (streaming message)
         // Permanent messages keep their roots to preserve tool call banners
         if (currentMessageId.startsWith("temp-")) {
-          const globalMap = getGlobalRootsMap();
-          const messageRoots = globalMap.get(currentMessageId);
-
-          if (messageRoots) {
-            messageRoots.forEach((root) => {
-              try {
-                root.unmount();
-              } catch (error) {
-                // Ignore unmount errors during cleanup
-                console.debug("Error unmounting React root during cleanup:", error);
-              }
-            });
-            globalMap.delete(currentMessageId);
-          }
+          cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
         }
       }, 0);
     };
