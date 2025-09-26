@@ -341,3 +341,25 @@ Run the focused test to cover the streaming behaviour and tool-call integration:
 ```
 npm test -- src/components/chat-components/ChatSingleMessage.test.tsx
 ```
+
+## Tool Call Roots
+
+React invariant #409 surfaced when tool-call banners attempted to render into React roots that had already been unmounted. Copilot now routes banner rendering through `src/components/chat-components/toolCallRootManager.tsx` to ensure every `root.render` targets a live container.
+
+### Manager Responsibilities
+
+- Tracks `{ root, isUnmounting }` per message/tool call via `window.__copilotToolCallRoots`.
+- `ensureToolCallRoot` finalises any pending disposal and creates a new `createRoot(container)` when required.
+- `renderToolCallBanner` renders `<ToolCallBanner />` into the cached root so components never call `root.render` directly.
+- `removeToolCallRoot` and `cleanupMessageToolCallRoots` schedule `root.unmount()` on the next tick and delete registry entries only after disposal completes.
+- `cleanupStaleToolCallRoots` purges message IDs older than one hour to avoid leaking historical roots.
+
+### Integration Notes
+
+`ChatSingleMessage` stores `const rootsRef = useRef(getMessageToolCallRoots(messageId))`, snapshots that ref in effect cleanup, and delegates render/removal calls to the manager. This avoids React invariant #409 while keeping the component readable.
+
+### Verification
+
+```
+npm test -- src/components/chat-components/ChatSingleMessage.test.tsx
+```
