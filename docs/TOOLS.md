@@ -318,64 +318,26 @@ function updateMcpToolSetting(toolId: string, enabled: boolean) {
 3. **Settings UI**: `ToolSettingsSection` component reads from the registry to generate UI
 4. **Tool Execution**: `AutonomousAgentChainRunner.getAvailableTools()` filters tools based on settings
 
-### Tool Execution Flow
+## Tool Call Rendering Roots
 
-1. Agent calls `getAvailableTools()` which:
+React invariant #409 surfaced when tool-call banners attempted to render into React roots that had already been unmounted. To prevent this regression, the plugin routes all banner rendering through the shared manager in `src/components/chat-components/toolCallRootManager.tsx`.
 
-   - Gets enabled tool IDs from settings array (`autonomousAgentEnabledToolIds`)
-   - Calls `registry.getEnabledTools()` to get actual tool implementations
-   - Filters based on vault availability and user preferences
+### Manager Responsibilities
 
-2. Model adapter receives tool list and:
+- Tracks `{ root, isUnmounting }` per message/tool call via `window.__copilotToolCallRoots`.
+- `ensureToolCallRoot` finalises pending disposals and creates a new `createRoot` when needed.
+- `renderToolCallBanner` renders `<ToolCallBanner />` into the managed root; components never call `root.render` directly.
+- `removeToolCallRoot` and `cleanupMessageToolCallRoots` schedule unmounts on the next tick and drop entries only after disposal completes.
+- `cleanupStaleToolCallRoots` purges message IDs older than one hour to avoid leaking historical roots.
 
-   - Generates tool descriptions for the system prompt
-   - Includes tool-specific instructions based on enabled tools
+### Integration Notes
 
-3. When tool is called:
-   - XML parsing extracts tool name and parameters
-   - Tool is executed via its `func` implementation
-   - Results are formatted and returned to the agent
+`ChatSingleMessage` keeps `const rootsRef = useRef(getMessageToolCallRoots(messageId))`, which provides a stable registry for each message. The component delegates all lifecycle calls to the manager and snapshots `rootsRef.current` inside effect cleanup to satisfy `react-hooks/exhaustive-deps`.
 
-## Benefits of This Architecture
+### Verification
 
-1. **Modularity**: Each tool is self-contained with metadata
-2. **Extensibility**: New tools can be added without core changes
-3. **Backward Compatibility**: Settings structure preserved while supporting new tools
-4. **Dynamic UI**: Settings automatically adapt to registered tools
-5. **Smart Prompts**: System prompts include only relevant tool instructions
-6. **MCP Ready**: Architecture supports dynamic tool registration from external sources
+Run the focused test to cover the streaming behaviour and tool-call integration:
 
-## Testing Your Tools
-
-```typescript
-// Test tool registration
-const registry = ToolRegistry.getInstance();
-registry.clear();
-initializeBuiltinTools(vault);
-
-// Verify tool is registered
-const allTools = registry.getAllTools();
-console.log(
-  "Registered tools:",
-  allTools.map((t) => t.metadata.id)
-);
-
-// Test with settings
-const enabledIds = new Set(["myNewTool", "localSearch"]);
-const enabledTools = registry.getEnabledTools(enabledIds, true);
-console.log(
-  "Enabled tools:",
-  enabledTools.map((t) => t.name)
-);
 ```
-
-This architecture provides a clean, extensible foundation for the tool system while maintaining simplicity and backward compatibility.
-
-## Summary
-
-The tool system's layered approach allows for:
-
-- Clear, comprehensive tool documentation at the schema level
-- Model-agnostic instructions that work for most LLMs
-- Targeted model-specific adaptations when necessary
-- Easy extension for new tools without modifying core infrastructure
+npm test -- src/components/chat-components/ChatSingleMessage.test.tsx
+```
