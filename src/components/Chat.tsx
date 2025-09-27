@@ -595,6 +595,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         await plugin.updateChatTitle(id, newTitle);
         await handleLoadChatHistory(); // Refresh the list
       } catch (error) {
+        logError("Error updating chat title:", error);
         new Notice("Failed to update chat title.");
         throw error; // Re-throw to let the popover handle the error state
       }
@@ -608,6 +609,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         await plugin.deleteChatHistory(id);
         await handleLoadChatHistory(); // Refresh the list
       } catch (error) {
+        logError("Error deleting chat:", error);
         new Notice("Failed to delete chat.");
         throw error; // Re-throw to let the popover handle the error state
       }
@@ -622,6 +624,18 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       } catch (error) {
         logError("Error loading chat:", error);
         new Notice("Failed to load chat.");
+      }
+    },
+    [plugin]
+  );
+
+  const handleOpenSourceFile = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.openChatSourceFile(id);
+      } catch (error) {
+        logError("Error opening source file:", error);
+        new Notice("Failed to open source file.");
       }
     },
     [plugin]
@@ -699,6 +713,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onUpdateChatTitle={handleUpdateChatTitle}
               onDeleteChat={handleDeleteChat}
               onLoadChat={handleLoadChat}
+              onOpenSourceFile={handleOpenSourceFile}
             />
             <ChatInput
               inputMessage={inputMessage}

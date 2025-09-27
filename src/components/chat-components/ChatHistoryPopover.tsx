@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
+import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -21,6 +21,7 @@ interface ChatHistoryPopoverProps {
   onUpdateTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
   onLoadChat?: (id: string) => Promise<void>;
+  onOpenSourceFile?: (id: string) => Promise<void>;
 }
 
 export function ChatHistoryPopover({
@@ -29,6 +30,7 @@ export function ChatHistoryPopover({
   onUpdateTitle,
   onDeleteChat,
   onLoadChat,
+  onOpenSourceFile,
 }: ChatHistoryPopoverProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -91,7 +93,7 @@ export function ChatHistoryPopover({
       groupMap.get(groupKey)!.push(chat);
     });
 
-    // 按优先级排序，确保 Today 在最前面
+    // Sort by priority, ensuring Today is at the top.
     return groups.sort((a, b) => a.priority - b.priority);
   }, [filteredHistory]);
 
@@ -195,6 +197,7 @@ export function ChatHistoryPopover({
                           onDelete={handleDelete}
                           onCancelDelete={handleCancelDelete}
                           onLoadChat={handleLoadChat}
+                          onOpenSourceFile={onOpenSourceFile}
                           isMobile={isMobile}
                           confirmDeleteId={confirmDeleteId}
                         />
@@ -222,6 +225,7 @@ interface ChatHistoryItemProps {
   onDelete: (id: string) => void;
   onCancelDelete: () => void;
   onLoadChat: (id: string) => void;
+  onOpenSourceFile?: (id: string) => void;
   isMobile: boolean;
   confirmDeleteId: string | null;
 }
@@ -237,6 +241,7 @@ function ChatHistoryItem({
   onDelete,
   onCancelDelete,
   onLoadChat,
+  onOpenSourceFile,
   isMobile,
   confirmDeleteId,
 }: ChatHistoryItemProps) {
@@ -304,7 +309,7 @@ function ChatHistoryItem({
                 onDelete(chat.id);
               }}
               className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-              title="确认删除"
+              title="Confirm Delete"
             >
               <Check className="tw-size-3" />
             </Button>
@@ -316,7 +321,7 @@ function ChatHistoryItem({
                 onCancelDelete();
               }}
               className="tw-size-5 tw-p-0"
-              title="取消删除"
+              title="Cancel deletion"
             >
               <X className="tw-size-3" />
             </Button>
@@ -324,6 +329,21 @@ function ChatHistoryItem({
         ) : (
           // Show edit and delete buttons
           <>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onOpenSourceFile) {
+                  onOpenSourceFile(chat.id);
+                }
+              }}
+              className="tw-size-5 tw-p-0"
+              title="Open the source file"
+            >
+              <ArrowUpRight className="tw-size-4" />
+            </Button>
+
             <Button
               size="sm"
               variant="ghost"
@@ -343,7 +363,7 @@ function ChatHistoryItem({
                 onDelete(chat.id);
               }}
               className="tw-size-5 tw-p-0 tw-text-error hover:tw-text-error"
-              title="删除"
+              title="delete file"
             >
               <Trash2 className="tw-size-3" />
             </Button>

@@ -16,7 +16,7 @@ import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/c
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logError, logInfo } from "@/logger";
+import { logInfo } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
@@ -397,7 +397,16 @@ export default class CopilotPlugin extends Plugin {
     if (file instanceof TFile) {
       await this.loadChatHistory(file);
     } else {
-      new Notice("Chat file not found.");
+      throw new Error("Chat file not found.");
+    }
+  }
+
+  async openChatSourceFile(fileId: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(fileId);
+    if (file instanceof TFile) {
+      await this.app.workspace.getLeaf(true).openFile(file);
+    } else {
+      throw new Error("Chat file not found.");
     }
   }
 
@@ -432,26 +441,17 @@ export default class CopilotPlugin extends Plugin {
 
       new Notice("Chat title updated.");
     } else {
-      const errorMsg = "Chat file not found.";
-      throw new Error(errorMsg);
+      throw new Error("Chat file not found.");
     }
   }
 
   async deleteChatHistory(fileId: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
-      try {
-        await this.app.vault.delete(file);
-        new Notice("Chat deleted.");
-      } catch (error) {
-        logError("Error deleting chat:", error);
-        new Notice("Failed to delete chat.");
-        throw error; // Re-throw to let the caller handle the error
-      }
+      await this.app.vault.delete(file);
+      new Notice("Chat deleted.");
     } else {
-      const errorMsg = "Chat file not found.";
-      new Notice(errorMsg);
-      throw new Error(errorMsg);
+      throw new Error("Chat file not found.");
     }
   }
 

@@ -177,6 +177,7 @@ interface ChatControlsProps {
   onUpdateChatTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
   onLoadChat: (id: string) => Promise<void>;
+  onOpenSourceFile?: (id: string) => Promise<void>;
 }
 
 export function ChatControls({
@@ -189,6 +190,7 @@ export function ChatControls({
   onUpdateChatTitle,
   onDeleteChat,
   onLoadChat,
+  onOpenSourceFile,
 }: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
@@ -308,6 +310,7 @@ export function ChatControls({
             onUpdateTitle={onUpdateChatTitle}
             onDeleteChat={onDeleteChat}
             onLoadChat={onLoadChat}
+            onOpenSourceFile={onOpenSourceFile}
           >
             <TooltipTrigger asChild>
               <Button variant="ghost2" size="icon" title="Chat History" onClick={onLoadHistory}>
