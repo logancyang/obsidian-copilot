@@ -31,6 +31,7 @@ function tryToPositionRange(leadOffset: number, editorWindow: Window): Range | n
 }
 
 const MENU_WIDTH = 400;
+const MAX_WIDTH_PERCENTAGE = 0.9;
 
 interface TypeaheadMenuPortalProps {
   options: TypeaheadOption[];
@@ -61,14 +62,17 @@ export function TypeaheadMenuPortal({
 
   // Calculate dynamic width based on content
   const calculateWidth = useCallback(() => {
-    if (options.length === 0) return MENU_WIDTH;
+    const maxAllowedWidth = Math.floor(window.innerWidth * MAX_WIDTH_PERCENTAGE);
+
+    if (options.length === 0) return Math.min(MENU_WIDTH, maxAllowedWidth);
 
     const maxTitleLength = Math.max(...options.map((opt) => opt.title.length));
     const maxSubtitleLength = Math.max(...options.map((opt) => opt.subtitle?.length || 0));
 
     const estimatedWidth = Math.max(maxTitleLength * 8 + 32, maxSubtitleLength * 6 + 32);
+    const preferredWidth = Math.min(Math.max(estimatedWidth, 300), MENU_WIDTH);
 
-    return Math.min(Math.max(estimatedWidth, MENU_WIDTH), MENU_WIDTH);
+    return Math.min(preferredWidth, maxAllowedWidth);
   }, [options]);
 
   // Positioning for text-triggered menus
