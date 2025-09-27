@@ -963,3 +963,8 @@ If your plugin does not need CSS, delete this file.
 .copilot-sources__text a {
   color: var(--text-accent);
 }
+
+/* fix the width of the popover on mobile */
+body.is-mobile div[data-radix-popper-content-wrapper] {
+  min-width: fit-content !important;
+}
