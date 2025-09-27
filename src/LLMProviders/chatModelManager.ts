@@ -1,6 +1,6 @@
 import { CustomModel, getModelKey, ModelConfig } from "@/aiParams";
 import {
-  BREVILABS_API_BASE_URL,
+  BREVILABS_MODELS_BASE_URL,
   BUILTIN_CHAT_MODELS,
   ChatModelProviders,
   ProviderInfo,
@@ -284,7 +284,7 @@ export default class ChatModelManager {
         modelName: modelName,
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         configuration: {
-          baseURL: BREVILABS_API_BASE_URL,
+          baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },

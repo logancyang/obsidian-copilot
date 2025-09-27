@@ -6,6 +6,7 @@ import { ChainType } from "./chainFactory";
 import { PromptSortStrategy } from "./types";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
+export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
@@ -588,13 +589,13 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
-    host: "https://api.brevilabs.com/v1",
+    host: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
     label: "Copilot Plus",
-    host: "https://api.brevilabs.com/v1",
+    host: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
     listModelURL: "",
   },

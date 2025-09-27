@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CustomModel } from "@/aiParams";
-import { BREVILABS_API_BASE_URL, EmbeddingModelProviders } from "@/constants";
+import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { BrevilabsClient } from "./brevilabsClient";
 import { err2String, safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -12,6 +11,7 @@ import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
 import { AzureOpenAIEmbeddings, OpenAIEmbeddings } from "@langchain/openai";
 import { Notice } from "obsidian";
+import { BrevilabsClient } from "./brevilabsClient";
 import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
 import { CustomOpenAIEmbeddings } from "./CustomOpenAIEmbeddings";
 
@@ -210,7 +210,7 @@ export default class EmbeddingManager {
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         configuration: {
-          baseURL: BREVILABS_API_BASE_URL,
+          baseURL: BREVILABS_MODELS_BASE_URL,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
@@ -220,7 +220,7 @@ export default class EmbeddingManager {
         timeout: 10000,
         batchSize: getSettings().embeddingBatchSize,
         dimensions: customModel.dimensions,
-        baseUrl: BREVILABS_API_BASE_URL + "/embeddings",
+        baseUrl: BREVILABS_MODELS_BASE_URL + "/embeddings",
         configuration: {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
