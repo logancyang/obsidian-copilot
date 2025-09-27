@@ -40,6 +40,7 @@ import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 
 type ChatMode = "default" | "project";
 
@@ -84,6 +85,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
+  const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   // null: keep default behavior; true: show; false: hide
   const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
 
@@ -578,9 +580,67 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     plugin.userMemoryManager,
   ]);
 
-  const handleLoadHistory = useCallback(() => {
-    plugin.loadCopilotChatHistory();
+  const handleLoadChatHistory = useCallback(async () => {
+    try {
+      const historyItems = await plugin.getChatHistoryItems();
+      setChatHistoryItems(historyItems);
+    } catch (error) {
+      logError("Error loading chat history:", error);
+      new Notice("Failed to load chat history.");
+    }
   }, [plugin]);
+
+  const handleUpdateChatTitle = useCallback(
+    async (id: string, newTitle: string) => {
+      try {
+        await plugin.updateChatTitle(id, newTitle);
+        await handleLoadChatHistory(); // Refresh the list
+      } catch (error) {
+        logError("Error updating chat title:", error);
+        new Notice("Failed to update chat title.");
+        throw error; // Re-throw to let the popover handle the error state
+      }
+    },
+    [plugin, handleLoadChatHistory]
+  );
+
+  const handleDeleteChat = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.deleteChatHistory(id);
+        await handleLoadChatHistory(); // Refresh the list
+      } catch (error) {
+        logError("Error deleting chat:", error);
+        new Notice("Failed to delete chat.");
+        throw error; // Re-throw to let the popover handle the error state
+      }
+    },
+    [plugin, handleLoadChatHistory]
+  );
+
+  const handleLoadChat = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.loadChatById(id);
+      } catch (error) {
+        logError("Error loading chat:", error);
+        new Notice("Failed to load chat.");
+      }
+    },
+    [plugin]
+  );
+
+  const handleOpenSourceFile = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.openChatSourceFile(id);
+      } catch (error) {
+        logError("Error opening source file:", error);
+        new Notice("Failed to open source file.");
+      }
+    },
+    [plugin]
+  );
 
   // Event listener for abort stream events
   useEffect(() => {
@@ -655,7 +715,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
             <ChatControls
               onNewChat={handleNewChat}
               onSaveAsNote={() => handleSaveAsNote()}
-              onLoadHistory={handleLoadHistory}
+              onLoadHistory={handleLoadChatHistory}
               onModeChange={(newMode) => {
                 setPreviousMode(selectedChain);
                 // Hide chat UI when switching to project mode
@@ -663,6 +723,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                   setShowChatUI(false);
                 }
               }}
+              chatHistory={chatHistoryItems}
+              onUpdateChatTitle={handleUpdateChatTitle}
+              onDeleteChat={handleDeleteChat}
+              onLoadChat={handleLoadChat}
+              onOpenSourceFile={handleOpenSourceFile}
             />
             <ChatInput
               inputMessage={inputMessage}
