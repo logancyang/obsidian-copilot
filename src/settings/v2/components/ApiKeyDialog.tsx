@@ -160,7 +160,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     }
   };
 
-  const verifyModel = async () => {
+  const verifyAndAddModel = async () => {
     if (!selectedModel) {
       new Notice("Please select a model first");
       return;
@@ -184,7 +184,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
       );
 
       if (!existingModel) {
-        const updatedModels = [...settings.activeModels, customModel];
+        const updatedModels = [...settings.activeModels, { ...customModel, apiKey: undefined }];
         updateSetting("activeModels", updatedModels);
         new Notice(
           `Model ${selectedModel.name} verified successfully and added to your models list!`
@@ -325,7 +325,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                           </div>
                           <div className="tw-w-[72px]">
                             <Button
-                              onClick={verifyModel}
+                              onClick={verifyAndAddModel}
                               disabled={
                                 !selectedModel ||
                                 selectedModel.provider !== item.provider ||
