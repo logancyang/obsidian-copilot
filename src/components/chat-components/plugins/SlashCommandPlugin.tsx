@@ -37,7 +37,7 @@ export function SlashCommandPlugin(): JSX.Element {
   // Filter commands based on query using fuzzysort
   const filteredCommands = useMemo(() => {
     if (!currentQuery) {
-      return allCommands.slice(0, 10); // Show first 10 commands when no query
+      return allCommands; // Show all commands when no query
     }
 
     const query = currentQuery;
@@ -45,7 +45,6 @@ export function SlashCommandPlugin(): JSX.Element {
     // Use fuzzysort to search through command titles
     const titleResults = fuzzysort.go(query, allCommands, {
       key: "title",
-      limit: 10,
       threshold: -10000, // Allow more lenient matching
     });
 
@@ -57,7 +56,6 @@ export function SlashCommandPlugin(): JSX.Element {
     // Fallback to content search if no title matches
     const contentResults = fuzzysort.go(query, allCommands, {
       key: "content",
-      limit: 5,
       threshold: -10000,
     });
 
@@ -95,6 +93,7 @@ export function SlashCommandPlugin(): JSX.Element {
   const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "/",
+      allowWhitespace: true,
     },
     options: filteredCommands,
     onSelect: handleSelect,

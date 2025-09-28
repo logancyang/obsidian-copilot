@@ -89,14 +89,14 @@ export function useAtMentionSearch(
       const allNonToolItems = [...noteItems, ...folderItems, ...tagItems];
       const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
         keys: ["searchKeyword"],
-        limit: 10,
+        limit: 30,
         threshold: -10000,
       });
 
       const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
 
       // Tools first, then everything else ranked by fuzzy search
-      return [...matchingTools, ...rankedNonToolItems].slice(0, 10);
+      return [...matchingTools, ...rankedNonToolItems].slice(0, 30);
     } else {
       // Category-specific search mode
       let items: AtMentionOption[] = [];
@@ -155,12 +155,12 @@ export function useAtMentionSearch(
 
       // For other categories, apply traditional search if there's a query
       if (!query) {
-        return items.slice(0, 10);
+        return items.slice(0, 30);
       }
 
       const results = fuzzysort.go(query, items, {
         keys: ["title", "subtitle"],
-        limit: 10,
+        limit: 30,
         threshold: -10000,
       });
 
