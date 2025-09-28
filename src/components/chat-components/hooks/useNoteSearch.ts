@@ -8,6 +8,11 @@ export interface NoteSearchOption extends TypeaheadOption {
   file: TFile;
 }
 
+export interface NoteSearchResults {
+  nameMatches: NoteSearchOption[];
+  pathOnlyMatches: NoteSearchOption[];
+}
+
 /**
  * Configuration for note search behavior
  */
@@ -26,17 +31,18 @@ const DEFAULT_CONFIG: Required<NoteSearchConfig> = {
 /**
  * Unified hook for searching notes and PDFs across both [[ and @ typeahead interfaces.
  * Ensures consistent search behavior and results between different typeahead implementations.
+ * Returns separate arrays for name matches and path-only matches to allow proper prioritization.
  *
  * @param query - Search query string
  * @param isCopilotPlus - Whether Copilot Plus features are enabled (includes PDFs)
  * @param config - Optional configuration for search behavior
- * @returns Array of NoteSearchOption objects matching the query
+ * @returns Object with nameMatches and pathOnlyMatches arrays
  */
 export function useNoteSearch(
   query: string,
   isCopilotPlus: boolean = false,
   config: NoteSearchConfig = {}
-): NoteSearchOption[] {
+): NoteSearchResults {
   // Get all available notes (including PDFs in Plus mode)
   const allNotes = useAllNotes(isCopilotPlus);
 
@@ -55,22 +61,40 @@ export function useNoteSearch(
   const searchResults = useMemo(() => {
     const mergedConfig = { ...DEFAULT_CONFIG, ...config };
 
-    // If no query, return first N notes
+    // If no query, return first N notes as name matches
     if (!query.trim()) {
-      return allNoteOptions.slice(0, mergedConfig.limit);
+      return {
+        nameMatches: allNoteOptions.slice(0, mergedConfig.limit),
+        pathOnlyMatches: [],
+      };
     }
 
     const searchQuery = query.trim();
 
-    // Search both title and path simultaneously using the same algorithm
-    // This ensures identical behavior between [[ and @ mention typeaheads
-    const results = fuzzysort.go(searchQuery, allNoteOptions, {
+    // First, search only on note names (titles)
+    const nameResults = fuzzysort.go(searchQuery, allNoteOptions, {
+      keys: ["title"],
+      limit: mergedConfig.limit,
+      threshold: mergedConfig.threshold,
+    });
+
+    // Then, search both title and path to find path-only matches
+    const allResults = fuzzysort.go(searchQuery, allNoteOptions, {
       keys: ["title", "subtitle"],
       limit: mergedConfig.limit,
       threshold: mergedConfig.threshold,
     });
 
-    return results.map((result) => result.obj);
+    // Remove duplicates (notes already included from name search)
+    const nameResultSet = new Set(nameResults.map((result) => result.obj.key));
+    const pathOnlyResults = allResults
+      .filter((result) => !nameResultSet.has(result.obj.key))
+      .slice(0, mergedConfig.limit);
+
+    return {
+      nameMatches: nameResults.map((result) => result.obj),
+      pathOnlyMatches: pathOnlyResults.map((result) => result.obj),
+    };
   }, [allNoteOptions, query, config]);
 
   return searchResults;
