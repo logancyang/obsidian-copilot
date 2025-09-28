@@ -34,7 +34,7 @@ export class UserMemoryManager {
         this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
       } else {
         this.recentConversationsContent = "";
-        logWarn("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
+        logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
 
       // Load saved memories
@@ -45,7 +45,7 @@ export class UserMemoryManager {
         this.savedMemoriesContent = await this.app.vault.read(savedMemoriesFile);
       } else {
         this.savedMemoriesContent = "";
-        logWarn("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
+        logInfo("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
       }
     } catch (error) {
       logError("[UserMemoryManager] Error reading memory files:", error);
@@ -389,7 +389,7 @@ Generate a title and summary for this conversation:`;
 
     try {
       const response = await chatModel.invoke(messages_llm);
-      const content = response.content.toString().trim();
+      const content = response.text;
 
       // Extract JSON from content, handling code blocks
       const jsonContent = this.extractJsonFromResponse(content);
