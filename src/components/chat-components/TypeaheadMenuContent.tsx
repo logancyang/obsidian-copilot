@@ -124,7 +124,8 @@ export function TypeaheadMenuContent({
                   key={option.key}
                   ref={isSelected ? selectedItemRef : undefined}
                   className={cn(
-                    "tw-flex tw-cursor-pointer tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm tw-text-normal hover:tw-bg-dropdown-hover"
+                    "tw-flex tw-cursor-pointer tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm tw-text-normal",
+                    isSelected ? "tw-bg-modifier-hover" : "hover:tw-bg-modifier-hover"
                   )}
                   // Use onMouseDown instead of onClick to prevent triggering
                   // onblur events of the typeahead menu

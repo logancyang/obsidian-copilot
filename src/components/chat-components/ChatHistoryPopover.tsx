@@ -275,7 +275,7 @@ function ChatHistoryItem({
   return (
     <div
       className={cn(
-        "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-dropdown-hover"
+        "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-modifier-hover"
       )}
       onClick={() => onLoadChat(chat.id)}
     >
