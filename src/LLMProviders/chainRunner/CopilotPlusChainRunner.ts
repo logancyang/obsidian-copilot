@@ -1,4 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import {
   ABORT_REASON,
   COMPOSER_OUTPUT_INSTRUCTIONS,
@@ -23,13 +24,6 @@ import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from 
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
-import {
-  formatSourceCatalog,
-  getCitationInstructions,
-  sanitizeContentForCitations,
-  addFallbackSources,
-  type SourceCatalogEntry,
-} from "./utils/citationUtils";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import {
   addChatHistoryToMessages,
@@ -37,14 +31,25 @@ import {
   processRawChatHistory,
 } from "./utils/chatHistoryUtils";
 import {
+  addFallbackSources,
+  formatSourceCatalog,
+  getCitationInstructions,
+  sanitizeContentForCitations,
+  type SourceCatalogEntry,
+} from "./utils/citationUtils";
+import {
   extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
+import {
+  buildLocalSearchInnerContent,
+  renderCiCMessage,
+  wrapLocalSearchPayload,
+} from "./utils/cicPromptUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
-import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
@@ -616,46 +621,47 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }
     }
 
-    if (toolOutputs.length > 0) {
-      const validOutputs = toolOutputs.filter((output) => output.output != null);
-      if (validOutputs.length > 0) {
-        // Don't add "Additional context" header if only localSearch with results to maintain QA format
-        const contextHeader =
-          hasLocalSearchWithResults && validOutputs.length === 1
-            ? ""
-            : "\n\n# Additional context:\n\n";
-        context =
-          contextHeader +
-          validOutputs
-            .map((output) => {
-              let content = output.output;
+    const validOutputs = toolOutputs.filter((output) => output.output != null);
 
-              // localSearch results are already formatted by executeToolCalls
-              // No need for special processing here
+    if (validOutputs.length > 0) {
+      // Don't add "Additional context" header if only localSearch with results to maintain QA format
+      const contextHeader =
+        hasLocalSearchWithResults && validOutputs.length === 1
+          ? ""
+          : "\n\n# Additional context:\n\n";
+      const rawContext =
+        contextHeader +
+        validOutputs
+          .map((output) => {
+            let content = output.output;
 
-              // Ensure content is string
-              if (typeof content !== "string") {
-                content = JSON.stringify(content);
-              }
+            // localSearch results are already formatted by executeToolCalls
+            // No need for special processing here
 
-              // localSearch is already wrapped in XML tags, don't double-wrap
-              if (output.tool === "localSearch") {
-                return content;
-              }
+            // Ensure content is string
+            if (typeof content !== "string") {
+              content = JSON.stringify(content);
+            }
 
-              // All other tools get wrapped consistently
-              return `<${output.tool}>\n${content}\n</${output.tool}>`;
-            })
-            .join("\n\n");
-      }
+            // localSearch is already wrapped in XML tags, don't double-wrap
+            if (output.tool === "localSearch") {
+              return content;
+            }
+
+            // All other tools get wrapped consistently
+            return `<${output.tool}>\n${content}\n</${output.tool}>`;
+          })
+          .join("\n\n");
+
+      context = rawContext.trim();
     }
 
-    // For QA format when only localSearch with results is present
-    if (hasLocalSearchWithResults && toolOutputs.filter((o) => o.output != null).length === 1) {
-      return `${context}\n\nQuestion: ${userMessage}`;
+    if (!context) {
+      return userMessage;
     }
 
-    return `${userMessage}${context}`;
+    const shouldLabelQuestion = hasLocalSearchWithResults && validOutputs.length === 1;
+    return renderCiCMessage(context, userMessage, shouldLabelQuestion);
   }
 
   protected getTimeExpression(toolCalls: any[]): string {
@@ -724,10 +730,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const settings = getSettings();
     const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
+    const innerContent = buildLocalSearchInnerContent(guidance, formattedContent);
+
     // Wrap in XML-like tags for better LLM understanding
-    return timeExpression
-      ? `<localSearch timeRange="${timeExpression}">\n${formattedContent}${guidance}\n</localSearch>`
-      : `<localSearch>\n${formattedContent}${guidance}\n</localSearch>`;
+    return wrapLocalSearchPayload(innerContent, timeExpression);
   }
 
   /**

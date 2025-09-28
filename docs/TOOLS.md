@@ -71,6 +71,14 @@ The system uses a three-layer approach for providing tool instructions to LLMs:
    - Only for persistent model-specific failures
    - Keep minimal and targeted
 
+### localSearch CiC Prompting Flow
+
+- CiC: Corpus in Context https://arxiv.org/pdf/2406.13121
+- **Instruction First**: `CopilotPlusChainRunner` now assembles the localSearch payload via `buildLocalSearchInnerContent`, ensuring citation guidance (e.g., `<guidance>` rules) tops the XML block before any documents.
+- **Documents Next**: Search hits are serialized once through `formatSearchResultsForLLM`; the helper simply appends them after guidance, keeping the documents section untouched but clearly separated.
+- **Question Last**: `renderCiCMessage` formats the final prompt so any context precedes the user's original query, optionally labeling it (`Question:`) when only vault search was used; this matches the CiC recommendation for instruction → context → query ordering.
+- **Reusable Wrapping**: `wrapLocalSearchPayload` centralizes the `<localSearch>` tag creation (including optional `timeRange`), making the layout reusable for future chains without copying string glue.
+
 ## Current Implementation
 
 ### Core Files
