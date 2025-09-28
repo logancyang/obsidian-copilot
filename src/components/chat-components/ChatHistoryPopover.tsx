@@ -245,8 +245,6 @@ function ChatHistoryItem({
   isMobile,
   confirmDeleteId,
 }: ChatHistoryItemProps) {
-  const [isHovered, setIsHovered] = useState(false);
-
   if (isEditing) {
     return (
       <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2">
@@ -277,11 +275,8 @@ function ChatHistoryItem({
   return (
     <div
       className={cn(
-        "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-accent-hover/10",
-        isHovered && "tw-bg-accent-hover/10"
+        "tw-group tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-rounded-md tw-p-1 tw-transition-colors hover:tw-bg-dropdown-hover"
       )}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
       onClick={() => onLoadChat(chat.id)}
     >
       <MessageCircle className="tw-size-3 tw-shrink-0 tw-text-muted" />
