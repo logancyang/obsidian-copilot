@@ -5,6 +5,7 @@ import { parseTextForPills, createNodesFromSegments } from "../utils/lexicalText
 
 interface PastePluginProps {
   enableURLPills?: boolean;
+  onImagePaste?: (files: File[]) => void;
 }
 
 /**
@@ -12,7 +13,7 @@ interface PastePluginProps {
  * Only converts patterns that resolve to actual notes in the vault, valid tools, valid tags, valid folders, and valid URLs -
  * invalid references are left as plain text.
  */
-export function PastePlugin({ enableURLPills = false }: PastePluginProps): null {
+export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePluginProps): null {
   const [editor] = useLexicalComposerContext();
 
   React.useEffect(() => {
@@ -22,6 +23,35 @@ export function PastePlugin({ enableURLPills = false }: PastePluginProps): null 
         const clipboardData = event.clipboardData;
         if (!clipboardData) {
           return false;
+        }
+
+        // First, check for image data
+        if (onImagePaste) {
+          const items = clipboardData.items;
+          if (items) {
+            const imageItems = Array.from(items).filter(
+              (item) => item.type.indexOf("image") !== -1
+            );
+
+            if (imageItems.length > 0) {
+              event.preventDefault();
+
+              // Handle image processing asynchronously
+              Promise.all(
+                imageItems.map((item) => {
+                  const file = item.getAsFile();
+                  return file;
+                })
+              ).then((files) => {
+                const validFiles = files.filter((file) => file !== null);
+                if (validFiles.length > 0) {
+                  onImagePaste(validFiles);
+                }
+              });
+
+              return true;
+            }
+          }
         }
 
         const plainText = clipboardData.getData("text/plain");
@@ -80,7 +110,7 @@ export function PastePlugin({ enableURLPills = false }: PastePluginProps): null 
       },
       COMMAND_PRIORITY_HIGH
     );
-  }, [editor, enableURLPills]);
+  }, [editor, enableURLPills, onImagePaste]);
 
   return null;
 }

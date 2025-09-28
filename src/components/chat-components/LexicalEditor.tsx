@@ -47,6 +47,7 @@ interface LexicalEditorProps {
   onTagsChange?: (tags: string[]) => void;
   onTagsRemoved?: (removedTags: string[]) => void;
   onEditorReady?: (editor: any) => void;
+  onImagePaste?: (files: File[]) => void;
   isCopilotPlus?: boolean;
 }
 
@@ -68,6 +69,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onTagsChange,
   onTagsRemoved,
   onEditorReady,
+  onImagePaste,
   isCopilotPlus = false,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
@@ -161,7 +163,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         />
         <TagPillSyncPlugin onTagsChange={onTagsChange} onTagsRemoved={onTagsRemoved} />
         <PillDeletionPlugin />
-        <PastePlugin enableURLPills={!!onURLsChange} />
+        <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
         <SlashCommandPlugin />
         <NoteCommandPlugin isCopilotPlus={isCopilotPlus} />
         <TagCommandPlugin />
