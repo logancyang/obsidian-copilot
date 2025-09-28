@@ -43,6 +43,11 @@ import {
   formatSearchResultStringForLLM,
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
+import {
+  buildLocalSearchInnerContent,
+  renderCiCMessage,
+  wrapLocalSearchPayload,
+} from "./utils/cicPromptUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 
@@ -656,55 +661,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     const shouldLabelQuestion = hasLocalSearchWithResults && validOutputs.length === 1;
-    return this.renderCiCMessage(context, userMessage, shouldLabelQuestion);
-  }
-
-  /**
-   * Builds the ordered inner payload for a localSearch result, placing guidance before documents.
-   * @param guidance Citation guidance or instructions associated with the search results.
-   * @param formattedContent Serialized documents selected for inclusion.
-   * @returns Combined payload string with minimal whitespace.
-   */
-  private buildLocalSearchInnerContent(guidance: string, formattedContent: string): string {
-    const sections = [guidance, formattedContent]
-      .map((section) => section?.trim())
-      .filter((section): section is string => Boolean(section));
-
-    return sections.join("\n\n");
-  }
-
-  /**
-   * Wraps localSearch payload content in XML, preserving optional time range metadata.
-   * @param innerContent Ordered combination of guidance and documents.
-   * @param timeExpression Optional natural-language time range expression.
-   * @returns XML-wrapped localSearch payload ready for LLM consumption.
-   */
-  private wrapLocalSearchPayload(innerContent: string, timeExpression: string): string {
-    const payload = innerContent ? `\n${innerContent}\n` : "";
-    const timeAttribute = timeExpression ? ` timeRange="${timeExpression}"` : "";
-    return `<localSearch${timeAttribute}>${payload}</localSearch>`;
-  }
-
-  /**
-   * Produces a CiC-aligned (Corpus in Context https://arxiv.org/pdf/2406.13121) prompt by placing context
-   * first and the user question last.
-   * @param contextSection Prepared instruction/context block.
-   * @param userQuestion Original user message.
-   * @param labelQuestion Whether to prefix the question with a clarifying label.
-   * @returns String formatted according to CiC ordering.
-   */
-  private renderCiCMessage(
-    contextSection: string,
-    userQuestion: string,
-    labelQuestion: boolean
-  ): string {
-    const contextBlock = contextSection.trim();
-    if (!contextBlock) {
-      return userQuestion;
-    }
-
-    const questionBlock = labelQuestion ? `Question: ${userQuestion}` : userQuestion;
-    return `${contextBlock}\n\n${questionBlock}`;
+    return renderCiCMessage(context, userMessage, shouldLabelQuestion);
   }
 
   protected getTimeExpression(toolCalls: any[]): string {
@@ -773,10 +730,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const settings = getSettings();
     const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
-    const innerContent = this.buildLocalSearchInnerContent(guidance, formattedContent);
+    const innerContent = buildLocalSearchInnerContent(guidance, formattedContent);
 
     // Wrap in XML-like tags for better LLM understanding
-    return this.wrapLocalSearchPayload(innerContent, timeExpression);
+    return wrapLocalSearchPayload(innerContent, timeExpression);
   }
 
   /**
