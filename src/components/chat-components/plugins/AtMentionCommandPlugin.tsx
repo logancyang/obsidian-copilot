@@ -129,6 +129,7 @@ export function AtMentionCommandPlugin({
   const { state, handleHighlight } = useTypeaheadPlugin({
     triggerConfig: {
       char: "@",
+      allowWhitespace: true,
     },
     options: searchResults,
     onSelect: handleSelect,

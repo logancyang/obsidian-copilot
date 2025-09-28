@@ -44,6 +44,7 @@ export function TagCommandPlugin(): JSX.Element {
     triggerConfig: {
       char: "#",
       multiChar: false,
+      allowWhitespace: true,
     },
     options: filteredTags,
     onSelect: handleSelect,

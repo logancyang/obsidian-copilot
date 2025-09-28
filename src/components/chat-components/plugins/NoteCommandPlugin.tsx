@@ -79,6 +79,7 @@ export function NoteCommandPlugin({ isCopilotPlus = false }: NoteCommandPluginPr
     triggerConfig: {
       char: "[[",
       multiChar: true,
+      allowWhitespace: true,
     },
     options: filteredNotes,
     onSelect: handleSelect,
