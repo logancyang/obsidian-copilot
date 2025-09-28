@@ -5,6 +5,44 @@ import { ToolManager } from "@/tools/toolManager";
 import { err2String } from "@/utils";
 import { ToolCall } from "./xmlParsing";
 
+const DEFAULT_CONCURRENCY = 4;
+const MIN_CONCURRENCY = 1;
+const MAX_CONCURRENCY = 10;
+
+export type ToolStatus = "ok" | "error" | "timeout" | "cancelled";
+
+export interface ToolResult {
+  index: number;
+  name: string;
+  status: ToolStatus;
+  payload?: unknown;
+  error?: string;
+}
+
+export interface ExecHooks {
+  onStart?: (index: number, meta: { name: string; background?: boolean }) => void;
+  onSettle?: (index: number, result: ToolResult) => void;
+}
+
+export interface ExecOptions {
+  concurrency?: number;
+  signal?: AbortSignal;
+  hooks?: ExecHooks;
+}
+
+export interface ExecuteToolCallContext {
+  availableTools: any[];
+  originalUserMessage?: string;
+  signal?: AbortSignal;
+}
+
+export interface CoordinatorToolCall extends ToolCall {
+  index?: number;
+  id?: string;
+  background?: boolean;
+  timeoutMs?: number;
+}
+
 export interface ToolExecutionResult {
   toolName: string;
   result: string;
@@ -14,6 +52,301 @@ export interface ToolExecutionResult {
    * When absent, fallback to `result` for display purposes.
    */
   displayResult?: string;
+}
+
+/**
+ * Ensures concurrency configuration stays within allowed bounds.
+ */
+function clampConcurrency(value: number | undefined): number {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return DEFAULT_CONCURRENCY;
+  }
+
+  if (value < MIN_CONCURRENCY) {
+    return MIN_CONCURRENCY;
+  }
+
+  if (value > MAX_CONCURRENCY) {
+    return MAX_CONCURRENCY;
+  }
+
+  return Math.floor(value);
+}
+
+function normalizeIndex(call: CoordinatorToolCall, fallback: number): number {
+  return typeof call.index === "number" && call.index >= 0 ? call.index : fallback;
+}
+
+function createCancelledResult(
+  call: CoordinatorToolCall,
+  index: number,
+  reason = "Aborted"
+): ToolResult {
+  return {
+    index,
+    name: call.name,
+    status: "cancelled",
+    error: reason,
+  };
+}
+
+function createErrorResult(call: CoordinatorToolCall, index: number, error: unknown): ToolResult {
+  return {
+    index,
+    name: call.name,
+    status: "error",
+    error: err2String(error),
+  };
+}
+
+function mapSequentialToToolResult(
+  call: CoordinatorToolCall,
+  index: number,
+  sequential: ToolExecutionResult
+): ToolResult {
+  if (sequential.success) {
+    return {
+      index,
+      name: call.name,
+      status: "ok",
+      payload: sequential.result,
+    };
+  }
+
+  const lowered = sequential.result.toLowerCase();
+  if (lowered.includes("timed out")) {
+    return {
+      index,
+      name: call.name,
+      status: "timeout",
+      error: sequential.result,
+    };
+  }
+
+  if (lowered.includes("aborted")) {
+    return {
+      index,
+      name: call.name,
+      status: "cancelled",
+      error: sequential.result,
+    };
+  }
+
+  return {
+    index,
+    name: call.name,
+    status: "error",
+    error: sequential.result,
+  };
+}
+
+/**
+ * Executes a single tool call using the existing sequential pathway while returning
+ * the coordinator-friendly ToolResult payload.
+ */
+export async function executeToolCall(
+  toolCall: CoordinatorToolCall,
+  context: ExecuteToolCallContext
+): Promise<ToolResult> {
+  const { availableTools, originalUserMessage, signal } = context;
+
+  const index = normalizeIndex(toolCall, 0);
+
+  if (signal?.aborted) {
+    return createCancelledResult(toolCall, index);
+  }
+
+  try {
+    const result = await executeSequentialToolCall(toolCall, availableTools, originalUserMessage);
+    return mapSequentialToToolResult(toolCall, index, result);
+  } catch (error) {
+    return createErrorResult(toolCall, index, error);
+  }
+}
+
+export interface ExecuteToolCallsContext extends ExecOptions {
+  availableTools: any[];
+  originalUserMessage?: string;
+}
+
+/**
+ * Schedules tool calls with bounded parallelism while preserving input ordering.
+ */
+export async function executeToolCallsInParallel(
+  toolCalls: CoordinatorToolCall[],
+  context: ExecuteToolCallsContext
+): Promise<ToolResult[]> {
+  const { availableTools, originalUserMessage, hooks, signal } = context;
+  const concurrency = clampConcurrency(context.concurrency);
+
+  if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+    return [];
+  }
+
+  const normalizedCalls = toolCalls.map((call, idx) => ({
+    ...call,
+    index: normalizeIndex(call, idx),
+  }));
+
+  const indexToCall: CoordinatorToolCall[] = [];
+  normalizedCalls.forEach((call) => {
+    const targetIndex = call.index ?? 0;
+    indexToCall[targetIndex] = call;
+  });
+
+  const maxIndex = indexToCall.reduce((acc, call, idx) => (call ? Math.max(acc, idx) : acc), 0);
+  const resultSize = Math.max(maxIndex + 1, normalizedCalls.length);
+  const results: ToolResult[] = new Array(resultSize);
+
+  let next = 0;
+  let inFlight = 0;
+  let completed = false;
+  let aborted = signal?.aborted ?? false;
+
+  const singleCallContext: ExecuteToolCallContext = {
+    availableTools,
+    originalUserMessage,
+    signal,
+  };
+
+  return await new Promise<ToolResult[]>((resolve) => {
+    let abortCleanup: (() => void) | undefined;
+
+    function markRemainingCancelled(): void {
+      indexToCall.forEach((call, idx) => {
+        if (!call) {
+          return;
+        }
+        if (!results[idx]) {
+          results[idx] = createCancelledResult(call, idx, aborted ? "Aborted" : "");
+        }
+      });
+
+      if (aborted) {
+        next = normalizedCalls.length;
+      }
+    }
+
+    const settleIfDone = () => {
+      if (completed) {
+        return;
+      }
+
+      if (next >= normalizedCalls.length && inFlight === 0) {
+        completed = true;
+        markRemainingCancelled();
+        abortCleanup?.();
+
+        const finalResults: ToolResult[] = new Array(resultSize);
+        for (let i = 0; i < resultSize; i += 1) {
+          const existing = results[i];
+          if (existing) {
+            finalResults[i] = existing;
+            continue;
+          }
+
+          const call = indexToCall[i];
+          if (call) {
+            finalResults[i] = createCancelledResult(call, i, aborted ? "Aborted" : "");
+            continue;
+          }
+
+          finalResults[i] = {
+            index: i,
+            name: "unknown",
+            status: aborted ? "cancelled" : "error",
+            error: aborted ? "Aborted" : "Missing tool call context",
+          };
+        }
+
+        resolve(finalResults);
+      }
+    };
+
+    const startOne = (queueIndex: number) => {
+      const call = normalizedCalls[queueIndex];
+      const targetIndex = call.index ?? queueIndex;
+
+      if (aborted) {
+        results[targetIndex] = results[targetIndex] ?? createCancelledResult(call, targetIndex);
+        settleIfDone();
+        return;
+      }
+
+      try {
+        signal?.throwIfAborted?.();
+      } catch {
+        aborted = true;
+        results[targetIndex] = createCancelledResult(call, targetIndex);
+        markRemainingCancelled();
+        settleIfDone();
+        return;
+      }
+
+      hooks?.onStart?.(targetIndex, { name: call.name, background: call.background });
+      inFlight += 1;
+
+      executeToolCall(call, singleCallContext)
+        .then((toolResult) => {
+          if (aborted) {
+            return;
+          }
+
+          results[targetIndex] = toolResult;
+          hooks?.onSettle?.(targetIndex, toolResult);
+        })
+        .catch((error) => {
+          if (aborted) {
+            return;
+          }
+
+          const fallback = createErrorResult(call, targetIndex, error);
+          results[targetIndex] = fallback;
+          hooks?.onSettle?.(targetIndex, fallback);
+        })
+        .finally(() => {
+          inFlight -= 1;
+          pump();
+        });
+    };
+
+    function pump(): void {
+      if (completed) {
+        return;
+      }
+
+      if (aborted) {
+        markRemainingCancelled();
+        settleIfDone();
+        return;
+      }
+
+      while (inFlight < concurrency && next < normalizedCalls.length) {
+        startOne(next);
+        next += 1;
+      }
+
+      settleIfDone();
+    }
+
+    if (signal) {
+      const onAbort = () => {
+        if (aborted) {
+          return;
+        }
+        aborted = true;
+        markRemainingCancelled();
+        settleIfDone();
+      };
+
+      signal.addEventListener("abort", onAbort);
+      abortCleanup = () => {
+        signal.removeEventListener("abort", onAbort);
+      };
+    }
+
+    pump();
+  });
 }
 
 /**

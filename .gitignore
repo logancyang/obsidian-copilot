@@ -30,3 +30,6 @@ data.json
 
 # Development session tracking
 TODO.md
+# BMAD (local only)
+.bmad-core/
+.bmad-*/
