@@ -342,7 +342,6 @@ export class UserMemoryManager {
    * Extract JSON content from LLM response, handling cases where JSON is wrapped in code blocks
    */
   private extractJsonFromResponse(content: string): string {
-    logInfo("[UserMemoryManager] Extracting JSON from response:", content);
     // First, try to extract JSON from markdown code blocks
     const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (codeBlockMatch) {
