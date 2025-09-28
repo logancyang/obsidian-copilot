@@ -6,7 +6,7 @@ import { logInfo } from "@/logger";
 import { Mention } from "@/mentions/Mention";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage, MessageContext } from "@/types/message";
-import { extractNoteFiles, getNotesFromTags } from "@/utils";
+import { extractNoteFiles, getNotesFromTags, getNotesFromPath } from "@/utils";
 import { TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -72,7 +72,8 @@ export class ContextManager {
           : { urlContext: "", imageUrls: [] };
 
       // 3. Process context notes
-      const excludedNotePaths = new Set(includedFiles.map((file) => file.path));
+      // Initialize tracking set with files already included from custom prompts
+      const processedNotePaths = new Set(includedFiles.map((file) => file.path));
       const contextNotes = message.context?.notes || [];
 
       // Add active note if requested and not already included
@@ -81,13 +82,14 @@ export class ContextManager {
         includeActiveNote &&
         chainType !== ChainType.PROJECT_CHAIN &&
         activeNote &&
+        !processedNotePaths.has(activeNote.path) &&
         !notes.some((note) => note.path === activeNote.path)
       ) {
         notes.push(activeNote);
       }
 
       const noteContextAddition = await this.contextProcessor.processContextNotes(
-        excludedNotePaths,
+        processedNotePaths,
         fileParserManager,
         vault,
         notes,
@@ -95,6 +97,9 @@ export class ContextManager {
         activeNote,
         chainType
       );
+
+      // Add processed context notes to tracking set
+      notes.forEach((note) => processedNotePaths.add(note.path));
 
       // 4. Process context tags
       const contextTags = message.context?.tags || [];
@@ -106,7 +111,7 @@ export class ContextManager {
 
         // Filter out already processed notes to avoid duplication
         const filteredTaggedNotes = taggedNotes.filter(
-          (note) => !excludedNotePaths.has(note.path) && !notes.some((n) => n.path === note.path)
+          (note) => !processedNotePaths.has(note.path)
         );
 
         if (filteredTaggedNotes.length > 0) {
@@ -119,18 +124,51 @@ export class ContextManager {
             null,
             chainType
           );
+
+          // Add processed tagged notes to tracking set
+          filteredTaggedNotes.forEach((note) => processedNotePaths.add(note.path));
         }
       }
 
-      // 5. Process selected text contexts
+      // 5. Process context folders
+      const contextFolders = message.context?.folders || [];
+      let folderContextAddition = "";
+
+      if (contextFolders.length > 0) {
+        // Get all notes from the specified folders
+        const folderNotes = contextFolders.flatMap((folder) => getNotesFromPath(vault, folder));
+
+        // Filter out already processed notes to avoid duplication
+        const filteredFolderNotes = folderNotes.filter(
+          (note) => !processedNotePaths.has(note.path)
+        );
+
+        if (filteredFolderNotes.length > 0) {
+          folderContextAddition = await this.contextProcessor.processContextNotes(
+            new Set(), // Don't exclude any notes since we already filtered
+            fileParserManager,
+            vault,
+            filteredFolderNotes,
+            false, // Don't include active note again
+            null,
+            chainType
+          );
+
+          // Add processed folder notes to tracking set
+          filteredFolderNotes.forEach((note) => processedNotePaths.add(note.path));
+        }
+      }
+
+      // 6. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 6. Combine everything
+      // 7. Combine everything
       const finalProcessedMessage =
         processedUserMessage +
         urlContextAddition.urlContext +
         noteContextAddition +
         tagContextAddition +
+        folderContextAddition +
         selectedTextContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
