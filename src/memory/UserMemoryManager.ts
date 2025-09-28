@@ -34,7 +34,7 @@ export class UserMemoryManager {
         this.recentConversationsContent = await this.app.vault.read(recentConversationsFile);
       } else {
         this.recentConversationsContent = "";
-        logWarn("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
+        logInfo("[UserMemoryManager] Recent Conversations file not found, skipping memory load");
       }
 
       // Load saved memories
@@ -45,7 +45,7 @@ export class UserMemoryManager {
         this.savedMemoriesContent = await this.app.vault.read(savedMemoriesFile);
       } else {
         this.savedMemoriesContent = "";
-        logWarn("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
+        logInfo("[UserMemoryManager] Saved Memories file not found, skipping saved memory load");
       }
     } catch (error) {
       logError("[UserMemoryManager] Error reading memory files:", error);
@@ -342,6 +342,7 @@ export class UserMemoryManager {
    * Extract JSON content from LLM response, handling cases where JSON is wrapped in code blocks
    */
   private extractJsonFromResponse(content: string): string {
+    logInfo("[UserMemoryManager] Extracting JSON from response:", content);
     // First, try to extract JSON from markdown code blocks
     const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)\n?```/);
     if (codeBlockMatch) {
@@ -389,7 +390,7 @@ Generate a title and summary for this conversation:`;
 
     try {
       const response = await chatModel.invoke(messages_llm);
-      const content = response.content.toString().trim();
+      const content = response.text ?? response.content.toString().trim();
 
       // Extract JSON from content, handling code blocks
       const jsonContent = this.extractJsonFromResponse(content);
