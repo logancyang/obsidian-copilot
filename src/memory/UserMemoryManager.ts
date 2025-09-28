@@ -390,7 +390,7 @@ Generate a title and summary for this conversation:`;
 
     try {
       const response = await chatModel.invoke(messages_llm);
-      const content = response.text ?? response.content.toString().trim();
+      const content = response.text;
 
       // Extract JSON from content, handling code blocks
       const jsonContent = this.extractJsonFromResponse(content);
