@@ -40,7 +40,7 @@ function PatternListGroup({
         {patterns.map((pattern) => (
           <li
             key={pattern}
-            className="tw-flex tw-gap-2 tw-rounded-md tw-pl-2 tw-pr-1 hover:tw-bg-dropdown-hover"
+            className="tw-flex tw-gap-2 tw-rounded-md tw-pl-2 tw-pr-1 hover:tw-bg-modifier-hover"
           >
             <TruncatedText className="tw-flex-1">{pattern}</TruncatedText>
             <Button variant="ghost2" size="fit" onClick={() => onRemove(pattern)}>
