@@ -1,4 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import {
   ABORT_REASON,
   COMPOSER_OUTPUT_INSTRUCTIONS,
@@ -23,19 +24,19 @@ import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from 
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
-import {
-  formatSourceCatalog,
-  getCitationInstructions,
-  sanitizeContentForCitations,
-  addFallbackSources,
-  type SourceCatalogEntry,
-} from "./utils/citationUtils";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import {
   addChatHistoryToMessages,
   processedMessagesToTextOnly,
   processRawChatHistory,
 } from "./utils/chatHistoryUtils";
+import {
+  addFallbackSources,
+  formatSourceCatalog,
+  getCitationInstructions,
+  sanitizeContentForCitations,
+  type SourceCatalogEntry,
+} from "./utils/citationUtils";
 import {
   extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
@@ -44,7 +45,6 @@ import {
 } from "./utils/searchResultUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
-import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
@@ -616,46 +616,95 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }
     }
 
-    if (toolOutputs.length > 0) {
-      const validOutputs = toolOutputs.filter((output) => output.output != null);
-      if (validOutputs.length > 0) {
-        // Don't add "Additional context" header if only localSearch with results to maintain QA format
-        const contextHeader =
-          hasLocalSearchWithResults && validOutputs.length === 1
-            ? ""
-            : "\n\n# Additional context:\n\n";
-        context =
-          contextHeader +
-          validOutputs
-            .map((output) => {
-              let content = output.output;
+    const validOutputs = toolOutputs.filter((output) => output.output != null);
 
-              // localSearch results are already formatted by executeToolCalls
-              // No need for special processing here
+    if (validOutputs.length > 0) {
+      // Don't add "Additional context" header if only localSearch with results to maintain QA format
+      const contextHeader =
+        hasLocalSearchWithResults && validOutputs.length === 1
+          ? ""
+          : "\n\n# Additional context:\n\n";
+      const rawContext =
+        contextHeader +
+        validOutputs
+          .map((output) => {
+            let content = output.output;
 
-              // Ensure content is string
-              if (typeof content !== "string") {
-                content = JSON.stringify(content);
-              }
+            // localSearch results are already formatted by executeToolCalls
+            // No need for special processing here
 
-              // localSearch is already wrapped in XML tags, don't double-wrap
-              if (output.tool === "localSearch") {
-                return content;
-              }
+            // Ensure content is string
+            if (typeof content !== "string") {
+              content = JSON.stringify(content);
+            }
 
-              // All other tools get wrapped consistently
-              return `<${output.tool}>\n${content}\n</${output.tool}>`;
-            })
-            .join("\n\n");
-      }
+            // localSearch is already wrapped in XML tags, don't double-wrap
+            if (output.tool === "localSearch") {
+              return content;
+            }
+
+            // All other tools get wrapped consistently
+            return `<${output.tool}>\n${content}\n</${output.tool}>`;
+          })
+          .join("\n\n");
+
+      context = rawContext.trim();
     }
 
-    // For QA format when only localSearch with results is present
-    if (hasLocalSearchWithResults && toolOutputs.filter((o) => o.output != null).length === 1) {
-      return `${context}\n\nQuestion: ${userMessage}`;
+    if (!context) {
+      return userMessage;
     }
 
-    return `${userMessage}${context}`;
+    const shouldLabelQuestion = hasLocalSearchWithResults && validOutputs.length === 1;
+    return this.renderCiCMessage(context, userMessage, shouldLabelQuestion);
+  }
+
+  /**
+   * Builds the ordered inner payload for a localSearch result, placing guidance before documents.
+   * @param guidance Citation guidance or instructions associated with the search results.
+   * @param formattedContent Serialized documents selected for inclusion.
+   * @returns Combined payload string with minimal whitespace.
+   */
+  private buildLocalSearchInnerContent(guidance: string, formattedContent: string): string {
+    const sections = [guidance, formattedContent]
+      .map((section) => section?.trim())
+      .filter((section): section is string => Boolean(section));
+
+    return sections.join("\n\n");
+  }
+
+  /**
+   * Wraps localSearch payload content in XML, preserving optional time range metadata.
+   * @param innerContent Ordered combination of guidance and documents.
+   * @param timeExpression Optional natural-language time range expression.
+   * @returns XML-wrapped localSearch payload ready for LLM consumption.
+   */
+  private wrapLocalSearchPayload(innerContent: string, timeExpression: string): string {
+    const payload = innerContent ? `\n${innerContent}\n` : "";
+    const timeAttribute = timeExpression ? ` timeRange="${timeExpression}"` : "";
+    return `<localSearch${timeAttribute}>${payload}</localSearch>`;
+  }
+
+  /**
+   * Produces a CiC-aligned (Corpus in Context https://arxiv.org/pdf/2406.13121) prompt by placing context
+   * first and the user question last.
+   * @param contextSection Prepared instruction/context block.
+   * @param userQuestion Original user message.
+   * @param labelQuestion Whether to prefix the question with a clarifying label.
+   * @returns String formatted according to CiC ordering.
+   */
+  private renderCiCMessage(
+    contextSection: string,
+    userQuestion: string,
+    labelQuestion: boolean
+  ): string {
+    const contextBlock = contextSection.trim();
+    if (!contextBlock) {
+      return userQuestion;
+    }
+
+    const questionBlock = labelQuestion ? `Question: ${userQuestion}` : userQuestion;
+    return `${contextBlock}\n\n${questionBlock}`;
   }
 
   protected getTimeExpression(toolCalls: any[]): string {
@@ -724,10 +773,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const settings = getSettings();
     const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
+    const innerContent = this.buildLocalSearchInnerContent(guidance, formattedContent);
+
     // Wrap in XML-like tags for better LLM understanding
-    return timeExpression
-      ? `<localSearch timeRange="${timeExpression}">\n${formattedContent}${guidance}\n</localSearch>`
-      : `<localSearch>\n${formattedContent}${guidance}\n</localSearch>`;
+    return this.wrapLocalSearchPayload(innerContent, timeExpression);
   }
 
   /**
