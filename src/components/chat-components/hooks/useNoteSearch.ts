@@ -26,11 +26,12 @@ const DEFAULT_CONFIG: Required<NoteSearchConfig> = {
 /**
  * Unified hook for searching notes and PDFs across both [[ and @ typeahead interfaces.
  * Ensures consistent search behavior and results between different typeahead implementations.
+ * Searches only by note name (basename), never by path, to avoid confusion.
  *
  * @param query - Search query string
  * @param isCopilotPlus - Whether Copilot Plus features are enabled (includes PDFs)
  * @param config - Optional configuration for search behavior
- * @returns Array of NoteSearchOption objects matching the query
+ * @returns Array of NoteSearchOption objects matching the query by name
  */
 export function useNoteSearch(
   query: string,
@@ -51,7 +52,7 @@ export function useNoteSearch(
     }));
   }, [allNotes]);
 
-  // Filter and search notes based on query
+  // Filter and search notes based on query (name only)
   const searchResults = useMemo(() => {
     const mergedConfig = { ...DEFAULT_CONFIG, ...config };
 
@@ -62,10 +63,9 @@ export function useNoteSearch(
 
     const searchQuery = query.trim();
 
-    // Search both title and path simultaneously using the same algorithm
-    // This ensures identical behavior between [[ and @ mention typeaheads
+    // Search only on note paths (subtitles), never on names
     const results = fuzzysort.go(searchQuery, allNoteOptions, {
-      keys: ["title", "subtitle"],
+      keys: ["subtitle"],
       limit: mergedConfig.limit,
       threshold: mergedConfig.threshold,
     });

@@ -31,7 +31,7 @@ export function useAtMentionSearch(
         return availableCategoryOptions.map((cat) => ({
           ...cat,
           content: undefined,
-        }));
+        })) as (CategoryOption | AtMentionOption)[];
       }
 
       // Search across all categories when query exists
@@ -41,64 +41,69 @@ export function useAtMentionSearch(
         category: "notes" as AtMentionCategory,
         data: result.file,
         icon: React.createElement(FileText, { className: "tw-size-4" }),
+        searchKeyword: result.subtitle, // Search by note path
       }));
 
-      const allItems: AtMentionOption[] = [
-        ...noteItems,
-        // Tools (only if Copilot Plus is enabled)
-        ...(isCopilotPlus
-          ? AVAILABLE_TOOLS.map((tool) => ({
-              key: `tool-${tool}`,
-              title: tool,
-              subtitle: getToolDescription(tool),
-              category: "tools" as AtMentionCategory,
-              data: tool,
-              content: getToolDescription(tool),
-              icon: React.createElement(Wrench, { className: "tw-size-4" }),
-            }))
-          : []),
-        // Folders
-        ...allFolders.map((folder: TFolder) => ({
-          key: `folder-${folder.path}`,
-          title: folder.name,
-          subtitle: folder.path,
-          category: "folders" as AtMentionCategory,
-          data: folder,
-          content: undefined,
-          icon: React.createElement(Folder, { className: "tw-size-4" }),
-        })),
-        // Tags
-        ...allTags.map((tag) => ({
-          key: `tag-${tag}`,
-          title: tag.startsWith("#") ? tag.slice(1) : tag,
-          subtitle: undefined,
-          category: "tags" as AtMentionCategory,
-          data: tag,
-          content: undefined,
-          icon: React.createElement(Hash, { className: "tw-size-4" }),
-        })),
-      ];
+      // Create items for other categories
+      const toolItems: AtMentionOption[] = isCopilotPlus
+        ? AVAILABLE_TOOLS.map((tool) => ({
+            key: `tool-${tool}`,
+            title: tool,
+            subtitle: getToolDescription(tool),
+            category: "tools" as AtMentionCategory,
+            data: tool,
+            content: getToolDescription(tool),
+            icon: React.createElement(Wrench, { className: "tw-size-4" }),
+          }))
+        : [];
 
-      // For non-note categories, apply fuzzy search
-      const nonNoteItems = allItems.filter((item) => item.category !== "notes");
-      const fuzzySearchResults = fuzzysort.go(query, nonNoteItems, {
-        keys: ["title", "subtitle"],
-        limit: 10 - noteItems.length, // Leave room for note results
+      const folderItems: AtMentionOption[] = allFolders.map((folder: TFolder) => ({
+        key: `folder-${folder.path}`,
+        title: folder.name,
+        subtitle: folder.path,
+        category: "folders" as AtMentionCategory,
+        data: folder,
+        content: undefined,
+        icon: React.createElement(Folder, { className: "tw-size-4" }),
+        searchKeyword: folder.path, // Search by folder path
+      }));
+
+      const tagItems: AtMentionOption[] = allTags.map((tag) => ({
+        key: `tag-${tag}`,
+        title: tag.startsWith("#") ? tag.slice(1) : tag,
+        subtitle: undefined,
+        category: "tags" as AtMentionCategory,
+        data: tag,
+        content: undefined,
+        icon: React.createElement(Hash, { className: "tw-size-4" }),
+        searchKeyword: tag.startsWith("#") ? tag.slice(1) : tag, // Search by tag name without #
+      }));
+
+      // Search tools using exact string matching on name only (case-insensitive)
+      const queryLower = query.toLowerCase();
+      const matchingTools = toolItems.filter((tool) => {
+        return tool.title.toLowerCase().includes(queryLower);
+      });
+
+      // Combine all non-tool items for unified fuzzy search
+      const allNonToolItems = [...noteItems, ...folderItems, ...tagItems];
+      const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
+        keys: ["searchKeyword"],
+        limit: 10,
         threshold: -10000,
       });
 
-      // Combine note results with fuzzy search results for other categories
-      return [
-        ...noteItems.slice(0, 10), // Prioritize note results
-        ...fuzzySearchResults.map((result) => result.obj),
-      ].slice(0, 10);
+      const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
+
+      // Tools first, then everything else ranked by fuzzy search
+      return [...matchingTools, ...rankedNonToolItems].slice(0, 10);
     } else {
       // Category-specific search mode
       let items: AtMentionOption[] = [];
 
       switch (selectedCategory) {
         case "notes":
-          // Use unified note search for consistency
+          // Use unified note search for consistency (name-only search)
           items = noteSearchResults.map((result) => ({
             ...result,
             category: "notes" as AtMentionCategory,

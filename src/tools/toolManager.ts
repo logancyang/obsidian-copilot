@@ -9,7 +9,7 @@ export const getToolDescription = (tool: string): string => {
     case "@composer":
       return "Edit existing notes or create new notes.";
     case "@memory":
-      return "Save information to user memory. Example: @memory <information to remember>";
+      return "Save information to user memory";
     default:
       return "";
   }
