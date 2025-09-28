@@ -158,6 +158,10 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+
+  // TODO: Force autocomplete features off until user-customizable prompts return
+  newSettings.enableAutocomplete = false;
+  newSettings.enableWordCompletion = false;
   settingsStore.set(settingsAtom, newSettings);
 }
 
@@ -344,6 +348,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
     sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
   }
+
+  // TODO: Force autocomplete features off until user-customizable prompts return
+  sanitizedSettings.enableAutocomplete = false;
+  sanitizedSettings.enableWordCompletion = false;
 
   // Ensure autonomousAgentMaxIterations has a valid value
   const autonomousAgentMaxIterations = Number(settingsToSanitize.autonomousAgentMaxIterations);
