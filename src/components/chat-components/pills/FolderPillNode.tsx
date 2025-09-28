@@ -7,9 +7,9 @@ import {
   LexicalNode,
   NodeKey,
 } from "lexical";
-import { Badge } from "@/components/ui/badge";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
+import { PillBadge } from "./PillBadge";
 
 export interface SerializedFolderPillNode extends SerializedBasePillNode {
   type: "folder-pill";
@@ -72,17 +72,14 @@ export class FolderPillNode extends BasePillNode {
     const tooltipContent = <div className="tw-text-left">{this.getFolderPath()}</div>;
 
     return (
-      <Badge
-        variant="secondary"
-        className="tw-mx-0.5 tw-inline-flex tw-items-center tw-gap-1 tw-px-2 tw-py-0 tw-align-middle tw-text-xs"
-      >
+      <PillBadge>
         <TruncatedPillText
           content={this.getFolderPath()}
           openBracket="{"
           closeBracket="}"
           tooltipContent={tooltipContent}
         />
-      </Badge>
+      </PillBadge>
     );
   }
 

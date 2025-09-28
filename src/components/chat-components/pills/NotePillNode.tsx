@@ -8,10 +8,9 @@ import {
   LexicalNode,
   NodeKey,
 } from "lexical";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
+import { PillBadge } from "./PillBadge";
 
 export interface SerializedNotePillNode extends SerializedBasePillNode {
   noteTitle: string;
@@ -147,10 +146,7 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   const tooltipContent = <div className="tw-text-left">{notePath}</div>;
 
   return (
-    <Badge
-      variant="secondary"
-      className={cn("tw-mx-0.5 tw-items-center tw-px-2 tw-py-0 tw-align-middle tw-text-xs")}
-    >
+    <PillBadge>
       <div className="tw-flex tw-items-center tw-gap-1">
         <TruncatedPillText
           content={noteTitle}
@@ -161,7 +157,7 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
-    </Badge>
+    </PillBadge>
   );
 }
 

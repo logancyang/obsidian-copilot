@@ -8,9 +8,8 @@ import {
   LexicalNode,
   NodeKey,
 } from "lexical";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
+import { PillBadge } from "./PillBadge";
 
 export interface SerializedURLPillNode extends SerializedBasePillNode {
   url: string;
@@ -132,15 +131,12 @@ export class URLPillNode extends BasePillNode {
     const displayText = this.__title || this.__url;
 
     return (
-      <Badge
-        variant="secondary"
-        className={cn("tw-inline-flex tw-items-center tw-gap-1 tw-whitespace-nowrap tw-text-xs")}
-      >
+      <PillBadge className="tw-whitespace-nowrap">
         <div className="tw-flex tw-items-center tw-gap-1">
           <span className="tw-max-w-40 tw-truncate">{displayText}</span>
           {this.__isActive && <span className="tw-text-xs tw-text-faint">Active</span>}
         </div>
-      </Badge>
+      </PillBadge>
     );
   }
 }

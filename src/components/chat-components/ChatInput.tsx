@@ -702,6 +702,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onFoldersChange={setFoldersFromPills}
           onFoldersRemoved={handleFolderPillsRemoved}
           onEditorReady={onEditorReady}
+          onImagePaste={onAddImage}
           placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
           disabled={isProjectLoading}
           isCopilotPlus={isCopilotPlus}

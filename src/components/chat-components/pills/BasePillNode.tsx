@@ -6,8 +6,8 @@ import {
   NodeKey,
   SerializedLexicalNode,
 } from "lexical";
-import { Badge } from "@/components/ui/badge";
 import { IPillNode } from "../plugins/PillDeletionPlugin";
+import { PillBadge } from "./PillBadge";
 
 export interface SerializedBasePillNode extends SerializedLexicalNode {
   value: string;
@@ -136,17 +136,10 @@ export abstract class BasePillNode extends DecoratorNode<JSX.Element> implements
   }
 
   /**
-   * Default rendering with Badge component - subclasses can override for custom rendering.
+   * Default rendering with PillBadge component - subclasses can override for custom rendering.
    */
   decorate(): JSX.Element {
-    return (
-      <Badge
-        variant="secondary"
-        className="tw-inline-flex tw-items-center tw-gap-1 tw-whitespace-nowrap tw-text-xs"
-      >
-        {this.__value}
-      </Badge>
-    );
+    return <PillBadge>{this.__value}</PillBadge>;
   }
 
   // Abstract methods that subclasses must implement

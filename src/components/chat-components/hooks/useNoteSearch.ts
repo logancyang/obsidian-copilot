@@ -19,7 +19,7 @@ export interface NoteSearchConfig {
 }
 
 const DEFAULT_CONFIG: Required<NoteSearchConfig> = {
-  limit: 10,
+  limit: 30,
   threshold: -10000,
 };
 
