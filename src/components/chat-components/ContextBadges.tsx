@@ -1,9 +1,9 @@
 import React from "react";
 import { ExternalLink, FileText, Folder, Hash, X } from "lucide-react";
 import { TFile } from "obsidian";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
+import { ContextBadgeWrapper } from "./ContextBadgeWrapper";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
@@ -30,9 +30,7 @@ export function ContextNoteBadge({ note, isActive = false, onRemove }: ContextNo
   const tooltipContent = <div className="tw-text-left">{note.path}</div>;
 
   return (
-    <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
-    >
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <FileText className="tw-size-3" />
         <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent}>
@@ -52,7 +50,7 @@ export function ContextNoteBadge({ note, isActive = false, onRemove }: ContextNo
           <X className="tw-size-4" />
         </Button>
       )}
-    </Badge>
+    </ContextBadgeWrapper>
   );
 }
 
@@ -68,9 +66,7 @@ export function ContextUrlBadge({ url, onRemove }: ContextUrlBadgeProps) {
   };
 
   return (
-    <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
-    >
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <ExternalLink className="tw-size-3" />
         <TruncatedText className="tw-max-w-40" tooltipContent={url}>
@@ -88,7 +84,7 @@ export function ContextUrlBadge({ url, onRemove }: ContextUrlBadgeProps) {
           <X className="tw-size-4" />
         </Button>
       )}
-    </Badge>
+    </ContextBadgeWrapper>
   );
 }
 
@@ -97,9 +93,7 @@ export function ContextTagBadge({ tag, onRemove }: ContextTagBadgeProps) {
   const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
 
   return (
-    <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
-    >
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <Hash className="tw-size-3" />
         <TruncatedText className="tw-max-w-40" tooltipContent={tag}>
@@ -117,15 +111,13 @@ export function ContextTagBadge({ tag, onRemove }: ContextTagBadgeProps) {
           <X className="tw-size-4" />
         </Button>
       )}
-    </Badge>
+    </ContextBadgeWrapper>
   );
 }
 
 export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps) {
   return (
-    <Badge
-      className={`tw-items-center tw-py-0 tw-pl-2 tw-text-xs ${onRemove ? "tw-pr-0.5" : "tw-pr-2"}`}
-    >
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <Folder className="tw-size-3" />
         <TruncatedText className="tw-max-w-40" tooltipContent={folder}>
@@ -143,6 +135,6 @@ export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps
           <X className="tw-size-4" />
         </Button>
       )}
-    </Badge>
+    </ContextBadgeWrapper>
   );
 }
