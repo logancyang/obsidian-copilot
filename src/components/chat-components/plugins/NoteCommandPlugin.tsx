@@ -52,11 +52,8 @@ export function NoteCommandPlugin({ isCopilotPlus = false }: NoteCommandPluginPr
   // Use unified note search hook with standard configuration
   const searchResults = useNoteSearch(currentQuery, isCopilotPlus);
 
-  // For [[ typeahead, combine both name and path matches since users link to notes by both
-  const allNotes = [...searchResults.nameMatches, ...searchResults.pathOnlyMatches];
-
   // Add preview content from cache to the results
-  const filteredNotes = allNotes.map((note) => ({
+  const filteredNotes = searchResults.map((note) => ({
     ...note,
     content: previewContent.get(note.file.path) || "",
   }));

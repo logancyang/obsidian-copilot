@@ -35,20 +35,13 @@ export function useAtMentionSearch(
       }
 
       // Search across all categories when query exists
-      // Convert name matches to AtMentionOption format (prioritized)
-      const nameMatchItems: AtMentionOption[] = noteSearchResults.nameMatches.map((result) => ({
+      // Convert note search results to AtMentionOption format
+      const noteItems: AtMentionOption[] = noteSearchResults.map((result) => ({
         ...result,
         category: "notes" as AtMentionCategory,
         data: result.file,
         icon: React.createElement(FileText, { className: "tw-size-4" }),
-      }));
-
-      // Convert path-only matches to AtMentionOption format (lower priority)
-      const pathOnlyItems: AtMentionOption[] = noteSearchResults.pathOnlyMatches.map((result) => ({
-        ...result,
-        category: "notes" as AtMentionCategory,
-        data: result.file,
-        icon: React.createElement(FileText, { className: "tw-size-4" }),
+        searchKeyword: result.title, // Search by note name
       }));
 
       // Create items for other categories
@@ -72,6 +65,7 @@ export function useAtMentionSearch(
         data: folder,
         content: undefined,
         icon: React.createElement(Folder, { className: "tw-size-4" }),
+        searchKeyword: folder.path, // Search by folder path
       }));
 
       const tagItems: AtMentionOption[] = allTags.map((tag) => ({
@@ -82,6 +76,7 @@ export function useAtMentionSearch(
         data: tag,
         content: undefined,
         icon: React.createElement(Hash, { className: "tw-size-4" }),
+        searchKeyword: tag.startsWith("#") ? tag.slice(1) : tag, // Search by tag name without #
       }));
 
       // Search tools using exact string matching on name only (case-insensitive)
@@ -90,46 +85,31 @@ export function useAtMentionSearch(
         return tool.title.toLowerCase().includes(queryLower);
       });
 
-      // Search folders and tags together (lower priority)
-      const folderTagItems = [...folderItems, ...tagItems];
-      const folderTagSearchResults = fuzzysort.go(query, folderTagItems, {
-        keys: ["title", "subtitle"],
+      // Combine all non-tool items for unified fuzzy search
+      const allNonToolItems = [...noteItems, ...folderItems, ...tagItems];
+      const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
+        keys: ["searchKeyword"],
         limit: 10,
         threshold: -10000,
       });
 
-      const matchingFoldersAndTags = folderTagSearchResults.map((result) => result.obj);
+      const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
 
-      // Prioritize: tools first, then note name matches, then folders/tags, then path-only matches
-      const prioritizedResults = [
-        ...matchingTools, // Tools with matching names (highest priority)
-        ...nameMatchItems, // Note name matches (second priority)
-        ...matchingFoldersAndTags, // Folders and tags (third priority)
-        ...pathOnlyItems, // Notes that only match by path (lowest priority)
-      ];
-
-      return prioritizedResults.slice(0, 10);
+      // Tools first, then everything else ranked by fuzzy search
+      return [...matchingTools, ...rankedNonToolItems].slice(0, 10);
     } else {
       // Category-specific search mode
       let items: AtMentionOption[] = [];
 
       switch (selectedCategory) {
         case "notes":
-          // Use unified note search for consistency - combine both name and path matches
-          items = [
-            ...noteSearchResults.nameMatches.map((result) => ({
-              ...result,
-              category: "notes" as AtMentionCategory,
-              data: result.file,
-              icon: React.createElement(FileText, { className: "tw-size-4" }),
-            })),
-            ...noteSearchResults.pathOnlyMatches.map((result) => ({
-              ...result,
-              category: "notes" as AtMentionCategory,
-              data: result.file,
-              icon: React.createElement(FileText, { className: "tw-size-4" }),
-            })),
-          ];
+          // Use unified note search for consistency (name-only search)
+          items = noteSearchResults.map((result) => ({
+            ...result,
+            category: "notes" as AtMentionCategory,
+            data: result.file,
+            icon: React.createElement(FileText, { className: "tw-size-4" }),
+          }));
           break;
         case "tools":
           items = isCopilotPlus
