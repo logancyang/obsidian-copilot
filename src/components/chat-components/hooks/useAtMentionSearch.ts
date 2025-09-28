@@ -41,7 +41,7 @@ export function useAtMentionSearch(
         category: "notes" as AtMentionCategory,
         data: result.file,
         icon: React.createElement(FileText, { className: "tw-size-4" }),
-        searchKeyword: result.title, // Search by note name
+        searchKeyword: result.subtitle, // Search by note path
       }));
 
       // Create items for other categories

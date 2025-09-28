@@ -63,9 +63,9 @@ export function useNoteSearch(
 
     const searchQuery = query.trim();
 
-    // Search only on note names (titles), never on paths
+    // Search only on note paths (subtitles), never on names
     const results = fuzzysort.go(searchQuery, allNoteOptions, {
-      keys: ["title"],
+      keys: ["subtitle"],
       limit: mergedConfig.limit,
       threshold: mergedConfig.threshold,
     });
