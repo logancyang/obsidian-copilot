@@ -437,14 +437,70 @@ export class CodeMirrorIntegration {
       this.lastRequestTime = now;
 
       // TODO: to be added back with user customizable prompt
-      // const suggestionWords = filteredSuggestions.map((s) => s.word);
-      // const contextPrefix = prefix.slice(-1000);
-      // const contextSuffix = suffix.slice(0, 500);
-      // const requestPromise = this.client.wordcomplete(
-      //   contextPrefix,
-      //   contextSuffix,
-      //   suggestionWords
-      // );
+      /*
+      try {
+        // Use LLM to select the best suggestion from trie results
+        const suggestionWords = filteredSuggestions.map((s) => s.word);
+
+        // Get enough context for LLM decision
+        const contextPrefix = prefix.slice(-1000); // Last 1000 chars for context
+        const contextSuffix = suffix.slice(0, 500); // Next 500 chars for context
+
+        // Check cache first (if enabled)
+        let wordCompleteResponse;
+        let cacheKey: string | undefined;
+        let cachedResponse: any;
+
+        if (this.cacheEnabled) {
+          cacheKey = this.cache.generateWordKey(contextPrefix, contextSuffix, suggestionWords);
+          cachedResponse = this.cache.get(cacheKey);
+        }
+
+        if (cachedResponse) {
+          wordCompleteResponse = cachedResponse;
+        } else {
+          // Create and track the request
+          const requestPromise = this.client.wordcomplete(
+            contextPrefix,
+            contextSuffix,
+            suggestionWords
+          );
+
+          this.activeRequests.set(requestKey, requestPromise);
+
+          wordCompleteResponse = await requestPromise;
+
+          // Cache the response (if caching is enabled)
+          if (this.cacheEnabled && cacheKey) {
+            this.cache.set(cacheKey, wordCompleteResponse);
+          }
+
+          // Clean up the request from active requests
+          this.activeRequests.delete(requestKey);
+        }
+
+        const selectedWord = wordCompleteResponse.response.selected_word;
+
+        // Always use the API's selected word if we have one and it's different from current word
+        if (selectedWord && selectedWord !== currentWord) {
+          const completion = this.generateCaseMatchedCompletion(selectedWord, currentWord);
+          if (completion) {
+            yield {
+              display_suggestion: completion,
+              complete_suggestion: completion,
+            };
+          }
+        }
+      } catch (error) {
+        // Clean up the request from active requests (only if we made a request)
+        this.activeRequests.delete(requestKey);
+
+        logError(
+          "[Copilot Autocomplete] Error with LLM word selection, falling back to trie:",
+          error
+        );
+      }
+      */
 
       const bestSuggestion = filteredSuggestions[0];
       const completion = this.generateCaseMatchedCompletion(bestSuggestion.word, currentWord);
@@ -484,23 +540,74 @@ export class CodeMirrorIntegration {
       this.lastRequestTime = now;
 
       // TODO: to be added back with user customizable prompt
-      // const shouldIncludeRelevantNotes = settings.allowAdditionalContext;
-      // let relevantNotesStr = "";
-      // if (shouldIncludeRelevantNotes) {
-      //   relevantNotesStr = await RelevantNotesCache.getInstance().getRelevantNotes(view.file);
-      // }
-      // const currentNoteTitle = view.file?.basename || "";
-      // const prefixWithTitle = currentNoteTitle
-      //   ? `[[${currentNoteTitle}]]:\n\n${trimmedPrefix}`
-      //   : trimmedPrefix;
-      // const requestPromise = this.client.autocomplete(
-      //   prefixWithTitle,
-      //   noteContext,
-      //   relevantNotesStr
-      // );
-      // const response = await requestPromise;
-      // const cacheKey = this.cache.generateSentenceKey(prefixWithTitle, noteContext, relevantNotesStr);
-      // this.cache.set(cacheKey, response);
+      /*
+      try {
+        // Check if additional context is allowed
+        const shouldIncludeRelevantNotes = settings.allowAdditionalContext;
+
+        // Get relevant notes from cache only if needed
+        let relevantNotesStr = "";
+        if (shouldIncludeRelevantNotes) {
+          relevantNotesStr = await RelevantNotesCache.getInstance().getRelevantNotes(view.file);
+        }
+
+        // Prepend current note title to the prefix
+        const currentNoteTitle = view.file?.basename || "";
+        const prefixWithTitle = currentNoteTitle
+          ? `[[${currentNoteTitle}]]:\n\n${trimmedPrefix}`
+          : trimmedPrefix;
+
+        // Check cache first (if enabled)
+        let response;
+        let cacheKey: string | undefined;
+        let cachedResponse: any;
+
+        if (this.cacheEnabled) {
+          cacheKey = this.cache.generateSentenceKey(prefixWithTitle, noteContext, relevantNotesStr);
+          cachedResponse = this.cache.get(cacheKey);
+        }
+
+        if (cachedResponse) {
+          response = cachedResponse;
+        } else {
+          // Create and track the request
+          const requestPromise = this.client.autocomplete(
+            prefixWithTitle,
+            noteContext,
+            relevantNotesStr
+          );
+
+          this.activeRequests.set(requestKey, requestPromise);
+
+          // Get completion from API
+          response = await requestPromise;
+
+          // Cache the response (if caching is enabled)
+          if (this.cacheEnabled && cacheKey) {
+            this.cache.set(cacheKey, response);
+          }
+
+          // Clean up the request from active requests
+          this.activeRequests.delete(requestKey);
+        }
+
+        let completion = response.response.completion;
+
+        // Apply post-processing to the completion
+        const context = this.detectContext(prefix);
+        completion = this.postProcessor.process(trimmedPrefix, suffix, completion, context);
+
+        yield {
+          display_suggestion: completion,
+          complete_suggestion: completion,
+        };
+      } catch (error) {
+        // Clean up the request from active requests (only if we made a request)
+        this.activeRequests.delete(requestKey);
+
+        logError("[Copilot Autocomplete] Error fetching autocomplete suggestions:", error);
+      }
+      */
 
       return;
     }
