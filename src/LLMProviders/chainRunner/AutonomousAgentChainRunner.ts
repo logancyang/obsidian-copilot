@@ -20,19 +20,17 @@ import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
 import {
   deduplicateSources,
-  executeSequentialToolCall,
-  getToolConfirmtionMessage,
   getToolDisplayName,
   getToolEmoji,
-  logToolCall,
-  logToolResult,
   ToolExecutionResult,
 } from "./utils/toolExecution";
+import { executeCoordinatorFlow } from "./utils/parallelExecution";
 
 import {
   extractToolNameFromPartialBlock,
   parseXMLToolCalls,
   stripToolCallXML,
+  ToolCall,
 } from "./utils/xmlParsing";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
@@ -324,123 +322,22 @@ ${params}
           iterationHistory.push(responseForHistory);
         }
 
-        // Execute tool calls and show progress
-        const toolResults: ToolExecutionResult[] = [];
-        const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
+        const execution = await this.executeCoordinatorCalls({
+          toolCalls,
+          iteration,
+          iterationHistory,
+          currentIterationToolCallMessages,
+          updateCurrentAiMessage,
+          originalUserPrompt,
+          collectedSources,
+          abortController,
+        });
 
-        // Truncate currentIterationToolCallMessages based on the toolCalls array size
-        currentIterationToolCallMessages.splice(toolCalls.length);
-
-        for (let i = 0; i < toolCalls.length; i++) {
-          const toolCall = toolCalls[i];
-          if (abortController.signal.aborted) break;
-
-          // Log tool call details for debugging
-          logToolCall(toolCall, iteration);
-
-          // Find the tool to check if it's a background tool
-          const availableTools = this.getAvailableTools();
-          const tool = availableTools.find((t) => t.name === toolCall.name);
-          const isBackgroundTool = tool?.isBackground || false;
-
-          let toolCallId: string | undefined;
-
-          // Only show tool calling message for non-background tools
-          if (!isBackgroundTool) {
-            // Create tool calling message with structured marker
-            const toolEmoji = getToolEmoji(toolCall.name);
-            const toolDisplayName = getToolDisplayName(toolCall.name);
-            const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-
-            // Generate unique ID for this tool call
-            toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            toolCallIdMap.set(i, toolCallId);
-
-            // Create structured tool call marker
-            const toolCallMarker = createToolCallMarker(
-              toolCallId,
-              toolCall.name,
-              toolDisplayName,
-              toolEmoji,
-              confirmationMessage || "",
-              true, // isExecuting
-              "", // content (empty for now)
-              "" // result (empty until execution completes)
-            );
-
-            // Check if the tool call marker already created during streaming
-            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-              msg.includes(this.getTemporaryToolCallId(toolCall.name, i))
-            );
-            if (messageIndex !== -1) {
-              currentIterationToolCallMessages[messageIndex] = toolCallMarker;
-            } else {
-              currentIterationToolCallMessages.push(toolCallMarker);
-              logWarn(
-                "Created tool call marker for tool call that was not created during streaming",
-                toolCall.name
-              );
-            }
-
-            // Show all history plus all tool call messages
-            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
-              "\n\n"
-            );
-            updateCurrentAiMessage(currentDisplay);
-          }
-
-          const result = await executeSequentialToolCall(
-            toolCall,
-            availableTools,
-            originalUserPrompt
-          );
-
-          // Process localSearch results using the inherited method
-          if (toolCall.name === "localSearch") {
-            // Note: We don't have access to time expression in autonomous agent context
-            // as it processes tools individually, not in batch with toolCalls
-
-            // Use the inherited method for consistent processing
-            const processed = this.processLocalSearchResult(result);
-
-            // Collect sources for UI
-            collectedSources.push(...processed.sources);
-
-            // Update result with formatted text for LLM
-            result.result = processed.formattedForLLM;
-            result.displayResult = processed.formattedForDisplay;
-          }
-
-          toolResults.push(result);
-
-          // Update the tool call marker with the result if we have an ID
-          if (toolCallId && !isBackgroundTool) {
-            // Update the specific tool call message
-            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-              msg.includes(toolCallId)
-            );
-            if (messageIndex !== -1) {
-              currentIterationToolCallMessages[messageIndex] = updateToolCallMarker(
-                currentIterationToolCallMessages[messageIndex],
-                toolCallId,
-                result.displayResult ?? result.result
-              );
-            }
-
-            // Update the display with the result
-            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
-              "\n\n"
-            );
-            updateCurrentAiMessage(currentDisplay);
-          }
-
-          // Log tool result
-          logToolResult(toolCall.name, result);
-        }
+        const { toolResults, updatedMessages } = execution;
 
         // Add all tool call messages to history so they persist
-        if (currentIterationToolCallMessages.length > 0) {
-          const toolCallsString = currentIterationToolCallMessages.join("\n");
+        if (updatedMessages.length > 0) {
+          const toolCallsString = updatedMessages.join("\n");
           iterationHistory.push(toolCallsString);
         }
 
@@ -544,6 +441,32 @@ ${params}
       uniqueSources.length > 0 ? uniqueSources : undefined,
       llmFormattedOutput
     );
+  }
+
+  protected async executeCoordinatorCalls(params: {
+    toolCalls: ToolCall[];
+    iteration: number;
+    iterationHistory: string[];
+    currentIterationToolCallMessages: string[];
+    updateCurrentAiMessage: (message: string) => void;
+    originalUserPrompt?: string;
+    collectedSources: {
+      title: string;
+      path: string;
+      score: number;
+      explanation?: any;
+    }[];
+    abortController: AbortController;
+  }): Promise<{
+    toolResults: ToolExecutionResult[];
+    updatedMessages: string[];
+  }> {
+    return executeCoordinatorFlow({
+      ...params,
+      availableTools: this.getAvailableTools(),
+      getTemporaryToolCallId: (name, index) => this.getTemporaryToolCallId(name, index),
+      processLocalSearchResult: (result) => this.processLocalSearchResult(result),
+    });
   }
 
   private async streamResponse(

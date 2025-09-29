@@ -17,6 +17,7 @@ export interface ToolResult {
   status: ToolStatus;
   payload?: unknown;
   error?: string;
+  displayResult?: string;
 }
 
 export interface ExecHooks {
@@ -73,6 +74,10 @@ function clampConcurrency(value: number | undefined): number {
   return Math.floor(value);
 }
 
+export function clampParallelToolConcurrency(value: number | undefined): number {
+  return clampConcurrency(value);
+}
+
 function normalizeIndex(call: CoordinatorToolCall, fallback: number): number {
   return typeof call.index === "number" && call.index >= 0 ? call.index : fallback;
 }
@@ -105,12 +110,18 @@ function mapSequentialToToolResult(
   sequential: ToolExecutionResult
 ): ToolResult {
   if (sequential.success) {
-    return {
+    const mapped: ToolResult = {
       index,
       name: call.name,
       status: "ok",
       payload: sequential.result,
     };
+
+    if (typeof sequential.displayResult === "string") {
+      mapped.displayResult = sequential.displayResult;
+    }
+
+    return mapped;
   }
 
   const lowered = sequential.result.toLowerCase();

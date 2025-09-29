@@ -132,6 +132,10 @@ export interface CopilotSettings {
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
   autonomousAgentEnabledToolIds: string[];
+  parallelToolCalls: {
+    enabled: boolean;
+    concurrency: number;
+  };
   /** Default reasoning effort for models that support it (GPT-5, O-series, etc.) */
   reasoningEffort: "minimal" | "low" | "medium" | "high";
   /** Default verbosity level for models that support it */
@@ -352,6 +356,16 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autonomousAgentEnabledToolIds =
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
+
+  const rawParallel = settingsToSanitize.parallelToolCalls || DEFAULT_SETTINGS.parallelToolCalls;
+  const parsedConcurrency = Number(rawParallel?.concurrency);
+  const clampedConcurrency = Number.isFinite(parsedConcurrency)
+    ? Math.min(10, Math.max(1, Math.floor(parsedConcurrency)))
+    : DEFAULT_SETTINGS.parallelToolCalls.concurrency;
+  sanitizedSettings.parallelToolCalls = {
+    enabled: Boolean(rawParallel?.enabled),
+    concurrency: clampedConcurrency,
+  };
 
   // Ensure folder settings fall back to defaults when empty/whitespace
   const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
