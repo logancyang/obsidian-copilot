@@ -170,7 +170,6 @@ describe("toolExecution", () => {
     });
 
     it("bubbles sequential errors with status error", async () => {
-      const errorMessage = "Error: Something failed";
       mockCallTool.mockRejectedValueOnce(new Error("Something failed"));
 
       const result = await executeToolCall({ name: "testTool", args: {} }, context);

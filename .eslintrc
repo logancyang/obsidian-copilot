@@ -2,7 +2,7 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "env": { "node": true },
-  "plugins": ["@typescript-eslint", "tailwindcss"],
+  "plugins": ["@typescript-eslint", "tailwindcss", "jsonc"],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
@@ -34,6 +34,7 @@
     {
       "files": ["*.json", "*.jsonc", ".eslintrc"],
       "parser": "jsonc-eslint-parser",
+      "extends": ["plugin:jsonc/recommended-with-jsonc"],
       "rules": {
         "jsonc/auto": "error",
       },

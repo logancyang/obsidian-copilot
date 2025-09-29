@@ -51,7 +51,12 @@ User Message → Intent Analysis → Tool Execution → Enhanced Prompt → LLM 
 const toolCalls = await IntentAnalyzer.analyzeIntent(message);
 
 // 2. Execute tools
-const toolOutputs = await this.executeToolCalls(toolCalls);
+const abortController = new AbortController();
+const { toolOutputs } = await this.executeToolCalls({
+  toolCalls,
+  abortController,
+  originalUserMessage: message,
+});
 
 // 3. Enhance message with context
 const enhancedMessage = this.prepareEnhancedUserMessage(message, toolOutputs);
