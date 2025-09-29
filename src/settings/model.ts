@@ -362,8 +362,17 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const clampedConcurrency = Number.isFinite(parsedConcurrency)
     ? Math.min(10, Math.max(1, Math.floor(parsedConcurrency)))
     : DEFAULT_SETTINGS.parallelToolCalls.concurrency;
+  const enabledRaw = rawParallel?.enabled;
+  const normalizedEnabled =
+    typeof enabledRaw === "boolean"
+      ? enabledRaw
+      : typeof enabledRaw === "string"
+        ? enabledRaw.trim().toLowerCase() === "true"
+        : typeof enabledRaw === "number"
+          ? enabledRaw !== 0
+          : DEFAULT_SETTINGS.parallelToolCalls.enabled;
   sanitizedSettings.parallelToolCalls = {
-    enabled: Boolean(rawParallel?.enabled),
+    enabled: normalizedEnabled,
     concurrency: clampedConcurrency,
   };
 

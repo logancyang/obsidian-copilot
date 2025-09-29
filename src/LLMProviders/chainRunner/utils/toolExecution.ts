@@ -3,11 +3,8 @@ import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
 import { err2String } from "@/utils";
+import { clampConcurrency } from "./parallelConfig";
 import { ToolCall } from "./xmlParsing";
-
-const DEFAULT_CONCURRENCY = 4;
-const MIN_CONCURRENCY = 1;
-const MAX_CONCURRENCY = 10;
 
 export type ToolStatus = "ok" | "error" | "timeout" | "cancelled";
 
@@ -53,25 +50,6 @@ export interface ToolExecutionResult {
    * When absent, fallback to `result` for display purposes.
    */
   displayResult?: string;
-}
-
-/**
- * Ensures concurrency configuration stays within allowed bounds.
- */
-function clampConcurrency(value: number | undefined): number {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return DEFAULT_CONCURRENCY;
-  }
-
-  if (value < MIN_CONCURRENCY) {
-    return MIN_CONCURRENCY;
-  }
-
-  if (value > MAX_CONCURRENCY) {
-    return MAX_CONCURRENCY;
-  }
-
-  return Math.floor(value);
 }
 
 export function clampParallelToolConcurrency(value: number | undefined): number {

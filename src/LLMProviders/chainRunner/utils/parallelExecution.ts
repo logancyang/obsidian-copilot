@@ -1,4 +1,5 @@
 import { logInfo, logWarn } from "@/logger";
+import { v4 as uuidv4 } from "uuid";
 import { createToolCallMarker, updateToolCallMarker } from "./toolCallParser";
 import {
   CoordinatorToolCall,
@@ -76,10 +77,10 @@ export async function executeCoordinatorFlow(params: ParallelExecutionParams): P
     if (!augmentedCall.background) {
       const toolEmoji = getToolEmoji(toolCall.name);
       const toolDisplayName = getToolDisplayName(toolCall.name);
-      const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-      const toolCallId = `${toolCall.name}-${Date.now()}-${Math.random()
-        .toString(36)
-        .substr(2, 9)}`;
+      const confirmationMessage = (getToolConfirmtionMessage(toolCall.name) || "")
+        .replace(/[:\r\n]/g, " ")
+        .trim();
+      const toolCallId = `${toolCall.name}-${uuidv4()}`;
       toolCallIdMap.set(index, toolCallId);
 
       const marker = createToolCallMarker(
@@ -87,7 +88,7 @@ export async function executeCoordinatorFlow(params: ParallelExecutionParams): P
         toolCall.name,
         toolDisplayName,
         toolEmoji,
-        confirmationMessage || "",
+        confirmationMessage,
         true,
         "",
         ""
@@ -219,13 +220,24 @@ export async function executeCoordinatorFlow(params: ParallelExecutionParams): P
     },
   };
 
-  await executeToolCallsInParallel(coordinatorCalls, {
-    availableTools,
-    originalUserMessage: originalUserPrompt,
-    signal: abortController.signal,
-    concurrency: useParallel ? concurrency : 1,
-    hooks,
-  });
+  try {
+    await executeToolCallsInParallel(coordinatorCalls, {
+      availableTools,
+      originalUserMessage: originalUserPrompt,
+      signal: abortController.signal,
+      concurrency: useParallel ? concurrency : 1,
+      hooks,
+    });
+  } catch (error: any) {
+    if (error?.name === "AbortError" || abortController.signal.aborted) {
+      throw error;
+    }
+
+    logWarn(
+      "[parallel] executeToolCallsInParallel threw unexpectedly; proceeding with fallbacks",
+      error
+    );
+  }
 
   coordinatorCalls.forEach((call) => {
     const targetIndex = call.index ?? 0;

@@ -4,7 +4,7 @@ const DEFAULT_CONCURRENCY = 4;
 const MIN_CONCURRENCY = 1;
 const MAX_CONCURRENCY = 10;
 
-function clampConcurrency(value: number | undefined): number {
+export function clampConcurrency(value: number | undefined): number {
   if (typeof value !== "number" || Number.isNaN(value)) {
     return DEFAULT_CONCURRENCY;
   }
