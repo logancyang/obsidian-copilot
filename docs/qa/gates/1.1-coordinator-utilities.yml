@@ -1,0 +1,62 @@
+schema: 1
+story: "1.1"
+story_title: "Coordinator Utilities"
+gate: CONCERNS
+status_reason: "Parallel scheduler utilities implemented; awaiting runner integration & telemetry to retire residual concurrency risks."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-09-28T15:00:00Z"
+
+quality_score: 90
+expires: "2025-10-12T15:00:00Z"
+
+top_issues:
+  - id: TECH-001
+    severity: medium
+    summary: "Need validation of hook lifecycle within Autonomous/Copilot+ runners once coordinator is wired in."
+    suggested_owner: dev
+    actions:
+      - "Integrate coordinator into runners (Stories 1.2 / 1.3) and rerun risk profile."
+    references:
+      - docs/prd/epic-1-parallel-tool-execution.md
+      - docs/qa/assessments/1.1-coordinator-utilities-risk-20250928.md
+
+waiver:
+  active: false
+
+evidence:
+  tests_reviewed: 10
+  risks_identified: 1
+  trace:
+    ac_covered: [1, 2, 3, 4, 5]
+    ac_gaps: []
+  documents:
+    - docs/qa/assessments/1.1-coordinator-utilities-trace-20250928.md
+    - docs/qa/assessments/1.1-coordinator-utilities-test-design-20250928.md
+    - docs/qa/assessments/1.1-coordinator-utilities-nfr-20250928.md
+    - docs/qa/assessments/1.1-coordinator-utilities-risk-20250928.md
+
+nfr_validation:
+  _assessed: [security, performance, reliability, maintainability]
+  security:
+    status: PASS
+    notes: "Coordinator reuses existing gating; abort cleanup prevents stale updates."
+  performance:
+    status: PASS
+    notes: "Concurrency clamp aligns with architecture targets; unit tests cover mixed latency."
+  reliability:
+    status: PASS
+    notes: "Abort guard prevents post-cancel overwrites; error/timeout mapping verified."
+  maintainability:
+    status: PASS
+    notes: "Unit suite covers all AC5 scenarios; helpers improve fake-timer determinism."
+
+recommendations:
+  immediate:
+    - action: "Integrate coordinator into Autonomous and Copilot+ runners and rerun risk profile."
+      refs:
+        - src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts
+        - docs/qa/assessments/1.1-coordinator-utilities-risk-20250928.md
+  future:
+    - action: "Instrument telemetry spans once runner integration lands to validate wall-time targets."
+      refs:
+        - docs/architecture/8-observability.md

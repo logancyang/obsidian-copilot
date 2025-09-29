@@ -1,0 +1,26 @@
+# PRD — Parallel Tool Execution (Brownfield: Service/API) — v0.2
+
+## Table of Contents
+
+- [PRD — Parallel Tool Execution (Brownfield: Service/API) — v0.2](#table-of-contents)
+  - [0) Change Log](./0-change-log.md)
+  - [1) Background (Baseline Reference)](./1-background-baseline-reference.md)
+    - [System Overview (from baseline)](./1-background-baseline-reference.md#system-overview-from-baseline)
+  - [2) Problem Statement](./2-problem-statement.md)
+  - [3) Goals](./3-goals.md)
+  - [4) Out of Scope](./4-out-of-scope.md)
+  - [5) Users](./5-users.md)
+  - [6) Functional Requirements](./6-functional-requirements.md)
+  - [7) Non‑Functional Requirements](./7-nonfunctional-requirements.md)
+  - [8) Acceptance Criteria](./8-acceptance-criteria.md)
+  - [9) Metrics](./9-metrics.md)
+  - [10) Rollout](./10-rollout.md)
+  - [11) Risks & Mitigations](./11-risks-mitigations.md)
+  - [12) Dependencies](./12-dependencies.md)
+  - [13) Test Plan](./13-test-plan.md)
+    - [Unit (utils)](./13-test-plan.md#unit-utils)
+    - [Integration (runners)](./13-test-plan.md#integration-runners)
+    - [Snapshot](./13-test-plan.md#snapshot)
+    - [Chaos](./13-test-plan.md#chaos)
+  - [14) Configuration](./14-configuration.md)
+  - [15) Open Questions](./15-open-questions.md)
