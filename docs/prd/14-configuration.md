@@ -1,10 +1,10 @@
 # 14) Configuration
 
 ```json
-{{
-  "parallelToolCalls": {{
+{
+  "parallelToolCalls": {
     "enabled": false,
     "concurrency": 4
-  }}
-}}
+  }
+}
 ```

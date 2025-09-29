@@ -303,7 +303,7 @@ describe("toolExecution", () => {
       expect(results[0].status).toBe("cancelled");
       expect(results[1].status).toBe("cancelled");
       expect(results[2].status).toBe("cancelled");
-      expect(settleSpy).not.toHaveBeenCalled();
+      expect(settleSpy).toHaveBeenCalledTimes(3);
       expect(mockCallTool).toHaveBeenCalledTimes(1);
 
       // Resolve deferreds to avoid dangling promises.

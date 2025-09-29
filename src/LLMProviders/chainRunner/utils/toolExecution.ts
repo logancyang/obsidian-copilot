@@ -232,12 +232,13 @@ export async function executeToolCallsInParallel(
       }
 
       indexToCall.forEach((call, idx) => {
-        if (!call) {
+        if (!call || results[idx]) {
           return;
         }
-        if (!results[idx]) {
-          results[idx] = createCancelledResult(call, idx, "Aborted");
-        }
+
+        const cancelled = createCancelledResult(call, idx, "Aborted");
+        results[idx] = cancelled;
+        hooks?.onSettle?.(idx, cancelled);
       });
 
       next = normalizedCalls.length;
@@ -263,20 +264,22 @@ export async function executeToolCallsInParallel(
 
         const call = indexToCall[i];
         if (call) {
-          if (aborted) {
-            results[i] = createCancelledResult(call, i, "Aborted");
-          } else {
-            results[i] = createErrorResult(call, i, "Tool call did not complete");
-          }
+          const filled = aborted
+            ? createCancelledResult(call, i, "Aborted")
+            : createErrorResult(call, i, "Tool call did not complete");
+          results[i] = filled;
+          hooks?.onSettle?.(i, filled);
           continue;
         }
 
-        results[i] = {
+        const orphan: ToolResult = {
           index: i,
           name: "unknown",
           status: aborted ? "cancelled" : "error",
           error: aborted ? "Aborted" : "Missing tool call context",
         };
+        results[i] = orphan;
+        hooks?.onSettle?.(i, orphan);
       }
 
       resolve(results as ToolResult[]);
@@ -297,7 +300,11 @@ export async function executeToolCallsInParallel(
       const targetIndex = call.index ?? queueIndex;
 
       if (aborted) {
-        results[targetIndex] = results[targetIndex] ?? createCancelledResult(call, targetIndex);
+        if (!results[targetIndex]) {
+          const cancelled = createCancelledResult(call, targetIndex);
+          results[targetIndex] = cancelled;
+          hooks?.onSettle?.(targetIndex, cancelled);
+        }
         settleIfDone();
         return;
       }
@@ -306,7 +313,9 @@ export async function executeToolCallsInParallel(
         signal?.throwIfAborted?.();
       } catch {
         aborted = true;
-        results[targetIndex] = createCancelledResult(call, targetIndex);
+        const cancelled = createCancelledResult(call, targetIndex);
+        results[targetIndex] = cancelled;
+        hooks?.onSettle?.(targetIndex, cancelled);
         markRemainingCancelled();
         settleIfDone();
         return;

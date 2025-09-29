@@ -12,36 +12,39 @@
 async function executeToolCallsInParallel(calls: ToolCall[], opts: ExecOptions = {}) {
   const { concurrency = 4, signal, hooks } = opts;
   const results: ToolResult[] = new Array(calls.length);
-  let inFlight = 0,
-    next = 0;
-
-  const startOne = () => {
-    if (signal?.aborted) return;
-    if (next >= calls.length) return;
-    const i = next++;
-    const c = calls[i];
-    hooks?.onStart?.(i, { name: c.name, background: c.background });
-    inFlight++;
-    executeToolCall(c, { signal })
-      .then((r) => r)
-      .catch((e) => ({ index: i, name: c.name, status: "error", error: String(e) }))
-      .then((r) => {
-        results[i] = r;
-        hooks?.onSettle?.(i, r);
-      })
-      .finally(() => {
-        inFlight--;
-        pump();
-      });
-  };
-
-  const pump = () => {
-    if (signal?.aborted) return;
-    while (inFlight < concurrency && next < calls.length) startOne();
-    if (next >= calls.length && inFlight === 0) resolve(results);
-  };
+  let inFlight = 0;
+  let next = 0;
 
   return await new Promise<ToolResult[]>((resolve) => {
+    const startOne = () => {
+      if (signal?.aborted || next >= calls.length) return;
+      const i = next++;
+      const c = calls[i];
+      hooks?.onStart?.(i, { name: c.name, background: c.background });
+      inFlight++;
+      executeToolCall(c, { signal })
+        .then((r) => r)
+        .catch((e) => ({ index: i, name: c.name, status: "error", error: String(e) }))
+        .then((r) => {
+          results[i] = r;
+          if (!signal?.aborted) hooks?.onSettle?.(i, r);
+        })
+        .finally(() => {
+          inFlight--;
+          pump();
+        });
+    };
+
+    const pump = () => {
+      if (signal?.aborted) {
+        resolve(results);
+        return;
+      }
+
+      while (inFlight < concurrency && next < calls.length) startOne();
+      if (next >= calls.length && inFlight === 0) resolve(results);
+    };
+
     pump();
   });
 }
