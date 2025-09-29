@@ -1,23 +1,10 @@
 import { getSettings } from "@/settings/model";
+import {
+  DEFAULT_PARALLEL_CONCURRENCY,
+  clampParallelConcurrency,
+} from "@/utils/parallelConcurrency";
 
-const DEFAULT_CONCURRENCY = 4;
-const MIN_CONCURRENCY = 1;
-const MAX_CONCURRENCY = 10;
-
-export function clampConcurrency(value: number | undefined): number {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return DEFAULT_CONCURRENCY;
-  }
-
-  const floored = Math.floor(value);
-  if (floored < MIN_CONCURRENCY) {
-    return MIN_CONCURRENCY;
-  }
-  if (floored > MAX_CONCURRENCY) {
-    return MAX_CONCURRENCY;
-  }
-  return floored;
-}
+export { clampParallelConcurrency as clampConcurrency } from "@/utils/parallelConcurrency";
 
 export interface ParallelToolConfig {
   useParallel: boolean;
@@ -26,8 +13,11 @@ export interface ParallelToolConfig {
 
 export function resolveParallelToolConfig(toolCount: number): ParallelToolConfig {
   const settings = getSettings();
-  const config = settings.parallelToolCalls ?? { enabled: false, concurrency: DEFAULT_CONCURRENCY };
-  const concurrency = clampConcurrency(config.concurrency);
+  const config = settings.parallelToolCalls ?? {
+    enabled: false,
+    concurrency: DEFAULT_PARALLEL_CONCURRENCY,
+  };
+  const concurrency = clampParallelConcurrency(config.concurrency);
   const useParallel = Boolean(config.enabled) && concurrency > 1 && toolCount > 1;
 
   return { useParallel, concurrency };

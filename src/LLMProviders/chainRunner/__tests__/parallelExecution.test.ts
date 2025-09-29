@@ -3,7 +3,7 @@ jest.mock("@/LLMProviders/chainRunner/utils/toolExecution", () => ({
   deduplicateSources: (sources: any[]) => sources,
   getToolDisplayName: jest.fn((name: string) => name),
   getToolEmoji: jest.fn(() => "🛠"),
-  getToolConfirmtionMessage: jest.fn(() => ""),
+  getToolConfirmationMessage: jest.fn(() => ""),
 }));
 
 jest.mock("@/LLMProviders/chainRunner/utils/parallelConfig", () => ({
@@ -48,7 +48,6 @@ describe("executeCoordinatorFlow", () => {
         { name: "visibleTool", args: {} },
         { name: "backgroundTool", args: {} },
       ],
-      iteration: 1,
       iterationHistory: [],
       currentIterationToolCallMessages: [
         '<marker id="temp-visibleTool-0"></marker>',
@@ -120,7 +119,6 @@ describe("executeCoordinatorFlow", () => {
         { name: "visibleTool", args: {} },
         { name: "backgroundTool", args: {} },
       ],
-      iteration: 1,
       iterationHistory: [],
       currentIterationToolCallMessages: [
         '<marker id="temp-visibleTool-0"></marker>',
@@ -186,7 +184,6 @@ describe("executeCoordinatorFlow", () => {
 
     const params = {
       toolCalls: [{ name: "visibleTool", args: {} }],
-      iteration: 1,
       iterationHistory: [],
       currentIterationToolCallMessages: ['<marker id="temp-visibleTool-0"></marker>'],
       updateCurrentAiMessage,
@@ -231,7 +228,6 @@ describe("executeCoordinatorFlow", () => {
         { name: "toolA", args: {} },
         { name: "toolB", args: {} },
       ],
-      iteration: 1,
       iterationHistory: [],
       currentIterationToolCallMessages: [],
       updateCurrentAiMessage: jest.fn(),

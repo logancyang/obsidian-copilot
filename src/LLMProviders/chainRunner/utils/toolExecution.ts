@@ -52,10 +52,6 @@ export interface ToolExecutionResult {
   displayResult?: string;
 }
 
-export function clampParallelToolConcurrency(value: number | undefined): number {
-  return clampConcurrency(value);
-}
-
 function normalizeIndex(call: CoordinatorToolCall, fallback: number): number {
   return typeof call.index === "number" && call.index >= 0 ? call.index : fallback;
 }
@@ -533,7 +529,7 @@ export function getToolEmoji(toolName: string): string {
 /**
  * Get user confirmation message for tool call
  */
-export function getToolConfirmtionMessage(toolName: string, toolArgs?: any): string | null {
+export function getToolConfirmationMessage(toolName: string, toolArgs?: any): string | null {
   if (toolName == "writeToFile" || toolName == "replaceInFile") {
     return "Accept / reject in the Preview";
   }

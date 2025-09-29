@@ -14,6 +14,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
+import { clampParallelConcurrency } from "@/utils/parallelConcurrency";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -359,9 +360,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   const rawParallel = settingsToSanitize.parallelToolCalls || DEFAULT_SETTINGS.parallelToolCalls;
   const parsedConcurrency = Number(rawParallel?.concurrency);
-  const clampedConcurrency = Number.isFinite(parsedConcurrency)
-    ? Math.min(10, Math.max(1, Math.floor(parsedConcurrency)))
-    : DEFAULT_SETTINGS.parallelToolCalls.concurrency;
+  const clampedConcurrency = clampParallelConcurrency(
+    parsedConcurrency,
+    DEFAULT_SETTINGS.parallelToolCalls.concurrency
+  );
   const enabledRaw = rawParallel?.enabled;
   const normalizedEnabled =
     typeof enabledRaw === "boolean"

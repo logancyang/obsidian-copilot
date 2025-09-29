@@ -7,14 +7,15 @@ import {
   ToolResult,
   ToolExecutionResult,
   executeToolCallsInParallel,
+  getToolConfirmationMessage,
+  getToolDisplayName,
+  getToolEmoji,
 } from "./toolExecution";
-import { getToolConfirmtionMessage, getToolDisplayName, getToolEmoji } from "./toolExecution";
 import { emitToolSpan } from "./observability";
 import { resolveParallelToolConfig } from "./parallelConfig";
 
 export interface ParallelExecutionParams {
   toolCalls: { name: string; args: any; id?: string }[];
-  iteration: number;
   iterationHistory: string[];
   currentIterationToolCallMessages: string[];
   updateCurrentAiMessage: (message: string) => void;
@@ -46,7 +47,6 @@ export async function executeCoordinatorFlow(params: ParallelExecutionParams): P
 }> {
   const {
     toolCalls,
-    iteration,
     iterationHistory,
     currentIterationToolCallMessages,
     updateCurrentAiMessage,
@@ -77,7 +77,7 @@ export async function executeCoordinatorFlow(params: ParallelExecutionParams): P
     if (!augmentedCall.background) {
       const toolEmoji = getToolEmoji(toolCall.name);
       const toolDisplayName = getToolDisplayName(toolCall.name);
-      const confirmationMessage = (getToolConfirmtionMessage(toolCall.name) || "")
+      const confirmationMessage = (getToolConfirmationMessage(toolCall.name) || "")
         .replace(/[:\r\n]/g, " ")
         .trim();
       const toolCallId = `${toolCall.name}-${uuidv4()}`;
@@ -325,6 +325,19 @@ function mapToolResultToExecutionResult(
       : result.payload !== undefined
         ? JSON.stringify(result.payload)
         : `Tool ${call.name} ${result.status}`);
+
+  if (call.name === "localSearch") {
+    const processed = processLocalSearchResult({
+      result: errorMessage,
+      success: false,
+    });
+    return {
+      toolName: call.name,
+      result: processed.formattedForLLM,
+      success: false,
+      displayResult: result.displayResult ?? processed.formattedForDisplay,
+    };
+  }
 
   return {
     toolName: call.name,

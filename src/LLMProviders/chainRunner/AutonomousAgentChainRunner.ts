@@ -324,7 +324,6 @@ ${params}
 
         const execution = await this.executeCoordinatorCalls({
           toolCalls,
-          iteration,
           iterationHistory,
           currentIterationToolCallMessages,
           updateCurrentAiMessage,
@@ -445,7 +444,6 @@ ${params}
 
   protected async executeCoordinatorCalls(params: {
     toolCalls: ToolCall[];
-    iteration: number;
     iterationHistory: string[];
     currentIterationToolCallMessages: string[];
     updateCurrentAiMessage: (message: string) => void;
