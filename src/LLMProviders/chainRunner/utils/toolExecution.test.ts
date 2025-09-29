@@ -335,13 +335,15 @@ function createDeferred<T>() {
 }
 
 async function flushMicrotasks(): Promise<void> {
-  await Promise.resolve();
+  const { setImmediate } = jest.requireActual("timers");
+  await new Promise(setImmediate);
 }
 
 async function waitForCallCount(mockFn: jest.Mock, expected: number): Promise<void> {
   const maxAttempts = 10;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-    if (mockFn.mock.calls.length === expected) {
+    if (mockFn.mock.calls.length >= expected) {
+      expect(mockFn).toHaveBeenCalledTimes(expected);
       return;
     }
     await flushMicrotasks();

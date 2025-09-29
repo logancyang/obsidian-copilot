@@ -256,25 +256,22 @@ export async function executeToolCallsInParallel(
 
       abortCleanup?.();
 
-      const finalResults: ToolResult[] = new Array(resultSize);
       for (let i = 0; i < resultSize; i += 1) {
-        const existing = results[i];
-        if (existing) {
-          finalResults[i] = existing;
+        if (results[i]) {
           continue;
         }
 
         const call = indexToCall[i];
         if (call) {
           if (aborted) {
-            finalResults[i] = createCancelledResult(call, i, "Aborted");
+            results[i] = createCancelledResult(call, i, "Aborted");
           } else {
-            finalResults[i] = createErrorResult(call, i, "Tool call did not complete");
+            results[i] = createErrorResult(call, i, "Tool call did not complete");
           }
           continue;
         }
 
-        finalResults[i] = {
+        results[i] = {
           index: i,
           name: "unknown",
           status: aborted ? "cancelled" : "error",
@@ -282,7 +279,7 @@ export async function executeToolCallsInParallel(
         };
       }
 
-      resolve(finalResults);
+      resolve(results as ToolResult[]);
     };
 
     const settleIfDone = () => {
