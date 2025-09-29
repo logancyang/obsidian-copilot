@@ -3,11 +3,8 @@ import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
 import { err2String } from "@/utils";
+import { clampConcurrency } from "./parallelConfig";
 import { ToolCall } from "./xmlParsing";
-
-const DEFAULT_CONCURRENCY = 4;
-const MIN_CONCURRENCY = 1;
-const MAX_CONCURRENCY = 10;
 
 export type ToolStatus = "ok" | "error" | "timeout" | "cancelled";
 
@@ -17,6 +14,7 @@ export interface ToolResult {
   status: ToolStatus;
   payload?: unknown;
   error?: string;
+  displayResult?: string;
 }
 
 export interface ExecHooks {
@@ -54,25 +52,6 @@ export interface ToolExecutionResult {
   displayResult?: string;
 }
 
-/**
- * Ensures concurrency configuration stays within allowed bounds.
- */
-function clampConcurrency(value: number | undefined): number {
-  if (typeof value !== "number" || Number.isNaN(value)) {
-    return DEFAULT_CONCURRENCY;
-  }
-
-  if (value < MIN_CONCURRENCY) {
-    return MIN_CONCURRENCY;
-  }
-
-  if (value > MAX_CONCURRENCY) {
-    return MAX_CONCURRENCY;
-  }
-
-  return Math.floor(value);
-}
-
 function normalizeIndex(call: CoordinatorToolCall, fallback: number): number {
   return typeof call.index === "number" && call.index >= 0 ? call.index : fallback;
 }
@@ -105,12 +84,18 @@ function mapSequentialToToolResult(
   sequential: ToolExecutionResult
 ): ToolResult {
   if (sequential.success) {
-    return {
+    const mapped: ToolResult = {
       index,
       name: call.name,
       status: "ok",
       payload: sequential.result,
     };
+
+    if (typeof sequential.displayResult === "string") {
+      mapped.displayResult = sequential.displayResult;
+    }
+
+    return mapped;
   }
 
   const lowered = sequential.result.toLowerCase();
@@ -544,7 +529,7 @@ export function getToolEmoji(toolName: string): string {
 /**
  * Get user confirmation message for tool call
  */
-export function getToolConfirmtionMessage(toolName: string, toolArgs?: any): string | null {
+export function getToolConfirmationMessage(toolName: string, toolArgs?: any): string | null {
   if (toolName == "writeToFile" || toolName == "replaceInFile") {
     return "Accept / reject in the Preview";
   }

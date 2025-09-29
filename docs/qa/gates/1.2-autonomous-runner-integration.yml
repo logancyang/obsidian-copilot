@@ -1,0 +1,43 @@
+schema: 1
+story: "1.2"
+story_title: "Autonomous Runner Integration"
+gate: PASS
+status_reason: "Marker parity, abort handling, and config controls now covered by automated tests; remaining performance check tracked as follow-up telemetry task."
+reviewer: "Quinn (Test Architect)"
+updated: "2025-09-29T06:15:00Z"
+quality_score: 90
+expires: "2025-10-13T05:55:27Z"
+
+top_issues: []
+
+waiver:
+  active: false
+
+evidence:
+  tests_reviewed: 3
+  risks_identified: 1
+  trace:
+    ac_covered: [1, 2, 3, 4]
+    ac_gaps: []
+
+nfr_validation:
+  _assessed: [security, performance, reliability, maintainability]
+  security:
+    status: PASS
+    notes: Reuses sequential gating/timeouts; no new data surfaces.
+  performance:
+    status: PASS
+    notes: Telemetry summary logging plus unit benchmark confirm concurrency reduces wall time.
+  reliability:
+    status: PASS
+    notes: Abort and marker parity validated in parallelExecution tests.
+  maintainability:
+    status: PASS
+    notes: Logic extracted to reusable helper; new targeted tests.
+
+recommendations:
+  immediate: []
+  future:
+    - action: "Capture production telemetry or synthetic benchmark before enabling flag for broader cohorts."
+      refs:
+        - docs/qa/assessments/1.2-autonomous-runner-integration-nfr-20250929.md

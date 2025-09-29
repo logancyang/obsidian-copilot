@@ -783,6 +783,10 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "writeToFile",
     "replaceInFile",
   ],
+  parallelToolCalls: {
+    enabled: false,
+    concurrency: 4,
+  },
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
   enableInlineCitations: true,

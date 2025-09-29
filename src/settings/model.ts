@@ -14,6 +14,7 @@ import {
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
 } from "@/constants";
+import { clampParallelConcurrency } from "@/utils/parallelConcurrency";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -132,6 +133,10 @@ export interface CopilotSettings {
   suggestedDefaultCommands: boolean;
   autonomousAgentMaxIterations: number;
   autonomousAgentEnabledToolIds: string[];
+  parallelToolCalls: {
+    enabled: boolean;
+    concurrency: number;
+  };
   /** Default reasoning effort for models that support it (GPT-5, O-series, etc.) */
   reasoningEffort: "minimal" | "low" | "medium" | "high";
   /** Default verbosity level for models that support it */
@@ -352,6 +357,26 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autonomousAgentEnabledToolIds =
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
+
+  const rawParallel = settingsToSanitize.parallelToolCalls || DEFAULT_SETTINGS.parallelToolCalls;
+  const parsedConcurrency = Number(rawParallel?.concurrency);
+  const clampedConcurrency = clampParallelConcurrency(
+    parsedConcurrency,
+    DEFAULT_SETTINGS.parallelToolCalls.concurrency
+  );
+  const enabledRaw = rawParallel?.enabled;
+  const normalizedEnabled =
+    typeof enabledRaw === "boolean"
+      ? enabledRaw
+      : typeof enabledRaw === "string"
+        ? enabledRaw.trim().toLowerCase() === "true"
+        : typeof enabledRaw === "number"
+          ? enabledRaw !== 0
+          : DEFAULT_SETTINGS.parallelToolCalls.enabled;
+  sanitizedSettings.parallelToolCalls = {
+    enabled: normalizedEnabled,
+    concurrency: clampedConcurrency,
+  };
 
   // Ensure folder settings fall back to defaults when empty/whitespace
   const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
