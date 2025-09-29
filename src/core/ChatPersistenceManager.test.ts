@@ -1,6 +1,6 @@
+import { ChatMessage } from "@/types/message";
 import { Notice, TFile } from "obsidian";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
-import { ChatMessage } from "@/types/message";
 
 const USER_SENDER = "user";
 const AI_SENDER = "ai";
@@ -377,6 +377,59 @@ Nature's quiet song`);
       expect(mockApp.vault.create).not.toHaveBeenCalled();
       // Notice constructor should have been called
       expect(jest.mocked(Notice)).toHaveBeenCalled();
+    });
+
+    it("should sanitize wiki link brackets and illegal characters in filename", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Check [[My Note]] and path [ref] :: test \\\u0000",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Expect [[My Note]] -> My Note, [ref] -> ref, illegal chars removed, spaces -> underscores
+      expect(mockApp.vault.create).toHaveBeenCalledWith(
+        "test-folder/Check_My_Note_and_path_ref_test@20240923_221800.md",
+        expect.any(String)
+      );
+    });
+
+    it("should fallback to 'Untitled Chat' when sanitized topic is empty", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "[[]] [] {} :: :: \\",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.create).toHaveBeenCalledWith(
+        "test-folder/Untitled_Chat@20240923_221800.md",
+        expect.any(String)
+      );
     });
   });
 
