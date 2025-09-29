@@ -49,7 +49,13 @@ import {
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { deduplicateSources } from "./utils/toolExecution";
+import {
+  CoordinatorToolCall,
+  ToolExecutionResult,
+  deduplicateSources,
+} from "./utils/toolExecution";
+import { executeCoordinatorFlow } from "./utils/parallelExecution";
+import { resolveParallelToolConfig } from "./utils/parallelConfig";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private isYoutubeOnlyMessage(message: string): boolean {
@@ -462,10 +468,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         .join(" ")
         .trim();
 
-      const { toolOutputs, sources: toolSources } = await this.executeToolCalls(
+      const { toolOutputs, sources: toolSources } = await this.executeToolCalls({
         toolCalls,
-        updateLoadingMessage
-      );
+        abortController,
+        updateLoadingMessage,
+        updateCurrentAiMessage: () => {},
+        originalUserMessage: messageForAnalysis,
+      });
 
       // Use sources from tool execution
       sources = toolSources;
@@ -610,14 +619,91 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return Array.from(uniqueDocs.values()).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
   }
 
-  private async executeToolCalls(
-    toolCalls: any[],
-    updateLoadingMessage?: (message: string) => void
-  ): Promise<{
+  private async executeToolCalls(params: {
+    toolCalls: any[];
+    abortController: AbortController;
+    updateLoadingMessage?: (message: string) => void;
+    updateCurrentAiMessage?: (message: string) => void;
+    originalUserMessage?: string;
+  }): Promise<{
     toolOutputs: { tool: string; output: any }[];
     sources: { title: string; path: string; score: number; explanation?: any }[];
   }> {
-    const toolOutputs = [];
+    const {
+      toolCalls,
+      abortController,
+      updateLoadingMessage,
+      updateCurrentAiMessage,
+      originalUserMessage,
+    } = params;
+
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) {
+      return { toolOutputs: [], sources: [] };
+    }
+
+    const { useParallel } = resolveParallelToolConfig(toolCalls.length);
+
+    if (!useParallel) {
+      return this.executeToolCallsSequential({ toolCalls, updateLoadingMessage });
+    }
+
+    const availableTools = this.collectAvailableTools(toolCalls);
+    const timeExpression = this.getTimeExpression(toolCalls);
+    const iterationHistory: string[] = [];
+    const currentIterationToolCallMessages: string[] = [];
+    const collectedSources: {
+      title: string;
+      path: string;
+      score: number;
+      explanation?: any;
+    }[] = [];
+
+    const coordinatorCalls: CoordinatorToolCall[] = toolCalls.map((toolCall, index) => ({
+      index,
+      name: toolCall.tool?.name ?? toolCall.name,
+      args: toolCall.args,
+      id: toolCall.id,
+      background: Boolean(toolCall.tool?.isBackground),
+    }));
+
+    try {
+      const { toolResults } = await executeCoordinatorFlow({
+        toolCalls: coordinatorCalls,
+        iterationHistory,
+        currentIterationToolCallMessages,
+        updateCurrentAiMessage: updateCurrentAiMessage ?? (() => {}),
+        originalUserPrompt: originalUserMessage,
+        collectedSources,
+        abortController,
+        availableTools,
+        getTemporaryToolCallId: (name: string, index: number) =>
+          this.getTemporaryToolCallId(name, index),
+        processLocalSearchResult: (result) => this.processLocalSearchResult(result, timeExpression),
+      });
+
+      const toolOutputs = toolResults.map((result: ToolExecutionResult) => ({
+        tool: result.toolName,
+        output: result.result,
+      }));
+
+      return {
+        toolOutputs,
+        sources: deduplicateSources(collectedSources),
+      };
+    } finally {
+      updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
+    }
+  }
+
+  private async executeToolCallsSequential(params: {
+    toolCalls: any[];
+    updateLoadingMessage?: (message: string) => void;
+  }): Promise<{
+    toolOutputs: { tool: string; output: any }[];
+    sources: { title: string; path: string; score: number; explanation?: any }[];
+  }> {
+    const { toolCalls, updateLoadingMessage } = params;
+    const toolOutputs: { tool: string; output: any }[] = [];
     const allSources: { title: string; path: string; score: number; explanation?: any }[] = [];
 
     for (const toolCall of toolCalls) {
@@ -631,25 +717,37 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }
       const output = await ToolManager.callTool(toolCall.tool, toolCall.args);
 
-      // Process localSearch results immediately
       if (toolCall.tool.name === "localSearch") {
-        // Convert output to string if needed
         const outputStr = typeof output === "string" ? output : JSON.stringify(output);
         const result = { result: outputStr, success: output != null };
         const timeExpression = this.getTimeExpression(toolCalls);
         const processed = this.processLocalSearchResult(result, timeExpression);
 
-        // Collect sources
         allSources.push(...processed.sources);
-
-        // Store the formatted output for LLM
         toolOutputs.push({ tool: toolCall.tool.name, output: processed.formattedForLLM });
       } else {
         toolOutputs.push({ tool: toolCall.tool.name, output });
       }
     }
 
+    updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
+
     return { toolOutputs, sources: deduplicateSources(allSources) };
+  }
+
+  private collectAvailableTools(toolCalls: any[]): any[] {
+    const unique = new Map<string, any>();
+    for (const call of toolCalls) {
+      const tool = call.tool;
+      if (tool?.name && !unique.has(tool.name)) {
+        unique.set(tool.name, tool);
+      }
+    }
+    return Array.from(unique.values());
+  }
+
+  private getTemporaryToolCallId(name: string, index: number): string {
+    return `${name}-${index}`;
   }
 
   // Persist citation lines built for this turn to reuse in fallback

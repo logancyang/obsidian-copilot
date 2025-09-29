@@ -1,3 +1,14 @@
+import { executeCoordinatorFlow } from "@/LLMProviders/chainRunner/utils/parallelExecution";
+import {
+  executeToolCallsInParallel,
+  getToolDisplayName,
+  getToolEmoji,
+} from "@/LLMProviders/chainRunner/utils/toolExecution";
+import { resolveParallelToolConfig } from "@/LLMProviders/chainRunner/utils/parallelConfig";
+import { emitToolSpan } from "@/LLMProviders/chainRunner/utils/observability";
+import { logInfo } from "@/logger";
+import { processToolResults } from "@/utils/toolResultUtils";
+
 jest.mock("@/LLMProviders/chainRunner/utils/toolExecution", () => ({
   executeToolCallsInParallel: jest.fn(),
   deduplicateSources: (sources: any[]) => sources,
@@ -20,23 +31,19 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-const { executeCoordinatorFlow } = require("@/LLMProviders/chainRunner/utils/parallelExecution");
-const {
-  executeToolCallsInParallel,
-  getToolDisplayName,
-  getToolEmoji,
-} = require("@/LLMProviders/chainRunner/utils/toolExecution");
-const { resolveParallelToolConfig } = require("@/LLMProviders/chainRunner/utils/parallelConfig");
-const { emitToolSpan } = require("@/LLMProviders/chainRunner/utils/observability");
-const { logInfo } = require("@/logger");
-const { processToolResults } = require("@/utils/toolResultUtils");
+const mockedExecuteToolCallsInParallel = jest.mocked(executeToolCallsInParallel);
+const mockedGetToolDisplayName = jest.mocked(getToolDisplayName);
+const mockedGetToolEmoji = jest.mocked(getToolEmoji);
+const mockedResolveParallelToolConfig = jest.mocked(resolveParallelToolConfig);
+const mockedLogInfo = jest.mocked(logInfo);
+const mockedEmitToolSpan = jest.mocked(emitToolSpan);
 
 describe("executeCoordinatorFlow", () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    resolveParallelToolConfig.mockReturnValue({ useParallel: true, concurrency: 4 });
-    (getToolDisplayName as jest.Mock).mockImplementation((name: string) => name);
-    (getToolEmoji as jest.Mock).mockReturnValue("🛠");
+    mockedResolveParallelToolConfig.mockReturnValue({ useParallel: true, concurrency: 4 });
+    mockedGetToolDisplayName.mockImplementation((name: string) => name);
+    mockedGetToolEmoji.mockReturnValue("🛠");
   });
 
   it("updates markers for visible tools only and records telemetry", async () => {
@@ -69,30 +76,28 @@ describe("executeCoordinatorFlow", () => {
       }),
     };
 
-    (executeToolCallsInParallel as jest.Mock).mockImplementation(
-      async (_calls: any, context: any) => {
-        context.hooks?.onStart?.(0, { name: "visibleTool", background: false });
-        context.hooks?.onStart?.(1, { name: "backgroundTool", background: true });
+    mockedExecuteToolCallsInParallel.mockImplementation(async (_calls: any, context: any) => {
+      context.hooks?.onStart?.(0, { name: "visibleTool", background: false });
+      context.hooks?.onStart?.(1, { name: "backgroundTool", background: true });
 
-        context.hooks?.onSettle?.(0, {
-          index: 0,
-          name: "visibleTool",
-          status: "ok",
-          payload: "visible-data",
-        });
-        context.hooks?.onSettle?.(1, {
-          index: 1,
-          name: "backgroundTool",
-          status: "ok",
-          payload: "background-data",
-        });
+      context.hooks?.onSettle?.(0, {
+        index: 0,
+        name: "visibleTool",
+        status: "ok",
+        payload: "visible-data",
+      });
+      context.hooks?.onSettle?.(1, {
+        index: 1,
+        name: "backgroundTool",
+        status: "ok",
+        payload: "background-data",
+      });
 
-        return [
-          { index: 0, name: "visibleTool", status: "ok", payload: "visible-data" },
-          { index: 1, name: "backgroundTool", status: "ok", payload: "background-data" },
-        ];
-      }
-    );
+      return [
+        { index: 0, name: "visibleTool", status: "ok", payload: "visible-data" },
+        { index: 1, name: "backgroundTool", status: "ok", payload: "background-data" },
+      ];
+    });
 
     const execution = await executeCoordinatorFlow(params);
 
@@ -106,9 +111,7 @@ describe("executeCoordinatorFlow", () => {
 
     expect(updateCurrentAiMessage).toHaveBeenCalled();
     expect(
-      (logInfo as jest.Mock).mock.calls.some(
-        (call: any[]) => call[0] === "[parallel] execution summary"
-      )
+      mockedLogInfo.mock.calls.some((call: any[]) => call[0] === "[parallel] execution summary")
     ).toBe(true);
   });
 
@@ -140,30 +143,28 @@ describe("executeCoordinatorFlow", () => {
       }),
     };
 
-    (executeToolCallsInParallel as jest.Mock).mockImplementation(
-      async (_calls: any, context: any) => {
-        context.hooks?.onStart?.(0, { name: "visibleTool", background: false });
-        context.hooks?.onStart?.(1, { name: "backgroundTool", background: true });
+    mockedExecuteToolCallsInParallel.mockImplementation(async (_calls: any, context: any) => {
+      context.hooks?.onStart?.(0, { name: "visibleTool", background: false });
+      context.hooks?.onStart?.(1, { name: "backgroundTool", background: true });
 
-        context.hooks?.onSettle?.(0, {
-          index: 0,
-          name: "visibleTool",
-          status: "ok",
-          payload: "visible-data",
-        });
-        context.hooks?.onSettle?.(1, {
-          index: 1,
-          name: "backgroundTool",
-          status: "ok",
-          payload: "background-data",
-        });
+      context.hooks?.onSettle?.(0, {
+        index: 0,
+        name: "visibleTool",
+        status: "ok",
+        payload: "visible-data",
+      });
+      context.hooks?.onSettle?.(1, {
+        index: 1,
+        name: "backgroundTool",
+        status: "ok",
+        payload: "background-data",
+      });
 
-        return [
-          { index: 0, name: "visibleTool", status: "ok", payload: "visible-data" },
-          { index: 1, name: "backgroundTool", status: "ok", payload: "background-data" },
-        ];
-      }
-    );
+      return [
+        { index: 0, name: "visibleTool", status: "ok", payload: "visible-data" },
+        { index: 1, name: "backgroundTool", status: "ok", payload: "background-data" },
+      ];
+    });
 
     const parallelExecution = await executeCoordinatorFlow(params);
 
@@ -199,19 +200,17 @@ describe("executeCoordinatorFlow", () => {
       }),
     };
 
-    (executeToolCallsInParallel as jest.Mock).mockImplementation(
-      async (_calls: any, context: any) => {
-        context.hooks?.onStart?.(0, { name: "visibleTool", background: false });
-        abortController.abort();
-        context.hooks?.onSettle?.(0, {
-          index: 0,
-          name: "visibleTool",
-          status: "cancelled",
-          error: "Aborted",
-        });
-        return [{ index: 0, name: "visibleTool", status: "cancelled", error: "Aborted" }];
-      }
-    );
+    mockedExecuteToolCallsInParallel.mockImplementation(async (_calls: any, context: any) => {
+      context.hooks?.onStart?.(0, { name: "visibleTool", background: false });
+      abortController.abort();
+      context.hooks?.onSettle?.(0, {
+        index: 0,
+        name: "visibleTool",
+        status: "cancelled",
+        error: "Aborted",
+      });
+      return [{ index: 0, name: "visibleTool", status: "cancelled", error: "Aborted" }];
+    });
 
     const execution = await executeCoordinatorFlow(params);
 
@@ -249,39 +248,37 @@ describe("executeCoordinatorFlow", () => {
     let now = 0;
     const dateSpy = jest.spyOn(Date, "now").mockImplementation(() => now);
 
-    (executeToolCallsInParallel as jest.Mock).mockImplementation(
-      async (_calls: any, context: any) => {
-        now = 0;
-        context.hooks?.onStart?.(0, { name: "toolA", background: false });
-        now = 5;
-        context.hooks?.onSettle?.(0, {
-          index: 0,
-          name: "toolA",
-          status: "ok",
-          payload: "A",
-        });
+    mockedExecuteToolCallsInParallel.mockImplementation(async (_calls: any, context: any) => {
+      now = 0;
+      context.hooks?.onStart?.(0, { name: "toolA", background: false });
+      now = 5;
+      context.hooks?.onSettle?.(0, {
+        index: 0,
+        name: "toolA",
+        status: "ok",
+        payload: "A",
+      });
 
-        now = 5;
-        context.hooks?.onStart?.(1, { name: "toolB", background: false });
-        now = 9;
-        context.hooks?.onSettle?.(1, {
-          index: 1,
-          name: "toolB",
-          status: "ok",
-          payload: "B",
-        });
+      now = 5;
+      context.hooks?.onStart?.(1, { name: "toolB", background: false });
+      now = 9;
+      context.hooks?.onSettle?.(1, {
+        index: 1,
+        name: "toolB",
+        status: "ok",
+        payload: "B",
+      });
 
-        return [
-          { index: 0, name: "toolA", status: "ok", payload: "A" },
-          { index: 1, name: "toolB", status: "ok", payload: "B" },
-        ];
-      }
-    );
+      return [
+        { index: 0, name: "toolA", status: "ok", payload: "A" },
+        { index: 1, name: "toolB", status: "ok", payload: "B" },
+      ];
+    });
 
     await executeCoordinatorFlow(params);
     dateSpy.mockRestore();
 
-    const summaryCall = (logInfo as jest.Mock).mock.calls.find(
+    const summaryCall = mockedLogInfo.mock.calls.find(
       (call: any[]) => call[0] === "[parallel] execution summary"
     );
     expect(summaryCall).toBeDefined();
@@ -298,5 +295,43 @@ describe("executeCoordinatorFlow", () => {
     );
     const parallelTotal = Math.max(...summaryPayload.durations.map((item: any) => item.durationMs));
     expect(parallelTotal).toBeLessThan(sequentialTotal);
+
+    expect(mockedEmitToolSpan).toHaveBeenCalledWith({
+      event: "tool.start",
+      index: 0,
+      name: "toolA",
+      background: false,
+      concurrency: 4,
+    });
+
+    expect(mockedEmitToolSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "tool.settle",
+        index: 0,
+        name: "toolA",
+        status: "ok",
+        durationMs: 5,
+        background: false,
+      })
+    );
+
+    expect(mockedEmitToolSpan).toHaveBeenCalledWith({
+      event: "tool.start",
+      index: 1,
+      name: "toolB",
+      background: false,
+      concurrency: 4,
+    });
+
+    expect(mockedEmitToolSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        event: "tool.settle",
+        index: 1,
+        name: "toolB",
+        status: "ok",
+        durationMs: 4,
+        background: false,
+      })
+    );
   });
 });

@@ -17,7 +17,7 @@ import {
   STREAMING_TRUNCATE_THRESHOLD,
 } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
+import { createToolCallMarker } from "./utils/toolCallParser";
 import {
   deduplicateSources,
   getToolDisplayName,
