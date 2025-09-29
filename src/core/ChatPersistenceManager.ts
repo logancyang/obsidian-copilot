@@ -1,13 +1,12 @@
-import { App, Notice, TFile, TFolder } from "obsidian";
-import { ChatMessage } from "@/types/message";
-import { MessageRepository } from "./MessageRepository";
-import { logInfo, logError } from "@/logger";
-import { extractTextFromChunk, formatDateTime } from "@/utils";
-import { USER_SENDER, AI_SENDER } from "@/constants";
-import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
-import { ensureFolderExists } from "@/utils";
+import { logError, logInfo } from "@/logger";
+import { getSettings } from "@/settings/model";
+import { ChatMessage } from "@/types/message";
+import { ensureFolderExists, extractTextFromChunk, formatDateTime } from "@/utils";
+import { App, Notice, TFile, TFolder } from "obsidian";
+import { MessageRepository } from "./MessageRepository";
 
 /**
  * ChatPersistenceManager - Handles saving and loading chat messages
@@ -395,11 +394,18 @@ ${conversationSummary}`;
       // Get the first 10 words from the first user message and sanitize them
       topicForFilename = firstUserMessage
         ? firstUserMessage.message
+            // Remove Obsidian wiki link brackets while preserving inner text: [[Title]] -> Title
+            .replace(/\[\[([^\]]+)\]\]/g, "$1")
+            // Remove any remaining square brackets or braces
+            .replace(/[{}[\]]/g, "")
+            // Now split to first 10 words
             .split(/\s+/)
             .slice(0, 10)
             .join(" ")
-            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-            .trim()
+            // Remove invalid filename characters (including control chars)
+            // eslint-disable-next-line no-control-regex
+            .replace(/[\\/:*?"<>|\x00-\x1F]/g, "")
+            .trim() || "Untitled Chat"
         : "Untitled Chat";
     }
 
@@ -412,8 +418,14 @@ ${conversationSummary}`;
       .replace("{$date}", timestampFileName.split("_")[0])
       .replace("{$time}", timestampFileName.split("_")[1]);
 
-    // Sanitize the final filename
-    const sanitizedFileName = customFileName.replace(/[\\/:*?"<>|]/g, "_");
+    // Sanitize the final filename (replace any illegal chars with underscore)
+    // Also remove leftover square brackets which are illegal on some platforms
+    // eslint-disable-next-line no-control-regex
+    const sanitizedFileName = customFileName
+      .replace(/\[\[([^\]]+)\]\]/g, "$1")
+      .replace(/[{}[\]]/g, "_")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
 
     // Add project ID as prefix for project-specific chat histories
     const currentProject = getCurrentProject();
