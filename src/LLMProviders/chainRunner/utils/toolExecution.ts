@@ -188,6 +188,20 @@ export async function executeToolCallsInParallel(
     index: normalizeIndex(call, idx),
   }));
 
+  const indices = new Set<number>();
+  for (const call of normalizedCalls) {
+    const idx = call.index;
+    if (typeof idx !== "number") {
+      throw new Error("Tool call is missing a normalized index.");
+    }
+
+    if (indices.has(idx)) {
+      throw new Error(`Duplicate index ${idx} found in tool calls.`);
+    }
+
+    indices.add(idx);
+  }
+
   const indexToCall: CoordinatorToolCall[] = [];
   normalizedCalls.forEach((call) => {
     const targetIndex = call.index ?? 0;
@@ -213,53 +227,71 @@ export async function executeToolCallsInParallel(
     let abortCleanup: (() => void) | undefined;
 
     function markRemainingCancelled(): void {
+      if (!aborted) {
+        return;
+      }
+
       indexToCall.forEach((call, idx) => {
         if (!call) {
           return;
         }
         if (!results[idx]) {
-          results[idx] = createCancelledResult(call, idx, aborted ? "Aborted" : "");
+          results[idx] = createCancelledResult(call, idx, "Aborted");
         }
       });
 
-      if (aborted) {
-        next = normalizedCalls.length;
-      }
+      next = normalizedCalls.length;
     }
+
+    const finalize = () => {
+      if (completed) {
+        return;
+      }
+
+      completed = true;
+
+      if (aborted) {
+        markRemainingCancelled();
+      }
+
+      abortCleanup?.();
+
+      const finalResults: ToolResult[] = new Array(resultSize);
+      for (let i = 0; i < resultSize; i += 1) {
+        const existing = results[i];
+        if (existing) {
+          finalResults[i] = existing;
+          continue;
+        }
+
+        const call = indexToCall[i];
+        if (call) {
+          if (aborted) {
+            finalResults[i] = createCancelledResult(call, i, "Aborted");
+          } else {
+            finalResults[i] = createErrorResult(call, i, "Tool call did not complete");
+          }
+          continue;
+        }
+
+        finalResults[i] = {
+          index: i,
+          name: "unknown",
+          status: aborted ? "cancelled" : "error",
+          error: aborted ? "Aborted" : "Missing tool call context",
+        };
+      }
+
+      resolve(finalResults);
+    };
 
     const settleIfDone = () => {
       if (completed) {
         return;
       }
 
-      if (next >= normalizedCalls.length && inFlight === 0) {
-        completed = true;
-        markRemainingCancelled();
-        abortCleanup?.();
-
-        const finalResults: ToolResult[] = new Array(resultSize);
-        for (let i = 0; i < resultSize; i += 1) {
-          const existing = results[i];
-          if (existing) {
-            finalResults[i] = existing;
-            continue;
-          }
-
-          const call = indexToCall[i];
-          if (call) {
-            finalResults[i] = createCancelledResult(call, i, aborted ? "Aborted" : "");
-            continue;
-          }
-
-          finalResults[i] = {
-            index: i,
-            name: "unknown",
-            status: aborted ? "cancelled" : "error",
-            error: aborted ? "Aborted" : "Missing tool call context",
-          };
-        }
-
-        resolve(finalResults);
+      if (aborted || (next >= normalizedCalls.length && inFlight === 0)) {
+        finalize();
       }
     };
 
@@ -315,12 +347,6 @@ export async function executeToolCallsInParallel(
         return;
       }
 
-      if (aborted) {
-        markRemainingCancelled();
-        settleIfDone();
-        return;
-      }
-
       while (inFlight < concurrency && next < normalizedCalls.length) {
         startOne(next);
         next += 1;
@@ -335,7 +361,6 @@ export async function executeToolCallsInParallel(
           return;
         }
         aborted = true;
-        markRemainingCancelled();
         settleIfDone();
       };
 

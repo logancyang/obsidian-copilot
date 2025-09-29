@@ -298,12 +298,6 @@ describe("toolExecution", () => {
 
       controller.abort();
       await flushMicrotasks();
-      await flushMicrotasks();
-
-      slowDeferred.resolve("slow");
-      fastDeferred.resolve("fast");
-      await flushMicrotasks();
-      await flushMicrotasks();
 
       const results = await promise;
       expect(results[0].status).toBe("cancelled");
@@ -311,6 +305,21 @@ describe("toolExecution", () => {
       expect(results[2].status).toBe("cancelled");
       expect(settleSpy).not.toHaveBeenCalled();
       expect(mockCallTool).toHaveBeenCalledTimes(1);
+
+      // Resolve deferreds to avoid dangling promises.
+      slowDeferred.resolve("slow");
+      fastDeferred.resolve("fast");
+      await flushMicrotasks();
+      await flushMicrotasks();
+    });
+
+    it("rejects duplicate tool call indices", async () => {
+      const context = defaultContext();
+      const calls = [buildCall("a", 0), buildCall("b", 0)];
+
+      await expect(executeToolCallsInParallel(calls, context)).rejects.toThrow(
+        "Duplicate index 0 found in tool calls."
+      );
     });
   });
 });
