@@ -1,8 +1,7 @@
-import { addSelectedTextContext, getChainType } from "@/aiParams";
+import { addSelectedTextContext } from "@/aiParams";
 import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
-import { ChainType } from "@/chainFactory";
 import { logError } from "@/logger";
 
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
@@ -363,16 +362,6 @@ export function registerCommands(
 
   // Add selection to chat context command
   addEditorCommand(plugin, COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT, async (editor: Editor) => {
-    // Check if we're in Copilot Plus mode
-    const currentChainType = getChainType();
-    if (
-      currentChainType !== ChainType.COPILOT_PLUS_CHAIN &&
-      currentChainType !== ChainType.PROJECT_CHAIN
-    ) {
-      new Notice("Selected text context is only available in Copilot Plus and Project modes");
-      return;
-    }
-
     const selectedText = editor.getSelection();
     if (!selectedText) {
       new Notice("No text selected");
