@@ -47,6 +47,11 @@ type Props = {
    * the children will be used.
    */
   tooltipContent?: React.ReactNode;
+
+  /**
+   * Always show the tooltip on hover, regardless of whether the text is truncated.
+   */
+  alwaysShowTooltip?: boolean;
 } & React.HTMLAttributes<HTMLDivElement>;
 
 /**
@@ -62,6 +67,7 @@ export const TruncatedText = ({
   className,
   lineClamp,
   tooltipContent,
+  alwaysShowTooltip = false,
   ...props
 }: PropsWithChildren<Props>) => {
   const textRef = useRef<HTMLDivElement | null>(null);
@@ -69,8 +75,8 @@ export const TruncatedText = ({
   const [open, setOpen] = useState<boolean>(false);
 
   const onOpenChange = (isOpen: boolean): void => {
-    // only render the tooltip on hover if the text overflows
-    setOpen(isOpen && isEllipsesActive(textRef, lineClamp));
+    // only render the tooltip on hover if the text overflows or alwaysShowTooltip is true
+    setOpen(isOpen && (alwaysShowTooltip || isEllipsesActive(textRef, lineClamp)));
   };
 
   return (
