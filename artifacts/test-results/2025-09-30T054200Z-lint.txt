@@ -1,0 +1,4 @@
+
+> obsidian-copilot@3.0.3 lint
+> ESLINT_USE_FLAT_CONFIG=false eslint .
+

@@ -1,0 +1,32 @@
+
+> obsidian-copilot@3.0.3 build
+> npm run build:tailwind && npm run build:esbuild || exit 1
+
+
+> obsidian-copilot@3.0.3 build:tailwind
+> npx tailwindcss -i src/styles/tailwind.css -o styles.css --minify
+
+
+> obsidian-copilot@3.0.3 build:esbuild
+> tsc -noEmit -skipLibCheck && node esbuild.config.mjs production
+
+src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts(36,14): error TS2415: Class 'AutonomousAgentChainRunner' incorrectly extends base class 'CopilotPlusChainRunner'.
+  Types have separate declarations of a private property 'getTemporaryToolCallId'.
+src/search/chunkedStorage.ts(4,52): error TS7016: Could not find a declaration file for module '@orama/orama'. '/home/drj/projects/forks/obsidian-copilot/node_modules/@orama/orama/dist/commonjs/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/orama__orama` if it exists or add a new declaration (.d.ts) file containing `declare module '@orama/orama';`
+src/search/dbOperations.ts(9,71): error TS7016: Could not find a declaration file for module '@orama/orama'. '/home/drj/projects/forks/obsidian-copilot/node_modules/@orama/orama/dist/commonjs/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/orama__orama` if it exists or add a new declaration (.d.ts) file containing `declare module '@orama/orama';`
+src/search/dbOperations.ts(191,34): error TS7006: Parameter 'hit' implicitly has an 'any' type.
+src/search/dbOperations.ts(508,29): error TS7006: Parameter 'hit' implicitly has an 'any' type.
+src/search/dbOperations.ts(638,24): error TS7006: Parameter 'doc' implicitly has an 'any' type.
+src/search/dbOperations.ts(657,34): error TS7006: Parameter 'hit' implicitly has an 'any' type.
+src/search/findRelevantNotes.ts(4,54): error TS7016: Could not find a declaration file for module '@orama/orama'. '/home/drj/projects/forks/obsidian-copilot/node_modules/@orama/orama/dist/commonjs/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/orama__orama` if it exists or add a new declaration (.d.ts) file containing `declare module '@orama/orama';`
+src/search/hybridRetriever.ts(20,24): error TS7016: Could not find a declaration file for module '@orama/orama'. '/home/drj/projects/forks/obsidian-copilot/node_modules/@orama/orama/dist/commonjs/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/orama__orama` if it exists or add a new declaration (.d.ts) file containing `declare module '@orama/orama';`
+src/search/hybridRetriever.ts(304,10): error TS7006: Parameter 'hit' implicitly has an 'any' type.
+src/search/hybridRetriever.ts(345,13): error TS7006: Parameter 'hit' implicitly has an 'any' type.
+src/search/hybridRetriever.ts(377,16): error TS7006: Parameter 'doc' implicitly has an 'any' type.
+src/search/vectorStoreManager.ts(6,23): error TS7016: Could not find a declaration file for module '@orama/orama'. '/home/drj/projects/forks/obsidian-copilot/node_modules/@orama/orama/dist/commonjs/index.js' implicitly has an 'any' type.
+  Try `npm i --save-dev @types/orama__orama` if it exists or add a new declaration (.d.ts) file containing `declare module '@orama/orama';`
+src/settings/model.ts(372,22): error TS2339: Property 'trim' does not exist on type 'never'.

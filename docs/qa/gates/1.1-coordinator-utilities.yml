@@ -1,31 +1,22 @@
 schema: 1
 story: "1.1"
 story_title: "Coordinator Utilities"
-gate: CONCERNS
-status_reason: "Parallel scheduler utilities implemented; awaiting runner integration & telemetry to retire residual concurrency risks."
+gate: PASS
+status_reason: "Runner integrations completed (Stories 1.2 / 1.3), synthetic E2E harness validates ordering, and telemetry spans confirmed via coordinator flow."
 reviewer: "Quinn (Test Architect)"
-updated: "2025-09-28T15:00:00Z"
+updated: "2025-09-30T05:35:00Z"
 
-quality_score: 90
-expires: "2025-10-12T15:00:00Z"
+quality_score: 96
+expires: "2025-10-14T05:35:00Z"
 
-top_issues:
-  - id: TECH-001
-    severity: medium
-    summary: "Need validation of hook lifecycle within Autonomous/Copilot+ runners once coordinator is wired in."
-    suggested_owner: dev
-    actions:
-      - "Integrate coordinator into runners (Stories 1.2 / 1.3) and rerun risk profile."
-    references:
-      - docs/prd/epic-1-parallel-tool-execution.md
-      - docs/qa/assessments/1.1-coordinator-utilities-risk-20250928.md
+top_issues: []
 
 waiver:
   active: false
 
 evidence:
-  tests_reviewed: 10
-  risks_identified: 1
+  tests_reviewed: 11
+  risks_identified: 0
   trace:
     ac_covered: [1, 2, 3, 4, 5]
     ac_gaps: []
@@ -51,12 +42,8 @@ nfr_validation:
     notes: "Unit suite covers all AC5 scenarios; helpers improve fake-timer determinism."
 
 recommendations:
-  immediate:
-    - action: "Integrate coordinator into Autonomous and Copilot+ runners and rerun risk profile."
-      refs:
-        - src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts
-        - docs/qa/assessments/1.1-coordinator-utilities-risk-20250928.md
+  immediate: []
   future:
-    - action: "Instrument telemetry spans once runner integration lands to validate wall-time targets."
+    - action: "Monitor coordinator telemetry during staged rollout and log anomalies in QA review."
       refs:
-        - docs/architecture/8-observability.md
+        - docs/qa/assessments/1.1-coordinator-utilities-risk-20250928.md

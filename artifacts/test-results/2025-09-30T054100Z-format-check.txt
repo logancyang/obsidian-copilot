@@ -1,0 +1,5 @@
+
+> obsidian-copilot@3.0.3 format:check
+> prettier --check 'src/**/*.{js,ts,tsx,md}'
+
+Checking formatting...

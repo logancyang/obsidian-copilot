@@ -784,8 +784,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "replaceInFile",
   ],
   parallelToolCalls: {
-    enabled: false,
-    concurrency: 4,
+    enabled: true,
+    concurrency: 10,
   },
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,

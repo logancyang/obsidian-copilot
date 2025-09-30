@@ -1,0 +1,4 @@
+
+> obsidian-copilot@3.0.3 test
+> jest --testPathIgnorePatterns=src/integration_tests/ --runTestsByPath src/LLMProviders/chainRunner/__tests__/parallelCoordinator.e2e.test.ts src/LLMProviders/chainRunner/utils/toolExecution.test.ts src/LLMProviders/chainRunner/__tests__/parallelExecution.test.ts
+

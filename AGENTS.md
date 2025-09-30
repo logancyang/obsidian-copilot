@@ -258,6 +258,7 @@ The TODO.md should be:
 - Settings are versioned - migrations may be needed
 - Local model support available via Ollama/LM Studio
 - Rate limiting is implemented for all API calls
+- Development vault used for manual testing is located at `/home/drj/VAULTS/copilot-test`.
 - For technical debt and known issues, see [`TECHDEBT.md`](./docs/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
 

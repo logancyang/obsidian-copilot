@@ -1,6 +1,6 @@
 export const MIN_PARALLEL_CONCURRENCY = 1;
 export const MAX_PARALLEL_CONCURRENCY = 10;
-export const DEFAULT_PARALLEL_CONCURRENCY = 4;
+export const DEFAULT_PARALLEL_CONCURRENCY = 10;
 
 export function clampParallelConcurrency(
   value: number | undefined,
