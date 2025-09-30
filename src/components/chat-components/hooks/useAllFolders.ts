@@ -9,13 +9,7 @@ import { TFolder, TAbstractFile } from "obsidian";
  * @returns Array of TFolder objects from the vault
  */
 export function useAllFolders(): TFolder[] {
-  const [folders, setFolders] = useState<TFolder[]>(() => {
-    if (!app?.vault) return [];
-
-    return app.vault
-      .getAllLoadedFiles()
-      .filter((file: TAbstractFile): file is TFolder => file instanceof TFolder);
-  });
+  const [folders, setFolders] = useState<TFolder[]>([]);
 
   useEffect(() => {
     if (!app?.vault) return;
@@ -26,6 +20,9 @@ export function useAllFolders(): TFolder[] {
         .filter((file: TAbstractFile): file is TFolder => file instanceof TFolder);
       setFolders(allFolders);
     };
+
+    // Refresh immediately when hook mounts
+    refreshFolders();
 
     const onFolderChange = (file: TAbstractFile) => {
       if (file instanceof TFolder) {

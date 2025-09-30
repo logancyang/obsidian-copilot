@@ -12,21 +12,7 @@ import { getTagsFromNote } from "@/utils";
  * @returns Array of tag strings with # prefix
  */
 export function useAllTags(frontmatterOnly: boolean = false): string[] {
-  const [tags, setTags] = useState<string[]>(() => {
-    if (!app?.vault) return [];
-
-    const tagSet = new Set<string>();
-
-    app.vault.getMarkdownFiles().forEach((file: TFile) => {
-      const fileTags = getTagsFromNote(file, frontmatterOnly);
-      fileTags.forEach((tag) => {
-        const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
-        tagSet.add(tagWithHash);
-      });
-    });
-
-    return Array.from(tagSet);
-  });
+  const [tags, setTags] = useState<string[]>([]);
 
   useEffect(() => {
     if (!app?.vault || !app?.metadataCache) return;
@@ -44,6 +30,9 @@ export function useAllTags(frontmatterOnly: boolean = false): string[] {
 
       setTags(Array.from(tagSet));
     };
+
+    // Refresh immediately when dependencies change
+    refreshTags();
 
     const onFileChange = (file: TAbstractFile) => {
       if (file instanceof TFile && file.extension === "md") {

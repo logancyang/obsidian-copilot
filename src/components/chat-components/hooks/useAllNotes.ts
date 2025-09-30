@@ -10,20 +10,7 @@ import { TFile, TAbstractFile } from "obsidian";
  * @returns Array of TFile objects (markdown files + PDFs in Plus mode)
  */
 export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
-  const [files, setFiles] = useState<TFile[]>(() => {
-    if (!app?.vault) return [];
-    const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
-
-    if (isCopilotPlus) {
-      const allFiles = app.vault.getFiles();
-      const pdfFiles = allFiles.filter(
-        (file): file is TFile => file instanceof TFile && file.extension === "pdf"
-      );
-      return [...markdownFiles, ...pdfFiles];
-    }
-
-    return markdownFiles;
-  });
+  const [files, setFiles] = useState<TFile[]>([]);
 
   useEffect(() => {
     if (!app?.vault) return;
@@ -41,6 +28,9 @@ export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
         setFiles(markdownFiles);
       }
     };
+
+    // Refresh immediately when dependencies change
+    refreshFiles();
 
     const onCreate = (file: TAbstractFile) => {
       if (file instanceof TFile) {
