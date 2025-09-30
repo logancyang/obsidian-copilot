@@ -261,6 +261,7 @@ The TODO.md should be:
 - Development vault used for manual testing is located at `/home/drj/VAULTS/copilot-test`.
 - For technical debt and known issues, see [`TECHDEBT.md`](./docs/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
+- **Absolutely do not open pull requests against `logancyang/obsidian-copilot` master unless the user explicitly requests it.**
 
 ### Obsidian Plugin Environment
 
