@@ -33,7 +33,7 @@ export function ContextNoteBadge({ note, isActive = false, onRemove }: ContextNo
     <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <FileText className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent}>
+        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
           {note.basename}
         </TruncatedText>
         {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
@@ -120,7 +120,7 @@ export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps
     <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <Folder className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={folder}>
+        <TruncatedText className="tw-max-w-40" tooltipContent={folder} alwaysShowTooltip>
           {folder}
         </TruncatedText>
       </div>

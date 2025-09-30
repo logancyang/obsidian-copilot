@@ -4,13 +4,13 @@ import { FileText, Wrench, Folder, Hash } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "../constants/tools";
-import { useNoteSearch } from "./useNoteSearch";
+import { useAllNotes } from "./useAllNotes";
 import { useAllFolders } from "./useAllFolders";
 import { useAllTags } from "./useAllTags";
 import { AtMentionCategory, AtMentionOption, CategoryOption } from "./useAtMentionCategories";
 
 /**
- * Custom hook for @ mention search results that uses unified note search
+ * Custom hook for @ mention search results with unified fuzzy search
  */
 export function useAtMentionSearch(
   query: string,
@@ -19,10 +19,72 @@ export function useAtMentionSearch(
   isCopilotPlus: boolean,
   availableCategoryOptions: CategoryOption[]
 ): (CategoryOption | AtMentionOption)[] {
-  // Use unified data hooks directly
-  const noteSearchResults = useNoteSearch(query, isCopilotPlus);
+  // Get raw data without pre-filtering
+  const allNotes = useAllNotes(isCopilotPlus);
   const allFolders = useAllFolders();
   const allTags = useAllTags(true);
+
+  // Create memoized item arrays (reused in both modes)
+  const noteItems: AtMentionOption[] = useMemo(
+    () =>
+      allNotes.map((file, index) => ({
+        key: `note-${file.basename}-${index}`,
+        title: file.basename,
+        subtitle: file.path,
+        category: "notes" as AtMentionCategory,
+        data: file,
+        content: undefined,
+        icon: React.createElement(FileText, { className: "tw-size-4" }),
+        searchKeyword: file.path, // Search by note path
+      })),
+    [allNotes]
+  );
+
+  const toolItems: AtMentionOption[] = useMemo(
+    () =>
+      isCopilotPlus
+        ? AVAILABLE_TOOLS.map((tool) => ({
+            key: `tool-${tool}`,
+            title: tool,
+            subtitle: getToolDescription(tool),
+            category: "tools" as AtMentionCategory,
+            data: tool,
+            content: getToolDescription(tool),
+            icon: React.createElement(Wrench, { className: "tw-size-4" }),
+          }))
+        : [],
+    [isCopilotPlus]
+  );
+
+  const folderItems: AtMentionOption[] = useMemo(
+    () =>
+      allFolders.map((folder: TFolder) => ({
+        key: `folder-${folder.path}`,
+        title: folder.name,
+        subtitle: folder.path,
+        category: "folders" as AtMentionCategory,
+        data: folder,
+        content: undefined,
+        icon: React.createElement(Folder, { className: "tw-size-4" }),
+        searchKeyword: folder.path, // Search by folder path
+      })),
+    [allFolders]
+  );
+
+  const tagItems: AtMentionOption[] = useMemo(
+    () =>
+      allTags.map((tag) => ({
+        key: `tag-${tag}`,
+        title: tag.startsWith("#") ? tag.slice(1) : tag,
+        subtitle: undefined,
+        category: "tags" as AtMentionCategory,
+        data: tag,
+        content: undefined,
+        icon: React.createElement(Hash, { className: "tw-size-4" }),
+        searchKeyword: tag.startsWith("#") ? tag.slice(1) : tag, // Search by tag name without #
+      })),
+    [allTags]
+  );
 
   return useMemo(() => {
     if (mode === "category") {
@@ -35,50 +97,6 @@ export function useAtMentionSearch(
       }
 
       // Search across all categories when query exists
-      // Convert note search results to AtMentionOption format
-      const noteItems: AtMentionOption[] = noteSearchResults.map((result) => ({
-        ...result,
-        category: "notes" as AtMentionCategory,
-        data: result.file,
-        icon: React.createElement(FileText, { className: "tw-size-4" }),
-        searchKeyword: result.subtitle, // Search by note path
-      }));
-
-      // Create items for other categories
-      const toolItems: AtMentionOption[] = isCopilotPlus
-        ? AVAILABLE_TOOLS.map((tool) => ({
-            key: `tool-${tool}`,
-            title: tool,
-            subtitle: getToolDescription(tool),
-            category: "tools" as AtMentionCategory,
-            data: tool,
-            content: getToolDescription(tool),
-            icon: React.createElement(Wrench, { className: "tw-size-4" }),
-          }))
-        : [];
-
-      const folderItems: AtMentionOption[] = allFolders.map((folder: TFolder) => ({
-        key: `folder-${folder.path}`,
-        title: folder.name,
-        subtitle: folder.path,
-        category: "folders" as AtMentionCategory,
-        data: folder,
-        content: undefined,
-        icon: React.createElement(Folder, { className: "tw-size-4" }),
-        searchKeyword: folder.path, // Search by folder path
-      }));
-
-      const tagItems: AtMentionOption[] = allTags.map((tag) => ({
-        key: `tag-${tag}`,
-        title: tag.startsWith("#") ? tag.slice(1) : tag,
-        subtitle: undefined,
-        category: "tags" as AtMentionCategory,
-        data: tag,
-        content: undefined,
-        icon: React.createElement(Hash, { className: "tw-size-4" }),
-        searchKeyword: tag.startsWith("#") ? tag.slice(1) : tag, // Search by tag name without #
-      }));
-
       // Search tools using exact string matching on name only (case-insensitive)
       const queryLower = query.toLowerCase();
       const matchingTools = toolItems.filter((tool) => {
@@ -98,62 +116,25 @@ export function useAtMentionSearch(
       // Tools first, then everything else ranked by fuzzy search
       return [...matchingTools, ...rankedNonToolItems].slice(0, 30);
     } else {
-      // Category-specific search mode
+      // Category-specific search mode - reuse memoized items
       let items: AtMentionOption[] = [];
 
       switch (selectedCategory) {
         case "notes":
-          // Use unified note search for consistency (name-only search)
-          items = noteSearchResults.map((result) => ({
-            ...result,
-            category: "notes" as AtMentionCategory,
-            data: result.file,
-            icon: React.createElement(FileText, { className: "tw-size-4" }),
-          }));
+          items = noteItems;
           break;
         case "tools":
-          items = isCopilotPlus
-            ? AVAILABLE_TOOLS.map((tool) => ({
-                key: `tool-${tool}`,
-                title: tool,
-                subtitle: getToolDescription(tool),
-                category: "tools" as AtMentionCategory,
-                data: tool,
-                content: getToolDescription(tool),
-                icon: React.createElement(Wrench, { className: "tw-size-4" }),
-              }))
-            : [];
+          items = toolItems;
           break;
         case "folders":
-          items = allFolders.map((folder: TFolder) => ({
-            key: `folder-${folder.path}`,
-            title: folder.name,
-            subtitle: folder.path,
-            category: "folders" as AtMentionCategory,
-            data: folder,
-            content: undefined,
-            icon: React.createElement(Folder, { className: "tw-size-4" }),
-          }));
+          items = folderItems;
           break;
         case "tags":
-          items = allTags.map((tag) => ({
-            key: `tag-${tag}`,
-            title: tag.startsWith("#") ? tag.slice(1) : tag,
-            subtitle: undefined,
-            category: "tags" as AtMentionCategory,
-            data: tag,
-            content: undefined,
-            icon: React.createElement(Hash, { className: "tw-size-4" }),
-          }));
+          items = tagItems;
           break;
       }
 
-      // For notes category, we already have search results from useNoteMentionSearch
-      if (selectedCategory === "notes") {
-        return items;
-      }
-
-      // For other categories, apply traditional search if there's a query
+      // Apply fuzzy search for all categories if there's a query
       if (!query) {
         return items.slice(0, 30);
       }
@@ -170,10 +151,10 @@ export function useAtMentionSearch(
     mode,
     query,
     selectedCategory,
-    noteSearchResults,
-    isCopilotPlus,
+    noteItems,
+    toolItems,
+    folderItems,
+    tagItems,
     availableCategoryOptions,
-    allFolders,
-    allTags,
   ]);
 }

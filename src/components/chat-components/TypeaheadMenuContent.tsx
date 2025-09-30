@@ -93,6 +93,11 @@ export function TypeaheadMenuContent({
           }}
         >
           <div className="tw-mb-1 tw-text-xs tw-text-muted">Preview</div>
+          {options[selectedIndex].subtitle && (
+            <div className="tw-mb-2 tw-text-xs tw-text-muted">
+              {options[selectedIndex].subtitle}
+            </div>
+          )}
           <div className="tw-whitespace-pre-wrap tw-text-normal">
             {options[selectedIndex].content}
           </div>
