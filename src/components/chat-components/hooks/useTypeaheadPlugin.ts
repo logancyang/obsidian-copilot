@@ -109,6 +109,12 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
 
         case "Enter":
         case "Tab":
+          // If there are no options, close menu and let Enter propagate (don't prevent default)
+          if (options.length === 0) {
+            closeMenu();
+            return false; // Let the event propagate to submit the message
+          }
+
           event.preventDefault();
           if (options[state.selectedIndex]) {
             onSelect(options[state.selectedIndex]);
