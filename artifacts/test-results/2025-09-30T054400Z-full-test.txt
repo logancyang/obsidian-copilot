@@ -1,4 +1,0 @@
-
-> obsidian-copilot@3.0.3 test
-> jest --testPathIgnorePatterns=src/integration_tests/
-

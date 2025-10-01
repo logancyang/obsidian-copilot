@@ -6,6 +6,13 @@
 > obsidian-copilot@3.0.3 build:tailwind
 > npx tailwindcss -i src/styles/tailwind.css -o styles.css --minify
 
+Browserslist: caniuse-lite is outdated. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+
+Rebuilding...
+
+Done in 1385ms.
 
 > obsidian-copilot@3.0.3 build:esbuild
 > tsc -noEmit -skipLibCheck && node esbuild.config.mjs production
@@ -29,4 +36,3 @@ src/search/hybridRetriever.ts(345,13): error TS7006: Parameter 'hit' implicitly 
 src/search/hybridRetriever.ts(377,16): error TS7006: Parameter 'doc' implicitly has an 'any' type.
 src/search/vectorStoreManager.ts(6,23): error TS7016: Could not find a declaration file for module '@orama/orama'. '/home/drj/projects/forks/obsidian-copilot/node_modules/@orama/orama/dist/commonjs/index.js' implicitly has an 'any' type.
   Try `npm i --save-dev @types/orama__orama` if it exists or add a new declaration (.d.ts) file containing `declare module '@orama/orama';`
-src/settings/model.ts(372,22): error TS2339: Property 'trim' does not exist on type 'never'.

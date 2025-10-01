@@ -1,0 +1,125 @@
+
+> obsidian-copilot@3.0.3 test
+> jest --testPathIgnorePatterns=src/integration_tests/
+
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+PASS src/tests/projectUtils.test.ts (28.855 s)
+PASS src/LLMProviders/chainRunner/__tests__/parallelCoordinator.e2e.test.ts
+PASS src/LLMProviders/chainRunner/utils/toolExecution.test.ts
+PASS src/LLMProviders/chainRunner/__tests__/parallelExecution.test.ts
+PASS src/LLMProviders/chainRunner/utils/imageExtraction.test.ts (29.85 s)
+PASS src/tests/context-manage-modal.test.ts (30.328 s)
+PASS src/LLMProviders/chainRunner/utils/parallelConfig.test.ts (30.748 s)
+PASS src/core/MessageRepository.test.ts (30.635 s)
+PASS src/tools/ToolResultFormatter.test.ts
+PASS src/autocomplete/triggerConditions.test.ts
+PASS src/autocomplete/postProcessors.test.ts
+PASS src/utils/toolResultUtils.test.ts
+PASS src/LLMProviders/chainRunner/utils/chatHistoryUtils.test.ts
+PASS src/search/v3/utils/FuzzyMatcher.test.ts
+PASS src/LLMProviders/chainRunner/utils/citationUtils.test.ts (31.307 s)
+PASS src/LLMProviders/chainRunner/utils/toolCallParser.test.ts
+PASS src/tools/SimpleTool.test.ts (31.63 s)
+PASS src/autocomplete/wordCompletion/VaultTrie.test.ts
+PASS src/search/v3/utils/ScoreNormalizer.test.ts
+PASS src/components/chat-components/MessageContext.test.tsx (32.21 s)
+PASS src/components/chat-components/ChatInput.test.ts
+PASS src/encryptionService.test.ts (33.697 s)
+PASS src/tools/allTools.validation.test.ts (33.963 s)
+PASS src/LLMProviders/chainRunner/utils/ActionBlockStreamer.test.ts
+PASS src/tools/SearchTools.schema.test.ts (34.073 s)
+PASS src/LLMProviders/chainRunner/__tests__/CopilotPlusParallelExecution.test.ts (35.744 s)
+PASS src/search/v3/chunks.test.ts
+PASS src/LLMProviders/chainRunner/utils/xmlParsing.test.ts
+PASS src/search/v3/engines/FullTextEngine.test.ts
+PASS src/LLMProviders/chainRunner/utils/searchResultUtils.test.ts
+PASS src/search/v3/scoring/FolderBoostCalculator.test.ts
+PASS src/LLMProviders/chainRunner/utils/modelAdapter.test.ts
+PASS src/search/v3/QueryExpander.test.ts
+PASS src/tools/TimeTools.test.ts (37.131 s)
+PASS src/tools/TimeTools.timezone.test.ts (37.175 s)
+PASS src/tools/FileTreeTools.test.ts (37.336 s)
+PASS src/settings/model.test.ts
+PASS src/core/MessageLifecycle.xmltags.test.ts
+PASS src/utils.cleanMessageForCopy.test.ts
+PASS src/core/MessageLifecycle.test.ts
+PASS src/tests/projectContextCache.test.ts
+PASS src/search/searchUtils.test.ts
+PASS src/chatUtils.toolMarkers.test.ts
+PASS src/cache/autocompleteCache.test.ts
+PASS src/core/ChatPersistenceManager.test.ts
+PASS src/utils.test.ts
+PASS src/commands/customCommandUtils.xmlescape.test.ts
+PASS src/commands/customCommandUtils.test.ts
+PASS src/tools/SearchTools.dedupe.test.ts
+PASS src/core/ChatManager.test.ts
+PASS src/tools/ComposerTools.test.ts
+PASS src/search/v3/scanners/GrepScanner.test.ts (7.889 s)
+PASS src/search/v3/TieredLexicalRetriever.test.ts (6.148 s)
+PASS src/components/chat-components/ChatSingleMessage.test.tsx (6.139 s)
+A worker process has failed to exit gracefully and has been force exited. This is likely caused by tests leaking due to improper teardown. Try running with --detectOpenHandles to find leaks. Active timers can also cause this, ensure that .unref() was called on them.
+
+Test Suites: 54 passed, 54 total
+Tests:       966 passed, 966 total
+Snapshots:   0 total
+Time:        41.884 s
+Ran all test suites.

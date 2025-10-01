@@ -364,7 +364,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     parsedConcurrency,
     DEFAULT_SETTINGS.parallelToolCalls.concurrency
   );
-  const enabledRaw = rawParallel?.enabled;
+  const enabledRaw = (rawParallel as { enabled?: unknown })?.enabled;
   const normalizedEnabled =
     typeof enabledRaw === "boolean"
       ? enabledRaw

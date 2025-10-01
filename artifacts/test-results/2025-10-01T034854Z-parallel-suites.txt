@@ -1,0 +1,25 @@
+
+> obsidian-copilot@3.0.3 test
+> jest --testPathIgnorePatterns=src/integration_tests/ --runTestsByPath src/LLMProviders/chainRunner/utils/toolExecution.test.ts src/LLMProviders/chainRunner/__tests__/parallelExecution.test.ts src/LLMProviders/chainRunner/__tests__/parallelCoordinator.e2e.test.ts
+
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+PASS src/LLMProviders/chainRunner/__tests__/parallelExecution.test.ts
+PASS src/LLMProviders/chainRunner/utils/toolExecution.test.ts
+PASS src/LLMProviders/chainRunner/__tests__/parallelCoordinator.e2e.test.ts
+
+Test Suites: 3 passed, 3 total
+Tests:       16 passed, 16 total
+Snapshots:   0 total
+Time:        5.466 s, estimated 10 s
+Ran all test suites within paths "src/LLMProviders/chainRunner/utils/toolExecution.test.ts", "src/LLMProviders/chainRunner/__tests__/parallelExecution.test.ts", "src/LLMProviders/chainRunner/__tests__/parallelCoordinator.e2e.test.ts".

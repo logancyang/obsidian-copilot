@@ -1,0 +1,470 @@
+
+> obsidian-copilot@3.0.3 test:integration
+> jest src/integration_tests/
+
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+ts-jest[ts-jest-transformer] (WARN) Define `ts-jest` config under `globals` is deprecated. Please do
+transform: {
+    <transform_regex>: ['ts-jest', { /* ts-jest config goes here in Jest */ }],
+},
+PASS src/integration_tests/composerPrompt.test.ts (19.546 s)
+  ● Console
+
+    console.log
+      Starting tests, API key available: true
+
+      at Object.<anonymous> (src/integration_tests/composerPrompt.test.ts:41:13)
+
+    console.log
+      Composer: create a new note - Response preview: ```xml
+      <writeToFile>
+      <path>Climate Change.md</path>
+      <content># Climate Change
+      
+      ## Overview
+      
+      Climate ...
+
+      at src/integration_tests/composerPrompt.test.ts:134:17
+
+    console.log
+      Composer: add content to a note - Response preview: ```
+      <writeToFile>
+      <path>atom.md</path>
+      <content>Atoms are the basic particles of the chemical elemen...
+
+      at src/integration_tests/composerPrompt.test.ts:134:17
+
+    console.log
+      Composer: rewrite a note - Response preview: <writeToFile>
+      <path>atom.md</path>
+      <content>
+      Atoms are the fundamental particles of chemical element...
+
+      at src/integration_tests/composerPrompt.test.ts:134:17
+
+    console.log
+      Composer: remove content from a note - Response preview: ```xml
+      <writeToFile>
+      <path>atom.md</path>
+      <content>Atoms are the basic particles of the chemical ele...
+
+      at src/integration_tests/composerPrompt.test.ts:134:17
+
+    console.log
+      Composer: update multiple notes - Response preview: ```xml
+      <writeToFile>
+      <path>Earth.md</path>
+      <content># Earth
+      
+      Earth is the third planet from the Sun ...
+
+      at src/integration_tests/composerPrompt.test.ts:134:17
+
+    console.log
+      Composer: create a canvas - Response preview: ```json
+      <writeToFile>
+      <path>Water Cycle.canvas</path>
+      <content>
+      {
+        "nodes": [
+          {
+            "id": "1"...
+
+      at src/integration_tests/composerPrompt.test.ts:134:17
+
+PASS src/integration_tests/AgentPrompt.test.ts (28.293 s)
+  ● Console
+
+    console.log
+      🚀 Starting Agent Prompt tests with real Gemini 2.5 Flash
+
+      at src/integration_tests/AgentPrompt.test.ts:180:13
+
+    console.log
+      Testing with prompt:  What time is it right now in Tokyo?
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (86 chars): <use_tool>
+      <name>getCurrentTime</name>
+      <timezoneOffset>+9</timezoneOffset>
+      </use_tool>...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: getCurrentTime with args: { timezoneOffset: '+9' }
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool getCurrentTime executed with result: {"epoch":1759289988280,"isoString":"2025-10-01T03:39:48.280Z","userLocaleString":"Current time in JST (Tokyo)","localDateString":"9/30/2025","timezoneOffset":540,"timezone":"JST"}...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (43 chars): It is 3:39 AM on October 1, 2025, in Tokyo....
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 2)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (43 chars): It is 3:39 AM on October 1, 2025, in Tokyo....
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should generate proper tool calls for time query
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      Testing with prompt:  Extend the description for London.
+      
+            <active_note>
+            <title>test.md</title>
+            <content>
+            New York City, USA - The city that never sleeps, New York buzzes with energy, towering skyscrapers, cultural diversity, and endless ambition. From Broadway to Wall Street, it’s a global symbol of dreams and hustle.
+      
+            Tokyo, Japan - A dazzling blend of futuristic tech and centuries-old tradition, Tokyo moves fast yet bows deep. Neon lights, tranquil shrines, and sushi perfection coexist in this mesmerizing metropolis.
+      
+            Paris, France - Romantic and refined, Paris is a living museum of art, fashion, and gastronomy. Every street corner whispers history, and every café terrace invites you to linger.
+      
+            London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.
+            </content>
+            </active_note>
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (623 chars): <use_tool>
+      <name>replaceInFile</name>
+      <path>test.md</path>
+      <diff>
+      ------- SEARCH
+      London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.
+      =======
+      London, UK - A city of kings and punks, r...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: replaceInFile with args: {
+        path: 'test.md',
+        diff: '------- SEARCH\n' +
+          'London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.\n' +
+          '=======\n' +
+          'London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art. Iconic landmarks like Big Ben and Buckingham Palace stand alongside world-class museums and a vibrant, multicultural atmosphere, making it a truly global hub.\n' +
+          '+++++++ REPLACE'
+      }
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool replaceInFile executed with result: File updated successfully...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (410 chars): I've extended the description for London in your `test.md` note. It now reads:
+      
+      "London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art. Iconic landmarks like Big Ben and Buckingham Pala...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 2)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (410 chars): I've extended the description for London in your `test.md` note. It now reads:
+      
+      "London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art. Iconic landmarks like Big Ben and Buckingham Palace stand alongside world-class museums and a vibrant, multicultural atmosphere, making it a truly global hub."...
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should generate proper tool calls for replacing text in a file
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      Testing with prompt:  Create a new note about London based on info from the active note.
+      
+            <active_note>
+            <title>test.md</title>
+            <content>
+            New York City, USA - The city that never sleeps, New York buzzes with energy, towering skyscrapers, cultural diversity, and endless ambition. From Broadway to Wall Street, it’s a global symbol of dreams and hustle.
+      
+            Tokyo, Japan - A dazzling blend of futuristic tech and centuries-old tradition, Tokyo moves fast yet bows deep. Neon lights, tranquil shrines, and sushi perfection coexist in this mesmerizing metropolis.
+      
+            Paris, France - Romantic and refined, Paris is a living museum of art, fashion, and gastronomy. Every street corner whispers history, and every café terrace invites you to linger.
+      
+            London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.
+            </content>
+            </active_note>
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (259 chars): <use_tool>
+      <name>writeToFile</name>
+      <path>London.md</path>
+      <content>London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.</content>
+      </use_tool>...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: writeToFile with args: {
+        path: 'London.md',
+        content: 'London, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.'
+      }
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool writeToFile executed with result: File updated successfully...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (101 chars): I've created a new note titled [[London.md]] with the information about London from your active note....
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 2)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (101 chars): I've created a new note titled [[London.md]] with the information about London from your active note....
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should generate proper tool calls for creating a new note
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      Testing with prompt:  Summarize https://www.youtube.com/watch?v=ZvqnkRd1iyw&list=RDZvqnkRd1iyw&start_radio=1
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (56 chars): <use_tool>
+      <name>youtubeTranscription</name>
+      </use_tool>...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: youtubeTranscription with args: {}
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool youtubeTranscription executed with result: This is the transcript of the video...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (350 chars): I have retrieved the transcript of the video. However, the transcript content is "This is the transcript of the video", which doesn't provide any actual information to summarize. It seems there was an issue fetching the full transcript.
+      
+      Could you please provide the actual transcript or tell me what...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 2)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (350 chars): I have retrieved the transcript of the video. However, the transcript content is "This is the transcript of the video", which doesn't provide any actual information to summarize. It seems there was an issue fetching the full transcript.
+      
+      Could you please provide the actual transcript or tell me what the video is about so I can summarize it for you?...
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should generate proper tool calls for youtube transcription
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      Testing with prompt:  Recap my last week
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (134 chars): I will search your notes from last week.
+      <use_tool>
+      <name>getTimeRangeMs</name>
+      <timeExpression>last week</timeExpression>
+      </use_tool>...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: getTimeRangeMs with args: { timeExpression: 'last week' }
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool getTimeRangeMs executed with result: {"startTime":1753660800000,"endTime":1754265600000}...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (188 chars): <use_tool>
+      <name>localSearch</name>
+      <query>Recap my last week</query>
+      <salientTerms>[]</salientTerms>
+      <timeRange>{"startTime":1753660800000,"endTime":1754265600000}</timeRange>
+      </use_tool>...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: localSearch with args: {
+        query: 'Recap my last week',
+        salientTerms: [],
+        timeRange: { startTime: 1753660800000, endTime: 1754265600000 }
+      }
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool localSearch executed with result: I went for shopping!...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (33 chars): Last week, you went for shopping....
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 3)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (75 chars): I will search your notes from last week.
+      
+      Last week, you went for shopping....
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should generate proper tool calls for local search with relative time
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      Testing with prompt:  What time is it right now?
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (50 chars): <use_tool>
+      <name>getCurrentTime</name>
+      </use_tool>...
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      🔧 Processing tool call: getCurrentTime with args: {}
+
+      at src/integration_tests/AgentPrompt.test.ts:501:19
+
+    console.log
+      ✅ Tool getCurrentTime executed with result: {"epoch":1759289988290,"isoString":"2025-10-01T03:39:48.290Z","userLocaleString":"Current time in UTC","localDateString":"9/30/2025","timezoneOffset":0,"timezone":"UTC"}...
+
+      at src/integration_tests/AgentPrompt.test.ts:510:19
+
+    console.log
+      📤 Model response (52 chars): The current time is 03:39:48 UTC on October 1, 2025....
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 2)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (52 chars): The current time is 03:39:48 UTC on October 1, 2025....
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      📄 Final output from real Gemini 2.5 Flash (52 chars): The current time is 03:39:48 UTC on October 1, 2025....
+
+      at Object.finalOutputValidator (src/integration_tests/AgentPrompt.test.ts:421:17)
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should generate proper tool calls for time query
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      Testing with prompt:  Hello! Can you tell me a fun fact about programming?
+
+      at src/integration_tests/AgentPrompt.test.ts:450:15
+
+    console.log
+      📤 Model response (273 chars): Sure! Here's a fun fact about programming:
+      
+      The first computer programmer was Ada Lovelace, the daughter of the poet Lord Byron. In the mid-1800s, she wrote what is considered the first algorithm intended to be carried out by a machine, Charles Babbage's analytical engine....
+
+      at src/integration_tests/AgentPrompt.test.ts:480:17
+
+    console.log
+      ✅ Final response without tool calls (iteration 1)
+
+      at src/integration_tests/AgentPrompt.test.ts:494:19
+
+    console.log
+      📄 Final response (273 chars): Sure! Here's a fun fact about programming:
+      
+      The first computer programmer was Ada Lovelace, the daughter of the poet Lord Byron. In the mid-1800s, she wrote what is considered the first algorithm intended to be carried out by a machine, Charles Babbage's analytical engine....
+
+      at src/integration_tests/AgentPrompt.test.ts:542:15
+
+    console.log
+      📄 Simple query response from Gemini 2.5 Flash (273 chars): Sure! Here's a fun fact about programming:
+      
+      The first computer programmer was Ada Lovelace, the daughter of the poet Lord Byron. In the mid-1800s, she wrote what is considered the first algorithm inte...
+
+      at Object.finalOutputValidator (src/integration_tests/AgentPrompt.test.ts:433:17)
+
+    console.log
+      ✅ Agent Prompt test completed successfully: should handle basic queries without tool requirements
+
+      at src/integration_tests/AgentPrompt.test.ts:608:15
+
+    console.log
+      ✅ Agent Prompt test setup verified successfully
+
+      at Object.<anonymous> (src/integration_tests/AgentPrompt.test.ts:625:13)
+
+
+Test Suites: 2 passed, 2 total
+Tests:       14 passed, 14 total
+Snapshots:   0 total
+Time:        28.822 s, estimated 60 s
+Ran all test suites matching /src\/integration_tests\//i.

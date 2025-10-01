@@ -1,0 +1,7 @@
+
+> obsidian-copilot@3.0.3 format:check
+> prettier --check 'src/**/*.{js,ts,tsx,md}'
+
+Checking formatting...
+[warn] src/settings/v2/components/QASettings.tsx
+[warn] Code style issues found in the above file. Run Prettier with --write to fix.
