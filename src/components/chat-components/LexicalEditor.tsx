@@ -6,6 +6,7 @@ import { ContentEditable } from "@lexical/react/LexicalContentEditable";
 import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
+import { TFile } from "obsidian";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 import { NoteCommandPlugin } from "./plugins/NoteCommandPlugin";
 import { TagCommandPlugin } from "./plugins/TagCommandPlugin";
@@ -15,6 +16,7 @@ import { URLPillNode } from "./pills/URLPillNode";
 import { ToolPillNode } from "./pills/ToolPillNode";
 import { FolderPillNode } from "./pills/FolderPillNode";
 import { TagPillNode } from "./pills/TagPillNode";
+import { ActiveNotePillNode } from "./pills/ActiveNotePillNode";
 import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
@@ -24,10 +26,12 @@ import { URLPillSyncPlugin } from "./plugins/URLPillSyncPlugin";
 import { ToolPillSyncPlugin } from "./plugins/ToolPillSyncPlugin";
 import { FolderPillSyncPlugin } from "./plugins/FolderPillSyncPlugin";
 import { TagPillSyncPlugin } from "./plugins/TagPillSyncPlugin";
+import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
+import { ActiveFileProvider } from "./context/ActiveFileContext";
 
 interface LexicalEditorProps {
   value: string;
@@ -46,9 +50,12 @@ interface LexicalEditorProps {
   onFoldersRemoved?: (removedFolders: string[]) => void;
   onTagsChange?: (tags: string[]) => void;
   onTagsRemoved?: (removedTags: string[]) => void;
+  onActiveNoteAdded?: () => void;
+  onActiveNoteRemoved?: () => void;
   onEditorReady?: (editor: any) => void;
   onImagePaste?: (files: File[]) => void;
   isCopilotPlus?: boolean;
+  currentActiveFile?: TFile | null;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -68,9 +75,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onFoldersRemoved,
   onTagsChange,
   onTagsRemoved,
+  onActiveNoteAdded,
+  onActiveNoteRemoved,
   onEditorReady,
   onImagePaste,
   isCopilotPlus = false,
+  currentActiveFile = null,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -98,6 +108,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
       },
       nodes: [
         NotePillNode,
+        ActiveNotePillNode,
         ToolPillNode,
         FolderPillNode,
         TagPillNode,
@@ -132,44 +143,53 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
 
   return (
     <LexicalComposer initialConfig={initialConfig}>
-      <div className={cn("tw-relative", className)}>
-        <PlainTextPlugin
-          contentEditable={
-            <ContentEditable
-              className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
-              aria-label="Chat input"
-            />
-          }
-          placeholder={
-            <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
-              {placeholder}
-            </div>
-          }
-          ErrorBoundary={LexicalErrorBoundary}
-        />
-        <OnChangePlugin onChange={handleEditorChange} />
-        <HistoryPlugin />
-        <KeyboardPlugin onSubmit={onSubmit} />
-        <ValueSyncPlugin value={value} />
-        <FocusPlugin onFocus={setFocusFn} onEditorReady={handleEditorReady} />
-        <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
-        {onURLsChange && (
-          <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
-        )}
-        <ToolPillSyncPlugin onToolsChange={onToolsChange} onToolsRemoved={onToolsRemoved} />
-        <FolderPillSyncPlugin
-          onFoldersChange={onFoldersChange}
-          onFoldersRemoved={onFoldersRemoved}
-        />
-        <TagPillSyncPlugin onTagsChange={onTagsChange} onTagsRemoved={onTagsRemoved} />
-        <PillDeletionPlugin />
-        <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
-        <SlashCommandPlugin />
-        <NoteCommandPlugin isCopilotPlus={isCopilotPlus} />
-        <TagCommandPlugin />
-        <AtMentionCommandPlugin isCopilotPlus={isCopilotPlus} />
-        <TextInsertionPlugin />
-      </div>
+      <ActiveFileProvider currentActiveFile={currentActiveFile}>
+        <div className={cn("tw-relative", className)}>
+          <PlainTextPlugin
+            contentEditable={
+              <ContentEditable
+                className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
+                aria-label="Chat input"
+              />
+            }
+            placeholder={
+              <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-0 tw-select-none tw-text-sm tw-text-muted/60">
+                {placeholder}
+              </div>
+            }
+            ErrorBoundary={LexicalErrorBoundary}
+          />
+          <OnChangePlugin onChange={handleEditorChange} />
+          <HistoryPlugin />
+          <KeyboardPlugin onSubmit={onSubmit} />
+          <ValueSyncPlugin value={value} />
+          <FocusPlugin onFocus={setFocusFn} onEditorReady={handleEditorReady} />
+          <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
+          {onURLsChange && (
+            <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
+          )}
+          <ToolPillSyncPlugin onToolsChange={onToolsChange} onToolsRemoved={onToolsRemoved} />
+          <FolderPillSyncPlugin
+            onFoldersChange={onFoldersChange}
+            onFoldersRemoved={onFoldersRemoved}
+          />
+          <TagPillSyncPlugin onTagsChange={onTagsChange} onTagsRemoved={onTagsRemoved} />
+          <ActiveNotePillSyncPlugin
+            onActiveNoteAdded={onActiveNoteAdded}
+            onActiveNoteRemoved={onActiveNoteRemoved}
+          />
+          <PillDeletionPlugin />
+          <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
+          <SlashCommandPlugin />
+          <NoteCommandPlugin isCopilotPlus={isCopilotPlus} />
+          <TagCommandPlugin />
+          <AtMentionCommandPlugin
+            isCopilotPlus={isCopilotPlus}
+            currentActiveFile={currentActiveFile}
+          />
+          <TextInsertionPlugin />
+        </div>
+      </ActiveFileProvider>
     </LexicalComposer>
   );
 };

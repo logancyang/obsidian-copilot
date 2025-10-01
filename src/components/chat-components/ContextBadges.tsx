@@ -26,6 +26,46 @@ interface ContextFolderBadgeProps extends BaseContextBadgeProps {
   folder: string;
 }
 
+interface ContextActiveNoteBadgeProps extends BaseContextBadgeProps {
+  currentActiveFile: TFile | null;
+}
+
+export function ContextActiveNoteBadge({
+  currentActiveFile,
+  onRemove,
+}: ContextActiveNoteBadgeProps) {
+  if (!currentActiveFile) {
+    return null;
+  }
+
+  const tooltipContent = <div className="tw-text-left">{currentActiveFile.path}</div>;
+  const isPdf = currentActiveFile.extension === "pdf";
+
+  return (
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <FileText className="tw-size-3" />
+        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+          {currentActiveFile.basename}
+        </TruncatedText>
+        <span className="tw-text-xs tw-text-faint">Current</span>
+        {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+      </div>
+      {onRemove && (
+        <Button
+          variant="ghost2"
+          size="fit"
+          onClick={onRemove}
+          aria-label="Remove from context"
+          className="tw-text-muted"
+        >
+          <X className="tw-size-4" />
+        </Button>
+      )}
+    </ContextBadgeWrapper>
+  );
+}
+
 export function ContextNoteBadge({ note, isActive = false, onRemove }: ContextNoteBadgeProps) {
   const tooltipContent = <div className="tw-text-left">{note.path}</div>;
 

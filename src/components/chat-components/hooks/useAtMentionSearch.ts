@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
-import { TFolder } from "obsidian";
-import { FileText, Wrench, Folder, Hash } from "lucide-react";
+import { TFolder, TFile } from "obsidian";
+import { FileText, Wrench, Folder, Hash, FileClock } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "../constants/tools";
@@ -18,7 +18,8 @@ export function useAtMentionSearch(
   mode: "category" | "search",
   selectedCategory: AtMentionCategory | undefined,
   isCopilotPlus: boolean,
-  availableCategoryOptions: CategoryOption[]
+  availableCategoryOptions: CategoryOption[],
+  currentActiveFile: TFile | null = null
 ): (CategoryOption | AtMentionOption)[] {
   // Get raw data without pre-filtering
   const allNotes = useAllNotes(isCopilotPlus);
@@ -91,10 +92,27 @@ export function useAtMentionSearch(
     if (mode === "category") {
       // Show category options when no query
       if (!query) {
-        return availableCategoryOptions.map((cat) => ({
+        const categoryOptions = availableCategoryOptions.map((cat) => ({
           ...cat,
           content: undefined,
         })) as (CategoryOption | AtMentionOption)[];
+
+        // Add "Active Note" option at the top if there is an active file
+        if (currentActiveFile) {
+          const activeNoteOption: AtMentionOption = {
+            key: `active-note-${currentActiveFile.path}`,
+            title: "Active Note",
+            subtitle: undefined,
+            category: "activeNote" as AtMentionCategory,
+            data: currentActiveFile,
+            content: undefined,
+            icon: React.createElement(FileClock, { className: "tw-size-4" }),
+          };
+
+          return [activeNoteOption, ...categoryOptions];
+        }
+
+        return categoryOptions;
       }
 
       // Search across all categories when query exists
@@ -103,6 +121,22 @@ export function useAtMentionSearch(
       const matchingTools = toolItems.filter((tool) => {
         return tool.title.toLowerCase().includes(queryLower);
       });
+
+      // Check if "active note" contains the query as a substring (case-insensitive)
+      const activeNoteTitle = "active note";
+      const activeNoteMatches = activeNoteTitle.includes(queryLower);
+      const activeNoteOption =
+        activeNoteMatches && currentActiveFile
+          ? {
+              key: `active-note-${currentActiveFile.path}`,
+              title: "Active Note",
+              subtitle: undefined,
+              category: "activeNote" as AtMentionCategory,
+              data: currentActiveFile,
+              content: undefined,
+              icon: React.createElement(FileClock, { className: "tw-size-4" }),
+            }
+          : null;
 
       // Combine all non-tool items for unified fuzzy search
       const allNonToolItems = [...noteItems, ...folderItems, ...tagItems];
@@ -114,8 +148,12 @@ export function useAtMentionSearch(
 
       const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
 
-      // Tools first, then everything else ranked by fuzzy search
-      return [...matchingTools, ...rankedNonToolItems].slice(0, 30);
+      // Tools first, then Active Note (if matches), then everything else ranked by fuzzy search
+      return [
+        ...matchingTools,
+        ...(activeNoteOption ? [activeNoteOption] : []),
+        ...rankedNonToolItems,
+      ].slice(0, 30);
     } else {
       // Category-specific search mode - reuse memoized items
       let items: AtMentionOption[] = [];
@@ -178,5 +216,6 @@ export function useAtMentionSearch(
     folderItems,
     tagItems,
     availableCategoryOptions,
+    currentActiveFile,
   ]);
 }

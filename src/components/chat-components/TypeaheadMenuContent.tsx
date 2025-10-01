@@ -122,7 +122,8 @@ export function TypeaheadMenuContent({
           <div className="tw-p-2 tw-text-normal">
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
-              const isCategory = mode === "category" && !query && option.icon;
+              const isCategory =
+                mode === "category" && !query && option.icon && !("data" in option);
 
               return (
                 <div

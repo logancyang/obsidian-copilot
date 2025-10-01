@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { TFile } from "obsidian";
 import { TypeaheadMenuPopover } from "./TypeaheadMenuPopover";
 import {
   useAtMentionCategories,
@@ -13,6 +14,7 @@ interface AtMentionTypeaheadProps {
   onClose: () => void;
   onSelect: (category: AtMentionCategory, data: any) => void;
   isCopilotPlus?: boolean;
+  currentActiveFile?: TFile | null;
 }
 
 // Type guard functions
@@ -29,6 +31,7 @@ export function AtMentionTypeahead({
   onClose,
   onSelect,
   isCopilotPlus = false,
+  currentActiveFile = null,
 }: AtMentionTypeaheadProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIndex, setSelectedIndex] = useState(0);
@@ -47,7 +50,8 @@ export function AtMentionTypeahead({
     extendedState.mode,
     extendedState.selectedCategory,
     isCopilotPlus,
-    availableCategoryOptions
+    availableCategoryOptions,
+    currentActiveFile
   );
 
   // Handle selection

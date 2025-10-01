@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   ContextNoteBadge,
+  ContextActiveNoteBadge,
   ContextUrlBadge,
   ContextTagBadge,
   ContextFolderBadge,
@@ -19,7 +20,8 @@ import { AtMentionTypeahead } from "./AtMentionTypeahead";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 interface ChatContextMenuProps {
-  activeNote: TFile | null;
+  includeActiveNote: boolean;
+  currentActiveFile: TFile | null;
   contextNotes: TFile[];
   contextUrls: string[];
   contextTags: string[];
@@ -63,7 +65,8 @@ function ContextSelection({
 }
 
 export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
-  activeNote,
+  includeActiveNote,
+  currentActiveFile,
   contextNotes,
   contextUrls,
   contextTags,
@@ -99,12 +102,8 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
-
-    return Array.from(notesMap.values()).filter((note) => {
-      // Show all notes except the active note (when it's already displayed separately)
-      return !(activeNote && note.path === activeNote.path);
-    });
-  }, [contextNotes, activeNote]);
+    return Array.from(notesMap.values());
+  }, [contextNotes]);
 
   const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
 
@@ -114,7 +113,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     selectedTextContexts.length > 0 ||
     contextTags.length > 0 ||
     contextFolders.length > 0 ||
-    !!activeNote;
+    includeActiveNote;
 
   // Get contextStatus from the shared hook
   const getContextStatusIcon = () => {
@@ -151,17 +150,16 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
               onClose={handleTypeaheadClose}
               onSelect={handleTypeaheadSelect}
               isCopilotPlus={isCopilotPlus}
+              currentActiveFile={currentActiveFile}
             />
           </PopoverContent>
         </Popover>
       </div>
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
-        {activeNote && (
-          <ContextNoteBadge
-            key={activeNote.path}
-            note={activeNote}
-            isActive={true}
-            onRemove={() => onRemoveContext("notes", activeNote.path)}
+        {includeActiveNote && (
+          <ContextActiveNoteBadge
+            currentActiveFile={currentActiveFile}
+            onRemove={() => onRemoveContext("activeNote", "")}
           />
         )}
         {uniqueNotes.map((note) => (

@@ -47,7 +47,8 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
 
   return (
     <ChatContextMenu
-      activeNote={includeActiveNote ? activeNote : null}
+      includeActiveNote={includeActiveNote}
+      currentActiveFile={activeNote}
       contextNotes={contextNotes}
       onRemoveContext={handleRemoveContext}
       contextUrls={contextUrls}
