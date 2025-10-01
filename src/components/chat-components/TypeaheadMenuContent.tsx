@@ -47,6 +47,12 @@ export function TypeaheadMenuContent({
 }: TypeaheadMenuContentProps) {
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
+
+  // Clear hover state when keyboard navigation changes selection
+  useEffect(() => {
+    setHoveredIndex(null);
+  }, [selectedIndex]);
 
   // Scroll the selected item into view when selection changes
   useEffect(() => {
@@ -122,6 +128,8 @@ export function TypeaheadMenuContent({
           <div className="tw-p-2 tw-text-normal">
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
+              const isHovered = index === hoveredIndex;
+              const shouldHighlight = isSelected || isHovered;
               const isCategory =
                 mode === "category" && !query && option.icon && !("data" in option);
 
@@ -131,7 +139,7 @@ export function TypeaheadMenuContent({
                   ref={isSelected ? selectedItemRef : undefined}
                   className={cn(
                     "tw-flex tw-cursor-pointer tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm tw-text-normal",
-                    isSelected ? "tw-bg-modifier-hover" : "hover:tw-bg-modifier-hover"
+                    shouldHighlight && "tw-bg-modifier-hover"
                   )}
                   // Use onMouseDown instead of onClick to prevent triggering
                   // onblur events of the typeahead menu
@@ -139,7 +147,11 @@ export function TypeaheadMenuContent({
                     e.preventDefault();
                     onSelect(option);
                   }}
-                  onMouseEnter={() => onHighlight(index)}
+                  onMouseEnter={() => {
+                    setHoveredIndex(index);
+                    onHighlight(index);
+                  }}
+                  onMouseLeave={() => setHoveredIndex(null)}
                 >
                   {isCategory ? (
                     <div className="tw-flex tw-w-full tw-items-center tw-justify-between">
