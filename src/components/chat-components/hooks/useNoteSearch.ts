@@ -3,6 +3,7 @@ import { TFile } from "obsidian";
 import fuzzysort from "fuzzysort";
 import { useAllNotes } from "./useAllNotes";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { getSettings } from "@/settings/model";
 
 export interface NoteSearchOption extends TypeaheadOption {
   file: TFile;
@@ -55,10 +56,17 @@ export function useNoteSearch(
   // Filter and search notes based on query (name only)
   const searchResults = useMemo(() => {
     const mergedConfig = { ...DEFAULT_CONFIG, ...config };
+    const customPromptsFolder = getSettings().customPromptsFolder;
 
-    // If no query, return first N notes
+    // If no query, return first N notes with custom command notes ranked lower
     if (!query.trim()) {
-      return allNoteOptions.slice(0, mergedConfig.limit);
+      const regularNotes = allNoteOptions.filter(
+        (opt) => !opt.file.path.startsWith(customPromptsFolder + "/")
+      );
+      const customCommandNotes = allNoteOptions.filter((opt) =>
+        opt.file.path.startsWith(customPromptsFolder + "/")
+      );
+      return [...regularNotes, ...customCommandNotes].slice(0, mergedConfig.limit);
     }
 
     const searchQuery = query.trim();
