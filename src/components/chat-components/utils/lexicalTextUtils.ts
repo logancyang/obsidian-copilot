@@ -23,10 +23,26 @@ declare const app: App;
 
 export type PillType = "notes" | "tools" | "folders" | "tags" | "active-note";
 
+// Type representing different kinds of parsed content segments
+export type ParsedContentType =
+  | "text"
+  | "note-pill"
+  | "active-note-pill"
+  | "url-pill"
+  | "tool-pill"
+  | "tag-pill"
+  | "folder-pill";
+
+// Type representing different pattern matching categories
+export type PatternType = "notes" | "urls" | "tools" | "tags" | "customTemplates";
+
+// Type representing the data associated with a pill
+export type PillDataValue = TFile | TFolder | string;
+
 export interface PillData {
   type: PillType;
   title?: string;
-  data?: TFile | TFolder | string;
+  data?: PillDataValue;
 }
 
 /**
@@ -65,14 +81,7 @@ export function $createPillNode(pillData: PillData) {
 }
 
 export interface ParsedContent {
-  type:
-    | "text"
-    | "note-pill"
-    | "active-note-pill"
-    | "url-pill"
-    | "tool-pill"
-    | "tag-pill"
-    | "folder-pill";
+  type: ParsedContentType;
   content: string;
   file?: TFile;
   url?: string;
@@ -395,7 +404,7 @@ function resolveNoteReference(noteName: string): TFile | null {
 }
 
 interface PatternInfo {
-  type: "notes" | "urls" | "tools" | "tags" | "customTemplates";
+  type: PatternType;
   groupCount: number;
   startIndex: number;
 }
