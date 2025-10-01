@@ -166,7 +166,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           <ContextNoteBadge
             key={note.path}
             note={note}
-            isActive={false}
             onRemove={() => onRemoveContext("notes", note.path)}
           />
         ))}
