@@ -15,27 +15,24 @@ import { PillBadge } from "./PillBadge";
 export interface SerializedNotePillNode extends SerializedBasePillNode {
   noteTitle: string;
   notePath: string;
-  isActive?: boolean;
 }
 
 export class NotePillNode extends BasePillNode {
   __noteTitle: string;
   __notePath: string;
-  __isActive: boolean;
 
   static getType(): string {
     return "note-pill";
   }
 
   static clone(node: NotePillNode): NotePillNode {
-    return new NotePillNode(node.__noteTitle, node.__notePath, node.__isActive, node.__key);
+    return new NotePillNode(node.__noteTitle, node.__notePath, node.__key);
   }
 
-  constructor(noteTitle: string, notePath: string, isActive = false, key?: NodeKey) {
+  constructor(noteTitle: string, notePath: string, key?: NodeKey) {
     super(noteTitle, key);
     this.__noteTitle = noteTitle;
     this.__notePath = notePath;
-    this.__isActive = isActive;
   }
 
   getClassName(): string {
@@ -67,8 +64,8 @@ export class NotePillNode extends BasePillNode {
   }
 
   static importJSON(serializedNode: SerializedNotePillNode): NotePillNode {
-    const { noteTitle, notePath, isActive } = serializedNode;
-    return $createNotePillNode(noteTitle, notePath, isActive);
+    const { noteTitle, notePath } = serializedNode;
+    return $createNotePillNode(noteTitle, notePath);
   }
 
   exportJSON(): SerializedNotePillNode {
@@ -76,7 +73,6 @@ export class NotePillNode extends BasePillNode {
       ...super.exportJSON(),
       noteTitle: this.__noteTitle,
       notePath: this.__notePath,
-      isActive: this.__isActive,
       type: "note-pill",
       version: 1,
     };
@@ -99,15 +95,6 @@ export class NotePillNode extends BasePillNode {
       ? `${this.__noteTitle}.pdf`
       : this.__noteTitle;
     return `[[${displayName}]]`;
-  }
-
-  setActive(isActive: boolean): void {
-    const writable = this.getWritable();
-    writable.__isActive = isActive;
-  }
-
-  getActive(): boolean {
-    return this.__isActive;
   }
 
   getNoteTitle(): string {
@@ -140,7 +127,6 @@ interface NotePillComponentProps {
 function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   const noteTitle = node.getNoteTitle();
   const notePath = node.getNotePath();
-  const isActive = node.getActive();
   const isPdf = notePath.toLowerCase().endsWith(".pdf");
 
   const tooltipContent = <div className="tw-text-left">{notePath}</div>;
@@ -154,7 +140,6 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
           closeBracket="]]"
           tooltipContent={tooltipContent}
         />
-        {isActive && <span className="tw-text-xs tw-text-faint">Current</span>}
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
       </div>
     </PillBadge>
@@ -162,12 +147,8 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
 }
 
 // Utility functions
-export function $createNotePillNode(
-  noteTitle: string,
-  notePath: string,
-  isActive = false
-): NotePillNode {
-  return new NotePillNode(noteTitle, notePath, isActive);
+export function $createNotePillNode(noteTitle: string, notePath: string): NotePillNode {
+  return new NotePillNode(noteTitle, notePath);
 }
 
 export function $isNotePillNode(node: LexicalNode | null | undefined): node is NotePillNode {

@@ -24,6 +24,7 @@ import { useDropzone } from "react-dropzone";
 import { $getSelection, $isRangeSelection } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
+import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
 import { $removePillsByURL } from "./pills/URLPillNode";
 import { $removePillsByTag } from "./pills/TagPillNode";
 import { $removePillsByFolder } from "./pills/FolderPillNode";
@@ -356,6 +357,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   // Unified handler for adding to context (from popover @ mention)
   const handleAddToContext = (category: string, data: any) => {
     switch (category) {
+      case "activeNote":
+        // Set active note context flag (no pill needed - context badge shows it)
+        setIncludeActiveNote(true);
+        break;
       case "notes":
         if (data instanceof TFile) {
           const activeNote = app.workspace.getActiveFile();
@@ -418,6 +423,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
   // Unified handler for removing from context (from context menu badges)
   const handleRemoveFromContext = (category: string, data: any) => {
     switch (category) {
+      case "activeNote":
+        // Remove active note pill from editor and turn off flag
+        setIncludeActiveNote(false);
+        if (lexicalEditorRef.current) {
+          lexicalEditorRef.current.update(() => {
+            $removeActiveNotePills();
+          });
+        }
+        break;
       case "notes":
         if (typeof data === "string") {
           // data is the path
@@ -481,8 +495,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
       // Find notes that need to be added
       const newNotesFromPills = notesFromPills.filter((pillNote) => {
-        // Don't add if it's the active note and includeActiveNote is already true
-        if (currentActiveNote?.path === pillNote.path && includeActiveNote) return false;
         // Only add if not already in context
         return !contextPaths.has(pillNote.path);
       });
@@ -498,7 +510,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
       return [...prev, ...newFiles];
     });
-  }, [notesFromPills, currentActiveNote, includeActiveNote, app.vault, setContextNotes]);
+  }, [notesFromPills, app.vault, setContextNotes]);
 
   // URL pill-to-context synchronization (when URL pills are added) - only for Plus chains
   useEffect(() => {
@@ -638,6 +650,15 @@ const ChatInput: React.FC<ChatInputProps> = ({
     }
   }, [isCopilotPlus]);
 
+  // Active note pill sync callbacks
+  const handleActiveNoteAdded = useCallback(() => {
+    setIncludeActiveNote(true);
+  }, [setIncludeActiveNote]);
+
+  const handleActiveNoteRemoved = useCallback(() => {
+    setIncludeActiveNote(false);
+  }, [setIncludeActiveNote]);
+
   return (
     <div
       className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -693,6 +714,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onSubmit={onSendMessage}
           onNotesChange={setNotesFromPills}
           onNotesRemoved={handleNotePillsRemoved}
+          onActiveNoteAdded={handleActiveNoteAdded}
+          onActiveNoteRemoved={handleActiveNoteRemoved}
           onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
           onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
           onToolsChange={isCopilotPlus ? setToolsFromPills : undefined}
@@ -706,6 +729,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
           disabled={isProjectLoading}
           isCopilotPlus={isCopilotPlus}
+          currentActiveFile={currentActiveNote}
         />
         <input {...getInputProps()} />
         {/* Overlay that appears when dragging */}

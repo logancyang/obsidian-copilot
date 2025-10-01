@@ -17,10 +17,12 @@ declare const app: App;
 
 interface AtMentionCommandPluginProps {
   isCopilotPlus?: boolean;
+  currentActiveFile?: TFile | null;
 }
 
 export function AtMentionCommandPlugin({
   isCopilotPlus = false,
+  currentActiveFile = null,
 }: AtMentionCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [extendedState, setExtendedState] = useState<{
@@ -67,7 +69,8 @@ export function AtMentionCommandPlugin({
     extendedState.mode,
     extendedState.selectedCategory,
     isCopilotPlus,
-    availableCategoryOptions
+    availableCategoryOptions,
+    currentActiveFile
   );
 
   // Type guard functions
@@ -100,15 +103,24 @@ export function AtMentionCommandPlugin({
 
       // Item was selected - create appropriate pill using shared utility
       if (isAtMentionOption(option)) {
-        const pillData: PillData = {
-          type: option.category,
-          title: option.title,
-          data: option.data,
-        };
+        // Check if this is the "Active Note" option by its category
+        if (option.category === "activeNote") {
+          // Create ActiveNotePillNode instead of regular NotePillNode
+          editor.update(() => {
+            $replaceTriggeredTextWithPill("@", { type: "active-note" });
+          });
+        } else {
+          // Regular pill
+          const pillData: PillData = {
+            type: option.category,
+            title: option.title,
+            data: option.data,
+          };
 
-        editor.update(() => {
-          $replaceTriggeredTextWithPill("@", pillData);
-        });
+          editor.update(() => {
+            $replaceTriggeredTextWithPill("@", pillData);
+          });
+        }
       }
     },
     [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor]

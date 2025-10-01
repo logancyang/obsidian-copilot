@@ -3,7 +3,7 @@ import { TFile, TFolder } from "obsidian";
 import { FileText, Wrench, Folder, Hash } from "lucide-react";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
 
-export type AtMentionCategory = "notes" | "tools" | "folders" | "tags";
+export type AtMentionCategory = "notes" | "tools" | "folders" | "tags" | "activeNote";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
