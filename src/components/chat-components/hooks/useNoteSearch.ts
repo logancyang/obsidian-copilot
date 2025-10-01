@@ -1,5 +1,6 @@
-import { useMemo } from "react";
+import React, { useMemo } from "react";
 import { TFile } from "obsidian";
+import { FileText } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { useAllNotes } from "./useAllNotes";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
@@ -49,6 +50,7 @@ export function useNoteSearch(
       title: file.basename,
       subtitle: file.path,
       content: "", // Will be loaded async when needed
+      icon: React.createElement(FileText, { className: "tw-size-4" }),
       file,
     }));
   }, [allNotes]);
