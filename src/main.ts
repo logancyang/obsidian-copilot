@@ -30,6 +30,7 @@ import {
   subscribeToSettingsChange,
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
+import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import {
@@ -88,6 +89,11 @@ export default class CopilotPlugin extends Plugin {
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
+
+    // Initialize VaultDataManager for centralized vault data (notes, folders, tags)
+    const vaultDataManager = VaultDataManager.getInstance();
+    const isPlusUser = getSettings().isPlusUser === true;
+    vaultDataManager.initialize(isPlusUser);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
@@ -164,6 +170,10 @@ export default class CopilotPlugin extends Plugin {
     if (this.projectManager) {
       this.projectManager.onunload();
     }
+
+    // Cleanup VaultDataManager event listeners
+    const vaultDataManager = VaultDataManager.getInstance();
+    vaultDataManager.cleanup();
 
     this.customCommandRegister.cleanup();
     this.settingsUnsubscriber?.();

@@ -1,71 +1,21 @@
-import { useState, useEffect } from "react";
-import { TFile, TAbstractFile } from "obsidian";
+import { useAtomValue } from "jotai";
+import { TFile } from "obsidian";
+import { notesAtom } from "@/state/vaultDataAtoms";
+import { settingsStore } from "@/settings/model";
 
 /**
  * Custom hook to get all available notes from the vault.
  * Includes PDF files when in Copilot Plus mode.
  * Automatically updates when files are created, deleted, or renamed.
  *
- * @param isCopilotPlus - Whether Copilot Plus features are enabled
+ * Data is managed by the singleton VaultDataManager, which provides:
+ * - Single set of vault event listeners (eliminates duplicates)
+ * - Debounced updates (250ms) to batch rapid file operations
+ * - Stable array references to prevent unnecessary re-renders
+ *
+ * @param isCopilotPlus - Whether Copilot Plus features are enabled (currently unused, managed by VaultDataManager)
  * @returns Array of TFile objects (markdown files + PDFs in Plus mode)
  */
 export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
-  const [files, setFiles] = useState<TFile[]>([]);
-
-  useEffect(() => {
-    if (!app?.vault) return;
-
-    const refreshFiles = () => {
-      const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
-
-      if (isCopilotPlus) {
-        const allFiles = app.vault.getFiles();
-        const pdfFiles = allFiles.filter(
-          (file): file is TFile => file instanceof TFile && file.extension === "pdf"
-        );
-        setFiles([...markdownFiles, ...pdfFiles]);
-      } else {
-        setFiles(markdownFiles);
-      }
-    };
-
-    // Refresh immediately when dependencies change
-    refreshFiles();
-
-    const onCreate = (file: TAbstractFile) => {
-      if (file instanceof TFile) {
-        if (file.extension === "md" || (isCopilotPlus && file.extension === "pdf")) {
-          refreshFiles();
-        }
-      }
-    };
-
-    const onDelete = (file: TAbstractFile) => {
-      if (file instanceof TFile) {
-        if (file.extension === "md" || (isCopilotPlus && file.extension === "pdf")) {
-          refreshFiles();
-        }
-      }
-    };
-
-    const onRename = (file: TAbstractFile) => {
-      if (file instanceof TFile) {
-        if (file.extension === "md" || (isCopilotPlus && file.extension === "pdf")) {
-          refreshFiles();
-        }
-      }
-    };
-
-    app.vault.on("create", onCreate);
-    app.vault.on("delete", onDelete);
-    app.vault.on("rename", onRename);
-
-    return () => {
-      app.vault.off("create", onCreate);
-      app.vault.off("delete", onDelete);
-      app.vault.off("rename", onRename);
-    };
-  }, [isCopilotPlus]);
-
-  return files;
+  return useAtomValue(notesAtom, { store: settingsStore });
 }
