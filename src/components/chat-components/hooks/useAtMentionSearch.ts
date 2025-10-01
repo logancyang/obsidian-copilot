@@ -10,6 +10,9 @@ import { useAllTags } from "./useAllTags";
 import { AtMentionCategory, AtMentionOption, CategoryOption } from "./useAtMentionCategories";
 import { getSettings } from "@/settings/model";
 
+// Maximum number of results to show in @ mention search
+const MAX_SEARCH_RESULTS = 30;
+
 /**
  * Custom hook for @ mention search results with unified fuzzy search
  */
@@ -142,7 +145,7 @@ export function useAtMentionSearch(
       const allNonToolItems = [...noteItems, ...folderItems, ...tagItems];
       const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
         keys: ["searchKeyword"],
-        limit: 30,
+        limit: MAX_SEARCH_RESULTS,
         threshold: -10000,
       });
 
@@ -153,7 +156,7 @@ export function useAtMentionSearch(
         ...matchingTools,
         ...(activeNoteOption ? [activeNoteOption] : []),
         ...rankedNonToolItems,
-      ].slice(0, 30);
+      ].slice(0, MAX_SEARCH_RESULTS);
     } else {
       // Category-specific search mode - reuse memoized items
       let items: AtMentionOption[] = [];
@@ -194,14 +197,14 @@ export function useAtMentionSearch(
               typeof item.data.path === "string" &&
               item.data.path.startsWith(customPromptsFolder + "/")
           );
-          return [...regularNotes, ...customCommandNotes].slice(0, 30);
+          return [...regularNotes, ...customCommandNotes].slice(0, MAX_SEARCH_RESULTS);
         }
-        return items.slice(0, 30);
+        return items.slice(0, MAX_SEARCH_RESULTS);
       }
 
       const results = fuzzysort.go(query, items, {
         keys: ["title", "subtitle"],
-        limit: 30,
+        limit: MAX_SEARCH_RESULTS,
         threshold: -10000,
       });
 
