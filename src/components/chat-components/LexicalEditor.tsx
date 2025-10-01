@@ -181,7 +181,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <PillDeletionPlugin />
           <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
           <SlashCommandPlugin />
-          <NoteCommandPlugin isCopilotPlus={isCopilotPlus} />
+          <NoteCommandPlugin isCopilotPlus={isCopilotPlus} currentActiveFile={currentActiveFile} />
           <TagCommandPlugin />
           <AtMentionCommandPlugin
             isCopilotPlus={isCopilotPlus}
