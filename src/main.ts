@@ -91,9 +91,9 @@ export default class CopilotPlugin extends Plugin {
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
     // Initialize VaultDataManager for centralized vault data (notes, folders, tags)
+    // Note: VaultDataManager tracks ALL data; hooks filter based on parameters
     const vaultDataManager = VaultDataManager.getInstance();
-    const isPlusUser = getSettings().isPlusUser === true;
-    vaultDataManager.initialize(isPlusUser);
+    vaultDataManager.initialize();
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);

@@ -1,5 +1,5 @@
 import { useAtomValue } from "jotai";
-import { tagsAtom } from "@/state/vaultDataAtoms";
+import { tagsFrontmatterAtom, tagsAllAtom } from "@/state/vaultDataAtoms";
 import { settingsStore } from "@/settings/model";
 
 /**
@@ -13,12 +13,12 @@ import { settingsStore } from "@/settings/model";
  * - Debounced updates (250ms) to batch rapid file operations
  * - Stable array references to prevent unnecessary re-renders
  *
- * Note: VaultDataManager currently only supports frontmatter tags.
- * The frontmatterOnly parameter is kept for API compatibility but currently unused.
- *
- * @param frontmatterOnly - Whether to include only frontmatter tags or all tags (currently unused, always frontmatter)
+ * @param frontmatterOnly - Whether to include only frontmatter tags or all tags (including inline)
  * @returns Array of tag strings with # prefix
  */
 export function useAllTags(frontmatterOnly: boolean = false): string[] {
-  return useAtomValue(tagsAtom, { store: settingsStore });
+  const frontmatterTags = useAtomValue(tagsFrontmatterAtom, { store: settingsStore });
+  const allTags = useAtomValue(tagsAllAtom, { store: settingsStore });
+
+  return frontmatterOnly ? frontmatterTags : allTags;
 }

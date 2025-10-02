@@ -13,10 +13,17 @@ const VAULT_DEBOUNCE_DELAY = 250;
 
 /**
  * Jotai atoms for vault data - centralized, singleton-managed vault state
+ *
+ * Note: Atoms store ALL available data. Hooks filter based on parameters.
+ * - notesAtom: ALL files (markdown + PDFs)
+ * - foldersAtom: ALL folders
+ * - tagsFrontmatterAtom: Frontmatter tags only
+ * - tagsAllAtom: All tags (frontmatter + inline)
  */
 export const notesAtom = atom<TFile[]>([]);
 export const foldersAtom = atom<TFolder[]>([]);
-export const tagsAtom = atom<string[]>([]);
+export const tagsFrontmatterAtom = atom<string[]>([]);
+export const tagsAllAtom = atom<string[]>([]);
 
 /**
  * Singleton manager for vault data with debounced event handling.
@@ -37,9 +44,6 @@ export class VaultDataManager {
   private static instance: VaultDataManager | null = null;
   private initialized = false;
 
-  // Track whether Copilot Plus is enabled for PDF support
-  private isCopilotPlus = false;
-
   private constructor() {
     // Private constructor for singleton pattern
   }
@@ -58,9 +62,10 @@ export class VaultDataManager {
    * Initializes the vault data manager with event listeners.
    * Should be called once during plugin initialization.
    *
-   * @param isCopilotPlus - Whether Copilot Plus features are enabled (for PDF support)
+   * Note: VaultDataManager tracks ALL files (md + PDFs) and ALL tags.
+   * Filtering is done by hooks based on parameters.
    */
-  public initialize(isCopilotPlus: boolean = false): void {
+  public initialize(): void {
     if (this.initialized) {
       logInfo("VaultDataManager: Already initialized, skipping");
       return;
@@ -71,31 +76,22 @@ export class VaultDataManager {
       return;
     }
 
-    this.isCopilotPlus = isCopilotPlus;
+    logInfo("VaultDataManager: Initializing with vault event listeners");
 
     // Initial data load
     this.refreshNotes();
     this.refreshFolders();
-    this.refreshTags();
+    this.refreshTagsFrontmatter();
+    this.refreshTagsAll();
 
     // Register event listeners
     app.vault.on("create", this.handleFileCreate);
     app.vault.on("delete", this.handleFileDelete);
     app.vault.on("rename", this.handleFileRename);
+    app.vault.on("modify", this.handleFileModify);
     app.metadataCache.on("changed", this.handleMetadataChange);
 
     this.initialized = true;
-  }
-
-  /**
-   * Updates Copilot Plus status (affects PDF file inclusion)
-   */
-  public setCopilotPlus(enabled: boolean): void {
-    if (this.isCopilotPlus !== enabled) {
-      this.isCopilotPlus = enabled;
-      // Trigger notes refresh to include/exclude PDFs
-      this.debouncedRefreshNotes();
-    }
   }
 
   /**
@@ -103,9 +99,10 @@ export class VaultDataManager {
    */
   private handleFileCreate = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || (this.isCopilotPlus && file.extension === "pdf")) {
+      if (file.extension === "md" || file.extension === "pdf") {
         this.debouncedRefreshNotes();
-        this.debouncedRefreshTags();
+        this.debouncedRefreshTagsFrontmatter();
+        this.debouncedRefreshTagsAll();
       }
     } else if (file instanceof TFolder) {
       this.debouncedRefreshFolders();
@@ -117,9 +114,10 @@ export class VaultDataManager {
    */
   private handleFileDelete = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || (this.isCopilotPlus && file.extension === "pdf")) {
+      if (file.extension === "md" || file.extension === "pdf") {
         this.debouncedRefreshNotes();
-        this.debouncedRefreshTags();
+        this.debouncedRefreshTagsFrontmatter();
+        this.debouncedRefreshTagsAll();
       }
     } else if (file instanceof TFolder) {
       this.debouncedRefreshFolders();
@@ -131,12 +129,22 @@ export class VaultDataManager {
    */
   private handleFileRename = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || (this.isCopilotPlus && file.extension === "pdf")) {
+      if (file.extension === "md" || file.extension === "pdf") {
         this.debouncedRefreshNotes();
-        this.debouncedRefreshTags();
+        this.debouncedRefreshTagsFrontmatter();
+        this.debouncedRefreshTagsAll();
       }
     } else if (file instanceof TFolder) {
       this.debouncedRefreshFolders();
+    }
+  };
+
+  /**
+   * Handles file modify events (for inline tag changes)
+   */
+  private handleFileModify = (file: TAbstractFile): void => {
+    if (file instanceof TFile && file.extension === "md") {
+      this.debouncedRefreshTagsAll();
     }
   };
 
@@ -145,7 +153,8 @@ export class VaultDataManager {
    */
   private handleMetadataChange = (file: TFile): void => {
     if (file.extension === "md") {
-      this.debouncedRefreshTags();
+      this.debouncedRefreshTagsFrontmatter();
+      this.debouncedRefreshTagsAll();
     }
   };
 
@@ -166,32 +175,38 @@ export class VaultDataManager {
   });
 
   /**
-   * Debounced tags refresh - batches rapid file operations using lodash.debounce
+   * Debounced frontmatter tags refresh - batches rapid file operations using lodash.debounce
    */
-  private debouncedRefreshTags = debounce(() => this.refreshTags(), VAULT_DEBOUNCE_DELAY, {
+  private debouncedRefreshTagsFrontmatter = debounce(
+    () => this.refreshTagsFrontmatter(),
+    VAULT_DEBOUNCE_DELAY,
+    {
+      leading: false,
+      trailing: true,
+    }
+  );
+
+  /**
+   * Debounced all tags refresh - batches rapid file operations using lodash.debounce
+   */
+  private debouncedRefreshTagsAll = debounce(() => this.refreshTagsAll(), VAULT_DEBOUNCE_DELAY, {
     leading: false,
     trailing: true,
   });
 
   /**
-   * Refreshes the notes atom with current vault files.
-   * Includes PDFs when Copilot Plus is enabled.
+   * Refreshes the notes atom with ALL vault files (markdown + PDFs).
+   * Hooks will filter based on their parameters.
    */
   private refreshNotes = (): void => {
     if (!app?.vault) return;
 
     const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
-
-    let newFiles: TFile[];
-    if (this.isCopilotPlus) {
-      const allFiles = app.vault.getFiles();
-      const pdfFiles = allFiles.filter(
-        (file): file is TFile => file instanceof TFile && file.extension === "pdf"
-      );
-      newFiles = [...markdownFiles, ...pdfFiles];
-    } else {
-      newFiles = markdownFiles;
-    }
+    const allFiles = app.vault.getFiles();
+    const pdfFiles = allFiles.filter(
+      (file): file is TFile => file instanceof TFile && file.extension === "pdf"
+    );
+    const newFiles = [...markdownFiles, ...pdfFiles];
 
     // Only update atom if data actually changed (stable reference optimization)
     const currentFiles = settingsStore.get(notesAtom);
@@ -218,9 +233,9 @@ export class VaultDataManager {
   };
 
   /**
-   * Refreshes the tags atom with current vault tags (frontmatter only)
+   * Refreshes the frontmatter tags atom with current vault tags (frontmatter only)
    */
-  private refreshTags = (): void => {
+  private refreshTagsFrontmatter = (): void => {
     if (!app?.vault || !app?.metadataCache) return;
 
     const tagSet = new Set<string>();
@@ -236,9 +251,34 @@ export class VaultDataManager {
     const newTags = Array.from(tagSet).sort();
 
     // Only update atom if data actually changed
-    const currentTags = settingsStore.get(tagsAtom);
+    const currentTags = settingsStore.get(tagsFrontmatterAtom);
     if (!this.arraysEqual(currentTags, newTags)) {
-      settingsStore.set(tagsAtom, newTags);
+      settingsStore.set(tagsFrontmatterAtom, newTags);
+    }
+  };
+
+  /**
+   * Refreshes the all tags atom with current vault tags (frontmatter + inline)
+   */
+  private refreshTagsAll = (): void => {
+    if (!app?.vault || !app?.metadataCache) return;
+
+    const tagSet = new Set<string>();
+
+    app.vault.getMarkdownFiles().forEach((file: TFile) => {
+      const fileTags = getTagsFromNote(file, false); // frontmatterOnly = false (all tags)
+      fileTags.forEach((tag) => {
+        const tagWithHash = tag.startsWith("#") ? tag : `#${tag}`;
+        tagSet.add(tagWithHash);
+      });
+    });
+
+    const newTags = Array.from(tagSet).sort();
+
+    // Only update atom if data actually changed
+    const currentTags = settingsStore.get(tagsAllAtom);
+    if (!this.arraysEqual(currentTags, newTags)) {
+      settingsStore.set(tagsAllAtom, newTags);
     }
   };
 
@@ -274,13 +314,15 @@ export class VaultDataManager {
     // Cancel pending debounced calls
     this.debouncedRefreshNotes.cancel();
     this.debouncedRefreshFolders.cancel();
-    this.debouncedRefreshTags.cancel();
+    this.debouncedRefreshTagsFrontmatter.cancel();
+    this.debouncedRefreshTagsAll.cancel();
 
     // Remove event listeners
     if (app?.vault) {
       app.vault.off("create", this.handleFileCreate);
       app.vault.off("delete", this.handleFileDelete);
       app.vault.off("rename", this.handleFileRename);
+      app.vault.off("modify", this.handleFileModify);
     }
     if (app?.metadataCache) {
       app.metadataCache.off("changed", this.handleMetadataChange);
@@ -312,10 +354,17 @@ export function getFolders(): TFolder[] {
 }
 
 /**
- * Gets the current tags from the atom (non-reactive)
+ * Gets the current frontmatter tags from the atom (non-reactive)
  */
-export function getTags(): string[] {
-  return settingsStore.get(tagsAtom);
+export function getTagsFrontmatter(): string[] {
+  return settingsStore.get(tagsFrontmatterAtom);
+}
+
+/**
+ * Gets all current tags from the atom (non-reactive)
+ */
+export function getTagsAll(): string[] {
+  return settingsStore.get(tagsAllAtom);
 }
 
 /**
@@ -337,10 +386,19 @@ export function subscribeToFoldersChange(callback: (folders: TFolder[]) => void)
 }
 
 /**
- * Subscribes to tags changes
+ * Subscribes to frontmatter tags changes
  */
-export function subscribeToTagsChange(callback: (tags: string[]) => void): () => void {
-  return settingsStore.sub(tagsAtom, () => {
-    callback(settingsStore.get(tagsAtom));
+export function subscribeToTagsFrontmatterChange(callback: (tags: string[]) => void): () => void {
+  return settingsStore.sub(tagsFrontmatterAtom, () => {
+    callback(settingsStore.get(tagsFrontmatterAtom));
+  });
+}
+
+/**
+ * Subscribes to all tags changes
+ */
+export function subscribeToTagsAllChange(callback: (tags: string[]) => void): () => void {
+  return settingsStore.sub(tagsAllAtom, () => {
+    callback(settingsStore.get(tagsAllAtom));
   });
 }
