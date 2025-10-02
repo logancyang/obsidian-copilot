@@ -71,7 +71,6 @@ export function useNoteSearch(
       const customCommandNotes = allNoteOptions.filter((opt) =>
         opt.file.path.startsWith(customPromptsFolder + "/")
       );
-      const noteResults = [...regularNotes, ...customCommandNotes].slice(0, mergedConfig.limit);
 
       // Add "Active Note" option at the top if there is an active file
       if (currentActiveFile) {
@@ -84,9 +83,15 @@ export function useNoteSearch(
           icon: React.createElement(FileClock, { className: "tw-size-4" }),
           file: currentActiveFile,
         };
+        // Reduce limit by 1 to account for active note option
+        const noteResults = [...regularNotes, ...customCommandNotes].slice(
+          0,
+          mergedConfig.limit - 1
+        );
         return [activeNoteOption, ...noteResults];
       }
 
+      const noteResults = [...regularNotes, ...customCommandNotes].slice(0, mergedConfig.limit);
       return noteResults;
     }
 
@@ -110,9 +115,12 @@ export function useNoteSearch(
         : null;
 
     // Search only on note paths (subtitles), never on names
+    // Adjust limit if active note will be prepended
+    const searchLimit = activeNoteOption ? mergedConfig.limit - 1 : mergedConfig.limit;
+
     const results = fuzzysort.go(searchQuery, allNoteOptions, {
       keys: ["subtitle"],
-      limit: mergedConfig.limit,
+      limit: searchLimit,
       threshold: mergedConfig.threshold,
     });
 
