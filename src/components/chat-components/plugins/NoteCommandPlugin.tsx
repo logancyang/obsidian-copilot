@@ -15,9 +15,13 @@ import { NotePreviewCache } from "@/components/chat-components/utils/notePreview
 
 interface NoteCommandPluginProps {
   isCopilotPlus?: boolean;
+  currentActiveFile?: TFile | null;
 }
 
-export function NoteCommandPlugin({ isCopilotPlus = false }: NoteCommandPluginProps): JSX.Element {
+export function NoteCommandPlugin({
+  isCopilotPlus = false,
+  currentActiveFile = null,
+}: NoteCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
 
@@ -50,7 +54,7 @@ export function NoteCommandPlugin({ isCopilotPlus = false }: NoteCommandPluginPr
   );
 
   // Use unified note search hook with standard configuration
-  const searchResults = useNoteSearch(currentQuery, isCopilotPlus);
+  const searchResults = useNoteSearch(currentQuery, isCopilotPlus, {}, currentActiveFile);
 
   // Add preview content from cache to the results
   const filteredNotes = searchResults.map((note) => ({
@@ -61,15 +65,24 @@ export function NoteCommandPlugin({ isCopilotPlus = false }: NoteCommandPluginPr
   // Shared selection handler
   const handleSelect = useCallback(
     (option: NoteSearchOption) => {
-      const pillData: PillData = {
-        type: "notes",
-        title: option.title,
-        data: option.file,
-      };
+      // Check if this is the "Active Note" option by its category
+      if (option.category === "activeNote") {
+        // Create ActiveNotePillNode instead of regular NotePillNode
+        editor.update(() => {
+          $replaceTriggeredTextWithPill("[[", { type: "active-note" });
+        });
+      } else {
+        // Regular note pill
+        const pillData: PillData = {
+          type: "notes",
+          title: option.title,
+          data: option.file,
+        };
 
-      editor.update(() => {
-        $replaceTriggeredTextWithPill("[[", pillData);
-      });
+        editor.update(() => {
+          $replaceTriggeredTextWithPill("[[", pillData);
+        });
+      }
     },
     [editor]
   );

@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { TFile } from "obsidian";
-import { FileText } from "lucide-react";
+import { FileText, FileClock } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { useAllNotes } from "./useAllNotes";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
@@ -8,6 +8,7 @@ import { getSettings } from "@/settings/model";
 
 export interface NoteSearchOption extends TypeaheadOption {
   file: TFile;
+  category?: string;
 }
 
 /**
@@ -33,12 +34,14 @@ const DEFAULT_CONFIG: Required<NoteSearchConfig> = {
  * @param query - Search query string
  * @param isCopilotPlus - Whether Copilot Plus features are enabled (includes PDFs)
  * @param config - Optional configuration for search behavior
+ * @param currentActiveFile - Current active file to show as "Active Note" option
  * @returns Array of NoteSearchOption objects matching the query by name
  */
 export function useNoteSearch(
   query: string,
   isCopilotPlus: boolean = false,
-  config: NoteSearchConfig = {}
+  config: NoteSearchConfig = {},
+  currentActiveFile: TFile | null = null
 ): NoteSearchOption[] {
   // Get all available notes (including PDFs in Plus mode)
   const allNotes = useAllNotes(isCopilotPlus);
@@ -68,20 +71,64 @@ export function useNoteSearch(
       const customCommandNotes = allNoteOptions.filter((opt) =>
         opt.file.path.startsWith(customPromptsFolder + "/")
       );
-      return [...regularNotes, ...customCommandNotes].slice(0, mergedConfig.limit);
+
+      // Add "Active Note" option at the top if there is an active file
+      if (currentActiveFile) {
+        const activeNoteOption: NoteSearchOption = {
+          key: `active-note-${currentActiveFile.path}`,
+          title: "Active Note",
+          subtitle: currentActiveFile.path,
+          content: "",
+          category: "activeNote",
+          icon: React.createElement(FileClock, { className: "tw-size-4" }),
+          file: currentActiveFile,
+        };
+        // Reduce limit by 1 to account for active note option
+        const noteResults = [...regularNotes, ...customCommandNotes].slice(
+          0,
+          mergedConfig.limit - 1
+        );
+        return [activeNoteOption, ...noteResults];
+      }
+
+      const noteResults = [...regularNotes, ...customCommandNotes].slice(0, mergedConfig.limit);
+      return noteResults;
     }
 
     const searchQuery = query.trim();
+    const queryLower = searchQuery.toLowerCase();
+
+    // Check if "active note" contains the query as a substring (case-insensitive)
+    const activeNoteTitle = "active note";
+    const activeNoteMatches = activeNoteTitle.includes(queryLower);
+    const activeNoteOption: NoteSearchOption | null =
+      activeNoteMatches && currentActiveFile
+        ? {
+            key: `active-note-${currentActiveFile.path}`,
+            title: "Active Note",
+            subtitle: currentActiveFile.path,
+            content: "",
+            category: "activeNote",
+            icon: React.createElement(FileClock, { className: "tw-size-4" }),
+            file: currentActiveFile,
+          }
+        : null;
 
     // Search only on note paths (subtitles), never on names
+    // Adjust limit if active note will be prepended
+    const searchLimit = activeNoteOption ? mergedConfig.limit - 1 : mergedConfig.limit;
+
     const results = fuzzysort.go(searchQuery, allNoteOptions, {
       keys: ["subtitle"],
-      limit: mergedConfig.limit,
+      limit: searchLimit,
       threshold: mergedConfig.threshold,
     });
 
-    return results.map((result) => result.obj);
-  }, [allNoteOptions, query, config]);
+    const noteResults = results.map((result) => result.obj);
+
+    // Prepend Active Note option if it matches
+    return activeNoteOption ? [activeNoteOption, ...noteResults] : noteResults;
+  }, [allNoteOptions, query, config, currentActiveFile]);
 
   return searchResults;
 }
