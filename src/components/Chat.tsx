@@ -11,7 +11,6 @@ import {
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
-import { logFileManager } from "@/logFileManager";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -539,7 +538,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleNewChat = useCallback(async () => {
     clearRecordedPromptPayload();
-    await logFileManager.clear();
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
 
     // Analyze chat messages for memory if enabled

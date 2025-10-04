@@ -468,7 +468,6 @@ export default class CopilotPlugin extends Plugin {
 
   async handleNewChat() {
     clearRecordedPromptPayload();
-    await logFileManager.clear();
 
     // Analyze chat messages for memory if enabled
     if (getSettings().enableRecentConversations) {

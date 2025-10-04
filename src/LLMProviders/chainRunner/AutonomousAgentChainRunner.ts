@@ -18,7 +18,11 @@ import {
   STREAMING_TRUNCATE_THRESHOLD,
 } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
+import {
+  createToolCallMarker,
+  updateToolCallMarker,
+  ensureEncodedToolCallMarkerResults,
+} from "./utils/toolCallParser";
 import {
   deduplicateSources,
   executeSequentialToolCall,
@@ -352,9 +356,10 @@ ${params}
           }
           fullAIResponse = allParts.join("\n\n");
 
+          const safeAssistantMessage = ensureEncodedToolCallMarkerResults(response);
           conversationMessages.push({
             role: "assistant",
-            content: response,
+            content: safeAssistantMessage,
           });
 
           // Add final response to LLM messages
@@ -515,7 +520,6 @@ ${params}
 
         // Add AI response to conversation for next iteration
         // Ensure any tool markers have encoded results before storing in conversation
-        const { ensureEncodedToolCallMarkerResults } = await import("./utils/toolCallParser");
         const safeAssistantContent = ensureEncodedToolCallMarkerResults(response);
         conversationMessages.push({
           role: "assistant",
