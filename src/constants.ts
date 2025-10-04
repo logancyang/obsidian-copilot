@@ -156,7 +156,7 @@ export enum ChatModels {
   OPENROUTER_GEMINI_2_5_FLASH_LITE = "google/gemini-2.5-flash-lite",
   OPENROUTER_GPT_41 = "openai/gpt-4.1",
   OPENROUTER_GPT_41_MINI = "openai/gpt-4.1-mini",
-  OPENROUTER_GROK_4_FAST_FREE = "x-ai/grok-4-fast:free",
+  OPENROUTER_GROK_4_FAST = "x-ai/grok-4-fast",
 }
 
 // Model Providers
@@ -246,7 +246,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.OPENROUTER_GROK_4_FAST_FREE,
+    name: ChatModels.OPENROUTER_GROK_4_FAST,
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,

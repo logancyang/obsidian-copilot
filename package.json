@@ -17,7 +17,8 @@
     "version": "node version-bump.mjs && git add manifest.json versions.json",
     "test": "jest --testPathIgnorePatterns=src/integration_tests/",
     "test:integration": "jest src/integration_tests/",
-    "prepare": "husky"
+    "prepare": "husky",
+    "prompt:debug": "node scripts/printPromptDebug.js"
   },
   "keywords": [],
   "author": "Logan Yang",

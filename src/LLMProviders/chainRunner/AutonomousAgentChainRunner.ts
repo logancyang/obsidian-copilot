@@ -1,8 +1,8 @@
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -18,7 +18,11 @@ import {
   STREAMING_TRUNCATE_THRESHOLD,
 } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import { createToolCallMarker, updateToolCallMarker } from "./utils/toolCallParser";
+import {
+  createToolCallMarker,
+  updateToolCallMarker,
+  ensureEncodedToolCallMarkerResults,
+} from "./utils/toolCallParser";
 import {
   deduplicateSources,
   executeSequentialToolCall,
@@ -30,6 +34,10 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
+import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
+import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
+import { recordPromptPayload } from "./utils/promptPayloadRecorder";
+import { PromptDebugReport } from "./utils/toolPromptDebugger";
 import {
   extractToolNameFromPartialBlock,
   parseXMLToolCalls,
@@ -55,7 +63,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
   }
 
-  private static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
+  public static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
     const tools = availableTools;
     return tools
       .map((tool) => {
@@ -112,6 +120,42 @@ ${params}
     );
   }
 
+  /**
+   * Build an annotated prompt report for debugging tool call prompting.
+   *
+   * @param userMessage - The user chat message to inspect.
+   * @returns A prompt debug report containing sections and annotated string output.
+   */
+  public async buildToolPromptDebugReport(userMessage: ChatMessage): Promise<PromptDebugReport> {
+    const availableTools = this.getAvailableTools();
+    const adapter = ModelAdapterFactory.createAdapter(
+      this.chainManager.chatModelManager.getChatModel()
+    );
+    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+
+    return buildAgentPromptDebugReport({
+      chainManager: this.chainManager,
+      adapter,
+      availableTools,
+      toolDescriptions,
+      userMessage,
+    });
+  }
+
+  /**
+   * Apply CiC ordering by appending the original user question after the local search payload.
+   *
+   * @param localSearchPayload - XML-wrapped local search payload prepared for the LLM.
+   * @param originalPrompt - The original user prompt (before any enhancements).
+   * @returns Payload with question appended using CiC ordering when needed.
+   */
+  protected applyCiCOrderingToLocalSearchResult(
+    localSearchPayload: string,
+    originalPrompt: string
+  ): string {
+    return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
+  }
+
   private getTemporaryToolCallId(toolName: string, index: number): string {
     return `temporary-tool-call-id-${toolName}-${index}`;
   }
@@ -142,6 +186,10 @@ ${params}
       return "";
     }
 
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const adapter = ModelAdapterFactory.createAdapter(chatModel);
+    const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
+
     try {
       // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
@@ -151,9 +199,6 @@ ${params}
 
       // Build initial conversation messages
       const customSystemPrompt = await this.generateSystemPrompt();
-
-      const chatModel = this.chainManager.chatModelManager.getChatModel();
-      const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
       if (customSystemPrompt) {
         conversationMessages.push({
@@ -311,6 +356,12 @@ ${params}
           }
           fullAIResponse = allParts.join("\n\n");
 
+          const safeAssistantMessage = ensureEncodedToolCallMarkerResults(response);
+          conversationMessages.push({
+            role: "assistant",
+            content: safeAssistantMessage,
+          });
+
           // Add final response to LLM messages
           this.llmFormattedMessages.push(response);
           break;
@@ -413,7 +464,10 @@ ${params}
             collectedSources.push(...processed.sources);
 
             // Update result with formatted text for LLM
-            result.result = processed.formattedForLLM;
+            result.result = this.applyCiCOrderingToLocalSearchResult(
+              processed.formattedForLLM,
+              originalUserPrompt || ""
+            );
             result.displayResult = processed.formattedForDisplay;
           }
 
@@ -466,7 +520,6 @@ ${params}
 
         // Add AI response to conversation for next iteration
         // Ensure any tool markers have encoded results before storing in conversation
-        const { ensureEncodedToolCallMarkerResults } = await import("./utils/toolCallParser");
         const safeAssistantContent = ensureEncodedToolCallMarkerResults(response);
         conversationMessages.push({
           role: "assistant",
@@ -497,6 +550,10 @@ ${params}
           "You may want to try a more specific question or break down your request into smaller parts.";
 
         fullAIResponse = iterationHistory.join("\n\n") + limitMessage;
+        conversationMessages.push({
+          role: "assistant",
+          content: fullAIResponse,
+        });
       }
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
@@ -534,6 +591,13 @@ ${params}
     if (!fullAIResponse && iterationHistory.length > 0) {
       logWarn("fullAIResponse was empty, using iteration history");
       fullAIResponse = iterationHistory.join("\n\n");
+    }
+
+    if (conversationMessages.length > 0) {
+      recordPromptPayload({
+        messages: [...conversationMessages],
+        modelName: modelNameForLog,
+      });
     }
 
     // Decode encoded tool marker results for clearer logging only

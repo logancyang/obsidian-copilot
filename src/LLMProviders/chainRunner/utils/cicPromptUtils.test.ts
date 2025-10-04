@@ -1,5 +1,6 @@
 import {
   buildLocalSearchInnerContent,
+  ensureCiCOrderingWithQuestion,
   renderCiCMessage,
   wrapLocalSearchPayload,
 } from "./cicPromptUtils";
@@ -45,6 +46,30 @@ describe("cicPromptUtils", () => {
 
     it("returns the original question when context is blank", () => {
       expect(renderCiCMessage("  \n  ", "What?", false)).toBe("What?");
+    });
+  });
+
+  describe("ensureCiCOrderingWithQuestion", () => {
+    it("appends the trimmed question after the payload when missing", () => {
+      const payload = "<localSearch>\n<context/>\n</localSearch>";
+      const question = "  What did I do last week?  ";
+
+      const result = ensureCiCOrderingWithQuestion(payload, question);
+
+      expect(result).toBe(renderCiCMessage(payload, "What did I do last week?", true));
+    });
+
+    it("returns payload unchanged when question already included", () => {
+      const question = "What did I do last week?";
+      const payload = renderCiCMessage("<localSearch />", question, true);
+
+      expect(ensureCiCOrderingWithQuestion(payload, question)).toBe(payload);
+    });
+
+    it("returns payload unchanged when question is blank", () => {
+      const payload = "<localSearch>\n<context/>\n</localSearch>";
+
+      expect(ensureCiCOrderingWithQuestion(payload, "   ")).toBe(payload);
     });
   });
 });
