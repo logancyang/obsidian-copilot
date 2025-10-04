@@ -3,6 +3,10 @@ import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError } from "@/logger";
+import {
+  clearRecordedPromptPayload,
+  flushRecordedPromptPayloadToLog,
+} from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { EMPTY_COMMAND, QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
@@ -99,6 +103,7 @@ export function registerCommands(
   });
 
   addCommand(plugin, COMMAND_IDS.NEW_CHAT, () => {
+    clearRecordedPromptPayload();
     plugin.newChat();
   });
 
@@ -334,6 +339,7 @@ export function registerCommands(
   // Create Copilot log file
   addCommand(plugin, COMMAND_IDS.OPEN_LOG_FILE, async () => {
     try {
+      await flushRecordedPromptPayloadToLog();
       await logFileManager.openLogFile();
     } catch (error) {
       logError("Error creating Copilot log file:", error);

@@ -1,8 +1,8 @@
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
+import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -30,13 +30,15 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
+import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
+import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
+import { recordPromptPayload } from "./utils/promptPayloadRecorder";
+import { PromptDebugReport } from "./utils/toolPromptDebugger";
 import {
   extractToolNameFromPartialBlock,
   parseXMLToolCalls,
   stripToolCallXML,
 } from "./utils/xmlParsing";
-import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
-import { buildPromptDebugReport, PromptDebugReport } from "./utils/toolPromptDebugger";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -57,7 +59,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
   }
 
-  private static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
+  public static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
     const tools = availableTools;
     return tools
       .map((tool) => {
@@ -122,39 +124,17 @@ ${params}
    */
   public async buildToolPromptDebugReport(userMessage: ChatMessage): Promise<PromptDebugReport> {
     const availableTools = this.getAvailableTools();
-    const chatModel = this.chainManager.chatModelManager.getChatModel();
-    const adapter = ModelAdapterFactory.createAdapter(chatModel);
-
-    const basePrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
-    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
-    const toolNames = availableTools.map((tool) => tool.name);
-
-    const registry = ToolRegistry.getInstance();
-    const toolMetadata = availableTools
-      .map((tool) => registry.getToolMetadata(tool.name))
-      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
-
-    const systemSections = adapter.buildSystemPromptSections(
-      basePrompt,
-      toolDescriptions,
-      toolNames,
-      toolMetadata
+    const adapter = ModelAdapterFactory.createAdapter(
+      this.chainManager.chatModelManager.getChatModel()
     );
+    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
 
-    const memory = this.chainManager.memoryManager.getMemory();
-    const memoryVariables = await memory.loadMemoryVariables({});
-    const rawHistory = Array.isArray(memoryVariables.history) ? memoryVariables.history : [];
-
-    const originalUserMessage = userMessage.originalMessage || userMessage.message;
-    const requiresTools = messageRequiresTools(userMessage.message);
-    const enhancedUserMessage = adapter.enhanceUserMessage(userMessage.message, requiresTools);
-
-    return buildPromptDebugReport({
-      systemSections,
-      rawHistory,
-      adapterName: adapter.constructor?.name || "ModelAdapter",
-      originalUserMessage,
-      enhancedUserMessage,
+    return buildAgentPromptDebugReport({
+      chainManager: this.chainManager,
+      adapter,
+      availableTools,
+      toolDescriptions,
+      userMessage,
     });
   }
 
@@ -202,6 +182,10 @@ ${params}
       return "";
     }
 
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const adapter = ModelAdapterFactory.createAdapter(chatModel);
+    const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
+
     try {
       // Get chat history from memory
       const memory = this.chainManager.memoryManager.getMemory();
@@ -211,9 +195,6 @@ ${params}
 
       // Build initial conversation messages
       const customSystemPrompt = await this.generateSystemPrompt();
-
-      const chatModel = this.chainManager.chatModelManager.getChatModel();
-      const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
       if (customSystemPrompt) {
         conversationMessages.push({
@@ -370,6 +351,11 @@ ${params}
             allParts.push(cleanedResponse);
           }
           fullAIResponse = allParts.join("\n\n");
+
+          conversationMessages.push({
+            role: "assistant",
+            content: response,
+          });
 
           // Add final response to LLM messages
           this.llmFormattedMessages.push(response);
@@ -560,6 +546,10 @@ ${params}
           "You may want to try a more specific question or break down your request into smaller parts.";
 
         fullAIResponse = iterationHistory.join("\n\n") + limitMessage;
+        conversationMessages.push({
+          role: "assistant",
+          content: fullAIResponse,
+        });
       }
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
@@ -597,6 +587,13 @@ ${params}
     if (!fullAIResponse && iterationHistory.length > 0) {
       logWarn("fullAIResponse was empty, using iteration history");
       fullAIResponse = iterationHistory.join("\n\n");
+    }
+
+    if (conversationMessages.length > 0) {
+      recordPromptPayload({
+        messages: [...conversationMessages],
+        modelName: modelNameForLog,
+      });
     }
 
     // Decode encoded tool marker results for clearer logging only

@@ -19,6 +19,7 @@ import { encryptAllKeys } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
+import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { checkIsPlusUser } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
@@ -466,6 +467,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async handleNewChat() {
+    clearRecordedPromptPayload();
+    await logFileManager.clear();
+
     // Analyze chat messages for memory if enabled
     if (getSettings().enableRecentConversations) {
       try {
