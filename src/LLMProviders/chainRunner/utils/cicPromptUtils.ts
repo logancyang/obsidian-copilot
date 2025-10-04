@@ -48,3 +48,26 @@ export function renderCiCMessage(
   const questionBlock = labelQuestion ? `Question: ${userQuestion}` : userQuestion;
   return `${contextBlock}\n\n${questionBlock}`;
 }
+
+/**
+ * Ensure a CiC payload appends the user's question, avoiding duplicates when the question already exists.
+ * @param localSearchPayload XML-wrapped local search payload.
+ * @param originalUserQuestion The original user question to append.
+ * @returns CiC ordered payload with the question appended when missing.
+ */
+export function ensureCiCOrderingWithQuestion(
+  localSearchPayload: string,
+  originalUserQuestion: string
+): string {
+  const trimmedQuestion = originalUserQuestion.trim();
+
+  if (!trimmedQuestion) {
+    return localSearchPayload;
+  }
+
+  if (localSearchPayload.includes(trimmedQuestion)) {
+    return localSearchPayload;
+  }
+
+  return renderCiCMessage(localSearchPayload, trimmedQuestion, true);
+}

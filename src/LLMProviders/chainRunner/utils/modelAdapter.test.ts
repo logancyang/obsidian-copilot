@@ -1,4 +1,4 @@
-import { ModelAdapterFactory } from "./modelAdapter";
+import { ModelAdapterFactory, joinPromptSections } from "./modelAdapter";
 import { ToolMetadata } from "@/tools/ToolRegistry";
 
 describe("ModelAdapter", () => {
@@ -138,6 +138,22 @@ describe("ModelAdapter", () => {
       expect(enhancedPrompt).toContain("fix the typo");
       expect(enhancedPrompt).toContain("add item 4 to the list");
       expect(enhancedPrompt).toContain("diff parameter MUST contain");
+    });
+
+    it("should rebuild enhanceSystemPrompt output from section metadata", () => {
+      const mockModel = { modelName: "gpt-4" } as any;
+      const adapter = ModelAdapterFactory.createAdapter(mockModel);
+
+      const sections = adapter.buildSystemPromptSections(basePrompt, toolDescriptions, [], []);
+      expect(sections.length).toBeGreaterThan(0);
+      expect(sections[0].id).toBe("base-system-prompt");
+
+      const reconstructed = joinPromptSections(sections);
+      const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
+
+      expect(reconstructed).toEqual(enhancedPrompt);
+      expect(enhancedPrompt).toContain("Available tools:\nTool descriptions here");
+      expect(enhancedPrompt).not.toContain("Available tools:\n\nTool descriptions here");
     });
 
     it("should enhance file editing messages for GPT", () => {

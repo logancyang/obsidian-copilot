@@ -35,6 +35,8 @@ import {
   parseXMLToolCalls,
   stripToolCallXML,
 } from "./utils/xmlParsing";
+import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
+import { buildPromptDebugReport, PromptDebugReport } from "./utils/toolPromptDebugger";
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
@@ -110,6 +112,64 @@ ${params}
       adapter,
       this.chainManager.userMemoryManager
     );
+  }
+
+  /**
+   * Build an annotated prompt report for debugging tool call prompting.
+   *
+   * @param userMessage - The user chat message to inspect.
+   * @returns A prompt debug report containing sections and annotated string output.
+   */
+  public async buildToolPromptDebugReport(userMessage: ChatMessage): Promise<PromptDebugReport> {
+    const availableTools = this.getAvailableTools();
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const adapter = ModelAdapterFactory.createAdapter(chatModel);
+
+    const basePrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+    const toolNames = availableTools.map((tool) => tool.name);
+
+    const registry = ToolRegistry.getInstance();
+    const toolMetadata = availableTools
+      .map((tool) => registry.getToolMetadata(tool.name))
+      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
+
+    const systemSections = adapter.buildSystemPromptSections(
+      basePrompt,
+      toolDescriptions,
+      toolNames,
+      toolMetadata
+    );
+
+    const memory = this.chainManager.memoryManager.getMemory();
+    const memoryVariables = await memory.loadMemoryVariables({});
+    const rawHistory = Array.isArray(memoryVariables.history) ? memoryVariables.history : [];
+
+    const originalUserMessage = userMessage.originalMessage || userMessage.message;
+    const requiresTools = messageRequiresTools(userMessage.message);
+    const enhancedUserMessage = adapter.enhanceUserMessage(userMessage.message, requiresTools);
+
+    return buildPromptDebugReport({
+      systemSections,
+      rawHistory,
+      adapterName: adapter.constructor?.name || "ModelAdapter",
+      originalUserMessage,
+      enhancedUserMessage,
+    });
+  }
+
+  /**
+   * Apply CiC ordering by appending the original user question after the local search payload.
+   *
+   * @param localSearchPayload - XML-wrapped local search payload prepared for the LLM.
+   * @param originalPrompt - The original user prompt (before any enhancements).
+   * @returns Payload with question appended using CiC ordering when needed.
+   */
+  protected applyCiCOrderingToLocalSearchResult(
+    localSearchPayload: string,
+    originalPrompt: string
+  ): string {
+    return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {
@@ -413,7 +473,10 @@ ${params}
             collectedSources.push(...processed.sources);
 
             // Update result with formatted text for LLM
-            result.result = processed.formattedForLLM;
+            result.result = this.applyCiCOrderingToLocalSearchResult(
+              processed.formattedForLLM,
+              originalUserPrompt || ""
+            );
             result.displayResult = processed.formattedForDisplay;
           }
 
