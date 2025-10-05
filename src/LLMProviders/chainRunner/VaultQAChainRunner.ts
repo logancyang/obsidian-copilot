@@ -169,7 +169,12 @@ export class VaultQAChainRunner extends BaseChainRunner {
     }
 
     // Always get the response, even if partial
-    let fullAIResponse = streamer.close();
+    const result = streamer.close();
+
+    const responseMetadata = {
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage ?? undefined,
+    };
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -178,15 +183,20 @@ export class VaultQAChainRunner extends BaseChainRunner {
     }
 
     // Add sources to the response
-    fullAIResponse = this.addSourcestoResponse(fullAIResponse);
+    const fullAIResponse = this.addSourcestoResponse(result.content);
 
-    return this.handleResponse(
+    await this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage
+      updateCurrentAiMessage,
+      undefined,
+      undefined,
+      responseMetadata
     );
+
+    return fullAIResponse;
   }
 
   private addSourcestoResponse(response: string): string {

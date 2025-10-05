@@ -292,20 +292,11 @@ export class ChatManager {
   }
 
   /**
-   * Add a display-only message (for AI responses)
+   * Add a message
    */
-  addDisplayMessage(text: string, sender: string, id?: string): string {
+  addMessage(message: ChatMessage): string {
     const currentRepo = this.getCurrentMessageRepo();
-    const messageId = currentRepo.addDisplayOnlyMessage(text, sender, id);
-    return messageId;
-  }
-
-  /**
-   * Add a full message object
-   */
-  addFullMessage(message: ChatMessage): string {
-    const currentRepo = this.getCurrentMessageRepo();
-    const messageId = currentRepo.addFullMessage(message);
+    const messageId = currentRepo.addMessage(message);
     return messageId;
   }
 
@@ -386,7 +377,7 @@ export class ChatManager {
     const currentRepo = this.getCurrentMessageRepo();
     currentRepo.clear();
     messages.forEach((msg) => {
-      currentRepo.addFullMessage(msg);
+      currentRepo.addMessage(msg);
     });
 
     // Update chain memory with loaded messages
@@ -447,7 +438,7 @@ export class ChatManager {
     // Add messages to the current repository
     const currentRepo = this.getCurrentMessageRepo();
     for (const message of messages) {
-      currentRepo.addFullMessage(message);
+      currentRepo.addMessage(message);
     }
 
     // Update chain memory with loaded messages

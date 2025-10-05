@@ -202,29 +202,7 @@ describe("MessageRepository", () => {
     });
   });
 
-  describe("addDisplayOnlyMessage", () => {
-    it("should add message with same display and processed text", () => {
-      const messageId = messageRepo.addDisplayOnlyMessage("AI Response", "AI");
-
-      const displayMessage = messageRepo.getMessage(messageId);
-      const llmMessage = messageRepo.getLLMMessage(messageId);
-
-      expect(displayMessage?.message).toBe("AI Response");
-      expect(llmMessage?.message).toBe("AI Response");
-    });
-
-    it("should use provided ID if given", () => {
-      const customId = "custom-message-id";
-      const messageId = messageRepo.addDisplayOnlyMessage("AI Response", "AI", customId);
-
-      expect(messageId).toBe(customId);
-
-      const message = messageRepo.getMessage(customId);
-      expect(message?.id).toBe(customId);
-    });
-  });
-
-  describe("addFullMessage", () => {
+  describe("addMessage with ChatMessage object", () => {
     it("should add message from ChatMessage object", () => {
       const chatMessage: ChatMessage = {
         id: "test-id",
@@ -239,7 +217,7 @@ describe("MessageRepository", () => {
         },
       };
 
-      const messageId = messageRepo.addFullMessage(chatMessage);
+      const messageId = messageRepo.addMessage(chatMessage);
 
       expect(messageId).toBe("test-id");
 
@@ -256,7 +234,7 @@ describe("MessageRepository", () => {
         isVisible: true,
       };
 
-      const messageId = messageRepo.addFullMessage(chatMessage);
+      const messageId = messageRepo.addMessage(chatMessage);
 
       expect(messageId).toBeDefined();
       expect(messageId).toMatch(/^msg-\d+-\w+$/);

@@ -134,24 +134,6 @@ export class ChatUIState {
   }
 
   /**
-   * Add a display-only message (for AI responses)
-   */
-  addDisplayMessage(text: string, sender: string, id?: string): string {
-    const messageId = this.chatManager.addDisplayMessage(text, sender, id);
-    this.notifyListeners();
-    return messageId;
-  }
-
-  /**
-   * Add a full message object
-   */
-  addFullMessage(message: ChatMessage): string {
-    const messageId = this.chatManager.addFullMessage(message);
-    this.notifyListeners();
-    return messageId;
-  }
-
-  /**
    * Clear all messages
    */
   clearMessages(): void {
@@ -211,19 +193,11 @@ export class ChatUIState {
   }
 
   /**
-   * Legacy compatibility - add message with visibility logic
+   * Add a message
    */
   addMessage(message: ChatMessage): void {
-    if (message.isVisible) {
-      // If the message has sources or other metadata, use addFullMessage to preserve them
-      if (message.sources || message.content) {
-        this.addFullMessage(message);
-      } else {
-        this.addDisplayMessage(message.message, message.sender, message.id);
-      }
-    } else {
-      this.addFullMessage(message);
-    }
+    this.chatManager.addMessage(message);
+    this.notifyListeners();
   }
 
   /**

@@ -93,7 +93,12 @@ export class LLMChainRunner extends BaseChainRunner {
     }
 
     // Always return the response, even if partial
-    const response = streamer.close();
+    const result = streamer.close();
+
+    const responseMetadata = {
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage ?? undefined,
+    };
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -101,12 +106,17 @@ export class LLMChainRunner extends BaseChainRunner {
       return "";
     }
 
-    return this.handleResponse(
-      response,
+    await this.handleResponse(
+      result.content,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage
+      updateCurrentAiMessage,
+      undefined,
+      undefined,
+      responseMetadata
     );
+
+    return result.content;
   }
 }

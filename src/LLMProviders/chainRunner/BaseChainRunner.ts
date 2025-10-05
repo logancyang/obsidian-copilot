@@ -1,6 +1,6 @@
 import { ABORT_REASON, AI_SENDER } from "@/constants";
 import { logError, logInfo } from "@/logger";
-import { ChatMessage } from "@/types/message";
+import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import { Notice } from "obsidian";
 import ChainManager from "../chainManager";
@@ -45,7 +45,8 @@ export abstract class BaseChainRunner implements ChainRunner {
     addMessage: (message: ChatMessage) => void,
     updateCurrentAiMessage: (message: string) => void,
     sources?: { title: string; path: string; score: number }[],
-    llmFormattedOutput?: string
+    llmFormattedOutput?: string,
+    responseMetadata?: ResponseMetadata
   ) {
     // Save to memory and add message if we have a response
     // Skip only if it's a NEW_CHAT abort (clearing everything)
@@ -68,6 +69,7 @@ export abstract class BaseChainRunner implements ChainRunner {
         isVisible: true,
         timestamp: formatDateTime(new Date()),
         sources: sources,
+        responseMetadata: responseMetadata,
       });
 
       // Clear the streaming message since it's now in chat history

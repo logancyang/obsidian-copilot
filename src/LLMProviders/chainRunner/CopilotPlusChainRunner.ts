@@ -19,7 +19,7 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { ChatMessage } from "@/types/message";
+import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { IntentAnalyzer } from "../intentAnalyzer";
@@ -283,7 +283,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void
-  ): Promise<string> {
+  ): Promise<StreamingResult> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -355,7 +355,14 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         thinkStreamer.processChunk(processedChunk);
       }
     }
-    return thinkStreamer.close();
+
+    const result = thinkStreamer.close();
+
+    return {
+      content: result.content,
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage,
+    };
   }
 
   async run(
@@ -374,6 +381,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
     let currentPartialResponse = "";
+    let responseMetadata: ResponseMetadata | undefined;
     const isPlusUser = await checkIsPlusUser({
       isCopilotPlus: true,
     });
@@ -465,12 +473,19 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       );
 
       logInfo("Invoking LLM with all tool results");
-      fullAIResponse = await this.streamMultimodalResponse(
+      const streamResult = await this.streamMultimodalResponse(
         enhancedUserMessage,
         userMessage,
         abortController,
         trackAndUpdateAiMessage
       );
+      fullAIResponse = streamResult.content;
+
+      // Store truncation metadata for handleResponse
+      responseMetadata = {
+        wasTruncated: streamResult.wasTruncated,
+        tokenUsage: streamResult.tokenUsage ?? undefined,
+      };
     } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
@@ -508,14 +523,18 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       settings.enableInlineCitations
     );
 
-    return this.handleResponse(
+    await this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
       updateCurrentAiMessage,
-      sources
+      sources,
+      undefined,
+      responseMetadata
     );
+
+    return fullAIResponse;
   }
 
   private getSources(

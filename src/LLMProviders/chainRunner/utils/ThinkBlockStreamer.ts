@@ -1,13 +1,18 @@
+import { StreamingResult, TokenUsage } from "@/types/message";
 import { ModelAdapter } from "./modelAdapter";
+import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
  * that support thinking/reasoning modes (like Claude and Deepseek).
+ * Also detects truncation due to token limits across all providers.
  */
 export class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
   private fullResponse = "";
   private shouldTruncate = false;
+  private wasTruncated = false;
+  private tokenUsage: TokenUsage | null = null;
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
@@ -67,6 +72,18 @@ export class ThinkBlockStreamer {
       return;
     }
 
+    // Detect truncation using multi-provider detector
+    const truncationResult = detectTruncation(chunk);
+    if (truncationResult.wasTruncated) {
+      this.wasTruncated = true;
+    }
+
+    // Extract token usage if available
+    const usage = extractTokenUsage(chunk);
+    if (usage) {
+      this.tokenUsage = usage;
+    }
+
     let handledThinking = false;
 
     // Handle Claude 3.7 array-based content
@@ -113,12 +130,17 @@ export class ThinkBlockStreamer {
     return truncated;
   }
 
-  close() {
+  close(): StreamingResult {
     // Make sure to close any open think block at the end
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
       this.updateCurrentAiMessage(this.fullResponse);
     }
-    return this.fullResponse;
+
+    return {
+      content: this.fullResponse,
+      wasTruncated: this.wasTruncated,
+      tokenUsage: this.tokenUsage,
+    };
   }
 }
