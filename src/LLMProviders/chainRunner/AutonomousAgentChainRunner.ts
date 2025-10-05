@@ -406,7 +406,14 @@ ${params}
           if (!isBackgroundTool) {
             // Create tool calling message with structured marker
             const toolEmoji = getToolEmoji(toolCall.name);
-            const toolDisplayName = getToolDisplayName(toolCall.name);
+            let toolDisplayName = getToolDisplayName(toolCall.name);
+            if (toolCall.name === "readNote") {
+              const notePath =
+                typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath : null;
+              if (notePath && notePath.trim().length > 0) {
+                toolDisplayName = notePath.trim();
+              }
+            }
             const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
 
             // Generate unique ID for this tool call

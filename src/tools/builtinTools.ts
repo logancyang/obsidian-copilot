@@ -1,18 +1,18 @@
-import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
+import { getSettings } from "@/settings/model";
+import { Vault } from "obsidian";
+import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
+import { createGetFileTreeTool } from "./FileTreeTools";
+import { memoryTool } from "./memoryTools";
+import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import {
+  convertTimeBetweenTimezonesTool,
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  convertTimeBetweenTimezonesTool,
 } from "./TimeTools";
+import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
-import { writeToFileTool, replaceInFileTool } from "./ComposerTools";
-import { readNoteTool } from "./NoteTools";
-import { createGetFileTreeTool } from "./FileTreeTools";
-import { memoryTool } from "./memoryTools";
-import { getSettings } from "@/settings/model";
-import { Vault } from "obsidian";
 
 /**
  * Define all built-in tools with their metadata
@@ -189,11 +189,14 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
       description: "Read a specific note in sequential chunks using the vault chunking pipeline.",
       category: "file",
       requiresVault: true,
-      customPromptInstructions: `For readNote (targeted note reading):
-- Only call this tool when you already know the exact note path (for example, after localSearch). Do NOT use it to discover notes.
-- Provide a vault-relative <notePath> without a leading slash. Start with the first chunk by omitting <chunkIndex> or setting it to 0.
-- Review the returned chunk before deciding to read more. Only request the next chunk when the previous chunk does not answer the question.
-- Stop as soon as you have enough information. Never stream the entire note by default.
+      isAlwaysEnabled: true,
+      customPromptInstructions: `For readNote:
+- Use this tool whenever the user asks about the contents of the active note, context notes or any specific note whose path you know. The target note path is provided in the context—read it before answering.
+- The linked notes called out in the document body are only discoverable by reading the note. Call readNote on the active note first to surface the "linkedNotes" list before answering about them.
+- Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
+- Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
+- Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
+- Stop calling readNote as soon as you have the required information.
 
 Example (first chunk):
 <use_tool>
@@ -201,7 +204,7 @@ Example (first chunk):
 <notePath>Projects/launch-plan.md</notePath>
 </use_tool>
 
-Example (follow-up chunk):
+Example (next chunk):
 <use_tool>
 <name>readNote</name>
 <notePath>Projects/launch-plan.md</notePath>

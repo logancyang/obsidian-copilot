@@ -15,7 +15,8 @@ class MockTFile {
 
   constructor(path: string) {
     this.path = path;
-    this.basename = path.split("/").pop() || path;
+    const fileName = path.split("/").pop() || path;
+    this.basename = fileName.replace(/\.[^/.]+$/, "");
     this.stat = { mtime: Date.now() };
   }
 }
@@ -28,6 +29,8 @@ describe("readNoteTool", () => {
   let readNoteTool: SimpleTool<any, any>;
   let originalApp: any;
   let getAbstractFileByPathMock: jest.Mock;
+  let getMarkdownFilesMock: jest.Mock;
+  let getFirstLinkpathDestMock: jest.Mock;
 
   beforeEach(async () => {
     jest.resetModules();
@@ -35,12 +38,16 @@ describe("readNoteTool", () => {
 
     originalApp = global.app;
     getAbstractFileByPathMock = jest.fn();
+    getMarkdownFilesMock = jest.fn().mockReturnValue([]);
+    getFirstLinkpathDestMock = jest.fn().mockReturnValue(null);
     global.app = {
       vault: {
         getAbstractFileByPath: getAbstractFileByPathMock,
+        getMarkdownFiles: getMarkdownFilesMock,
       },
       metadataCache: {
         getFileCache: jest.fn(),
+        getFirstLinkpathDest: getFirstLinkpathDestMock,
       },
       workspace: {
         getLeavesOfType: jest.fn().mockReturnValue([]),
@@ -86,7 +93,7 @@ describe("readNoteTool", () => {
     const result = await readNoteTool.call({ notePath });
 
     expect(mockGetChunks).toHaveBeenCalledWith([notePath]);
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       notePath,
       noteTitle: file.basename,
       heading: "Intro",
@@ -97,6 +104,7 @@ describe("readNoteTool", () => {
       nextChunkIndex: 1,
       content: "First chunk",
       mtime: 100,
+      linkedNotes: undefined,
     });
   });
 
@@ -130,7 +138,7 @@ describe("readNoteTool", () => {
 
     const result = await readNoteTool.call({ notePath, chunkIndex: 1 });
 
-    expect(result).toEqual({
+    expect(result).toMatchObject({
       notePath,
       noteTitle: file.basename,
       heading: "Details",
@@ -141,6 +149,7 @@ describe("readNoteTool", () => {
       nextChunkIndex: null,
       content: "Second chunk",
       mtime: 200,
+      linkedNotes: undefined,
     });
   });
 
@@ -198,5 +207,139 @@ describe("readNoteTool", () => {
     });
     expect(getAbstractFileByPathMock).not.toHaveBeenCalled();
     expect(mockGetChunks).not.toHaveBeenCalled();
+  });
+
+  it("surfaces linked note candidates including duplicate basenames", async () => {
+    const notePath = "Notes/source.md";
+    const file = new MockTFile(notePath);
+    const candidatePrimary = new MockTFile("Projects/Project Plan.md");
+    const candidateDuplicate = new MockTFile("Archive/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(file);
+    getFirstLinkpathDestMock.mockImplementation((link: string) =>
+      link === "Project Plan" ? candidatePrimary : null
+    );
+    getMarkdownFilesMock.mockReturnValue([candidatePrimary, candidateDuplicate, file]);
+
+    mockGetChunks.mockResolvedValue([
+      {
+        id: `${notePath}#0`,
+        notePath,
+        chunkIndex: 0,
+        content: "Intro [[Project Plan]] details",
+        contentHash: "hash-0",
+        title: file.basename,
+        heading: "Intro",
+        mtime: 100,
+      },
+    ]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result.linkedNotes).toEqual([
+      {
+        linkText: "Project Plan",
+        displayText: "Project Plan",
+        section: undefined,
+        candidates: [
+          { path: candidatePrimary.path, title: candidatePrimary.basename },
+          { path: candidateDuplicate.path, title: candidateDuplicate.basename },
+        ],
+      },
+    ]);
+  });
+
+  it("captures alias and section metadata for wiki links", async () => {
+    const notePath = "Notes/source.md";
+    const file = new MockTFile(notePath);
+    const guideFile = new MockTFile("Docs/Guide.md");
+
+    getAbstractFileByPathMock.mockReturnValue(file);
+    getFirstLinkpathDestMock.mockImplementation((link: string) =>
+      link === "Docs/Guide" ? guideFile : null
+    );
+    getMarkdownFilesMock.mockReturnValue([guideFile, file]);
+
+    mockGetChunks.mockResolvedValue([
+      {
+        id: `${notePath}#0`,
+        notePath,
+        chunkIndex: 0,
+        content: "See [[Docs/Guide#Setup|Quick Start]] for steps.",
+        contentHash: "hash-0",
+        title: file.basename,
+        heading: "Intro",
+        mtime: 100,
+      },
+    ]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result.linkedNotes).toEqual([
+      {
+        linkText: "Docs/Guide",
+        displayText: "Quick Start",
+        section: "Setup",
+        candidates: [{ path: guideFile.path, title: guideFile.basename }],
+      },
+    ]);
+  });
+
+  it("resolves note paths without an explicit extension", async () => {
+    const rawPath = "Notes/extensionless";
+    const file = new MockTFile(`${rawPath}.md`);
+
+    getAbstractFileByPathMock.mockImplementation((path: string) => {
+      if (path === rawPath) {
+        return null;
+      }
+      if (path === `${rawPath}.md`) {
+        return file;
+      }
+      return null;
+    });
+
+    mockGetChunks.mockResolvedValue([
+      {
+        id: `${file.path}#0`,
+        notePath: file.path,
+        chunkIndex: 0,
+        content: "Content",
+        contentHash: "hash-0",
+        title: file.basename,
+        heading: "Heading",
+        mtime: 100,
+      },
+    ]);
+
+    const result = await readNoteTool.call({ notePath: rawPath });
+
+    expect(result.notePath).toBe(file.path);
+    expect(result.chunkIndex).toBe(0);
+    expect(mockGetChunks).toHaveBeenCalledWith([file.path]);
+  });
+
+  it("strips chunk headers from the returned content", async () => {
+    const notePath = "Notes/header.md";
+    const file = new MockTFile(notePath);
+    getAbstractFileByPathMock.mockReturnValue(file);
+
+    const header = `\n\nNOTE TITLE: [[${file.basename}]]\n\nNOTE BLOCK CONTENT:\n\n`;
+    mockGetChunks.mockResolvedValue([
+      {
+        id: `${notePath}#0`,
+        notePath,
+        chunkIndex: 0,
+        content: `${header}\nLine 1\nLine 2`,
+        contentHash: "hash-0",
+        title: file.basename,
+        heading: "",
+        mtime: 100,
+      },
+    ]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result.content).toBe("Line 1\nLine 2");
   });
 });

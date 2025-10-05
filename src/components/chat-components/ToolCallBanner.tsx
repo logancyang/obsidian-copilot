@@ -114,8 +114,10 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
           <div className="tw-flex tw-items-center tw-gap-2">
             <span className="tw-text-base">{emoji}</span>
             <span className="tw-font-medium">
-              {isExecuting ? "Calling" : "Called"} {displayName}
-              {isExecuting && "..."}
+              {toolName === "readNote"
+                ? `${isExecuting ? "Reading" : "Read"} ${displayName}`
+                : `${isExecuting ? "Calling" : "Called"} ${displayName}`}
+              {isExecuting && toolName !== "readNote" && "..."}
             </span>
             {isExecuting && confirmationMessage && (
               <span className="tw-text-xs tw-text-muted">• {confirmationMessage}...</span>

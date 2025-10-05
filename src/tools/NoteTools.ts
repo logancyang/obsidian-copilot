@@ -6,6 +6,19 @@ import { createTool } from "./SimpleTool";
 
 let chunkManagerInstance: ChunkManager | null = null;
 
+interface LinkedNoteCandidate {
+  path: string;
+  title: string;
+}
+
+interface LinkedNoteMetadata {
+  linkText: string;
+  displayText: string;
+  section?: string;
+  candidates: LinkedNoteCandidate[];
+  unresolved?: boolean;
+}
+
 /**
  * Lazily retrieve the shared ChunkManager instance.
  */
@@ -20,13 +33,28 @@ function getChunkManager(): ChunkManager {
  * Resolve the note path to a TFile if possible.
  */
 async function resolveNoteFile(notePath: string): Promise<TFile | null> {
-  const file = app.vault.getAbstractFileByPath(notePath);
+  const tryResolve = (path: string) => {
+    const maybeFile = app.vault.getAbstractFileByPath(path);
+    return maybeFile instanceof TFile ? maybeFile : null;
+  };
 
-  if (!file || !(file instanceof TFile)) {
-    return null;
+  const direct = tryResolve(notePath);
+  if (direct) {
+    return direct;
   }
 
-  return file;
+  const hasExtension = /\.[^/]+$/.test(notePath);
+  if (!hasExtension) {
+    const fallbackExtensions = [".md", ".canvas"]; // default Obsidian note types
+    for (const ext of fallbackExtensions) {
+      const resolved = tryResolve(`${notePath}${ext}`);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -39,6 +67,112 @@ async function loadOrderedChunks(notePath: string): Promise<Chunk[]> {
   return chunks
     .filter((chunk) => chunk.notePath === notePath)
     .sort((a, b) => a.chunkIndex - b.chunkIndex);
+}
+
+/**
+ * Build an index of markdown files keyed by basename for duplicate detection.
+ */
+function buildBasenameIndex(): Map<string, TFile[]> {
+  const index = new Map<string, TFile[]>();
+  const files = app.vault.getMarkdownFiles?.() ?? [];
+
+  for (const file of files) {
+    if (!(file instanceof TFile)) {
+      continue;
+    }
+    const list = index.get(file.basename) ?? [];
+    list.push(file);
+    index.set(file.basename, list);
+  }
+
+  return index;
+}
+
+/**
+ * Resolve a wiki-link target to one or more candidate note files.
+ */
+function resolveWikiLinkTargets(
+  rawTarget: string,
+  sourcePath: string,
+  basenameIndex: Map<string, TFile[]>
+): TFile[] {
+  const sanitized = rawTarget.trim();
+  if (!sanitized) {
+    return [];
+  }
+
+  const candidates = new Map<string, TFile>();
+
+  const firstResolved = app.metadataCache.getFirstLinkpathDest?.(sanitized, sourcePath);
+  if (firstResolved instanceof TFile) {
+    candidates.set(firstResolved.path, firstResolved);
+  }
+
+  const hasExtension = /\.[^./]+$/.test(sanitized);
+
+  if (!hasExtension) {
+    const basename = sanitized.split("/").pop() ?? sanitized;
+    const duplicates = basenameIndex.get(basename) ?? [];
+    for (const file of duplicates) {
+      candidates.set(file.path, file);
+    }
+  }
+
+  // Limit to 10 candidates to prevent overly large payloads
+  return Array.from(candidates.values()).slice(0, 10);
+}
+
+/**
+ * Extract linked note metadata from the chunk content.
+ */
+function extractLinkedNoteMetadata(chunk: Chunk, sourceFile: TFile): LinkedNoteMetadata[] {
+  const content = chunk.content;
+  if (!content) {
+    return [];
+  }
+
+  const linkPattern = /\[\[([^\]]+)\]\]/g;
+  const matches = new Map<string, LinkedNoteMetadata>();
+  let basenameIndex: Map<string, TFile[]> | null = null;
+
+  let match: RegExpExecArray | null;
+  while ((match = linkPattern.exec(content)) !== null) {
+    const inner = match[1]?.trim();
+    if (!inner) {
+      continue;
+    }
+
+    const [targetPart, displayPart] = inner.split("|");
+    const [targetWithoutSection, sectionPart] = targetPart.split("#");
+    const normalizedTarget = targetWithoutSection?.trim();
+    if (!normalizedTarget) {
+      continue;
+    }
+
+    const key = `${normalizedTarget}|${displayPart ?? ""}|${sectionPart ?? ""}`;
+    if (matches.has(key)) {
+      continue;
+    }
+
+    if (!basenameIndex) {
+      basenameIndex = buildBasenameIndex();
+    }
+
+    const candidateFiles = resolveWikiLinkTargets(normalizedTarget, sourceFile.path, basenameIndex);
+
+    matches.set(key, {
+      linkText: normalizedTarget,
+      displayText: displayPart?.trim() || normalizedTarget,
+      section: sectionPart?.trim() || undefined,
+      candidates: candidateFiles.map((file) => ({
+        path: file.path,
+        title: file.basename,
+      })),
+      unresolved: candidateFiles.length === 0 ? true : undefined,
+    });
+  }
+
+  return Array.from(matches.values());
 }
 
 const readNoteSchema = z.object({
@@ -82,20 +216,21 @@ const readNoteTool = createTool({
       };
     }
 
-    const chunks = await loadOrderedChunks(sanitizedPath);
+    const canonicalPath = file.path;
+    const chunks = await loadOrderedChunks(canonicalPath);
 
     if (chunks.length === 0) {
-      logWarn(`readNote: no chunks generated for ${sanitizedPath}`);
+      logWarn(`readNote: no chunks generated for ${canonicalPath}`);
       return {
-        notePath: sanitizedPath,
+        notePath: canonicalPath,
         status: "empty",
-        message: `No readable content was found in "${sanitizedPath}".`,
+        message: `No readable content was found in "${canonicalPath}".`,
       };
     }
 
     if (chunkIndex >= chunks.length) {
       return {
-        notePath: sanitizedPath,
+        notePath: canonicalPath,
         status: "out_of_range",
         message: `Chunk index ${chunkIndex} exceeds available chunks (last index ${chunks.length - 1}).`,
         totalChunks: chunks.length,
@@ -104,13 +239,22 @@ const readNoteTool = createTool({
 
     const chunk = chunks[chunkIndex];
     logInfo(
-      `readNote: returning chunk ${chunk.chunkIndex} of ${chunks.length} for ${sanitizedPath}`
+      `readNote: returning chunk ${chunk.chunkIndex} of ${chunks.length} for ${canonicalPath}`
     );
 
     const hasMore = chunk.chunkIndex < chunks.length - 1;
+    const linkedNotes = extractLinkedNoteMetadata(chunk, file);
+
+    const headerPrefix = `\n\nNOTE TITLE: [[${chunk.title}]]\n\nNOTE BLOCK CONTENT:\n\n`;
+    let cleanedContent = chunk.content;
+    if (cleanedContent.startsWith(headerPrefix)) {
+      cleanedContent = cleanedContent.slice(headerPrefix.length);
+    }
+    // Trim leading newlines introduced by header removal while preserving intentional spacing
+    cleanedContent = cleanedContent.replace(/^\n+/, "");
 
     return {
-      notePath: sanitizedPath,
+      notePath: canonicalPath,
       noteTitle: chunk.title,
       heading: chunk.heading,
       chunkId: chunk.id,
@@ -118,8 +262,9 @@ const readNoteTool = createTool({
       totalChunks: chunks.length,
       hasMore,
       nextChunkIndex: hasMore ? chunk.chunkIndex + 1 : null,
-      content: chunk.content,
+      content: cleanedContent,
       mtime: chunk.mtime,
+      linkedNotes: linkedNotes.length > 0 ? linkedNotes : undefined,
     };
   },
 });
