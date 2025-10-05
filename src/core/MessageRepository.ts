@@ -67,7 +67,11 @@ export class MessageRepository {
       return id;
     }
 
-    // Otherwise, use parameters
+    // Otherwise, use string parameters
+    if (processedText === undefined || sender === undefined) {
+      throw new Error("processedText and sender are required when using string-based addMessage");
+    }
+
     const displayText = messageOrDisplayText;
     const id = this.generateId();
     const timestamp = formatDateTime(new Date());
@@ -75,8 +79,8 @@ export class MessageRepository {
     const message: StoredMessage = {
       id,
       displayText,
-      processedText: processedText!,
-      sender: sender!,
+      processedText,
+      sender,
       timestamp,
       context,
       isVisible: true,
