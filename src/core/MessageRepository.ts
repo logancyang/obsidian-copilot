@@ -22,9 +22,11 @@ export class MessageRepository {
   }
 
   /**
-   * Add a new message
-   * For user messages: displayText is what they typed, processedText includes context
-   * For AI messages: both are the same
+   * Add a message from a ChatMessage object
+   */
+  addMessage(message: NewChatMessage): string;
+  /**
+   * Add a message with separate display and processed text
    */
   addMessage(
     displayText: string,
@@ -32,15 +34,49 @@ export class MessageRepository {
     sender: string,
     context?: MessageContext,
     content?: any[]
+  ): string;
+  addMessage(
+    messageOrDisplayText: NewChatMessage | string,
+    processedText?: string,
+    sender?: string,
+    context?: MessageContext,
+    content?: any[]
   ): string {
+    // If first parameter is a ChatMessage object
+    if (typeof messageOrDisplayText === "object") {
+      const message = messageOrDisplayText;
+      const id = message.id || this.generateId();
+      const timestamp = message.timestamp || formatDateTime(new Date());
+
+      const storedMessage: StoredMessage = {
+        id,
+        displayText: message.message,
+        processedText: message.originalMessage || message.message,
+        sender: message.sender,
+        timestamp,
+        context: message.context,
+        isVisible: message.isVisible !== false,
+        isErrorMessage: message.isErrorMessage,
+        sources: message.sources,
+        content: message.content,
+        responseMetadata: message.responseMetadata,
+      };
+
+      this.messages.push(storedMessage);
+      logInfo(`[MessageRepository] Added message with ID: ${id}`);
+      return id;
+    }
+
+    // Otherwise, use parameters
+    const displayText = messageOrDisplayText;
     const id = this.generateId();
     const timestamp = formatDateTime(new Date());
 
     const message: StoredMessage = {
       id,
       displayText,
-      processedText,
-      sender,
+      processedText: processedText!,
+      sender: sender!,
       timestamp,
       context,
       isVisible: true,
@@ -51,55 +87,6 @@ export class MessageRepository {
     this.messages.push(message);
     logInfo(`[MessageRepository] Added message with ID: ${id}`);
 
-    return id;
-  }
-
-  /**
-   * Add a display-only message (for AI responses)
-   * Both display and processed text are the same
-   */
-  addDisplayOnlyMessage(text: string, sender: string, id?: string): string {
-    if (id) {
-      const timestamp = formatDateTime(new Date());
-      const message: StoredMessage = {
-        id,
-        displayText: text,
-        processedText: text,
-        sender,
-        timestamp,
-        isVisible: true,
-        isErrorMessage: false,
-      };
-      this.messages.push(message);
-      logInfo(`[MessageRepository] Added display-only message with ID: ${id}`);
-      return id;
-    }
-    return this.addMessage(text, text, sender);
-  }
-
-  /**
-   * Add a full message object (for compatibility)
-   */
-  addFullMessage(message: NewChatMessage): string {
-    const id = message.id || this.generateId();
-    const timestamp = message.timestamp || formatDateTime(new Date());
-
-    const storedMessage: StoredMessage = {
-      id,
-      displayText: message.message,
-      processedText: message.originalMessage || message.message,
-      sender: message.sender,
-      timestamp,
-      context: message.context,
-      isVisible: message.isVisible !== false,
-      isErrorMessage: message.isErrorMessage,
-      sources: message.sources,
-      content: message.content,
-      responseMetadata: message.responseMetadata,
-    };
-
-    this.messages.push(storedMessage);
-    logInfo(`[MessageRepository] Added full message with ID: ${id}`);
     return id;
   }
 
