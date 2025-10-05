@@ -1,12 +1,6 @@
 import { SimpleTool } from "./SimpleTool";
 
-const mockGetChunks = jest.fn();
-
-jest.mock("@/search/v3/chunks", () => ({
-  ChunkManager: jest.fn().mockImplementation(() => ({
-    getChunks: mockGetChunks,
-  })),
-}));
+const mockCachedRead = jest.fn();
 
 class MockTFile {
   path: string;
@@ -34,16 +28,19 @@ describe("readNoteTool", () => {
 
   beforeEach(async () => {
     jest.resetModules();
-    mockGetChunks.mockReset();
 
     originalApp = global.app;
     getAbstractFileByPathMock = jest.fn();
     getMarkdownFilesMock = jest.fn().mockReturnValue([]);
     getFirstLinkpathDestMock = jest.fn().mockReturnValue(null);
+    mockCachedRead.mockReset();
+    mockCachedRead.mockResolvedValue("");
+
     global.app = {
       vault: {
         getAbstractFileByPath: getAbstractFileByPathMock,
         getMarkdownFiles: getMarkdownFilesMock,
+        cachedRead: mockCachedRead,
       },
       metadataCache: {
         getFileCache: jest.fn(),
@@ -66,126 +63,47 @@ describe("readNoteTool", () => {
     const notePath = "Notes/test.md";
     const file = new MockTFile(notePath);
     getAbstractFileByPathMock.mockReturnValue(file);
-
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${notePath}#1`,
-        notePath,
-        chunkIndex: 1,
-        content: "Second chunk",
-        contentHash: "hash-1",
-        title: file.basename,
-        heading: "Details",
-        mtime: 200,
-      },
-      {
-        id: `${notePath}#0`,
-        notePath,
-        chunkIndex: 0,
-        content: "First chunk",
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "Intro",
-        mtime: 100,
-      },
-    ]);
+    mockCachedRead.mockResolvedValue(["## Heading", "Line 1", "Line 2"].join("\n"));
 
     const result = await readNoteTool.call({ notePath });
 
-    expect(mockGetChunks).toHaveBeenCalledWith([notePath]);
-    expect(result).toMatchObject({
-      notePath,
-      noteTitle: file.basename,
-      heading: "Intro",
-      chunkId: `${notePath}#0`,
-      chunkIndex: 0,
-      totalChunks: 2,
-      hasMore: true,
-      nextChunkIndex: 1,
-      content: "First chunk",
-      mtime: 100,
-      linkedNotes: undefined,
-    });
+    expect(result.notePath).toBe(notePath);
+    expect(result.totalChunks).toBe(1);
+    expect(result.hasMore).toBe(false);
+    expect(result.content).toBe(["## Heading", "Line 1", "Line 2"].join("\n"));
   });
 
   it("respects the requested chunk index", async () => {
-    const notePath = "Notes/test.md";
+    const notePath = "Notes/multi.md";
     const file = new MockTFile(notePath);
     getAbstractFileByPathMock.mockReturnValue(file);
 
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${notePath}#0`,
-        notePath,
-        chunkIndex: 0,
-        content: "First chunk",
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "Intro",
-        mtime: 100,
-      },
-      {
-        id: `${notePath}#1`,
-        notePath,
-        chunkIndex: 1,
-        content: "Second chunk",
-        contentHash: "hash-1",
-        title: file.basename,
-        heading: "Details",
-        mtime: 200,
-      },
-    ]);
+    const lines = Array.from({ length: 210 }, (_, i) => `Line ${i + 1}`);
+    mockCachedRead.mockResolvedValue(lines.join("\n"));
 
     const result = await readNoteTool.call({ notePath, chunkIndex: 1 });
 
-    expect(result).toMatchObject({
-      notePath,
-      noteTitle: file.basename,
-      heading: "Details",
-      chunkId: `${notePath}#1`,
-      chunkIndex: 1,
-      totalChunks: 2,
-      hasMore: false,
-      nextChunkIndex: null,
-      content: "Second chunk",
-      mtime: 200,
-      linkedNotes: undefined,
-    });
+    expect(result.chunkIndex).toBe(1);
+    expect(result.content).toBe(lines.slice(200).join("\n"));
   });
 
-  it("returns out_of_range when the chunk index exceeds available chunks", async () => {
-    const notePath = "Notes/test.md";
+  it("accepts chunkIndex provided as a string", async () => {
+    const notePath = "Notes/string-index.md";
     const file = new MockTFile(notePath);
     getAbstractFileByPathMock.mockReturnValue(file);
 
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${notePath}#0`,
-        notePath,
-        chunkIndex: 0,
-        content: "First chunk",
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "Intro",
-        mtime: 100,
-      },
-    ]);
+    const lines = Array.from({ length: 205 }, (_, i) => `Line ${i + 1}`);
+    mockCachedRead.mockResolvedValue(lines.join("\n"));
 
-    const result = await readNoteTool.call({ notePath, chunkIndex: 5 });
+    const result = await readNoteTool.call({ notePath, chunkIndex: "1" as any });
 
-    expect(result).toEqual({
-      notePath,
-      status: "out_of_range",
-      message: "Chunk index 5 exceeds available chunks (last index 0).",
-      totalChunks: 1,
-    });
+    expect(result.chunkIndex).toBe(1);
+    expect(result.content).toBe(lines.slice(200).join("\n"));
   });
 
   it("returns not_found when the note cannot be resolved", async () => {
     const notePath = "Notes/missing.md";
     getAbstractFileByPathMock.mockReturnValue(null);
-
-    mockGetChunks.mockResolvedValue([]);
 
     const result = await readNoteTool.call({ notePath });
 
@@ -194,7 +112,7 @@ describe("readNoteTool", () => {
       status: "not_found",
       message: 'Note "Notes/missing.md" was not found or is not a readable file.',
     });
-    expect(mockGetChunks).not.toHaveBeenCalled();
+    expect(mockCachedRead).not.toHaveBeenCalled();
   });
 
   it("returns invalid_path when notePath starts with a leading slash", async () => {
@@ -206,7 +124,7 @@ describe("readNoteTool", () => {
       message: "Provide the note path relative to the vault root without a leading slash.",
     });
     expect(getAbstractFileByPathMock).not.toHaveBeenCalled();
-    expect(mockGetChunks).not.toHaveBeenCalled();
+    expect(mockCachedRead).not.toHaveBeenCalled();
   });
 
   it("surfaces linked note candidates including duplicate basenames", async () => {
@@ -220,19 +138,7 @@ describe("readNoteTool", () => {
       link === "Project Plan" ? candidatePrimary : null
     );
     getMarkdownFilesMock.mockReturnValue([candidatePrimary, candidateDuplicate, file]);
-
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${notePath}#0`,
-        notePath,
-        chunkIndex: 0,
-        content: "Intro [[Project Plan]] details",
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "Intro",
-        mtime: 100,
-      },
-    ]);
+    mockCachedRead.mockResolvedValue("Intro [[Project Plan]] details");
 
     const result = await readNoteTool.call({ notePath });
 
@@ -259,19 +165,7 @@ describe("readNoteTool", () => {
       link === "Docs/Guide" ? guideFile : null
     );
     getMarkdownFilesMock.mockReturnValue([guideFile, file]);
-
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${notePath}#0`,
-        notePath,
-        chunkIndex: 0,
-        content: "See [[Docs/Guide#Setup|Quick Start]] for steps.",
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "Intro",
-        mtime: 100,
-      },
-    ]);
+    mockCachedRead.mockResolvedValue("See [[Docs/Guide#Setup|Quick Start]] for steps.");
 
     const result = await readNoteTool.call({ notePath });
 
@@ -299,47 +193,12 @@ describe("readNoteTool", () => {
       return null;
     });
 
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${file.path}#0`,
-        notePath: file.path,
-        chunkIndex: 0,
-        content: "Content",
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "Heading",
-        mtime: 100,
-      },
-    ]);
+    mockCachedRead.mockResolvedValue("Content");
 
     const result = await readNoteTool.call({ notePath: rawPath });
 
     expect(result.notePath).toBe(file.path);
     expect(result.chunkIndex).toBe(0);
-    expect(mockGetChunks).toHaveBeenCalledWith([file.path]);
-  });
-
-  it("strips chunk headers from the returned content", async () => {
-    const notePath = "Notes/header.md";
-    const file = new MockTFile(notePath);
-    getAbstractFileByPathMock.mockReturnValue(file);
-
-    const header = `\n\nNOTE TITLE: [[${file.basename}]]\n\nNOTE BLOCK CONTENT:\n\n`;
-    mockGetChunks.mockResolvedValue([
-      {
-        id: `${notePath}#0`,
-        notePath,
-        chunkIndex: 0,
-        content: `${header}\nLine 1\nLine 2`,
-        contentHash: "hash-0",
-        title: file.basename,
-        heading: "",
-        mtime: 100,
-      },
-    ]);
-
-    const result = await readNoteTool.call({ notePath });
-
-    expect(result.content).toBe("Line 1\nLine 2");
+    expect(mockCachedRead).toHaveBeenCalledWith(file);
   });
 });

@@ -191,8 +191,8 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
       requiresVault: true,
       isAlwaysEnabled: true,
       customPromptInstructions: `For readNote:
-- Decide based on the user's request: only call this tool when the question requires reading note content. If the question is unrelated to note contents, you can skip the tool.
-- When the user references the active note or a note shown in <note_context>, read its <path> value from that block and use it as <notePath>.
+- Decide based on the user's request: only call this tool when the question requires reading note content.
+- If the user is asking about a note that is already mentioned or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Skip the tool when a note is irrelevant.
 - If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
 - Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
 - Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
