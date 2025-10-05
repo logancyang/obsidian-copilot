@@ -8,6 +8,7 @@ import {
 } from "./TimeTools";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
 import { writeToFileTool, replaceInFileTool } from "./ComposerTools";
+import { readNoteTool } from "./NoteTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { memoryTool } from "./memoryTools";
 import { getSettings } from "@/settings/model";
@@ -180,6 +181,34 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
   },
 
   // File tools
+  {
+    tool: readNoteTool,
+    metadata: {
+      id: "readNote",
+      displayName: "Read Note",
+      description: "Read a specific note in sequential chunks using the vault chunking pipeline.",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For readNote (targeted note reading):
+- Only call this tool when you already know the exact note path (for example, after localSearch). Do NOT use it to discover notes.
+- Provide a vault-relative <notePath> without a leading slash. Start with the first chunk by omitting <chunkIndex> or setting it to 0.
+- Review the returned chunk before deciding to read more. Only request the next chunk when the previous chunk does not answer the question.
+- Stop as soon as you have enough information. Never stream the entire note by default.
+
+Example (first chunk):
+<use_tool>
+<name>readNote</name>
+<notePath>Projects/launch-plan.md</notePath>
+</use_tool>
+
+Example (follow-up chunk):
+<use_tool>
+<name>readNote</name>
+<notePath>Projects/launch-plan.md</notePath>
+<chunkIndex>1</chunkIndex>
+</use_tool>`,
+    },
+  },
   {
     tool: writeToFileTool,
     metadata: {

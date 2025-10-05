@@ -781,6 +781,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autonomousAgentMaxIterations: 4,
   autonomousAgentEnabledToolIds: [
     "localSearch",
+    "readNote",
     "webSearch",
     "pomodoro",
     "youtubeTranscription",
