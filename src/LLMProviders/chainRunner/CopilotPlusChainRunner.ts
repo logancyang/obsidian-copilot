@@ -341,7 +341,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const chatStream = await withSuppressedTokenWarnings(() =>
       this.chainManager.chatModelManager.getChatModel().stream(messages, {
         signal: abortController.signal,
-      } as any)
+      })
     );
 
     for await (const chunk of chatStream) {
