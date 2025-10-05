@@ -1,4 +1,5 @@
 import {
+  appendInlineCitationReminder,
   buildLocalSearchInnerContent,
   ensureCiCOrderingWithQuestion,
   renderCiCMessage,
@@ -46,6 +47,35 @@ describe("cicPromptUtils", () => {
 
     it("returns the original question when context is blank", () => {
       expect(renderCiCMessage("  \n  ", "What?", false)).toBe("What?");
+    });
+  });
+
+  describe("appendInlineCitationReminder", () => {
+    it("appends reminder when enabled and question has content", () => {
+      const result = appendInlineCitationReminder("Summarize my notes.", true);
+
+      expect(result).toBe(
+        "Summarize my notes.\n\nHave inline citations according to the guidance."
+      );
+    });
+
+    it("returns original question when reminder disabled", () => {
+      const result = appendInlineCitationReminder("Summarize my notes.", false);
+
+      expect(result).toBe("Summarize my notes.");
+    });
+
+    it("avoids duplicating reminder when already present", () => {
+      const question = "Summarize. Have inline citations according to the guidance.";
+      const result = appendInlineCitationReminder(question, true);
+
+      expect(result).toBe("Summarize. Have inline citations according to the guidance.");
+    });
+
+    it("returns reminder alone when question is blank", () => {
+      const result = appendInlineCitationReminder("   ", true);
+
+      expect(result).toBe("Have inline citations according to the guidance.");
     });
   });
 

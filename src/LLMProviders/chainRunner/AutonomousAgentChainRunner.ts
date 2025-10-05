@@ -34,7 +34,10 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
-import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
+import {
+  appendInlineCitationReminder,
+  ensureCiCOrderingWithQuestion,
+} from "./utils/cicPromptUtils";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { PromptDebugReport } from "./utils/toolPromptDebugger";
@@ -153,7 +156,12 @@ ${params}
     localSearchPayload: string,
     originalPrompt: string
   ): string {
-    return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
+    const settings = getSettings();
+    const promptWithReminder = appendInlineCitationReminder(
+      originalPrompt,
+      Boolean(settings?.enableInlineCitations)
+    );
+    return ensureCiCOrderingWithQuestion(localSearchPayload, promptWithReminder);
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {
