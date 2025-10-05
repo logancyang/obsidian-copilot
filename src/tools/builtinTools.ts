@@ -191,8 +191,9 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
       requiresVault: true,
       isAlwaysEnabled: true,
       customPromptInstructions: `For readNote:
-- Use this tool whenever the user asks about the contents of the active note, context notes or any specific note whose path you know. The target note path is provided in the context—read it before answering.
-- The linked notes called out in the document body are only discoverable by reading the note. Call readNote on the active note first to surface the "linkedNotes" list before answering about them.
+- Decide based on the user's request: only call this tool when the question requires reading note content. If the question is unrelated to note contents, you can skip the tool.
+- When the user references the active note or a note shown in <note_context>, read its <path> value from that block and use it as <notePath>.
+- If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
 - Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
 - Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
 - Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
