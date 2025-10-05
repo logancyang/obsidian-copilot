@@ -6,7 +6,7 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
-import { ChatMessage } from "@/types/message";
+import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
@@ -178,6 +178,7 @@ ${params}
     const collectedSources: { title: string; path: string; score: number; explanation?: any }[] =
       []; // Collect sources from localSearch
     this.llmFormattedMessages = []; // Reset LLM messages for this run
+    let responseMetadata: ResponseMetadata | undefined;
     const isPlusUser = await checkIsPlusUser({
       isAutonomousAgent: true,
     });
@@ -329,9 +330,9 @@ ${params}
 
         // Store truncation metadata if response was truncated
         if (response.wasTruncated) {
-          (this as any)._responseMetadata = {
+          responseMetadata = {
             wasTruncated: response.wasTruncated,
-            tokenUsage: response.tokenUsage,
+            tokenUsage: response.tokenUsage ?? undefined,
           };
         }
 
@@ -615,10 +616,6 @@ ${params}
     // Keep llmFormattedOutput encoded for memory storage; no decoded variant needed
     // Readable log removed to reduce verbosity
 
-    // Get response metadata if available
-    const responseMetadata = (this as any)._responseMetadata;
-    delete (this as any)._responseMetadata;
-
     await this.handleResponse(
       fullAIResponse,
       userMessage,
@@ -638,7 +635,7 @@ ${params}
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     adapter: ModelAdapter
-  ): Promise<{ content: string; wasTruncated: boolean; tokenUsage: any }> {
+  ): Promise<StreamingResult> {
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter);
 
     const maxRetries = 2;

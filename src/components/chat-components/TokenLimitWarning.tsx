@@ -10,18 +10,13 @@ import React from "react";
 interface TokenLimitWarningProps {
   message: ChatMessage;
   app: App;
-  inline?: boolean;
 }
 
 /**
  * Warning message component displayed when AI response is truncated due to token limits.
  * Shows a clear message and provides a button to open model settings.
  */
-export const TokenLimitWarning: React.FC<TokenLimitWarningProps> = ({
-  message,
-  app,
-  inline = false,
-}) => {
+export const TokenLimitWarning: React.FC<TokenLimitWarningProps> = ({ message, app }) => {
   const handleOpenSettings = () => {
     const settings = getSettings();
     const currentModelKey = getModelKey();
@@ -46,11 +41,7 @@ export const TokenLimitWarning: React.FC<TokenLimitWarningProps> = ({
   };
 
   return (
-    <div
-      className={`tw-rounded-md tw-border tw-border-border tw-bg-callout-warning/20 tw-p-4 ${
-        inline ? "tw-mt-3" : "tw-my-4"
-      }`}
-    >
+    <div className="tw-mt-3 tw-rounded-md tw-border tw-border-border tw-bg-callout-warning/20 tw-p-4">
       <div className="tw-flex tw-items-start tw-gap-3">
         <AlertTriangle className="tw-size-5 tw-shrink-0 tw-text-warning" />
         <div className="tw-flex-1">

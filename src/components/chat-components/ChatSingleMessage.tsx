@@ -579,7 +579,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           <div className="message-content">{renderMessageContent()}</div>
 
           {message.responseMetadata?.wasTruncated && message.sender !== USER_SENDER && (
-            <TokenLimitWarning message={message} app={app} inline={true} />
+            <TokenLimitWarning message={message} app={app} />
           )}
 
           {!isStreaming && (

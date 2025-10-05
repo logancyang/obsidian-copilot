@@ -33,6 +33,15 @@ export interface MessageContext {
 }
 
 /**
+ * Token usage statistics from LLM providers
+ */
+export interface TokenUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+/**
  * Response metadata from LLM providers
  */
 export interface ResponseMetadata {
@@ -40,11 +49,22 @@ export interface ResponseMetadata {
   wasTruncated?: boolean;
 
   /** Token usage statistics */
-  tokenUsage?: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  };
+  tokenUsage?: TokenUsage;
+}
+
+/**
+ * Streaming response result from chain runners
+ * Similar to ResponseMetadata but with required fields and content
+ */
+export interface StreamingResult {
+  /** The streamed content */
+  content: string;
+
+  /** Whether the response was truncated (required for streaming) */
+  wasTruncated: boolean;
+
+  /** Token usage statistics (may be null if not yet available) */
+  tokenUsage: TokenUsage | null;
 }
 
 /**

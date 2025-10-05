@@ -19,7 +19,7 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { ChatMessage } from "@/types/message";
+import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { IntentAnalyzer } from "../intentAnalyzer";
@@ -283,7 +283,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void
-  ): Promise<{ content: string; wasTruncated: boolean; tokenUsage: any }> {
+  ): Promise<StreamingResult> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -358,14 +358,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
     const result = thinkStreamer.close();
 
-    // Log token usage and show warning if truncated
-    if (result.tokenUsage) {
-      logInfo("CopilotPlus token usage:", result.tokenUsage);
-    }
-    if (result.wasTruncated) {
-      logWarn("CopilotPlus response was truncated due to token limit", result.tokenUsage);
-    }
-
     return {
       content: result.content,
       wasTruncated: result.wasTruncated,
@@ -389,6 +381,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
     let currentPartialResponse = "";
+    let responseMetadata: ResponseMetadata | undefined;
     const isPlusUser = await checkIsPlusUser({
       isCopilotPlus: true,
     });
@@ -489,11 +482,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       fullAIResponse = streamResult.content;
 
       // Store truncation metadata for handleResponse
-      const responseMetadata = {
+      responseMetadata = {
         wasTruncated: streamResult.wasTruncated,
-        tokenUsage: streamResult.tokenUsage,
+        tokenUsage: streamResult.tokenUsage ?? undefined,
       };
-      (this as any)._responseMetadata = responseMetadata;
     } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
@@ -530,10 +522,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       fallbackSources,
       settings.enableInlineCitations
     );
-
-    // Get response metadata if available
-    const responseMetadata = (this as any)._responseMetadata;
-    delete (this as any)._responseMetadata;
 
     await this.handleResponse(
       fullAIResponse,

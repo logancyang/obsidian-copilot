@@ -1,15 +1,6 @@
+import { StreamingResult, TokenUsage } from "@/types/message";
 import { ModelAdapter } from "./modelAdapter";
 import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
-
-export interface StreamingResult {
-  content: string;
-  wasTruncated: boolean;
-  tokenUsage: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  } | null;
-}
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
@@ -21,11 +12,7 @@ export class ThinkBlockStreamer {
   private fullResponse = "";
   private shouldTruncate = false;
   private wasTruncated = false;
-  private tokenUsage: {
-    inputTokens?: number;
-    outputTokens?: number;
-    totalTokens?: number;
-  } | null = null;
+  private tokenUsage: TokenUsage | null = null;
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
