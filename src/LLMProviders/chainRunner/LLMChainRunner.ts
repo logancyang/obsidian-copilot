@@ -69,11 +69,9 @@ export class LLMChainRunner extends BaseChainRunner {
       logInfo("Final Request to AI:\n", messages);
 
       // Stream with abort signal
-      // Enable usage metadata for OpenAI models (stream_options may not be typed in all LangChain versions)
       const chatStream = await withSuppressedTokenWarnings(() =>
         this.chainManager.chatModelManager.getChatModel().stream(messages, {
           signal: abortController.signal,
-          stream_options: { include_usage: true },
         } as any)
       );
 

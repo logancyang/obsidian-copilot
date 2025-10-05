@@ -646,11 +646,9 @@ ${params}
 
     while (retryCount <= maxRetries) {
       try {
-        // Enable usage metadata for OpenAI models (stream_options may not be typed in all LangChain versions)
         const chatStream = await withSuppressedTokenWarnings(() =>
           this.chainManager.chatModelManager.getChatModel().stream(messages, {
             signal: abortController.signal,
-            stream_options: { include_usage: true },
           } as any)
         );
 
@@ -662,14 +660,6 @@ ${params}
         }
 
         const result = streamer.close();
-
-        // Log token usage and show warning if truncated
-        if (result.tokenUsage) {
-          logInfo("AutonomousAgent token usage:", result.tokenUsage);
-        }
-        if (result.wasTruncated) {
-          logWarn("AutonomousAgent response was truncated due to token limit", result.tokenUsage);
-        }
 
         return {
           content: result.content,
