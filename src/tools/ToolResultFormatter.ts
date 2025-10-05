@@ -37,6 +37,8 @@ export class ToolResultFormatter {
           return this.formatWriteToFile(parsedResult);
         case "replaceInFile":
           return this.formatReplaceInFile(parsedResult);
+        case "readNote":
+          return this.formatReadNote(parsedResult);
         default:
           // For all other tools, return the raw result
           return result;
@@ -458,5 +460,64 @@ export class ToolResultFormatter {
 
     // Return message if available, otherwise the raw result
     return typeof result === "object" && result.message ? result.message : String(status);
+  }
+
+  private static formatReadNote(result: any): string {
+    const data =
+      typeof result === "object" && result !== null
+        ? result
+        : (() => {
+            try {
+              return JSON.parse(String(result));
+            } catch {
+              return null;
+            }
+          })();
+
+    if (!data || typeof data !== "object") {
+      return typeof result === "string" ? result : JSON.stringify(result, null, 2);
+    }
+
+    const notePath = data.notePath ?? "";
+    const title = data.noteTitle ?? notePath ?? "Note excerpt";
+    const chunkIndex = typeof data.chunkIndex === "number" ? data.chunkIndex : 0;
+    const totalChunks = typeof data.totalChunks === "number" ? data.totalChunks : undefined;
+    const heading =
+      typeof data.heading === "string" && data.heading.trim().length > 0 ? data.heading.trim() : "";
+    const hasMore = Boolean(data.hasMore);
+    const nextChunk = typeof data.nextChunkIndex === "number" ? data.nextChunkIndex : null;
+    const content = typeof data.content === "string" ? data.content.trim() : "";
+
+    const lines: string[] = [];
+    lines.push(`📄 ${title}`);
+    if (notePath) {
+      lines.push(`   Path: ${notePath}`);
+    }
+    const chunkLabel = totalChunks
+      ? `Chunk ${chunkIndex + 1} of ${totalChunks}`
+      : `Chunk ${chunkIndex + 1}`;
+    lines.push(`   ${chunkLabel}${hasMore ? " · more available" : ""}`);
+    if (nextChunk !== null) {
+      lines.push(`   Next chunk index: ${nextChunk}`);
+    }
+    if (heading) {
+      lines.push(`   Heading: ${heading}`);
+    }
+
+    lines.push("");
+
+    if (content) {
+      const MAX_PREVIEW = 800;
+      const preview = content.length > MAX_PREVIEW ? `${content.slice(0, MAX_PREVIEW)}…` : content;
+      lines.push(preview);
+      if (content.length > MAX_PREVIEW) {
+        lines.push("");
+        lines.push("… (truncated for display)");
+      }
+    } else {
+      lines.push("(This chunk is empty.)");
+    }
+
+    return lines.join("\n");
   }
 }

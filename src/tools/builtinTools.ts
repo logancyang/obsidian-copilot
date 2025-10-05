@@ -1,17 +1,18 @@
-import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
+import { getSettings } from "@/settings/model";
+import { Vault } from "obsidian";
+import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
+import { createGetFileTreeTool } from "./FileTreeTools";
+import { memoryTool } from "./memoryTools";
+import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import {
+  convertTimeBetweenTimezonesTool,
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  convertTimeBetweenTimezonesTool,
 } from "./TimeTools";
+import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
-import { writeToFileTool, replaceInFileTool } from "./ComposerTools";
-import { createGetFileTreeTool } from "./FileTreeTools";
-import { memoryTool } from "./memoryTools";
-import { getSettings } from "@/settings/model";
-import { Vault } from "obsidian";
 
 /**
  * Define all built-in tools with their metadata
@@ -180,6 +181,38 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
   },
 
   // File tools
+  {
+    tool: readNoteTool,
+    metadata: {
+      id: "readNote",
+      displayName: "Read Note",
+      description: "Read a specific note in sequential chunks using the vault chunking pipeline.",
+      category: "file",
+      requiresVault: true,
+      isAlwaysEnabled: true,
+      customPromptInstructions: `For readNote:
+- Decide based on the user's request: only call this tool when the question requires reading note content.
+- If the user is asking about a note that is already mentioned or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Skip the tool when a note is irrelevant.
+- If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
+- Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
+- Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
+- Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
+- Stop calling readNote as soon as you have the required information.
+
+Example (first chunk):
+<use_tool>
+<name>readNote</name>
+<notePath>Projects/launch-plan.md</notePath>
+</use_tool>
+
+Example (next chunk):
+<use_tool>
+<name>readNote</name>
+<notePath>Projects/launch-plan.md</notePath>
+<chunkIndex>1</chunkIndex>
+</use_tool>`,
+    },
+  },
   {
     tool: writeToFileTool,
     metadata: {

@@ -29,6 +29,32 @@ export function wrapLocalSearchPayload(innerContent: string, timeExpression: str
 }
 
 /**
+ * Append an inline citation reminder to the user's question when enabled.
+ *
+ * @param question - The original user question.
+ * @param shouldRemind - Whether inline citations are enabled and the reminder should be added.
+ * @returns The question with the reminder appended when required.
+ */
+export function appendInlineCitationReminder(question: string, shouldRemind: boolean): string {
+  if (!shouldRemind) {
+    return question;
+  }
+
+  const reminder = "Have inline citations according to the guidance.";
+  const trimmedQuestion = question.trimEnd();
+
+  if (!trimmedQuestion) {
+    return reminder;
+  }
+
+  if (trimmedQuestion.toLowerCase().includes(reminder.toLowerCase())) {
+    return trimmedQuestion;
+  }
+
+  return `${trimmedQuestion}\n\n${reminder}`;
+}
+
+/**
  * Produces a CiC-aligned prompt by placing context first and the user question last.
  * @param contextSection Prepared instruction/context block.
  * @param userQuestion Original user message.

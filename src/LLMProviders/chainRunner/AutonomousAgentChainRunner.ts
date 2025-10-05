@@ -34,7 +34,10 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
-import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
+import {
+  appendInlineCitationReminder,
+  ensureCiCOrderingWithQuestion,
+} from "./utils/cicPromptUtils";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { PromptDebugReport } from "./utils/toolPromptDebugger";
@@ -153,7 +156,12 @@ ${params}
     localSearchPayload: string,
     originalPrompt: string
   ): string {
-    return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
+    const settings = getSettings();
+    const promptWithReminder = appendInlineCitationReminder(
+      originalPrompt,
+      Boolean(settings?.enableInlineCitations)
+    );
+    return ensureCiCOrderingWithQuestion(localSearchPayload, promptWithReminder);
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {
@@ -406,7 +414,14 @@ ${params}
           if (!isBackgroundTool) {
             // Create tool calling message with structured marker
             const toolEmoji = getToolEmoji(toolCall.name);
-            const toolDisplayName = getToolDisplayName(toolCall.name);
+            let toolDisplayName = getToolDisplayName(toolCall.name);
+            if (toolCall.name === "readNote") {
+              const notePath =
+                typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath : null;
+              if (notePath && notePath.trim().length > 0) {
+                toolDisplayName = notePath.trim();
+              }
+            }
             const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
 
             // Generate unique ID for this tool call

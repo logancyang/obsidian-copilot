@@ -172,6 +172,7 @@ export function getToolEmoji(toolName: string): string {
     indexTool: "📚",
     writeToFile: "✏️",
     replaceInFile: "🔄",
+    readNote: "🔍",
   };
 
   return emojiMap[toolName] || "🔧";
