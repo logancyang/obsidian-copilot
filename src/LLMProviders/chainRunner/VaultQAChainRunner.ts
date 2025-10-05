@@ -173,7 +173,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
     const responseMetadata = {
       wasTruncated: result.wasTruncated,
-      tokenUsage: result.tokenUsage || undefined,
+      tokenUsage: result.tokenUsage ?? undefined,
     };
 
     // Only skip saving if it's a new chat (clearing everything)
