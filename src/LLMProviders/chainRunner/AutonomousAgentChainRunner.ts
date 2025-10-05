@@ -327,13 +327,23 @@ ${params}
           adapter
         );
 
-        if (!response) break;
+        // Store truncation metadata if response was truncated
+        if (response.wasTruncated) {
+          (this as any)._responseMetadata = {
+            wasTruncated: response.wasTruncated,
+            tokenUsage: response.tokenUsage,
+          };
+        }
+
+        const responseContent = response.content;
+
+        if (!responseContent) break;
 
         // Parse tool calls from the response
-        const toolCalls = parseXMLToolCalls(response);
+        const toolCalls = parseXMLToolCalls(responseContent);
 
         // Use model adapter to detect and handle premature responses
-        const prematureResponseResult = adapter.detectPrematureResponse?.(response);
+        const prematureResponseResult = adapter.detectPrematureResponse?.(responseContent);
         if (prematureResponseResult?.hasPremature && iteration === 1) {
           if (prematureResponseResult.type === "before") {
             logWarn("⚠️  Model provided premature response BEFORE tool calls!");
@@ -347,7 +357,7 @@ ${params}
         if (toolCalls.length === 0) {
           // No tool calls, this is the final response
           // Strip any tool call XML from final response but preserve think blocks
-          const cleanedResponse = stripToolCallXML(response);
+          const cleanedResponse = stripToolCallXML(responseContent);
 
           // Build full response from history (which includes tool call markers) and final response
           const allParts = [...iterationHistory];
@@ -356,21 +366,21 @@ ${params}
           }
           fullAIResponse = allParts.join("\n\n");
 
-          const safeAssistantMessage = ensureEncodedToolCallMarkerResults(response);
+          const safeAssistantMessage = ensureEncodedToolCallMarkerResults(responseContent);
           conversationMessages.push({
             role: "assistant",
             content: safeAssistantMessage,
           });
 
           // Add final response to LLM messages
-          this.llmFormattedMessages.push(response);
+          this.llmFormattedMessages.push(responseContent);
           break;
         }
 
         // Use model adapter to sanitize response if needed
-        let sanitizedResponse = response;
+        let sanitizedResponse = responseContent;
         if (adapter.sanitizeResponse && prematureResponseResult?.hasPremature) {
-          sanitizedResponse = adapter.sanitizeResponse(response, iteration);
+          sanitizedResponse = adapter.sanitizeResponse(responseContent, iteration);
         }
 
         // Store this iteration's response (AI reasoning) with tool indicators and think blocks preserved
@@ -508,7 +518,7 @@ ${params}
 
         // Track LLM-formatted messages for memory
         // Add the assistant's response with tool calls
-        this.llmFormattedMessages.push(response);
+        this.llmFormattedMessages.push(responseContent);
 
         // Add tool results in LLM format (truncated for memory)
         if (toolResults.length > 0) {
@@ -520,7 +530,7 @@ ${params}
 
         // Add AI response to conversation for next iteration
         // Ensure any tool markers have encoded results before storing in conversation
-        const safeAssistantContent = ensureEncodedToolCallMarkerResults(response);
+        const safeAssistantContent = ensureEncodedToolCallMarkerResults(sanitizedResponse);
         conversationMessages.push({
           role: "assistant",
           content: safeAssistantContent,
@@ -605,15 +615,22 @@ ${params}
     // Keep llmFormattedOutput encoded for memory storage; no decoded variant needed
     // Readable log removed to reduce verbosity
 
-    return this.handleResponse(
+    // Get response metadata if available
+    const responseMetadata = (this as any)._responseMetadata;
+    delete (this as any)._responseMetadata;
+
+    await this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
       updateCurrentAiMessage,
       uniqueSources.length > 0 ? uniqueSources : undefined,
-      llmFormattedOutput
+      llmFormattedOutput,
+      responseMetadata
     );
+
+    return fullAIResponse;
   }
 
   private async streamResponse(
@@ -621,7 +638,7 @@ ${params}
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     adapter: ModelAdapter
-  ): Promise<string> {
+  ): Promise<{ content: string; wasTruncated: boolean; tokenUsage: any }> {
     const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter);
 
     const maxRetries = 2;
@@ -629,10 +646,12 @@ ${params}
 
     while (retryCount <= maxRetries) {
       try {
+        // Enable usage metadata for OpenAI models (stream_options may not be typed in all LangChain versions)
         const chatStream = await withSuppressedTokenWarnings(() =>
           this.chainManager.chatModelManager.getChatModel().stream(messages, {
             signal: abortController.signal,
-          })
+            stream_options: { include_usage: true },
+          } as any)
         );
 
         for await (const chunk of chatStream) {
@@ -642,10 +661,29 @@ ${params}
           streamer.processChunk(chunk);
         }
 
-        return streamer.close();
+        const result = streamer.close();
+
+        // Log token usage and show warning if truncated
+        if (result.tokenUsage) {
+          logInfo("AutonomousAgent token usage:", result.tokenUsage);
+        }
+        if (result.wasTruncated) {
+          logWarn("AutonomousAgent response was truncated due to token limit", result.tokenUsage);
+        }
+
+        return {
+          content: result.content,
+          wasTruncated: result.wasTruncated,
+          tokenUsage: result.tokenUsage,
+        };
       } catch (error) {
         if (error.name === "AbortError" || abortController.signal.aborted) {
-          return streamer.close();
+          const result = streamer.close();
+          return {
+            content: result.content,
+            wasTruncated: result.wasTruncated,
+            tokenUsage: result.tokenUsage,
+          };
         }
 
         // Check if this is an overloaded error that we should retry
@@ -670,6 +708,11 @@ ${params}
     }
 
     // This should never be reached, but just in case
-    return streamer.close();
+    const result = streamer.close();
+    return {
+      content: result.content,
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage,
+    };
   }
 }

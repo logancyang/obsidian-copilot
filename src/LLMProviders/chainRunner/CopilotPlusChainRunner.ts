@@ -283,7 +283,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void
-  ): Promise<string> {
+  ): Promise<{ content: string; wasTruncated: boolean; tokenUsage: any }> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -338,10 +338,12 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
+    // Enable usage metadata for OpenAI models (stream_options may not be typed in all LangChain versions)
     const chatStream = await withSuppressedTokenWarnings(() =>
       this.chainManager.chatModelManager.getChatModel().stream(messages, {
         signal: abortController.signal,
-      })
+        // stream_options: { include_usage: true },
+      } as any)
     );
 
     for await (const chunk of chatStream) {
@@ -355,7 +357,22 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         thinkStreamer.processChunk(processedChunk);
       }
     }
-    return thinkStreamer.close();
+
+    const result = thinkStreamer.close();
+
+    // Log token usage and show warning if truncated
+    if (result.tokenUsage) {
+      logInfo("CopilotPlus token usage:", result.tokenUsage);
+    }
+    if (result.wasTruncated) {
+      logWarn("CopilotPlus response was truncated due to token limit", result.tokenUsage);
+    }
+
+    return {
+      content: result.content,
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage,
+    };
   }
 
   async run(
@@ -465,12 +482,20 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       );
 
       logInfo("Invoking LLM with all tool results");
-      fullAIResponse = await this.streamMultimodalResponse(
+      const streamResult = await this.streamMultimodalResponse(
         enhancedUserMessage,
         userMessage,
         abortController,
         trackAndUpdateAiMessage
       );
+      fullAIResponse = streamResult.content;
+
+      // Store truncation metadata for handleResponse
+      const responseMetadata = {
+        wasTruncated: streamResult.wasTruncated,
+        tokenUsage: streamResult.tokenUsage,
+      };
+      (this as any)._responseMetadata = responseMetadata;
     } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
@@ -508,14 +533,22 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       settings.enableInlineCitations
     );
 
-    return this.handleResponse(
+    // Get response metadata if available
+    const responseMetadata = (this as any)._responseMetadata;
+    delete (this as any)._responseMetadata;
+
+    await this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
       updateCurrentAiMessage,
-      sources
+      sources,
+      undefined,
+      responseMetadata
     );
+
+    return fullAIResponse;
   }
 
   private getSources(

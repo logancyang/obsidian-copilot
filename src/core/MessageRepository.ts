@@ -95,6 +95,7 @@ export class MessageRepository {
       isErrorMessage: message.isErrorMessage,
       sources: message.sources,
       content: message.content,
+      responseMetadata: message.responseMetadata,
     };
 
     this.messages.push(storedMessage);
@@ -208,6 +209,7 @@ export class MessageRepository {
         isErrorMessage: msg.isErrorMessage,
         sources: msg.sources,
         content: msg.content,
+        responseMetadata: msg.responseMetadata,
       }));
   }
 
@@ -230,6 +232,7 @@ export class MessageRepository {
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,
+      responseMetadata: msg.responseMetadata,
     };
   }
 

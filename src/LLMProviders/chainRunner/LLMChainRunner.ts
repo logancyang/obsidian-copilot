@@ -1,5 +1,5 @@
 import { ABORT_REASON } from "@/constants";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { getSystemPromptWithMemory } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
@@ -69,10 +69,12 @@ export class LLMChainRunner extends BaseChainRunner {
       logInfo("Final Request to AI:\n", messages);
 
       // Stream with abort signal
+      // Enable usage metadata for OpenAI models (stream_options may not be typed in all LangChain versions)
       const chatStream = await withSuppressedTokenWarnings(() =>
         this.chainManager.chatModelManager.getChatModel().stream(messages, {
           signal: abortController.signal,
-        })
+          stream_options: { include_usage: true },
+        } as any)
       );
 
       for await (const chunk of chatStream) {
@@ -93,7 +95,17 @@ export class LLMChainRunner extends BaseChainRunner {
     }
 
     // Always return the response, even if partial
-    const response = streamer.close();
+    const result = streamer.close();
+
+    // Log token usage
+    if (result.tokenUsage) {
+      logInfo("Token usage:", result.tokenUsage);
+    }
+
+    // Log warning if truncated
+    if (result.wasTruncated) {
+      logWarn("Response was truncated due to token limit", result.tokenUsage);
+    }
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -101,12 +113,17 @@ export class LLMChainRunner extends BaseChainRunner {
       return "";
     }
 
-    return this.handleResponse(
-      response,
+    await this.handleResponse(
+      result.content,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage
+      updateCurrentAiMessage,
+      undefined,
+      undefined,
+      { wasTruncated: result.wasTruncated, tokenUsage: result.tokenUsage || undefined }
     );
+
+    return result.content;
   }
 }

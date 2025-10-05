@@ -8,6 +8,7 @@ import {
   ContextFolderBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
+import { TokenLimitWarning } from "@/components/chat-components/TokenLimitWarning";
 import {
   cleanupMessageToolCallRoots,
   cleanupStaleToolCallRoots,
@@ -576,6 +577,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
+
+          {message.responseMetadata?.wasTruncated && message.sender !== USER_SENDER && (
+            <TokenLimitWarning message={message} app={app} inline={true} />
+          )}
 
           {!isStreaming && (
             <div className="tw-flex tw-items-center tw-justify-between">

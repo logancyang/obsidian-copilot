@@ -33,6 +33,21 @@ export interface MessageContext {
 }
 
 /**
+ * Response metadata from LLM providers
+ */
+export interface ResponseMetadata {
+  /** Whether the response was truncated due to token limits */
+  wasTruncated?: boolean;
+
+  /** Token usage statistics */
+  tokenUsage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+}
+
+/**
  * Core chat message interface
  * This represents both display and LLM messages with different content
  */
@@ -69,6 +84,9 @@ export interface ChatMessage {
 
   /** Whether context needs to be reprocessed (after editing) */
   needsContextReprocessing?: boolean;
+
+  /** Response metadata from LLM (for AI messages) */
+  responseMetadata?: ResponseMetadata;
 }
 
 /**
@@ -91,4 +109,5 @@ export interface StoredMessage {
   isErrorMessage?: boolean;
   sources?: { title: string; path: string; score: number; explanation?: any }[];
   content?: any[];
+  responseMetadata?: ResponseMetadata;
 }

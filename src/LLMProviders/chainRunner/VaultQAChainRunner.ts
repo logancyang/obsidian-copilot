@@ -1,5 +1,5 @@
 import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
@@ -145,10 +145,12 @@ export class VaultQAChainRunner extends BaseChainRunner {
       logInfo("Final Request to AI:\n", messages);
 
       // Stream with abort signal
+      // Enable usage metadata for OpenAI models (stream_options may not be typed in all LangChain versions)
       const chatStream = await withSuppressedTokenWarnings(() =>
         this.chainManager.chatModelManager.getChatModel().stream(messages, {
           signal: abortController.signal,
-        })
+          stream_options: { include_usage: true },
+        } as any)
       );
 
       for await (const chunk of chatStream) {
@@ -169,7 +171,17 @@ export class VaultQAChainRunner extends BaseChainRunner {
     }
 
     // Always get the response, even if partial
-    let fullAIResponse = streamer.close();
+    const result = streamer.close();
+
+    // Log token usage
+    if (result.tokenUsage) {
+      logInfo("VaultQA token usage:", result.tokenUsage);
+    }
+
+    // Log warning if truncated
+    if (result.wasTruncated) {
+      logWarn("VaultQA response was truncated due to token limit", result.tokenUsage);
+    }
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -178,15 +190,20 @@ export class VaultQAChainRunner extends BaseChainRunner {
     }
 
     // Add sources to the response
-    fullAIResponse = this.addSourcestoResponse(fullAIResponse);
+    const fullAIResponse = this.addSourcestoResponse(result.content);
 
-    return this.handleResponse(
+    await this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage
+      updateCurrentAiMessage,
+      undefined,
+      undefined,
+      { wasTruncated: result.wasTruncated, tokenUsage: result.tokenUsage || undefined }
     );
+
+    return fullAIResponse;
   }
 
   private addSourcestoResponse(response: string): string {

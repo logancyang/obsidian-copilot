@@ -30,13 +30,11 @@ interface ModelEditModalContentProps {
     originalModel: CustomModel,
     updatedModel: CustomModel
   ) => void;
-  onCancel: () => void;
 }
 
 export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   model,
   onUpdate,
-  onCancel,
   isEmbeddingModel,
 }) => {
   const [localModel, setLocalModel] = useState<CustomModel>(model);
@@ -122,11 +120,6 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
   return (
     <div className="tw-space-y-3 tw-p-4">
-      <div className="tw-mb-4">
-        <h2 className="tw-text-xl tw-font-bold">Model Settings - {localModel.name}</h2>
-        <p className="tw-text-sm tw-text-muted">Customize model parameters</p>
-      </div>
-
       <div className="tw-space-y-3">
         <FormField label="Model Name" required>
           <Input
@@ -412,6 +405,8 @@ export class ModelEditModal extends Modal {
     ) => void
   ) {
     super(app);
+    // @ts-ignore
+    this.setTitle(`Model Settings - ${this.model.name}`);
   }
 
   onOpen() {
@@ -430,16 +425,11 @@ export class ModelEditModal extends Modal {
       this.onUpdate(isEmbeddingModel, originalModel, updatedModel);
     };
 
-    const handleCancel = () => {
-      this.close();
-    };
-
     this.root.render(
       <ModelEditModalContent
         model={this.model}
         isEmbeddingModel={this.isEmbeddingModel}
         onUpdate={handleUpdate}
-        onCancel={handleCancel}
       />
     );
   }
