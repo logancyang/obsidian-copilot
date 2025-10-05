@@ -1,4 +1,5 @@
 import { CustomModel } from "@/aiParams";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -30,12 +31,14 @@ interface ModelEditModalContentProps {
     originalModel: CustomModel,
     updatedModel: CustomModel
   ) => void;
+  onCancel: () => void;
 }
 
 export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   model,
   onUpdate,
   isEmbeddingModel,
+  onCancel,
 }) => {
   const [localModel, setLocalModel] = useState<CustomModel>(model);
   const [originalModel, setOriginalModel] = useState<CustomModel>(model);
@@ -238,7 +241,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                 value={localModel.maxTokens ?? settings.maxTokens}
                 onChange={(value) => handleLocalUpdate("maxTokens", value)}
                 max={65000}
-                min={0}
+                min={100}
                 step={100}
                 defaultValue={DEFAULT_MODEL_SETTING.MAX_TOKENS}
                 helpText={
@@ -387,6 +390,12 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           </>
         )}
       </div>
+
+      <div className="tw-mt-6 tw-flex tw-justify-end tw-gap-2 tw-border-t tw-border-border tw-pt-4">
+        <Button variant="secondary" onClick={onCancel}>
+          Close
+        </Button>
+      </div>
     </div>
   );
 };
@@ -425,11 +434,16 @@ export class ModelEditModal extends Modal {
       this.onUpdate(isEmbeddingModel, originalModel, updatedModel);
     };
 
+    const handleCancel = () => {
+      this.close();
+    };
+
     this.root.render(
       <ModelEditModalContent
         model={this.model}
         isEmbeddingModel={this.isEmbeddingModel}
         onUpdate={handleUpdate}
+        onCancel={handleCancel}
       />
     );
   }

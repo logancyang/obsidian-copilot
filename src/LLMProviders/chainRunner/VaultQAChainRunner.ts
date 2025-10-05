@@ -1,5 +1,5 @@
 import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
-import { logInfo, logWarn } from "@/logger";
+import { logInfo } from "@/logger";
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
@@ -173,15 +173,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
     // Always get the response, even if partial
     const result = streamer.close();
 
-    // Log token usage
-    if (result.tokenUsage) {
-      logInfo("VaultQA token usage:", result.tokenUsage);
-    }
-
-    // Log warning if truncated
-    if (result.wasTruncated) {
-      logWarn("VaultQA response was truncated due to token limit", result.tokenUsage);
-    }
+    const responseMetadata = {
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage || undefined,
+    };
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -200,7 +195,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       updateCurrentAiMessage,
       undefined,
       undefined,
-      { wasTruncated: result.wasTruncated, tokenUsage: result.tokenUsage || undefined }
+      responseMetadata
     );
 
     return fullAIResponse;

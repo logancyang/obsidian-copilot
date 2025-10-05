@@ -1,5 +1,5 @@
 import { ABORT_REASON } from "@/constants";
-import { logInfo, logWarn } from "@/logger";
+import { logInfo } from "@/logger";
 import { getSystemPromptWithMemory } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
@@ -97,15 +97,10 @@ export class LLMChainRunner extends BaseChainRunner {
     // Always return the response, even if partial
     const result = streamer.close();
 
-    // Log token usage
-    if (result.tokenUsage) {
-      logInfo("Token usage:", result.tokenUsage);
-    }
-
-    // Log warning if truncated
-    if (result.wasTruncated) {
-      logWarn("Response was truncated due to token limit", result.tokenUsage);
-    }
+    const responseMetadata = {
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage || undefined,
+    };
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -121,7 +116,7 @@ export class LLMChainRunner extends BaseChainRunner {
       updateCurrentAiMessage,
       undefined,
       undefined,
-      { wasTruncated: result.wasTruncated, tokenUsage: result.tokenUsage || undefined }
+      responseMetadata
     );
 
     return result.content;
