@@ -47,6 +47,41 @@ import {
   stripToolCallXML,
 } from "./utils/xmlParsing";
 
+type AgentSource = {
+  title: string;
+  path: string;
+  score: number;
+  explanation?: any;
+};
+
+interface AgentRunContext {
+  conversationMessages: any[];
+  iterationHistory: string[];
+  collectedSources: AgentSource[];
+  originalUserPrompt: string;
+}
+
+interface AgentLoopParams extends AgentRunContext {
+  adapter: ModelAdapter;
+  abortController: AbortController;
+  updateCurrentAiMessage: (message: string) => void;
+}
+
+interface AgentLoopResult {
+  fullAIResponse: string;
+  responseMetadata?: ResponseMetadata;
+}
+
+interface AgentFinalizationParams extends AgentRunContext {
+  userMessage: ChatMessage;
+  abortController: AbortController;
+  addMessage: (message: ChatMessage) => void;
+  updateCurrentAiMessage: (message: string) => void;
+  modelNameForLog?: string;
+  responseMetadata?: ResponseMetadata;
+  fullAIResponse: string;
+}
+
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
 
@@ -168,6 +203,10 @@ ${params}
     return `temporary-tool-call-id-${toolName}-${index}`;
   }
 
+  /**
+   * Execute the autonomous agent workflow end-to-end, handling preparation,
+   * iterative tool execution, and final response persistence.
+   */
   async run(
     userMessage: ChatMessage,
     abortController: AbortController,
@@ -180,13 +219,10 @@ ${params}
       updateLoadingMessage?: (message: string) => void;
     }
   ): Promise<string> {
+    this.llmFormattedMessages = [];
     let fullAIResponse = "";
-    const conversationMessages: any[] = [];
-    const iterationHistory: string[] = []; // Track all iterations for display
-    const collectedSources: { title: string; path: string; score: number; explanation?: any }[] =
-      []; // Collect sources from localSearch
-    this.llmFormattedMessages = []; // Reset LLM messages for this run
     let responseMetadata: ResponseMetadata | undefined;
+
     const isPlusUser = await checkIsPlusUser({
       isAutonomousAgent: true,
     });
@@ -199,388 +235,17 @@ ${params}
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
     const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
 
+    const context = await this.prepareAgentConversation(userMessage, adapter, chatModel);
+
     try {
-      // Get chat history from memory
-      const memory = this.chainManager.memoryManager.getMemory();
-      const memoryVariables = await memory.loadMemoryVariables({});
-      // Use raw history to preserve multimodal content
-      const rawHistory = memoryVariables.history || [];
-
-      // Build initial conversation messages
-      const customSystemPrompt = await this.generateSystemPrompt();
-
-      if (customSystemPrompt) {
-        conversationMessages.push({
-          role: getMessageRole(chatModel),
-          content: customSystemPrompt,
-        });
-      }
-
-      // Add chat history - safely handle different message formats
-      addChatHistoryToMessages(rawHistory, conversationMessages);
-
-      // Check if the model supports multimodal (vision) capability
-      const isMultimodal = this.isMultimodalModel(chatModel);
-
-      // Add current user message with model-specific enhancements
-      const requiresTools = messageRequiresTools(userMessage.message);
-      const enhancedUserMessage = adapter.enhanceUserMessage(userMessage.message, requiresTools);
-
-      // Build message content with images if multimodal, otherwise just use text
-      const content: string | MessageContent[] = isMultimodal
-        ? await this.buildMessageContent(enhancedUserMessage, userMessage)
-        : enhancedUserMessage;
-
-      conversationMessages.push({
-        role: "user",
-        content,
+      const loopResult = await this.executeAgentLoop({
+        ...context,
+        adapter,
+        abortController,
+        updateCurrentAiMessage,
       });
-
-      // Store original user prompt for tools that need it
-      const originalUserPrompt = userMessage.originalMessage || userMessage.message;
-
-      // Autonomous agent loop
-      const maxIterations = getSettings().autonomousAgentMaxIterations; // Get from settings
-      let iteration = 0;
-
-      while (iteration < maxIterations) {
-        if (abortController.signal.aborted) {
-          break;
-        }
-
-        iteration++;
-        logInfo(`=== Autonomous Agent Iteration ${iteration} ===`);
-
-        // Store tool call messages for this iteration (declared here so it's accessible in the streaming callback)
-        const currentIterationToolCallMessages: string[] = [];
-
-        // Get AI response
-        const response = await this.streamResponse(
-          conversationMessages,
-          abortController,
-          (fullMessage) => {
-            // Show tool calls as indicators during streaming for clarity, preserve think blocks
-            const cleanedMessage = stripToolCallXML(fullMessage);
-            // Build display with ALL content including tool calls from history
-            const displayParts = [];
-
-            // Add all iteration history (which includes tool call markers)
-            displayParts.push(...iterationHistory);
-
-            // Add the current streaming message
-            if (cleanedMessage.trim()) {
-              displayParts.push(cleanedMessage);
-            }
-
-            // Collect tool names from the current streaming message, including partial tool call block
-            const toolCalls = parseXMLToolCalls(fullMessage);
-            let toolNames: string[] = [];
-            if (toolCalls.length > 0) {
-              toolNames = toolCalls.map((toolCall) => toolCall.name);
-            }
-
-            // Determine background tools to avoid showing banners during streaming
-            const availableTools = this.getAvailableTools();
-            const backgroundToolNames = new Set(
-              availableTools.filter((t) => t.isBackground).map((t) => t.name)
-            );
-
-            // Include partial tool name if long enough, then filter out background tools
-            const toolName = extractToolNameFromPartialBlock(fullMessage);
-            if (toolName) {
-              // Only add the partial tool call block if the block is larger than STREAMING_TRUNCATE_THRESHOLD
-              const lastToolNameIndex = fullMessage.lastIndexOf(toolName);
-              if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
-                toolNames.push(toolName);
-              }
-            }
-
-            // Filter out background tools (should be invisible)
-            toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
-
-            // Create tool call markers if they don't exist
-            // Generate temporary tool call id based on index of the tool name in the toolNames array
-            for (let i = 0; i < toolNames.length; i++) {
-              const toolName = toolNames[i];
-              const toolCallId = this.getTemporaryToolCallId(toolName, i);
-              // Check if the tool call marker already exists
-              const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-                msg.includes(toolCallId)
-              );
-              if (messageIndex !== -1) {
-                continue;
-              }
-
-              const toolCallMarker = createToolCallMarker(
-                toolCallId,
-                toolName,
-                getToolDisplayName(toolName),
-                getToolEmoji(toolName),
-                "", // confirmationMessage (empty until generation completes)
-                true, // isExecuting
-                "", // content (empty for now)
-                "" // result (empty until execution completes)
-              );
-
-              currentIterationToolCallMessages.push(toolCallMarker);
-            }
-
-            // Add current iteration's tool calls if any
-            if (currentIterationToolCallMessages.length > 0) {
-              displayParts.push(currentIterationToolCallMessages.join("\n"));
-            }
-
-            const currentDisplay = displayParts.join("\n\n");
-            updateCurrentAiMessage(currentDisplay);
-          },
-          adapter
-        );
-
-        // Store truncation metadata if response was truncated
-        if (response.wasTruncated) {
-          responseMetadata = {
-            wasTruncated: response.wasTruncated,
-            tokenUsage: response.tokenUsage ?? undefined,
-          };
-        }
-
-        const responseContent = response.content;
-
-        if (!responseContent) break;
-
-        // Parse tool calls from the response
-        const toolCalls = parseXMLToolCalls(responseContent);
-
-        // Use model adapter to detect and handle premature responses
-        const prematureResponseResult = adapter.detectPrematureResponse?.(responseContent);
-        if (prematureResponseResult?.hasPremature && iteration === 1) {
-          if (prematureResponseResult.type === "before") {
-            logWarn("⚠️  Model provided premature response BEFORE tool calls!");
-            logWarn("Sanitizing response to keep only tool calls for first iteration");
-          } else if (prematureResponseResult.type === "after") {
-            logWarn("⚠️  Model provided hallucinated response AFTER tool calls!");
-            logWarn("Truncating response at last tool call for first iteration");
-          }
-        }
-
-        if (toolCalls.length === 0) {
-          // No tool calls, this is the final response
-          // Strip any tool call XML from final response but preserve think blocks
-          const cleanedResponse = stripToolCallXML(responseContent);
-
-          // Build full response from history (which includes tool call markers) and final response
-          const allParts = [...iterationHistory];
-          if (cleanedResponse.trim()) {
-            allParts.push(cleanedResponse);
-          }
-          fullAIResponse = allParts.join("\n\n");
-
-          const safeAssistantMessage = ensureEncodedToolCallMarkerResults(responseContent);
-          conversationMessages.push({
-            role: "assistant",
-            content: safeAssistantMessage,
-          });
-
-          // Add final response to LLM messages
-          this.llmFormattedMessages.push(responseContent);
-          break;
-        }
-
-        // Use model adapter to sanitize response if needed
-        let sanitizedResponse = responseContent;
-        if (adapter.sanitizeResponse && prematureResponseResult?.hasPremature) {
-          sanitizedResponse = adapter.sanitizeResponse(responseContent, iteration);
-        }
-
-        // Store this iteration's response (AI reasoning) with tool indicators and think blocks preserved
-        const responseForHistory: string = stripToolCallXML(sanitizedResponse);
-
-        // Only add to history if there's meaningful content
-        if (responseForHistory.trim()) {
-          iterationHistory.push(responseForHistory);
-        }
-
-        // Execute tool calls and show progress
-        const toolResults: ToolExecutionResult[] = [];
-        const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
-
-        // Truncate currentIterationToolCallMessages based on the toolCalls array size
-        currentIterationToolCallMessages.splice(toolCalls.length);
-
-        for (let i = 0; i < toolCalls.length; i++) {
-          const toolCall = toolCalls[i];
-          if (abortController.signal.aborted) break;
-
-          // Log tool call details for debugging
-          logToolCall(toolCall, iteration);
-
-          // Find the tool to check if it's a background tool
-          const availableTools = this.getAvailableTools();
-          const tool = availableTools.find((t) => t.name === toolCall.name);
-          const isBackgroundTool = tool?.isBackground || false;
-
-          let toolCallId: string | undefined;
-
-          // Only show tool calling message for non-background tools
-          if (!isBackgroundTool) {
-            // Create tool calling message with structured marker
-            const toolEmoji = getToolEmoji(toolCall.name);
-            let toolDisplayName = getToolDisplayName(toolCall.name);
-            if (toolCall.name === "readNote") {
-              const notePath =
-                typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath : null;
-              if (notePath && notePath.trim().length > 0) {
-                toolDisplayName = notePath.trim();
-              }
-            }
-            const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-
-            // Generate unique ID for this tool call
-            toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-            toolCallIdMap.set(i, toolCallId);
-
-            // Create structured tool call marker
-            const toolCallMarker = createToolCallMarker(
-              toolCallId,
-              toolCall.name,
-              toolDisplayName,
-              toolEmoji,
-              confirmationMessage || "",
-              true, // isExecuting
-              "", // content (empty for now)
-              "" // result (empty until execution completes)
-            );
-
-            // Check if the tool call marker already created during streaming
-            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-              msg.includes(this.getTemporaryToolCallId(toolCall.name, i))
-            );
-            if (messageIndex !== -1) {
-              currentIterationToolCallMessages[messageIndex] = toolCallMarker;
-            } else {
-              currentIterationToolCallMessages.push(toolCallMarker);
-              logWarn(
-                "Created tool call marker for tool call that was not created during streaming",
-                toolCall.name
-              );
-            }
-
-            // Show all history plus all tool call messages
-            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
-              "\n\n"
-            );
-            updateCurrentAiMessage(currentDisplay);
-          }
-
-          const result = await executeSequentialToolCall(
-            toolCall,
-            availableTools,
-            originalUserPrompt
-          );
-
-          // Process localSearch results using the inherited method
-          if (toolCall.name === "localSearch") {
-            // Note: We don't have access to time expression in autonomous agent context
-            // as it processes tools individually, not in batch with toolCalls
-
-            // Use the inherited method for consistent processing
-            const processed = this.processLocalSearchResult(result);
-
-            // Collect sources for UI
-            collectedSources.push(...processed.sources);
-
-            // Update result with formatted text for LLM
-            result.result = this.applyCiCOrderingToLocalSearchResult(
-              processed.formattedForLLM,
-              originalUserPrompt || ""
-            );
-            result.displayResult = processed.formattedForDisplay;
-          }
-
-          toolResults.push(result);
-
-          // Update the tool call marker with the result if we have an ID
-          if (toolCallId && !isBackgroundTool) {
-            // Update the specific tool call message
-            const messageIndex = currentIterationToolCallMessages.findIndex((msg) =>
-              msg.includes(toolCallId)
-            );
-            if (messageIndex !== -1) {
-              currentIterationToolCallMessages[messageIndex] = updateToolCallMarker(
-                currentIterationToolCallMessages[messageIndex],
-                toolCallId,
-                result.displayResult ?? result.result
-              );
-            }
-
-            // Update the display with the result
-            const currentDisplay = [...iterationHistory, ...currentIterationToolCallMessages].join(
-              "\n\n"
-            );
-            updateCurrentAiMessage(currentDisplay);
-          }
-
-          // Log tool result
-          logToolResult(toolCall.name, result);
-        }
-
-        // Add all tool call messages to history so they persist
-        if (currentIterationToolCallMessages.length > 0) {
-          const toolCallsString = currentIterationToolCallMessages.join("\n");
-          iterationHistory.push(toolCallsString);
-        }
-
-        // Don't add tool results to display - they're internal only
-
-        // Track LLM-formatted messages for memory
-        // Add the assistant's response with tool calls
-        this.llmFormattedMessages.push(responseContent);
-
-        // Add tool results in LLM format (truncated for memory)
-        if (toolResults.length > 0) {
-          const toolResultsForLLM = processToolResults(toolResults, true); // truncated for memory
-          if (toolResultsForLLM) {
-            this.llmFormattedMessages.push(toolResultsForLLM);
-          }
-        }
-
-        // Add AI response to conversation for next iteration
-        // Ensure any tool markers have encoded results before storing in conversation
-        const safeAssistantContent = ensureEncodedToolCallMarkerResults(sanitizedResponse);
-        conversationMessages.push({
-          role: "assistant",
-          content: safeAssistantContent,
-        });
-
-        // Add tool results as user messages for next iteration (full results for current turn)
-        const toolResultsForConversation = processToolResults(toolResults, false); // full results
-
-        conversationMessages.push({
-          role: "user",
-          content: toolResultsForConversation,
-        });
-
-        // Keep logs concise: avoid dumping full tool results
-        logInfo("Tool results added to conversation");
-      }
-
-      // If we hit max iterations, add a message explaining the limit was reached
-      if (iteration >= maxIterations && !fullAIResponse) {
-        logWarn(
-          `Autonomous agent reached maximum iterations (${maxIterations}) without completing the task`
-        );
-
-        const limitMessage =
-          `\n\nI've reached the maximum number of iterations (${maxIterations}) for this task. ` +
-          "I attempted to gather information using various tools but couldn't complete the analysis within the iteration limit. " +
-          "You may want to try a more specific question or break down your request into smaller parts.";
-
-        fullAIResponse = iterationHistory.join("\n\n") + limitMessage;
-        conversationMessages.push({
-          role: "assistant",
-          content: fullAIResponse,
-        });
-      }
+      fullAIResponse = loopResult.fullAIResponse;
+      responseMetadata = loopResult.responseMetadata;
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
         logInfo("Autonomous agent stream aborted by user", {
@@ -588,8 +253,6 @@ ${params}
         });
       } else {
         logError("Autonomous agent failed, falling back to regular Plus mode:", error);
-
-        // Fallback to regular CopilotPlusChainRunner
         try {
           const fallbackRunner = new CopilotPlusChainRunner(this.chainManager);
           return await fallbackRunner.run(
@@ -607,16 +270,391 @@ ${params}
       }
     }
 
-    // Handle response like the parent class, with sources if we found any
+    return await this.finalizeAgentRun({
+      ...context,
+      userMessage,
+      abortController,
+      addMessage,
+      updateCurrentAiMessage,
+      modelNameForLog,
+      responseMetadata,
+      fullAIResponse,
+    });
+  }
+
+  /**
+   * Prepare the base conversation state, including system prompt, chat history,
+   * and the initial user message tailored for the active model.
+   *
+   * @param userMessage - The initiating user message from the UI.
+   * @param adapter - Model adapter used for user message enhancement.
+   * @param chatModel - The active chat model instance.
+   * @returns Aggregated context required for the autonomous agent loop.
+   */
+  private async prepareAgentConversation(
+    userMessage: ChatMessage,
+    adapter: ModelAdapter,
+    chatModel: any
+  ): Promise<AgentRunContext> {
+    const conversationMessages: any[] = [];
+    const iterationHistory: string[] = [];
+    const collectedSources: AgentSource[] = [];
+
+    const memory = this.chainManager.memoryManager.getMemory();
+    const memoryVariables = await memory.loadMemoryVariables({});
+    const rawHistory = memoryVariables.history || [];
+
+    const customSystemPrompt = await this.generateSystemPrompt();
+    if (customSystemPrompt) {
+      conversationMessages.push({
+        role: getMessageRole(chatModel),
+        content: customSystemPrompt,
+      });
+    }
+
+    addChatHistoryToMessages(rawHistory, conversationMessages);
+
+    const isMultimodal = this.isMultimodalModel(chatModel);
+    const requiresTools = messageRequiresTools(userMessage.message);
+    const enhancedUserMessage = adapter.enhanceUserMessage(userMessage.message, requiresTools);
+    const content: string | MessageContent[] = isMultimodal
+      ? await this.buildMessageContent(enhancedUserMessage, userMessage)
+      : enhancedUserMessage;
+
+    conversationMessages.push({
+      role: "user",
+      content,
+    });
+
+    return {
+      conversationMessages,
+      iterationHistory,
+      collectedSources,
+      originalUserPrompt: userMessage.originalMessage || userMessage.message,
+    };
+  }
+
+  /**
+   * Execute the autonomous agent iteration loop until completion, handling
+   * streaming updates, tool execution, and sanitized response tracking.
+   *
+   * @param params - Mutable conversation context and runtime dependencies.
+   * @returns The final response text and metadata from the executed loop.
+   */
+  private async executeAgentLoop(params: AgentLoopParams): Promise<AgentLoopResult> {
+    const {
+      conversationMessages,
+      iterationHistory,
+      collectedSources,
+      originalUserPrompt,
+      adapter,
+      abortController,
+      updateCurrentAiMessage,
+    } = params;
+
+    const maxIterations = getSettings().autonomousAgentMaxIterations;
+    let iteration = 0;
+    let fullAIResponse = "";
+    let responseMetadata: ResponseMetadata | undefined;
+
+    while (iteration < maxIterations) {
+      if (abortController.signal.aborted) {
+        break;
+      }
+
+      iteration += 1;
+      logInfo(`=== Autonomous Agent Iteration ${iteration} ===`);
+
+      const currentIterationToolCallMessages: string[] = [];
+
+      const response = await this.streamResponse(
+        conversationMessages,
+        abortController,
+        (fullMessage) => {
+          const cleanedMessage = stripToolCallXML(fullMessage);
+          const displayParts: string[] = [];
+          displayParts.push(...iterationHistory);
+
+          if (cleanedMessage.trim()) {
+            displayParts.push(cleanedMessage);
+          }
+
+          const toolCalls = parseXMLToolCalls(fullMessage);
+          let toolNames: string[] = [];
+          if (toolCalls.length > 0) {
+            toolNames = toolCalls.map((toolCall) => toolCall.name);
+          }
+
+          const availableTools = this.getAvailableTools();
+          const backgroundToolNames = new Set(
+            availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
+          );
+
+          const partialToolName = extractToolNameFromPartialBlock(fullMessage);
+          if (partialToolName) {
+            const lastToolNameIndex = fullMessage.lastIndexOf(partialToolName);
+            if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
+              toolNames.push(partialToolName);
+            }
+          }
+
+          toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
+
+          for (let i = 0; i < toolNames.length; i += 1) {
+            const toolName = toolNames[i];
+            const toolCallId = this.getTemporaryToolCallId(toolName, i);
+            const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
+              message.includes(toolCallId)
+            );
+            if (existingIndex !== -1) {
+              continue;
+            }
+
+            const toolCallMarker = createToolCallMarker(
+              toolCallId,
+              toolName,
+              getToolDisplayName(toolName),
+              getToolEmoji(toolName),
+              "",
+              true,
+              "",
+              ""
+            );
+
+            currentIterationToolCallMessages.push(toolCallMarker);
+          }
+
+          if (currentIterationToolCallMessages.length > 0) {
+            displayParts.push(currentIterationToolCallMessages.join("\n"));
+          }
+
+          updateCurrentAiMessage(displayParts.join("\n\n"));
+        },
+        adapter
+      );
+
+      if (response.wasTruncated) {
+        responseMetadata = {
+          wasTruncated: response.wasTruncated,
+          tokenUsage: response.tokenUsage ?? undefined,
+        };
+      }
+
+      const responseContent = response.content;
+      if (!responseContent) {
+        break;
+      }
+
+      const toolCalls = parseXMLToolCalls(responseContent);
+      const prematureResponseResult = adapter.detectPrematureResponse?.(responseContent);
+      if (prematureResponseResult?.hasPremature && iteration === 1) {
+        if (prematureResponseResult.type === "before") {
+          logWarn("⚠️  Model provided premature response BEFORE tool calls!");
+          logWarn("Sanitizing response to keep only tool calls for first iteration");
+        } else if (prematureResponseResult.type === "after") {
+          logWarn("⚠️  Model provided hallucinated response AFTER tool calls!");
+          logWarn("Truncating response at last tool call for first iteration");
+        }
+      }
+
+      if (toolCalls.length === 0) {
+        const cleanedResponse = stripToolCallXML(responseContent);
+        const allParts = [...iterationHistory];
+        if (cleanedResponse.trim()) {
+          allParts.push(cleanedResponse);
+        }
+        fullAIResponse = allParts.join("\n\n");
+
+        const safeAssistantMessage = ensureEncodedToolCallMarkerResults(responseContent);
+        conversationMessages.push({
+          role: "assistant",
+          content: safeAssistantMessage,
+        });
+
+        this.llmFormattedMessages.push(responseContent);
+        break;
+      }
+
+      let sanitizedResponse = responseContent;
+      if (adapter.sanitizeResponse && prematureResponseResult?.hasPremature) {
+        sanitizedResponse = adapter.sanitizeResponse(responseContent, iteration);
+      }
+
+      const responseForHistory = stripToolCallXML(sanitizedResponse);
+      if (responseForHistory.trim()) {
+        iterationHistory.push(responseForHistory);
+      }
+
+      const toolResults: ToolExecutionResult[] = [];
+      const toolCallIdMap = new Map<number, string>();
+      currentIterationToolCallMessages.splice(toolCalls.length);
+
+      for (let i = 0; i < toolCalls.length; i += 1) {
+        const toolCall = toolCalls[i];
+        if (abortController.signal.aborted) {
+          break;
+        }
+
+        logToolCall(toolCall, iteration);
+
+        const availableTools = this.getAvailableTools();
+        const tool = availableTools.find((availableTool) => availableTool.name === toolCall.name);
+        const isBackgroundTool = tool?.isBackground || false;
+
+        let toolCallId: string | undefined;
+        if (!isBackgroundTool) {
+          const toolEmoji = getToolEmoji(toolCall.name);
+          const toolDisplayName = getToolDisplayName(toolCall.name);
+          const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
+
+          toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          toolCallIdMap.set(i, toolCallId);
+
+          const toolCallMarker = createToolCallMarker(
+            toolCallId,
+            toolCall.name,
+            toolDisplayName,
+            toolEmoji,
+            confirmationMessage || "",
+            true,
+            "",
+            ""
+          );
+
+          const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
+            message.includes(this.getTemporaryToolCallId(toolCall.name, i))
+          );
+          if (existingIndex !== -1) {
+            currentIterationToolCallMessages[existingIndex] = toolCallMarker;
+          } else {
+            currentIterationToolCallMessages.push(toolCallMarker);
+            logWarn(
+              "Created tool call marker for tool call that was not created during streaming",
+              toolCall.name
+            );
+          }
+
+          updateCurrentAiMessage(
+            [...iterationHistory, ...currentIterationToolCallMessages].join("\n\n")
+          );
+        }
+
+        const result = await executeSequentialToolCall(
+          toolCall,
+          availableTools,
+          originalUserPrompt
+        );
+
+        if (toolCall.name === "localSearch") {
+          const processed = this.processLocalSearchResult(result);
+          collectedSources.push(...processed.sources);
+          result.result = this.applyCiCOrderingToLocalSearchResult(
+            processed.formattedForLLM,
+            originalUserPrompt || ""
+          );
+          result.displayResult = processed.formattedForDisplay;
+        }
+
+        toolResults.push(result);
+
+        if (toolCallId && !isBackgroundTool) {
+          const markerIndex = currentIterationToolCallMessages.findIndex((message) =>
+            message.includes(toolCallId)
+          );
+          if (markerIndex !== -1) {
+            currentIterationToolCallMessages[markerIndex] = updateToolCallMarker(
+              currentIterationToolCallMessages[markerIndex],
+              toolCallId,
+              result.displayResult ?? result.result
+            );
+          }
+
+          updateCurrentAiMessage(
+            [...iterationHistory, ...currentIterationToolCallMessages].join("\n\n")
+          );
+        }
+
+        logToolResult(toolCall.name, result);
+      }
+
+      if (currentIterationToolCallMessages.length > 0) {
+        iterationHistory.push(currentIterationToolCallMessages.join("\n"));
+      }
+
+      const assistantMemoryContent = sanitizedResponse;
+      this.llmFormattedMessages.push(assistantMemoryContent);
+
+      if (toolResults.length > 0) {
+        const toolResultsForLLM = processToolResults(toolResults, true);
+        if (toolResultsForLLM) {
+          this.llmFormattedMessages.push(toolResultsForLLM);
+        }
+      }
+
+      const safeAssistantContent = ensureEncodedToolCallMarkerResults(sanitizedResponse);
+      conversationMessages.push({
+        role: "assistant",
+        content: safeAssistantContent,
+      });
+
+      const toolResultsForConversation = processToolResults(toolResults, false);
+      conversationMessages.push({
+        role: "user",
+        content: toolResultsForConversation,
+      });
+
+      logInfo("Tool results added to conversation");
+    }
+
+    if (iteration >= maxIterations && !fullAIResponse) {
+      logWarn(
+        `Autonomous agent reached maximum iterations (${maxIterations}) without completing the task`
+      );
+
+      const limitMessage =
+        `
+
+I've reached the maximum number of iterations (${maxIterations}) for this task. ` +
+        "I attempted to gather information using various tools but couldn't complete the analysis within the iteration limit. " +
+        "You may want to try a more specific question or break down your request into smaller parts.";
+
+      fullAIResponse = iterationHistory.join("\n\n") + limitMessage;
+      conversationMessages.push({
+        role: "assistant",
+        content: fullAIResponse,
+      });
+    }
+
+    return { fullAIResponse, responseMetadata };
+  }
+
+  /**
+   * Finalize the run by persisting prompt payloads, updating memory, and
+   * returning the final response string to the caller.
+   *
+   * @param params - Finalization metadata including conversation context.
+   * @returns The finalized AI response presented to the user.
+   */
+  private async finalizeAgentRun(params: AgentFinalizationParams): Promise<string> {
+    const {
+      conversationMessages,
+      iterationHistory,
+      collectedSources,
+      userMessage,
+      abortController,
+      addMessage,
+      updateCurrentAiMessage,
+      modelNameForLog,
+      responseMetadata,
+      fullAIResponse,
+    } = params;
+
+    let finalResponse = fullAIResponse;
     const uniqueSources = deduplicateSources(collectedSources);
 
-    // Create LLM-formatted output for memory
-    const llmFormattedOutput = this.llmFormattedMessages.join("\n\n");
-
-    // If we somehow don't have a fullAIResponse but have iteration history, use that
-    if (!fullAIResponse && iterationHistory.length > 0) {
+    if (!finalResponse && iterationHistory.length > 0) {
       logWarn("fullAIResponse was empty, using iteration history");
-      fullAIResponse = iterationHistory.join("\n\n");
+      finalResponse = iterationHistory.join("\n\n");
     }
 
     if (conversationMessages.length > 0) {
@@ -626,13 +664,12 @@ ${params}
       });
     }
 
-    // Decode encoded tool marker results for clearer logging only
     await import("./utils/toolCallParser");
-    // Keep llmFormattedOutput encoded for memory storage; no decoded variant needed
-    // Readable log removed to reduce verbosity
+
+    const llmFormattedOutput = this.llmFormattedMessages.join("\n\n");
 
     await this.handleResponse(
-      fullAIResponse,
+      finalResponse,
       userMessage,
       abortController,
       addMessage,
@@ -642,7 +679,7 @@ ${params}
       responseMetadata
     );
 
-    return fullAIResponse;
+    return finalResponse;
   }
 
   private async streamResponse(
