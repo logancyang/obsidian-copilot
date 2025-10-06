@@ -444,12 +444,14 @@ export class DBOperations {
 
   async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
     if (!this.oramaDb) {
-      logInfo(
-        "Embedding model change detected. Semantic index database not found. Initializing new database..."
-      );
+      logInfo("Semantic index database not loaded in memory. Checking for existing index...");
       try {
         await this.initializeDB(embeddingInstance);
-        return true;
+        // After initialization, oramaDb might still be undefined if no index exists
+        if (!this.oramaDb) {
+          logInfo("No existing index found. Will create new index.");
+          return false; // No model change, just no index yet
+        }
       } catch (error) {
         logError("Failed to initialize database:", error);
         throw new CustomError(
