@@ -66,7 +66,10 @@ function inferMessageRole(message: any): "user" | "assistant" | null {
  * @param rawHistory Raw history from memory
  * @param messages Target messages array to add to
  */
-export function addChatHistoryToMessages(rawHistory: any[], messages: any[]): void {
+export function addChatHistoryToMessages(
+  rawHistory: any[],
+  messages: Array<{ role: string; content: any }>
+): void {
   const processedHistory = processRawChatHistory(rawHistory);
   for (const msg of processedHistory) {
     messages.push({ role: msg.role, content: msg.content });
