@@ -442,24 +442,45 @@ export class DBOperations {
     }
   }
 
+  /**
+   * Checks if the embedding model has changed and handles the transition.
+   *
+   * @param embeddingInstance - The current embedding instance to check against
+   * @returns {boolean} - Returns true if model changed (triggers full rebuild with overwrite=true),
+   *                      false if model unchanged or no index exists (allows normal indexing flow)
+   *
+   * Behavior:
+   * - true = Model changed → Forces full rebuild (clears existing index and reindexes all files)
+   * - false = Model unchanged OR no index exists → Proceeds with normal indexing:
+   *   - If index exists: incremental update (only new/modified files)
+   *   - If no index: first-time build (indexes all files without "rebuilding")
+   *
+   * Note: When no index exists, returning false is correct because:
+   * - It's not a "rebuild" (nothing to rebuild), it's a first-time "build"
+   * - The indexing flow will still create the index, just without the "overwrite" flag
+   * - This prevents unnecessary "rebuilding" when toggling semantic search on/off
+   */
   async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
+    // Load DB from disk if not in memory
     if (!this.oramaDb) {
       logInfo("Semantic index database not loaded in memory. Checking for existing index...");
       try {
         await this.initializeDB(embeddingInstance);
-        // After initialization, oramaDb might still be undefined if no index exists
-        if (!this.oramaDb) {
-          logInfo("No existing index found. Will create new index.");
-          return false; // No model change, just no index yet
-        }
       } catch (error) {
         logError("Failed to initialize database:", error);
         throw new CustomError(
           "Failed to initialize semantic index database. Please check your embedding model settings."
         );
       }
+
+      // If still no DB after init, no existing index to compare against
+      if (!this.oramaDb) {
+        logInfo("No existing index found. Will create new index.");
+        return false; // Not a rebuild, just a first-time build
+      }
     }
 
+    // Check if the embedding model in the existing index matches the current model
     const singleDoc = await search(this.oramaDb, {
       term: "",
       limit: 1,
