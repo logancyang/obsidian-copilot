@@ -423,12 +423,10 @@ ${params}
         adapter
       );
 
-      if (response.wasTruncated) {
-        responseMetadata = {
-          wasTruncated: response.wasTruncated,
-          tokenUsage: response.tokenUsage ?? undefined,
-        };
-      }
+      responseMetadata = {
+        wasTruncated: response.wasTruncated,
+        tokenUsage: response.tokenUsage ?? undefined,
+      };
 
       const responseContent = response.content;
       if (!responseContent) {
