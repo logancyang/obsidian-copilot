@@ -476,7 +476,7 @@ ${params}
       }
 
       const toolResults: ToolExecutionResult[] = [];
-      let visibleToolCounter = 0;
+      const toolCallIdMap = new Map<number, string>();
       currentIterationToolCallMessages.splice(toolCalls.length);
 
       for (let i = 0; i < toolCalls.length; i += 1) {
@@ -496,8 +496,8 @@ ${params}
           const toolDisplayName = this.getToolDisplayName(toolCall);
           const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
 
-          toolCallId = loopDeps.getTemporaryToolCallId(toolCall.name, visibleToolCounter);
-          visibleToolCounter += 1;
+          toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+          toolCallIdMap.set(i, toolCallId);
 
           const toolCallMarker = createToolCallMarker(
             toolCallId,
@@ -511,7 +511,7 @@ ${params}
           );
 
           const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
-            message.includes(toolCallId!)
+            message.includes(loopDeps.getTemporaryToolCallId(toolCall.name, i))
           );
           if (existingIndex !== -1) {
             currentIterationToolCallMessages[existingIndex] = toolCallMarker;
@@ -655,29 +655,25 @@ ${params}
     }
 
     const toolCalls = parseXMLToolCalls(fullMessage);
+    const toolNames = toolCalls.map((toolCall) => toolCall.name);
     const backgroundToolNames = new Set(
       loopDeps.availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
     );
-
-    const visibleToolNames: string[] = [];
-    toolCalls.forEach((toolCall) => {
-      if (!backgroundToolNames.has(toolCall.name)) {
-        visibleToolNames.push(toolCall.name);
-      }
-    });
 
     const partialToolName = extractToolNameFromPartialBlock(fullMessage);
     if (partialToolName) {
       const lastToolNameIndex = fullMessage.lastIndexOf(partialToolName);
       if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
-        visibleToolNames.push(partialToolName);
+        toolNames.push(partialToolName);
       }
     }
 
-    const uniqueVisibleNames = Array.from(new Set(visibleToolNames));
+    const visibleToolCalls = toolCalls.filter(
+      (toolCall) => !backgroundToolNames.has(toolCall.name)
+    );
 
-    uniqueVisibleNames.forEach((toolName, index) => {
-      const toolCallId = loopDeps.getTemporaryToolCallId(toolName, index);
+    visibleToolCalls.forEach((toolCall, index) => {
+      const toolCallId = loopDeps.getTemporaryToolCallId(toolCall.name, index);
       const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
         message.includes(toolCallId)
       );
@@ -687,9 +683,9 @@ ${params}
 
       const toolCallMarker = createToolCallMarker(
         toolCallId,
-        toolName,
-        getToolDisplayName(toolName),
-        getToolEmoji(toolName),
+        toolCall.name,
+        getToolDisplayName(toolCall.name),
+        getToolEmoji(toolCall.name),
         "",
         true,
         "",
