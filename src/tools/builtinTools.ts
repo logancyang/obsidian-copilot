@@ -186,13 +186,13 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
     metadata: {
       id: "readNote",
       displayName: "Read Note",
-      description: "Read a specific note in sequential chunks using the vault chunking pipeline.",
+      description: "Read a specific note in sequential chunks using its own line-chunking logic.",
       category: "file",
       requiresVault: true,
       isAlwaysEnabled: true,
       customPromptInstructions: `For readNote:
 - Decide based on the user's request: only call this tool when the question requires reading note content.
-- If the user is asking about a note that is already mentioned or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Skip the tool when a note is irrelevant.
+- If the user asks about a note title that is already mentioned in the current or previous turns of the conversation, or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Even if the note title mention is vague or partial, try to infer the correct note path from context. Skip the tool when a note is irrelevant.
 - If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
 - Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
 - Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
