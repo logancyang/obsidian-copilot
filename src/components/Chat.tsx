@@ -143,6 +143,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     setProgressCardVisible(null);
   }, [projectContextStatus]);
 
+  // Clear token count when chat is cleared or replaced (e.g., loading chat history)
+  useEffect(() => {
+    if (chatHistory.length === 0) {
+      setLatestTokenCount(null);
+    }
+  }, [chatHistory]);
+
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
