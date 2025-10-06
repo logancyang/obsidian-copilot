@@ -493,14 +493,7 @@ ${params}
         let toolCallId: string | undefined;
         if (!isBackgroundTool) {
           const toolEmoji = getToolEmoji(toolCall.name);
-          let toolDisplayName = getToolDisplayName(toolCall.name);
-          if (toolCall.name === "readNote") {
-            const notePath =
-              typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath.trim() : "";
-            if (notePath.length > 0) {
-              toolDisplayName = notePath;
-            }
-          }
+          const toolDisplayName = this.getToolDisplayName(toolCall);
           const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
 
           toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -630,6 +623,19 @@ ${params}
     };
   }
 
+  private getToolDisplayName(toolCall: { name: string; args?: Record<string, unknown> }): string {
+    if (toolCall.name === "readNote") {
+      const rawPath = toolCall.args?.notePath;
+      if (typeof rawPath === "string") {
+        const trimmed = rawPath.trim();
+        if (trimmed.length > 0) {
+          return trimmed;
+        }
+      }
+    }
+    return getToolDisplayName(toolCall.name);
+  }
+
   /**
    * Handle streaming updates by maintaining tool call markers and refreshing the
    * in-progress message display.
@@ -649,7 +655,7 @@ ${params}
     }
 
     const toolCalls = parseXMLToolCalls(fullMessage);
-    let toolNames = toolCalls.map((toolCall) => toolCall.name);
+    const toolNames = toolCalls.map((toolCall) => toolCall.name);
     const backgroundToolNames = new Set(
       loopDeps.availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
     );
@@ -662,23 +668,24 @@ ${params}
       }
     }
 
-    toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
+    const visibleToolCalls = toolCalls.filter(
+      (toolCall) => !backgroundToolNames.has(toolCall.name)
+    );
 
-    for (let i = 0; i < toolNames.length; i += 1) {
-      const toolName = toolNames[i];
-      const toolCallId = loopDeps.getTemporaryToolCallId(toolName, i);
+    visibleToolCalls.forEach((toolCall, index) => {
+      const toolCallId = loopDeps.getTemporaryToolCallId(toolCall.name, index);
       const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
         message.includes(toolCallId)
       );
       if (existingIndex !== -1) {
-        continue;
+        return;
       }
 
       const toolCallMarker = createToolCallMarker(
         toolCallId,
-        toolName,
-        getToolDisplayName(toolName),
-        getToolEmoji(toolName),
+        toolCall.name,
+        getToolDisplayName(toolCall.name),
+        getToolEmoji(toolCall.name),
         "",
         true,
         "",
@@ -686,7 +693,7 @@ ${params}
       );
 
       currentIterationToolCallMessages.push(toolCallMarker);
-    }
+    });
 
     if (currentIterationToolCallMessages.length > 0) {
       displayParts.push(currentIterationToolCallMessages.join("\n"));
