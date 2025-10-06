@@ -47,6 +47,11 @@ import {
   stripToolCallXML,
 } from "./utils/xmlParsing";
 
+type ConversationMessage = {
+  role: string;
+  content: string | MessageContent[];
+};
+
 type AgentSource = {
   title: string;
   path: string;
@@ -54,11 +59,29 @@ type AgentSource = {
   explanation?: any;
 };
 
+interface AgentLoopDeps {
+  availableTools: SimpleTool<any, any>[];
+  getTemporaryToolCallId: (toolName: string, index: number) => string;
+  processLocalSearchResult: (
+    toolResult: { result: string; success: boolean },
+    timeExpression?: string
+  ) => {
+    formattedForLLM: string;
+    formattedForDisplay: string;
+    sources: AgentSource[];
+  };
+  applyCiCOrderingToLocalSearchResult: (
+    localSearchPayload: string,
+    originalPrompt: string
+  ) => string;
+}
+
 interface AgentRunContext {
-  conversationMessages: any[];
+  conversationMessages: ConversationMessage[];
   iterationHistory: string[];
   collectedSources: AgentSource[];
   originalUserPrompt: string;
+  loopDeps: AgentLoopDeps;
 }
 
 interface AgentLoopParams extends AgentRunContext {
@@ -70,6 +93,9 @@ interface AgentLoopParams extends AgentRunContext {
 interface AgentLoopResult {
   fullAIResponse: string;
   responseMetadata?: ResponseMetadata;
+  iterationHistory: string[];
+  collectedSources: AgentSource[];
+  llmMessages: string[];
 }
 
 interface AgentFinalizationParams extends AgentRunContext {
@@ -246,6 +272,9 @@ ${params}
       });
       fullAIResponse = loopResult.fullAIResponse;
       responseMetadata = loopResult.responseMetadata;
+      context.iterationHistory = loopResult.iterationHistory;
+      context.collectedSources = loopResult.collectedSources;
+      this.llmFormattedMessages = loopResult.llmMessages;
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
         logInfo("Autonomous agent stream aborted by user", {
@@ -296,9 +325,16 @@ ${params}
     adapter: ModelAdapter,
     chatModel: any
   ): Promise<AgentRunContext> {
-    const conversationMessages: any[] = [];
+    const conversationMessages: ConversationMessage[] = [];
     const iterationHistory: string[] = [];
     const collectedSources: AgentSource[] = [];
+    const availableTools = this.getAvailableTools();
+    const loopDeps: AgentLoopDeps = {
+      availableTools,
+      getTemporaryToolCallId: this.getTemporaryToolCallId.bind(this),
+      processLocalSearchResult: this.processLocalSearchResult.bind(this),
+      applyCiCOrderingToLocalSearchResult: this.applyCiCOrderingToLocalSearchResult.bind(this),
+    };
 
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -331,6 +367,7 @@ ${params}
       iterationHistory,
       collectedSources,
       originalUserPrompt: userMessage.originalMessage || userMessage.message,
+      loopDeps,
     };
   }
 
@@ -344,21 +381,26 @@ ${params}
   private async executeAgentLoop(params: AgentLoopParams): Promise<AgentLoopResult> {
     const {
       conversationMessages,
-      iterationHistory,
-      collectedSources,
+      iterationHistory: initialIterationHistory,
+      collectedSources: initialCollectedSources,
       originalUserPrompt,
+      loopDeps,
       adapter,
       abortController,
       updateCurrentAiMessage,
     } = params;
 
+    const iterationHistory = [...initialIterationHistory];
+    const collectedSources = [...initialCollectedSources];
+    const llmMessages: string[] = [];
+    const { availableTools } = loopDeps;
     const maxIterations = getSettings().autonomousAgentMaxIterations;
     let iteration = 0;
     let fullAIResponse = "";
     let responseMetadata: ResponseMetadata | undefined;
 
     while (iteration < maxIterations) {
-      if (abortController.signal.aborted) {
+      if (this.isAbortRequested(abortController)) {
         break;
       }
 
@@ -370,66 +412,14 @@ ${params}
       const response = await this.streamResponse(
         conversationMessages,
         abortController,
-        (fullMessage) => {
-          const cleanedMessage = stripToolCallXML(fullMessage);
-          const displayParts: string[] = [];
-          displayParts.push(...iterationHistory);
-
-          if (cleanedMessage.trim()) {
-            displayParts.push(cleanedMessage);
-          }
-
-          const toolCalls = parseXMLToolCalls(fullMessage);
-          let toolNames: string[] = [];
-          if (toolCalls.length > 0) {
-            toolNames = toolCalls.map((toolCall) => toolCall.name);
-          }
-
-          const availableTools = this.getAvailableTools();
-          const backgroundToolNames = new Set(
-            availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
-          );
-
-          const partialToolName = extractToolNameFromPartialBlock(fullMessage);
-          if (partialToolName) {
-            const lastToolNameIndex = fullMessage.lastIndexOf(partialToolName);
-            if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
-              toolNames.push(partialToolName);
-            }
-          }
-
-          toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
-
-          for (let i = 0; i < toolNames.length; i += 1) {
-            const toolName = toolNames[i];
-            const toolCallId = this.getTemporaryToolCallId(toolName, i);
-            const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
-              message.includes(toolCallId)
-            );
-            if (existingIndex !== -1) {
-              continue;
-            }
-
-            const toolCallMarker = createToolCallMarker(
-              toolCallId,
-              toolName,
-              getToolDisplayName(toolName),
-              getToolEmoji(toolName),
-              "",
-              true,
-              "",
-              ""
-            );
-
-            currentIterationToolCallMessages.push(toolCallMarker);
-          }
-
-          if (currentIterationToolCallMessages.length > 0) {
-            displayParts.push(currentIterationToolCallMessages.join("\n"));
-          }
-
-          updateCurrentAiMessage(displayParts.join("\n\n"));
-        },
+        (fullMessage) =>
+          this.updateStreamingDisplay(
+            fullMessage,
+            iterationHistory,
+            currentIterationToolCallMessages,
+            updateCurrentAiMessage,
+            loopDeps
+          ),
         adapter
       );
 
@@ -471,7 +461,7 @@ ${params}
           content: safeAssistantMessage,
         });
 
-        this.llmFormattedMessages.push(responseContent);
+        llmMessages.push(responseContent);
         break;
       }
 
@@ -491,20 +481,26 @@ ${params}
 
       for (let i = 0; i < toolCalls.length; i += 1) {
         const toolCall = toolCalls[i];
-        if (abortController.signal.aborted) {
+        if (this.isAbortRequested(abortController)) {
           break;
         }
 
         logToolCall(toolCall, iteration);
 
-        const availableTools = this.getAvailableTools();
         const tool = availableTools.find((availableTool) => availableTool.name === toolCall.name);
         const isBackgroundTool = tool?.isBackground || false;
 
         let toolCallId: string | undefined;
         if (!isBackgroundTool) {
           const toolEmoji = getToolEmoji(toolCall.name);
-          const toolDisplayName = getToolDisplayName(toolCall.name);
+          let toolDisplayName = getToolDisplayName(toolCall.name);
+          if (toolCall.name === "readNote") {
+            const notePath =
+              typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath.trim() : "";
+            if (notePath.length > 0) {
+              toolDisplayName = notePath;
+            }
+          }
           const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
 
           toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -522,7 +518,7 @@ ${params}
           );
 
           const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
-            message.includes(this.getTemporaryToolCallId(toolCall.name, i))
+            message.includes(loopDeps.getTemporaryToolCallId(toolCall.name, i))
           );
           if (existingIndex !== -1) {
             currentIterationToolCallMessages[existingIndex] = toolCallMarker;
@@ -546,9 +542,9 @@ ${params}
         );
 
         if (toolCall.name === "localSearch") {
-          const processed = this.processLocalSearchResult(result);
+          const processed = loopDeps.processLocalSearchResult(result);
           collectedSources.push(...processed.sources);
-          result.result = this.applyCiCOrderingToLocalSearchResult(
+          result.result = loopDeps.applyCiCOrderingToLocalSearchResult(
             processed.formattedForLLM,
             originalUserPrompt || ""
           );
@@ -582,12 +578,12 @@ ${params}
       }
 
       const assistantMemoryContent = sanitizedResponse;
-      this.llmFormattedMessages.push(assistantMemoryContent);
+      llmMessages.push(assistantMemoryContent);
 
       if (toolResults.length > 0) {
         const toolResultsForLLM = processToolResults(toolResults, true);
         if (toolResultsForLLM) {
-          this.llmFormattedMessages.push(toolResultsForLLM);
+          llmMessages.push(toolResultsForLLM);
         }
       }
 
@@ -625,7 +621,82 @@ I've reached the maximum number of iterations (${maxIterations}) for this task. 
       });
     }
 
-    return { fullAIResponse, responseMetadata };
+    return {
+      fullAIResponse,
+      responseMetadata,
+      iterationHistory,
+      collectedSources,
+      llmMessages,
+    };
+  }
+
+  /**
+   * Handle streaming updates by maintaining tool call markers and refreshing the
+   * in-progress message display.
+   */
+  private updateStreamingDisplay(
+    fullMessage: string,
+    iterationHistory: string[],
+    currentIterationToolCallMessages: string[],
+    updateCurrentAiMessage: (message: string) => void,
+    loopDeps: AgentLoopDeps
+  ): void {
+    const cleanedMessage = stripToolCallXML(fullMessage);
+    const displayParts: string[] = [...iterationHistory];
+
+    if (cleanedMessage.trim()) {
+      displayParts.push(cleanedMessage);
+    }
+
+    const toolCalls = parseXMLToolCalls(fullMessage);
+    let toolNames = toolCalls.map((toolCall) => toolCall.name);
+    const backgroundToolNames = new Set(
+      loopDeps.availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
+    );
+
+    const partialToolName = extractToolNameFromPartialBlock(fullMessage);
+    if (partialToolName) {
+      const lastToolNameIndex = fullMessage.lastIndexOf(partialToolName);
+      if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
+        toolNames.push(partialToolName);
+      }
+    }
+
+    toolNames = toolNames.filter((name) => !backgroundToolNames.has(name));
+
+    for (let i = 0; i < toolNames.length; i += 1) {
+      const toolName = toolNames[i];
+      const toolCallId = loopDeps.getTemporaryToolCallId(toolName, i);
+      const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
+        message.includes(toolCallId)
+      );
+      if (existingIndex !== -1) {
+        continue;
+      }
+
+      const toolCallMarker = createToolCallMarker(
+        toolCallId,
+        toolName,
+        getToolDisplayName(toolName),
+        getToolEmoji(toolName),
+        "",
+        true,
+        "",
+        ""
+      );
+
+      currentIterationToolCallMessages.push(toolCallMarker);
+    }
+
+    if (currentIterationToolCallMessages.length > 0) {
+      displayParts.push(currentIterationToolCallMessages.join("\n"));
+    }
+
+    updateCurrentAiMessage(displayParts.join("\n\n"));
+  }
+
+  private isAbortRequested(abortController: AbortController): boolean {
+    return abortController.signal.aborted;
   }
 
   /**
@@ -683,7 +754,7 @@ I've reached the maximum number of iterations (${maxIterations}) for this task. 
   }
 
   private async streamResponse(
-    messages: any[],
+    messages: ConversationMessage[],
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void,
     adapter: ModelAdapter
