@@ -27,7 +27,7 @@ export const TokenCounter: React.FC<TokenCounterProps> = ({ tokenCount }) => {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <div className="tw-flex tw-items-center tw-gap-1 tw-text-sm tw-text-muted">
+        <div className="tw-flex tw-items-center tw-gap-1 tw-text-sm tw-text-faint">
           <Coins className="tw-size-3" />
           <span>{formatTokenCount(tokenCount)}</span>
         </div>
