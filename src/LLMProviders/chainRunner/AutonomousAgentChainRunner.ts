@@ -476,7 +476,7 @@ ${params}
       }
 
       const toolResults: ToolExecutionResult[] = [];
-      let visibleToolCounter = 0;
+      const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
       currentIterationToolCallMessages.splice(toolCalls.length);
 
       for (let i = 0; i < toolCalls.length; i += 1) {
@@ -493,11 +493,19 @@ ${params}
         let toolCallId: string | undefined;
         if (!isBackgroundTool) {
           const toolEmoji = getToolEmoji(toolCall.name);
-          const toolDisplayName = this.getToolDisplayName(toolCall);
+          let toolDisplayName = getToolDisplayName(toolCall.name);
+          if (toolCall.name === "readNote") {
+            const notePath =
+              typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath : null;
+            if (notePath && notePath.trim().length > 0) {
+              toolDisplayName = notePath.trim();
+            }
+          }
           const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
 
-          toolCallId = loopDeps.getTemporaryToolCallId(toolCall.name, visibleToolCounter);
-          visibleToolCounter += 1;
+          // Generate unique ID for this tool call
+          toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
+          toolCallIdMap.set(i, toolCallId);
 
           const toolCallMarker = createToolCallMarker(
             toolCallId,
@@ -511,7 +519,7 @@ ${params}
           );
 
           const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
-            message.includes(toolCallId!)
+            message.includes(loopDeps.getTemporaryToolCallId(toolCall.name, i))
           );
           if (existingIndex !== -1) {
             currentIterationToolCallMessages[existingIndex] = toolCallMarker;
@@ -621,19 +629,6 @@ ${params}
       collectedSources,
       llmMessages,
     };
-  }
-
-  private getToolDisplayName(toolCall: { name: string; args?: Record<string, unknown> }): string {
-    if (toolCall.name === "readNote") {
-      const rawPath = toolCall.args?.notePath;
-      if (typeof rawPath === "string") {
-        const trimmed = rawPath.trim();
-        if (trimmed.length > 0) {
-          return trimmed;
-        }
-      }
-    }
-    return getToolDisplayName(toolCall.name);
   }
 
   /**
