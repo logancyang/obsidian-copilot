@@ -74,6 +74,18 @@ describe("QueryExpander", () => {
       expect(result.salientTerms).not.toContain("music");
     });
 
+    it("should keep hash-prefixed tags intact as salient terms", async () => {
+      mockChatModel.invoke.mockResolvedValue({
+        content: `<queries></queries><terms></terms>`,
+      });
+
+      const result = await expander.expand("status update for #ProjectAlpha #2024/Plan");
+
+      expect(result.salientTerms).toEqual(expect.arrayContaining(["#projectalpha", "#2024/plan"]));
+      expect(result.salientTerms).not.toContain("projectalpha");
+      expect(result.salientTerms).not.toContain("2024/plan");
+    });
+
     it("should limit variants to maxVariants", async () => {
       mockChatModel.invoke.mockResolvedValue({
         content: `<queries>
@@ -117,12 +129,13 @@ describe("QueryExpander", () => {
     it("should handle LLM errors gracefully", async () => {
       mockChatModel.invoke.mockRejectedValue(new Error("LLM error"));
 
-      const result = await expander.expand("test error handling");
+      const result = await expander.expand("test error handling #Tagged");
 
-      expect(result.queries).toEqual(["test error handling"]);
+      expect(result.queries).toEqual(["test error handling #Tagged"]);
       expect(result.salientTerms).toContain("test");
       expect(result.salientTerms).toContain("error");
       expect(result.salientTerms).toContain("handling");
+      expect(result.salientTerms).toContain("#tagged");
     });
 
     it("should properly handle AbortController signal", async () => {

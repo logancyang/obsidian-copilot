@@ -7,7 +7,7 @@ import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { ChunkManager } from "./chunks";
-import { SearchCore } from "./SearchCore";
+import { RETURN_ALL_LIMIT, SearchCore } from "./SearchCore";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
 async function safeGetChatModel() {
@@ -49,6 +49,8 @@ export class TieredLexicalRetriever extends BaseRetriever {
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number; // Not used in v3, kept for compatibility
+      returnAllTags?: boolean;
+      tagTerms?: string[];
     }
   ) {
     super();
@@ -84,6 +86,11 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const noteFiles = extractNoteFiles(query, this.app.vault);
       const noteTitles = noteFiles.map((file) => file.basename);
 
+      const tagTerms = (this.options.tagTerms ?? []).filter((term) => term.startsWith("#"));
+      if (this.options.returnAllTags && tagTerms.length > 0) {
+        return this.getAllTagDocuments(tagTerms, query, noteFiles);
+      }
+
       // Combine salient terms with note titles
       const enhancedSalientTerms = [...new Set([...this.options.salientTerms, ...noteTitles])];
 
@@ -98,9 +105,10 @@ export class TieredLexicalRetriever extends BaseRetriever {
       // Perform the tiered search
       const settings = getSettings();
       const searchResults = await this.searchCore.retrieve(query, {
-        maxResults: this.options.maxK,
+        maxResults: this.options.returnAllTags ? RETURN_ALL_LIMIT : this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableLexicalBoosts: settings.enableLexicalBoosts,
+        returnAll: this.options.returnAllTags,
       });
 
       // Get title-matched notes that should always be included
@@ -173,7 +181,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
     const timeFilteredDocuments: Document[] = [];
 
     // Limit the number of time-filtered documents to avoid overwhelming results
-    const maxTimeFilteredDocs = Math.min(this.options.maxK, 100);
+    const maxTimeFilteredDocs = this.options.returnAll
+      ? RETURN_ALL_LIMIT
+      : Math.min(this.options.maxK, RETURN_ALL_LIMIT);
 
     for (const file of allFiles) {
       // Only include files modified within the time range
@@ -256,6 +266,27 @@ export class TieredLexicalRetriever extends BaseRetriever {
     }
 
     return results;
+  }
+
+  private async getAllTagDocuments(
+    tagTerms: string[],
+    originalQuery: string,
+    noteFiles: TFile[]
+  ): Promise<Document[]> {
+    const settings = getSettings();
+    const tagQuery = tagTerms.join(" ") || originalQuery;
+
+    const searchResults = await this.searchCore.retrieve(tagQuery, {
+      maxResults: RETURN_ALL_LIMIT,
+      candidateLimit: RETURN_ALL_LIMIT,
+      salientTerms: tagTerms,
+      enableLexicalBoosts: settings.enableLexicalBoosts,
+      returnAll: true,
+    });
+
+    const titleMatches = await this.getTitleMatches(noteFiles);
+    const searchDocuments = await this.convertToDocuments(searchResults);
+    return this.combineResults(searchDocuments, titleMatches);
   }
 
   /**

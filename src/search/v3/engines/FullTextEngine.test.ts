@@ -158,6 +158,24 @@ jest.mock("../chunks", () => ({
           heading: "",
           mtime: Date.now(),
         },
+        {
+          id: "common.md#0",
+          notePath: "common.md",
+          chunkIndex: 0,
+          content: "Meeting note summary with meeting agenda note note.",
+          title: "Common Note",
+          heading: "",
+          mtime: Date.now(),
+        },
+        {
+          id: "unique.md#0",
+          notePath: "unique.md",
+          chunkIndex: 0,
+          content: "Meeting note covering architecture rareterm decisions for alpha.",
+          title: "Unique Note",
+          heading: "",
+          mtime: Date.now(),
+        },
       ];
 
       // Filter chunks based on candidates
@@ -252,6 +270,14 @@ describe("FullTextEngine", () => {
         headings: [],
         frontmatter: {}, // Will be set up separately for circular test
       },
+      "common.md": {
+        headings: [],
+        frontmatter: {},
+      },
+      "unique.md": {
+        headings: [],
+        frontmatter: {},
+      },
     };
 
     // Mock app
@@ -275,6 +301,8 @@ describe("FullTextEngine", () => {
             "array-test.md": "Testing arrays in frontmatter",
             "edge-cases.md": "Testing edge cases",
             "circular.md": "body",
+            "common.md": "Meeting note summary with meeting agenda note note.",
+            "unique.md": "Meeting note covering architecture rareterm decisions for alpha.",
           };
           return Promise.resolve(contents[file.path] || "");
         }),
@@ -332,6 +360,31 @@ describe("FullTextEngine", () => {
 
       expect(tokens).toContain("中");
       expect(tokens).toContain("文");
+    });
+
+    it("should tokenize hash tags and their hierarchy variants", () => {
+      const tokens = (engine as any).tokenizeMixed("Working on #Project/Alpha and #deepWork");
+
+      expect(tokens).toEqual(
+        expect.arrayContaining([
+          "#project/alpha",
+          "#project",
+          "project/alpha",
+          "project",
+          "alpha",
+          "#deepwork",
+          "deepwork",
+        ])
+      );
+    });
+
+    it("should not split hyphenated tags into partial word tokens", () => {
+      const tokens = (engine as any).tokenizeMixed("#copilot-conversation updates");
+
+      expect(tokens).toContain("#copilot-conversation");
+      expect(tokens).toContain("copilot-conversation");
+      expect(tokens).not.toContain("copilot");
+      expect(tokens).not.toContain("conversation");
     });
 
     it("should return empty array for empty input", () => {
@@ -574,6 +627,42 @@ describe("FullTextEngine", () => {
         expect(results[0].score).toBeGreaterThan(0);
       }
     });
+
+    it("should prioritize chunks that match tag queries", () => {
+      const results = engine.search(["#piano", "piano"], 10, ["#piano"], "#piano");
+
+      expect(results.length).toBeGreaterThan(0);
+      const tagMatchIndex = results.findIndex((r) => r.id === "projects/music.md#0");
+      expect(tagMatchIndex).toBeGreaterThanOrEqual(0);
+
+      const lessonIndex = results.findIndex((r) => r.id.includes("Lesson 1"));
+      if (lessonIndex >= 0) {
+        expect(tagMatchIndex).toBeLessThan(lessonIndex);
+      }
+
+      const tagMatchScore = results[tagMatchIndex]?.score ?? 0;
+      const otherScore = lessonIndex >= 0 ? (results[lessonIndex]?.score ?? 0) : 0;
+      expect(tagMatchScore).toBeGreaterThan(otherScore);
+    });
+
+    it("should downweight ubiquitous terms during ranking", async () => {
+      await engine.buildFromCandidates(["common.md"]);
+      const results = engine.search(["meeting"], 10, ["meeting"], "meeting");
+
+      expect(results[0].explanation?.baseScore).toBeCloseTo(0.4, 2);
+    });
+
+    it("should keep rare terms dominant when combined with common terms", async () => {
+      await engine.buildFromCandidates(["common.md", "unique.md"]);
+      const results = engine.search(
+        ["meeting", "rareterm"],
+        10,
+        ["meeting", "rareterm"],
+        "meeting rareterm"
+      );
+
+      expect(results[0].id).toBe("unique.md#0");
+    });
   });
 
   describe("chunk-based indexing", () => {
@@ -624,10 +713,10 @@ describe("FullTextEngine", () => {
       const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
 
       expect(getFieldWeight("title")).toBe(3);
-      expect(getFieldWeight("heading")).toBe(1); // Default weight since not in field weights map
+      expect(getFieldWeight("heading")).toBe(2.5);
       expect(getFieldWeight("path")).toBe(1.5); // Actual weight from implementation
       expect(getFieldWeight("headings")).toBe(1.5);
-      expect(getFieldWeight("tags")).toBe(1.5);
+      expect(getFieldWeight("tags")).toBe(4);
       expect(getFieldWeight("props")).toBe(1.5);
       expect(getFieldWeight("links")).toBe(1.5);
       expect(getFieldWeight("body")).toBe(1);

@@ -215,7 +215,18 @@ Format your response using XML tags:
    * @returns Array of valid terms extracted from the original query
    */
   private extractSalientTermsFromOriginal(originalQuery: string): string[] {
-    return this.extractTermsFromQueries([originalQuery]).filter((term) => this.isValidTerm(term));
+    const baseTerms = this.extractTermsFromQueries([originalQuery]).filter((term) =>
+      this.isValidTerm(term)
+    );
+    const tagTerms = this.extractTags(originalQuery);
+    const combined = new Set<string>([...baseTerms, ...tagTerms]);
+    for (const tag of tagTerms) {
+      const withoutHash = tag.slice(1);
+      if (withoutHash.length > 0) {
+        combined.delete(withoutHash);
+      }
+    }
+    return Array.from(combined);
   }
 
   /**
@@ -341,13 +352,26 @@ Format your response using XML tags:
    */
   private fallbackExpansion(query: string): ExpandedQuery {
     // Extract terms from the original query
-    const terms = this.extractTermsFromQueries([query]);
+    const baseTerms = this.extractTermsFromQueries([query]);
+    const tagTerms = this.extractTags(query);
+    const termsSet = new Set<string>([...baseTerms, ...tagTerms]);
+    for (const tag of tagTerms) {
+      const withoutHash = tag.slice(1);
+      if (withoutHash.length > 0) {
+        termsSet.delete(withoutHash);
+      }
+    }
+    const terms = Array.from(termsSet);
 
     // Generate fuzzy variants for important terms
     const queries = new Set<string>([query]);
 
     // Generate variants for each salient term
     for (const term of terms) {
+      if (term.startsWith("#")) {
+        // Skip fuzzing tag tokens; tags must remain intact
+        continue;
+      }
       if (term.length >= 3) {
         // Only generate variants for meaningful terms
         const variants = FuzzyMatcher.generateVariants(term);
@@ -411,6 +435,41 @@ Format your response using XML tags:
     }
 
     return Array.from(terms);
+  }
+
+  /**
+   * Extracts tag tokens (words prefixed with '#') from the query while preserving the hash prefix.
+   * Generates lowercase variants for consistent downstream matching.
+   *
+   * @param query - The raw search query supplied by the user
+   * @returns Array of normalized tag tokens (e.g., ['#projectx', '#notes'])
+   */
+  private extractTags(query: string): string[] {
+    if (!query) {
+      return [];
+    }
+
+    let matches: RegExpMatchArray | null = null;
+    try {
+      matches = query.match(/#[\p{L}\p{N}_/-]+/gu);
+    } catch {
+      matches = query.match(/#[a-zA-Z0-9_/-]+/g);
+    }
+
+    if (!matches) {
+      return [];
+    }
+
+    const normalized = new Set<string>();
+    for (const raw of matches) {
+      const trimmed = raw.trim();
+      if (trimmed.length <= 1) {
+        continue;
+      }
+      normalized.add(trimmed.toLowerCase());
+    }
+
+    return Array.from(normalized);
   }
 
   /**

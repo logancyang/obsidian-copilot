@@ -6,19 +6,25 @@ A high-performance, memory-bounded lexical search system for Obsidian that uses 
 
 ```mermaid
 graph TD
-    A[User Query] --> B[Query Expansion<br/>LLM rewrites + terms]
-    B --> C[Grep Scan<br/>Fast substring search]
-    C --> D[Chunking<br/>Heading-first + size-cap]
-    D --> F[Full-Text Search<br/>Chunk-level indexing]
-    F --> H[Lexical Boost<br/>Folder + Graph]
-    H --> J[Score Normalization<br/>Min-max clipping]
-    J --> K[Chunk Results]
+    A[User Query] --> B[QueryExpander<br/>variants + salient terms]
+    B --> C[SearchCore<br/>pipeline orchestrator]
+
+    C --> D[Grep Scan<br/>recall up to 200 paths]
+    C --> E[ChunkManager<br/>heading-first chunks]
+    E --> F[FullTextEngine<br/>chunk index – title · path · tags · body]
+    F --> G[Boosters<br/>folder / graph / tag bonus]
+    G --> H[Score Normalization]
+    H --> I[Deduplicate + order]
+    I --> J[[Final chunk results]]
 
     style B fill:#e1f5fe
-    style D fill:#ffecb3
+    style C fill:#f3e5f5
+    style D fill:#fff3e0
+    style E fill:#ffecb3
     style F fill:#ffe0b2
-    style H fill:#f3e5f5
-    style K fill:#fff3e0
+    style G fill:#ede7f6
+    style H fill:#e0f7fa
+    style J fill:#dcedc8
 ```
 
 ## Chunk ID Mapping and Result Assembly
@@ -59,16 +65,16 @@ The lexical search engine operates on individual chunks and returns consistent c
 
 ## Example: Search Flow
 
-**Query**: `"How do I set up OAuth in Next.js?"`
+**Query**: `"Need to deploy #project/alpha after fixing #mobile-app sync"`
 
 ### 1. Query Expansion
 
 ```
-Input:  "How do I set up OAuth in Next.js?"
-Output: ["How do I set up OAuth in Next.js?",
-         "Next.js OAuth configuration",
-         "NextJS OAuth setup"]
-Terms:  ["oauth", "nextjs"]
+Input:  "Need to deploy #project/alpha after fixing #mobile-app sync"
+Output: ["Need to deploy #project/alpha after fixing #mobile-app sync",
+         "deploy #project/alpha",
+         "mobile app sync fix"]
+Terms:  ["#project/alpha", "#mobile-app", "deploy", "sync"]
 ```
 
 ### 2. Grep Scan (L0)
@@ -76,7 +82,7 @@ Terms:  ["oauth", "nextjs"]
 Searches for all recall terms (original + expanded + salient):
 
 ```
-Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
+Finds: ["projects/alpha/deploy.md", "projects/mobile/sync.md", "notes/release-checklist.md"]
        (up to 200 candidates)
 ```
 
@@ -85,21 +91,21 @@ Finds: ["auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md"]
 Heading-first intelligent chunking converts candidate notes into manageable pieces:
 
 ```
-Input:  3 candidate notes ("auth/oauth-guide.md", "nextjs/auth.md", "tutorials/oauth.md")
-Chunks: 8 chunks with size 800-2000 chars each
-Output: ["auth/oauth-guide.md#0", "auth/oauth-guide.md#1", "nextjs/auth.md#0", ...]
+Input:  3 candidate notes ("projects/alpha/deploy.md", "projects/mobile/sync.md", "notes/release-checklist.md")
+Chunks: 7 chunks with size 800-2000 chars each
+Output: ["projects/alpha/deploy.md#0", "projects/alpha/deploy.md#1", "projects/mobile/sync.md#0", ...]
 ```
 
 ### 4. Full-Text Search Execution
 
 **Two-phase approach**:
 
-- **Recall**: Uses all terms to find candidates in FlexSearch index
-- **Ranking**: Scores using only salient terms to avoid stopword noise
+- **Recall**: Uses the original query, expanded variants, and salient/tag terms to locate candidate chunks in the FlexSearch index.
+- **Ranking**: Scores with salient/tag terms when they are available; if the expander supplies none, the original user query is used instead. Weighting comes from the FlexSearch scorer plus our field weights, and we taper the impact of tokens that hit most candidates so everyday words (e.g., “note”, “meeting”) can’t overpower rarer matches.
 
-- Builds ephemeral FlexSearch index from chunks (not full notes)
+- Builds an ephemeral FlexSearch index from chunks (not full notes)
 - **Frontmatter Replication**: Extracts note-level frontmatter once and replicates property values across all chunks from that note
-- Field weights: Title (3x), Heading (2.5x), Path (2x), Body (1x)
+- Field weights: Title (3x), Heading (2.5x), Path (2x), Tags (4x), Body (1x)
 
 ### 5. Lexical Reranking (Boosting Stage)
 
@@ -119,9 +125,9 @@ Min-max normalization prevents auto-1.0 scores
 ### 7. Final Results
 
 ```
-1. nextjs/auth.md#0 (0.95) - Title match chunk, folder boost, graph connections
-2. nextjs/config.md#1 (0.38) - Configuration section, folder boost
-3. auth/oauth-guide.md#0 (0.21) - Introduction section, title match
+1. projects/alpha/deploy.md#0 (0.94) - Matched `#project/alpha` + “deploy”, folder boost
+2. projects/mobile/sync.md#0 (0.46) - Matched `#mobile-app` + “sync”, folder boost
+3. notes/release-checklist.md#1 (0.23) - Matched “deploy” and shared tags
 ```
 
 ## Core Components
@@ -326,6 +332,43 @@ interface Chunk {
   - Max Boost Multiplier: 1.15x (prevents over-boosting)
 - **Memory Management**: RAM usage split between chunks (35%) and FlexSearch (65%)
 - **File Filtering**: Pattern-based inclusions and exclusions for search
+
+## Full Pipeline Overview
+
+```
+┌────────────┐         ┌──────────────────┐          ┌─────────────────────────┐
+│ User Query │───────▶│ QueryExpander    │─────────▶│ Salient Terms           │
+└────────────┘         └──────┬───────────┘          └────────┬──────────────────┘
+                               │ keep language / keep #tags              │
+                               ▼                                         ▼
+┌──────────────────┐   ┌──────────────────┐          ┌─────────────────────────┐
+│ Grep (recall)    │◀──│ SearchCore       │─────────▶│ FlexSearch (ranking pool)│
+└──────┬───────────┘   └──────┬───────────┘          └────────┬──────────────────┘
+       │ candidate list        │ returnAll? cap=200                     │ normalized scores
+       ▼                       ▼                                         ▼
+┌──────────────────┐   ┌──────────────────┐          ┌─────────────────────────┐
+│ ChunkManager     │──▶│ FullTextEngine   │─────────▶│ Scoring + Boosting      │
+└──────────────────┘   └──────┬───────────┘          └────────┬──────────────────┘
+                              │ index title/path/body/tags/props          │ folder/graph/tag bonuses
+                              ▼                                           ▼
+                       ┌─────────────────────────┐             ┌─────────────────────────┐
+                       │ Dedup + Ordering        │────────────▶│ Final Results (≤200)   │
+                       └─────────────────────────┘             └─────────────────────────┘
+```
+
+- **Query & tags**: Expansion keeps hash-prefixed terms exactly as typed (`#project/alpha`). We do not generate plain variants; tag recall is handled by metadata indexing.
+- **Recall**: Grep seeds the candidate list with the original query + salient terms while honouring the 200-chunk ceiling when `returnAll` is enabled (time range or tag query).
+- **Chunking**: Notes are split once through `ChunkManager`, and frontmatter properties/tags are copied to every chunk while inline tags stay local.
+- **Indexing**: `FullTextEngine` indexes title, path, body, and the normalised tag/prop fields. Tags receive their own field but we avoid partial matches for hyphenated tags, keeping tokens intact.
+- **Scoring**: FlexSearch results flow through lexical scoring, folder/graph boosts, and a modest tag bonus (`tags` weight = 4) so true tag hits win without overwhelming other evidence.
+- **Return-all mode**: When a time range or tag query is detected we raise the cap to 200 chunks (`RETURN_ALL_LIMIT`), guaranteeing tag/time windows fan out widely while staying bounded for downstream ranking.
+
+**Example** — `#project/alpha bugfix`
+
+1. QueryExpander preserves the tag (`#project/alpha`) and extracts `bugfix` as a salient term.
+2. SearchCore runs grep + FlexSearch with `#project/alpha` and `bugfix`, raising the cap to 200.
+3. FullTextEngine finds chunks where the metadata already lists that tag (inline or frontmatter) and indexes them under the `tags` field.
+4. Scoring boosts those chunks via the tag field weight, so the bugfix notes with the exact tag rise above generic “project alpha” mentions.
 
 ## Key Design Decisions
 
