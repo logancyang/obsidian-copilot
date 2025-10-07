@@ -1,6 +1,6 @@
+import { HybridRetriever } from "@/search/hybridRetriever";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
-import { HybridRetriever } from "@/search/hybridRetriever";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
@@ -34,7 +34,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
   private readonly returnAll: boolean;
 
   private static readonly LEXICAL_WEIGHT = 1.0;
-  private static readonly SEMANTIC_WEIGHT = 0.7;
+  private static readonly SEMANTIC_WEIGHT = 1.0;
   private static readonly TAG_MATCH_BOOST = 1.1;
 
   /**
@@ -122,7 +122,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * @param source - Origin of the document
    */
   private insertResult(map: Map<string, Document>, doc: Document, source: SourceKind): void {
-    const key = this.getDocumentKey(doc);
+    const key = this.getDocumentKey(doc); // Map key = chunk-level identity for cross-engine dedupe
     const enriched = this.decorateDocument(doc, source);
 
     if (!map.has(key) || source === "lexical") {
@@ -160,6 +160,8 @@ export class MergedSemanticRetriever extends BaseRetriever {
       source,
     };
 
+    // Blend lexical + semantic scores; lexical and semantic weights are currently equal
+    // Tag matches in lexical scoring receive a small boost to prioritize keyword hits
     const baseScore = this.extractBaseScore(metadata);
     const weight =
       source === "lexical"
