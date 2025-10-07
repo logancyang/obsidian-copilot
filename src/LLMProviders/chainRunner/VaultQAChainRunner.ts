@@ -1,7 +1,7 @@
 import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { logInfo } from "@/logger";
-import { HybridRetriever } from "@/search/hybridRetriever";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import { MergedSemanticRetriever } from "@/search/v3/MergedSemanticRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import {
@@ -54,10 +54,11 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Create retriever based on semantic search setting
       const settings = getSettings();
       const retriever = settings.enableSemanticSearchV3
-        ? new HybridRetriever({
+        ? new MergedSemanticRetriever(app, {
             minSimilarityScore: 0.01,
             maxK: settings.maxSourceChunks,
             salientTerms: [],
+            returnAll: false,
           })
         : new TieredLexicalRetriever(app, {
             minSimilarityScore: 0.01,
