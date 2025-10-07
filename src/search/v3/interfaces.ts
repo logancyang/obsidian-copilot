@@ -53,4 +53,6 @@ export interface SearchOptions {
   salientTerms?: string[]; // Additional terms to enhance the search
   /** Enable lexical boosts (folder and graph) - default: true */
   enableLexicalBoosts?: boolean;
+  /** When true, bypasses max result ceilings and returns every matching chunk */
+  returnAll?: boolean;
 }

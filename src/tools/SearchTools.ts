@@ -6,6 +6,7 @@ import { getSettings } from "@/settings/model";
 import { z } from "zod";
 import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecution";
 import { createTool, SimpleTool } from "./SimpleTool";
+import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
 
 // Define Zod schema for localSearch
@@ -29,18 +30,19 @@ const lexicalSearchTool = createTool({
   handler: async ({ timeRange, query, salientTerms }) => {
     const settings = getSettings();
 
+    const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
     const returnAll = timeRange !== undefined;
-    const effectiveMaxK = returnAll
-      ? Math.max(settings.maxSourceChunks, 200)
-      : settings.maxSourceChunks;
+    const returnAllTags = tagTerms.length > 0;
+    const shouldReturnAll = returnAll || returnAllTags;
+    const effectiveMaxK = shouldReturnAll ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
 
-    logInfo(`lexicalSearch returnAll: ${returnAll}`);
+    logInfo(`lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags})`);
 
     // Always use TieredLexicalRetriever for lexical search
     const retriever = new (
       await import("@/search/v3/TieredLexicalRetriever")
     ).TieredLexicalRetriever(app, {
-      minSimilarityScore: returnAll ? 0.0 : 0.1,
+      minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       timeRange: timeRange
@@ -52,6 +54,8 @@ const lexicalSearchTool = createTool({
       textWeight: TEXT_WEIGHT,
       returnAll: returnAll,
       useRerankerThreshold: 0.5,
+      returnAllTags,
+      tagTerms,
     });
 
     const documents = await retriever.getRelevantDocuments(query);
@@ -198,10 +202,13 @@ const localSearchTool = createTool({
       `localSearch delegating to ${settings.enableSemanticSearchV3 ? "semantic" : "lexical"} search`
     );
 
+    const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+    const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;
+
     // Delegate to appropriate search tool based on settings
-    return settings.enableSemanticSearchV3
-      ? await semanticSearchTool.call({ timeRange, query, salientTerms })
-      : await lexicalSearchTool.call({ timeRange, query, salientTerms });
+    return shouldForceLexical || !settings.enableSemanticSearchV3
+      ? await lexicalSearchTool.call({ timeRange, query, salientTerms })
+      : await semanticSearchTool.call({ timeRange, query, salientTerms });
   },
 });
 

@@ -31,6 +31,8 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
 - You MUST always provide both "query" (string) and "salientTerms" (array of strings)
 - salientTerms MUST be extracted from the user's original query - never invent new terms
 - They are keywords used for BM25 full-text search to find notes containing those exact words
+- Treat every token that begins with "#" as a high-priority salient term. Keep the leading "#" and the full tag hierarchy (e.g., "#project/phase1").
+- Include tagged terms alongside other meaningful words; never strip hashes or rewrite tags into plain words.
 - Extract meaningful content words from the query (nouns, verbs, names, etc.)
 - Exclude common words like "what", "I", "do", "the", "a", etc.
 - Exclude time expressions like "last month", "yesterday", "last week"
@@ -41,6 +43,13 @@ Example usage:
 <name>localSearch</name>
 <query>piano learning practice</query>
 <salientTerms>["piano", "learning", "practice"]</salientTerms>
+</use_tool>
+
+For localSearch with tags in the query (e.g., "#projectx status update"):
+<use_tool>
+<name>localSearch</name>
+<query>#projectx status update</query>
+<salientTerms>["#projectx", "status", "update"]</salientTerms>
 </use_tool>
 
 For localSearch with time range (e.g., "what did I do last week"):
