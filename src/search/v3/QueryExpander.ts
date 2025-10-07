@@ -215,18 +215,9 @@ Format your response using XML tags:
    * @returns Array of valid terms extracted from the original query
    */
   private extractSalientTermsFromOriginal(originalQuery: string): string[] {
-    const baseTerms = this.extractTermsFromQueries([originalQuery]).filter((term) =>
-      this.isValidTerm(term)
-    );
+    const baseTerms = this.extractTermsFromQueries([originalQuery]);
     const tagTerms = this.extractTags(originalQuery);
-    const combined = new Set<string>([...baseTerms, ...tagTerms]);
-    for (const tag of tagTerms) {
-      const withoutHash = tag.slice(1);
-      if (withoutHash.length > 0) {
-        combined.delete(withoutHash);
-      }
-    }
-    return Array.from(combined);
+    return this.combineBaseAndTagTerms(baseTerms, tagTerms, originalQuery);
   }
 
   /**
@@ -354,14 +345,7 @@ Format your response using XML tags:
     // Extract terms from the original query
     const baseTerms = this.extractTermsFromQueries([query]);
     const tagTerms = this.extractTags(query);
-    const termsSet = new Set<string>([...baseTerms, ...tagTerms]);
-    for (const tag of tagTerms) {
-      const withoutHash = tag.slice(1);
-      if (withoutHash.length > 0) {
-        termsSet.delete(withoutHash);
-      }
-    }
-    const terms = Array.from(termsSet);
+    const terms = this.combineBaseAndTagTerms(baseTerms, tagTerms, query);
 
     // Generate fuzzy variants for important terms
     const queries = new Set<string>([query]);
@@ -479,9 +463,63 @@ Format your response using XML tags:
    * @returns true if the term is valid for inclusion
    */
   private isValidTerm(term: string): boolean {
-    return (
-      term.length >= this.config.minTermLength && /^[\w-]+$/.test(term) // Allow word characters and hyphens
-    );
+    if (term.length < this.config.minTermLength) {
+      return false;
+    }
+
+    if (term.startsWith("#")) {
+      try {
+        return /^#[\p{L}\p{N}_/-]+$/u.test(term);
+      } catch {
+        return /^#[A-Za-z0-9_/-]+$/.test(term);
+      }
+    }
+
+    try {
+      return /^[\p{L}\p{N}_-]+$/u.test(term);
+    } catch {
+      return /^[A-Za-z0-9_-]+$/.test(term);
+    }
+  }
+
+  /**
+   * Merges base terms with tag-prefixed terms while preserving standalone terms present in the query.
+   * Removes tag bodies only when they originate exclusively from tag tokens.
+   *
+   * @param baseTerms - Terms extracted from the raw query (sans tag awareness)
+   * @param tagTerms - Hash-prefixed tag tokens extracted from the query
+   * @param originalQuery - The original user-supplied query
+   * @returns Array of unique salient terms preserving tag intent
+   */
+  private combineBaseAndTagTerms(
+    baseTerms: string[],
+    tagTerms: string[],
+    originalQuery: string
+  ): string[] {
+    const combined = new Set<string>([...baseTerms, ...tagTerms]);
+
+    if (tagTerms.length === 0) {
+      return Array.from(combined);
+    }
+
+    const normalizedQuery = originalQuery.toLowerCase();
+    let queryWithoutTags = normalizedQuery;
+
+    for (const tag of tagTerms) {
+      const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      queryWithoutTags = queryWithoutTags.replace(new RegExp(escapedTag, "g"), " ");
+    }
+
+    const standaloneTerms = new Set(this.extractTermsFromQueries([queryWithoutTags]));
+
+    for (const tag of tagTerms) {
+      const withoutHash = tag.slice(1);
+      if (withoutHash.length > 0 && !standaloneTerms.has(withoutHash)) {
+        combined.delete(withoutHash);
+      }
+    }
+
+    return Array.from(combined);
   }
 
   /**

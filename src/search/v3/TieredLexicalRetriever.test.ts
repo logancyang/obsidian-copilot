@@ -197,13 +197,15 @@ describe("TieredLexicalRetriever", () => {
         { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
       ]);
 
-      const tagRetriever = new TieredLexicalRetriever(mockApp, {
+      const tagRetrieverOptions: ConstructorParameters<typeof TieredLexicalRetriever>[1] = {
         minSimilarityScore: 0.1,
         maxK: Number.MAX_SAFE_INTEGER,
         salientTerms: ["#project"],
         returnAllTags: true,
         tagTerms: ["#project"],
-      });
+      };
+
+      const tagRetriever = new TieredLexicalRetriever(mockApp, tagRetrieverOptions);
 
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "tagNote.md") {

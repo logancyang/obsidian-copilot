@@ -128,7 +128,8 @@ export class FullTextEngine {
             tokens.add(segment);
           }
         }
-        asciiSource = asciiSource.replace(tag, " ");
+        const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        asciiSource = asciiSource.replace(new RegExp(escapedTag, "gu"), " ");
       }
     }
 
@@ -658,7 +659,7 @@ export class FullTextEngine {
   /**
    * Build final results with bonuses applied
    */
-  private buildFinalResults(scoreMap: Map<string, any>, limit: number): NoteIdRank[] {
+  private buildFinalResults(scoreMap: Map<string, ScoreAccumulator>, limit: number): NoteIdRank[] {
     const finalResults: NoteIdRank[] = [];
 
     for (const [id, data] of scoreMap.entries()) {

@@ -86,6 +86,16 @@ describe("QueryExpander", () => {
       expect(result.salientTerms).not.toContain("2024/plan");
     });
 
+    it("should keep standalone term when both tagged and untagged variants exist", async () => {
+      mockChatModel.invoke.mockRejectedValue(new Error("LLM error"));
+
+      const result = await expander.expand("#project project kickoff brief");
+
+      expect(result.salientTerms).toEqual(
+        expect.arrayContaining(["#project", "project", "kickoff", "brief"])
+      );
+    });
+
     it("should limit variants to maxVariants", async () => {
       mockChatModel.invoke.mockResolvedValue({
         content: `<queries>
