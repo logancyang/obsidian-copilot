@@ -492,8 +492,13 @@ export class FullTextEngine {
     const candidateDocs = new Set<string>();
 
     for (const query of queries) {
+      const normalizedQuery = this.normalizeQueryTerm(query);
+      if (!normalizedQuery) {
+        continue;
+      }
+
       try {
-        const results = this.index.search(query, { limit: limit * 3, enrich: true });
+        const results = this.index.search(normalizedQuery, { limit: limit * 3, enrich: true });
         if (Array.isArray(results)) {
           for (const fieldResult of results) {
             if (!fieldResult?.result) continue;
@@ -544,17 +549,21 @@ export class FullTextEngine {
     scoreMap: Map<string, ScoreAccumulator>,
     limit: number
   ): void {
-    try {
-      const results = this.index.search(query, { limit: limit * 3, enrich: true });
+    const normalizedQuery = this.normalizeQueryTerm(query);
+    if (!normalizedQuery) {
+      return;
+    }
 
+    try {
+      const results = this.index.search(normalizedQuery, { limit: limit * 3, enrich: true });
       if (!Array.isArray(results)) {
         return;
       }
 
-      const trimmedQuery = query.trim();
+      const trimmedQuery = normalizedQuery;
       const isPhrase = trimmedQuery.includes(" ");
       const isTagQuery = trimmedQuery.startsWith("#");
-      const normalizedTag = isTagQuery ? trimmedQuery.toLowerCase() : null;
+      const normalizedTag = isTagQuery ? trimmedQuery : null;
       const queryWeight = isPhrase ? 1.5 : 1.0;
 
       const docMatchesForQuery = new Set<string>();
@@ -609,10 +618,12 @@ export class FullTextEngine {
           fieldMatches.add(fieldName);
 
           const queriesMatched = new Set(existing.queriesMatched);
-          queriesMatched.add(query);
+          queriesMatched.add(trimmedQuery);
 
           const explanationQuery =
-            fieldName === "tags" || !query.startsWith("#") ? query : query.replace(/^#/, "");
+            fieldName === "tags" || !trimmedQuery.startsWith("#")
+              ? trimmedQuery
+              : trimmedQuery.replace(/^#/, "");
 
           const lexicalMatches = [
             ...existing.lexicalMatches,
@@ -715,6 +726,25 @@ export class FullTextEngine {
       : 1;
 
     return baseBoost * diversityBoost * metadataBoost;
+  }
+
+  /**
+   * Normalizes a query term for case-insensitive matching.
+   * Trims whitespace and lowercases content to align with tokenizer behavior.
+   * @param query - Raw query string
+   * @returns Lowercase trimmed query or null when empty
+   */
+  private normalizeQueryTerm(query: string): string | null {
+    if (!query) {
+      return null;
+    }
+
+    const trimmed = query.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    return trimmed.toLowerCase();
   }
 
   /**

@@ -114,6 +114,15 @@ jest.mock("../chunks", () => ({
           mtime: Date.now(),
         },
         {
+          id: "tags-uppercase.md#0",
+          notePath: "tags-uppercase.md",
+          chunkIndex: 0,
+          content: "Status review for #BP and cross-linking #Project/Beta milestones",
+          title: "Uppercase Tag Note",
+          heading: "Status",
+          mtime: Date.now(),
+        },
+        {
           id: "author-test.md#0",
           notePath: "author-test.md",
           chunkIndex: 0,
@@ -247,6 +256,13 @@ describe("FullTextEngine", () => {
           nested: { ignore: "this" }, // Should be ignored
         },
       },
+      "tags-uppercase.md": {
+        headings: [{ heading: "Status" }],
+        frontmatter: {
+          title: "Uppercase Tag Note",
+          tags: ["#BP"],
+        },
+      },
       "array-test.md": {
         headings: [],
         frontmatter: {
@@ -303,6 +319,7 @@ describe("FullTextEngine", () => {
             "circular.md": "body",
             "common.md": "Meeting note summary with meeting agenda note note.",
             "unique.md": "Meeting note covering architecture rareterm decisions for alpha.",
+            "tags-uppercase.md": "Status review for #BP and cross-linking #Project/Beta milestones",
           };
           return Promise.resolve(contents[file.path] || "");
         }),
@@ -495,7 +512,7 @@ describe("FullTextEngine", () => {
 
   describe("search", () => {
     beforeEach(async () => {
-      await engine.buildFromCandidates(["note1.md", "note2.md", "note3.md"]);
+      await engine.buildFromCandidates(["note1.md", "note2.md", "note3.md", "tags-uppercase.md"]);
     });
 
     it("should search indexed chunks and return chunk IDs", () => {
@@ -525,6 +542,14 @@ describe("FullTextEngine", () => {
       const results = engine.search(["typescript"], 1, [], "typescript");
 
       expect(results.length).toBeLessThanOrEqual(1);
+    });
+
+    it("should match uppercase tag queries case-insensitively", () => {
+      const results = engine.search(["#BP", "#bp", "bp"], 10, ["#bp"], "#BP");
+
+      expect(results.length).toBeGreaterThan(0);
+      const containsUpperCaseTagNote = results.some((r) => r.id.startsWith("tags-uppercase.md"));
+      expect(containsUpperCaseTagNote).toBe(true);
     });
 
     it("should handle empty query array", () => {
