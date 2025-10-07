@@ -116,7 +116,7 @@ export class SearchCore {
           return;
         }
         recallLookup.add(normalized);
-        recallQueries.push(term);
+        recallQueries.push(normalized);
       };
 
       queries.forEach(addRecallTerm);

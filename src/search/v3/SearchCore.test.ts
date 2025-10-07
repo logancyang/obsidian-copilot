@@ -116,7 +116,7 @@ describe("SearchCore tag recall", () => {
     const results = await searchCore.retrieve("#ProjectAlpha/Phase1 update");
 
     expect(results).toHaveLength(1);
-    const recallQueries = searchMock.mock.calls[0][0];
+    const recallQueries = searchMock.mock.calls[0][0] as string[];
 
     expect(recallQueries).toEqual(
       expect.arrayContaining([
@@ -127,10 +127,35 @@ describe("SearchCore tag recall", () => {
       ])
     );
 
-    const grepQueries = batchCachedReadGrepMock.mock.calls[0][0];
+    const grepQueries = batchCachedReadGrepMock.mock.calls[0][0] as string[];
     expect(grepQueries).toEqual(
       expect.arrayContaining(["projectalpha/phase1", "projectalpha", "phase1"])
     );
+  });
+
+  it("should normalize recall queries for uppercase tag input", async () => {
+    const searchCore = new SearchCore(mockApp as any);
+
+    expandMock.mockResolvedValueOnce({
+      queries: ["#BP progress"],
+      salientTerms: ["#bp", "progress"],
+      originalQuery: "#BP progress",
+      expandedQueries: [],
+      expandedTerms: [],
+    });
+
+    batchCachedReadGrepMock.mockResolvedValueOnce(["bp-note.md"]);
+
+    await searchCore.retrieve("#BP progress");
+
+    const recallQueries = searchMock.mock.calls[0][0];
+    expect(recallQueries).toEqual(
+      expect.arrayContaining(["#bp progress", "#bp", "progress", "bp"])
+    );
+    expect(recallQueries.every((term: string) => term === term.toLowerCase())).toBe(true);
+
+    const grepQueries = batchCachedReadGrepMock.mock.calls[0][0];
+    expect(grepQueries.every((term: string) => term === term.toLowerCase())).toBe(true);
   });
 
   it("should bypass ceilings when returnAll is enabled", async () => {

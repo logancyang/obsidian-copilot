@@ -264,7 +264,7 @@ describe("TieredLexicalRetriever", () => {
         return "";
       });
 
-      const results = await derivedRetriever.getRelevantDocuments("#project planning");
+      const results = await derivedRetriever.getRelevantDocuments("#PROJECT planning");
 
       expect(retrieveMock).toHaveBeenCalledWith(
         expect.stringContaining("#project"),
