@@ -217,7 +217,7 @@ describe("MergedSemanticRetriever", () => {
     const results = await retriever.getRelevantDocuments("query");
 
     expect(results).toHaveLength(2);
-    expect(optionsSpy.lexicalOptions?.maxK).toBe(200);
-    expect(optionsSpy.semanticOptions?.maxK).toBe(200);
+    expect(optionsSpy.lexicalOptions?.maxK).toBe(100);
+    expect(optionsSpy.semanticOptions?.maxK).toBe(100);
   });
 });

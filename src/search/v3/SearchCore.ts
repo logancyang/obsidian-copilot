@@ -13,7 +13,7 @@ import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 
 // Search constants
 const FULLTEXT_RESULT_MULTIPLIER = 2;
-export const RETURN_ALL_LIMIT = 200;
+export const RETURN_ALL_LIMIT = 100;
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline

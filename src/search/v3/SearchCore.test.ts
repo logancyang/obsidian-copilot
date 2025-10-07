@@ -173,8 +173,8 @@ describe("SearchCore tag recall", () => {
       returnAll: true,
     });
 
-    expect(batchCachedReadGrepMock).toHaveBeenCalledWith(expect.any(Array), 200);
-    expect(searchMock.mock.calls[0][1]).toBe(400);
+    expect(batchCachedReadGrepMock).toHaveBeenCalledWith(expect.any(Array), 100);
+    expect(searchMock.mock.calls[0][1]).toBe(200);
     expect(results.length).toBe(2);
   });
 });
