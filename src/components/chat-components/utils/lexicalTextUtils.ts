@@ -14,14 +14,13 @@ import { $createNotePillNode } from "../pills/NotePillNode";
 import { $createActiveNotePillNode } from "../pills/ActiveNotePillNode";
 import { $createURLPillNode } from "../pills/URLPillNode";
 import { $createToolPillNode } from "../pills/ToolPillNode";
-import { $createTagPillNode } from "../pills/TagPillNode";
 import { $createFolderPillNode } from "../pills/FolderPillNode";
 import { logInfo } from "@/logger";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 
 declare const app: App;
 
-export type PillType = "notes" | "tools" | "folders" | "tags" | "active-note";
+export type PillType = "notes" | "tools" | "folders" | "active-note";
 
 // Type representing different kinds of parsed content segments
 export type ParsedContentType =
@@ -30,11 +29,10 @@ export type ParsedContentType =
   | "active-note-pill"
   | "url-pill"
   | "tool-pill"
-  | "tag-pill"
   | "folder-pill";
 
 // Type representing different pattern matching categories
-export type PatternType = "notes" | "urls" | "tools" | "tags" | "customTemplates";
+export type PatternType = "notes" | "urls" | "tools" | "customTemplates";
 
 // Type representing the data associated with a pill
 export type PillDataValue = TFile | TFolder | string;
@@ -70,11 +68,6 @@ export function $createPillNode(pillData: PillData) {
         return $createFolderPillNode(data.path);
       }
       break;
-    case "tags":
-      if (typeof data === "string") {
-        return $createTagPillNode(data);
-      }
-      break;
   }
 
   throw new Error(`Invalid pill data: ${JSON.stringify(pillData)}`);
@@ -94,7 +87,6 @@ export interface ParsedContent {
 export interface InsertTextOptions {
   enableURLPills?: boolean;
   enableToolPills?: boolean;
-  enableTagPills?: boolean;
   insertAtSelection?: boolean;
 }
 
@@ -248,54 +240,6 @@ function resolveToolReference(toolName: string): string | null {
 }
 
 /**
- * Attempts to resolve a tag reference
- * @param tagName The name of the tag to resolve (with or without #)
- * @returns The tag name if valid, null otherwise
- */
-function resolveTagReference(tagName: string): string | null {
-  if (!app?.metadataCache) {
-    return null;
-  }
-
-  try {
-    // Ensure the tag name has # prefix
-    const normalizedTagName = tagName.startsWith("#") ? tagName : `#${tagName}`;
-
-    // Get all tags from the vault (frontmatter only)
-    const allTags = new Set<string>();
-    app.vault.getMarkdownFiles().forEach((file) => {
-      const metadata = app.metadataCache.getFileCache(file);
-      const frontmatterTags = metadata?.frontmatter?.tags;
-
-      if (frontmatterTags) {
-        if (Array.isArray(frontmatterTags)) {
-          frontmatterTags.forEach((tag) => {
-            if (typeof tag === "string") {
-              const tagString = tag.startsWith("#") ? tag : `#${tag}`;
-              allTags.add(tagString);
-            }
-          });
-        } else if (typeof frontmatterTags === "string") {
-          const tagString = frontmatterTags.startsWith("#")
-            ? frontmatterTags
-            : `#${frontmatterTags}`;
-          allTags.add(tagString);
-        }
-      }
-    });
-
-    if (allTags.has(normalizedTagName)) {
-      return normalizedTagName;
-    }
-
-    return null;
-  } catch (error) {
-    logInfo("Error resolving tag reference:", error);
-    return null;
-  }
-}
-
-/**
  * Attempts to resolve a folder reference to a TFolder
  * @param folderName The name of the folder to resolve
  * @returns TFolder if found, null otherwise
@@ -421,7 +365,6 @@ export function parseTextForPills(
     includeNotes?: boolean;
     includeURLs?: boolean;
     includeTools?: boolean;
-    includeTags?: boolean;
     includeFolders?: boolean;
   } = {}
 ): ParsedContent[] {
@@ -429,7 +372,6 @@ export function parseTextForPills(
     includeNotes = true,
     includeURLs = false,
     includeTools = false,
-    includeTags = false,
     includeFolders = false,
   } = options;
   const segments: ParsedContent[] = [];
@@ -452,11 +394,6 @@ export function parseTextForPills(
   if (includeTools) {
     patterns.push("(@[a-zA-Z][a-zA-Z0-9_]*)"); // 1 group: @tool
     patternInfo.push({ type: "tools", groupCount: 1, startIndex: currentGroupIndex });
-    currentGroupIndex += 1;
-  }
-  if (includeTags) {
-    patterns.push("(#[a-zA-Z][a-zA-Z0-9_\\-]*)"); // 1 group: #tag
-    patternInfo.push({ type: "tags", groupCount: 1, startIndex: currentGroupIndex });
     currentGroupIndex += 1;
   }
   if (includeFolders) {
@@ -558,24 +495,6 @@ export function parseTextForPills(
           content: match[0],
         });
       }
-    } else if (matchedPattern.type === "tags") {
-      // This is a tag reference #tag
-      const tagName = match[matchedPattern.startIndex];
-      const resolvedTag = resolveTagReference(tagName);
-
-      if (resolvedTag) {
-        segments.push({
-          type: "tag-pill",
-          content: resolvedTag,
-          tagName: resolvedTag,
-        });
-      } else {
-        // Invalid tag reference - keep as plain text
-        segments.push({
-          type: "text",
-          content: match[0],
-        });
-      }
     } else if (matchedPattern.type === "customTemplates") {
       // This is a custom template: folder reference {folderName} or special {activeNote} syntax
       const templateContent = match[matchedPattern.startIndex + 1].trim();
@@ -641,8 +560,6 @@ export function createNodesFromSegments(segments: ParsedContent[]): LexicalNode[
       nodes.push($createURLPillNode(segment.url));
     } else if (segment.type === "tool-pill" && segment.toolName) {
       nodes.push($createToolPillNode(segment.toolName));
-    } else if (segment.type === "tag-pill" && segment.tagName) {
-      nodes.push($createTagPillNode(segment.tagName));
     } else if (segment.type === "folder-pill" && segment.folder) {
       nodes.push($createFolderPillNode(segment.folder.path));
     }

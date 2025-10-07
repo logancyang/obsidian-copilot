@@ -26,7 +26,6 @@ import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
 import { $removePillsByURL } from "./pills/URLPillNode";
-import { $removePillsByTag } from "./pills/TagPillNode";
 import { $removePillsByFolder } from "./pills/FolderPillNode";
 import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNode";
 import LexicalEditor from "./LexicalEditor";
@@ -38,7 +37,6 @@ interface ChatInputProps {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
-    contextTags?: string[];
     contextFolders?: string[];
   }) => void;
   isGenerating: boolean;
@@ -63,7 +61,6 @@ interface ChatInputProps {
     context: {
       notes: TFile[];
       urls: string[];
-      tags: string[];
       folders: string[];
     }
   ) => void;
@@ -71,7 +68,6 @@ interface ChatInputProps {
   initialContext?: {
     notes?: TFile[];
     urls?: string[];
-    tags?: string[];
     folders?: string[];
   };
 }
@@ -100,7 +96,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   initialContext,
 }) => {
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
-  const [contextTags, setContextTags] = useState<string[]>(initialContext?.tags || []);
   const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<any>(null);
@@ -115,7 +110,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
-  const [tagsFromPills, setTagsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
   const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
@@ -188,7 +182,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       onEditSave(inputMessage, {
         notes: contextNotes,
         urls: contextUrls,
-        tags: contextTags,
         folders: contextFolders,
       });
       return;
@@ -222,7 +215,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       toolCalls,
       contextNotes,
       urls: contextUrls,
-      contextTags,
       contextFolders,
     });
   };
@@ -246,20 +238,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setContextUrls((prev) => {
       return prev.filter((url) => {
         if (removedUrlSet.has(url)) {
-          return false;
-        }
-        return true;
-      });
-    });
-  };
-
-  // Handle when tags are removed from pills (when pills are deleted in editor)
-  const handleTagPillsRemoved = (removedTags: string[]) => {
-    const removedTagSet = new Set(removedTags);
-
-    setContextTags((prev) => {
-      return prev.filter((tag) => {
-        if (removedTagSet.has(tag)) {
           return false;
         }
         return true;
@@ -328,19 +306,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setUrlsFromPills((prev) => prev.filter((pillUrl) => pillUrl !== url));
   };
 
-  // Handle when context tags are removed from the context menu
-  // This should remove all corresponding tag pills from the editor
-  const handleTagContextRemoved = (tagName: string) => {
-    if (lexicalEditorRef.current) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByTag(tagName);
-      });
-    }
-
-    // Also immediately update tagsFromPills to prevent stale data from re-adding the tag
-    setTagsFromPills((prev) => prev.filter((pillTag) => pillTag !== tagName));
-  };
-
   // Handle when context folders are removed from the context menu
   // This should remove all corresponding folder pills from the editor
   const handleFolderContextRemoved = (folderPath: string) => {
@@ -393,17 +358,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           // Note: toolsFromPills will be updated automatically via ToolPillSyncPlugin
         }
         break;
-      case "tags":
-        // Update tagsFromPills - sync will update contextTags
-        if (typeof data === "string") {
-          setTagsFromPills((prev) => {
-            if (!prev.includes(data)) {
-              return [...prev, data];
-            }
-            return prev;
-          });
-        }
-        break;
       case "folders":
         // For folders from context menu, update contextFolders directly (no pills in editor)
         if (data && data.path) {
@@ -450,12 +404,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         if (typeof data === "string") {
           setContextUrls((prev) => prev.filter((u) => u !== data));
           handleURLContextRemoved(data);
-        }
-        break;
-      case "tags":
-        if (typeof data === "string") {
-          setContextTags((prev) => prev.filter((t) => t !== data));
-          handleTagContextRemoved(data);
         }
         break;
       case "folders":
@@ -536,22 +484,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       setContextUrls([]);
     }
   }, [urlsFromPills, currentChain]);
-
-  // Tag-to-context synchronization (when tags are added via pills)
-  useEffect(() => {
-    setContextTags((prev) => {
-      const contextTagSet = new Set(prev);
-
-      // Find tags that need to be added
-      const newTagsFromPills = tagsFromPills.filter((pillTag) => {
-        // Only add if not already in context
-        return !contextTagSet.has(pillTag);
-      });
-
-      // Add completely new tags from pills
-      return [...prev, ...newTagsFromPills];
-    });
-  }, [tagsFromPills]);
 
   // Folder-to-context synchronization (when folders are added via pills)
   useEffect(() => {
@@ -669,7 +601,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
         includeActiveNote={includeActiveNote}
         activeNote={currentActiveNote}
         contextUrls={contextUrls}
-        contextTags={contextTags}
         contextFolders={contextFolders}
         selectedTextContexts={selectedTextContexts}
         showProgressCard={showProgressCard}
@@ -720,8 +651,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
           onToolsChange={isCopilotPlus ? setToolsFromPills : undefined}
           onToolsRemoved={isCopilotPlus ? handleToolPillsRemoved : undefined}
-          onTagsChange={setTagsFromPills}
-          onTagsRemoved={handleTagPillsRemoved}
           onFoldersChange={setFoldersFromPills}
           onFoldersRemoved={handleFolderPillsRemoved}
           onEditorReady={onEditorReady}

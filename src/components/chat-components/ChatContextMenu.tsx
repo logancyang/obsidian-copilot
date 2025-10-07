@@ -7,7 +7,6 @@ import {
   ContextNoteBadge,
   ContextActiveNoteBadge,
   ContextUrlBadge,
-  ContextTagBadge,
   ContextFolderBadge,
 } from "@/components/chat-components/ContextBadges";
 import { SelectedTextContext } from "@/types/message";
@@ -24,7 +23,6 @@ interface ChatContextMenuProps {
   currentActiveFile: TFile | null;
   contextNotes: TFile[];
   contextUrls: string[];
-  contextTags: string[];
   contextFolders: string[];
   selectedTextContexts?: SelectedTextContext[];
   onRemoveContext: (category: string, data: any) => void;
@@ -69,7 +67,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   currentActiveFile,
   contextNotes,
   contextUrls,
-  contextTags,
   contextFolders,
   selectedTextContexts = [],
   onRemoveContext,
@@ -111,7 +108,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     uniqueNotes.length > 0 ||
     uniqueUrls.length > 0 ||
     selectedTextContexts.length > 0 ||
-    contextTags.length > 0 ||
     contextFolders.length > 0 ||
     includeActiveNote;
 
@@ -171,9 +167,6 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         ))}
         {uniqueUrls.map((url) => (
           <ContextUrlBadge key={url} url={url} onRemove={() => onRemoveContext("urls", url)} />
-        ))}
-        {contextTags.map((tag) => (
-          <ContextTagBadge key={tag} tag={tag} onRemove={() => onRemoveContext("tags", tag)} />
         ))}
         {contextFolders.map((folder) => (
           <ContextFolderBadge

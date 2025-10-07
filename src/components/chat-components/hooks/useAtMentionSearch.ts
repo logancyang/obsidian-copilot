@@ -1,12 +1,11 @@
 import React, { useMemo } from "react";
 import { TFolder, TFile } from "obsidian";
-import { FileText, Wrench, Folder, Hash, FileClock } from "lucide-react";
+import { FileText, Wrench, Folder, FileClock } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 import { useAllNotes } from "./useAllNotes";
 import { useAllFolders } from "./useAllFolders";
-import { useAllTags } from "./useAllTags";
 import { AtMentionCategory, AtMentionOption, CategoryOption } from "./useAtMentionCategories";
 import { getSettings } from "@/settings/model";
 
@@ -27,7 +26,6 @@ export function useAtMentionSearch(
   // Get raw data without pre-filtering
   const allNotes = useAllNotes(isCopilotPlus);
   const allFolders = useAllFolders();
-  const allTags = useAllTags(true);
 
   // Create memoized item arrays (reused in both modes)
   const noteItems: AtMentionOption[] = useMemo(
@@ -74,21 +72,6 @@ export function useAtMentionSearch(
         searchKeyword: folder.path, // Search by folder path
       })),
     [allFolders]
-  );
-
-  const tagItems: AtMentionOption[] = useMemo(
-    () =>
-      allTags.map((tag) => ({
-        key: `tag-${tag}`,
-        title: tag.startsWith("#") ? tag.slice(1) : tag,
-        subtitle: undefined,
-        category: "tags" as AtMentionCategory,
-        data: tag,
-        content: undefined,
-        icon: React.createElement(Hash, { className: "tw-size-4" }),
-        searchKeyword: tag.startsWith("#") ? tag.slice(1) : tag, // Search by tag name without #
-      })),
-    [allTags]
   );
 
   return useMemo(() => {
@@ -142,7 +125,7 @@ export function useAtMentionSearch(
           : null;
 
       // Combine all non-tool items for unified fuzzy search
-      const allNonToolItems = [...noteItems, ...folderItems, ...tagItems];
+      const allNonToolItems = [...noteItems, ...folderItems];
       const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
         keys: ["searchKeyword"],
         limit: MAX_SEARCH_RESULTS,
@@ -170,9 +153,6 @@ export function useAtMentionSearch(
           break;
         case "folders":
           items = folderItems;
-          break;
-        case "tags":
-          items = tagItems;
           break;
       }
 
@@ -217,7 +197,6 @@ export function useAtMentionSearch(
     noteItems,
     toolItems,
     folderItems,
-    tagItems,
     availableCategoryOptions,
     currentActiveFile,
   ]);
