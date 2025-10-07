@@ -519,12 +519,16 @@ export default class CopilotPlugin extends Plugin {
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
     const settings = getSettings();
     const retriever = settings.enableSemanticSearchV3
-      ? new (await import("@/search/hybridRetriever")).HybridRetriever({
-          minSimilarityScore: 0.3,
-          maxK: 20,
-          salientTerms: salientTerms,
-          textWeight: textWeight,
-        })
+      ? new (await import("@/search/v3/MergedSemanticRetriever")).MergedSemanticRetriever(
+          this.app,
+          {
+            minSimilarityScore: 0.3,
+            maxK: 20,
+            salientTerms: salientTerms,
+            textWeight: textWeight,
+            returnAll: false,
+          }
+        )
       : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(this.app, {
           minSimilarityScore: 0.3,
           maxK: 20,

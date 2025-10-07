@@ -361,7 +361,7 @@ interface Chunk {
 - **Chunking**: Notes are split once through `ChunkManager`, and frontmatter properties/tags are copied to every chunk while inline tags stay local.
 - **Indexing**: `FullTextEngine` indexes title, path, body, and the normalised tag/prop fields. Tags receive their own field but we avoid partial matches for hyphenated tags, keeping tokens intact.
 - **Scoring**: FlexSearch results flow through lexical scoring, folder/graph boosts, and a modest tag bonus (`tags` weight = 4) so true tag hits win without overwhelming other evidence.
-- **Return-all mode**: When a time range or tag query is detected we raise the cap to 200 chunks (`RETURN_ALL_LIMIT`), guaranteeing tag/time windows fan out widely while staying bounded for downstream ranking.
+- **Return-all mode**: When a time range or tag query is detected we raise the cap to 100 chunks (`RETURN_ALL_LIMIT`), guaranteeing tag/time windows fan out widely while staying bounded for downstream ranking.
 
 **Example** — `#project/alpha bugfix`
 
@@ -369,6 +369,30 @@ interface Chunk {
 2. SearchCore runs grep + FlexSearch with `#project/alpha` and `bugfix`, raising the cap to 200.
 3. FullTextEngine finds chunks where the metadata already lists that tag (inline or frontmatter) and indexes them under the `tags` field.
 4. Scoring boosts those chunks via the tag field weight, so the bugfix notes with the exact tag rise above generic “project alpha” mentions.
+
+## Semantic + Lexical Fusion (Design)
+
+Semantic retrieval (HybridRetriever/Orama) is strong at paraphrase recall, while Search v3’s TieredLexicalRetriever excels at deliberate keyword/tag matching. When the **Semantic Search** toggle is enabled we can fuse both without widening the retriever surface area.
+
+- **MergedSemanticRetriever**
+  - Implements the same `getRelevantDocuments()` API.
+  - Internally holds one `HybridRetriever` and one `TieredLexicalRetriever`, reusing the shared `ChunkManager` when possible.
+- **Execution Flow**
+  - Run both engines in parallel (`Promise.all` with shared abort handling).
+  - Annotate each returned `Document` with `metadata.source = "semantic"` or `"lexical"`.
+  - Dedupe by `chunkId`/`path`, preferring the lexical chunk when both engines surface the same slice.
+  - Blend scores using lightweight weights (e.g., lexical ×1.0, semantic ×0.7) and reuse existing tag bonuses so tagged hits stay on top.
+  - Write the blended score back to `metadata.score`/`metadata.rerank_score`, sort, and cap at `maxK`.
+- **Result Limits**
+  - When `returnAll` is **false**, request roughly `maxK` items from each engine, merge/dedupe, then truncate to `maxK`.
+  - When `returnAll` is **true**, propagate the widened ceiling (`RETURN_ALL_LIMIT`, 100) to both engines and keep the merged list at that size so tag/time queries still return every chunk Search v3 surfaced.
+- **Integration Points**
+  - Vault QA: when semantic search is on, instantiate `MergedSemanticRetriever`; otherwise keep TieredLexicalRetriever.
+  - `lexicalSearch` tool (and similar call sites) construct the merged retriever instead of branching on the toggle.
+- **Fallback Behaviour**
+  - With semantic search disabled nothing changes—the TieredLexicalRetriever path remains intact.
+
+This approach keeps callers unaware of the fusion mechanics while giving users semantic coverage plus Search v3’s deterministic tag/keyword strength.
 
 ## Key Design Decisions
 

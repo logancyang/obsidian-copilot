@@ -22,7 +22,7 @@ const localSearchSchema = z.object({
     .describe("Time range for search"),
 });
 
-// Lexical-only search tool using v3 TieredLexicalRetriever
+// Local search tool using Search v3 (optionally merged with semantic retrieval)
 const lexicalSearchTool = createTool({
   name: "lexicalSearch",
   description: "Search for notes using lexical/keyword-based search",
@@ -38,10 +38,7 @@ const lexicalSearchTool = createTool({
 
     logInfo(`lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags})`);
 
-    // Always use TieredLexicalRetriever for lexical search
-    const retriever = new (
-      await import("@/search/v3/TieredLexicalRetriever")
-    ).TieredLexicalRetriever(app, {
+    const retrieverOptions = {
       minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
@@ -52,11 +49,21 @@ const lexicalSearchTool = createTool({
           }
         : undefined,
       textWeight: TEXT_WEIGHT,
-      returnAll: returnAll,
+      returnAll,
       useRerankerThreshold: 0.5,
       returnAllTags,
       tagTerms,
-    });
+    };
+
+    const retriever = settings.enableSemanticSearchV3
+      ? new (await import("@/search/v3/MergedSemanticRetriever")).MergedSemanticRetriever(
+          app,
+          retrieverOptions
+        )
+      : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(
+          app,
+          retrieverOptions
+        );
 
     const documents = await retriever.getRelevantDocuments(query);
 

@@ -1,6 +1,7 @@
 import { LLM_TIMEOUT_MS } from "@/constants";
 import { TimeoutError } from "@/error";
 import { logError, logInfo, logWarn } from "@/logger";
+import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
 import { withSuppressedTokenWarnings, withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { FuzzyMatcher } from "./utils/FuzzyMatcher";
@@ -216,7 +217,7 @@ Format your response using XML tags:
    */
   private extractSalientTermsFromOriginal(originalQuery: string): string[] {
     const baseTerms = this.extractTermsFromQueries([originalQuery]);
-    const tagTerms = this.extractTags(originalQuery);
+    const tagTerms = extractTagsFromQuery(originalQuery);
     return this.combineBaseAndTagTerms(baseTerms, tagTerms, originalQuery);
   }
 
@@ -344,7 +345,7 @@ Format your response using XML tags:
   private fallbackExpansion(query: string): ExpandedQuery {
     // Extract terms from the original query
     const baseTerms = this.extractTermsFromQueries([query]);
-    const tagTerms = this.extractTags(query);
+    const tagTerms = extractTagsFromQuery(query);
     const terms = this.combineBaseAndTagTerms(baseTerms, tagTerms, query);
 
     // Generate fuzzy variants for important terms
@@ -419,41 +420,6 @@ Format your response using XML tags:
     }
 
     return Array.from(terms);
-  }
-
-  /**
-   * Extracts tag tokens (words prefixed with '#') from the query while preserving the hash prefix.
-   * Generates lowercase variants for consistent downstream matching.
-   *
-   * @param query - The raw search query supplied by the user
-   * @returns Array of normalized tag tokens (e.g., ['#projectx', '#notes'])
-   */
-  private extractTags(query: string): string[] {
-    if (!query) {
-      return [];
-    }
-
-    let matches: RegExpMatchArray | null = null;
-    try {
-      matches = query.match(/#[\p{L}\p{N}_/-]+/gu);
-    } catch {
-      matches = query.match(/#[a-zA-Z0-9_/-]+/g);
-    }
-
-    if (!matches) {
-      return [];
-    }
-
-    const normalized = new Set<string>();
-    for (const raw of matches) {
-      const trimmed = raw.trim();
-      if (trimmed.length <= 1) {
-        continue;
-      }
-      normalized.add(trimmed.toLowerCase());
-    }
-
-    return Array.from(normalized);
   }
 
   /**
