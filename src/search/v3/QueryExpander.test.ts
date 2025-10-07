@@ -96,6 +96,16 @@ describe("QueryExpander", () => {
       );
     });
 
+    it("should retain standalone term even when similar tag bodies appear multiple times", async () => {
+      mockChatModel.invoke.mockRejectedValue(new Error("LLM error"));
+
+      const result = await expander.expand("#project updates about project deadlines");
+
+      expect(result.salientTerms).toEqual(
+        expect.arrayContaining(["#project", "updates", "about", "project", "deadlines"])
+      );
+    });
+
     it("should limit variants to maxVariants", async () => {
       mockChatModel.invoke.mockResolvedValue({
         content: `<queries>

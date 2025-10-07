@@ -235,6 +235,47 @@ describe("TieredLexicalRetriever", () => {
       expect(results.length).toBe(2);
     });
 
+    it("should derive tag terms from query when returnAllTags is set without explicit tags", async () => {
+      retrieveMock.mockResolvedValue([
+        { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
+        { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
+      ]);
+
+      const derivedRetriever = new TieredLexicalRetriever(mockApp, {
+        minSimilarityScore: 0.1,
+        maxK: Number.MAX_SAFE_INTEGER,
+        salientTerms: [],
+        returnAllTags: true,
+      });
+
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "tagNote.md") {
+          const file = new (TFile as any)(path);
+          Object.setPrototypeOf(file, (TFile as any).prototype);
+          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          return file;
+        }
+        return null;
+      });
+
+      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+        if (id === "tagNote.md#0") return "Tag chunk 0";
+        if (id === "tagNote.md#1") return "Tag chunk 1";
+        return "";
+      });
+
+      const results = await derivedRetriever.getRelevantDocuments("#project planning");
+
+      expect(retrieveMock).toHaveBeenCalledWith(
+        expect.stringContaining("#project"),
+        expect.objectContaining({
+          returnAll: true,
+          salientTerms: ["#project"],
+        })
+      );
+      expect(results.length).toBe(2);
+    });
+
     it("should extract mentioned notes from query", async () => {
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "mentioned.md") {

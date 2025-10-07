@@ -86,7 +86,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const noteFiles = extractNoteFiles(query, this.app.vault);
       const noteTitles = noteFiles.map((file) => file.basename);
 
-      const tagTerms = (this.options.tagTerms ?? []).filter((term) => term.startsWith("#"));
+      const tagTerms = this.resolveTagTerms(query);
       if (this.options.returnAllTags && tagTerms.length > 0) {
         return this.getAllTagDocuments(tagTerms, query, noteFiles);
       }
@@ -266,6 +266,74 @@ export class TieredLexicalRetriever extends BaseRetriever {
     }
 
     return results;
+  }
+
+  /**
+   * Resolves tag terms used to trigger exhaustive tag retrieval.
+   * Prefers explicit options, falls back to salient terms, then raw query extraction.
+   *
+   * @param query - Original user query string
+   * @returns Array of normalized tag tokens (hash-prefixed, lowercase)
+   */
+  private resolveTagTerms(query: string): string[] {
+    const normalized = new Set<string>();
+
+    const explicit = this.options.tagTerms ?? [];
+    for (const term of explicit) {
+      if (typeof term === "string" && term.startsWith("#")) {
+        normalized.add(term.toLowerCase());
+      }
+    }
+
+    if (normalized.size === 0) {
+      for (const term of this.options.salientTerms ?? []) {
+        if (typeof term === "string" && term.startsWith("#")) {
+          normalized.add(term.toLowerCase());
+        }
+      }
+    }
+
+    if (normalized.size === 0) {
+      for (const tag of this.extractTagsFromQuery(query)) {
+        normalized.add(tag);
+      }
+    }
+
+    return Array.from(normalized);
+  }
+
+  /**
+   * Extracts hash-prefixed tags from a query string, returning lowercase tokens.
+   *
+   * @param query - Original user query
+   * @returns Array of detected tag tokens
+   */
+  private extractTagsFromQuery(query: string): string[] {
+    if (!query) {
+      return [];
+    }
+
+    let matches: RegExpMatchArray | null = null;
+    try {
+      matches = query.match(/#[\p{L}\p{N}_/-]+/gu);
+    } catch {
+      matches = query.match(/#[a-z0-9_/-]+/g);
+    }
+
+    if (!matches) {
+      return [];
+    }
+
+    const normalized = new Set<string>();
+    for (const raw of matches) {
+      const trimmed = raw.trim();
+      if (trimmed.length <= 1) {
+        continue;
+      }
+      normalized.add(trimmed.toLowerCase());
+    }
+
+    return Array.from(normalized);
   }
 
   private async getAllTagDocuments(
