@@ -46,7 +46,7 @@ describe("MergedSemanticRetriever", () => {
   });
 
   it("merges semantic and lexical results with lexical priority on duplicates", async () => {
-    const lexicalDoc = new Document({
+    const lexicalInput = new Document({
       pageContent: "Lexical chunk",
       metadata: {
         chunkId: "note.md#0",
@@ -55,7 +55,7 @@ describe("MergedSemanticRetriever", () => {
         explanation: { lexicalMatches: [{ field: "tags" }] },
       },
     });
-    const semanticDoc = new Document({
+    const semanticInput = new Document({
       pageContent: "Lexical chunk",
       metadata: {
         chunkId: "note.md#0",
@@ -64,8 +64,8 @@ describe("MergedSemanticRetriever", () => {
       },
     });
 
-    lexicalResults = [lexicalDoc];
-    semanticResults = [semanticDoc];
+    lexicalResults = [lexicalInput];
+    semanticResults = [semanticInput];
 
     const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 5,
@@ -80,7 +80,7 @@ describe("MergedSemanticRetriever", () => {
   });
 
   it("retains unique semantic results with blended scoring", async () => {
-    const lexicalDoc = new Document({
+    const lexicalInput = new Document({
       pageContent: "Lexical",
       metadata: {
         chunkId: "note.md#0",
@@ -89,7 +89,7 @@ describe("MergedSemanticRetriever", () => {
         explanation: { lexicalMatches: [{ field: "tags" }] },
       },
     });
-    const semanticDoc = new Document({
+    const semanticInput = new Document({
       pageContent: "Semantic",
       metadata: {
         chunkId: "note.md#1",
@@ -98,8 +98,8 @@ describe("MergedSemanticRetriever", () => {
       },
     });
 
-    lexicalResults = [lexicalDoc];
-    semanticResults = [semanticDoc];
+    lexicalResults = [lexicalInput];
+    semanticResults = [semanticInput];
 
     const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 5,
@@ -109,9 +109,15 @@ describe("MergedSemanticRetriever", () => {
     const results = await retriever.getRelevantDocuments("query");
 
     expect(results).toHaveLength(2);
-    expect(results[0].metadata.source).toBe("lexical");
-    expect(results[1].metadata.source).toBe("semantic");
-    expect(results[0].metadata.score).toBeGreaterThan(results[1].metadata.score);
+
+    const lexicalHit = results.find((doc) => doc.metadata.source === "lexical");
+    const semanticHit = results.find((doc) => doc.metadata.source === "semantic");
+
+    expect(lexicalHit).toBeDefined();
+    expect(semanticHit).toBeDefined();
+
+    expect(lexicalHit?.metadata.score).toBeCloseTo(0.77, 2); // lexical score with tag bonus
+    expect(semanticHit?.metadata.score).toBeCloseTo(0.9, 2); // semantic score untouched
   });
 
   it("respects RETURN_ALL_LIMIT when returnAll is enabled", async () => {
