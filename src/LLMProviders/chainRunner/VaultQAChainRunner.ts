@@ -1,6 +1,7 @@
 import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { logInfo } from "@/logger";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import { QueryExpander } from "@/search/v3/QueryExpander";
 import { MergedSemanticRetriever } from "@/search/v3/MergedSemanticRetriever";
 import { getSettings, getSystemPrompt } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -53,21 +54,29 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
       // Create retriever based on semantic search setting
       const settings = getSettings();
+      const sharedOptions = {
+        minSimilarityScore: 0.01,
+        maxK: settings.maxSourceChunks,
+        salientTerms: [] as string[],
+        timeRange: undefined,
+        textWeight: undefined,
+        returnAll: false,
+        useRerankerThreshold: undefined,
+      };
+      const tags = this.extractTagTerms(standaloneQuestion);
+
       const retriever = settings.enableSemanticSearchV3
         ? new MergedSemanticRetriever(app, {
-            minSimilarityScore: 0.01,
-            maxK: settings.maxSourceChunks,
-            salientTerms: [],
-            returnAll: false,
+            ...sharedOptions,
+            returnAll: tags.length > 0 ? true : false,
+            returnAllTags: tags.length > 0,
+            tagTerms: tags,
           })
         : new TieredLexicalRetriever(app, {
-            minSimilarityScore: 0.01,
-            maxK: settings.maxSourceChunks,
-            salientTerms: [],
-            timeRange: undefined,
-            textWeight: undefined,
-            returnAll: false,
-            useRerankerThreshold: undefined,
+            ...sharedOptions,
+            returnAll: tags.length > 0 ? true : false,
+            returnAllTags: tags.length > 0,
+            tagTerms: tags,
           });
 
       // Retrieve relevant documents
@@ -206,5 +215,13 @@ export class VaultQAChainRunner extends BaseChainRunner {
     const sources = extractUniqueTitlesFromDocs(retrievedDocs).map((title) => ({ title }));
 
     return addFallbackSources(response, sources, settings.enableInlineCitations);
+  }
+
+  /**
+   * Extracts hash-prefixed tags from the current query so Vault QA can trigger tag-aware retrieval.
+   */
+  private extractTagTerms(query: string): string[] {
+    const expander = new QueryExpander();
+    return expander["extractTags"](query);
   }
 }
