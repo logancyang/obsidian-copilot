@@ -120,6 +120,72 @@ describe("MergedSemanticRetriever", () => {
     expect(semanticHit?.metadata.score).toBeCloseTo(0.9, 2); // semantic score untouched
   });
 
+  it("keeps the highest scoring lexical duplicate", async () => {
+    lexicalResults = [
+      new Document({
+        pageContent: "Chunk",
+        metadata: {
+          chunkId: "dup.md#0",
+          score: 0.4,
+          rerank_score: 0.4,
+        },
+      }),
+      new Document({
+        pageContent: "Chunk",
+        metadata: {
+          chunkId: "dup.md#0",
+          score: 0.85,
+          rerank_score: 0.85,
+        },
+      }),
+    ];
+    semanticResults = [];
+
+    const retriever = new MergedSemanticRetriever(mockApp, {
+      maxK: 5,
+      salientTerms: [],
+    });
+
+    const results = await retriever.getRelevantDocuments("query");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].metadata.source).toBe("lexical");
+    expect(results[0].metadata.score).toBeCloseTo(0.85, 2);
+  });
+
+  it("keeps the highest scoring semantic duplicate when no lexical hit exists", async () => {
+    lexicalResults = [];
+    semanticResults = [
+      new Document({
+        pageContent: "Chunk",
+        metadata: {
+          chunkId: "dup.md#0",
+          score: 0.3,
+          rerank_score: 0.3,
+        },
+      }),
+      new Document({
+        pageContent: "Chunk",
+        metadata: {
+          chunkId: "dup.md#0",
+          score: 0.6,
+          rerank_score: 0.6,
+        },
+      }),
+    ];
+
+    const retriever = new MergedSemanticRetriever(mockApp, {
+      maxK: 5,
+      salientTerms: [],
+    });
+
+    const results = await retriever.getRelevantDocuments("query");
+
+    expect(results).toHaveLength(1);
+    expect(results[0].metadata.source).toBe("semantic");
+    expect(results[0].metadata.score).toBeCloseTo(0.6, 2);
+  });
+
   it("respects RETURN_ALL_LIMIT when returnAll is enabled", async () => {
     lexicalResults = [
       new Document({

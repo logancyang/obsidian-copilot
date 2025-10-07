@@ -125,7 +125,25 @@ export class MergedSemanticRetriever extends BaseRetriever {
     const key = this.getDocumentKey(doc); // Map key = chunk-level identity for cross-engine dedupe
     const enriched = this.decorateDocument(doc, source);
 
-    if (!map.has(key) || source === "lexical") {
+    const existing = map.get(key);
+    if (!existing) {
+      map.set(key, enriched);
+      return;
+    }
+
+    const existingSource = existing.metadata?.source as SourceKind | undefined;
+    const existingScore = this.getDocumentScore(existing);
+    const newScore = this.getDocumentScore(enriched);
+
+    if (source === "lexical") {
+      if (existingSource !== "lexical" || newScore > existingScore) {
+        map.set(key, enriched);
+      }
+      return;
+    }
+
+    // Semantic result: only replace if the existing entry is also semantic and lower scoring
+    if (existingSource !== "lexical" && newScore > existingScore) {
       map.set(key, enriched);
     }
   }
@@ -196,6 +214,14 @@ export class MergedSemanticRetriever extends BaseRetriever {
       }
     }
     return 0;
+  }
+
+  /**
+   * Safely retrieves the blended score from a Document (falls back to 0 when absent).
+   */
+  private getDocumentScore(doc: Document): number {
+    const score = doc.metadata?.score;
+    return typeof score === "number" && !Number.isNaN(score) ? score : 0;
   }
 
   /**
