@@ -125,9 +125,11 @@ export class SearchCore {
       tagRecallTerms.forEach(addRecallTerm);
 
       // Only log details if expansion produced significant variants
-      if (queries.length > 1 || salientTerms.length > 3 || expanded.expandedTerms.length > 0) {
+      if (queries.length > 1 || salientTerms.length > 0 || expanded.expandedTerms.length > 0) {
         logInfo(
-          `Query expansion: ${queries.length} variants, ${salientTerms.length} scoring terms (from original), ${expanded.expandedTerms.length} recall terms (LLM-generated)`
+          `Query expansion: variants=${JSON.stringify(queries)}, salient=${JSON.stringify(
+            salientTerms
+          )}, recall=${JSON.stringify(expanded.expandedTerms)}`
         );
       }
 
