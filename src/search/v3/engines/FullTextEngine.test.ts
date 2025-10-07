@@ -663,6 +663,16 @@ describe("FullTextEngine", () => {
 
       expect(results[0].id).toBe("unique.md#0");
     });
+
+    it("should display hashless explanation for non-tag matches", async () => {
+      await engine.buildFromCandidates(["unique.md"]);
+      const results = engine.search(["#rareterm"], 10, ["#rareterm"], "#rareterm");
+      const explanation = results[0].explanation?.lexicalMatches?.find(
+        (match) => match.field === "body"
+      );
+
+      expect(explanation?.query).toBe("rareterm");
+    });
   });
 
   describe("chunk-based indexing", () => {

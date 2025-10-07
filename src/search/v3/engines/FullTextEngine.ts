@@ -610,11 +610,14 @@ export class FullTextEngine {
           const queriesMatched = new Set(existing.queriesMatched);
           queriesMatched.add(query);
 
+          const explanationQuery =
+            fieldName === "tags" || !query.startsWith("#") ? query : query.replace(/^#/, "");
+
           const lexicalMatches = [
             ...existing.lexicalMatches,
             {
               field: fieldName,
-              query,
+              query: explanationQuery,
               weight: fieldWeight,
             },
           ];
