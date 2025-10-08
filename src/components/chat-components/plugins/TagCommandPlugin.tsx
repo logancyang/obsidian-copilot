@@ -22,7 +22,6 @@ export function TagCommandPlugin({ onTagSelected }: TagCommandPluginProps): JSX.
 
   const filteredTags = useTagSearch(currentQuery, {
     limit: 10,
-    frontmatterOnly: false, // Include both frontmatter and inline tags
   });
 
   // Handle tag selection - insert as raw text instead of pill

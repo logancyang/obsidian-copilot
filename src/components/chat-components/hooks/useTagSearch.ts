@@ -15,14 +15,14 @@ export interface TagSearchConfig {
   limit?: number;
   /** Fuzzysort threshold for matching (-10000 = very lenient, 0 = exact match) */
   threshold?: number;
-  /** Whether to include only frontmatter tags or all tags */
+  /** Whether to include only frontmatter tags or all tags (defaults to false - includes all tags) */
   frontmatterOnly?: boolean;
 }
 
 const DEFAULT_CONFIG: Required<TagSearchConfig> = {
   limit: 10,
   threshold: -10000,
-  frontmatterOnly: true,
+  frontmatterOnly: false,
 };
 
 /**
