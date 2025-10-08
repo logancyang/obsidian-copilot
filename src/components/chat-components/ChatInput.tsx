@@ -18,7 +18,7 @@ import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { isAllowedFileForContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
-import { App, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useDropzone } from "react-dropzone";
 import { $getSelection, $isRangeSelection } from "lexical";
@@ -591,6 +591,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setIncludeActiveNote(false);
   }, [setIncludeActiveNote]);
 
+  // Handle tag selection from typeahead - auto-enable vault search
+  const handleTagSelected = useCallback(() => {
+    if (isCopilotPlus && !autonomousAgentToggle && !vaultToggle) {
+      setVaultToggle(true);
+      new Notice("Vault search enabled for tag query");
+    }
+  }, [isCopilotPlus, autonomousAgentToggle, vaultToggle]);
+
   return (
     <div
       className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -655,10 +663,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onFoldersRemoved={handleFolderPillsRemoved}
           onEditorReady={onEditorReady}
           onImagePaste={onAddImage}
+          onTagSelected={handleTagSelected}
           placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
           disabled={isProjectLoading}
           isCopilotPlus={isCopilotPlus}
           currentActiveFile={currentActiveNote}
+          currentChain={currentChain}
         />
         <input {...getInputProps()} />
         {/* Overlay that appears when dragging */}

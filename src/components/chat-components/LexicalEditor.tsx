@@ -30,6 +30,7 @@ import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
+import { ChainType } from "@/chainFactory";
 
 interface LexicalEditorProps {
   value: string;
@@ -50,8 +51,10 @@ interface LexicalEditorProps {
   onActiveNoteRemoved?: () => void;
   onEditorReady?: (editor: any) => void;
   onImagePaste?: (files: File[]) => void;
+  onTagSelected?: () => void;
   isCopilotPlus?: boolean;
   currentActiveFile?: TFile | null;
+  currentChain?: ChainType;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -73,8 +76,10 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onActiveNoteRemoved,
   onEditorReady,
   onImagePaste,
+  onTagSelected,
   isCopilotPlus = false,
   currentActiveFile = null,
+  currentChain,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -174,7 +179,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
           <SlashCommandPlugin />
           <NoteCommandPlugin isCopilotPlus={isCopilotPlus} currentActiveFile={currentActiveFile} />
-          <TagCommandPlugin />
+          {currentChain !== ChainType.LLM_CHAIN && (
+            <TagCommandPlugin onTagSelected={onTagSelected} />
+          )}
           <AtMentionCommandPlugin
             isCopilotPlus={isCopilotPlus}
             currentActiveFile={currentActiveFile}

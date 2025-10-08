@@ -8,11 +8,15 @@ import {
 } from "@/components/chat-components/hooks/useTypeaheadPlugin";
 import { useTagSearch, TagSearchOption } from "@/components/chat-components/hooks/useTagSearch";
 
+interface TagCommandPluginProps {
+  onTagSelected?: () => void;
+}
+
 /**
  * TagCommandPlugin provides # typeahead functionality for tags
  * Inserts tags as raw text (#tag) instead of pills, so search v3 can process them
  */
-export function TagCommandPlugin(): JSX.Element {
+export function TagCommandPlugin({ onTagSelected }: TagCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
 
@@ -52,8 +56,11 @@ export function TagCommandPlugin(): JSX.Element {
         const newOffset = beforeText.length + tagText.length;
         anchorNode.select(newOffset, newOffset);
       });
+
+      // Notify parent that a tag was selected from typeahead
+      onTagSelected?.();
     },
-    [editor]
+    [editor, onTagSelected]
   );
 
   // Use the shared typeahead hook
