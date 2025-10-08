@@ -201,4 +201,55 @@ describe("readNoteTool", () => {
     expect(result.chunkIndex).toBe(0);
     expect(mockCachedRead).toHaveBeenCalledWith(file);
   });
+
+  it("resolves wiki-linked notes via metadata without active note context", async () => {
+    const requestedPath = "Project Plan";
+    const targetFile = new MockTFile("Projects/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockImplementation((link: string, source: string) => {
+      if (link === requestedPath && source === "") {
+        return targetFile;
+      }
+      return null;
+    });
+    mockCachedRead.mockResolvedValue("Content");
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result.notePath).toBe(targetFile.path);
+    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+    expect(getFirstLinkpathDestMock).toHaveBeenCalledWith(requestedPath, "");
+  });
+
+  it("falls back to a unique basename match when metadata resolution fails", async () => {
+    const requestedPath = "Solo Note";
+    const targetFile = new MockTFile("Area/Solo Note.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([targetFile]);
+    mockCachedRead.mockResolvedValue("Content");
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result.notePath).toBe(targetFile.path);
+    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+  });
+
+  it("matches a unique partial path when multiple basenames exist", async () => {
+    const requestedPath = "Projects/Project Plan";
+    const targetFile = new MockTFile("Projects/Project Plan.md");
+    const duplicateFile = new MockTFile("Archive/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([targetFile, duplicateFile]);
+    mockCachedRead.mockResolvedValue("Content");
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result.notePath).toBe(targetFile.path);
+    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+  });
 });

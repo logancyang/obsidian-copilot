@@ -26,24 +26,124 @@ interface NoteChunk {
   heading: string;
 }
 
+/**
+ * Normalizes a path fragment to support case-insensitive comparisons with forward slashes.
+ *
+ * @param value - Path or fragment supplied by the caller or taken from vault files.
+ * @returns Lowercase path string with forward slashes as separators.
+ */
+function normalizePathFragment(value: string): string {
+  return value.replace(/\\/g, "/").toLowerCase();
+}
+
+/**
+ * Determines whether the provided path already contains a file extension.
+ *
+ * @param value - Path or fragment to inspect.
+ * @returns True if the input ends with an extension segment.
+ */
+function pathHasExtension(value: string): boolean {
+  return /\.[^/]+$/.test(value);
+}
+
 async function resolveNoteFile(notePath: string): Promise<TFile | null> {
   const tryResolve = (path: string) => {
     const maybeFile = app.vault.getAbstractFileByPath(path);
     return maybeFile instanceof TFile ? maybeFile : null;
   };
 
-  const direct = tryResolve(notePath);
-  if (direct) {
-    return direct;
+  const trimmedInput = notePath.trim();
+  const wikiMatch = trimmedInput.match(/^\s*\[\[([\s\S]+?)\]\]\s*$/);
+  const innerTarget = wikiMatch ? wikiMatch[1] : trimmedInput;
+  const [targetPart] = innerTarget.split("|");
+  const [targetWithoutSection] = (targetPart ?? innerTarget).split("#");
+  const canonicalTarget = targetWithoutSection?.trim() || trimmedInput;
+
+  const attemptedPaths = Array.from(
+    new Set<string>(
+      [trimmedInput, innerTarget, canonicalTarget].map((value) => value.trim()).filter(Boolean)
+    )
+  );
+
+  for (const candidate of attemptedPaths) {
+    const direct = tryResolve(candidate);
+    if (direct) {
+      return direct;
+    }
+
+    if (!pathHasExtension(candidate)) {
+      for (const ext of [".md", ".canvas"]) {
+        const resolved = tryResolve(`${candidate}${ext}`);
+        if (resolved) {
+          return resolved;
+        }
+      }
+    }
   }
 
-  if (!/\.[^/]+$/.test(notePath)) {
-    for (const ext of [".md", ".canvas"]) {
-      const resolved = tryResolve(`${notePath}${ext}`);
-      if (resolved) {
+  const metadataCache = app.metadataCache;
+  const resolutionTarget = canonicalTarget;
+
+  if (metadataCache && resolutionTarget) {
+    const linkTargets = new Set<string>([resolutionTarget]);
+
+    if (!pathHasExtension(resolutionTarget)) {
+      for (const ext of [".md", ".canvas"]) {
+        linkTargets.add(`${resolutionTarget}${ext}`);
+      }
+    }
+
+    for (const target of linkTargets) {
+      const resolved = metadataCache.getFirstLinkpathDest?.(target, "");
+      if (resolved instanceof TFile) {
         return resolved;
       }
     }
+  }
+
+  if (!resolutionTarget) {
+    return null;
+  }
+
+  const markdownFiles = app.vault.getMarkdownFiles?.() ?? [];
+  if (markdownFiles.length === 0) {
+    return null;
+  }
+
+  const normalizedTarget = normalizePathFragment(resolutionTarget);
+  const candidatePathForms = new Set<string>([normalizedTarget]);
+
+  if (!pathHasExtension(resolutionTarget)) {
+    for (const ext of [".md", ".canvas"]) {
+      candidatePathForms.add(normalizePathFragment(`${resolutionTarget}${ext}`));
+    }
+  }
+
+  for (const file of markdownFiles) {
+    const normalizedFilePath = normalizePathFragment(file.path);
+    if (candidatePathForms.has(normalizedFilePath)) {
+      return file;
+    }
+  }
+
+  const basename = resolutionTarget.split("/").pop();
+  if (basename) {
+    const normalizedBasename = basename.toLowerCase();
+    const basenameMatches = markdownFiles.filter(
+      (file) => file.basename.toLowerCase() === normalizedBasename
+    );
+
+    if (basenameMatches.length === 1) {
+      return basenameMatches[0];
+    }
+  }
+
+  const partialMatches = markdownFiles.filter((file) =>
+    normalizePathFragment(file.path).includes(normalizedTarget)
+  );
+
+  if (partialMatches.length === 1) {
+    return partialMatches[0];
   }
 
   return null;
