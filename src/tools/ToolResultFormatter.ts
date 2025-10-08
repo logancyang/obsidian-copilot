@@ -478,6 +478,38 @@ export class ToolResultFormatter {
       return typeof result === "string" ? result : JSON.stringify(result, null, 2);
     }
 
+    const status = typeof data.status === "string" ? data.status : null;
+    const message = typeof data.message === "string" ? data.message : null;
+    const candidates = Array.isArray(data.candidates) ? data.candidates : null;
+
+    if (status === "not_found") {
+      const baseLines = ["⚠️ Note not found"];
+      if (message) {
+        baseLines.push("");
+        baseLines.push(message);
+      }
+      return baseLines.join("\n");
+    }
+
+    if (status === "not_unique") {
+      const baseLines = ["⚠️ Multiple notes match that title"];
+      if (message) {
+        baseLines.push("");
+        baseLines.push(message);
+      }
+      if (candidates && candidates.length > 0) {
+        baseLines.push("");
+        baseLines.push("Candidates:");
+        for (const candidate of candidates) {
+          const path = typeof candidate?.path === "string" ? candidate.path : "";
+          const title =
+            typeof candidate?.title === "string" ? candidate.title : path || "(unknown)";
+          baseLines.push(`- ${title}${path && path !== title ? ` (${path})` : ""}`);
+        }
+      }
+      return baseLines.join("\n");
+    }
+
     const notePath = data.notePath ?? "";
     const title = data.noteTitle ?? notePath ?? "Note excerpt";
     const chunkIndex = typeof data.chunkIndex === "number" ? data.chunkIndex : 0;

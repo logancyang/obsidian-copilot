@@ -237,6 +237,29 @@ describe("readNoteTool", () => {
     expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
   });
 
+  it("returns not_unique when multiple notes share the same title", async () => {
+    const requestedPath = "Project Plan";
+    const projectFile = new MockTFile("Projects/Project Plan.md");
+    const archiveFile = new MockTFile("Archive/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([projectFile, archiveFile]);
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result).toEqual({
+      notePath: requestedPath,
+      status: "not_unique",
+      message: 'Multiple notes match "Project Plan". Provide a more specific path.',
+      candidates: [
+        { path: projectFile.path, title: projectFile.basename },
+        { path: archiveFile.path, title: archiveFile.basename },
+      ],
+    });
+    expect(mockCachedRead).not.toHaveBeenCalled();
+  });
+
   it("matches a unique partial path when multiple basenames exist", async () => {
     const requestedPath = "Projects/Project Plan";
     const targetFile = new MockTFile("Projects/Project Plan.md");

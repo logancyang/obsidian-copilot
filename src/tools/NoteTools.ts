@@ -26,6 +26,22 @@ interface NoteChunk {
   heading: string;
 }
 
+type ResolveNoteSuccess = {
+  type: "resolved";
+  file: TFile;
+};
+
+type ResolveNoteAmbiguous = {
+  type: "not_unique";
+  matches: TFile[];
+};
+
+type ResolveNoteFailure = {
+  type: "not_found";
+};
+
+type ResolveNoteOutcome = ResolveNoteSuccess | ResolveNoteAmbiguous | ResolveNoteFailure;
+
 /**
  * Normalizes a path fragment to support case-insensitive comparisons with forward slashes.
  *
@@ -46,7 +62,7 @@ function pathHasExtension(value: string): boolean {
   return /\.[^/]+$/.test(value);
 }
 
-async function resolveNoteFile(notePath: string): Promise<TFile | null> {
+async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
   const tryResolve = (path: string) => {
     const maybeFile = app.vault.getAbstractFileByPath(path);
     return maybeFile instanceof TFile ? maybeFile : null;
@@ -68,14 +84,14 @@ async function resolveNoteFile(notePath: string): Promise<TFile | null> {
   for (const candidate of attemptedPaths) {
     const direct = tryResolve(candidate);
     if (direct) {
-      return direct;
+      return { type: "resolved", file: direct };
     }
 
     if (!pathHasExtension(candidate)) {
       for (const ext of [".md", ".canvas"]) {
         const resolved = tryResolve(`${candidate}${ext}`);
         if (resolved) {
-          return resolved;
+          return { type: "resolved", file: resolved };
         }
       }
     }
@@ -96,18 +112,18 @@ async function resolveNoteFile(notePath: string): Promise<TFile | null> {
     for (const target of linkTargets) {
       const resolved = metadataCache.getFirstLinkpathDest?.(target, "");
       if (resolved instanceof TFile) {
-        return resolved;
+        return { type: "resolved", file: resolved };
       }
     }
   }
 
   if (!resolutionTarget) {
-    return null;
+    return { type: "not_found" };
   }
 
   const markdownFiles = app.vault.getMarkdownFiles?.() ?? [];
   if (markdownFiles.length === 0) {
-    return null;
+    return { type: "not_found" };
   }
 
   const normalizedTarget = normalizePathFragment(resolutionTarget);
@@ -122,7 +138,7 @@ async function resolveNoteFile(notePath: string): Promise<TFile | null> {
   for (const file of markdownFiles) {
     const normalizedFilePath = normalizePathFragment(file.path);
     if (candidatePathForms.has(normalizedFilePath)) {
-      return file;
+      return { type: "resolved", file };
     }
   }
 
@@ -134,7 +150,11 @@ async function resolveNoteFile(notePath: string): Promise<TFile | null> {
     );
 
     if (basenameMatches.length === 1) {
-      return basenameMatches[0];
+      return { type: "resolved", file: basenameMatches[0] };
+    }
+
+    if (basenameMatches.length > 1) {
+      return { type: "not_unique", matches: basenameMatches };
     }
   }
 
@@ -143,10 +163,14 @@ async function resolveNoteFile(notePath: string): Promise<TFile | null> {
   );
 
   if (partialMatches.length === 1) {
-    return partialMatches[0];
+    return { type: "resolved", file: partialMatches[0] };
   }
 
-  return null;
+  if (partialMatches.length > 1) {
+    return { type: "not_unique", matches: partialMatches };
+  }
+
+  return { type: "not_found" };
 }
 
 async function readNoteText(file: TFile): Promise<string> {
@@ -330,8 +354,8 @@ const readNoteTool = createTool({
       };
     }
 
-    const file = await resolveNoteFile(sanitizedPath);
-    if (!file) {
+    const resolution = await resolveNoteFile(sanitizedPath);
+    if (resolution.type === "not_found") {
       logWarn(`readNote: note not found or not a file (${sanitizedPath})`);
       return {
         notePath: sanitizedPath,
@@ -340,6 +364,23 @@ const readNoteTool = createTool({
       };
     }
 
+    if (resolution.type === "not_unique") {
+      logWarn(
+        `readNote: ambiguous note path "${sanitizedPath}" matched multiple files`,
+        resolution.matches.map((file) => file.path)
+      );
+      return {
+        notePath: sanitizedPath,
+        status: "not_unique",
+        message: `Multiple notes match "${sanitizedPath}". Provide a more specific path.`,
+        candidates: resolution.matches.map((file) => ({
+          path: file.path,
+          title: file.basename,
+        })),
+      };
+    }
+
+    const file = resolution.file;
     const canonicalPath = file.path;
     const text = await readNoteText(file);
     const chunks = chunkContentByLines(file, text);
