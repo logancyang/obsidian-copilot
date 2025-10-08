@@ -236,7 +236,11 @@ function matchFilePathWithTags(filePath: string, tagPatterns: string[]): boolean
   const file = app.vault.getAbstractFileByPath(filePath);
   if (file instanceof TFile) {
     const tags = getTagsFromNote(file);
-    if (tagPatterns.some((pattern) => tags.includes(stripHash(pattern)))) {
+    if (
+      tagPatterns.some((pattern) =>
+        tags.some((tag) => tag.toLowerCase() === stripHash(pattern).toLowerCase())
+      )
+    ) {
       return true;
     }
   }

@@ -119,10 +119,10 @@ export const getNotesFromPath = (vault: Vault, path: string): TFile[] => {
 
 /**
  * @param tag - The tag to strip the hash symbol from.
- * @returns The tag without the hash symbol in lowercase.
+ * @returns The tag without the hash symbol.
  */
 export function stripHash(tag: string): string {
-  return tag.replace(/^#/, "").trim().toLowerCase();
+  return tag.replace(/^#/, "").trim();
 }
 
 /**

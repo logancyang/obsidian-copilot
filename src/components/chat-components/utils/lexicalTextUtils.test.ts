@@ -391,7 +391,6 @@ describe("parseTextForPills", () => {
         includeNotes: true,
         includeURLs: true,
         includeTools: true,
-        // includeTags removed - tags now appear as raw text
         includeFolders: true,
       });
 
