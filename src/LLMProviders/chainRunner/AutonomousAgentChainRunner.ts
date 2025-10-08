@@ -6,7 +6,7 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
-import { deriveReadNoteDisplayName } from "@/tools/ToolResultFormatter";
+import { deriveReadNoteDisplayName, ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
@@ -549,6 +549,8 @@ ${params}
             originalUserPrompt || ""
           );
           result.displayResult = processed.formattedForDisplay;
+        } else if (toolCall.name === "readNote") {
+          result.displayResult = ToolResultFormatter.format("readNote", result.result);
         }
 
         toolResults.push(result);

@@ -187,6 +187,39 @@ Just content, no path or modified date
     });
   });
 
+  describe("formatReadNote", () => {
+    it("returns a success summary without exposing content", () => {
+      const payload = JSON.stringify({
+        notePath: "Vault/Docs/Test.md",
+        noteTitle: "Test Note",
+        chunkIndex: 0,
+        totalChunks: 2,
+        hasMore: true,
+        content: "Very long note content that should not appear in the banner.",
+      });
+
+      expect(ToolResultFormatter.format("readNote", payload)).toBe(
+        '✅ Read "Test Note" · chunk 1 of 2 · more available'
+      );
+    });
+
+    it("surfaces not_found status messages directly", () => {
+      const payload = JSON.stringify({
+        notePath: "Vault/Missing.md",
+        status: "not_found",
+        message: 'Note "Vault/Missing.md" was not found or is not a readable file.',
+      });
+
+      expect(ToolResultFormatter.format("readNote", payload)).toBe(
+        'Note "Vault/Missing.md" was not found or is not a readable file.'
+      );
+    });
+
+    it("handles non-JSON payloads gracefully", () => {
+      expect(ToolResultFormatter.format("readNote", "not-json")).toBe("not-json");
+    });
+  });
+
   describe("deriveReadNoteDisplayName", () => {
     it("returns a generic label when the input is blank", () => {
       expect(deriveReadNoteDisplayName("")).toBe("note");

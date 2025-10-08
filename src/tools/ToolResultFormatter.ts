@@ -30,6 +30,93 @@ export function deriveReadNoteDisplayName(rawNotePath: string): string {
   return withoutExtension || lastSegment || "note";
 }
 
+const READ_NOTE_SUMMARY_MAX_LENGTH = 180;
+
+function clampReadNoteMessage(message: string): string {
+  const trimmed = message.trim();
+  if (trimmed.length <= READ_NOTE_SUMMARY_MAX_LENGTH) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, READ_NOTE_SUMMARY_MAX_LENGTH)}…`;
+}
+
+function summarizeReadNotePayload(payload: any): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const status = typeof payload.status === "string" ? payload.status : null;
+  const message =
+    typeof payload.message === "string" && payload.message.trim().length > 0
+      ? clampReadNoteMessage(payload.message)
+      : null;
+  const notePath = typeof payload.notePath === "string" ? payload.notePath : "";
+  const noteTitle =
+    typeof payload.noteTitle === "string" && payload.noteTitle.trim().length > 0
+      ? payload.noteTitle.trim()
+      : deriveReadNoteDisplayName(notePath);
+  const displayName = noteTitle || deriveReadNoteDisplayName(notePath);
+
+  if (status === "invalid_path") {
+    return message ?? `⚠️ Invalid note path "${displayName}"`;
+  }
+  if (status === "not_found") {
+    return message ?? `⚠️ Note "${displayName}" not found`;
+  }
+  if (status === "not_unique") {
+    const candidateCount = Array.isArray(payload.candidates) ? payload.candidates.length : 0;
+    if (message) {
+      return message;
+    }
+    return candidateCount > 0
+      ? `⚠️ Multiple matches for "${displayName}" (${candidateCount} candidates)`
+      : `⚠️ Multiple matches for "${displayName}"`;
+  }
+  if (status === "empty") {
+    return message ?? `⚠️ "${displayName}" contains no readable content`;
+  }
+  if (status === "out_of_range") {
+    if (message) {
+      return message;
+    }
+    const totalChunks =
+      typeof payload.totalChunks === "number" && Number.isFinite(payload.totalChunks)
+        ? payload.totalChunks
+        : null;
+    const requested =
+      typeof payload.chunkIndex === "number" && Number.isFinite(payload.chunkIndex)
+        ? payload.chunkIndex
+        : null;
+    if (requested !== null && totalChunks !== null) {
+      const maxIndex = Math.max(totalChunks - 1, 0);
+      return `⚠️ Chunk ${requested} exceeds available range (max index ${maxIndex})`;
+    }
+    return "⚠️ Requested chunk is out of range";
+  }
+
+  const chunkIndex =
+    typeof payload.chunkIndex === "number" && Number.isFinite(payload.chunkIndex)
+      ? payload.chunkIndex
+      : 0;
+  const totalChunks =
+    typeof payload.totalChunks === "number" && Number.isFinite(payload.totalChunks)
+      ? payload.totalChunks
+      : null;
+  const hasMore = Boolean(payload.hasMore);
+
+  const parts: string[] = [`✅ Read "${displayName || "note"}"`];
+  if (totalChunks && totalChunks > 0) {
+    parts.push(`chunk ${chunkIndex + 1} of ${totalChunks}`);
+  } else {
+    parts.push(`chunk ${chunkIndex + 1}`);
+  }
+  if (hasMore) {
+    parts.push("more available");
+  }
+
+  return parts.join(" · ");
+}
+
 /**
  * Format tool results for display in the UI
  * Each formatter should return a user-friendly representation of the tool result
@@ -70,7 +157,7 @@ export class ToolResultFormatter {
         case "replaceInFile":
           return this.formatReplaceInFile(parsedResult);
         case "readNote":
-          return this.formatReadNote(parsedResult);
+          return this.formatReadNote(normalized);
         default:
           // For all other tools, return the raw result
           return result;
@@ -495,93 +582,20 @@ export class ToolResultFormatter {
   }
 
   private static formatReadNote(result: any): string {
-    const data =
-      typeof result === "object" && result !== null
-        ? result
-        : (() => {
-            try {
-              return JSON.parse(String(result));
-            } catch {
-              return null;
-            }
-          })();
-
-    if (!data || typeof data !== "object") {
-      return typeof result === "string" ? result : JSON.stringify(result, null, 2);
-    }
-
-    const status = typeof data.status === "string" ? data.status : null;
-    const message = typeof data.message === "string" ? data.message : null;
-    const candidates = Array.isArray(data.candidates) ? data.candidates : null;
-
-    if (status === "not_found") {
-      const baseLines = ["⚠️ Note not found"];
-      if (message) {
-        baseLines.push("");
-        baseLines.push(message);
+    let payload: any = result;
+    if (typeof result === "string") {
+      try {
+        payload = JSON.parse(result);
+      } catch {
+        payload = null;
       }
-      return baseLines.join("\n");
     }
 
-    if (status === "not_unique") {
-      const baseLines = ["⚠️ Multiple notes match that title"];
-      if (message) {
-        baseLines.push("");
-        baseLines.push(message);
-      }
-      if (candidates && candidates.length > 0) {
-        baseLines.push("");
-        baseLines.push("Candidates:");
-        for (const candidate of candidates) {
-          const path = typeof candidate?.path === "string" ? candidate.path : "";
-          const title =
-            typeof candidate?.title === "string" ? candidate.title : path || "(unknown)";
-          baseLines.push(`- ${title}${path && path !== title ? ` (${path})` : ""}`);
-        }
-      }
-      return baseLines.join("\n");
+    const summary = summarizeReadNotePayload(payload);
+    if (summary) {
+      return summary;
     }
 
-    const notePath = data.notePath ?? "";
-    const title = data.noteTitle ?? deriveReadNoteDisplayName(notePath);
-    const chunkIndex = typeof data.chunkIndex === "number" ? data.chunkIndex : 0;
-    const totalChunks = typeof data.totalChunks === "number" ? data.totalChunks : undefined;
-    const heading =
-      typeof data.heading === "string" && data.heading.trim().length > 0 ? data.heading.trim() : "";
-    const hasMore = Boolean(data.hasMore);
-    const nextChunk = typeof data.nextChunkIndex === "number" ? data.nextChunkIndex : null;
-    const content = typeof data.content === "string" ? data.content.trim() : "";
-
-    const lines: string[] = [];
-    lines.push(`📄 ${title}`);
-    if (notePath) {
-      lines.push(`   Path: ${notePath}`);
-    }
-    const chunkLabel = totalChunks
-      ? `Chunk ${chunkIndex + 1} of ${totalChunks}`
-      : `Chunk ${chunkIndex + 1}`;
-    lines.push(`   ${chunkLabel}${hasMore ? " · more available" : ""}`);
-    if (nextChunk !== null) {
-      lines.push(`   Next chunk index: ${nextChunk}`);
-    }
-    if (heading) {
-      lines.push(`   Heading: ${heading}`);
-    }
-
-    lines.push("");
-
-    if (content) {
-      const MAX_PREVIEW = 800;
-      const preview = content.length > MAX_PREVIEW ? `${content.slice(0, MAX_PREVIEW)}…` : content;
-      lines.push(preview);
-      if (content.length > MAX_PREVIEW) {
-        lines.push("");
-        lines.push("… (truncated for display)");
-      }
-    } else {
-      lines.push("(This chunk is empty.)");
-    }
-
-    return lines.join("\n");
+    return typeof result === "string" ? result : JSON.stringify(result, null, 2);
   }
 }
