@@ -9,7 +9,6 @@ interface ChatControlsProps {
   includeActiveNote: boolean;
   activeNote: TFile | null;
   contextUrls: string[];
-  contextTags: string[];
   contextFolders: string[];
   selectedTextContexts?: SelectedTextContext[];
   showProgressCard: () => void;
@@ -25,7 +24,6 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   includeActiveNote,
   activeNote,
   contextUrls,
-  contextTags,
   contextFolders,
   selectedTextContexts,
   showProgressCard,
@@ -52,7 +50,6 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       contextNotes={contextNotes}
       onRemoveContext={handleRemoveContext}
       contextUrls={contextUrls}
-      contextTags={contextTags}
       contextFolders={contextFolders}
       selectedTextContexts={selectedTextContexts}
       showProgressCard={showProgressCard}

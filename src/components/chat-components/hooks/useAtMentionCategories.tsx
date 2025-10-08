@@ -1,9 +1,9 @@
 import React, { useMemo } from "react";
 import { TFile, TFolder } from "obsidian";
-import { FileText, Wrench, Folder, Hash } from "lucide-react";
+import { FileText, Wrench, Folder } from "lucide-react";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
 
-export type AtMentionCategory = "notes" | "tools" | "folders" | "tags" | "activeNote";
+export type AtMentionCategory = "notes" | "tools" | "folders" | "activeNote";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
@@ -36,13 +36,6 @@ export const CATEGORY_OPTIONS: CategoryOption[] = [
     subtitle: "Reference vault folders",
     category: "folders",
     icon: <Folder className="tw-size-4" />,
-  },
-  {
-    key: "tags",
-    title: "Tags",
-    subtitle: "Reference existing tags",
-    category: "tags",
-    icon: <Hash className="tw-size-4" />,
   },
 ];
 

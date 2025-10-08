@@ -15,7 +15,6 @@ import { NotePillNode } from "./pills/NotePillNode";
 import { URLPillNode } from "./pills/URLPillNode";
 import { ToolPillNode } from "./pills/ToolPillNode";
 import { FolderPillNode } from "./pills/FolderPillNode";
-import { TagPillNode } from "./pills/TagPillNode";
 import { ActiveNotePillNode } from "./pills/ActiveNotePillNode";
 import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
@@ -25,13 +24,13 @@ import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
 import { URLPillSyncPlugin } from "./plugins/URLPillSyncPlugin";
 import { ToolPillSyncPlugin } from "./plugins/ToolPillSyncPlugin";
 import { FolderPillSyncPlugin } from "./plugins/FolderPillSyncPlugin";
-import { TagPillSyncPlugin } from "./plugins/TagPillSyncPlugin";
 import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
+import { ChainType } from "@/chainFactory";
 
 interface LexicalEditorProps {
   value: string;
@@ -48,14 +47,14 @@ interface LexicalEditorProps {
   onToolsRemoved?: (removedTools: string[]) => void;
   onFoldersChange?: (folders: string[]) => void;
   onFoldersRemoved?: (removedFolders: string[]) => void;
-  onTagsChange?: (tags: string[]) => void;
-  onTagsRemoved?: (removedTags: string[]) => void;
   onActiveNoteAdded?: () => void;
   onActiveNoteRemoved?: () => void;
   onEditorReady?: (editor: any) => void;
   onImagePaste?: (files: File[]) => void;
+  onTagSelected?: () => void;
   isCopilotPlus?: boolean;
   currentActiveFile?: TFile | null;
+  currentChain?: ChainType;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -73,14 +72,14 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onToolsRemoved,
   onFoldersChange,
   onFoldersRemoved,
-  onTagsChange,
-  onTagsRemoved,
   onActiveNoteAdded,
   onActiveNoteRemoved,
   onEditorReady,
   onImagePaste,
+  onTagSelected,
   isCopilotPlus = false,
   currentActiveFile = null,
+  currentChain,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -111,7 +110,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         ActiveNotePillNode,
         ToolPillNode,
         FolderPillNode,
-        TagPillNode,
         ...(onURLsChange ? [URLPillNode] : []),
       ],
       onError: (error: Error) => {
@@ -173,7 +171,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
             onFoldersChange={onFoldersChange}
             onFoldersRemoved={onFoldersRemoved}
           />
-          <TagPillSyncPlugin onTagsChange={onTagsChange} onTagsRemoved={onTagsRemoved} />
           <ActiveNotePillSyncPlugin
             onActiveNoteAdded={onActiveNoteAdded}
             onActiveNoteRemoved={onActiveNoteRemoved}
@@ -182,7 +179,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
           <SlashCommandPlugin />
           <NoteCommandPlugin isCopilotPlus={isCopilotPlus} currentActiveFile={currentActiveFile} />
-          <TagCommandPlugin />
+          {currentChain && currentChain !== ChainType.LLM_CHAIN && (
+            <TagCommandPlugin onTagSelected={onTagSelected} />
+          )}
           <AtMentionCommandPlugin
             isCopilotPlus={isCopilotPlus}
             currentActiveFile={currentActiveFile}

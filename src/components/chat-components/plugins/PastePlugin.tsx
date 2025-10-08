@@ -71,7 +71,6 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
           includeNotes: true,
           includeURLs: enableURLPills,
           includeTools: true,
-          includeTags: true,
           includeFolders: true,
         });
 
@@ -82,7 +81,6 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
             segment.type === "active-note-pill" ||
             (enableURLPills && segment.type === "url-pill") ||
             segment.type === "tool-pill" ||
-            segment.type === "tag-pill" ||
             segment.type === "folder-pill"
         );
 

@@ -15,14 +15,14 @@ export interface TagSearchConfig {
   limit?: number;
   /** Fuzzysort threshold for matching (-10000 = very lenient, 0 = exact match) */
   threshold?: number;
-  /** Whether to include only frontmatter tags or all tags */
+  /** Whether to include only frontmatter tags or all tags (defaults to false - includes all tags) */
   frontmatterOnly?: boolean;
 }
 
 const DEFAULT_CONFIG: Required<TagSearchConfig> = {
   limit: 10,
   threshold: -10000,
-  frontmatterOnly: true,
+  frontmatterOnly: false,
 };
 
 /**
@@ -42,15 +42,15 @@ export function useTagSearch(query: string, config: TagSearchConfig = {}): TagSe
   // Transform tags into TagSearchOption objects
   const allTagOptions = useMemo(() => {
     return allTags.map((tag, index) => {
-      // Remove # prefix for title display
-      const titleTag = tag.startsWith("#") ? tag.slice(1) : tag;
+      // Remove # prefix for internal use
+      const tagWithoutHash = tag.startsWith("#") ? tag.slice(1) : tag;
 
       return {
-        key: `tag-${titleTag}-${index}`,
-        title: titleTag,
-        subtitle: tag, // Show with # prefix in subtitle
+        key: `tag-${tagWithoutHash}-${index}`,
+        title: tag, // Show with # prefix as title
+        subtitle: undefined, // No subtitle needed for tags
         content: "", // Tags don't have preview content
-        tag: titleTag, // Store without # prefix
+        tag: tagWithoutHash, // Store without # prefix for insertion
       };
     });
   }, [allTags]);
