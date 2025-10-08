@@ -157,7 +157,7 @@ export class ToolResultFormatter {
         case "replaceInFile":
           return this.formatReplaceInFile(parsedResult);
         case "readNote":
-          return this.formatReadNote(normalized);
+          return this.formatReadNote(parsedResult);
         default:
           // For all other tools, return the raw result
           return result;
