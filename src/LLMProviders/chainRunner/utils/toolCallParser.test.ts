@@ -96,4 +96,23 @@ describe("toolCallParser encoding/decoding", () => {
       "Tool 'readNote' Result omitted to keep the UI responsive (payload exceeded 5,000 characters)."
     );
   });
+
+  it("preserves encoded results when decoded length is within the display limit", () => {
+    const id = "readNote-medium";
+    const mediumPayload = "a".repeat(4000);
+    const marker = createToolCallMarker(
+      id,
+      "readNote",
+      "Read Note",
+      "🔍",
+      "",
+      false,
+      "",
+      mediumPayload
+    );
+
+    const parsed = parseToolCallMarkers(marker);
+    const toolSegment = parsed.segments.find((s) => s.type === "toolCall")!;
+    expect(toolSegment.toolCall?.result).toBe(mediumPayload);
+  });
 });

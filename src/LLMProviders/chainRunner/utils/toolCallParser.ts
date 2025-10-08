@@ -125,9 +125,13 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
     ] = match;
 
     const rawResult = typeof result === "string" ? result : "";
-    const shouldSuppressResult = rawResult.length > TOOL_RESULT_UI_MAX_LENGTH;
-    const decodedResult = shouldSuppressResult ? undefined : decodeResultFromMarker(rawResult);
-    const safeResult = shouldSuppressResult ? buildOmittedResultMessage(toolName) : decodedResult;
+    const decodedResult = decodeResultFromMarker(rawResult);
+    const effectiveLength =
+      typeof decodedResult === "string" ? decodedResult.length : rawResult.length;
+    const shouldSuppressResult = effectiveLength > TOOL_RESULT_UI_MAX_LENGTH;
+    const safeResult = shouldSuppressResult
+      ? buildOmittedResultMessage(toolName)
+      : (decodedResult ?? undefined);
 
     segments.push({
       type: "toolCall",
@@ -139,7 +143,7 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
         emoji,
         confirmationMessage: confirmationMessage || undefined,
         isExecuting: isExecuting === "true",
-        result: safeResult || undefined,
+        result: safeResult,
         startIndex: match.index,
         endIndex: match.index + fullMatch.length,
       },
