@@ -115,6 +115,38 @@ describe("readNoteTool", () => {
     expect(mockCachedRead).not.toHaveBeenCalled();
   });
 
+  it("returns not_found for section-only wiki link targets", async () => {
+    const notePath = "[[#Setup]]";
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([new MockTFile("Docs/Guide.md")]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result).toEqual({
+      notePath,
+      status: "not_found",
+      message: 'Note "[[#Setup]]" was not found or is not a readable file.',
+    });
+    expect(mockCachedRead).not.toHaveBeenCalled();
+  });
+
+  it("returns not_found for empty wiki link targets", async () => {
+    const notePath = "[[]]";
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([new MockTFile("Docs/Guide.md")]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result).toEqual({
+      notePath,
+      status: "not_found",
+      message: 'Note "[[]]" was not found or is not a readable file.',
+    });
+    expect(mockCachedRead).not.toHaveBeenCalled();
+  });
+
   it("returns invalid_path when notePath starts with a leading slash", async () => {
     const result = await readNoteTool.call({ notePath: "/Projects/note.md" });
 
@@ -200,5 +232,79 @@ describe("readNoteTool", () => {
     expect(result.notePath).toBe(file.path);
     expect(result.chunkIndex).toBe(0);
     expect(mockCachedRead).toHaveBeenCalledWith(file);
+  });
+
+  it("resolves wiki-linked notes via metadata without active note context", async () => {
+    const requestedPath = "Project Plan";
+    const targetFile = new MockTFile("Projects/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockImplementation((link: string, source: string) => {
+      if (link === requestedPath && source === "") {
+        return targetFile;
+      }
+      return null;
+    });
+    mockCachedRead.mockResolvedValue("Content");
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result.notePath).toBe(targetFile.path);
+    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+    expect(getFirstLinkpathDestMock).toHaveBeenCalledWith(requestedPath, "");
+  });
+
+  it("falls back to a unique basename match when metadata resolution fails", async () => {
+    const requestedPath = "Solo Note";
+    const targetFile = new MockTFile("Area/Solo Note.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([targetFile]);
+    mockCachedRead.mockResolvedValue("Content");
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result.notePath).toBe(targetFile.path);
+    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+  });
+
+  it("returns not_unique when multiple notes share the same title", async () => {
+    const requestedPath = "Project Plan";
+    const projectFile = new MockTFile("Projects/Project Plan.md");
+    const archiveFile = new MockTFile("Archive/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([projectFile, archiveFile]);
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result).toEqual({
+      notePath: requestedPath,
+      status: "not_unique",
+      message: 'Multiple notes match "Project Plan". Provide a more specific path.',
+      candidates: [
+        { path: projectFile.path, title: projectFile.basename },
+        { path: archiveFile.path, title: archiveFile.basename },
+      ],
+    });
+    expect(mockCachedRead).not.toHaveBeenCalled();
+  });
+
+  it("matches a unique partial path when multiple basenames exist", async () => {
+    const requestedPath = "Projects/Project Plan";
+    const targetFile = new MockTFile("Projects/Project Plan.md");
+    const duplicateFile = new MockTFile("Archive/Project Plan.md");
+
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([targetFile, duplicateFile]);
+    mockCachedRead.mockResolvedValue("Content");
+
+    const result = await readNoteTool.call({ notePath: requestedPath });
+
+    expect(result.notePath).toBe(targetFile.path);
+    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
   });
 });

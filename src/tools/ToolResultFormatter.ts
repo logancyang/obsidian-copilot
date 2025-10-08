@@ -1,4 +1,36 @@
 /**
+ * Derive a user-facing label from a readNote tool path.
+ *
+ * @param rawNotePath - Original note path supplied to the readNote tool.
+ * @returns Sanitized display name without directories, extensions, or wiki syntax.
+ */
+export function deriveReadNoteDisplayName(rawNotePath: string): string {
+  const trimmed = rawNotePath.trim();
+  if (!trimmed) {
+    return "note";
+  }
+
+  const wikiMatch = trimmed.match(/^\[\[([\s\S]+?)\]\]$/);
+  const withoutWiki = wikiMatch ? wikiMatch[1] : trimmed;
+
+  const [targetPartRaw = "", aliasPartRaw = ""] = withoutWiki.split("|");
+  const aliasPart = aliasPartRaw.trim();
+  if (aliasPart.length > 0) {
+    return aliasPart;
+  }
+
+  const targetPart = targetPartRaw.trim();
+  const [withoutSection] = targetPart.split("#");
+  const coreTarget = (withoutSection || targetPart).trim() || trimmed;
+
+  const segments = coreTarget.split("/").filter(Boolean);
+  const lastSegment = segments.length > 0 ? segments[segments.length - 1] : coreTarget;
+
+  const withoutExtension = lastSegment.replace(/\.[^/.]+$/, "");
+  return withoutExtension || lastSegment || "note";
+}
+
+/**
  * Format tool results for display in the UI
  * Each formatter should return a user-friendly representation of the tool result
  */
@@ -478,8 +510,40 @@ export class ToolResultFormatter {
       return typeof result === "string" ? result : JSON.stringify(result, null, 2);
     }
 
+    const status = typeof data.status === "string" ? data.status : null;
+    const message = typeof data.message === "string" ? data.message : null;
+    const candidates = Array.isArray(data.candidates) ? data.candidates : null;
+
+    if (status === "not_found") {
+      const baseLines = ["⚠️ Note not found"];
+      if (message) {
+        baseLines.push("");
+        baseLines.push(message);
+      }
+      return baseLines.join("\n");
+    }
+
+    if (status === "not_unique") {
+      const baseLines = ["⚠️ Multiple notes match that title"];
+      if (message) {
+        baseLines.push("");
+        baseLines.push(message);
+      }
+      if (candidates && candidates.length > 0) {
+        baseLines.push("");
+        baseLines.push("Candidates:");
+        for (const candidate of candidates) {
+          const path = typeof candidate?.path === "string" ? candidate.path : "";
+          const title =
+            typeof candidate?.title === "string" ? candidate.title : path || "(unknown)";
+          baseLines.push(`- ${title}${path && path !== title ? ` (${path})` : ""}`);
+        }
+      }
+      return baseLines.join("\n");
+    }
+
     const notePath = data.notePath ?? "";
-    const title = data.noteTitle ?? notePath ?? "Note excerpt";
+    const title = data.noteTitle ?? deriveReadNoteDisplayName(notePath);
     const chunkIndex = typeof data.chunkIndex === "number" ? data.chunkIndex : 0;
     const totalChunks = typeof data.totalChunks === "number" ? data.totalChunks : undefined;
     const heading =
