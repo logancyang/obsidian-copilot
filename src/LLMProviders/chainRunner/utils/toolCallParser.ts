@@ -124,14 +124,15 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
       result,
     ] = match;
 
+    // Decode the result and check if it's too large for UI display
     const rawResult = typeof result === "string" ? result : "";
     const decodedResult = decodeResultFromMarker(rawResult);
-    const effectiveLength =
-      typeof decodedResult === "string" ? decodedResult.length : rawResult.length;
-    const shouldSuppressResult = effectiveLength > TOOL_RESULT_UI_MAX_LENGTH;
-    const safeResult = shouldSuppressResult
-      ? buildOmittedResultMessage(toolName)
-      : (decodedResult ?? undefined);
+    const resultLength = typeof decodedResult === "string" ? decodedResult.length : 0;
+
+    const safeResult =
+      resultLength > TOOL_RESULT_UI_MAX_LENGTH
+        ? buildOmittedResultMessage(toolName)
+        : (decodedResult ?? undefined);
 
     segments.push({
       type: "toolCall",
