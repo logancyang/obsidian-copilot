@@ -1,4 +1,36 @@
 /**
+ * Derive a user-facing label from a readNote tool path.
+ *
+ * @param rawNotePath - Original note path supplied to the readNote tool.
+ * @returns Sanitized display name without directories, extensions, or wiki syntax.
+ */
+export function deriveReadNoteDisplayName(rawNotePath: string): string {
+  const trimmed = rawNotePath.trim();
+  if (!trimmed) {
+    return "note";
+  }
+
+  const wikiMatch = trimmed.match(/^\[\[([\s\S]+?)\]\]$/);
+  const withoutWiki = wikiMatch ? wikiMatch[1] : trimmed;
+
+  const [targetPartRaw = "", aliasPartRaw = ""] = withoutWiki.split("|");
+  const aliasPart = aliasPartRaw.trim();
+  if (aliasPart.length > 0) {
+    return aliasPart;
+  }
+
+  const targetPart = targetPartRaw.trim();
+  const [withoutSection] = targetPart.split("#");
+  const coreTarget = (withoutSection || targetPart).trim() || trimmed;
+
+  const segments = coreTarget.split("/").filter(Boolean);
+  const lastSegment = segments.length > 0 ? segments[segments.length - 1] : coreTarget;
+
+  const withoutExtension = lastSegment.replace(/\.[^/.]+$/, "");
+  return withoutExtension || lastSegment || "note";
+}
+
+/**
  * Format tool results for display in the UI
  * Each formatter should return a user-friendly representation of the tool result
  */
@@ -511,7 +543,7 @@ export class ToolResultFormatter {
     }
 
     const notePath = data.notePath ?? "";
-    const title = data.noteTitle ?? notePath ?? "Note excerpt";
+    const title = data.noteTitle ?? deriveReadNoteDisplayName(notePath);
     const chunkIndex = typeof data.chunkIndex === "number" ? data.chunkIndex : 0;
     const totalChunks = typeof data.totalChunks === "number" ? data.totalChunks : undefined;
     const heading =

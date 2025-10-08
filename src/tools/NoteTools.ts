@@ -52,6 +52,42 @@ function normalizePathFragment(value: string): string {
   return value.replace(/\\/g, "/").toLowerCase();
 }
 
+function stripExtension(value: string): string {
+  return value.replace(/\.[^/.]+$/, "");
+}
+
+function pathSegmentsMatchTail(filePath: string, targetSegments: string[]): boolean {
+  if (targetSegments.length === 0) {
+    return false;
+  }
+
+  const normalizedFilePath = normalizePathFragment(filePath);
+  const fileSegments = normalizedFilePath.split("/").filter(Boolean);
+  if (fileSegments.length < targetSegments.length) {
+    return false;
+  }
+
+  const comparisonSegments = fileSegments.slice(-targetSegments.length);
+  for (let index = 0; index < targetSegments.length; index += 1) {
+    const targetSegment = targetSegments[index];
+    if (!targetSegment) {
+      return false;
+    }
+
+    const fileSegment = comparisonSegments[index];
+    if (index === comparisonSegments.length - 1) {
+      const fileSegmentSansExt = stripExtension(fileSegment);
+      if (!fileSegment.includes(targetSegment) && !fileSegmentSansExt.includes(targetSegment)) {
+        return false;
+      }
+    } else if (!fileSegment.includes(targetSegment)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 /**
  * Determines whether the provided path already contains a file extension.
  *
@@ -70,10 +106,11 @@ async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
 
   const trimmedInput = notePath.trim();
   const wikiMatch = trimmedInput.match(/^\s*\[\[([\s\S]+?)\]\]\s*$/);
-  const innerTarget = wikiMatch ? wikiMatch[1] : trimmedInput;
+  const innerTargetRaw = wikiMatch ? wikiMatch[1] : trimmedInput;
+  const innerTarget = innerTargetRaw.trim();
   const [targetPart] = innerTarget.split("|");
-  const [targetWithoutSection] = (targetPart ?? innerTarget).split("#");
-  const canonicalTarget = targetWithoutSection?.trim() || trimmedInput;
+  const [targetWithoutSection] = targetPart.split("#");
+  const canonicalTarget = targetWithoutSection.trim();
 
   const attemptedPaths = Array.from(
     new Set<string>(
@@ -98,7 +135,7 @@ async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
   }
 
   const metadataCache = app.metadataCache;
-  const resolutionTarget = canonicalTarget;
+  const resolutionTarget = canonicalTarget.trim();
 
   if (metadataCache && resolutionTarget) {
     const linkTargets = new Set<string>([resolutionTarget]);
@@ -158,8 +195,13 @@ async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
     }
   }
 
+  const targetSegments = normalizedTarget.split("/").filter(Boolean);
+  if (targetSegments.length === 0) {
+    return { type: "not_found" };
+  }
+
   const partialMatches = markdownFiles.filter((file) =>
-    normalizePathFragment(file.path).includes(normalizedTarget)
+    pathSegmentsMatchTail(file.path, targetSegments)
   );
 
   if (partialMatches.length === 1) {

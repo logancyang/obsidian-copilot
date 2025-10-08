@@ -6,6 +6,7 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
+import { deriveReadNoteDisplayName } from "@/tools/ToolResultFormatter";
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
@@ -496,7 +497,7 @@ ${params}
             const notePath =
               typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath : null;
             if (notePath && notePath.trim().length > 0) {
-              toolDisplayName = notePath.trim();
+              toolDisplayName = deriveReadNoteDisplayName(notePath);
             }
           }
           const confirmationMessage = getToolConfirmtionMessage(toolCall.name);

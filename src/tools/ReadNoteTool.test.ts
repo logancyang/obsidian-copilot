@@ -115,6 +115,38 @@ describe("readNoteTool", () => {
     expect(mockCachedRead).not.toHaveBeenCalled();
   });
 
+  it("returns not_found for section-only wiki link targets", async () => {
+    const notePath = "[[#Setup]]";
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([new MockTFile("Docs/Guide.md")]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result).toEqual({
+      notePath,
+      status: "not_found",
+      message: 'Note "[[#Setup]]" was not found or is not a readable file.',
+    });
+    expect(mockCachedRead).not.toHaveBeenCalled();
+  });
+
+  it("returns not_found for empty wiki link targets", async () => {
+    const notePath = "[[]]";
+    getAbstractFileByPathMock.mockReturnValue(null);
+    getFirstLinkpathDestMock.mockReturnValue(null);
+    getMarkdownFilesMock.mockReturnValue([new MockTFile("Docs/Guide.md")]);
+
+    const result = await readNoteTool.call({ notePath });
+
+    expect(result).toEqual({
+      notePath,
+      status: "not_found",
+      message: 'Note "[[]]" was not found or is not a readable file.',
+    });
+    expect(mockCachedRead).not.toHaveBeenCalled();
+  });
+
   it("returns invalid_path when notePath starts with a leading slash", async () => {
     const result = await readNoteTool.call({ notePath: "/Projects/note.md" });
 
