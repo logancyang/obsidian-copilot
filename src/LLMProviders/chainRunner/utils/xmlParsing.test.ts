@@ -75,18 +75,16 @@ Let me also search the web.
   it("should handle string parameters without JSON parsing", () => {
     const text = `
 <use_tool>
-<name>simpleYoutubeTranscription</name>
+<name>youtubeTranscription</name>
 <url>https://youtube.com/watch?v=123</url>
-<language>en</language>
 </use_tool>
     `;
 
     const toolCalls = parseXMLToolCalls(text);
 
     expect(toolCalls).toHaveLength(1);
-    expect(toolCalls[0].name).toBe("simpleYoutubeTranscription");
+    expect(toolCalls[0].name).toBe("youtubeTranscription");
     expect(toolCalls[0].args.url).toBe("https://youtube.com/watch?v=123");
-    expect(toolCalls[0].args.language).toBe("en");
   });
 
   it("should handle hybrid approach with both JSON and XML formats", () => {

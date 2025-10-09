@@ -162,13 +162,13 @@ export class ContextManager {
       // 6. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 7. Combine everything
+      // 7. Combine everything (note context before URL context)
       const finalProcessedMessage =
         processedUserMessage +
-        urlContextAddition.urlContext +
         noteContextAddition +
         tagContextAddition +
         folderContextAddition +
+        urlContextAddition.urlContext +
         selectedTextContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);

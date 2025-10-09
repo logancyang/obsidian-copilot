@@ -9,9 +9,8 @@ import {
   getTimeRangeMsTool,
   TimeInfo,
 } from "@/tools/TimeTools";
-import { simpleYoutubeTranscriptionTool } from "@/tools/YoutubeTools";
 import { ToolManager } from "@/tools/toolManager";
-import { extractAllYoutubeUrls, extractChatHistory } from "@/utils";
+import { extractChatHistory } from "@/utils";
 import { Vault } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
 import { memoryTool } from "@/tools/memoryTools";
@@ -35,7 +34,6 @@ export class IntentAnalyzer {
         localSearchTool,
         indexTool,
         webSearchTool,
-        simpleYoutubeTranscriptionTool,
         createGetFileTreeTool(vault.getRoot()),
       ];
     }
@@ -143,22 +141,6 @@ export class IntentAnalyzer {
           memoryContent: cleanQuery,
         },
       });
-    }
-
-    // Auto-detect YouTube URLs
-    const youtubeUrls = extractAllYoutubeUrls(originalMessage);
-    for (const url of youtubeUrls) {
-      // Check if we already have a YouTube tool call for this URL
-      const hasYoutubeToolForUrl = processedToolCalls.some(
-        (tc) => tc.tool.name === simpleYoutubeTranscriptionTool.name && tc.args.url === url
-      );
-
-      if (!hasYoutubeToolForUrl) {
-        processedToolCalls.push({
-          tool: simpleYoutubeTranscriptionTool,
-          args: { url },
-        });
-      }
     }
   }
 

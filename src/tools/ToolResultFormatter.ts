@@ -149,7 +149,6 @@ export class ToolResultFormatter {
           return this.formatLocalSearch(parsedResult);
         case "webSearch":
           return this.formatWebSearch(parsedResult);
-        case "simpleYoutubeTranscriptionTool":
         case "youtubeTranscription":
           return this.formatYoutubeTranscription(parsedResult);
         case "writeToFile":
