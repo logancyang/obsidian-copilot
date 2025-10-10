@@ -432,7 +432,7 @@ export function registerCommands(
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
     const isPlusUser = await checkIsPlusUser();
     if (!isPlusUser) {
-      new Notice("Download YouTube Script is a Copilot Plus feature");
+      new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
       return;
     }
 
