@@ -431,6 +431,143 @@ Nature's quiet song`);
         expect.any(String)
       );
     });
+
+    it("should update existing file when epoch is stored as a string", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = {
+        path: "test-folder/Hello@20240923_221800.md",
+      } as unknown as TFile;
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([existingFile]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { epoch: "1695513480000" },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("**user**: Hello")
+      );
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
+
+      getFilesSpy.mockRestore();
+    });
+
+    it("should locate existing file by path when epoch frontmatter is missing", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello again",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = {
+        path: "test-folder/Hello_again@20240923_221800.md",
+        basename: "Hello_again@20240923_221800",
+      } as unknown as TFile;
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test-folder/Hello_again@20240923_221800.md") {
+          return existingFile;
+        }
+        return null;
+      });
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Existing Topic" },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("**user**: Hello again")
+      );
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
+      expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+
+      getFilesSpy.mockRestore();
+    });
+
+    it("should resolve create conflicts by updating the existing file", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Conflict message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = {
+        path: "test-folder/Conflict_message@20240923_221800.md",
+        basename: "Conflict_message@20240923_221800",
+      } as unknown as TFile;
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([]);
+
+      let lookupCount = 0;
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test-folder/Conflict_message@20240923_221800.md") {
+          lookupCount += 1;
+          return lookupCount >= 2 ? existingFile : null;
+        }
+        return null;
+      });
+
+      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Existing Conflict Topic" },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("**user**: Conflict message")
+      );
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+
+      getFilesSpy.mockRestore();
+    });
   });
 
   describe("loadChat", () => {
