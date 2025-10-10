@@ -486,16 +486,22 @@ Nature's quiet song`);
         },
       ];
 
-      const existingFile = {
+      const existingFile = Object.create(TFile.prototype);
+      Object.assign(existingFile, {
         path: "test-folder/Hello_again@20240923_221800.md",
         basename: "Hello_again@20240923_221800",
-      } as unknown as TFile;
+      });
 
       const getFilesSpy = jest
         .spyOn(persistenceManager, "getChatHistoryFiles")
         .mockResolvedValue([]);
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+
+      // Mock vault.create to throw "already exists" error
+      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
+
+      // Mock getAbstractFileByPath to return existing file when called from catch block
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test-folder/Hello_again@20240923_221800.md") {
           return existingFile;
@@ -512,7 +518,7 @@ Nature's quiet song`);
         existingFile,
         expect.stringContaining("**user**: Hello again")
       );
-      expect(mockApp.vault.create).not.toHaveBeenCalled();
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
       expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
 
       getFilesSpy.mockRestore();
@@ -533,20 +539,20 @@ Nature's quiet song`);
         },
       ];
 
-      const existingFile = {
+      const existingFile = Object.create(TFile.prototype);
+      Object.assign(existingFile, {
         path: "test-folder/Conflict_message@20240923_221800.md",
         basename: "Conflict_message@20240923_221800",
-      } as unknown as TFile;
+      });
 
       const getFilesSpy = jest
         .spyOn(persistenceManager, "getChatHistoryFiles")
         .mockResolvedValue([]);
 
-      let lookupCount = 0;
+      // Mock getAbstractFileByPath to return existing file when called from catch block
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test-folder/Conflict_message@20240923_221800.md") {
-          lookupCount += 1;
-          return lookupCount >= 2 ? existingFile : null;
+          return existingFile;
         }
         return null;
       });

@@ -73,7 +73,7 @@ export class ChatPersistenceManager {
         } catch (error) {
           if (this.isFileAlreadyExistsError(error)) {
             const conflictFile = this.app.vault.getAbstractFileByPath(fileName);
-            if (conflictFile instanceof TFile) {
+            if (conflictFile && conflictFile instanceof TFile) {
               // Update existingTopic to prevent unnecessary regeneration
               existingTopic =
                 this.app.metadataCache.getFileCache(conflictFile)?.frontmatter?.topic ??
