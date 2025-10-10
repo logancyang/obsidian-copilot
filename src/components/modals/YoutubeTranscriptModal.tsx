@@ -1,7 +1,8 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { validateYoutubeUrl, formatYoutubeUrl } from "@/utils";
+import { logError } from "@/logger";
+import { formatYoutubeUrl, insertIntoEditor, validateYoutubeUrl } from "@/utils";
 import { App, Modal, Notice } from "obsidian";
 import * as React from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -78,7 +79,7 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
       setTranscriptData(newTranscriptData);
       setCurrentView("display");
     } catch (error) {
-      console.error("Error downloading YouTube transcript:", error);
+      logError("Error downloading YouTube transcript:", error);
       const errorMessage =
         error instanceof Error
           ? error.message
@@ -97,8 +98,21 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
       await navigator.clipboard.writeText(textToCopy);
       new Notice("Transcript copied to clipboard!");
     } catch (error) {
-      console.error("Failed to copy to clipboard:", error);
+      logError("Failed to copy to clipboard:", error);
       new Notice("Failed to copy to clipboard");
+    }
+  };
+
+  const handleInsertToNote = async () => {
+    if (!transcriptData) return;
+
+    try {
+      const textToInsert = `# YouTube Video Transcript\n\nSource: ${transcriptData.url}\n\n${transcriptData.transcript}`;
+      await insertIntoEditor(textToInsert, false);
+      onClose();
+    } catch (error) {
+      logError("Failed to insert to note:", error);
+      new Notice("Failed to insert to note");
     }
   };
 
@@ -145,6 +159,9 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
           <Button variant="default" onClick={handleCopyToClipboard}>
             Copy to Clipboard
           </Button>
+          <Button variant="default" onClick={handleInsertToNote}>
+            Insert at Cursor
+          </Button>
           <Button variant="secondary" onClick={onClose}>
             Close
           </Button>
@@ -188,7 +205,7 @@ export class YoutubeTranscriptModal extends Modal {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
     // @ts-ignore
-    this.setTitle("Download YouTube Script");
+    this.setTitle("Download YouTube Script (plus)");
   }
 
   onOpen() {
