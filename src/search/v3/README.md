@@ -394,6 +394,11 @@ Semantic retrieval (HybridRetriever/Orama) is strong at paraphrase recall, while
 
 This approach keeps callers unaware of the fusion mechanics while giving users semantic coverage plus Search v3’s deterministic tag/keyword strength.
 
+### TODO
+
+- Investigate an adaptive fetch strategy that requests additional lexical/semantic batches only when the initial `maxK` from one engine leaves gaps, instead of always pulling `maxK * 2` from each.
+- Explore mutating metadata in place or deferring `Document` decoration to avoid cloning every chunk during merge, reducing object churn for large result sets.
+
 ## Key Design Decisions
 
 1. **Lexical-Only Architecture**: Fast, reliable keyword-based search with intelligent boosting
