@@ -45,7 +45,7 @@ After months of hard work, we have revamped the codebase and adopted a new parad
 
 - FOR ALL USERS: You can do vault search out-of-the-box **without building an index first** (Indexing is still available but optional behind the "Semantic Search" toggle in QA settings).
 - FOR FREE USERS: Image support and chat context menu are available to all users starting from v3.0.0!
-- FOR PLUS USERS: Autonomous agent is available with vault search, web search, youtube, composer and soon a lot other tools!
+- FOR PLUS USERS: **Autonomous agent** is available with vault search, web search, youtube, composer and soon a lot other tools! **Long-term memory** is also a tool the agent can use by itself starting from 3.1.0!
 
 Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag/3.0.0).
 
