@@ -157,125 +157,129 @@ export const CopilotPlusSettings: React.FC = () => {
             </span>
           </div>
 
-          <SettingItem
-            type="switch"
-            title="Sentence Autocomplete"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">
-                  Enable AI-powered sentence autocomplete suggestions while typing
-                </span>
-              </div>
-            }
-            checked={settings.enableAutocomplete}
-            onCheckedChange={(checked) => {
-              if (isAutocompleteTemporarilyDisabled) {
-                return;
-              }
-              updateSetting("enableAutocomplete", checked);
-            }}
-            disabled={isAutocompleteTemporarilyDisabled}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Word Completion"
-            description="Suggest completions for partially typed words based on your vault's content. Requires at least 3 characters to trigger."
-            checked={settings.enableWordCompletion}
-            onCheckedChange={(checked) => {
-              if (isAutocompleteTemporarilyDisabled) {
-                return;
-              }
-              updateSetting("enableWordCompletion", checked);
-            }}
-            disabled={isAutocompleteTemporarilyDisabled}
-          />
-
-          <SettingItem
-            type="custom"
-            title="Word Index Management"
-            description="Rebuild the word index to include new words from your vault. The index is automatically built when the plugin loads."
-            disabled={isAutocompleteTemporarilyDisabled}
-          >
-            <Button
-              onClick={handleRefreshWordIndex}
-              disabled={isRefreshing || isAutocompleteTemporarilyDisabled}
-              className="tw-flex tw-items-center tw-gap-2"
-            >
-              <RefreshCw className={cn("tw-size-4", isRefreshing && "tw-animate-spin")} />
-              {isRefreshing ? "Rebuilding..." : "Refresh Word Index"}
-            </Button>
-          </SettingItem>
-
-          <SettingItem
-            type="custom"
-            title="Autocomplete Accept Suggestion Key"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">
-                  The key used to accept autocomplete suggestions
-                </span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                      <div className="tw-text-sm tw-text-muted">
-                        Select the key you want to use for accepting suggestions. Default is
-                        &quot;Tab&quot;.
-                      </div>
-                    </div>
+          {isAutocompleteTemporarilyDisabled ? null : (
+            <>
+              <SettingItem
+                type="switch"
+                title="Sentence Autocomplete"
+                description={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">
+                      Enable AI-powered sentence autocomplete suggestions while typing
+                    </span>
+                  </div>
+                }
+                checked={settings.enableAutocomplete}
+                onCheckedChange={(checked) => {
+                  if (isAutocompleteTemporarilyDisabled) {
+                    return;
                   }
-                />
-              </div>
-            }
-            disabled={isAutocompleteTemporarilyDisabled}
-          >
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <Select
-                value={currentShortcut}
-                onValueChange={handleKeyChange}
+                  updateSetting("enableAutocomplete", checked);
+                }}
+                disabled={isAutocompleteTemporarilyDisabled}
+              />
+
+              <SettingItem
+                type="switch"
+                title="Word Completion"
+                description="Suggest completions for partially typed words based on your vault's content. Requires at least 3 characters to trigger."
+                checked={settings.enableWordCompletion}
+                onCheckedChange={(checked) => {
+                  if (isAutocompleteTemporarilyDisabled) {
+                    return;
+                  }
+                  updateSetting("enableWordCompletion", checked);
+                }}
+                disabled={isAutocompleteTemporarilyDisabled}
+              />
+
+              <SettingItem
+                type="custom"
+                title="Word Index Management"
+                description="Rebuild the word index to include new words from your vault. The index is automatically built when the plugin loads."
                 disabled={isAutocompleteTemporarilyDisabled}
               >
-                <SelectTrigger
-                  className="tw-w-[180px]"
-                  disabled={isAutocompleteTemporarilyDisabled}
-                >
-                  <SelectValue placeholder="Select key" />
-                </SelectTrigger>
-                <SelectContent>
-                  {keyOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-
-              {currentShortcut && currentShortcut !== AUTOCOMPLETE_CONFIG.KEYBIND && (
                 <Button
-                  variant="ghost"
-                  onClick={resetToDefault}
-                  className="tw-h-8 tw-text-xs"
-                  disabled={isAutocompleteTemporarilyDisabled}
+                  onClick={handleRefreshWordIndex}
+                  disabled={isRefreshing || isAutocompleteTemporarilyDisabled}
+                  className="tw-flex tw-items-center tw-gap-2"
                 >
-                  Reset to Default
+                  <RefreshCw className={cn("tw-size-4", isRefreshing && "tw-animate-spin")} />
+                  {isRefreshing ? "Rebuilding..." : "Refresh Word Index"}
                 </Button>
-              )}
-            </div>
-          </SettingItem>
+              </SettingItem>
 
-          <SettingItem
-            type="switch"
-            title="Allow Additional Context"
-            description="Allow the AI to access relevant notes to provide more relevant suggestions. When off, the AI can only see the current note context."
-            checked={settings.allowAdditionalContext}
-            onCheckedChange={(checked) => {
-              if (isAutocompleteTemporarilyDisabled) {
-                return;
-              }
-              updateSetting("allowAdditionalContext", checked);
-            }}
-            disabled={isAutocompleteTemporarilyDisabled}
-          />
+              <SettingItem
+                type="custom"
+                title="Autocomplete Accept Suggestion Key"
+                description={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">
+                      The key used to accept autocomplete suggestions
+                    </span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                          <div className="tw-text-sm tw-text-muted">
+                            Select the key you want to use for accepting suggestions. Default is
+                            &quot;Tab&quot;.
+                          </div>
+                        </div>
+                      }
+                    />
+                  </div>
+                }
+                disabled={isAutocompleteTemporarilyDisabled}
+              >
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <Select
+                    value={currentShortcut}
+                    onValueChange={handleKeyChange}
+                    disabled={isAutocompleteTemporarilyDisabled}
+                  >
+                    <SelectTrigger
+                      className="tw-w-[180px]"
+                      disabled={isAutocompleteTemporarilyDisabled}
+                    >
+                      <SelectValue placeholder="Select key" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {keyOptions.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {currentShortcut && currentShortcut !== AUTOCOMPLETE_CONFIG.KEYBIND && (
+                    <Button
+                      variant="ghost"
+                      onClick={resetToDefault}
+                      className="tw-h-8 tw-text-xs"
+                      disabled={isAutocompleteTemporarilyDisabled}
+                    >
+                      Reset to Default
+                    </Button>
+                  )}
+                </div>
+              </SettingItem>
+
+              <SettingItem
+                type="switch"
+                title="Allow Additional Context"
+                description="Allow the AI to access relevant notes to provide more relevant suggestions. When off, the AI can only see the current note context."
+                checked={settings.allowAdditionalContext}
+                onCheckedChange={(checked) => {
+                  if (isAutocompleteTemporarilyDisabled) {
+                    return;
+                  }
+                  updateSetting("allowAdditionalContext", checked);
+                }}
+                disabled={isAutocompleteTemporarilyDisabled}
+              />
+            </>
+          )}
         </div>
       </section>
     </div>
