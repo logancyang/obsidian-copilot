@@ -96,6 +96,7 @@ export const SELECTED_TEXT_TAG = "selected_text";
 export const VARIABLE_TAG = "variable";
 export const VARIABLE_NOTE_TAG = "variable_note";
 export const EMBEDDED_PDF_TAG = "embedded_pdf";
+export const DATAVIEW_BLOCK_TAG = "dataview_block";
 export const VAULT_NOTE_TAG = "vault_note";
 export const RETRIEVED_DOCUMENT_TAG = "retrieved_document";
 export const EMPTY_INDEX_ERROR_MESSAGE =
