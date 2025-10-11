@@ -104,7 +104,7 @@ export const CopilotPlusSettings: React.FC = () => {
             </>
           )}
 
-          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory</div>
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory (experimental)</div>
 
           <SettingItem
             type="text"
