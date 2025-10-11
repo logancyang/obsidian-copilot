@@ -44,13 +44,14 @@ export class ChatPersistenceManager {
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);
-      const existingTopic = existingFile
+      let existingTopic = existingFile
         ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter?.topic
         : undefined;
 
       const fileName = existingFile
         ? existingFile.path
         : this.generateFileName(messages, firstMessageEpoch, undefined);
+
       const noteContent = this.generateNoteContent(
         chatContent,
         firstMessageEpoch,
@@ -65,9 +66,31 @@ export class ChatPersistenceManager {
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
       } else {
         // If the file doesn't exist, create a new one
-        targetFile = await this.app.vault.create(fileName, noteContent);
-        new Notice(`Chat saved as note: ${fileName}`);
-        logInfo(`[ChatPersistenceManager] Created new chat file: ${fileName}`);
+        try {
+          targetFile = await this.app.vault.create(fileName, noteContent);
+          new Notice(`Chat saved as note: ${fileName}`);
+          logInfo(`[ChatPersistenceManager] Created new chat file: ${fileName}`);
+        } catch (error) {
+          if (this.isFileAlreadyExistsError(error)) {
+            const conflictFile = this.app.vault.getAbstractFileByPath(fileName);
+            if (conflictFile && conflictFile instanceof TFile) {
+              // Update existingTopic to prevent unnecessary regeneration
+              existingTopic =
+                this.app.metadataCache.getFileCache(conflictFile)?.frontmatter?.topic ??
+                existingTopic;
+              await this.app.vault.modify(conflictFile, noteContent);
+              targetFile = conflictFile;
+              new Notice("Existing chat note found - updating it now.");
+              logInfo(
+                `[ChatPersistenceManager] Resolved save conflict by updating existing chat file: ${conflictFile.path}`
+              );
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       this.generateTopicAsyncIfNeeded(messages, targetFile, existingTopic);
@@ -310,7 +333,17 @@ export class ChatPersistenceManager {
 
     for (const file of files) {
       const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      if (frontmatter?.epoch === epoch) {
+      const frontmatterEpoch =
+        typeof frontmatter?.epoch === "number"
+          ? frontmatter.epoch
+          : typeof frontmatter?.epoch === "string"
+            ? Number(frontmatter.epoch)
+            : undefined;
+      if (
+        typeof frontmatterEpoch === "number" &&
+        !Number.isNaN(frontmatterEpoch) &&
+        frontmatterEpoch === epoch
+      ) {
         return file;
       }
     }
@@ -508,5 +541,16 @@ ${chatContent}`;
     } catch (error) {
       logError("[ChatPersistenceManager] Error applying AI topic to file:", error);
     }
+  }
+
+  /**
+   * Determine if an error indicates an Obsidian file-exists conflict.
+   */
+  private isFileAlreadyExistsError(error: unknown): boolean {
+    if (!error) {
+      return false;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return message.toLowerCase().includes("already exists");
   }
 }
