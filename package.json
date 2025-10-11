@@ -83,7 +83,7 @@
     "@google/generative-ai": "^0.21.0",
     "@huggingface/inference": "^2.6.4",
     "@koa/cors": "^5.0.0",
-    "@langchain/anthropic": "^0.3.20",
+    "@langchain/anthropic": "^0.3.30",
     "@langchain/cohere": "^0.3.0",
     "@langchain/community": "^0.3.22",
     "@langchain/core": "^0.3.45",
