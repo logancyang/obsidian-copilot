@@ -1,6 +1,27 @@
-import React, { useState } from "react";
-import { useTab } from "@/contexts/TabContext";
-import { getSettings } from "@/settings/model";
+import { CustomModel } from "@/aiParams";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { FormField } from "@/components/ui/form-field";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { PasswordInput } from "@/components/ui/password-input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   ChatModelProviders,
   EmbeddingModelProviders,
@@ -11,33 +32,13 @@ import {
   ProviderSettingsKeyMap,
   SettingKeyProviders,
 } from "@/constants";
-import { CustomModel } from "@/aiParams";
+import { useTab } from "@/contexts/TabContext";
 import { logError } from "@/logger";
+import { getSettings } from "@/settings/model";
 import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
-import { Notice } from "obsidian";
-import { Label } from "@/components/ui/label";
-import { Input } from "@/components/ui/input";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Button } from "@/components/ui/button";
 import { ChevronDown, Loader2 } from "lucide-react";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { PasswordInput } from "@/components/ui/password-input";
-import { Checkbox } from "@/components/ui/checkbox";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
-import { FormField } from "@/components/ui/form-field";
+import { Notice } from "obsidian";
+import React, { useState } from "react";
 
 interface FormErrors {
   name: boolean;
@@ -558,21 +559,30 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               </div>
             </Label>
           </div>
-          <div className="tw-flex tw-gap-2 tw-text-xs md:tw-text-sm">
-            <Button variant="secondary" onClick={handleAdd} disabled={isButtonDisabled()}>
-              Add Model
-            </Button>
-            <Button variant="secondary" onClick={handleVerify} disabled={isButtonDisabled()}>
-              {isVerifying ? (
-                <>
-                  <Loader2 className="tw-mr-2 tw-size-2 tw-animate-spin md:tw-size-4 " />
-                  Verify
-                </>
-              ) : (
-                "Verify"
-              )}
-            </Button>
-          </div>
+          <TooltipProvider>
+            <div className="tw-flex tw-gap-2 tw-text-xs md:tw-text-sm">
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" onClick={handleVerify} disabled={isButtonDisabled()}>
+                    {isVerifying ? (
+                      <>
+                        <Loader2 className="tw-mr-2 tw-size-2 tw-animate-spin md:tw-size-4 " />
+                        Test
+                      </>
+                    ) : (
+                      "Test"
+                    )}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Optional: test API call</p>
+                </TooltipContent>
+              </Tooltip>
+              <Button variant="default" onClick={handleAdd} disabled={isButtonDisabled()}>
+                Add Model
+              </Button>
+            </div>
+          </TooltipProvider>
         </div>
       </DialogContent>
     </Dialog>
