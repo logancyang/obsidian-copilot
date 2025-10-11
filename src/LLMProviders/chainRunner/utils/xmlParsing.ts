@@ -40,12 +40,13 @@ export function parseXMLToolCalls(text: string): ToolCall[] {
   const toolCalls: ToolCall[] = [];
 
   try {
-    const regex = /<use_tool>([\s\S]*?)<\/use_tool>/g;
+    const regex = /<use_tool>([\s\S]*?)(<\/use_tool>|$)/g;
 
     let match;
     while ((match = regex.exec(text)) !== null) {
       const content = match[1];
       const nameMatch = content.match(/<name>([\s\S]*?)<\/name>/);
+      const hasClosingTag = match[2] === "</use_tool>";
 
       if (nameMatch) {
         const name = nameMatch[1].trim();
@@ -75,6 +76,12 @@ export function parseXMLToolCalls(text: string): ToolCall[] {
 
           // Parse parameter content as pure XML
           args[paramName] = parseParameterContent(paramContent, paramName);
+        }
+
+        if (!hasClosingTag) {
+          logWarn(
+            `Detected partial tool call block for tool "${name}" - treating as best effort parse`
+          );
         }
 
         toolCalls.push({ name, args });
