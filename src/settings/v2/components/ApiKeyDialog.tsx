@@ -219,6 +219,9 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
           );
         }
       }
+    } catch (error) {
+      logError("Error adding model:", error);
+      new Notice(`Failed to add model: ${err2String(error)}`, 10000);
     } finally {
       setVerifyingModel(false);
     }
