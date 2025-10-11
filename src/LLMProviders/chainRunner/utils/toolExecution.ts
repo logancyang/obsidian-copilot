@@ -141,7 +141,6 @@ export function getToolDisplayName(toolName: string): string {
     convertTimeBetweenTimezones: "timezone converter",
     startPomodoro: "pomodoro timer",
     pomodoroTool: "pomodoro timer",
-    simpleYoutubeTranscriptionTool: "YouTube transcription",
     youtubeTranscription: "YouTube transcription",
     indexVault: "vault indexing",
     indexTool: "index",
@@ -164,14 +163,12 @@ export function getToolEmoji(toolName: string): string {
     getTimeRangeMs: "📅",
     getTimeInfoByEpoch: "🕰️",
     convertTimeBetweenTimezones: "🌍",
-    startPomodoro: "⏱️",
-    pomodoroTool: "⏱️",
-    simpleYoutubeTranscriptionTool: "📺",
     youtubeTranscription: "📺",
     indexVault: "📚",
     indexTool: "📚",
     writeToFile: "✏️",
     replaceInFile: "🔄",
+    readNote: "🔍",
   };
 
   return emojiMap[toolName] || "🔧";

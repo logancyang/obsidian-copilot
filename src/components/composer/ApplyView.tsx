@@ -297,7 +297,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
 
   return (
     <div className="tw-relative tw-flex tw-h-full tw-flex-col">
-      <div className="tw-fixed tw-bottom-2 tw-left-1/2 tw-z-[1] tw-flex tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2">
+      <div className="tw-fixed tw-bottom-4 tw-left-1/2 tw-z-[9999] tw-flex tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-secondary tw-p-2 tw-shadow-lg">
         <Button variant="destructive" size="sm" onClick={handleReject}>
           <XIcon className="tw-size-4" />
           Reject

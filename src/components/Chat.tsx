@@ -10,7 +10,7 @@ import {
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
-import { logInfo } from "@/logger";
+import { logInfo, logError } from "@/logger";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -20,25 +20,30 @@ import { ProjectList } from "@/components/chat-components/ProjectList";
 import ProgressCard from "@/components/project/progress-card";
 import {
   ABORT_REASON,
+  AI_SENDER,
   EVENT_NAMES,
   LOADING_MESSAGES,
   RESTRICTION_MESSAGES,
   USER_SENDER,
 } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
+import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatManager } from "@/hooks/useChatManager";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
+import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import CopilotPlugin from "@/main";
-import { Mention } from "@/mentions/Mention";
 import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
+import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
+import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 
 type ChatMode = "default" | "project";
 
@@ -52,23 +57,38 @@ interface ChatProps {
   chatUIState: ChatUIState;
 }
 
-const Chat: React.FC<ChatProps> = ({
+// Internal component that has access to the ChatInput context
+const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatInput> }> = ({
   chainManager,
   onSaveChat,
   updateUserMessageHistory,
   fileParserManager,
   plugin,
   chatUIState,
+  chatInput,
 }) => {
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
 
-  const { messages: chatHistory, addMessage } = useChatManager(chatUIState);
+  const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
   const [currentModelKey] = useModelKey();
   const [currentChain] = useChainType();
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
+  const [latestTokenCount, setLatestTokenCount] = useState<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+
+  // Wrapper for addMessage that tracks token usage from AI responses
+  const addMessage = useCallback(
+    (message: ChatMessage) => {
+      rawAddMessage(message);
+      // Track token usage from AI messages
+      if (message.sender === AI_SENDER && message.responseMetadata?.tokenUsage?.totalTokens) {
+        setLatestTokenCount(message.responseMetadata.tokenUsage.totalTokens);
+      }
+    },
+    [rawAddMessage]
+  );
 
   // Function to set the abort controller ref (for getAIResponse compatibility)
   const setAbortController = useCallback((controller: AbortController | null) => {
@@ -81,6 +101,7 @@ const Chat: React.FC<ChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
+  const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   // null: keep default behavior; true: show; false: hide
   const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
 
@@ -122,27 +143,16 @@ const Chat: React.FC<ChatProps> = ({
     setProgressCardVisible(null);
   }, [projectContextStatus]);
 
+  // Clear token count when chat is cleared or replaced (e.g., loading chat history)
+  useEffect(() => {
+    if (chatHistory.length === 0) {
+      setLatestTokenCount(null);
+    }
+  }, [chatHistory]);
+
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
-
-  const mention = Mention.getInstance();
-
-  const inputRef = useRef<HTMLTextAreaElement>(null);
-
-  useEffect(() => {
-    const handleChatVisibility = () => {
-      if (inputRef.current) {
-        inputRef.current.focus();
-      }
-    };
-    eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
-
-    // Cleanup function
-    return () => {
-      eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
-    };
-  }, [eventTarget]);
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
@@ -151,18 +161,21 @@ const Chat: React.FC<ChatProps> = ({
     toolCalls,
     urls,
     contextNotes: passedContextNotes,
+    contextTags,
+    contextFolders,
   }: {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
+    contextTags?: string[];
+    contextFolders?: string[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
     // Check for URL restrictions in non-Plus chains and show notice, but continue processing
     const hasUrlsInContext = urls && urls.length > 0;
-    const hasUrlsInMessage = inputMessage && mention.extractAllUrls(inputMessage).length > 0;
 
-    if ((hasUrlsInContext || hasUrlsInMessage) && !isPlusChain(currentChain)) {
+    if (hasUrlsInContext && !isPlusChain(currentChain)) {
       // Show notice but continue processing the message without URL context
       new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
     }
@@ -209,6 +222,8 @@ const Chat: React.FC<ChatProps> = ({
       const context = {
         notes,
         urls: isPlusChain(currentChain) ? urls || [] : [],
+        tags: contextTags || [],
+        folders: contextFolders || [],
         selectedTextContexts,
       };
 
@@ -255,7 +270,7 @@ const Chat: React.FC<ChatProps> = ({
         handleSaveAsNote();
       }
     } catch (error) {
-      console.error("Error sending message:", error);
+      logError("Error sending message:", error);
       new Notice("Failed to send message. Please try again.");
     } finally {
       safeSet.setLoading(false);
@@ -265,7 +280,7 @@ const Chat: React.FC<ChatProps> = ({
 
   const handleSaveAsNote = useCallback(async () => {
     if (!app) {
-      console.error("App instance is not available.");
+      logError("App instance is not available.");
       return;
     }
 
@@ -273,7 +288,7 @@ const Chat: React.FC<ChatProps> = ({
       // Use the new ChatManager persistence functionality
       await chatUIState.saveChat(currentModelKey);
     } catch (error) {
-      console.error("Error saving chat as note:", err2String(error));
+      logError("Error saving chat as note:", err2String(error));
       new Notice("Failed to save chat as note. Check console for details.");
     }
   }, [app, chatUIState, currentModelKey]);
@@ -338,7 +353,7 @@ const Chat: React.FC<ChatProps> = ({
           handleSaveAsNote();
         }
       } catch (error) {
-        console.error("Error regenerating message:", error);
+        logError("Error regenerating message:", error);
         new Notice("Failed to regenerate message. Please try again.");
       } finally {
         safeSet.setLoading(false);
@@ -399,7 +414,7 @@ const Chat: React.FC<ChatProps> = ({
                 );
               }
             } catch (error) {
-              console.error("Error regenerating AI response:", error);
+              logError("Error regenerating AI response:", error);
               new Notice("Failed to regenerate AI response. Please try again.");
             } finally {
               safeSet.setLoading(false);
@@ -412,7 +427,7 @@ const Chat: React.FC<ChatProps> = ({
           handleSaveAsNote();
         }
       } catch (error) {
-        console.error("Error editing message:", error);
+        logError("Error editing message:", error);
         new Notice("Failed to edit message. Please try again.");
       }
     },
@@ -459,7 +474,7 @@ const Chat: React.FC<ChatProps> = ({
             new Notice(`${project.name} added and context loaded`);
           })
           .catch((error: Error) => {
-            console.error("Error loading project context:", error);
+            logError("Error loading project context:", error);
             new Notice(`${project.name} added but context loading failed`);
           });
       } else {
@@ -494,7 +509,7 @@ const Chat: React.FC<ChatProps> = ({
             new Notice(`${originP.name} updated and context reloaded`);
           })
           .catch((error: Error) => {
-            console.error("Error reloading project context:", error);
+            logError("Error reloading project context:", error);
             new Notice(`${originP.name} updated but context reload failed`);
           });
       } else {
@@ -506,13 +521,21 @@ const Chat: React.FC<ChatProps> = ({
     [settings.projectList]
   );
 
-  const handleInsertToChat = useCallback((prompt: string) => {
-    setInputMessage((prev) => `${prev} ${prompt} `);
-  }, []);
-
   const handleRemoveSelectedText = useCallback((id: string) => {
     removeSelectedTextContext(id);
   }, []);
+
+  useEffect(() => {
+    const handleChatVisibility = () => {
+      chatInput.focusInput();
+    };
+    eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+
+    // Cleanup function
+    return () => {
+      eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
+    };
+  }, [eventTarget, chatInput]);
 
   const handleDelete = useCallback(
     async (messageIndex: number) => {
@@ -528,7 +551,7 @@ const Chat: React.FC<ChatProps> = ({
           new Notice("Failed to delete message. Please try again.");
         }
       } catch (error) {
-        console.error("Error deleting message:", error);
+        logError("Error deleting message:", error);
         new Notice("Failed to delete message. Please try again.");
       }
     },
@@ -536,7 +559,19 @@ const Chat: React.FC<ChatProps> = ({
   );
 
   const handleNewChat = useCallback(async () => {
+    clearRecordedPromptPayload();
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
+
+    // Analyze chat messages for memory if enabled
+    if (settings.enableRecentConversations) {
+      try {
+        // Get the current chat model from the chain manager
+        const chatModel = chainManager.chatModelManager.getChatModel();
+        plugin.userMemoryManager.addRecentConversation(chatUIState.getMessages(), chatModel);
+      } catch (error) {
+        logInfo("Failed to analyze chat messages for memory:", error);
+      }
+    }
 
     // First autosave the current chat if the setting is enabled
     if (settings.autosaveChat) {
@@ -549,6 +584,7 @@ const Chat: React.FC<ChatProps> = ({
     // Additional UI state reset specific to this component
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
+    setLatestTokenCount(null); // Clear token count on new chat
     clearSelectedTextContexts();
     // Respect the includeActiveNote setting for all non-project chains
     if (selectedChain === ChainType.PROJECT_CHAIN) {
@@ -558,17 +594,78 @@ const Chat: React.FC<ChatProps> = ({
     }
   }, [
     handleStopGenerating,
+    chainManager.chatModelManager,
     chatUIState,
     settings.autosaveChat,
+    settings.enableRecentConversations,
     settings.includeActiveNoteAsContext,
     selectedChain,
     handleSaveAsNote,
     safeSet,
+    plugin.userMemoryManager,
   ]);
 
-  const handleLoadHistory = useCallback(() => {
-    plugin.loadCopilotChatHistory();
+  const handleLoadChatHistory = useCallback(async () => {
+    try {
+      const historyItems = await plugin.getChatHistoryItems();
+      setChatHistoryItems(historyItems);
+    } catch (error) {
+      logError("Error loading chat history:", error);
+      new Notice("Failed to load chat history.");
+    }
   }, [plugin]);
+
+  const handleUpdateChatTitle = useCallback(
+    async (id: string, newTitle: string) => {
+      try {
+        await plugin.updateChatTitle(id, newTitle);
+        await handleLoadChatHistory(); // Refresh the list
+      } catch (error) {
+        logError("Error updating chat title:", error);
+        new Notice("Failed to update chat title.");
+        throw error; // Re-throw to let the popover handle the error state
+      }
+    },
+    [plugin, handleLoadChatHistory]
+  );
+
+  const handleDeleteChat = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.deleteChatHistory(id);
+        await handleLoadChatHistory(); // Refresh the list
+      } catch (error) {
+        logError("Error deleting chat:", error);
+        new Notice("Failed to delete chat.");
+        throw error; // Re-throw to let the popover handle the error state
+      }
+    },
+    [plugin, handleLoadChatHistory]
+  );
+
+  const handleLoadChat = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.loadChatById(id);
+      } catch (error) {
+        logError("Error loading chat:", error);
+        new Notice("Failed to load chat.");
+      }
+    },
+    [plugin]
+  );
+
+  const handleOpenSourceFile = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.openChatSourceFile(id);
+      } catch (error) {
+        logError("Error opening source file:", error);
+        new Notice("Failed to open source file.");
+      }
+    },
+    [plugin]
+  );
 
   // Event listener for abort stream events
   useEffect(() => {
@@ -613,7 +710,6 @@ const Chat: React.FC<ChatProps> = ({
           onRegenerate={handleRegenerate}
           onEdit={handleEdit}
           onDelete={handleDelete}
-          onInsertToChat={handleInsertToChat}
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
         />
@@ -624,6 +720,19 @@ const Chat: React.FC<ChatProps> = ({
               setHiddenCard={() => {
                 setProgressCardVisible(false);
               }}
+              onEditContext={() => {
+                const currentProject = getCurrentProject();
+                if (currentProject) {
+                  // Open the context management modal for editing the project
+                  new ContextManageModal(
+                    app,
+                    (updatedProject) => {
+                      handleEditProject(currentProject, updatedProject);
+                    },
+                    currentProject
+                  ).open();
+                }
+              }}
             />
           </div>
         ) : (
@@ -631,7 +740,7 @@ const Chat: React.FC<ChatProps> = ({
             <ChatControls
               onNewChat={handleNewChat}
               onSaveAsNote={() => handleSaveAsNote()}
-              onLoadHistory={handleLoadHistory}
+              onLoadHistory={handleLoadChatHistory}
               onModeChange={(newMode) => {
                 setPreviousMode(selectedChain);
                 // Hide chat UI when switching to project mode
@@ -639,9 +748,14 @@ const Chat: React.FC<ChatProps> = ({
                   setShowChatUI(false);
                 }
               }}
+              chatHistory={chatHistoryItems}
+              onUpdateChatTitle={handleUpdateChatTitle}
+              onDeleteChat={handleDeleteChat}
+              onLoadChat={handleLoadChat}
+              onOpenSourceFile={handleOpenSourceFile}
+              latestTokenCount={latestTokenCount}
             />
             <ChatInput
-              ref={inputRef}
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
               handleSendMessage={handleSendMessage}
@@ -652,7 +766,6 @@ const Chat: React.FC<ChatProps> = ({
               setContextNotes={setContextNotes}
               includeActiveNote={includeActiveNote}
               setIncludeActiveNote={setIncludeActiveNote}
-              mention={mention}
               selectedImages={selectedImages}
               onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
               setSelectedImages={setSelectedImages}
@@ -682,7 +795,6 @@ const Chat: React.FC<ChatProps> = ({
                 hasMessages={false}
                 onProjectAdded={handleAddProject}
                 onEditProject={handleEditProject}
-                inputRef={inputRef}
                 onClose={() => {
                   if (previousMode) {
                     setSelectedChain(previousMode);
@@ -708,6 +820,21 @@ const Chat: React.FC<ChatProps> = ({
       </div>
     </div>
   );
+};
+
+// Main Chat component with context provider
+const Chat: React.FC<ChatProps> = (props) => {
+  return (
+    <ChatInputProvider>
+      <ChatWithContext {...props} />
+    </ChatInputProvider>
+  );
+};
+
+// Chat component that uses context
+const ChatWithContext: React.FC<ChatProps> = (props) => {
+  const chatInput = useChatInput();
+  return <ChatInternal {...props} chatInput={chatInput} />;
 };
 
 export default Chat;

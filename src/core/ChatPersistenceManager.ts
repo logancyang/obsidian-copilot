@@ -1,13 +1,12 @@
-import { App, Notice, TFile, TFolder } from "obsidian";
-import { ChatMessage } from "@/types/message";
-import { MessageRepository } from "./MessageRepository";
-import { logInfo, logError } from "@/logger";
-import { extractTextFromChunk, formatDateTime } from "@/utils";
-import { USER_SENDER, AI_SENDER } from "@/constants";
-import { getSettings } from "@/settings/model";
 import { getCurrentProject } from "@/aiParams";
+import { AI_SENDER, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
-import { ensureFolderExists } from "@/utils";
+import { logError, logInfo } from "@/logger";
+import { getSettings } from "@/settings/model";
+import { ChatMessage } from "@/types/message";
+import { ensureFolderExists, extractTextFromChunk, formatDateTime } from "@/utils";
+import { App, Notice, TFile, TFolder } from "obsidian";
+import { MessageRepository } from "./MessageRepository";
 
 /**
  * ChatPersistenceManager - Handles saving and loading chat messages
@@ -45,13 +44,14 @@ export class ChatPersistenceManager {
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);
-      const existingTopic = existingFile
+      let existingTopic = existingFile
         ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter?.topic
         : undefined;
 
       const fileName = existingFile
         ? existingFile.path
         : this.generateFileName(messages, firstMessageEpoch, undefined);
+
       const noteContent = this.generateNoteContent(
         chatContent,
         firstMessageEpoch,
@@ -66,9 +66,31 @@ export class ChatPersistenceManager {
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
       } else {
         // If the file doesn't exist, create a new one
-        targetFile = await this.app.vault.create(fileName, noteContent);
-        new Notice(`Chat saved as note: ${fileName}`);
-        logInfo(`[ChatPersistenceManager] Created new chat file: ${fileName}`);
+        try {
+          targetFile = await this.app.vault.create(fileName, noteContent);
+          new Notice(`Chat saved as note: ${fileName}`);
+          logInfo(`[ChatPersistenceManager] Created new chat file: ${fileName}`);
+        } catch (error) {
+          if (this.isFileAlreadyExistsError(error)) {
+            const conflictFile = this.app.vault.getAbstractFileByPath(fileName);
+            if (conflictFile && conflictFile instanceof TFile) {
+              // Update existingTopic to prevent unnecessary regeneration
+              existingTopic =
+                this.app.metadataCache.getFileCache(conflictFile)?.frontmatter?.topic ??
+                existingTopic;
+              await this.app.vault.modify(conflictFile, noteContent);
+              targetFile = conflictFile;
+              new Notice("Existing chat note found - updating it now.");
+              logInfo(
+                `[ChatPersistenceManager] Resolved save conflict by updating existing chat file: ${conflictFile.path}`
+              );
+            } else {
+              throw error;
+            }
+          } else {
+            throw error;
+          }
+        }
       }
 
       this.generateTopicAsyncIfNeeded(messages, targetFile, existingTopic);
@@ -129,7 +151,37 @@ export class ChatPersistenceManager {
     return messages
       .map((message) => {
         const timestamp = message.timestamp ? message.timestamp.display : "Unknown time";
-        return `**${message.sender}**: ${message.message}\n[Timestamp: ${timestamp}]`;
+        let content = `**${message.sender}**: ${message.message}`;
+
+        // Include context information if present
+        if (message.context) {
+          const contextParts: string[] = [];
+
+          if (message.context.notes?.length) {
+            contextParts.push(
+              `Notes: ${message.context.notes.map((note) => note.basename).join(", ")}`
+            );
+          }
+
+          if (message.context.urls?.length) {
+            contextParts.push(`URLs: ${message.context.urls.join(", ")}`);
+          }
+
+          if (message.context.tags?.length) {
+            contextParts.push(`Tags: ${message.context.tags.join(", ")}`);
+          }
+
+          if (message.context.folders?.length) {
+            contextParts.push(`Folders: ${message.context.folders.join(", ")}`);
+          }
+
+          if (contextParts.length > 0) {
+            content += `\n[Context: ${contextParts.join(" | ")}]`;
+          }
+        }
+
+        content += `\n[Timestamp: ${timestamp}]`;
+        return content;
       })
       .join("\n\n");
   }
@@ -157,21 +209,36 @@ export class ChatPersistenceManager {
       const sender = match[1] === "user" ? USER_SENDER : AI_SENDER;
       const fullContent = match[2].trim();
 
-      // Split content into lines to extract timestamp and message
+      // Split content into lines to extract timestamp, context, and message
       const contentLines = fullContent.split("\n");
       let messageText = fullContent;
       let timestamp = "Unknown time";
+      let contextInfo: any = undefined;
+
+      // Check for context and timestamp lines
+      let endIndex = contentLines.length;
 
       // Check if last line is a timestamp
-      const lastLineIndex = contentLines.length - 1;
-      if (lastLineIndex > 0 && contentLines[lastLineIndex].startsWith("[Timestamp: ")) {
-        const timestampMatch = contentLines[lastLineIndex].match(/\[Timestamp: (.*?)\]/);
+      if (contentLines[endIndex - 1]?.startsWith("[Timestamp: ")) {
+        const timestampMatch = contentLines[endIndex - 1].match(/\[Timestamp: (.*?)\]/);
         if (timestampMatch) {
           timestamp = timestampMatch[1];
-          // Message is everything except the timestamp line
-          messageText = contentLines.slice(0, lastLineIndex).join("\n").trim();
+          endIndex--;
         }
       }
+
+      // Check if second-to-last line is context
+      if (endIndex > 0 && contentLines[endIndex - 1]?.startsWith("[Context: ")) {
+        const contextMatch = contentLines[endIndex - 1].match(/\[Context: (.*?)\]/);
+        if (contextMatch) {
+          const contextStr = contextMatch[1];
+          contextInfo = this.parseContextString(contextStr);
+          endIndex--;
+        }
+      }
+
+      // Message is everything before context and timestamp
+      messageText = contentLines.slice(0, endIndex).join("\n").trim();
 
       // Parse the timestamp
       let epoch: number | undefined;
@@ -193,10 +260,69 @@ export class ChatPersistenceManager {
               fileName: "",
             }
           : null,
+        context: contextInfo,
       });
     }
 
     return messages;
+  }
+
+  /**
+   * Parse context string back into context object
+   */
+  private parseContextString(contextStr: string): any {
+    const context: any = {
+      notes: [],
+      urls: [],
+      tags: [],
+      folders: [],
+    };
+
+    // Split by | to get different context types
+    const parts = contextStr.split(" | ");
+
+    for (const part of parts) {
+      const trimmed = part.trim();
+
+      if (trimmed.startsWith("Notes: ")) {
+        const notesStr = trimmed.substring(7); // Remove "Notes: "
+        if (notesStr) {
+          // For notes, we only have basenames. Create TFile-like objects with path = basename
+          // This is a limitation since we don't save full paths, but it's better than nothing
+          context.notes = notesStr.split(", ").map((basename) => ({
+            basename: basename.trim(),
+            path: basename.trim(), // Use basename as path since we don't have the full path
+          }));
+        }
+      } else if (trimmed.startsWith("URLs: ")) {
+        const urlsStr = trimmed.substring(6); // Remove "URLs: "
+        if (urlsStr) {
+          context.urls = urlsStr.split(", ").map((url) => url.trim());
+        }
+      } else if (trimmed.startsWith("Tags: ")) {
+        const tagsStr = trimmed.substring(6); // Remove "Tags: "
+        if (tagsStr) {
+          context.tags = tagsStr.split(", ").map((tag) => tag.trim());
+        }
+      } else if (trimmed.startsWith("Folders: ")) {
+        const foldersStr = trimmed.substring(9); // Remove "Folders: "
+        if (foldersStr) {
+          context.folders = foldersStr.split(", ").map((folder) => folder.trim());
+        }
+      }
+    }
+
+    // Only return context if it has any content
+    if (
+      context.notes.length > 0 ||
+      context.urls.length > 0 ||
+      context.tags.length > 0 ||
+      context.folders.length > 0
+    ) {
+      return context;
+    }
+
+    return undefined;
   }
 
   /**
@@ -207,7 +333,17 @@ export class ChatPersistenceManager {
 
     for (const file of files) {
       const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-      if (frontmatter?.epoch === epoch) {
+      const frontmatterEpoch =
+        typeof frontmatter?.epoch === "number"
+          ? frontmatter.epoch
+          : typeof frontmatter?.epoch === "string"
+            ? Number(frontmatter.epoch)
+            : undefined;
+      if (
+        typeof frontmatterEpoch === "number" &&
+        !Number.isNaN(frontmatterEpoch) &&
+        frontmatterEpoch === epoch
+      ) {
         return file;
       }
     }
@@ -291,11 +427,18 @@ ${conversationSummary}`;
       // Get the first 10 words from the first user message and sanitize them
       topicForFilename = firstUserMessage
         ? firstUserMessage.message
+            // Remove Obsidian wiki link brackets while preserving inner text: [[Title]] -> Title
+            .replace(/\[\[([^\]]+)\]\]/g, "$1")
+            // Remove any remaining square brackets or braces
+            .replace(/[{}[\]]/g, "")
+            // Now split to first 10 words
             .split(/\s+/)
             .slice(0, 10)
             .join(" ")
-            .replace(/[\\/:*?"<>|]/g, "") // Remove invalid filename characters
-            .trim()
+            // Remove invalid filename characters (including control chars)
+            // eslint-disable-next-line no-control-regex
+            .replace(/[\\/:*?"<>|\x00-\x1F]/g, "")
+            .trim() || "Untitled Chat"
         : "Untitled Chat";
     }
 
@@ -308,8 +451,14 @@ ${conversationSummary}`;
       .replace("{$date}", timestampFileName.split("_")[0])
       .replace("{$time}", timestampFileName.split("_")[1]);
 
-    // Sanitize the final filename
-    const sanitizedFileName = customFileName.replace(/[\\/:*?"<>|]/g, "_");
+    // Sanitize the final filename (replace any illegal chars with underscore)
+    // Also remove leftover square brackets which are illegal on some platforms
+    // eslint-disable-next-line no-control-regex
+    const sanitizedFileName = customFileName
+      .replace(/\[\[([^\]]+)\]\]/g, "$1")
+      .replace(/[{}[\]]/g, "_")
+      // eslint-disable-next-line no-control-regex
+      .replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
 
     // Add project ID as prefix for project-specific chat histories
     const currentProject = getCurrentProject();
@@ -392,5 +541,16 @@ ${chatContent}`;
     } catch (error) {
       logError("[ChatPersistenceManager] Error applying AI topic to file:", error);
     }
+  }
+
+  /**
+   * Determine if an error indicates an Obsidian file-exists conflict.
+   */
+  private isFileAlreadyExistsError(error: unknown): boolean {
+    if (!error) {
+      return false;
+    }
+    const message = error instanceof Error ? error.message : String(error);
+    return message.toLowerCase().includes("already exists");
   }
 }

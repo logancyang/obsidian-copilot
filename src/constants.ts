@@ -6,6 +6,7 @@ import { ChainType } from "./chainFactory";
 import { PromptSortStrategy } from "./types";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
+export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
@@ -14,6 +15,7 @@ export const AI_SENDER = "ai";
 export const COPILOT_FOLDER_ROOT = "copilot";
 export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
 export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
+export const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
@@ -154,7 +156,7 @@ export enum ChatModels {
   OPENROUTER_GEMINI_2_5_FLASH_LITE = "google/gemini-2.5-flash-lite",
   OPENROUTER_GPT_41 = "openai/gpt-4.1",
   OPENROUTER_GPT_41_MINI = "openai/gpt-4.1-mini",
-  OPENROUTER_GROK_4_FAST_FREE = "x-ai/grok-4-fast:free",
+  OPENROUTER_GROK_4_FAST = "x-ai/grok-4-fast",
 }
 
 // Model Providers
@@ -244,7 +246,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.OPENROUTER_GROK_4_FAST_FREE,
+    name: ChatModels.OPENROUTER_GROK_4_FAST,
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,
@@ -587,13 +589,13 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
-    host: "https://api.brevilabs.com/v1",
+    host: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: {
     label: "Copilot Plus",
-    host: "https://api.brevilabs.com/v1",
+    host: BREVILABS_MODELS_BASE_URL,
     keyManagementURL: "",
     listModelURL: "",
   },
@@ -655,6 +657,7 @@ export const COMMAND_IDS = {
   APPLY_CUSTOM_COMMAND: "apply-custom-command",
   OPEN_LOG_FILE: "open-log-file",
   CLEAR_LOG_FILE: "clear-log-file",
+  DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -682,6 +685,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "Apply custom command",
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
+  [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
@@ -777,14 +781,20 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autonomousAgentMaxIterations: 4,
   autonomousAgentEnabledToolIds: [
     "localSearch",
+    "readNote",
     "webSearch",
     "pomodoro",
     "youtubeTranscription",
     "writeToFile",
     "replaceInFile",
+    "memoryTool",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
+  memoryFolderName: DEFAULT_MEMORY_FOLDER,
+  enableRecentConversations: false,
+  maxRecentConversations: 30,
+  enableSavedMemory: false,
   enableInlineCitations: true,
 };
 

@@ -6,6 +6,15 @@ import { ChunkManager } from "../chunks";
 import { NoteDoc, NoteIdRank, SearchExplanation } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
 
+type ScoreAccumulator = {
+  score: number;
+  fieldMatches: Set<string>;
+  queriesMatched: Set<string>;
+  lexicalMatches: { field: string; query: string; weight: number }[];
+  tagQueryMatches: Set<string>;
+  tagFieldMatches: Set<string>;
+};
+
 /**
  * Full-text search engine using ephemeral FlexSearch index built per-query
  */
@@ -25,13 +34,21 @@ export class FullTextEngine {
   // Field weights for search scoring
   private static readonly FIELD_WEIGHTS = {
     title: 3,
-    path: 1.5,
+    heading: 2.5,
     headings: 1.5,
-    tags: 1.5,
+    path: 1.5,
+    tags: 4,
     props: 1.5,
     links: 1.5,
     body: 1,
   } as const;
+
+  private static readonly TAG_PRIMARY_FIELD_BOOST = 6;
+  private static readonly TAG_SECONDARY_FIELD_BOOST = 3;
+  private static readonly TAG_BASE_MATCH_BONUS = 2;
+  private static readonly TAG_METADATA_MATCH_BOOST = 2.5;
+  private static readonly TAG_DIVERSITY_BONUS = 0.4;
+  private static readonly TAG_METADATA_SCORE_BONUS = 5;
 
   constructor(
     private app: App,
@@ -60,6 +77,7 @@ export class FullTextEngine {
           { field: "title", tokenize: tokenizer, weight: 3 }, // Note title
           { field: "heading", tokenize: tokenizer, weight: 2.5 }, // Section heading
           { field: "path", tokenize: tokenizer, weight: 2 }, // Path components
+          { field: "tags", tokenize: tokenizer, weight: 4 }, // Note tags and hierarchies
           { field: "body", tokenize: tokenizer, weight: 1 }, // Chunk content
         ],
         store: ["id", "notePath", "title", "heading", "chunkIndex"], // Store metadata only, not body
@@ -73,13 +91,51 @@ export class FullTextEngine {
    * @returns Array of tokens
    */
   private tokenizeMixed(str: string): string[] {
-    if (!str) return [];
+    if (!str) {
+      return [];
+    }
 
-    const tokens: string[] = [];
+    const tokens = new Set<string>();
+    const lowered = str.toLowerCase();
+    let asciiSource = lowered;
+
+    // Extract tags (keep hash and generate hierarchy-aware tokens)
+    let tagMatches: RegExpMatchArray | null = null;
+    try {
+      tagMatches = lowered.match(/#[\p{L}\p{N}_/-]+/gu);
+    } catch {
+      tagMatches = lowered.match(/#[a-z0-9_/-]+/g);
+    }
+
+    if (tagMatches) {
+      for (const tag of tagMatches) {
+        tokens.add(tag);
+
+        const tagBody = tag.slice(1);
+        if (!tagBody) {
+          continue;
+        }
+
+        tokens.add(tagBody);
+
+        const segments = tagBody.split("/").filter((segment) => segment.length > 0);
+        if (segments.length > 0) {
+          let prefix = "";
+          for (const segment of segments) {
+            prefix = prefix ? `${prefix}/${segment}` : segment;
+            tokens.add(prefix);
+            tokens.add(`#${prefix}`);
+            tokens.add(segment);
+          }
+        }
+        const escapedTag = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        asciiSource = asciiSource.replace(new RegExp(escapedTag, "gu"), " ");
+      }
+    }
 
     // ASCII words (including alphanumeric and underscores)
-    const asciiWords = str.toLowerCase().match(/[a-z0-9_]+/g) || [];
-    tokens.push(...asciiWords);
+    const asciiWords = asciiSource.match(/[a-z0-9_]+/g) || [];
+    asciiWords.forEach((word) => tokens.add(word));
 
     // CJK pattern for Chinese, Japanese, Korean characters
     const cjkPattern = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]+/g;
@@ -87,17 +143,15 @@ export class FullTextEngine {
 
     // Generate bigrams for CJK text
     for (const match of cjkMatches) {
-      // Add single character for length 1
       if (match.length === 1) {
-        tokens.push(match);
+        tokens.add(match);
       }
-      // Generate bigrams
       for (let i = 0; i < match.length - 1; i++) {
-        tokens.push(match.slice(i, i + 2));
+        tokens.add(match.slice(i, i + 2));
       }
     }
 
-    return tokens;
+    return Array.from(tokens);
   }
 
   /**
@@ -162,8 +216,10 @@ export class FullTextEngine {
         const file = this.app.vault.getAbstractFileByPath(chunk.notePath);
         if (file instanceof TFile) {
           const cache = this.app.metadataCache.getFileCache(file);
-          const allTags = cache ? (getAllTags(cache) ?? []) : [];
           const frontmatter = cache?.frontmatter ?? {};
+          const rawTags = cache ? (getAllTags(cache) ?? []) : [];
+          const frontmatterTags = this.extractFrontmatterTags(frontmatter);
+          const normalizedTags = this.normalizeTagList([...rawTags, ...frontmatterTags]);
 
           // Get links
           const outgoing = this.app.metadataCache.resolvedLinks[file.path] ?? {};
@@ -176,7 +232,7 @@ export class FullTextEngine {
           const propValues = this.extractPropertyValues(frontmatter);
 
           noteMetadata = {
-            tags: allTags,
+            tags: normalizedTags,
             links: allLinks,
             props: propValues,
           };
@@ -289,6 +345,97 @@ export class FullTextEngine {
   }
 
   /**
+   * Extracts tag strings from frontmatter definitions, supporting both scalar and array formats.
+   *
+   * @param frontmatter - Frontmatter object retrieved from the metadata cache
+   * @returns Array of raw tag strings (without normalization)
+   */
+  private extractFrontmatterTags(frontmatter: Record<string, unknown> | undefined): string[] {
+    if (!frontmatter || typeof frontmatter !== "object") {
+      return [];
+    }
+
+    const collected: string[] = [];
+    const possibleKeys: Array<"tags" | "tag"> = ["tags", "tag"];
+
+    const addTag = (value: string) => {
+      const trimmed = value.trim();
+      if (trimmed.length > 0) {
+        collected.push(trimmed);
+      }
+    };
+
+    for (const key of possibleKeys) {
+      const rawValue = (frontmatter as Record<string, unknown>)[key];
+      if (!rawValue) {
+        continue;
+      }
+
+      if (Array.isArray(rawValue)) {
+        for (const item of rawValue) {
+          if (typeof item === "string") {
+            addTag(item);
+          }
+        }
+      } else if (typeof rawValue === "string") {
+        rawValue
+          .split(/[,\s]+/g)
+          .map((segment) => segment.trim())
+          .filter((segment) => segment.length > 0)
+          .forEach(addTag);
+      }
+    }
+
+    return collected;
+  }
+
+  /**
+   * Normalizes tag strings so both hashed and plain variants (including hierarchical parents) are indexed.
+   *
+   * @param tags - Raw tag values gathered from note content and frontmatter
+   * @returns Array of normalized tags with hashes and plain equivalents
+   */
+  private normalizeTagList(tags: string[]): string[] {
+    const normalized = new Set<string>();
+
+    for (const rawTag of tags) {
+      if (typeof rawTag !== "string") {
+        continue;
+      }
+
+      const trimmed = rawTag.trim();
+      if (trimmed.length === 0) {
+        continue;
+      }
+
+      const withoutHashes = trimmed.replace(/^#+/, "");
+      if (withoutHashes.length === 0) {
+        continue;
+      }
+
+      const base = withoutHashes.toLowerCase();
+      normalized.add(`#${base}`);
+      normalized.add(base);
+
+      const segments = base.split("/").filter((segment) => segment.length > 0);
+      if (segments.length > 1) {
+        let prefix = "";
+        for (const segment of segments) {
+          prefix = prefix ? `${prefix}/${segment}` : segment;
+          normalized.add(`#${prefix}`);
+          normalized.add(prefix);
+          normalized.add(segment);
+        }
+      } else if (segments.length === 1) {
+        normalized.add(`#${segments[0]}`);
+        normalized.add(segments[0]);
+      }
+    }
+
+    return Array.from(normalized);
+  }
+
+  /**
    * Extract primitive values with depth limit to prevent infinite recursion.
    * Simpler approach using depth limit instead of circular reference tracking.
    *
@@ -345,8 +492,13 @@ export class FullTextEngine {
     const candidateDocs = new Set<string>();
 
     for (const query of queries) {
+      const normalizedQuery = this.normalizeQueryTerm(query);
+      if (!normalizedQuery) {
+        continue;
+      }
+
       try {
-        const results = this.index.search(query, { limit: limit * 3, enrich: true });
+        const results = this.index.search(normalizedQuery, { limit: limit * 3, enrich: true });
         if (Array.isArray(results)) {
           for (const fieldResult of results) {
             if (!fieldResult?.result) continue;
@@ -366,15 +518,7 @@ export class FullTextEngine {
     );
 
     // Now, score using ONLY original query AND salient terms (not expanded queries)
-    const scoreMap = new Map<
-      string,
-      {
-        score: number;
-        fieldMatches: Set<string>;
-        queriesMatched: Set<string>;
-        lexicalMatches: { field: string; query: string; weight: number }[];
-      }
-    >();
+    const scoreMap = new Map<string, ScoreAccumulator>();
 
     // Build list of scoring queries: ONLY salient terms (original query contains stopwords)
     // If no salient terms provided, fallback to original query for backward compatibility
@@ -402,57 +546,120 @@ export class FullTextEngine {
   private scoreWithQuery(
     query: string,
     candidateDocs: Set<string>,
-    scoreMap: Map<string, any>,
+    scoreMap: Map<string, ScoreAccumulator>,
     limit: number
   ): void {
+    const normalizedQuery = this.normalizeQueryTerm(query);
+    if (!normalizedQuery) {
+      return;
+    }
+
     try {
-      const results = this.index.search(query, { limit: limit * 3, enrich: true });
+      const results = this.index.search(normalizedQuery, { limit: limit * 3, enrich: true });
+      if (!Array.isArray(results)) {
+        return;
+      }
 
-      // Process results
-      if (Array.isArray(results)) {
-        for (const fieldResult of results) {
-          if (!fieldResult?.result || !fieldResult?.field) continue;
+      const trimmedQuery = normalizedQuery;
+      const isPhrase = trimmedQuery.includes(" ");
+      const isTagQuery = trimmedQuery.startsWith("#");
+      const normalizedTag = isTagQuery ? trimmedQuery : null;
+      const queryWeight = isPhrase ? 1.5 : 1.0;
 
-          const fieldName = fieldResult.field;
-          const fieldWeight = this.getFieldWeight(fieldName);
+      const docMatchesForQuery = new Set<string>();
+      for (const fieldResult of results) {
+        if (!fieldResult?.result || !fieldResult?.field) {
+          continue;
+        }
+        for (const item of fieldResult.result) {
+          const id = typeof item === "string" ? item : item?.id;
+          if (id && candidateDocs.has(id)) {
+            docMatchesForQuery.add(id);
+          }
+        }
+      }
 
-          // Check if it's a phrase query
-          const isPhrase = query.trim().includes(" ");
-          const queryWeight = isPhrase ? 1.5 : 1.0;
+      const docMatchRatio =
+        docMatchesForQuery.size === 0 || candidateDocs.size === 0
+          ? 0
+          : docMatchesForQuery.size / candidateDocs.size;
+      const rarityWeight = isTagQuery ? 1 : 1 - Math.min(0.6, docMatchRatio * 0.6);
+      const weightedQueryFactor = queryWeight * rarityWeight;
 
-          for (let idx = 0; idx < fieldResult.result.length; idx++) {
-            const item = fieldResult.result[idx];
-            const id = typeof item === "string" ? item : item?.id;
+      for (const fieldResult of results) {
+        if (!fieldResult?.result || !fieldResult?.field) {
+          continue;
+        }
 
-            // Only score if this document was found in recall phase
-            if (id && candidateDocs.has(id)) {
-              // Calculate position-based score with field weighting
-              const positionScore = 1 / (idx + 1);
-              const fieldScore = positionScore * fieldWeight * queryWeight;
+        const fieldName = fieldResult.field;
+        const fieldWeight = this.getFieldWeight(fieldName);
 
-              const existing = scoreMap.get(id) || {
-                score: 0,
-                fieldMatches: new Set<string>(),
-                queriesMatched: new Set<string>(),
-                lexicalMatches: [],
-              };
+        for (let idx = 0; idx < fieldResult.result.length; idx++) {
+          const item = fieldResult.result[idx];
+          const id = typeof item === "string" ? item : item?.id;
 
-              // Track lexical match for explanation
-              existing.lexicalMatches.push({
-                field: fieldName,
-                query: query,
-                weight: fieldWeight,
-              });
+          if (!id || !candidateDocs.has(id)) {
+            continue;
+          }
 
-              const updated = {
-                score: existing.score + fieldScore,
-                fieldMatches: new Set(existing.fieldMatches).add(fieldName),
-                queriesMatched: new Set(existing.queriesMatched).add(query),
-                lexicalMatches: existing.lexicalMatches,
-              };
-              scoreMap.set(id, updated);
+          const positionScore = 1 / (idx + 1);
+          let adjustedScore = positionScore * fieldWeight * weightedQueryFactor;
+
+          const existing: ScoreAccumulator = scoreMap.get(id) ?? {
+            score: 0,
+            fieldMatches: new Set<string>(),
+            queriesMatched: new Set<string>(),
+            lexicalMatches: [],
+            tagQueryMatches: new Set<string>(),
+            tagFieldMatches: new Set<string>(),
+          };
+
+          const fieldMatches = new Set(existing.fieldMatches);
+          fieldMatches.add(fieldName);
+
+          const queriesMatched = new Set(existing.queriesMatched);
+          queriesMatched.add(trimmedQuery);
+
+          const explanationQuery =
+            fieldName === "tags" || !trimmedQuery.startsWith("#")
+              ? trimmedQuery
+              : trimmedQuery.replace(/^#/, "");
+
+          const lexicalMatches = [
+            ...existing.lexicalMatches,
+            {
+              field: fieldName,
+              query: explanationQuery,
+              weight: fieldWeight,
+            },
+          ];
+
+          const tagQueryMatches = new Set(existing.tagQueryMatches);
+          const tagFieldMatches = new Set(existing.tagFieldMatches);
+
+          if (isTagQuery && normalizedTag) {
+            tagQueryMatches.add(normalizedTag);
+            const matchedField = fieldName === "tags" ? "metadata" : fieldName;
+            tagFieldMatches.add(matchedField);
+            adjustedScore *=
+              fieldName === "tags"
+                ? FullTextEngine.TAG_PRIMARY_FIELD_BOOST
+                : FullTextEngine.TAG_SECONDARY_FIELD_BOOST;
+            if (fieldName === "tags") {
+              adjustedScore += FullTextEngine.TAG_METADATA_SCORE_BONUS;
             }
           }
+
+          const updated: ScoreAccumulator = {
+            score: existing.score + adjustedScore,
+            fieldMatches,
+            queriesMatched,
+            lexicalMatches,
+            tagQueryMatches,
+            tagFieldMatches,
+          };
+
+          scoreMap.set(id, updated);
         }
       }
     } catch (error) {
@@ -463,22 +670,23 @@ export class FullTextEngine {
   /**
    * Build final results with bonuses applied
    */
-  private buildFinalResults(scoreMap: Map<string, any>, limit: number): NoteIdRank[] {
+  private buildFinalResults(scoreMap: Map<string, ScoreAccumulator>, limit: number): NoteIdRank[] {
     const finalResults: NoteIdRank[] = [];
 
     for (const [id, data] of scoreMap.entries()) {
       // Calculate bonuses
       const multiFieldBonus = 1 + (data.fieldMatches.size - 1) * 0.2;
       const coverageBonus = 1 + Math.max(0, data.queriesMatched.size - 1) * 0.1;
-      let finalScore = data.score * multiFieldBonus * coverageBonus;
+      const tagBonus = this.calculateTagBonus(data.tagQueryMatches, data.tagFieldMatches);
+      let finalScore = data.score * multiFieldBonus * coverageBonus * tagBonus;
 
       // Apply phrase-in-path bonus
       finalScore = this.applyPhraseInPathBonus(id, data.queriesMatched, finalScore);
 
       const explanation: SearchExplanation = {
         lexicalMatches: data.lexicalMatches,
-        baseScore: finalScore,
-        finalScore: finalScore,
+        baseScore: data.score,
+        finalScore,
       };
 
       finalResults.push({
@@ -492,6 +700,51 @@ export class FullTextEngine {
     // Sort and return top results
     finalResults.sort((a, b) => b.score - a.score);
     return finalResults.slice(0, limit);
+  }
+
+  /**
+   * Computes a final score multiplier when tag queries are matched.
+   * Rewards documents that satisfy multiple tag queries and surface metadata tag hits preferentially.
+   *
+   * @param tagQueryMatches - Set of matched tag queries (lowercase, hash-prefixed)
+   * @param tagFieldMatches - Fields that satisfied the tag query (metadata vs. content/path)
+   * @returns Multiplicative boost applied to the final score (>= 1)
+   */
+  private calculateTagBonus(tagQueryMatches?: Set<string>, tagFieldMatches?: Set<string>): number {
+    if (!tagQueryMatches || tagQueryMatches.size === 0) {
+      return 1;
+    }
+
+    const baseBoost = 1 + tagQueryMatches.size * FullTextEngine.TAG_BASE_MATCH_BONUS;
+
+    const diversityCount = tagFieldMatches ? tagFieldMatches.size : 0;
+    const diversityBoost =
+      diversityCount > 1 ? 1 + (diversityCount - 1) * FullTextEngine.TAG_DIVERSITY_BONUS : 1;
+
+    const metadataBoost = tagFieldMatches?.has("metadata")
+      ? FullTextEngine.TAG_METADATA_MATCH_BOOST
+      : 1;
+
+    return baseBoost * diversityBoost * metadataBoost;
+  }
+
+  /**
+   * Normalizes a query term for case-insensitive matching.
+   * Trims whitespace and lowercases content to align with tokenizer behavior.
+   * @param query - Raw query string
+   * @returns Lowercase trimmed query or null when empty
+   */
+  private normalizeQueryTerm(query: string): string | null {
+    if (!query) {
+      return null;
+    }
+
+    const trimmed = query.trim();
+    if (trimmed.length === 0) {
+      return null;
+    }
+
+    return trimmed.toLowerCase();
   }
 
   /**

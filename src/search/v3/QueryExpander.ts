@@ -1,6 +1,7 @@
 import { LLM_TIMEOUT_MS } from "@/constants";
 import { TimeoutError } from "@/error";
 import { logError, logInfo, logWarn } from "@/logger";
+import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
 import { withSuppressedTokenWarnings, withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { FuzzyMatcher } from "./utils/FuzzyMatcher";
@@ -215,7 +216,9 @@ Format your response using XML tags:
    * @returns Array of valid terms extracted from the original query
    */
   private extractSalientTermsFromOriginal(originalQuery: string): string[] {
-    return this.extractTermsFromQueries([originalQuery]).filter((term) => this.isValidTerm(term));
+    const baseTerms = this.extractTermsFromQueries([originalQuery]);
+    const tagTerms = extractTagsFromQuery(originalQuery);
+    return this.combineBaseAndTagTerms(baseTerms, tagTerms, originalQuery);
   }
 
   /**
@@ -341,13 +344,19 @@ Format your response using XML tags:
    */
   private fallbackExpansion(query: string): ExpandedQuery {
     // Extract terms from the original query
-    const terms = this.extractTermsFromQueries([query]);
+    const baseTerms = this.extractTermsFromQueries([query]);
+    const tagTerms = extractTagsFromQuery(query);
+    const terms = this.combineBaseAndTagTerms(baseTerms, tagTerms, query);
 
     // Generate fuzzy variants for important terms
     const queries = new Set<string>([query]);
 
     // Generate variants for each salient term
     for (const term of terms) {
+      if (term.startsWith("#")) {
+        // Skip fuzzing tag tokens; tags must remain intact
+        continue;
+      }
       if (term.length >= 3) {
         // Only generate variants for meaningful terms
         const variants = FuzzyMatcher.generateVariants(term);
@@ -420,9 +429,145 @@ Format your response using XML tags:
    * @returns true if the term is valid for inclusion
    */
   private isValidTerm(term: string): boolean {
-    return (
-      term.length >= this.config.minTermLength && /^[\w-]+$/.test(term) // Allow word characters and hyphens
-    );
+    if (term.length < this.config.minTermLength) {
+      return false;
+    }
+
+    if (term.startsWith("#")) {
+      try {
+        return /^#[\p{L}\p{N}_/-]+$/u.test(term);
+      } catch {
+        return /^#[A-Za-z0-9_/-]+$/.test(term);
+      }
+    }
+
+    try {
+      return /^[\p{L}\p{N}_-]+$/u.test(term);
+    } catch {
+      return /^[A-Za-z0-9_-]+$/.test(term);
+    }
+  }
+
+  /**
+   * Merges base terms with tag-prefixed terms while preserving standalone terms present in the query.
+   * Removes tag bodies only when they originate exclusively from tag tokens.
+   *
+   * @param baseTerms - Terms extracted from the raw query (sans tag awareness)
+   * @param tagTerms - Hash-prefixed tag tokens extracted from the query
+   * @param originalQuery - The original user-supplied query
+   * @returns Array of unique salient terms preserving tag intent
+   */
+  private combineBaseAndTagTerms(
+    baseTerms: string[],
+    tagTerms: string[],
+    originalQuery: string
+  ): string[] {
+    const combined = new Set<string>([...baseTerms, ...tagTerms]);
+
+    if (tagTerms.length === 0) {
+      return Array.from(combined);
+    }
+
+    const standaloneTerms = this.collectStandaloneTerms(originalQuery);
+
+    for (const tag of tagTerms) {
+      const withoutHash = tag.slice(1);
+      if (withoutHash.length > 0 && !standaloneTerms.has(withoutHash)) {
+        combined.delete(withoutHash);
+      }
+    }
+
+    return Array.from(combined);
+  }
+
+  /**
+   * Collects lowercase standalone terms from the original query that do not belong to tag tokens.
+   * These terms originate from user text outside of hash-prefixed tags.
+   *
+   * @param originalQuery - Raw user query containing potential tag and non-tag text
+   * @returns Set of standalone terms detected outside tag spans
+   */
+  private collectStandaloneTerms(originalQuery: string): Set<string> {
+    const standaloneTerms = new Set<string>();
+
+    if (!originalQuery) {
+      return standaloneTerms;
+    }
+
+    const normalizedQuery = originalQuery.toLowerCase();
+    const tagRanges = this.findTagRanges(normalizedQuery);
+
+    const wordPatterns = [/[\p{L}\p{N}_-]+/gu, /[a-z0-9_-]+/g];
+
+    for (const pattern of wordPatterns) {
+      try {
+        for (const match of normalizedQuery.matchAll(pattern)) {
+          if (match.index === undefined) {
+            continue;
+          }
+
+          const start = match.index;
+          const end = start + match[0].length;
+          const insideTag = tagRanges.some(
+            ({ start: tagStart, end: tagEnd }) => start >= tagStart && end <= tagEnd
+          );
+
+          if (insideTag) {
+            continue;
+          }
+
+          const candidate = match[0];
+          if (this.isValidTerm(candidate) && !candidate.startsWith("#")) {
+            standaloneTerms.add(candidate);
+
+            if (candidate.includes("-")) {
+              candidate.split("-").forEach((part) => {
+                if (this.isValidTerm(part) && !part.startsWith("#")) {
+                  standaloneTerms.add(part);
+                }
+              });
+            }
+          }
+        }
+        break;
+      } catch {
+        continue;
+      }
+    }
+
+    return standaloneTerms;
+  }
+
+  /**
+   * Finds the start and end indices for every tag token inside the query string.
+   * Ranges include the '#' prefix so downstream checks can exclude tag spans precisely.
+   *
+   * @param normalizedQuery - Lowercase query used for regex scanning
+   * @returns Array of inclusive-exclusive index ranges for each tag occurrence
+   */
+  private findTagRanges(normalizedQuery: string): Array<{ start: number; end: number }> {
+    const ranges: Array<{ start: number; end: number }> = [];
+    const tagPatterns = [/#[\p{L}\p{N}_/-]+/gu, /#[a-z0-9_/-]+/g];
+
+    for (const pattern of tagPatterns) {
+      try {
+        for (const match of normalizedQuery.matchAll(pattern)) {
+          if (match.index === undefined) {
+            continue;
+          }
+
+          ranges.push({
+            start: match.index,
+            end: match.index + match[0].length,
+          });
+        }
+        break;
+      } catch {
+        continue;
+      }
+    }
+
+    return ranges;
   }
 
   /**

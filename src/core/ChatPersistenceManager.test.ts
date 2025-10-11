@@ -1,6 +1,6 @@
+import { ChatMessage } from "@/types/message";
 import { Notice, TFile } from "obsidian";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
-import { ChatMessage } from "@/types/message";
 
 const USER_SENDER = "user";
 const AI_SENDER = "ai";
@@ -378,6 +378,202 @@ Nature's quiet song`);
       // Notice constructor should have been called
       expect(jest.mocked(Notice)).toHaveBeenCalled();
     });
+
+    it("should sanitize wiki link brackets and illegal characters in filename", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Check [[My Note]] and path [ref] :: test \\\u0000",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Expect [[My Note]] -> My Note, [ref] -> ref, illegal chars removed, spaces -> underscores
+      expect(mockApp.vault.create).toHaveBeenCalledWith(
+        "test-folder/Check_My_Note_and_path_ref_test@20240923_221800.md",
+        expect.any(String)
+      );
+    });
+
+    it("should fallback to 'Untitled Chat' when sanitized topic is empty", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "[[]] [] {} :: :: \\",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.create).toHaveBeenCalledWith(
+        "test-folder/Untitled_Chat@20240923_221800.md",
+        expect.any(String)
+      );
+    });
+
+    it("should update existing file when epoch is stored as a string", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = {
+        path: "test-folder/Hello@20240923_221800.md",
+      } as unknown as TFile;
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([existingFile]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { epoch: "1695513480000" },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("**user**: Hello")
+      );
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
+
+      getFilesSpy.mockRestore();
+    });
+
+    it("should locate existing file by path when epoch frontmatter is missing", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello again",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = Object.create(TFile.prototype);
+      Object.assign(existingFile, {
+        path: "test-folder/Hello_again@20240923_221800.md",
+        basename: "Hello_again@20240923_221800",
+      });
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+
+      // Mock vault.create to throw "already exists" error
+      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
+
+      // Mock getAbstractFileByPath to return existing file when called from catch block
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test-folder/Hello_again@20240923_221800.md") {
+          return existingFile;
+        }
+        return null;
+      });
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Existing Topic" },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("**user**: Hello again")
+      );
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+
+      getFilesSpy.mockRestore();
+    });
+
+    it("should resolve create conflicts by updating the existing file", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Conflict message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = Object.create(TFile.prototype);
+      Object.assign(existingFile, {
+        path: "test-folder/Conflict_message@20240923_221800.md",
+        basename: "Conflict_message@20240923_221800",
+      });
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([]);
+
+      // Mock getAbstractFileByPath to return existing file when called from catch block
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test-folder/Conflict_message@20240923_221800.md") {
+          return existingFile;
+        }
+        return null;
+      });
+
+      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: { topic: "Existing Conflict Topic" },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("**user**: Conflict message")
+      );
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
+      expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+
+      getFilesSpy.mockRestore();
+    });
   });
 
   describe("loadChat", () => {
@@ -455,6 +651,93 @@ ${formattedContent}`;
       expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
       expect(parsedMessages[1].message).toBe(originalMessages[1].message);
       expect(parsedMessages[1].sender).toBe(originalMessages[1].sender);
+    });
+
+    it("should preserve context information through save and load cycle", async () => {
+      const originalMessages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "What are the files about TypeScript?",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+          context: {
+            notes: [{ basename: "typescript-guide.md", path: "docs/typescript-guide.md" } as any],
+            urls: ["https://typescriptlang.org"],
+            tags: ["programming", "typescript"],
+            folders: ["docs/"],
+          },
+        },
+        {
+          id: "2",
+          message: "Here's what I found about TypeScript in your files...",
+          sender: AI_SENDER,
+          timestamp: {
+            epoch: 1695513481000,
+            display: "2024/09/23 22:18:01",
+            fileName: "2024_09_23_221801",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Format the content
+      const formattedContent = (persistenceManager as any).formatChatContent(originalMessages);
+
+      // Add frontmatter
+      const fullContent = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+${formattedContent}`;
+
+      // Parse it back
+      const parsedMessages = (persistenceManager as any).parseChatContent(fullContent);
+
+      // Verify the messages match
+      expect(parsedMessages).toHaveLength(2);
+      expect(parsedMessages[0].message).toBe(originalMessages[0].message);
+      expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
+
+      // Verify context is preserved
+      expect(parsedMessages[0].context).toBeDefined();
+      expect(parsedMessages[0].context.notes).toHaveLength(1);
+      expect(parsedMessages[0].context.notes[0].basename).toBe("typescript-guide.md");
+      expect(parsedMessages[0].context.urls).toEqual(["https://typescriptlang.org"]);
+      expect(parsedMessages[0].context.tags).toEqual(["programming", "typescript"]);
+      expect(parsedMessages[0].context.folders).toHaveLength(1);
+      expect(parsedMessages[0].context.folders[0]).toBe("docs/");
+
+      // Second message should not have context
+      expect(parsedMessages[1].context).toBeUndefined();
+    });
+
+    it("should handle messages without context (backward compatibility)", async () => {
+      const content = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+**user**: Hello without context
+[Timestamp: 2024/09/23 22:18:00]
+
+**ai**: Hi there!
+[Timestamp: 2024/09/23 22:18:01]`;
+
+      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+
+      expect(parsedMessages).toHaveLength(2);
+      expect(parsedMessages[0].context).toBeUndefined();
+      expect(parsedMessages[1].context).toBeUndefined();
     });
   });
 });

@@ -1,16 +1,18 @@
-import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
+import { getSettings } from "@/settings/model";
+import { Vault } from "obsidian";
+import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
+import { createGetFileTreeTool } from "./FileTreeTools";
+import { memoryTool } from "./memoryTools";
+import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import {
+  convertTimeBetweenTimezonesTool,
   getCurrentTimeTool,
   getTimeInfoByEpochTool,
   getTimeRangeMsTool,
-  pomodoroTool,
-  convertTimeBetweenTimezonesTool,
 } from "./TimeTools";
+import { ToolDefinition, ToolRegistry } from "./ToolRegistry";
 import { youtubeTranscriptionTool } from "./YoutubeTools";
-import { writeToFileTool, replaceInFileTool } from "./ComposerTools";
-import { createGetFileTreeTool } from "./FileTreeTools";
-import { Vault } from "obsidian";
 
 /**
  * Define all built-in tools with their metadata
@@ -29,6 +31,8 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
 - You MUST always provide both "query" (string) and "salientTerms" (array of strings)
 - salientTerms MUST be extracted from the user's original query - never invent new terms
 - They are keywords used for BM25 full-text search to find notes containing those exact words
+- Treat every token that begins with "#" as a high-priority salient term. Keep the leading "#" and the full tag hierarchy (e.g., "#project/phase1").
+- Include tagged terms alongside other meaningful words; never strip hashes or rewrite tags into plain words.
 - Extract meaningful content words from the query (nouns, verbs, names, etc.)
 - Exclude common words like "what", "I", "do", "the", "a", etc.
 - Exclude time expressions like "last month", "yesterday", "last week"
@@ -39,6 +43,13 @@ Example usage:
 <name>localSearch</name>
 <query>piano learning practice</query>
 <salientTerms>["piano", "learning", "practice"]</salientTerms>
+</use_tool>
+
+For localSearch with tags in the query (e.g., "#projectx status update"):
+<use_tool>
+<name>localSearch</name>
+<query>#projectx status update</query>
+<salientTerms>["#projectx", "status", "update"]</salientTerms>
 </use_tool>
 
 For localSearch with time range (e.g., "what did I do last week"):
@@ -177,18 +188,40 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 </use_tool>`,
     },
   },
-  {
-    tool: pomodoroTool,
-    metadata: {
-      id: "pomodoro",
-      displayName: "Pomodoro Timer",
-      description: "Manage time with Pomodoro technique",
-      category: "time",
-      copilotCommands: ["@pomodoro"],
-    },
-  },
 
   // File tools
+  {
+    tool: readNoteTool,
+    metadata: {
+      id: "readNote",
+      displayName: "Read Note",
+      description: "Read a specific note in sequential chunks using its own line-chunking logic.",
+      category: "file",
+      requiresVault: true,
+      isAlwaysEnabled: true,
+      customPromptInstructions: `For readNote:
+- Decide based on the user's request: only call this tool when the question requires reading note content.
+- If the user asks about a note title that is already mentioned in the current or previous turns of the conversation, or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Even if the note title mention is partial but similar to what you have seen in the context, try to infer the correct note path from context. Skip the tool when a note is irrelevant to the user query.
+- If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
+- Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
+- Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
+- Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
+- Stop calling readNote as soon as you have the required information.
+
+Example (first chunk):
+<use_tool>
+<name>readNote</name>
+<notePath>Projects/launch-plan.md</notePath>
+</use_tool>
+
+Example (next chunk):
+<use_tool>
+<name>readNote</name>
+<notePath>Projects/launch-plan.md</notePath>
+<chunkIndex>1</chunkIndex>
+</use_tool>`,
+    },
+  },
   {
     tool: writeToFileTool,
     metadata: {
@@ -254,7 +287,6 @@ Example usage:
       displayName: "YouTube Transcription",
       description: "Get transcripts from YouTube videos",
       category: "media",
-      copilotCommands: ["@youtube"],
       customPromptInstructions: `For youtubeTranscription:
 - Use when user provides YouTube URLs
 - No parameters needed - the tool will process URLs from the conversation
@@ -284,11 +316,43 @@ export function registerFileTreeTool(vault: Vault): void {
       requiresVault: true,
       customPromptInstructions: `For getFileTree:
 - Use to browse the vault's file structure
+- Use this tool when the user asks for the vault structure, or a specific file or folder but you are unsure about the exact path.
+- Use this tool too look up folders when user asks to create new notes under a folder.
+- DO NOT use this tool to look up note contents or metadata - use localSearch or readNote instead.
 - No parameters needed
 
 Example usage:
 <use_tool>
 <name>getFileTree</name>
+</use_tool>`,
+    },
+  });
+}
+
+/**
+ * Register the memory tool separately as it depends on saved memory setting
+ */
+export function registerMemoryTool(): void {
+  const registry = ToolRegistry.getInstance();
+
+  registry.register({
+    tool: memoryTool,
+    metadata: {
+      id: "memoryTool",
+      displayName: "Save Memory",
+      description: "Save information to user memory when explicitly asked to remember something",
+      category: "memory",
+      copilotCommands: ["@memory"],
+      isAlwaysEnabled: true,
+      customPromptInstructions: `For memoryTool:
+- Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
+- DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
+- Extract the key information to remember from the user's message
+
+Example usage:
+<use_tool>
+<name>memoryTool</name>
+<memoryContent>User's favorite programming language is Python and they prefer functional programming style</memoryContent>
 </use_tool>`,
     },
   });
@@ -303,12 +367,19 @@ Example usage:
  */
 export function initializeBuiltinTools(vault?: Vault): void {
   const registry = ToolRegistry.getInstance();
+  const settings = getSettings();
 
-  // Only reinitialize if tools have changed or vault status has changed
+  // Only reinitialize if tools have changed or vault/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
   const shouldHaveFileTree = vault !== undefined;
+  const hasMemoryTool = registry.getToolMetadata("memoryTool") !== undefined;
+  const shouldHaveMemoryTool = settings.enableSavedMemory;
 
-  if (registry.getAllTools().length === 0 || hasFileTree !== shouldHaveFileTree) {
+  if (
+    registry.getAllTools().length === 0 ||
+    hasFileTree !== shouldHaveFileTree ||
+    hasMemoryTool !== shouldHaveMemoryTool
+  ) {
     // Clear any existing tools
     registry.clear();
 
@@ -318,6 +389,11 @@ export function initializeBuiltinTools(vault?: Vault): void {
     // Register vault-dependent tools if vault is available
     if (vault) {
       registerFileTreeTool(vault);
+    }
+
+    // Register memory tool if saved memory is enabled
+    if (settings.enableSavedMemory) {
+      registerMemoryTool();
     }
   }
 }

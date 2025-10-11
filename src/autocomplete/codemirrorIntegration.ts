@@ -8,7 +8,7 @@ import { EditorView } from "@codemirror/view";
 import { forceableInlineSuggestion, type Suggestion } from "codemirror-companion-extension";
 import { MarkdownView } from "obsidian";
 import { AutocompletePostProcessor } from "./postProcessors";
-import { getEditorContext, isNonSpaceDelimitedText, RelevantNotesCache } from "./utils";
+import { getEditorContext, isNonSpaceDelimitedText } from "./utils";
 import { WordCompletionManager } from "./wordCompletion";
 
 export interface AutocompleteOptions {
@@ -362,6 +362,7 @@ export class CodeMirrorIntegration {
 
     const editor = view.editor;
     const cursor = editor.getCursor();
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { prefix, noteContext } = getEditorContext(editor, cursor);
     const suffix = editor.getLine(cursor.line).substring(cursor.ch) || "";
 
@@ -433,13 +434,17 @@ export class CodeMirrorIntegration {
         return;
       }
 
+      this.lastRequestTime = now;
+
+      // TODO: to be added back with user customizable prompt
+      /*
       try {
         // Use LLM to select the best suggestion from trie results
         const suggestionWords = filteredSuggestions.map((s) => s.word);
 
         // Get enough context for LLM decision
-        const contextPrefix = prefix.slice(-1000); // Last 200 chars for context
-        const contextSuffix = suffix.slice(0, 500); // Next 100 chars for context
+        const contextPrefix = prefix.slice(-1000); // Last 1000 chars for context
+        const contextSuffix = suffix.slice(0, 500); // Next 500 chars for context
 
         // Check cache first (if enabled)
         let wordCompleteResponse;
@@ -462,7 +467,6 @@ export class CodeMirrorIntegration {
           );
 
           this.activeRequests.set(requestKey, requestPromise);
-          this.lastRequestTime = now;
 
           wordCompleteResponse = await requestPromise;
 
@@ -495,17 +499,17 @@ export class CodeMirrorIntegration {
           "[Copilot Autocomplete] Error with LLM word selection, falling back to trie:",
           error
         );
+      }
+      */
 
-        // Fallback to original trie-only logic on error
-        const bestSuggestion = filteredSuggestions[0];
-        const completion = this.generateCaseMatchedCompletion(bestSuggestion.word, currentWord);
+      const bestSuggestion = filteredSuggestions[0];
+      const completion = this.generateCaseMatchedCompletion(bestSuggestion.word, currentWord);
 
-        if (completion) {
-          yield {
-            display_suggestion: completion,
-            complete_suggestion: completion,
-          };
-        }
+      if (completion) {
+        yield {
+          display_suggestion: completion,
+          complete_suggestion: completion,
+        };
       }
     } else {
       // Check if sentence completion is enabled
@@ -533,6 +537,10 @@ export class CodeMirrorIntegration {
         return;
       }
 
+      this.lastRequestTime = now;
+
+      // TODO: to be added back with user customizable prompt
+      /*
       try {
         // Check if additional context is allowed
         const shouldIncludeRelevantNotes = settings.allowAdditionalContext;
@@ -570,7 +578,6 @@ export class CodeMirrorIntegration {
           );
 
           this.activeRequests.set(requestKey, requestPromise);
-          this.lastRequestTime = now;
 
           // Get completion from API
           response = await requestPromise;
@@ -600,6 +607,9 @@ export class CodeMirrorIntegration {
 
         logError("[Copilot Autocomplete] Error fetching autocomplete suggestions:", error);
       }
+      */
+
+      return;
     }
   }
 

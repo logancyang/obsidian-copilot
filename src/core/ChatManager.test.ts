@@ -56,8 +56,6 @@ describe("ChatManager", () => {
       updateProcessedText: jest.fn(),
       truncateAfterMessageId: jest.fn(),
       deleteMessage: jest.fn(),
-      addDisplayOnlyMessage: jest.fn(),
-      addFullMessage: jest.fn(),
       clear: jest.fn(),
       getDisplayMessages: jest.fn(),
       getLLMMessages: jest.fn(),
@@ -405,32 +403,8 @@ describe("ChatManager", () => {
     });
   });
 
-  describe("addDisplayMessage", () => {
-    it("should add a display message", () => {
-      mockMessageRepo.addDisplayOnlyMessage.mockReturnValue("msg-1");
-
-      const result = chatManager.addDisplayMessage("Hello", "AI");
-
-      expect(result).toBe("msg-1");
-      expect(mockMessageRepo.addDisplayOnlyMessage).toHaveBeenCalledWith("Hello", "AI", undefined);
-    });
-
-    it("should add a display message with custom ID", () => {
-      mockMessageRepo.addDisplayOnlyMessage.mockReturnValue("custom-id");
-
-      const result = chatManager.addDisplayMessage("Hello", "AI", "custom-id");
-
-      expect(result).toBe("custom-id");
-      expect(mockMessageRepo.addDisplayOnlyMessage).toHaveBeenCalledWith(
-        "Hello",
-        "AI",
-        "custom-id"
-      );
-    });
-  });
-
-  describe("addFullMessage", () => {
-    it("should add a full message", () => {
+  describe("addMessage", () => {
+    it("should add a message from ChatMessage object", () => {
       const mockMessage: ChatMessage = {
         id: "msg-1",
         message: "Hello",
@@ -439,12 +413,12 @@ describe("ChatManager", () => {
         isVisible: true,
       };
 
-      mockMessageRepo.addFullMessage.mockReturnValue("msg-1");
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
 
-      const result = chatManager.addFullMessage(mockMessage);
+      const result = chatManager.addMessage(mockMessage);
 
       expect(result).toBe("msg-1");
-      expect(mockMessageRepo.addFullMessage).toHaveBeenCalledWith(mockMessage);
+      expect(mockMessageRepo.addMessage).toHaveBeenCalledWith(mockMessage);
     });
   });
 
@@ -458,7 +432,7 @@ describe("ChatManager", () => {
       chatManager.loadMessages(messages);
 
       expect(mockMessageRepo.clear).toHaveBeenCalled();
-      expect(mockMessageRepo.addFullMessage).toHaveBeenCalledTimes(2);
+      expect(mockMessageRepo.addMessage).toHaveBeenCalledTimes(2);
     });
   });
 

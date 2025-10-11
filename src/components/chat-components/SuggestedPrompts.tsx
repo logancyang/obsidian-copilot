@@ -54,7 +54,7 @@ const SUGGESTED_PROMPTS: Record<string, NotePrompt> = {
       `Give me a recap of last week @vault`,
       `What are the key takeaways from my notes on <topic> @vault`,
       `Summarize <url> in under 10 bullet points`,
-      `@youtube <video_url>`,
+      `Summarize <youtube_video_url>`,
       `@websearch what are most recent updates in the AI industry`,
       `What are the key insights from this paper <arxiv_url>`,
       `What new methods are proposed in this paper [[<note_with_embedded_pdf>]]`,

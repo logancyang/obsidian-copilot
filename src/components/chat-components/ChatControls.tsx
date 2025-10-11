@@ -28,6 +28,11 @@ import {
 } from "lucide-react";
 import { Notice } from "obsidian";
 import React from "react";
+import {
+  ChatHistoryItem,
+  ChatHistoryPopover,
+} from "@/components/chat-components/ChatHistoryPopover";
+import { TokenCounter } from "./TokenCounter";
 
 export async function refreshVaultIndex() {
   try {
@@ -169,6 +174,12 @@ interface ChatControlsProps {
   onLoadHistory: () => void;
   onModeChange: (mode: ChainType) => void;
   onCloseProject?: () => void;
+  chatHistory: ChatHistoryItem[];
+  onUpdateChatTitle: (id: string, newTitle: string) => Promise<void>;
+  onDeleteChat: (id: string) => Promise<void>;
+  onLoadChat: (id: string) => Promise<void>;
+  onOpenSourceFile?: (id: string) => Promise<void>;
+  latestTokenCount?: number | null;
 }
 
 export function ChatControls({
@@ -177,6 +188,12 @@ export function ChatControls({
   onLoadHistory,
   onModeChange,
   onCloseProject,
+  chatHistory,
+  onUpdateChatTitle,
+  onDeleteChat,
+  onLoadChat,
+  onOpenSourceFile,
+  latestTokenCount,
 }: ChatControlsProps) {
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
@@ -271,7 +288,10 @@ export function ChatControls({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
-      <div>
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <div className="tw-mr-2">
+          <TokenCounter tokenCount={latestTokenCount ?? null} />
+        </div>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button variant="ghost2" size="icon" title="New Chat" onClick={onNewChat}>
@@ -291,11 +311,19 @@ export function ChatControls({
           </Tooltip>
         )}
         <Tooltip>
-          <TooltipTrigger asChild>
-            <Button variant="ghost2" size="icon" title="Chat History" onClick={onLoadHistory}>
-              <History className="tw-size-4" />
-            </Button>
-          </TooltipTrigger>
+          <ChatHistoryPopover
+            chatHistory={chatHistory}
+            onUpdateTitle={onUpdateChatTitle}
+            onDeleteChat={onDeleteChat}
+            onLoadChat={onLoadChat}
+            onOpenSourceFile={onOpenSourceFile}
+          >
+            <TooltipTrigger asChild>
+              <Button variant="ghost2" size="icon" title="Chat History" onClick={onLoadHistory}>
+                <History className="tw-size-4" />
+              </Button>
+            </TooltipTrigger>
+          </ChatHistoryPopover>
           <TooltipContent>Chat History</TooltipContent>
         </Tooltip>
 

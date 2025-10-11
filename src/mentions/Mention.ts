@@ -39,8 +39,7 @@ export class Mention {
     const urlRegex = /https?:\/\/[^\s"'<>]+/g;
     return (text.match(urlRegex) || [])
       .map((url) => url.replace(/,+$/, ""))
-      .filter((url, index, self) => self.indexOf(url) === index)
-      .filter((url) => !isYoutubeUrl(url));
+      .filter((url, index, self) => self.indexOf(url) === index);
   }
 
   async processUrl(url: string): Promise<Url4llmResponse & { error?: string }> {
@@ -53,22 +52,28 @@ export class Mention {
     }
   }
 
+  async processYoutubeUrl(url: string): Promise<{ transcript: string; error?: string }> {
+    try {
+      const response = await this.brevilabsClient.youtube4llm(url);
+      return { transcript: response.response.transcript };
+    } catch (error) {
+      const msg = err2String(error);
+      logError(`Error processing YouTube URL ${url}: ${msg}`);
+      return { transcript: "", error: msg };
+    }
+  }
+
   /**
-   * Process URLs from user input text for url4llm endpoint.
+   * Process a list of URLs directly (both regular and YouTube URLs).
    *
-   * IMPORTANT: This method should ONLY be called with the user's direct chat input,
-   * NOT with content from context notes. This ensures url4llm is only called for
-   * URLs explicitly typed by the user, similar to YouTube transcript processing.
-   *
-   * @param text The user's chat input text
+   * @param urls Array of URLs to process
    * @returns Processed URL context and any errors
    */
-  async processUrls(text: string): Promise<{
+  async processUrlList(urls: string[]): Promise<{
     urlContext: string;
     imageUrls: string[];
     processedErrorUrls: Record<string, string>;
   }> {
-    const urls = this.extractUrls(text);
     let urlContext = "";
     const imageUrls: string[] = [];
     const processedErrorUrls: Record<string, string> = {};
@@ -83,9 +88,24 @@ export class Mention {
       // Check if it's an image URL
       if (await ImageProcessor.isImageUrl(url, app.vault)) {
         imageUrls.push(url);
-        return null;
+        return { type: "image", url };
       }
 
+      // Check if it's a YouTube URL
+      if (isYoutubeUrl(url)) {
+        if (!this.mentions.has(url)) {
+          const processed = await this.processYoutubeUrl(url);
+          this.mentions.set(url, {
+            type: "youtube",
+            original: url,
+            processed: processed.transcript,
+            error: processed.error,
+          });
+        }
+        return { type: "youtube", data: this.mentions.get(url) };
+      }
+
+      // Regular URL
       if (!this.mentions.has(url)) {
         const processed = await this.processUrl(url);
         this.mentions.set(url, {
@@ -95,23 +115,53 @@ export class Mention {
           error: processed.error,
         });
       }
-      return this.mentions.get(url);
+      return { type: "url", data: this.mentions.get(url) };
     });
 
     const processedUrls = await Promise.all(processPromises);
 
     // Append all processed content
-    processedUrls.forEach((urlData) => {
-      if (urlData?.processed) {
-        urlContext += `\n\n<url_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</url_content>`;
+    processedUrls.forEach((result) => {
+      if (result.type === "image") {
+        // Already added to imageUrls
+        return;
       }
 
-      if (urlData?.error) {
+      const urlData = result.data;
+      if (!urlData) return;
+
+      if (urlData.processed) {
+        if (result.type === "youtube") {
+          urlContext += `\n\n<youtube_transcript>\n<url>${urlData.original}</url>\n<transcript>\n${urlData.processed}\n</transcript>\n</youtube_transcript>`;
+        } else {
+          urlContext += `\n\n<url_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</url_content>`;
+        }
+      }
+
+      if (urlData.error) {
         processedErrorUrls[urlData.original] = urlData.error;
       }
     });
 
     return { urlContext, imageUrls, processedErrorUrls };
+  }
+
+  /**
+   * Process URLs from user input text (both regular and YouTube URLs).
+   *
+   * IMPORTANT: This method should ONLY be called with the user's direct chat input,
+   * NOT with content from context notes.
+   *
+   * @param text The user's chat input text
+   * @returns Processed URL context and any errors
+   */
+  async processUrls(text: string): Promise<{
+    urlContext: string;
+    imageUrls: string[];
+    processedErrorUrls: Record<string, string>;
+  }> {
+    const urls = this.extractUrls(text);
+    return this.processUrlList(urls);
   }
 
   getMentions(): Map<string, MentionData> {

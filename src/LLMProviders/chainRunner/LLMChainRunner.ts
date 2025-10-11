@@ -1,6 +1,6 @@
 import { ABORT_REASON } from "@/constants";
 import { logInfo } from "@/logger";
-import { getSystemPrompt } from "@/settings/model";
+import { getSystemPromptWithMemory } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
@@ -30,7 +30,7 @@ export class LLMChainRunner extends BaseChainRunner {
       const messages: any[] = [];
 
       // Add system message if available
-      const systemPrompt = getSystemPrompt();
+      const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
       const chatModel = this.chainManager.chatModelManager.getChatModel();
 
       if (systemPrompt) {
@@ -93,7 +93,12 @@ export class LLMChainRunner extends BaseChainRunner {
     }
 
     // Always return the response, even if partial
-    const response = streamer.close();
+    const result = streamer.close();
+
+    const responseMetadata = {
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage ?? undefined,
+    };
 
     // Only skip saving if it's a new chat (clearing everything)
     if (abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT) {
@@ -101,12 +106,17 @@ export class LLMChainRunner extends BaseChainRunner {
       return "";
     }
 
-    return this.handleResponse(
-      response,
+    await this.handleResponse(
+      result.content,
       userMessage,
       abortController,
       addMessage,
-      updateCurrentAiMessage
+      updateCurrentAiMessage,
+      undefined,
+      undefined,
+      responseMetadata
     );
+
+    return result.content;
   }
 }

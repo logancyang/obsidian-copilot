@@ -21,9 +21,10 @@ import { logError } from "@/logger";
 interface ProgressCardProps {
   plugin?: CopilotPlugin;
   setHiddenCard: (hidden: boolean) => void;
+  onEditContext?: () => void;
 }
 
-export default function ProgressCard({ plugin, setHiddenCard }: ProgressCardProps) {
+export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: ProgressCardProps) {
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;
   const successFiles = contextLoadState.success;
@@ -67,16 +68,28 @@ export default function ProgressCard({ plugin, setHiddenCard }: ProgressCardProp
           <div className="tw-flex tw-items-center tw-gap-2">
             <FileText className="tw-size-5" />
             Context Loading
+            <Button
+              size="sm"
+              variant="ghost2"
+              className="tw-size-6 tw-p-0 tw-text-muted"
+              title="Edit Context"
+              onClick={() => onEditContext?.()}
+            >
+              <ChevronRight className="tw-size-4" />
+              <span className="tw-sr-only">Edit Context</span>
+            </Button>
           </div>
-          <Button
-            size="sm"
-            variant="ghost2"
-            className="tw-size-6 tw-p-0 tw-text-muted"
-            title="Close Progress Bar"
-            onClick={() => setHiddenCard(true)}
-          >
-            <X className="tw-size-4" />
-          </Button>
+          <div className="tw-flex tw-items-center tw-gap-2 tw-rounded tw-p-1">
+            <Button
+              size="sm"
+              variant="ghost2"
+              className="tw-size-6 tw-p-0 tw-text-muted"
+              title="Close Progress Bar"
+              onClick={() => setHiddenCard(true)}
+            >
+              <X className="tw-size-4" />
+            </Button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="tw-space-y-6">

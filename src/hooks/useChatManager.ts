@@ -74,20 +74,6 @@ export function useChatManager(chatUIState: ChatUIState) {
     [chatUIState]
   );
 
-  const addDisplayMessage = useCallback(
-    (text: string, sender: string, id?: string): string => {
-      return chatUIState.addDisplayMessage(text, sender, id);
-    },
-    [chatUIState]
-  );
-
-  const addFullMessage = useCallback(
-    (message: ChatMessage): string => {
-      return chatUIState.addFullMessage(message);
-    },
-    [chatUIState]
-  );
-
   const clearMessages = useCallback((): void => {
     chatUIState.clearMessages();
   }, [chatUIState]);
@@ -150,13 +136,9 @@ export function useChatManager(chatUIState: ChatUIState) {
     editMessage,
     regenerateMessage,
     deleteMessage,
-    addDisplayMessage,
-    addFullMessage,
+    addMessage,
     clearMessages,
     truncateAfterMessageId,
-
-    // Compatibility methods
-    addMessage,
 
     // Advanced operations
     loadMessages,

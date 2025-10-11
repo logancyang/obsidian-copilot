@@ -13,6 +13,7 @@ import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 
 // Search constants
 const FULLTEXT_RESULT_MULTIPLIER = 2;
+export const RETURN_ALL_LIMIT = 100;
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
@@ -80,8 +81,13 @@ export class SearchCore {
     }
 
     // Validate and sanitize options with bounds checking
-    const maxResults = Math.min(Math.max(1, options.maxResults || 30), 100);
-    const candidateLimit = Math.min(Math.max(10, options.candidateLimit || 500), 1000);
+    const returnAll = Boolean(options.returnAll);
+    const maxResults = returnAll
+      ? RETURN_ALL_LIMIT
+      : Math.min(Math.max(1, options.maxResults || 30), 100);
+    const candidateLimit = returnAll
+      ? RETURN_ALL_LIMIT
+      : Math.min(Math.max(10, options.candidateLimit || 500), 1000);
     const enableLexicalBoosts = Boolean(options.enableLexicalBoosts ?? true); // Default to enabled
 
     try {
@@ -96,16 +102,40 @@ export class SearchCore {
         ? [...new Set([...expanded.salientTerms, ...options.salientTerms])]
         : expanded.salientTerms;
 
+      // Build recall queries, ensuring tag variants are included for maximum recall
+      const tagRecallTerms = this.buildTagRecallQueries(salientTerms);
+      const recallQueries: string[] = [];
+      const recallLookup = new Set<string>();
+
+      const addRecallTerm = (term: string | undefined) => {
+        if (!term) {
+          return;
+        }
+        const normalized = term.toLowerCase();
+        if (normalized.length === 0 || recallLookup.has(normalized)) {
+          return;
+        }
+        recallLookup.add(normalized);
+        recallQueries.push(normalized);
+      };
+
+      queries.forEach(addRecallTerm);
+      expanded.expandedTerms.forEach(addRecallTerm);
+      salientTerms.forEach(addRecallTerm);
+      tagRecallTerms.forEach(addRecallTerm);
+
       // Only log details if expansion produced significant variants
-      if (queries.length > 1 || salientTerms.length > 3 || expanded.expandedTerms.length > 0) {
+      if (queries.length > 1 || salientTerms.length > 0 || expanded.expandedTerms.length > 0) {
         logInfo(
-          `Query expansion: ${queries.length} variants, ${salientTerms.length} scoring terms (from original), ${expanded.expandedTerms.length} recall terms (LLM-generated)`
+          `Query expansion: variants=${JSON.stringify(queries)}, salient=${JSON.stringify(
+            salientTerms
+          )}, recall=${JSON.stringify(expanded.expandedTerms)}`
         );
       }
 
       // 2. GREP for initial candidates (use all terms for maximum recall)
-      const recallQueries = [...queries, ...expanded.expandedTerms, ...salientTerms];
-      const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, 200);
+      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 200;
+      const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, grepLimit);
 
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
       const candidates = grepHits.slice(0, candidateLimit);
@@ -119,7 +149,8 @@ export class SearchCore {
         recallQueries,
         salientTerms,
         maxResults,
-        expanded.originalQuery
+        expanded.originalQuery,
+        returnAll
       );
 
       // 6. Apply boosts to lexical results (if enabled)
@@ -136,7 +167,9 @@ export class SearchCore {
       this.fullTextEngine.clear();
 
       // 9. Return top K results
-      finalResults = finalResults.slice(0, maxResults);
+      if (finalResults.length > maxResults) {
+        finalResults = finalResults.slice(0, maxResults);
+      }
 
       // Log final result summary
       if (finalResults.length > 0) {
@@ -211,6 +244,47 @@ export class SearchCore {
   }
 
   /**
+   * Builds additional recall terms for tag queries so that tagged notes are always considered during recall.
+   * Generates lowercase variants without the hash prefix and splits hierarchical tags into their components.
+   *
+   * @param salientTerms - Salient terms extracted from the original query (may include hash-prefixed tags)
+   * @returns Unique recall terms derived from tag tokens (e.g., ['project/alpha', 'project', 'alpha'])
+   */
+  private buildTagRecallQueries(salientTerms: string[]): string[] {
+    const tagQueries = new Set<string>();
+
+    for (const term of salientTerms) {
+      if (!term || !term.startsWith("#")) {
+        continue;
+      }
+
+      const normalized = term.toLowerCase();
+      if (normalized.length <= 1) {
+        continue;
+      }
+
+      const withoutHash = normalized.slice(1);
+      if (withoutHash.length === 0) {
+        continue;
+      }
+
+      tagQueries.add(withoutHash);
+
+      const segments = withoutHash.split("/").filter((segment) => segment.length > 0);
+      if (segments.length > 0) {
+        let prefix = "";
+        for (const segment of segments) {
+          prefix = prefix ? `${prefix}/${segment}` : segment;
+          tagQueries.add(prefix);
+          tagQueries.add(segment);
+        }
+      }
+    }
+
+    return Array.from(tagQueries);
+  }
+
+  /**
    * Execute lexical search with full-text index
    * @param candidates - Candidate documents to index
    * @param recallQueries - All queries for recall (original + expanded + salient terms)
@@ -224,7 +298,8 @@ export class SearchCore {
     recallQueries: string[],
     salientTerms: string[],
     maxResults: number,
-    originalQuery?: string
+    originalQuery?: string,
+    returnAll: boolean = false
   ): Promise<NoteIdRank[]> {
     try {
       // Build ephemeral full-text index
@@ -234,9 +309,17 @@ export class SearchCore {
 
       // Search the index
       const searchStartTime = Date.now();
+      const effectiveMaxResults = returnAll
+        ? RETURN_ALL_LIMIT
+        : Number.isFinite(maxResults)
+          ? Math.min(maxResults, 1000)
+          : candidates.length || 30;
+      const searchLimit = returnAll
+        ? RETURN_ALL_LIMIT * FULLTEXT_RESULT_MULTIPLIER
+        : Math.max(effectiveMaxResults * FULLTEXT_RESULT_MULTIPLIER, FULLTEXT_RESULT_MULTIPLIER);
       const results = this.fullTextEngine.search(
         recallQueries,
-        maxResults * FULLTEXT_RESULT_MULTIPLIER,
+        searchLimit,
         salientTerms,
         originalQuery
       );

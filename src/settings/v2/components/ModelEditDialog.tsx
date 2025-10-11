@@ -1,4 +1,5 @@
 import { CustomModel } from "@/aiParams";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FormField } from "@/components/ui/form-field";
 import { Input } from "@/components/ui/input";
@@ -36,8 +37,8 @@ interface ModelEditModalContentProps {
 export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   model,
   onUpdate,
-  onCancel,
   isEmbeddingModel,
+  onCancel,
 }) => {
   const [localModel, setLocalModel] = useState<CustomModel>(model);
   const [originalModel, setOriginalModel] = useState<CustomModel>(model);
@@ -122,11 +123,6 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
   return (
     <div className="tw-space-y-3 tw-p-4">
-      <div className="tw-mb-4">
-        <h2 className="tw-text-xl tw-font-bold">Model Settings - {localModel.name}</h2>
-        <p className="tw-text-sm tw-text-muted">Customize model parameters</p>
-      </div>
-
       <div className="tw-space-y-3">
         <FormField label="Model Name" required>
           <Input
@@ -245,7 +241,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                 value={localModel.maxTokens ?? settings.maxTokens}
                 onChange={(value) => handleLocalUpdate("maxTokens", value)}
                 max={65000}
-                min={0}
+                min={100}
                 step={100}
                 defaultValue={DEFAULT_MODEL_SETTING.MAX_TOKENS}
                 helpText={
@@ -394,6 +390,12 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           </>
         )}
       </div>
+
+      <div className="tw-mt-6 tw-flex tw-justify-end tw-gap-2 tw-border-t tw-border-border tw-pt-4">
+        <Button variant="secondary" onClick={onCancel}>
+          Close
+        </Button>
+      </div>
     </div>
   );
 };
@@ -412,6 +414,8 @@ export class ModelEditModal extends Modal {
     ) => void
   ) {
     super(app);
+    // @ts-ignore
+    this.setTitle(`Model Settings - ${this.model.name}`);
   }
 
   onOpen() {

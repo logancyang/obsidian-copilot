@@ -18,6 +18,9 @@ export interface ParsedMessage {
   }>;
 }
 
+const TOOL_RESULT_UI_MAX_LENGTH = 5000;
+const TOOL_RESULT_OMITTED_THRESHOLD_MESSAGE = `Result omitted to keep the UI responsive (payload exceeded ${TOOL_RESULT_UI_MAX_LENGTH.toLocaleString()} characters).`;
+
 /**
  * Safely encode tool result so it can be embedded inside an HTML comment
  * We use URI encoding with a prefix to avoid introducing `-->` in the payload
@@ -42,6 +45,16 @@ export function decodeResultFromMarker(result: string | undefined): string | und
   } catch {
     return result;
   }
+}
+
+/**
+ * Build a short placeholder message when a tool payload is too large for the UI.
+ *
+ * @param toolName - Name of the tool that produced the payload.
+ * @returns Placeholder string for banner rendering.
+ */
+function buildOmittedResultMessage(toolName: string): string {
+  return `Tool '${toolName}' ${TOOL_RESULT_OMITTED_THRESHOLD_MESSAGE}`;
 }
 
 /**
@@ -111,6 +124,16 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
       result,
     ] = match;
 
+    // Decode the result and check if it's too large for UI display
+    const rawResult = typeof result === "string" ? result : "";
+    const decodedResult = decodeResultFromMarker(rawResult);
+    const resultLength = typeof decodedResult === "string" ? decodedResult.length : 0;
+
+    const safeResult =
+      resultLength > TOOL_RESULT_UI_MAX_LENGTH
+        ? buildOmittedResultMessage(toolName)
+        : (decodedResult ?? undefined);
+
     segments.push({
       type: "toolCall",
       content: content,
@@ -121,7 +144,7 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
         emoji,
         confirmationMessage: confirmationMessage || undefined,
         isExecuting: isExecuting === "true",
-        result: decodeResultFromMarker(result) || undefined,
+        result: safeResult,
         startIndex: match.index,
         endIndex: match.index + fullMatch.length,
       },

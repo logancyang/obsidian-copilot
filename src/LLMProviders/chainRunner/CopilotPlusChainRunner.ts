@@ -1,4 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import {
   ABORT_REASON,
   COMPOSER_OUTPUT_INSTRUCTIONS,
@@ -12,30 +13,17 @@ import {
   ImageProcessingResult,
   MessageContent,
 } from "@/imageProcessing/imageProcessor";
-import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { logError, logInfo, logWarn } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { getSettings, getSystemPrompt } from "@/settings/model";
+import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { ChatMessage } from "@/types/message";
-import {
-  extractYoutubeUrl,
-  getApiErrorMessage,
-  getMessageRole,
-  withSuppressedTokenWarnings,
-} from "@/utils";
+import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
+import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { COPILOT_TOOL_NAMES, IntentAnalyzer } from "../intentAnalyzer";
+import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
-import {
-  formatSourceCatalog,
-  getCitationInstructions,
-  sanitizeContentForCitations,
-  addFallbackSources,
-  type SourceCatalogEntry,
-} from "./utils/citationUtils";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import {
   addChatHistoryToMessages,
@@ -43,28 +31,27 @@ import {
   processRawChatHistory,
 } from "./utils/chatHistoryUtils";
 import {
+  addFallbackSources,
+  formatSourceCatalog,
+  getCitationInstructions,
+  sanitizeContentForCitations,
+  type SourceCatalogEntry,
+} from "./utils/citationUtils";
+import {
   extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
+import {
+  buildLocalSearchInnerContent,
+  renderCiCMessage,
+  wrapLocalSearchPayload,
+} from "./utils/cicPromptUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
-  private isYoutubeOnlyMessage(message: string): boolean {
-    const trimmedMessage = message.trim();
-    const hasYoutubeCommand = trimmedMessage.includes("@youtube");
-    const youtubeUrl = extractYoutubeUrl(trimmedMessage);
-
-    // Check if message only contains @youtube command and a valid URL
-    const words = trimmedMessage
-      .split(/\s+/)
-      .filter((word) => word !== "@youtube" && word.length > 0);
-
-    return hasYoutubeCommand && youtubeUrl !== null && words.length === 1;
-  }
-
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
     const failedImages: string[] = [];
     const processedImages = await ImageBatchProcessor.processUrlBatch(
@@ -296,7 +283,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     userMessage: ChatMessage,
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void
-  ): Promise<string> {
+  ): Promise<StreamingResult> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -368,7 +355,14 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         thinkStreamer.processChunk(processedChunk);
       }
     }
-    return thinkStreamer.close();
+
+    const result = thinkStreamer.close();
+
+    return {
+      content: result.content,
+      wasTruncated: result.wasTruncated,
+      tokenUsage: result.tokenUsage,
+    };
   }
 
   async run(
@@ -387,6 +381,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     let fullAIResponse = "";
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
     let currentPartialResponse = "";
+    let responseMetadata: ResponseMetadata | undefined;
     const isPlusUser = await checkIsPlusUser({
       isCopilotPlus: true,
     });
@@ -402,44 +397,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     };
 
     try {
-      // Check if this is a YouTube-only message
-      if (this.isYoutubeOnlyMessage(userMessage.message)) {
-        const url = extractYoutubeUrl(userMessage.message);
-        const failMessage =
-          "Transcript not available. Only videos with the auto transcript option turned on are supported at the moment.";
-        if (url) {
-          try {
-            const response = await BrevilabsClient.getInstance().youtube4llm(url);
-            if (response.response.transcript) {
-              return this.handleResponse(
-                response.response.transcript,
-                userMessage,
-                abortController,
-                addMessage,
-                updateCurrentAiMessage
-              );
-            }
-            return this.handleResponse(
-              failMessage,
-              userMessage,
-              abortController,
-              addMessage,
-              updateCurrentAiMessage
-            );
-          } catch (error) {
-            logError("Error processing YouTube video:", error);
-            return this.handleResponse(
-              failMessage,
-              userMessage,
-              abortController,
-              addMessage,
-              updateCurrentAiMessage
-            );
-          }
-        }
-      }
-
-      logInfo("Step 1: Analyzing intent");
+      logInfo("==== Step 1: Analyzing intent ====");
       let toolCalls;
       // Use the original message for intent analysis
       const messageForAnalysis = userMessage.originalMessage || userMessage.message;
@@ -458,7 +416,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Use the same removeAtCommands logic as IntentAnalyzer
       const cleanedUserMessage = userMessage.message
         .split(" ")
-        .filter((word) => !COPILOT_TOOL_NAMES.includes(word.toLowerCase()))
+        .filter((word) => !AVAILABLE_TOOLS.includes(word.toLowerCase()))
         .join(" ")
         .trim();
 
@@ -515,12 +473,19 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       );
 
       logInfo("Invoking LLM with all tool results");
-      fullAIResponse = await this.streamMultimodalResponse(
+      const streamResult = await this.streamMultimodalResponse(
         enhancedUserMessage,
         userMessage,
         abortController,
         trackAndUpdateAiMessage
       );
+      fullAIResponse = streamResult.content;
+
+      // Store truncation metadata for handleResponse
+      responseMetadata = {
+        wasTruncated: streamResult.wasTruncated,
+        tokenUsage: streamResult.tokenUsage ?? undefined,
+      };
     } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
@@ -558,14 +523,18 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       settings.enableInlineCitations
     );
 
-    return this.handleResponse(
+    await this.handleResponse(
       fullAIResponse,
       userMessage,
       abortController,
       addMessage,
       updateCurrentAiMessage,
-      sources
+      sources,
+      undefined,
+      responseMetadata
     );
+
+    return fullAIResponse;
   }
 
   private getSources(
@@ -671,46 +640,47 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       }
     }
 
-    if (toolOutputs.length > 0) {
-      const validOutputs = toolOutputs.filter((output) => output.output != null);
-      if (validOutputs.length > 0) {
-        // Don't add "Additional context" header if only localSearch with results to maintain QA format
-        const contextHeader =
-          hasLocalSearchWithResults && validOutputs.length === 1
-            ? ""
-            : "\n\n# Additional context:\n\n";
-        context =
-          contextHeader +
-          validOutputs
-            .map((output) => {
-              let content = output.output;
+    const validOutputs = toolOutputs.filter((output) => output.output != null);
 
-              // localSearch results are already formatted by executeToolCalls
-              // No need for special processing here
+    if (validOutputs.length > 0) {
+      // Don't add "Additional context" header if only localSearch with results to maintain QA format
+      const contextHeader =
+        hasLocalSearchWithResults && validOutputs.length === 1
+          ? ""
+          : "\n\n# Additional context:\n\n";
+      const rawContext =
+        contextHeader +
+        validOutputs
+          .map((output) => {
+            let content = output.output;
 
-              // Ensure content is string
-              if (typeof content !== "string") {
-                content = JSON.stringify(content);
-              }
+            // localSearch results are already formatted by executeToolCalls
+            // No need for special processing here
 
-              // localSearch is already wrapped in XML tags, don't double-wrap
-              if (output.tool === "localSearch") {
-                return content;
-              }
+            // Ensure content is string
+            if (typeof content !== "string") {
+              content = JSON.stringify(content);
+            }
 
-              // All other tools get wrapped consistently
-              return `<${output.tool}>\n${content}\n</${output.tool}>`;
-            })
-            .join("\n\n");
-      }
+            // localSearch is already wrapped in XML tags, don't double-wrap
+            if (output.tool === "localSearch") {
+              return content;
+            }
+
+            // All other tools get wrapped consistently
+            return `<${output.tool}>\n${content}\n</${output.tool}>`;
+          })
+          .join("\n\n");
+
+      context = rawContext.trim();
     }
 
-    // For QA format when only localSearch with results is present
-    if (hasLocalSearchWithResults && toolOutputs.filter((o) => o.output != null).length === 1) {
-      return `${context}\n\nQuestion: ${userMessage}`;
+    if (!context) {
+      return userMessage;
     }
 
-    return `${userMessage}${context}`;
+    const shouldLabelQuestion = hasLocalSearchWithResults && validOutputs.length === 1;
+    return renderCiCMessage(context, userMessage, shouldLabelQuestion);
   }
 
   protected getTimeExpression(toolCalls: any[]): string {
@@ -779,10 +749,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const settings = getSettings();
     const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
+    const innerContent = buildLocalSearchInnerContent(guidance, formattedContent);
+
     // Wrap in XML-like tags for better LLM understanding
-    return timeExpression
-      ? `<localSearch timeRange="${timeExpression}">\n${formattedContent}${guidance}\n</localSearch>`
-      : `<localSearch>\n${formattedContent}${guidance}\n</localSearch>`;
+    return wrapLocalSearchPayload(innerContent, timeExpression);
   }
 
   /**
@@ -847,6 +817,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   protected async getSystemPrompt(): Promise<string> {
-    return getSystemPrompt();
+    return getSystemPromptWithMemory(this.chainManager.userMemoryManager);
   }
 }

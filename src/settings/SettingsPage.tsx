@@ -2,6 +2,7 @@ import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE } from "@/constants";
 import CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
+import { logInfo, logError } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
 import { createRoot } from "react-dom/client";
@@ -18,8 +19,24 @@ export class CopilotSettingTab extends PluginSettingTab {
 
   async reloadPlugin() {
     try {
-      // Autosave the current chat before reloading
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
+
+      // Analyze chat messages for memory if enabled
+      if (chatView && getSettings().enableRecentConversations) {
+        try {
+          // Get the current chat model from the chain manager
+          const chainManager = this.plugin.projectManager.getCurrentChainManager();
+          const chatModel = chainManager.chatModelManager.getChatModel();
+          this.plugin.userMemoryManager.addRecentConversation(
+            this.plugin.chatUIState.getMessages(),
+            chatModel
+          );
+        } catch (error) {
+          logInfo("Failed to analyze chat messages for memory:", error);
+        }
+      }
+
+      // Autosave the current chat before reloading
       if (chatView && getSettings().autosaveChat) {
         await this.plugin.autosaveCurrentChat();
       }
@@ -34,7 +51,7 @@ export class CopilotSettingTab extends PluginSettingTab {
       new Notice("Plugin reloaded successfully.");
     } catch (error) {
       new Notice("Failed to reload the plugin. Please reload manually.");
-      console.error("Error reloading plugin:", error);
+      logError("Error reloading plugin:", error);
     }
   }
 

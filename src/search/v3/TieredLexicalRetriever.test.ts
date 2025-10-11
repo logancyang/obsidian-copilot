@@ -1,45 +1,27 @@
 import { Document } from "@langchain/core/documents";
 import { TFile } from "obsidian";
-import * as SearchCoreModule from "./SearchCore";
 import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
+
+const retrieveMock = jest.fn();
+const mockChunkManager: { getChunkTextSync: jest.Mock } = {
+  getChunkTextSync: jest.fn(),
+};
 
 // Mock modules
 jest.mock("obsidian");
 jest.mock("@/logger");
-jest.mock("./SearchCore", () => {
-  const mockChunkManager = {
-    getChunkTextSync: jest.fn((id: string) => {
-      if (id === "note1.md#0") return "First chunk content from note1";
-      if (id === "note1.md#1") return "Second chunk content from note1";
-      if (id === "note2.md#0") return "Content from note2 chunk";
-      return "";
-    }),
-  };
-
-  return {
-    SearchCore: jest.fn().mockImplementation(() => ({
-      retrieve: jest.fn().mockResolvedValue([
-        { id: "note1.md#0", score: 0.8, engine: "fulltext" },
-        { id: "note1.md#1", score: 0.7, engine: "fulltext" },
-        { id: "note2.md#0", score: 0.6, engine: "grep" },
-      ]),
-      getChunkManager: jest.fn(() => mockChunkManager),
-    })),
-  };
-});
+jest.mock("./SearchCore", () => ({
+  SearchCore: jest.fn().mockImplementation(() => ({
+    retrieve: retrieveMock,
+    getChunkManager: jest.fn(() => mockChunkManager),
+  })),
+}));
 jest.mock("@/LLMProviders/chatModelManager");
 jest.mock("@/utils", () => ({
   extractNoteFiles: jest.fn().mockReturnValue([]),
 }));
 jest.mock("./chunks", () => ({
-  ChunkManager: jest.fn().mockImplementation(() => ({
-    getChunkTextSync: jest.fn((id: string) => {
-      if (id === "note1.md#0") return "First chunk content from note1";
-      if (id === "note1.md#1") return "Second chunk content from note1";
-      if (id === "note2.md#0") return "Content from note2 chunk";
-      return "";
-    }),
-  })),
+  ChunkManager: jest.fn().mockImplementation(() => mockChunkManager),
 }));
 
 describe("TieredLexicalRetriever", () => {
@@ -48,6 +30,21 @@ describe("TieredLexicalRetriever", () => {
   // legacy var no longer used after refactor
 
   beforeEach(() => {
+    retrieveMock.mockReset();
+    retrieveMock.mockResolvedValue([
+      { id: "note1.md#0", score: 0.8, engine: "fulltext" },
+      { id: "note1.md#1", score: 0.7, engine: "fulltext" },
+      { id: "note2.md#0", score: 0.6, engine: "grep" },
+    ]);
+
+    mockChunkManager.getChunkTextSync.mockReset();
+    mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+      if (id === "note1.md#0") return "First chunk content from note1";
+      if (id === "note1.md#1") return "Second chunk content from note1";
+      if (id === "note2.md#0") return "Content from note2 chunk";
+      return "";
+    });
+
     // Mock app
     mockApp = {
       vault: {
@@ -58,15 +55,6 @@ describe("TieredLexicalRetriever", () => {
         getFileCache: jest.fn(),
       },
     };
-
-    // Ensure SearchCore is mocked before constructing retriever
-    jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-      retrieve: jest.fn().mockResolvedValue([
-        { id: "note1.md#0", score: 0.8, engine: "fulltext" },
-        { id: "note1.md#1", score: 0.7, engine: "fulltext" },
-        { id: "note2.md#0", score: 0.6, engine: "grep" },
-      ]),
-    })) as any);
 
     // Create retriever instance
     retriever = new TieredLexicalRetriever(mockApp, {
@@ -164,23 +152,19 @@ describe("TieredLexicalRetriever", () => {
     });
 
     it("should integrate all components correctly and return chunk Documents", async () => {
-      // Ensure SearchCore mock returns chunk results
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest.fn().mockResolvedValue([
-          { id: "note1.md#0", score: 0.8, engine: "fulltext" },
-          { id: "note2.md#0", score: 0.6, engine: "grep" },
-        ]),
-      })) as any);
+      retrieveMock.mockResolvedValueOnce([
+        { id: "note1.md#0", score: 0.8, engine: "fulltext" },
+        { id: "note2.md#0", score: 0.6, engine: "grep" },
+      ]);
 
-      // Recreate retriever with the mocked SearchCore
-      retriever = new TieredLexicalRetriever(mockApp, {
+      const chunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
       });
 
       const query = "test query";
-      const results = await retriever.getRelevantDocuments(query);
+      const results = await chunkRetriever.getRelevantDocuments(query);
 
       // Should return chunk Documents (all chunks from SearchCore, no title matches)
       expect(results.length).toBe(2);
@@ -197,17 +181,99 @@ describe("TieredLexicalRetriever", () => {
     });
 
     it("should handle empty search results", async () => {
-      jest
-        .spyOn(SearchCoreModule, "SearchCore")
-        .mockImplementation((() => ({ retrieve: jest.fn().mockResolvedValue([]) })) as any);
-      // Recreate retriever to use the new mock implementation
-      retriever = new TieredLexicalRetriever(mockApp, {
+      retrieveMock.mockResolvedValue([]);
+      const emptyRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
       });
-      const results = await retriever.getRelevantDocuments("no matches");
+      const results = await emptyRetriever.getRelevantDocuments("no matches");
       expect(results).toEqual([]);
+    });
+
+    it("should retrieve all tag matches when returnAllTags is enabled", async () => {
+      retrieveMock.mockResolvedValue([
+        { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
+        { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
+      ]);
+
+      const tagRetrieverOptions: ConstructorParameters<typeof TieredLexicalRetriever>[1] = {
+        minSimilarityScore: 0.1,
+        maxK: Number.MAX_SAFE_INTEGER,
+        salientTerms: ["#project"],
+        returnAllTags: true,
+        tagTerms: ["#project"],
+      };
+
+      const tagRetriever = new TieredLexicalRetriever(mockApp, tagRetrieverOptions);
+
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "tagNote.md") {
+          const file = new (TFile as any)(path);
+          Object.setPrototypeOf(file, (TFile as any).prototype);
+          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          return file;
+        }
+        return null;
+      });
+
+      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+        if (id === "tagNote.md#0") return "Tag chunk 0";
+        if (id === "tagNote.md#1") return "Tag chunk 1";
+        return "";
+      });
+
+      const results = await tagRetriever.getRelevantDocuments("#project work log");
+
+      expect(retrieveMock).toHaveBeenCalledWith(
+        expect.stringContaining("#project"),
+        expect.objectContaining({
+          returnAll: true,
+          salientTerms: ["#project"],
+        })
+      );
+      expect(results.length).toBe(2);
+    });
+
+    it("should derive tag terms from query when returnAllTags is set without explicit tags", async () => {
+      retrieveMock.mockResolvedValue([
+        { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
+        { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
+      ]);
+
+      const derivedRetriever = new TieredLexicalRetriever(mockApp, {
+        minSimilarityScore: 0.1,
+        maxK: Number.MAX_SAFE_INTEGER,
+        salientTerms: [],
+        returnAllTags: true,
+      });
+
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "tagNote.md") {
+          const file = new (TFile as any)(path);
+          Object.setPrototypeOf(file, (TFile as any).prototype);
+          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          return file;
+        }
+        return null;
+      });
+
+      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+        if (id === "tagNote.md#0") return "Tag chunk 0";
+        if (id === "tagNote.md#1") return "Tag chunk 1";
+        return "";
+      });
+
+      const results = await derivedRetriever.getRelevantDocuments("#PROJECT planning");
+
+      expect(retrieveMock).toHaveBeenCalledWith(
+        expect.stringContaining("#project"),
+        expect.objectContaining({
+          returnAll: true,
+          salientTerms: ["#project"],
+        })
+      );
+      expect(results.length).toBe(2);
     });
 
     it("should extract mentioned notes from query", async () => {
@@ -243,21 +309,16 @@ describe("TieredLexicalRetriever", () => {
       (mockMentionedFile as any).stat = { mtime: 1000, ctime: 1000 };
       extractNoteFiles.mockReturnValueOnce([mockMentionedFile]);
 
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest
-          .fn()
-          .mockResolvedValue([{ id: "other.md#0", score: 0.4, engine: "fulltext" }]),
-      })) as any);
+      retrieveMock.mockResolvedValueOnce([{ id: "other.md#0", score: 0.4, engine: "fulltext" }]);
 
-      // Recreate retriever to use the new mock implementation
-      retriever = new TieredLexicalRetriever(mockApp, {
+      const mentionRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
       });
 
       const query = "search [[mentioned]] for something";
-      const results = await retriever.getRelevantDocuments(query);
+      const results = await mentionRetriever.getRelevantDocuments(query);
 
       // Should include the mentioned note
       const mentioned = results.find((d) => d.metadata.path === "mentioned.md");
@@ -268,22 +329,17 @@ describe("TieredLexicalRetriever", () => {
   describe("chunk Document handling", () => {
     it("should return chunk Documents with chunk content", async () => {
       // Update ChunkManager mock for these specific chunk IDs
-      const { ChunkManager } = jest.requireMock("./chunks");
-      ChunkManager.mockImplementation(() => ({
-        getChunkTextSync: jest.fn((id: string) => {
-          if (id === "test.md#0") return "First chunk from test note";
-          if (id === "test.md#1") return "Second chunk from test note";
-          return "";
-        }),
-      }));
+      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+        if (id === "test.md#0") return "First chunk from test note";
+        if (id === "test.md#1") return "Second chunk from test note";
+        return "";
+      });
 
       // Mock SearchCore before creating retriever
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest.fn().mockResolvedValue([
-          { id: "test.md#0", score: 0.9, engine: "fulltext" },
-          { id: "test.md#1", score: 0.8, engine: "fulltext" },
-        ]),
-      })) as any);
+      retrieveMock.mockResolvedValueOnce([
+        { id: "test.md#0", score: 0.9, engine: "fulltext" },
+        { id: "test.md#1", score: 0.8, engine: "fulltext" },
+      ]);
 
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test.md") {
@@ -295,14 +351,13 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      // Recreate retriever with the mocked SearchCore
-      retriever = new TieredLexicalRetriever(mockApp, {
+      const chunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
       });
 
-      const results = await retriever.getRelevantDocuments("test query");
+      const results = await chunkRetriever.getRelevantDocuments("test query");
 
       // Should return all chunk Documents
       expect(results.length).toBe(2);
@@ -313,25 +368,17 @@ describe("TieredLexicalRetriever", () => {
 
     it("should handle missing chunk content gracefully", async () => {
       // Mock ChunkManager to return empty content
-      const { ChunkManager: mockChunkManager } = jest.requireMock("./chunks");
-      mockChunkManager.mockImplementation(() => ({
-        getChunkTextSync: jest.fn(() => ""), // Empty chunk content
-      }));
+      mockChunkManager.getChunkTextSync.mockImplementation(() => "");
 
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest
-          .fn()
-          .mockResolvedValue([{ id: "test.md#0", score: 0.9, engine: "fulltext" }]),
-      })) as any);
+      retrieveMock.mockResolvedValueOnce([{ id: "test.md#0", score: 0.9, engine: "fulltext" }]);
 
-      // Recreate retriever to use new mock
-      retriever = new TieredLexicalRetriever(mockApp, {
+      const emptyChunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
       });
 
-      const results = await retriever.getRelevantDocuments("test query");
+      const results = await emptyChunkRetriever.getRelevantDocuments("test query");
 
       // Should skip chunks with empty content
       expect(results.length).toBe(0);
@@ -340,14 +387,6 @@ describe("TieredLexicalRetriever", () => {
 
   describe("multiple chunks", () => {
     it("should handle multiple chunks from same note correctly", async () => {
-      jest.spyOn(SearchCoreModule, "SearchCore").mockImplementation((() => ({
-        retrieve: jest.fn().mockResolvedValue([
-          { id: "large.md#0", score: 0.9, engine: "fulltext" },
-          { id: "large.md#1", score: 0.8, engine: "fulltext" },
-          { id: "other.md#0", score: 0.6, engine: "fulltext" },
-        ]),
-      })) as any);
-
       // Mock file system
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "large.md" || path === "other.md") {
@@ -359,25 +398,26 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      // Update ChunkManager mock
-      const { ChunkManager: mockChunkManager } = jest.requireMock("./chunks");
-      mockChunkManager.mockImplementation(() => ({
-        getChunkTextSync: jest.fn((id: string) => {
-          if (id === "large.md#0") return "First chunk from large note";
-          if (id === "large.md#1") return "Second chunk from large note";
-          if (id === "other.md#0") return "Content from other note";
-          return "";
-        }),
-      }));
+      retrieveMock.mockResolvedValueOnce([
+        { id: "large.md#0", score: 0.9, engine: "fulltext" },
+        { id: "large.md#1", score: 0.8, engine: "fulltext" },
+        { id: "other.md#0", score: 0.6, engine: "fulltext" },
+      ]);
 
-      // Recreate retriever
-      retriever = new TieredLexicalRetriever(mockApp, {
+      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+        if (id === "large.md#0") return "First chunk from large note";
+        if (id === "large.md#1") return "Second chunk from large note";
+        if (id === "other.md#0") return "Content from other note";
+        return "";
+      });
+
+      const multiChunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
       });
 
-      const results = await retriever.getRelevantDocuments("test query");
+      const results = await multiChunkRetriever.getRelevantDocuments("test query");
 
       // Should return all chunks
       expect(results.length).toBe(3);

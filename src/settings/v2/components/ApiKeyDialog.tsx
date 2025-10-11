@@ -150,7 +150,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
       setModelsByProvider((prev) => ({ ...prev, [provider]: standardModels }));
       setLoadingProvider(null);
     } catch (error) {
-      console.error(`Error fetching models for ${provider}:`, error);
+      logError(`Error fetching models for ${provider}:`, error);
       setErrorProvider(provider);
       setLoadingProvider(null);
       new Notice(
@@ -160,13 +160,16 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     }
   };
 
-  const verifyModel = async () => {
+  const verifyAndAddModel = async () => {
     if (!selectedModel) {
       new Notice("Please select a model first");
       return;
     }
 
     setVerifyingModel(true);
+    let verificationFailed = false;
+    let verificationError = "";
+
     try {
       const apiKey = getApiKeyByProvider(selectedModel.provider);
       const customModel: CustomModel = {
@@ -176,27 +179,49 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
         enabled: true,
       };
 
-      await ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(customModel);
+      // Try to verify the model, but don't block on failure
+      try {
+        await ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(customModel);
+      } catch (error) {
+        verificationFailed = true;
+        verificationError = err2String(error);
+        logError("Model verification failed:", error);
+      }
 
-      // After successful verification, add the model to activeModels
+      // Add the model regardless of verification result
       const existingModel = settings.activeModels.find(
         (model) => model.name === selectedModel.name && model.provider === selectedModel.provider
       );
 
       if (!existingModel) {
-        const updatedModels = [...settings.activeModels, customModel];
+        const updatedModels = [...settings.activeModels, { ...customModel, apiKey: undefined }];
         updateSetting("activeModels", updatedModels);
-        new Notice(
-          `Model ${selectedModel.name} verified successfully and added to your models list!`
-        );
+
+        if (verificationFailed) {
+          new Notice(
+            `Model ${selectedModel.name} added to your models list (verification failed: ${verificationError})`,
+            10000
+          );
+        } else {
+          new Notice(
+            `Model ${selectedModel.name} verified successfully and added to your models list!`
+          );
+        }
       } else {
-        new Notice(
-          `Model ${selectedModel.name} verified successfully! It already exists in your models list.`
-        );
+        if (verificationFailed) {
+          new Notice(
+            `Model ${selectedModel.name} already exists in your models list (verification failed: ${verificationError})`,
+            10000
+          );
+        } else {
+          new Notice(
+            `Model ${selectedModel.name} verified successfully! It already exists in your models list.`
+          );
+        }
       }
     } catch (error) {
-      console.error("Model verification failed:", error);
-      new Notice("Model verification failed: " + err2String(error), 10000);
+      logError("Error adding model:", error);
+      new Notice(`Failed to add model: ${err2String(error)}`, 10000);
     } finally {
       setVerifyingModel(false);
     }
@@ -325,7 +350,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
                           </div>
                           <div className="tw-w-[72px]">
                             <Button
-                              onClick={verifyModel}
+                              onClick={verifyAndAddModel}
                               disabled={
                                 !selectedModel ||
                                 selectedModel.provider !== item.provider ||

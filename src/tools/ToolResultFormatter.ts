@@ -1,4 +1,123 @@
 /**
+ * Derive a user-facing label from a readNote tool path.
+ *
+ * @param rawNotePath - Original note path supplied to the readNote tool.
+ * @returns Sanitized display name without directories, extensions, or wiki syntax.
+ */
+export function deriveReadNoteDisplayName(rawNotePath: string): string {
+  const trimmed = rawNotePath.trim();
+  if (!trimmed) {
+    return "note";
+  }
+
+  const wikiMatch = trimmed.match(/^\[\[([\s\S]+?)\]\]$/);
+  const withoutWiki = wikiMatch ? wikiMatch[1] : trimmed;
+
+  const [targetPartRaw = "", aliasPartRaw = ""] = withoutWiki.split("|");
+  const aliasPart = aliasPartRaw.trim();
+  if (aliasPart.length > 0) {
+    return aliasPart;
+  }
+
+  const targetPart = targetPartRaw.trim();
+  const [withoutSection] = targetPart.split("#");
+  const coreTarget = (withoutSection || targetPart).trim() || trimmed;
+
+  const segments = coreTarget.split("/").filter(Boolean);
+  const lastSegment = segments.length > 0 ? segments[segments.length - 1] : coreTarget;
+
+  const withoutExtension = lastSegment.replace(/\.[^/.]+$/, "");
+  return withoutExtension || lastSegment || "note";
+}
+
+const READ_NOTE_SUMMARY_MAX_LENGTH = 180;
+
+function clampReadNoteMessage(message: string): string {
+  const trimmed = message.trim();
+  if (trimmed.length <= READ_NOTE_SUMMARY_MAX_LENGTH) {
+    return trimmed;
+  }
+  return `${trimmed.slice(0, READ_NOTE_SUMMARY_MAX_LENGTH)}…`;
+}
+
+function summarizeReadNotePayload(payload: any): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const status = typeof payload.status === "string" ? payload.status : null;
+  const message =
+    typeof payload.message === "string" && payload.message.trim().length > 0
+      ? clampReadNoteMessage(payload.message)
+      : null;
+  const notePath = typeof payload.notePath === "string" ? payload.notePath : "";
+  const noteTitle =
+    typeof payload.noteTitle === "string" && payload.noteTitle.trim().length > 0
+      ? payload.noteTitle.trim()
+      : deriveReadNoteDisplayName(notePath);
+  const displayName = noteTitle || deriveReadNoteDisplayName(notePath);
+
+  if (status === "invalid_path") {
+    return message ?? `⚠️ Invalid note path "${displayName}"`;
+  }
+  if (status === "not_found") {
+    return message ?? `⚠️ Note "${displayName}" not found`;
+  }
+  if (status === "not_unique") {
+    const candidateCount = Array.isArray(payload.candidates) ? payload.candidates.length : 0;
+    if (message) {
+      return message;
+    }
+    return candidateCount > 0
+      ? `⚠️ Multiple matches for "${displayName}" (${candidateCount} candidates)`
+      : `⚠️ Multiple matches for "${displayName}"`;
+  }
+  if (status === "empty") {
+    return message ?? `⚠️ "${displayName}" contains no readable content`;
+  }
+  if (status === "out_of_range") {
+    if (message) {
+      return message;
+    }
+    const totalChunks =
+      typeof payload.totalChunks === "number" && Number.isFinite(payload.totalChunks)
+        ? payload.totalChunks
+        : null;
+    const requested =
+      typeof payload.chunkIndex === "number" && Number.isFinite(payload.chunkIndex)
+        ? payload.chunkIndex
+        : null;
+    if (requested !== null && totalChunks !== null) {
+      const maxIndex = Math.max(totalChunks - 1, 0);
+      return `⚠️ Chunk ${requested} exceeds available range (max index ${maxIndex})`;
+    }
+    return "⚠️ Requested chunk is out of range";
+  }
+
+  const chunkIndex =
+    typeof payload.chunkIndex === "number" && Number.isFinite(payload.chunkIndex)
+      ? payload.chunkIndex
+      : 0;
+  const totalChunks =
+    typeof payload.totalChunks === "number" && Number.isFinite(payload.totalChunks)
+      ? payload.totalChunks
+      : null;
+  const hasMore = Boolean(payload.hasMore);
+
+  const parts: string[] = [`✅ Read "${displayName || "note"}"`];
+  if (totalChunks && totalChunks > 0) {
+    parts.push(`chunk ${chunkIndex + 1} of ${totalChunks}`);
+  } else {
+    parts.push(`chunk ${chunkIndex + 1}`);
+  }
+  if (hasMore) {
+    parts.push("more available");
+  }
+
+  return parts.join(" · ");
+}
+
+/**
  * Format tool results for display in the UI
  * Each formatter should return a user-friendly representation of the tool result
  */
@@ -30,13 +149,14 @@ export class ToolResultFormatter {
           return this.formatLocalSearch(parsedResult);
         case "webSearch":
           return this.formatWebSearch(parsedResult);
-        case "simpleYoutubeTranscriptionTool":
         case "youtubeTranscription":
           return this.formatYoutubeTranscription(parsedResult);
         case "writeToFile":
           return this.formatWriteToFile(parsedResult);
         case "replaceInFile":
           return this.formatReplaceInFile(parsedResult);
+        case "readNote":
+          return this.formatReadNote(parsedResult);
         default:
           // For all other tools, return the raw result
           return result;
@@ -458,5 +578,23 @@ export class ToolResultFormatter {
 
     // Return message if available, otherwise the raw result
     return typeof result === "object" && result.message ? result.message : String(status);
+  }
+
+  private static formatReadNote(result: any): string {
+    let payload: any = result;
+    if (typeof result === "string") {
+      try {
+        payload = JSON.parse(result);
+      } catch {
+        payload = null;
+      }
+    }
+
+    const summary = summarizeReadNotePayload(payload);
+    if (summary) {
+      return summary;
+    }
+
+    return typeof result === "string" ? result : JSON.stringify(result, null, 2);
   }
 }

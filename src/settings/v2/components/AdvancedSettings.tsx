@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { logFileManager } from "@/logFileManager";
+import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 
@@ -50,6 +51,7 @@ export const AdvancedSettings: React.FC = () => {
               variant="secondary"
               size="sm"
               onClick={async () => {
+                await flushRecordedPromptPayloadToLog();
                 await logFileManager.flush();
                 await logFileManager.openLogFile();
               }}

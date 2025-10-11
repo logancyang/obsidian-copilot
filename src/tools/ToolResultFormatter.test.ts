@@ -1,4 +1,4 @@
-import { ToolResultFormatter } from "./ToolResultFormatter";
+import { deriveReadNoteDisplayName, ToolResultFormatter } from "./ToolResultFormatter";
 
 describe("ToolResultFormatter", () => {
   describe("formatLocalSearch", () => {
@@ -184,6 +184,58 @@ Just content, no path or modified date
       // which doesn't match the XML pattern, so it falls back to parseSearchResults
       // which returns empty array for "null" string, resulting in "no results" message
       expect(formatted).toBe("📚 Found 0 relevant notes\n\nNo matching notes found.");
+    });
+  });
+
+  describe("formatReadNote", () => {
+    it("returns a success summary without exposing content", () => {
+      const payload = JSON.stringify({
+        notePath: "Vault/Docs/Test.md",
+        noteTitle: "Test Note",
+        chunkIndex: 0,
+        totalChunks: 2,
+        hasMore: true,
+        content: "Very long note content that should not appear in the banner.",
+      });
+
+      expect(ToolResultFormatter.format("readNote", payload)).toBe(
+        '✅ Read "Test Note" · chunk 1 of 2 · more available'
+      );
+    });
+
+    it("surfaces not_found status messages directly", () => {
+      const payload = JSON.stringify({
+        notePath: "Vault/Missing.md",
+        status: "not_found",
+        message: 'Note "Vault/Missing.md" was not found or is not a readable file.',
+      });
+
+      expect(ToolResultFormatter.format("readNote", payload)).toBe(
+        'Note "Vault/Missing.md" was not found or is not a readable file.'
+      );
+    });
+
+    it("handles non-JSON payloads gracefully", () => {
+      expect(ToolResultFormatter.format("readNote", "not-json")).toBe("not-json");
+    });
+  });
+
+  describe("deriveReadNoteDisplayName", () => {
+    it("returns a generic label when the input is blank", () => {
+      expect(deriveReadNoteDisplayName("")).toBe("note");
+      expect(deriveReadNoteDisplayName("   ")).toBe("note");
+    });
+
+    it("strips wiki-link syntax, aliases, sections, and extensions", () => {
+      expect(deriveReadNoteDisplayName("[[Projects/Plan.md]]")).toBe("Plan");
+      expect(deriveReadNoteDisplayName("[[Projects/Plan.md|Project Plan]]")).toBe("Project Plan");
+      expect(deriveReadNoteDisplayName("[[Docs/Guide#Setup|Quick Start]]")).toBe("Quick Start");
+      expect(deriveReadNoteDisplayName("[[Area/Tasks.canvas]]")).toBe("Tasks");
+    });
+
+    it("returns the last path segment when no wiki syntax is present", () => {
+      expect(deriveReadNoteDisplayName("Area/Deep/Notes/Plan.md")).toBe("Plan");
+      expect(deriveReadNoteDisplayName("Area/Deep/Notes")).toBe("Notes");
     });
   });
 });

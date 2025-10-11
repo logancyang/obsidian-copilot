@@ -1,4 +1,5 @@
 import { ChatModelProviders, SettingKeyProviders } from "@/constants";
+import { logError } from "@/logger";
 
 /**
  * Standard model interface definition - for frontend display
@@ -466,7 +467,7 @@ export const parseModelsResponse = (provider: SettingKeyProviders, data: any): S
   try {
     return adapter(data);
   } catch (error) {
-    console.error(`Error parsing ${provider} model data:`, error);
+    logError(`Error parsing ${provider} model data:`, error);
     return [];
   }
 };

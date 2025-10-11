@@ -1,8 +1,23 @@
 import { ChatButtons } from "@/components/chat-components/ChatButtons";
-import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import { SourcesModal } from "@/components/modals/SourcesModal";
-import { Badge } from "@/components/ui/badge";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  ContextNoteBadge,
+  ContextUrlBadge,
+  ContextTagBadge,
+  ContextFolderBadge,
+} from "@/components/chat-components/ContextBadges";
+import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
+import { TokenLimitWarning } from "@/components/chat-components/TokenLimitWarning";
+import {
+  cleanupMessageToolCallRoots,
+  cleanupStaleToolCallRoots,
+  ensureToolCallRoot,
+  getMessageToolCallRoots,
+  renderToolCallBanner,
+  removeToolCallRoot,
+  type ToolCallRootRecord,
+} from "@/components/chat-components/toolCallRootManager";
 import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
@@ -12,13 +27,6 @@ import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import ReactDOM, { Root } from "react-dom/client";
-
-declare global {
-  interface Window {
-    __copilotToolCallRoots?: Map<string, Map<string, Root>>;
-  }
-}
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
@@ -58,25 +66,57 @@ export const normalizeFootnoteRendering = (root: HTMLElement): void => {
 };
 
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
-  if (!context || (!context.notes?.length && !context.urls?.length)) {
+  if (
+    !context ||
+    (!context.notes?.length &&
+      !context.urls?.length &&
+      !context.tags?.length &&
+      !context.folders?.length)
+  ) {
     return null;
   }
 
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
-        <HelpTooltip key={`${index}-${note.path}`} content={note.path} side="top">
-          <Badge variant="secondary">
-            <span className="tw-max-w-40 tw-truncate">{note.basename}</span>
-          </Badge>
-        </HelpTooltip>
+        <Tooltip key={`note-${index}-${note.path}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextNoteBadge note={note} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{note.path}</TooltipContent>
+        </Tooltip>
       ))}
       {context.urls.map((url, index) => (
-        <HelpTooltip key={`${index}-${url}`} content={url} side="top">
-          <Badge variant="secondary">
-            <span className="tw-max-w-40 tw-truncate">{url}</span>
-          </Badge>
-        </HelpTooltip>
+        <Tooltip key={`url-${index}-${url}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextUrlBadge url={url} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{url}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.tags?.map((tag, index) => (
+        <Tooltip key={`tag-${index}-${tag}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextTagBadge tag={tag} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{tag}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.folders?.map((folder, index) => (
+        <Tooltip key={`folder-${index}-${folder}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextFolderBadge folder={folder} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">{folder}</TooltipContent>
+        </Tooltip>
       ))}
     </div>
   );
@@ -89,7 +129,6 @@ interface ChatSingleMessageProps {
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
   onDelete: () => void;
-  chatHistory?: ChatMessage[];
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -99,15 +138,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onRegenerate,
   onEdit,
   onDelete,
-  chatHistory = [],
 }) => {
   const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  const [editedMessage, setEditedMessage] = useState<string>(message.message);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isUnmountingRef = useRef<boolean>(false);
   // Use a stable ID for the message to preserve tool call roots across re-renders
   const messageId = useRef(
@@ -117,22 +153,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   );
 
   // Store roots in a global map to preserve them across component instances
-  const getGlobalRootsMap = () => {
-    if (!window.__copilotToolCallRoots) {
-      window.__copilotToolCallRoots = new Map<string, Map<string, Root>>();
-    }
-    return window.__copilotToolCallRoots;
-  };
-
-  const getRootsForMessage = () => {
-    const globalMap = getGlobalRootsMap();
-    if (!globalMap.has(messageId.current)) {
-      globalMap.set(messageId.current, new Map<string, Root>());
-    }
-    return globalMap.get(messageId.current)!;
-  };
-
-  const rootsRef = useRef<Map<string, Root>>(getRootsForMessage());
+  const rootsRef = useRef<Map<string, ToolCallRootRecord>>(
+    getMessageToolCallRoots(messageId.current)
+  );
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -171,7 +194,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-          content = content.replace(completeRegex, (match, sectionContent) => {
+          content = content.replace(completeRegex, (_match, sectionContent) => {
             return `<details style="${detailsStyle}">
               <summary style="${summaryStyle}">${summaryText}</summary>
               <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
@@ -182,7 +205,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (match, partialContent) => `<div style="${detailsStyle}">
+            (_match, partialContent) => `<div style="${detailsStyle}">
               <div style="${summaryStyle}">${streamingSummaryText}</div>
               <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
             </div>`
@@ -192,7 +215,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-        return content.replace(regex, (match, sectionContent) => {
+        return content.replace(regex, (_match, sectionContent) => {
           return `<details style="${detailsStyle}">
             <summary style="${summaryStyle}">${summaryText}</summary>
             <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
@@ -211,7 +234,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
 
-          return text.replace(xmlCodeblockRegex, (match, xmlContent) => {
+          return text.replace(xmlCodeblockRegex, (_match, xmlContent) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -224,7 +247,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           // Pattern to match XML codeblocks that contain unclosed writeToFile tags
           const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?)$/g;
 
-          return text.replace(streamingXmlCodeblockRegex, (match, xmlContent) => {
+          return text.replace(streamingXmlCodeblockRegex, (_match, xmlContent) => {
             // Extract the content and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -330,7 +353,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Process segments and only update what's needed
         let currentIndex = 0;
-        parsedMessage.segments.forEach((segment, index) => {
+        parsedMessage.segments.forEach((segment) => {
           if (segment.type === "text" && segment.content.trim()) {
             // Find where to insert this text segment
             const insertBefore = contentRef.current!.children[currentIndex];
@@ -349,26 +372,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
-            const existingDiv = document.getElementById(`tool-call-${toolCallId}`);
+            let container = document.getElementById(`tool-call-${toolCallId}`);
 
-            if (existingDiv) {
-              // Update existing tool call
-              const root = rootsRef.current.get(toolCallId);
-              if (root && !isUnmountingRef.current) {
-                root.render(
-                  <ToolCallBanner
-                    toolName={segment.toolCall.toolName}
-                    displayName={segment.toolCall.displayName}
-                    emoji={segment.toolCall.emoji}
-                    isExecuting={segment.toolCall.isExecuting}
-                    result={segment.toolCall.result || null}
-                    confirmationMessage={segment.toolCall.confirmationMessage}
-                  />
-                );
-              }
-              currentIndex++;
-            } else {
-              // Create new tool call
+            if (!container) {
               const insertBefore = contentRef.current!.children[currentIndex];
               const toolDiv = document.createElement("div");
               toolDiv.className = "tool-call-container";
@@ -380,23 +386,22 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 contentRef.current!.appendChild(toolDiv);
               }
 
-              const root = ReactDOM.createRoot(toolDiv);
-              rootsRef.current.set(toolCallId, root);
-
-              if (!isUnmountingRef.current) {
-                root.render(
-                  <ToolCallBanner
-                    toolName={segment.toolCall.toolName}
-                    displayName={segment.toolCall.displayName}
-                    emoji={segment.toolCall.emoji}
-                    isExecuting={segment.toolCall.isExecuting}
-                    result={segment.toolCall.result || null}
-                    confirmationMessage={segment.toolCall.confirmationMessage}
-                  />
-                );
-              }
-              currentIndex++;
+              container = toolDiv;
             }
+
+            const rootRecord = ensureToolCallRoot(
+              messageId.current,
+              rootsRef.current,
+              toolCallId,
+              container as HTMLElement,
+              "render refresh"
+            );
+
+            if (!isUnmountingRef.current && !rootRecord.isUnmounting) {
+              renderToolCallBanner(rootRecord, segment.toolCall);
+            }
+
+            currentIndex++;
           }
         });
 
@@ -411,18 +416,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           if (!currentToolCallIds.has(id)) {
             const element = document.getElementById(`tool-call-${id}`);
             if (element) {
-              const root = rootsRef.current.get(id);
-              if (root) {
-                // Defer unmounting to avoid React rendering conflicts
-                setTimeout(() => {
-                  try {
-                    root.unmount();
-                  } catch (error) {
-                    console.debug("Error unmounting tool call root:", error);
-                  }
-                  rootsRef.current.delete(id);
-                }, 0);
-              }
+              removeToolCallRoot(messageId.current, rootsRef.current, id, "tool call removal");
               element.remove();
             }
           }
@@ -440,29 +434,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   useEffect(() => {
     const currentComponentRef = componentRef;
     const currentMessageId = messageId.current;
+    const messageRootsSnapshot = rootsRef.current;
 
     // Clean up old message roots to prevent memory leaks (older than 1 hour)
     const cleanupOldRoots = () => {
-      const globalMap = getGlobalRootsMap();
-      const oneHourAgo = Date.now() - 60 * 60 * 1000;
-
-      globalMap.forEach((roots, msgId) => {
-        // Extract timestamp from message ID if it's in epoch format
-        const timestamp = parseInt(msgId);
-        if (!isNaN(timestamp) && timestamp < oneHourAgo) {
-          // Defer cleanup to avoid React rendering conflicts
-          setTimeout(() => {
-            roots.forEach((root) => {
-              try {
-                root.unmount();
-              } catch {
-                // Ignore errors
-              }
-            });
-            globalMap.delete(msgId);
-          }, 0);
-        }
-      });
+      cleanupStaleToolCallRoots();
     };
 
     // Run cleanup on mount
@@ -483,69 +459,24 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Only clean up roots if this is a temporary message (streaming message)
         // Permanent messages keep their roots to preserve tool call banners
         if (currentMessageId.startsWith("temp-")) {
-          const globalMap = getGlobalRootsMap();
-          const messageRoots = globalMap.get(currentMessageId);
-
-          if (messageRoots) {
-            messageRoots.forEach((root) => {
-              try {
-                root.unmount();
-              } catch (error) {
-                // Ignore unmount errors during cleanup
-                console.debug("Error unmounting React root during cleanup:", error);
-              }
-            });
-            globalMap.delete(currentMessageId);
-          }
+          cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
         }
       }, 0);
     };
   }, []); // Empty dependency array ensures this only runs on unmount
 
-  useEffect(() => {
-    if (isEditing && textareaRef.current) {
-      adjustTextareaHeight(textareaRef.current);
-    }
-  }, [isEditing]);
-
-  useEffect(() => {
-    setEditedMessage(message.message);
-  }, [message.message]);
-
-  const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
-    element.style.height = "auto";
-    element.style.height = `${element.scrollHeight}px`;
-  };
-
-  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setEditedMessage(e.target.value);
-    adjustTextareaHeight(e.target);
-  };
-
-  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.nativeEvent.isComposing) return;
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault(); // Prevents adding a newline to the textarea
-      handleSaveEdit();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      handleCancelEdit();
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setIsEditing(false);
-    setEditedMessage(message.message);
-  };
-
   const handleEdit = () => {
     setIsEditing(true);
   };
 
-  const handleSaveEdit = () => {
+  const handleCancelEdit = () => {
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = (newText: string) => {
     setIsEditing(false);
     if (onEdit) {
-      onEdit(editedMessage);
+      onEdit(newText);
     }
   };
 
@@ -576,16 +507,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (item.type === "text") {
               return (
                 <div key={index}>
-                  {message.sender === USER_SENDER && isEditing ? (
-                    <textarea
-                      ref={textareaRef}
-                      value={editedMessage}
-                      onChange={handleTextareaChange}
-                      onKeyDown={handleKeyDown}
-                      autoFocus
-                      className="edit-textarea"
-                    />
-                  ) : message.sender === USER_SENDER ? (
+                  {message.sender === USER_SENDER ? (
                     <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
                       {message.message}
                     </div>
@@ -615,16 +537,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
 
     // Fallback for messages without content array
-    return message.sender === USER_SENDER && isEditing ? (
-      <textarea
-        ref={textareaRef}
-        value={editedMessage}
-        onChange={handleTextareaChange}
-        onKeyDown={handleKeyDown}
-        autoFocus
-        className="edit-textarea"
-      />
-    ) : message.sender === USER_SENDER ? (
+    return message.sender === USER_SENDER ? (
       <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
         {message.message}
       </div>
@@ -632,6 +545,21 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       <div ref={contentRef} className={message.isErrorMessage ? "tw-text-error" : ""}></div>
     );
   };
+
+  // If editing a user message, replace the entire message container with the inline editor
+  if (isEditing && message.sender === USER_SENDER) {
+    return (
+      <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
+        <InlineMessageEditor
+          initialValue={message.message}
+          initialContext={message.context}
+          onSave={handleSaveEdit}
+          onCancel={handleCancelEdit}
+          app={app}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="tw-my-1 tw-flex tw-w-full tw-flex-col">
@@ -649,6 +577,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         <div className="tw-flex tw-max-w-full tw-flex-col tw-gap-2 tw-overflow-hidden">
           {!isEditing && <MessageContext context={message.context} />}
           <div className="message-content">{renderMessageContent()}</div>
+
+          {message.responseMetadata?.wasTruncated && message.sender !== USER_SENDER && (
+            <TokenLimitWarning message={message} app={app} />
+          )}
 
           {!isStreaming && (
             <div className="tw-flex tw-items-center tw-justify-between">

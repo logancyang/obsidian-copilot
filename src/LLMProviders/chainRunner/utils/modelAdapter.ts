@@ -5,6 +5,29 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 export const STREAMING_TRUNCATE_THRESHOLD = 50;
 
 /**
+ * Represents a labeled segment of the system prompt used for tool prompting.
+ */
+export interface PromptSection {
+  id: string;
+  label: string;
+  source: string;
+  content: string;
+}
+
+/**
+ * Join prompt sections into a single prompt while preserving blank line separation.
+ *
+ * @param sections - Prompt sections to concatenate in order.
+ * @returns The combined prompt content suitable for LLM input.
+ */
+export function joinPromptSections(sections: PromptSection[]): string {
+  return sections
+    .map((section) => section.content)
+    .filter((content) => content && content.trim().length > 0)
+    .join("\n\n");
+}
+
+/**
  * Model-specific adaptations for autonomous agent
  * Handles quirks and requirements of different LLM providers
  */
@@ -24,6 +47,22 @@ export interface ModelAdapter {
     availableToolNames?: string[],
     toolMetadata?: ToolMetadata[]
   ): string;
+
+  /**
+   * Build ordered system prompt sections tagged with their source information.
+   *
+   * @param basePrompt - The base system prompt to enhance.
+   * @param toolDescriptions - The tool descriptions included in the prompt.
+   * @param availableToolNames - Names of tools enabled for the run.
+   * @param toolMetadata - Metadata with custom instructions for each tool.
+   * @returns Array of prompt sections in the order they should appear.
+   */
+  buildSystemPromptSections(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
+  ): PromptSection[];
 
   /**
    * Enhance user message if needed for specific models
@@ -133,14 +172,37 @@ class BaseModelAdapter implements ModelAdapter {
     availableToolNames?: string[],
     toolMetadata?: ToolMetadata[]
   ): string {
+    const sections = this.buildSystemPromptSections(
+      basePrompt,
+      toolDescriptions,
+      availableToolNames,
+      toolMetadata
+    );
+    return joinPromptSections(sections);
+  }
+
+  buildSystemPromptSections(
+    basePrompt: string,
+    toolDescriptions: string,
+    _availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
+  ): PromptSection[] {
     const metadata = toolMetadata || [];
-
-    // Build tool-specific instructions from metadata
-    const toolSpecificInstructions = this.buildToolSpecificInstructions(metadata);
-
-    return `${basePrompt}
-
-# Autonomous Agent Mode
+    const toolSpecificInstructions = this.buildToolSpecificInstructions(metadata).trim();
+    const normalizedBasePrompt = basePrompt.trimEnd();
+    const sections: PromptSection[] = [
+      {
+        id: "base-system-prompt",
+        label: "System prompt with memory",
+        source: "src/settings/model.ts#getSystemPromptWithMemory",
+        content: normalizedBasePrompt,
+      },
+      {
+        id: "autonomous-agent-intro",
+        label: "Autonomous agent introduction",
+        source:
+          "src/LLMProviders/chainRunner/utils/modelAdapter.ts#BaseModelAdapter.buildSystemPromptSections",
+        content: `# Autonomous Agent Mode
 
 You are now in autonomous agent mode. You can use tools to gather information and complete tasks step by step.
 
@@ -152,11 +214,29 @@ When you need to use a tool, format it EXACTLY like this:
 </use_tool>
 
 IMPORTANT: Use the EXACT parameter names as shown in the tool descriptions below. Do NOT use generic names like "param1" or "param".
+`,
+      },
+    ];
 
-Available tools:
-${toolDescriptions}
+    const trimmedToolDescriptions = toolDescriptions.trim();
 
-# Tool Usage Guidelines
+    if (trimmedToolDescriptions.length > 0) {
+      sections.push({
+        id: "tool-descriptions",
+        label: "Tool XML parameter descriptions",
+        source:
+          "src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts#generateToolDescriptions",
+        content: `Available tools:
+${trimmedToolDescriptions}`,
+      });
+    }
+
+    sections.push({
+      id: "tool-usage-guidelines",
+      label: "Tool usage guidelines",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#BaseModelAdapter.buildSystemPromptSections",
+      content: `# Tool Usage Guidelines
 
 ## Time-based Queries
 When users ask about temporal periods (e.g., "what did I do last month", "show me notes from last week"), you MUST:
@@ -174,7 +254,32 @@ Example for "meetings about project X last week":
 2. Use localSearch with query "meetings about project X"
 3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
 
-${toolSpecificInstructions ? toolSpecificInstructions + "\n\n" : ""}## General Guidelines
+
+## File-related Queries
+When creating a new file, you must use the getFileTree tool to confirm folder first unless user explicitly ask to create new folders
+
+Example for "create a new note in the projects folder":
+1. Call getFileTree to get the exact folder path
+2. Use writeToFile with the folder path
+`,
+    });
+
+    if (toolSpecificInstructions.length > 0) {
+      sections.push({
+        id: "tool-specific-instructions",
+        label: "Tool-specific instructions",
+        source:
+          "src/LLMProviders/chainRunner/utils/modelAdapter.ts#BaseModelAdapter.buildToolSpecificInstructions",
+        content: toolSpecificInstructions,
+      });
+    }
+
+    sections.push({
+      id: "general-guidelines",
+      label: "General guidelines",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#BaseModelAdapter.buildSystemPromptSections",
+      content: `## General Guidelines
 - Think hard about whether a query could potentially be answered from personal knowledge or notes, if yes, call a vault search (localSearch) first
 - Only use web search if: the query explicitly asks for web search, OR the query explicitly requires current/web information
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
@@ -186,7 +291,10 @@ When you've gathered enough information, provide your final response without any
 
 IMPORTANT: Do not include any code blocks (\`\`\`) or tool_code blocks in your responses. Only use the <use_tool> format for tool calls.
 
-NOTE: Use individual XML parameter tags. For arrays, use JSON format like ["item1", "item2"].`;
+NOTE: Use individual XML parameter tags. For arrays, use JSON format like ["item1", "item2"].`,
+    });
+
+    return sections;
   }
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
@@ -209,13 +317,13 @@ class GPTModelAdapter extends BaseModelAdapter {
   protected isGPT5Model(): boolean {
     return this.modelName.includes("gpt-5") || this.modelName.includes("gpt5");
   }
-  enhanceSystemPrompt(
+  buildSystemPromptSections(
     basePrompt: string,
     toolDescriptions: string,
     availableToolNames?: string[],
     toolMetadata?: ToolMetadata[]
-  ): string {
-    const baseSystemPrompt = super.enhanceSystemPrompt(
+  ): PromptSection[] {
+    const sections = super.buildSystemPromptSections(
       basePrompt,
       toolDescriptions,
       availableToolNames,
@@ -225,14 +333,10 @@ class GPTModelAdapter extends BaseModelAdapter {
     const tools = availableToolNames || [];
     const hasComposerTools = tools.includes("writeToFile") || tools.includes("replaceInFile");
 
-    // Insert GPT-specific instructions after the base prompt
-    let gptSpecificSection = "";
+    const gptSectionParts: string[] = [];
 
-    // Add GPT-5 specific instructions
     if (this.isGPT5Model()) {
-      gptSpecificSection = `
-
-GPT-5 SPECIFIC RULES:
+      gptSectionParts.push(`GPT-5 SPECIFIC RULES:
 - Use maximum 2 tool calls initially, then provide an answer
 - Call each tool ONCE per unique query
 - For optional parameters: OMIT them entirely if not needed (don't pass empty strings/null)
@@ -243,17 +347,15 @@ Example localSearch without time:
 <name>localSearch</name>
 <query>piano notes</query>
 <salientTerms>["piano", "notes"]</salientTerms>
-</use_tool>`;
+</use_tool>`);
     } else {
-      gptSpecificSection = `
-
-CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks.`;
+      gptSectionParts.push(
+        "CRITICAL FOR GPT MODELS: You MUST ALWAYS include XML tool calls in your response. Do not just describe what you plan to do - you MUST include the actual XML tool call blocks."
+      );
     }
 
     if (hasComposerTools) {
-      gptSpecificSection += `
-
-🚨 FILE EDITING WITH COMPOSER TOOLS - GPT SPECIFIC EXAMPLES 🚨
+      gptSectionParts.push(`🚨 FILE EDITING WITH COMPOSER TOOLS - GPT SPECIFIC EXAMPLES 🚨
 
 When user asks you to edit or modify a file, you MUST:
 1. Determine if it's a small edit (use replaceInFile) or major rewrite (use writeToFile)
@@ -300,14 +402,24 @@ EXAMPLE 2 - User says "add item 4 to the list":
 "I'll help you add item 4 to the list. Let me update that for you."
 [No tool call = FAILURE]
 
-CRITICAL: The diff parameter MUST contain the SEARCH/REPLACE blocks wrapped in triple backticks EXACTLY as shown above.`;
+CRITICAL: The diff parameter MUST contain the SEARCH/REPLACE blocks wrapped in triple backticks EXACTLY as shown above.`);
     }
 
-    gptSpecificSection += `
+    gptSectionParts.push(
+      "FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, edit, or modify anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn."
+    );
 
-FINAL REMINDER FOR GPT MODELS: If the user asks you to search, find, edit, or modify anything, you MUST include the appropriate <use_tool> XML block in your very next response. Do not wait for another turn.`;
+    const gptSpecificContent = gptSectionParts.join("\n\n");
 
-    return baseSystemPrompt + gptSpecificSection;
+    sections.push({
+      id: "gpt-specific-guidelines",
+      label: "GPT-specific guidance",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#GPTModelAdapter.buildSystemPromptSections",
+      content: gptSpecificContent,
+    });
+
+    return sections;
   }
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {
@@ -380,24 +492,25 @@ class ClaudeModelAdapter extends BaseModelAdapter {
     );
   }
 
-  enhanceSystemPrompt(
+  buildSystemPromptSections(
     basePrompt: string,
     toolDescriptions: string,
     availableToolNames?: string[],
     toolMetadata?: ToolMetadata[]
-  ): string {
-    const baseSystemPrompt = super.enhanceSystemPrompt(
+  ): PromptSection[] {
+    const sections = super.buildSystemPromptSections(
       basePrompt,
       toolDescriptions,
       availableToolNames,
       toolMetadata
     );
 
-    // Add specific instructions for thinking models
-    if (this.isThinkingModel()) {
-      let thinkingModelSection = `
+    if (!this.isThinkingModel()) {
+      return sections;
+    }
 
-IMPORTANT FOR CLAUDE THINKING MODELS:
+    const thinkingSectionParts: string[] = [
+      `IMPORTANT FOR CLAUDE THINKING MODELS:
 - You are a thinking model with internal reasoning capability
 - Your thinking process will be automatically wrapped in <think> tags - do not manually add thinking tags
 - Place ALL tool calls AFTER your thinking is complete, in the main response body
@@ -413,13 +526,11 @@ CORRECT FLOW FOR THINKING MODELS:
 4. Provide final response based on gathered information
 
 INCORRECT: Providing a final answer before using tools
-CORRECT: Using tools first, then providing answer based on results`;
+CORRECT: Using tools first, then providing answer based on results`,
+    ];
 
-      // Add even stronger instructions specifically for Claude Sonnet 4
-      if (this.isClaudeSonnet4()) {
-        thinkingModelSection += `
-
-🚨 CRITICAL INSTRUCTIONS FOR CLAUDE SONNET 4 - AUTONOMOUS AGENT MODE 🚨
+    if (this.isClaudeSonnet4()) {
+      thinkingSectionParts.push(`🚨 CRITICAL INSTRUCTIONS FOR CLAUDE SONNET 4 - AUTONOMOUS AGENT MODE 🚨
 
 ⚠️  WARNING: You have a specific tendency to write complete responses immediately after tool calls. This BREAKS the autonomous agent pattern!
 
@@ -491,13 +602,18 @@ Based on the search results, here's a complete practice plan...
 3. If you need more tools: Brief sentence + more tool calls, then STOP
 4. If you have enough info: THEN provide your final response
 
-REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`;
-      }
-
-      return baseSystemPrompt + thinkingModelSection;
+REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`);
     }
 
-    return baseSystemPrompt;
+    sections.push({
+      id: "claude-thinking-guidelines",
+      label: "Claude thinking model guidance",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#ClaudeModelAdapter.buildSystemPromptSections",
+      content: thinkingSectionParts.join("\n\n"),
+    });
+
+    return sections;
   }
 
   needsSpecialHandling(): boolean {
@@ -630,13 +746,13 @@ REMEMBER: One brief sentence before tools is perfect. Nothing after tool calls.`
  * Gemini adapter with aggressive tool calling prompts
  */
 class GeminiModelAdapter extends BaseModelAdapter {
-  enhanceSystemPrompt(
+  buildSystemPromptSections(
     basePrompt: string,
     toolDescriptions: string,
     availableToolNames?: string[],
     toolMetadata?: ToolMetadata[]
-  ): string {
-    const baseSystemPrompt = super.enhanceSystemPrompt(
+  ): PromptSection[] {
+    const sections = super.buildSystemPromptSections(
       basePrompt,
       toolDescriptions,
       availableToolNames,
@@ -647,9 +763,8 @@ class GeminiModelAdapter extends BaseModelAdapter {
     const tools = availableToolNames || [];
     const hasLocalSearch = tools.includes("localSearch");
 
-    const geminiSpecificSection = `
-
-🚨 CRITICAL INSTRUCTIONS FOR GEMINI - AUTONOMOUS AGENT MODE 🚨
+    const geminiSectionParts: string[] = [
+      `🚨 CRITICAL INSTRUCTIONS FOR GEMINI - AUTONOMOUS AGENT MODE 🚨
 
 You MUST use tools to complete tasks. DO NOT ask the user questions about how to proceed.
 ${
@@ -665,11 +780,12 @@ When the user mentions "my notes" or "my vault", use the localSearch tool.
 <name>localSearch</name>
 <query>piano</query>
 <salientTerms>["piano"]</salientTerms>
-</use_tool>
-`
+</use_tool>`
     : ""
-}
-GEMINI SPECIFIC RULES:
+}`.trim(),
+    ];
+
+    geminiSectionParts.push(`GEMINI SPECIFIC RULES:
 1. When user mentions "my notes" about X → use localSearch with query "X"
 2. DO NOT ask clarifying questions about search terms
 3. DO NOT wait for permission to use tools
@@ -684,9 +800,17 @@ Your response:
 <salientTerms>["project", "roadmap"]</salientTerms>
 </use_tool>
 
-Remember: The user has already told you what to do. Execute it NOW with the available tools.`;
+Remember: The user has already told you what to do. Execute it NOW with the available tools.`);
 
-    return baseSystemPrompt + geminiSpecificSection;
+    sections.push({
+      id: "gemini-specific-guidelines",
+      label: "Gemini-specific guidance",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#GeminiModelAdapter.buildSystemPromptSections",
+      content: geminiSectionParts.join("\n\n"),
+    });
+
+    return sections;
   }
 
   enhanceUserMessage(message: string, requiresTools: boolean): string {

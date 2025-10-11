@@ -6,7 +6,7 @@ import { logInfo } from "@/logger";
 import { Mention } from "@/mentions/Mention";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage, MessageContext } from "@/types/message";
-import { extractNoteFiles } from "@/utils";
+import { extractNoteFiles, getNotesFromTags, getNotesFromPath } from "@/utils";
 import { TFile, Vault } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -62,17 +62,18 @@ export class ContextManager {
       );
 
       // 2. Extract URLs and process them (for Copilot Plus chain)
-      // IMPORTANT: Only process URLs from the user's direct chat input message,
-      // NOT from the content of context notes. This ensures url4llm is only called
-      // for URLs explicitly typed by the user in the chat, similar to how YouTube
-      // transcription only processes YouTube URLs from user input.
+      // Process URLs from context (only URLs explicitly added to context via URL pills)
+      // This ensures url4llm is only called for URLs that appear in the context menu,
+      // not for all URLs found in the message text.
+      const contextUrls = message.context?.urls || [];
       const urlContextAddition =
         chainType === ChainType.COPILOT_PLUS_CHAIN
-          ? await this.mention.processUrls(processedMessage)
+          ? await this.mention.processUrlList(contextUrls)
           : { urlContext: "", imageUrls: [] };
 
       // 3. Process context notes
-      const excludedNotePaths = new Set(includedFiles.map((file) => file.path));
+      // Initialize tracking set with files already included from custom prompts
+      const processedNotePaths = new Set(includedFiles.map((file) => file.path));
       const contextNotes = message.context?.notes || [];
 
       // Add active note if requested and not already included
@@ -81,13 +82,14 @@ export class ContextManager {
         includeActiveNote &&
         chainType !== ChainType.PROJECT_CHAIN &&
         activeNote &&
+        !processedNotePaths.has(activeNote.path) &&
         !notes.some((note) => note.path === activeNote.path)
       ) {
         notes.push(activeNote);
       }
 
       const noteContextAddition = await this.contextProcessor.processContextNotes(
-        excludedNotePaths,
+        processedNotePaths,
         fileParserManager,
         vault,
         notes,
@@ -96,14 +98,77 @@ export class ContextManager {
         chainType
       );
 
-      // 4. Process selected text contexts
+      // Add processed context notes to tracking set
+      notes.forEach((note) => processedNotePaths.add(note.path));
+
+      // 4. Process context tags
+      const contextTags = message.context?.tags || [];
+      let tagContextAddition = "";
+
+      if (contextTags.length > 0) {
+        // Get all notes that have any of the specified tags (in frontmatter)
+        const taggedNotes = getNotesFromTags(vault, contextTags);
+
+        // Filter out already processed notes to avoid duplication
+        const filteredTaggedNotes = taggedNotes.filter(
+          (note) => !processedNotePaths.has(note.path)
+        );
+
+        if (filteredTaggedNotes.length > 0) {
+          tagContextAddition = await this.contextProcessor.processContextNotes(
+            new Set(), // Don't exclude any notes since we already filtered
+            fileParserManager,
+            vault,
+            filteredTaggedNotes,
+            false, // Don't include active note again
+            null,
+            chainType
+          );
+
+          // Add processed tagged notes to tracking set
+          filteredTaggedNotes.forEach((note) => processedNotePaths.add(note.path));
+        }
+      }
+
+      // 5. Process context folders
+      const contextFolders = message.context?.folders || [];
+      let folderContextAddition = "";
+
+      if (contextFolders.length > 0) {
+        // Get all notes from the specified folders
+        const folderNotes = contextFolders.flatMap((folder) => getNotesFromPath(vault, folder));
+
+        // Filter out already processed notes to avoid duplication
+        const filteredFolderNotes = folderNotes.filter(
+          (note) => !processedNotePaths.has(note.path)
+        );
+
+        if (filteredFolderNotes.length > 0) {
+          folderContextAddition = await this.contextProcessor.processContextNotes(
+            new Set(), // Don't exclude any notes since we already filtered
+            fileParserManager,
+            vault,
+            filteredFolderNotes,
+            false, // Don't include active note again
+            null,
+            chainType
+          );
+
+          // Add processed folder notes to tracking set
+          filteredFolderNotes.forEach((note) => processedNotePaths.add(note.path));
+        }
+      }
+
+      // 6. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 5. Combine everything
+      // 7. Combine everything (note context before URL context)
       const finalProcessedMessage =
         processedUserMessage +
-        urlContextAddition.urlContext +
         noteContextAddition +
+        tagContextAddition +
+        folderContextAddition +
+        urlContextAddition.urlContext +
         selectedTextContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
