@@ -380,12 +380,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   // Ensure enableRecentConversations has a default value
-  if (typeof sanitizedSettings.enableRecentConversations !== "boolean") {
+  if (
+    !sanitizedSettings.enableRecentConversations ||
+    typeof sanitizedSettings.enableRecentConversations !== "boolean"
+  ) {
     sanitizedSettings.enableRecentConversations = DEFAULT_SETTINGS.enableRecentConversations;
   }
 
   // Ensure enableSavedMemory has a default value
-  if (typeof sanitizedSettings.enableSavedMemory !== "boolean") {
+  if (
+    !sanitizedSettings.enableSavedMemory ||
+    typeof sanitizedSettings.enableSavedMemory !== "boolean"
+  ) {
     sanitizedSettings.enableSavedMemory = DEFAULT_SETTINGS.enableSavedMemory;
   }
 

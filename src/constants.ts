@@ -792,9 +792,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
   memoryFolderName: DEFAULT_MEMORY_FOLDER,
-  enableRecentConversations: false,
+  enableRecentConversations: true,
   maxRecentConversations: 30,
-  enableSavedMemory: false,
+  enableSavedMemory: true,
   enableInlineCitations: true,
 };
 
