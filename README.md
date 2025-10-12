@@ -22,7 +22,12 @@ The Ultimate AI Assistant for Your Second Brain
   </a>
 </p>
 
-Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based vault search, web and youtube support, powerful context processing and ever-expanding agentic capabilities—all within Obsidian’s highly customizable workspace.
+
+## Overview
+
+Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based vault search, web and youtube support, powerful context processing and ever-expanding agentic capabilities—all within Obsidian's highly customizable workspace.
+
+## Key Features
 
 - **🔒 Your data is 100% yours**: Local search and storage, and full control of your data if you use self-hosted models.
 - **🧠 Bring Your Own Model**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create content.
@@ -38,6 +43,17 @@ Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based va
 <p align="center">
   <img src="./images/product-ui-screenshot.jpeg" alt="Product UI screenshot" width="800"/>
 </p>
+
+## Table of Contents
+
+- [Get Started](#get-started)
+  - [Install Obsidian Copilot](#install-obsidian-copilot)
+  - [Set API Keys](#set-api-keys)
+- [Usage](#usage)
+  - [Free User](#free-user)
+  - [Copilot Plus/Believer](#copilot-plusbeliever)
+- [Need Help?](#need-help)
+- [FAQ](#️faq)
 
 ## Copilot V3 is a New Era 🔥
 
@@ -55,164 +71,137 @@ Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag
 - *"Since discovering Copilot, my writing process has been completely transformed. Conversing with my own articles and thoughts is the most refreshing experience I’ve had in decades.”* - Mat QV, Writer
 - *"Copilot has transformed our family—not just as a productivity assistant, but as a therapist. I introduced it to my non‑technical wife, Mania, who was stressed about our daughter’s upcoming exam; within an hour, she gained clarity on her mindset and next steps, finding calm and confidence."* - @screenfluent, A Loving Husband
 
-## **Get Started in 5 Minutes**
+## Get Started
 
-### FREE Product Features
+### Install Obsidian Copilot
 
-**🔌 Install Copilot in Community Plugins in Obsidian**
+1. Open **Obsidian → Settings → Community plugins**.
+2. Turn off **Safe mode** (if enabled).
+3. Click **Browse**, search for **“Copilot for Obsidian”**.
+4. Click **Install**, then **Enable**.
 
-**🔑 Set Up Your AI Model (API Key)**
+### Set API Keys
 
-- To start using Copilot AI features, you'll need access to an AI model of your choice.
+**Free User**
+
+1. Go to **Obsidian → Settings → Copilot → Basic** and click **Set Keys**.
+2. Choose your AI provider(s) (e.g., **OpenRouter, Gemini, OpenAI, Anthropic, Cohere**) and paste ****your ****API ****key(s)**. OpenRouter is recommended.**
+
+**Copilot Plus/Believer**
+
+1. Copy your license key at your [dashboard](https://www.obsidiancopilot.com/en/dashboard). *Don’t forget to join our wonderful Discord community!*
+2. Go to **Obsidian → Settings → Copilot → Basic** and paste the key into in the **Copilot Plus** card.
+
+## Usage
+
+### Free User
+
+**Chat Mode: reference notes and discuss ideas with Copilot**
+
+Use `@` to add context and chat with your note.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=mzMbiamzOqM" target="_blank">
-    <img src="./images/AI-Model-Setup.png" alt="AI Model API Key" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
+    <img src="./images/Add-Context.png" alt="Chat Mode" width="700" height="394">
 </p>
 
-**📖** **Chat Mode: Summarize Specific Notes**
-
-- 🧠 **Use When:** You want to reference specific notes or folders, generate content, or talk through ideas with Copilot like a knowledgeable thought partner.
-
-- 💭 **In `Chat` mode, ask Copilot:**
-  > _"Summarize [[Meeting Notes – March]] and create a follow-up task list based on notes in {projects}."_
+Ask Copilot:
+  > "Summarize [[Q3 Retrospective]] and identify the top 3 action items for Q4 based on the notes in {{01-Projects}}"
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=idit7nCqEs0" target="_blank">
     <img src="./images/Chat-Mode.png" alt="Chat Mode" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
 </p>
 
-**📖** **Vault QA Mode: Chat With Your Entire Vault**
+**Vault QA Mode: chat with your entire vault**
 
-- 🧠 **Use When:** You want to search your vault for patterns, ideas, or facts without knowing exactly where the information is stored.
+Ask Copilot:
+  > "What are the recurring themes in my research regarding the intersection of AI and SaaS?"
 
-- 💭 **In `Vault QA` mode, ask Copilot:**
-
-  > _"What insights can I gather about the benefits of journaling from all of my notes?"_
-
-- 💡 **Tip:** Replace _the benefits of journaling_ with any topic mentioned in your notes to get more precise results.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=hBLMWE8WRFU" target="_blank">
     <img src="./images/Vault-Mode.png" alt="Vault Mode" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
 </p>
 
-**📖 Edit and Apply with One Click**
+**Edit and Apply with One Click**
 
-- 🧠 **Use When:** You want to quickly fix grammar, spelling or wording directly in your notes—without switching tabs or manually rewriting.
+Select text and edit with one RIGHT click.
 
-- 💭 **Select the text** and **edit with one RIGHT click**
-
-- 💡 **Tip:** Set up and customize your right-click menu with common actions you use often, like _"Summarize"_, _"Simplify Language"_, or _"Translate to Formal Tone"_—so you can apply them effortlessly while you write.
+**Tip:** Set up and customize your right-click menu with common actions you use often, like _"Summarize"_, _"Simplify Language"_, or _"Translate to Formal Tone"_—so you can apply them effortlessly while you write.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=hSmRnmEVoec" target="_blank">
     <img src="./images/One-Click-Commands.png" alt="One-Click Commands" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
 </p>
 
-**📖 Automate your workflow with the Copilot Prompt Palette**
+**Prompt Palette: automate your workflow**
 
-- 🧠 **Use When:** You want to speed up repetitive tasks like summarizing, rewriting, or translating without typing full prompts every time.
+Type `/` to use Prompt Palette in chat window.
 
-- 💭 Type / to use Prompt Palette
-
-- 💡 **Tip:** Create shortcuts for your most-used actions—like _"Translate to Spanish"_ or _"Draft a blog post outline"_—and trigger them instantly with typing / !
+**Tip:** Create shortcuts for your most-used actions—like _"Translate to Spanish"_ or _"Draft a blog post outline"_—and trigger them instantly with typing `/` !
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=9YzY2OJ54wM" target="_blank">
     <img src="./images/Prompt-Palette.png" alt="Prompt Palette" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
 </p>
 
-**📖 Stay in flow with the Relevant Notes**
+**Relevant Notes: notes suggestions based on semantic similarity and links**
 
-- 🧠 **Use When:** You're working on a note and want to pull in context or insights from related notes—without breaking your focus.
+Appears automatically when there's useful related content and links.
 
-- 💭 Appears automatically when there's useful related content.
-
-- 💡 **Tip:** Use it to quickly reference past research, ideas, or decisions—no need to search or switch tabs.
+Use it to quickly reference past research, ideas, or decisions—no need to search or switch tabs.
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=qapQD7jD3Uk" target="_blank">
     <img src="./images/Relevant-Notes.png" alt="Relevant Notes" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
 </p>
 
-### Level Up with Copilot Plus and Beyond
+### Copilot Plus/Believer
 
 Copilot Plus brings powerful AI agentic capabilities, context-aware actions and seamless tool integration—built to elevate your knowledge work in Obsidian.
 
-🆙 **Upgrade to Copilot Plus**
+**Get Precision Insights From a Specific Time Window**
 
-First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Then, set up Copilot Plus License Key in Obsidian.
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=pPfWKZnNYhA" target="_blank">
-    <img src="./images/Copilot-Plus-Setup.png" alt="Copilot Plus Setup" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
-</p>
-
-❔Community is at the heart of everything we build. Join us on Discord for updates, priority support, and a voice in shaping the best AI products for your experience.
+  > "Summarize everything I worked on last week in {{01-Projects}} folder"
 
 <p align="center">
-  <img src="./images/discord-support.png" alt="Discord support screenshot" width="700"/>
-</p>
-
-**📖 Get Precision Insights From a Specific Time Window**
-
-- 🧠 **Use When:** You want to quickly review tasks, notes, or ideas from a specific time range without manually digging through files.
-
-- 💭 **In Chat mode, ask Copilot:**
-
-  > _"Give me a recap of everything I captured last week."_
-
-- 💡 **Tip:** Try variations like _"Summarize my highlights from August 11 through August 22"_ for even more insights.
-
-<p align="center">
-  <a href="https://www.youtube.com/watch?v=sXP2sjvrqtI" target="_blank">
     <img src="./images/Time-Based-Queries.png" alt="Time-Based Queries" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
 </p>
 
-**📖 One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
+**Agent Mode: Autonomous Tool Calling**
 
-- 🧠 **Use When:** You want to combine information from multiple formats—documents, videos, web pages, and images—into one concise, actionable summary.
+Copilot's agent automatically calls the right tools—no manual commands needed. Just ask, and it searches the web, queries your vault, and combines insights seamlessly.
 
-- 💭 **In PLUS mode, ask Copilot:**
+Ask Copilot in agent mode:
 
-  > "Please write a short intro of Kiwi birds based on the following information I collected about this animal.
-
-  > Summarize [](https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s)[https://www.youtube.com/watch?v=tZ2jm_UPc6c&t=417s](https://www.youtube.com/watch?v=ABTfc5wUT1U)
-  > in a short paragraph.
-
-  > @websearch where can I find Kiwi birds?
-
-  > Summarize https://www.doc.govt.nz/nature/native-animals/birds/birds-a-z/kiwi/ in 300 words.“
-
-- 🛠️ **Add PDFs and Images as Context to Enrich Your Learning**
-
-- 💡 _Tip: For large PDFs, reference specific sections to focus the AI's attention._
+  > "Research web and my vault and draft a note on AI SaaS onboarding best practices"
 
 <p align="center">
-  <a href="https://www.youtube.com/watch?v=WXoOZmMSHVE" target="_blank">
-    <img src="./images/One-Prompt-Every-Source.png" alt="One Prompt, Every Source" width="700" height="394">
-  </a><br>
-  <em>Click the image to watch the video on YouTube</em>
+    <img src="./images/Agent-Mode.png" alt="Agent Mode" width="700" height="394">
 </p>
 
-# **💡 Need Help?**
+**Understand Images in Your Notes**
+
+Copilot can analyze images embedded in your notes—from wireframes and diagrams to screenshots and photos. Get detailed feedback, suggestions, and insights based on visual content.
+
+Ask Copilot to analyze your wireframes:
+
+  > "Analyze the wireframe in [[UX Design - Mobile App Wireframes]] and suggest improvements for the navigation flow"
+
+<p align="center">
+    <img src="./images/Note-Image.png" alt="Image Understanding" width="700" height="394">
+</p>
+
+**One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
+
+
+In agent mode, ask Copilot
+
+  > "Compare the information about [Agent Memory] from this youtube video: [URL], this PDF [file], and @web[search results]. Start with your
+     conclusion in bullet points in your response"
+
+
+
+<p align="center">
+    <img src="./images/One-Prompt-Every-Source.png" alt="One Prompt, Every Source" width="700" height="394">
+</p>
+
+## **Need Help?**
 
 - Check the [documentation](https://www.obsidiancopilot.com/en/docs) for setup guides, how-tos, and advanced features.
 - Watch [Youtube](https://www.youtube.com/@loganhallucinates) for walkthroughs.
@@ -231,7 +220,7 @@ First, go to https://www.obsidiancopilot.com/en to subscribe to Copilot Plus. Th
     - ☑️Clearly describe the feature, why it matters, and how it would help
     - ☑️Submit your feature request [here](https://github.com/logancyang/obsidian-copilot/issues/new?template=feature_request.md)
 
-# **🙋‍♂️ FAQ**
+## **FAQ**
 
 <details>
   <summary><strong>Why isn’t Vault search finding my notes?</strong></summary>
@@ -303,4 +292,3 @@ Copilot Plus is a premium product of Brevilabs LLC and it is not affiliated with
 ## **Authors**
 
 Brevilabs Team | Email: logan@brevilabs.com | X/Twitter: [@logancyang](https://twitter.com/logancyang)
-
