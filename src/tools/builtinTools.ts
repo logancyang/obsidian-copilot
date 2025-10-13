@@ -2,6 +2,7 @@ import { getSettings } from "@/settings/model";
 import { Vault } from "obsidian";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
+import { createGetTagListTool } from "./TagTools";
 import { memoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
@@ -330,6 +331,41 @@ Example usage:
 }
 
 /**
+ * Register the tag list tool separately to ensure metadata cache access is available.
+ */
+export function registerTagListTool(): void {
+  const registry = ToolRegistry.getInstance();
+
+  registry.register({
+    tool: createGetTagListTool(),
+    metadata: {
+      id: "getTagList",
+      displayName: "Tag List",
+      description: "List vault tags with occurrence statistics",
+      category: "file",
+      isAlwaysEnabled: true,
+      requiresVault: true,
+      customPromptInstructions: `For getTagList:
+- Use to inspect existing tags before suggesting new ones or reorganizing notes.
+- Omit parameters to include both frontmatter and inline tags.
+- Set includeInline to false when you only need frontmatter-defined tags.
+- Use maxEntries to limit output for very large vaults.
+
+Example usage (default):
+<use_tool>
+<name>getTagList</name>
+</use_tool>
+
+Example usage (frontmatter only):
+<use_tool>
+<name>getTagList</name>
+<includeInline>false</includeInline>
+</use_tool>`,
+    },
+  });
+}
+
+/**
  * Register the memory tool separately as it depends on saved memory setting
  */
 export function registerMemoryTool(): void {
@@ -389,6 +425,7 @@ export function initializeBuiltinTools(vault?: Vault): void {
     // Register vault-dependent tools if vault is available
     if (vault) {
       registerFileTreeTool(vault);
+      registerTagListTool();
     }
 
     // Register memory tool if saved memory is enabled
