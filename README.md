@@ -85,7 +85,7 @@ Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag
 **Free User**
 
 1. Go to **Obsidian → Settings → Copilot → Basic** and click **Set Keys**.
-2. Choose your AI provider(s) (e.g., **OpenRouter, Gemini, OpenAI, Anthropic, Cohere**) and paste ****your ****API ****key(s)**. OpenRouter is recommended.**
+2. Choose your AI provider(s) (e.g., **OpenRouter, Gemini, OpenAI, Anthropic, Cohere**) and paste your API key(s). **OpenRouter is recommended.**
 
 **Copilot Plus/Believer**
 
@@ -96,7 +96,7 @@ Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag
 
 ### Free User
 
-**Chat Mode: reference notes and discuss ideas with Copilot**
+#### **Chat Mode: reference notes and discuss ideas with Copilot**
 
 Use `@` to add context and chat with your note.
 
@@ -105,43 +105,68 @@ Use `@` to add context and chat with your note.
 </p>
 
 Ask Copilot:
-  > "Summarize [[Q3 Retrospective]] and identify the top 3 action items for Q4 based on the notes in {{01-Projects}}"
+  > *Summarize [[Q3 Retrospective]] and identify the top 3 action items for Q4 based on the notes in {01-Projects}.*
 
 <p align="center">
     <img src="./images/Chat-Mode.png" alt="Chat Mode" width="700" height="394">
 </p>
 
-**Vault QA Mode: chat with your entire vault**
+#### **Vault QA Mode: chat with your entire vault**
 
 Ask Copilot:
-  > "What are the recurring themes in my research regarding the intersection of AI and SaaS?"
+  > *What are the recurring themes in my research regarding the intersection of AI and SaaS?*
 
 
 <p align="center">
     <img src="./images/Vault-Mode.png" alt="Vault Mode" width="700" height="394">
 </p>
 
+#### Copilot's Command Palette
+Copilot's Command Palette puts powerful AI capabilities at your fingertips. Access all commands in chat window via `/` or via
+right-click menu on selected text.
+
+**Add selection to chat context**
+
+Select text and add it to context. Recommend shortcut: `ctrl/cmd + L`
+
+<p align="center">
+    <img src="./images/Add-Selection-to-Context.png" alt="Add Selection to Context" width="700" height="394">
+</p>
+
+**Quick Command**
+
+Select text and apply action without opening chat. Recommend shortcut: `ctrl/cmd + K`
+
+
+<p align="center">
+    <img src="./images/Quick-Command.png" alt="Quick Command" width="700" height="394">
+</p>
+
+
 **Edit and Apply with One Click**
 
 Select text and edit with one RIGHT click.
-
-**Tip:** Set up and customize your right-click menu with common actions you use often, like _"Summarize"_, _"Simplify Language"_, or _"Translate to Formal Tone"_—so you can apply them effortlessly while you write.
 
 <p align="center">
     <img src="./images/One-Click-Commands.png" alt="One-Click Commands" width="700" height="394">
 </p>
 
-**Prompt Palette: automate your workflow**
+**Create your Command**
 
-Type `/` to use Prompt Palette in chat window.
+Create commands and workflows in `Settings → Copilot → Command → Add Cmd`.
 
-**Tip:** Create shortcuts for your most-used actions—like _"Translate to Spanish"_ or _"Draft a blog post outline"_—and trigger them instantly with typing `/` !
+<p align="center">
+    <img src="./images/Create-Command.png" alt="Create Command" width="700" height="394">
+</p>
+
+**Command Palette in Chat**
+Type `/` to use Command Palette in chat window.
 
 <p align="center">
     <img src="./images/Prompt-Palette.png" alt="Prompt Palette" width="700" height="394">
 </p>
 
-**Relevant Notes: notes suggestions based on semantic similarity and links**
+#### **Relevant Notes: notes suggestions based on semantic similarity and links**
 
 Appears automatically when there's useful related content and links.
 
@@ -155,45 +180,45 @@ Use it to quickly reference past research, ideas, or decisions—no need to sear
 
 Copilot Plus brings powerful AI agentic capabilities, context-aware actions and seamless tool integration—built to elevate your knowledge work in Obsidian.
 
-**Get Precision Insights From a Specific Time Window**
+#### **Get Precision Insights From a Specific Time Window**
 
-  > "Summarize everything I worked on last week in {{01-Projects}} folder"
+  > *Summarize everything I worked on last week in {{01-Projects}} folder.*
 
 <p align="center">
     <img src="./images/Time-Based-Queries.png" alt="Time-Based Queries" width="700" height="394">
 </p>
 
-**Agent Mode: Autonomous Tool Calling**
+#### **Agent Mode: Autonomous Tool Calling**
 
 Copilot's agent automatically calls the right tools—no manual commands needed. Just ask, and it searches the web, queries your vault, and combines insights seamlessly.
 
 Ask Copilot in agent mode:
 
-  > "Research web and my vault and draft a note on AI SaaS onboarding best practices"
+  > *Research web and my vault and draft a note on AI SaaS onboarding best practices.*
 
 <p align="center">
     <img src="./images/Agent-Mode.png" alt="Agent Mode" width="700" height="394">
 </p>
 
-**Understand Images in Your Notes**
+#### **Understand Images in Your Notes**
 
 Copilot can analyze images embedded in your notes—from wireframes and diagrams to screenshots and photos. Get detailed feedback, suggestions, and insights based on visual content.
 
 Ask Copilot to analyze your wireframes:
 
-  > "Analyze the wireframe in [[UX Design - Mobile App Wireframes]] and suggest improvements for the navigation flow"
+  > *Analyze the wireframe in [[UX Design - Mobile App Wireframes]] and suggest improvements for the navigation flow.*
 
 <p align="center">
     <img src="./images/Note-Image.png" alt="Image Understanding" width="700" height="394">
 </p>
 
-**One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
+#### **One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
 
 
 In agent mode, ask Copilot
 
-  > "Compare the information about [Agent Memory] from this youtube video: [URL], this PDF [file], and @web[search results]. Start with your
-     conclusion in bullet points in your response"
+  > *Compare the information about [Agent Memory] from this youtube video: [URL], this PDF [file], and @web[search results]. Start with your
+     conclusion in bullet points in your response*
 
 
 
