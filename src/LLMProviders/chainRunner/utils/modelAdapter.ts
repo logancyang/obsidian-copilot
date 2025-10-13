@@ -256,11 +256,14 @@ Example for "meetings about project X last week":
 
 
 ## File-related Queries
-When creating a new file, you must use the getFileTree tool to confirm folder first unless user explicitly ask to create new folders
+When creating a new file in given folder, you must use the getFileTree tool to confirm folder first unless user explicitly ask to create new folders
 
 Example for "create a new note in the projects folder":
 1. Call getFileTree to get the exact folder path
 2. Use writeToFile with the folder path
+
+Example for "create a new note about topic X":
+1. Use writeToFile with the path "topicX.md" for creating the note in the root folder
 `,
     });
 
