@@ -25,8 +25,8 @@ export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
     let files: TFile[];
 
     if (isCopilotPlus) {
-      // Return all files (md + PDFs)
-      files = allNotes;
+      // Return all files (md + PDFs) - create a copy to avoid mutating the atom
+      files = [...allNotes];
     } else {
       // Filter out PDFs for non-Plus users
       files = allNotes.filter((file) => file.extension === "md");
