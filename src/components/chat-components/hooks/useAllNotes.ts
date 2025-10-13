@@ -8,6 +8,7 @@ import { settingsStore } from "@/settings/model";
  * Custom hook to get all available notes from the vault.
  * Includes PDF files when in Copilot Plus mode.
  * Automatically updates when files are created, deleted, or renamed.
+ * Notes are sorted by creation date in descending order (newest first).
  *
  * Data is managed by the singleton VaultDataManager, which provides:
  * - Single set of vault event listeners (eliminates duplicates)
@@ -15,17 +16,23 @@ import { settingsStore } from "@/settings/model";
  * - Stable array references to prevent unnecessary re-renders
  *
  * @param isCopilotPlus - Whether to include PDF files (Plus feature)
- * @returns Array of TFile objects (markdown files + PDFs in Plus mode)
+ * @returns Array of TFile objects sorted by creation date (newest first)
  */
 export function useAllNotes(isCopilotPlus: boolean = false): TFile[] {
   const allNotes = useAtomValue(notesAtom, { store: settingsStore });
 
   return useMemo(() => {
+    let files: TFile[];
+
     if (isCopilotPlus) {
       // Return all files (md + PDFs)
-      return allNotes;
+      files = allNotes;
+    } else {
+      // Filter out PDFs for non-Plus users
+      files = allNotes.filter((file) => file.extension === "md");
     }
-    // Filter out PDFs for non-Plus users
-    return allNotes.filter((file) => file.extension === "md");
+
+    // Sort by creation time in descending order (newest first)
+    return files.sort((a, b) => b.stat.ctime - a.stat.ctime);
   }, [allNotes, isCopilotPlus]);
 }
