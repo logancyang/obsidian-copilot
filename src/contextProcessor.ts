@@ -70,12 +70,18 @@ export class ContextProcessor {
     }
 
     // Match dataview and dataviewjs code blocks
-    const blockRegex = /```(dataview|dataviewjs)\n([\s\S]*?)```/g;
+    // Fixed regex: \s* handles trailing spaces and different line endings
+    const blockRegex = /```(dataview|dataviewjs)\s*\n([\s\S]*?)```/g;
     const matches = [...content.matchAll(blockRegex)];
 
-    for (const match of matches) {
+    // Process matches in reverse order to avoid position shifts when replacing
+    // This also handles multiple identical blocks correctly
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i];
       const queryType = match[1]; // 'dataview' or 'dataviewjs'
       const query = match[2].trim();
+      const matchStart = match.index!;
+      const matchEnd = matchStart + match[0].length;
 
       try {
         // Execute query with timeout
@@ -84,18 +90,14 @@ export class ContextProcessor {
           new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 5000)),
         ]);
 
-        // Replace block with structured output
-        content = content.replace(
-          match[0],
-          `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<executed_result>\n${result}\n</executed_result>\n</${DATAVIEW_BLOCK_TAG}>\n\n`
-        );
+        // Replace block with structured output using slice (position-based, handles duplicates)
+        const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<executed_result>\n${result}\n</executed_result>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
+        content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
       } catch (error) {
         console.error(`Error executing Dataview query:`, error);
         // On error, include query with error message
-        content = content.replace(
-          match[0],
-          `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<error>${error instanceof Error ? error.message : "Query execution failed"}</error>\n</${DATAVIEW_BLOCK_TAG}>\n\n`
-        );
+        const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<error>${error instanceof Error ? error.message : "Query execution failed"}</error>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
+        content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
       }
     }
 
