@@ -380,18 +380,12 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   // Ensure enableRecentConversations has a default value
-  if (
-    !sanitizedSettings.enableRecentConversations ||
-    typeof sanitizedSettings.enableRecentConversations !== "boolean"
-  ) {
+  if (typeof sanitizedSettings.enableRecentConversations !== "boolean") {
     sanitizedSettings.enableRecentConversations = DEFAULT_SETTINGS.enableRecentConversations;
   }
 
   // Ensure enableSavedMemory has a default value
-  if (
-    !sanitizedSettings.enableSavedMemory ||
-    typeof sanitizedSettings.enableSavedMemory !== "boolean"
-  ) {
+  if (typeof sanitizedSettings.enableSavedMemory !== "boolean") {
     sanitizedSettings.enableSavedMemory = DEFAULT_SETTINGS.enableSavedMemory;
   }
 
@@ -401,6 +395,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.maxRecentConversations = DEFAULT_SETTINGS.maxRecentConversations;
   } else {
     sanitizedSettings.maxRecentConversations = maxRecentConversations;
+  }
+
+  // Ensure autosaveChat has a default value
+  if (typeof sanitizedSettings.autosaveChat !== "boolean") {
+    sanitizedSettings.autosaveChat = DEFAULT_SETTINGS.autosaveChat;
   }
 
   // Ensure folder settings fall back to defaults when empty/whitespace

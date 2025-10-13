@@ -737,7 +737,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   stream: true,
   defaultSaveFolder: DEFAULT_CHAT_HISTORY_FOLDER,
   defaultConversationTag: "copilot-conversation",
-  autosaveChat: false,
+  autosaveChat: true,
   generateAIChatTitleOnSave: true,
   includeActiveNoteAsContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
