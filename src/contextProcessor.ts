@@ -4,7 +4,12 @@ import { RESTRICTION_MESSAGES } from "@/constants";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain } from "@/utils";
 import { TFile, Vault, Notice } from "obsidian";
-import { NOTE_CONTEXT_PROMPT_TAG, EMBEDDED_PDF_TAG, SELECTED_TEXT_TAG } from "./constants";
+import {
+  NOTE_CONTEXT_PROMPT_TAG,
+  EMBEDDED_PDF_TAG,
+  SELECTED_TEXT_TAG,
+  DATAVIEW_BLOCK_TAG,
+} from "./constants";
 
 export class ContextProcessor {
   private static instance: ContextProcessor;
@@ -47,6 +52,168 @@ export class ContextProcessor {
       }
     }
     return content;
+  }
+
+  /**
+   * Process Dataview blocks in content, executing queries and replacing them with structured results
+   */
+  async processDataviewBlocks(content: string, sourcePath: string): Promise<string> {
+    // Check if Dataview plugin is available
+    const dataviewPlugin = (app as any).plugins?.plugins?.dataview;
+    if (!dataviewPlugin) {
+      return content; // Dataview not installed, return content as-is
+    }
+
+    const dataviewApi = dataviewPlugin.api;
+    if (!dataviewApi) {
+      return content; // API not available
+    }
+
+    // Match dataview and dataviewjs code blocks
+    // Fixed regex: \s* handles trailing spaces and different line endings
+    const blockRegex = /```(dataview|dataviewjs)\s*\n([\s\S]*?)```/g;
+    const matches = [...content.matchAll(blockRegex)];
+
+    // Process matches in reverse order to avoid position shifts when replacing
+    // This also handles multiple identical blocks correctly
+    for (let i = matches.length - 1; i >= 0; i--) {
+      const match = matches[i];
+      const queryType = match[1]; // 'dataview' or 'dataviewjs'
+      const query = match[2].trim();
+      const matchStart = match.index!;
+      const matchEnd = matchStart + match[0].length;
+
+      try {
+        // Execute query with timeout
+        const result = await Promise.race([
+          this.executeDataviewQuery(dataviewApi, query, queryType, sourcePath),
+          new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 5000)),
+        ]);
+
+        // Replace block with structured output using slice (position-based, handles duplicates)
+        const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<executed_result>\n${result}\n</executed_result>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
+        content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
+      } catch (error) {
+        console.error(`Error executing Dataview query:`, error);
+        // On error, include query with error message
+        const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<error>${error instanceof Error ? error.message : "Query execution failed"}</error>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
+        content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
+      }
+    }
+
+    return content;
+  }
+
+  /**
+   * Execute a Dataview query and format the results
+   */
+  private async executeDataviewQuery(
+    dataviewApi: any,
+    query: string,
+    queryType: string,
+    sourcePath: string
+  ): Promise<string> {
+    if (queryType === "dataviewjs") {
+      // DataviewJS requires more complex handling - for now, return a message
+      return "[DataviewJS execution not yet supported - showing original query]";
+    }
+
+    // Parse and execute DQL query
+    const result = await dataviewApi.query(query, sourcePath);
+
+    if (!result.successful) {
+      throw new Error(result.error || "Query failed");
+    }
+
+    // Format results based on type
+    return this.formatDataviewResult(result.value);
+  }
+
+  /**
+   * Format Dataview query results into readable text
+   */
+  private formatDataviewResult(result: any): string {
+    if (!result) {
+      return "No results";
+    }
+
+    // Handle different result types
+    if (result.type === "list") {
+      return this.formatDataviewList(result.values);
+    } else if (result.type === "table") {
+      return this.formatDataviewTable(result.headers, result.values);
+    } else if (result.type === "task") {
+      return this.formatDataviewTasks(result.values);
+    } else if (Array.isArray(result)) {
+      return result.map((item) => this.formatDataviewValue(item)).join("\n");
+    }
+
+    return String(result);
+  }
+
+  /**
+   * Format Dataview list results
+   */
+  private formatDataviewList(values: any[]): string {
+    if (!values || values.length === 0) {
+      return "No results";
+    }
+    return values.map((item) => `- ${this.formatDataviewValue(item)}`).join("\n");
+  }
+
+  /**
+   * Format Dataview table results
+   */
+  private formatDataviewTable(headers: string[], rows: any[][]): string {
+    if (!rows || rows.length === 0) {
+      return "No results";
+    }
+
+    // Create markdown table
+    let table = `| ${headers.join(" | ")} |\n`;
+    table += `| ${headers.map(() => "---").join(" | ")} |\n`;
+
+    for (const row of rows) {
+      table += `| ${row.map((cell) => this.formatDataviewValue(cell)).join(" | ")} |\n`;
+    }
+
+    return table;
+  }
+
+  /**
+   * Format Dataview task results
+   */
+  private formatDataviewTasks(tasks: any[]): string {
+    if (!tasks || tasks.length === 0) {
+      return "No results";
+    }
+    return tasks
+      .map((task) => {
+        const checkbox = task.completed ? "[x]" : "[ ]";
+        return `- ${checkbox} ${this.formatDataviewValue(task.text || task)}`;
+      })
+      .join("\n");
+  }
+
+  /**
+   * Format individual Dataview values
+   */
+  private formatDataviewValue(value: any): string {
+    if (value === null || value === undefined) {
+      return "";
+    }
+
+    // Handle links
+    if (value && typeof value === "object" && value.path) {
+      return `[[${value.path}]]`;
+    }
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+      return value.map((v) => this.formatDataviewValue(v)).join(", ");
+    }
+
+    return String(value);
   }
 
   /**
@@ -108,9 +275,15 @@ export class ContextProcessor {
         // 3. If we reach here, parse the file (md, canvas, or other supported type in Plus mode)
         let content = await fileParserManager.parseFile(note, vault);
 
-        // Special handling for embedded PDFs within markdown (only in Plus mode)
-        if (note.extension === "md" && isPlusChain(currentChain)) {
-          content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
+        // Special handling for markdown files
+        if (note.extension === "md") {
+          // Process embedded PDFs (only in Plus mode)
+          if (isPlusChain(currentChain)) {
+            content = await this.processEmbeddedPDFs(content, vault, fileParserManager);
+          }
+
+          // Process Dataview blocks (all modes)
+          content = await this.processDataviewBlocks(content, note.path);
         }
 
         // Get file metadata
