@@ -342,7 +342,7 @@ export function registerTagListTool(): void {
       id: "getTagList",
       displayName: "Tag List",
       description: "List vault tags with occurrence statistics",
-      category: "metadata",
+      category: "file",
       isAlwaysEnabled: true,
       requiresVault: true,
       customPromptInstructions: `For getTagList:
