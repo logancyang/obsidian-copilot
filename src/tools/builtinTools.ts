@@ -374,22 +374,23 @@ export function registerMemoryTool(): void {
   registry.register({
     tool: memoryTool,
     metadata: {
-      id: "memoryTool",
-      displayName: "Save Memory",
-      description: "Save information to user memory when explicitly asked to remember something",
+      id: "updateMemory",
+      displayName: "Update Memory",
+      description:
+        "Save information to user memory when the user explicitly asks to remember something",
       category: "memory",
       copilotCommands: ["@memory"],
       isAlwaysEnabled: true,
-      customPromptInstructions: `For memoryTool:
-- Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
-- DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
-- Extract the key information to remember from the user's message
-
-Example usage:
-<use_tool>
-<name>memoryTool</name>
-<memoryContent>User's favorite programming language is Python and they prefer functional programming style</memoryContent>
-</use_tool>`,
+      customPromptInstructions: `For updateMemory:
+      - Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
+      - DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
+      - Pass the exact user statement to the "query" parameter (preserve language)
+      
+      Example usage:
+      <use_tool>
+      <name>updateMemory</name>
+      <query>User's favorite programming language is Python and they prefer functional programming style</query>
+      </use_tool>`,
     },
   });
 }
@@ -408,7 +409,7 @@ export function initializeBuiltinTools(vault?: Vault): void {
   // Only reinitialize if tools have changed or vault/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
   const shouldHaveFileTree = vault !== undefined;
-  const hasMemoryTool = registry.getToolMetadata("memoryTool") !== undefined;
+  const hasMemoryTool = registry.getToolMetadata("updateMemory") !== undefined;
   const shouldHaveMemoryTool = settings.enableSavedMemory;
 
   if (

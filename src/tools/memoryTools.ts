@@ -5,12 +5,7 @@ import { logError } from "@/logger";
 
 // Define Zod schema for memoryTool
 const memorySchema = z.object({
-  memoryContent: z
-    .string()
-    .min(1)
-    .describe(
-      "The content to save to user's memory (information the user explicitly asked to remember)"
-    ),
+  query: z.string().min(1).describe("The user query for explicitly updating saved memories"),
 });
 
 /**
@@ -22,24 +17,24 @@ export const memoryTool: SimpleTool<typeof memorySchema, { success: boolean; mes
     description:
       "Save information to user memory when the user explicitly asks to remember something",
     schema: memorySchema,
-    handler: async ({ memoryContent }) => {
+    handler: async ({ query }) => {
       try {
         const memoryManager = new UserMemoryManager(app);
-        const success = await memoryManager.addSavedMemory(memoryContent);
+        const success = await memoryManager.updateSavedMemory(query, chatModel);
         if (!success) {
           return {
             success: false,
-            message: `Failed to save memory: ${memoryContent}`,
+            message: `Failed to update memory: ${query}`,
           };
         }
         const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
 
         return {
           success: true,
-          message: `Memory saved successfully into ${memoryFilePath}: ${memoryContent}`,
+          message: `Memory updated successfully into ${memoryFilePath}: ${query}`,
         };
       } catch (error) {
-        logError("[memoryTool] Error saving memory:", error);
+        logError("[memoryTool] Error updating memory:", error);
 
         return {
           success: false,

@@ -80,34 +80,38 @@ export class UserMemoryManager {
   /**
    * Adds a saved memory that the user explicitly asked to remember
    */
-  async addSavedMemory(memoryContent: string): Promise<boolean> {
+  async updateSavedMemory(
+    query: string,
+    chatModel: BaseChatModel
+  ): Promise<{ success: boolean; content: string }> {
     const settings = getSettings();
 
     // Only proceed if saved memory is enabled
     if (!settings.enableSavedMemory) {
       logWarn("[UserMemoryManager] Saved memory is disabled, skipping save");
-      return false;
+      return { success: false, content: "" };
     }
 
-    if (!memoryContent || memoryContent.trim() === "") {
+    if (!query || query.trim() === "") {
       logWarn("[UserMemoryManager] No content provided for saved memory");
-      return false;
+      return { success: false, content: "" };
     }
 
     try {
       // Ensure user memory folder exists
       await this.ensureMemoryFolderExists();
-      // Create memory entry as a bullet point without timestamp metadata
-      const memoryEntry = `- ${memoryContent.trim()}`;
-
       // Add to saved memories file
-      await this.addToSavedMemoryFile(this.getSavedMemoriesFilePath(), memoryEntry);
+      const content = await this.updateSavedMemoryFile(
+        this.getSavedMemoriesFilePath(),
+        query,
+        chatModel
+      );
 
       logInfo("[UserMemoryManager] Saved memory added successfully");
-      return true;
+      return { success: true, content: content };
     } catch (error) {
       logError("[UserMemoryManager] Error saving memory:", error);
-      return false;
+      return { success: false, content: "" };
     }
   }
 
@@ -237,30 +241,73 @@ export class UserMemoryManager {
   }
 
   /**
-   * Save content to saved memory file by appending new entry (no max limit)
+   * Update content to saved memory file with ChatModel
    */
-  private async addToSavedMemoryFile(filePath: string, newMemoryEntry: string): Promise<void> {
+  private async updateSavedMemoryFile(
+    filePath: string,
+    query: string,
+    chatModel: BaseChatModel
+  ): Promise<string> {
     const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
+    // Load existing saved memories (may be empty)
+    const existingContent =
+      existingFile instanceof TFile ? await this.app.vault.read(existingFile) : "";
+
+    // Fast path: if no model available for some reason, append a bullet safely
+    if (!chatModel) {
+      logError("[UserMemoryManager] No chat model available, skipping memory update");
+      return existingContent;
+    }
+
+    // Ask the model to produce a deduplicated/merged/conflict-free full list
+    const systemPrompt = `You maintain a user's long-term personal memory list as concise bullet points.
+
+    You task is to update the user's memory list with the new statement.
+Rules:
+- Keep only stable, evergreen facts or preferences that will help future conversations.
+- Remove duplicates and near-duplicates by merging them into one concise statement.
+- If the new statement conflicts with older ones, keep the most recent truth and remove obsolete/conflicting entries.
+- Prefer short, specific, and unambiguous phrasing.
+- Preserve the language used in the input memories.
+- Output only the memory content with each as a bullet point.`;
+
+    const humanPrompt = `<current_memories>
+${existingContent.trim()}
+</current_memories>
+
+<new_statement>
+${query.trim()}
+</new_statement>
+
+Return the updated memory list with each as a bullet point.
+- memory item 1
+- memory item 2
+- memory item 3
+...
+`;
+
+    const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
+
+    let updatedContent: string | null = null;
+    try {
+      const response = await chatModel.invoke(messages_llm);
+      updatedContent = response.text ?? "";
+    } catch (error) {
+      logError("[UserMemoryManager] LLM call failed while updating saved memories:", error);
+    }
+    if (!updatedContent) {
+      logWarn("[UserMemoryManager] empty content returned from LLM, returning existing content");
+      return existingContent;
+    }
+
     if (existingFile instanceof TFile) {
-      // Read existing content and append new entry
-      const fileContent = await this.app.vault.read(existingFile);
-
-      let updatedContent: string;
-      if (fileContent.trim() === "") {
-        // Create new file with the entry
-        updatedContent = `${newMemoryEntry}\n`;
-      } else {
-        // Append to existing content
-        updatedContent = `${fileContent.trimEnd()}\n${newMemoryEntry}\n`;
-      }
-
       await this.app.vault.modify(existingFile, updatedContent);
     } else {
-      // Create new file
-      const initialContent = `${newMemoryEntry}\n`;
-      await this.app.vault.create(filePath, initialContent);
+      await this.app.vault.create(filePath, updatedContent);
     }
+
+    return updatedContent;
   }
 
   /**

@@ -461,7 +461,7 @@ The conversation covered advanced features and included code examples.`,
     it("should skip saving when saved memory is disabled", async () => {
       mockSettings.enableSavedMemory = false;
 
-      const result = await userMemoryManager.addSavedMemory("Test memory content");
+      const result = await userMemoryManager.updateSavedMemory("Test memory content");
 
       expect(result).toBe(false);
       expect(logWarn).toHaveBeenCalledWith(
@@ -472,7 +472,7 @@ The conversation covered advanced features and included code examples.`,
     it("should skip saving when no content provided", async () => {
       mockSettings.enableSavedMemory = true;
 
-      const result = await userMemoryManager.addSavedMemory("");
+      const result = await userMemoryManager.updateSavedMemory("");
 
       expect(result).toBe(false);
       expect(logWarn).toHaveBeenCalledWith(
@@ -493,7 +493,7 @@ The conversation covered advanced features and included code examples.`,
       const mockNewFile = createMockTFile("copilot/memory/Saved Memories.md");
       mockVault.create.mockResolvedValue(mockNewFile);
 
-      const result = await userMemoryManager.addSavedMemory(
+      const result = await userMemoryManager.updateSavedMemory(
         "Important user preference: I prefer dark mode"
       );
 
@@ -529,7 +529,7 @@ The conversation covered advanced features and included code examples.`,
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
       mockVault.read.mockResolvedValue(existingContent);
 
-      const result = await userMemoryManager.addSavedMemory("New important information");
+      const result = await userMemoryManager.updateSavedMemory("New important information");
 
       // Verify file modification was called with appended content
       expect(mockVault.modify).toHaveBeenCalledWith(
@@ -554,7 +554,7 @@ The conversation covered advanced features and included code examples.`,
       // Mock ensureFolderExists to reject
       (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
 
-      const result = await userMemoryManager.addSavedMemory("Test content");
+      const result = await userMemoryManager.updateSavedMemory("Test content");
 
       expect(result).toBe(false);
       expect(logError).toHaveBeenCalledWith(
