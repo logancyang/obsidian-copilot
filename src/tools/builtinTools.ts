@@ -377,19 +377,18 @@ export function registerMemoryTool(): void {
       id: "updateMemory",
       displayName: "Update Memory",
       description:
-        "Save information to user memory when the user explicitly asks to remember something",
+        "Save information to user memory when the user explicitly asks to remember something or update the memory",
       category: "memory",
       copilotCommands: ["@memory"],
       isAlwaysEnabled: true,
       customPromptInstructions: `For updateMemory:
-      - Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
+      - Use this tool to update the memory when the user explicitly asks to update the memory
       - DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
-      - Pass the exact user statement to the "query" parameter (preserve language)
-      
+
       Example usage:
       <use_tool>
       <name>updateMemory</name>
-      <query>User's favorite programming language is Python and they prefer functional programming style</query>
+      <statement>I'm studying Japanese and I'm preparing for JLPT N3</statement>
       </use_tool>`,
     },
   });

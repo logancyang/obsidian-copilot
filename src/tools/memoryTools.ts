@@ -2,10 +2,14 @@ import { z } from "zod";
 import { createTool, SimpleTool } from "./SimpleTool";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logError } from "@/logger";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 
 // Define Zod schema for memoryTool
 const memorySchema = z.object({
-  query: z.string().min(1).describe("The user query for explicitly updating saved memories"),
+  statement: z
+    .string()
+    .min(1)
+    .describe("The user statement for explicitly updating saved memories"),
 });
 
 /**
@@ -14,24 +18,24 @@ const memorySchema = z.object({
 export const memoryTool: SimpleTool<typeof memorySchema, { success: boolean; message: string }> =
   createTool({
     name: "memoryTool",
-    description:
-      "Save information to user memory when the user explicitly asks to remember something",
+    description: "Update the user memory when the user explicitly asks to update the memory",
     schema: memorySchema,
-    handler: async ({ query }) => {
+    handler: async ({ statement }) => {
       try {
         const memoryManager = new UserMemoryManager(app);
-        const success = await memoryManager.updateSavedMemory(query, chatModel);
+        const chatModel = ChatModelManager.getInstance().getChatModel();
+        const success = await memoryManager.updateSavedMemory(statement, chatModel);
         if (!success) {
           return {
             success: false,
-            message: `Failed to update memory: ${query}`,
+            message: `Failed to update memory: ${statement}`,
           };
         }
         const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
 
         return {
           success: true,
-          message: `Memory updated successfully into ${memoryFilePath}: ${query}`,
+          message: `Memory updated successfully into ${memoryFilePath}: ${statement}`,
         };
       } catch (error) {
         logError("[memoryTool] Error updating memory:", error);

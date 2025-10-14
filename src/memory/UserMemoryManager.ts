@@ -270,7 +270,16 @@ Rules:
 - If the new statement conflicts with older ones, keep the most recent truth and remove obsolete/conflicting entries.
 - Prefer short, specific, and unambiguous phrasing.
 - Preserve the language used in the input memories.
-- Output only the memory content with each as a bullet point.`;
+- Output only the memory content with each as a bullet point.
+
+
+# OUTPUT FORMAT
+Return the updated memory list with each as a bullet point.
+- memory item 1
+- memory item 2
+- memory item 3
+...
+`;
 
     const humanPrompt = `<current_memories>
 ${existingContent.trim()}
@@ -279,12 +288,6 @@ ${existingContent.trim()}
 <new_statement>
 ${query.trim()}
 </new_statement>
-
-Return the updated memory list with each as a bullet point.
-- memory item 1
-- memory item 2
-- memory item 3
-...
 `;
 
     const messages_llm = [new SystemMessage(systemPrompt), new HumanMessage(humanPrompt)];
