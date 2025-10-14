@@ -28,7 +28,7 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       description: "Search through your vault notes",
       category: "search",
       copilotCommands: ["@vault"],
-      customPromptInstructions: `For localSearch (searching notes in the vault):
+      customPromptInstructions: `For localSearch (searching notes based on their contents in the vault):
 - You MUST always provide both "query" (string) and "salientTerms" (array of strings)
 - salientTerms MUST be extracted from the user's original query - never invent new terms
 - They are keywords used for BM25 full-text search to find notes containing those exact words
