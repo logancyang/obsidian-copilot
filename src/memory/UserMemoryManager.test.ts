@@ -461,9 +461,12 @@ The conversation covered advanced features and included code examples.`,
     it("should skip saving when saved memory is disabled", async () => {
       mockSettings.enableSavedMemory = false;
 
-      const result = await userMemoryManager.updateSavedMemory("Test memory content");
+      const result = await userMemoryManager.updateSavedMemory(
+        "Test memory content",
+        mockChatModel
+      );
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ success: false, content: "" });
       expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] Saved memory is disabled, skipping save"
       );
@@ -472,9 +475,9 @@ The conversation covered advanced features and included code examples.`,
     it("should skip saving when no content provided", async () => {
       mockSettings.enableSavedMemory = true;
 
-      const result = await userMemoryManager.updateSavedMemory("");
+      const result = await userMemoryManager.updateSavedMemory("", mockChatModel);
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ success: false, content: "" });
       expect(logWarn).toHaveBeenCalledWith(
         "[UserMemoryManager] No content provided for saved memory"
       );
@@ -493,8 +496,15 @@ The conversation covered advanced features and included code examples.`,
       const mockNewFile = createMockTFile("copilot/memory/Saved Memories.md");
       mockVault.create.mockResolvedValue(mockNewFile);
 
+      // Mock LLM merge result content
+      const llmMergedContent = `- The user prefers concise responses`;
+      (mockChatModel.invoke as jest.Mock).mockResolvedValue(
+        new AIMessageChunk({ content: llmMergedContent })
+      );
+
       const result = await userMemoryManager.updateSavedMemory(
-        "Important user preference: I prefer dark mode"
+        "I prefer concise responses",
+        mockChatModel
       );
 
       // Verify folder creation was called
@@ -503,13 +513,13 @@ The conversation covered advanced features and included code examples.`,
       // Verify file creation was called with proper content
       expect(mockVault.create).toHaveBeenCalledWith(
         "copilot/memory/Saved Memories.md",
-        expect.stringContaining("- Important user preference: I prefer dark mode")
+        expect.stringContaining("- The user prefers concise responses")
       );
 
       const createdContent = mockVault.create.mock.calls[0][1];
       expect(createdContent).not.toContain("**");
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ success: true, content: llmMergedContent });
       expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
     });
 
@@ -529,7 +539,16 @@ The conversation covered advanced features and included code examples.`,
       mockVault.getAbstractFileByPath.mockReturnValue(mockMemoryFile);
       mockVault.read.mockResolvedValue(existingContent);
 
-      const result = await userMemoryManager.updateSavedMemory("New important information");
+      // Mock LLM to return merged full list
+      const mergedContent = `- Previous memory content\n- Another important fact\n- New important information`;
+      (mockChatModel.invoke as jest.Mock).mockResolvedValue(
+        new AIMessageChunk({ content: mergedContent })
+      );
+
+      const result = await userMemoryManager.updateSavedMemory(
+        "New important information",
+        mockChatModel
+      );
 
       // Verify file modification was called with appended content
       expect(mockVault.modify).toHaveBeenCalledWith(
@@ -544,7 +563,7 @@ The conversation covered advanced features and included code examples.`,
       const modifiedContent = mockVault.modify.mock.calls[0][1];
       expect(modifiedContent).not.toContain("**");
 
-      expect(result).toBe(true);
+      expect(result).toEqual({ success: true, content: mergedContent });
       expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
     });
 
@@ -554,9 +573,9 @@ The conversation covered advanced features and included code examples.`,
       // Mock ensureFolderExists to reject
       (ensureFolderExists as jest.Mock).mockRejectedValue(new Error("Folder creation failed"));
 
-      const result = await userMemoryManager.updateSavedMemory("Test content");
+      const result = await userMemoryManager.updateSavedMemory("Test content", mockChatModel);
 
-      expect(result).toBe(false);
+      expect(result).toEqual({ success: false, content: "" });
       expect(logError).toHaveBeenCalledWith(
         "[UserMemoryManager] Error saving memory:",
         expect.any(Error)
