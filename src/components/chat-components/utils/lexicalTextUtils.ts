@@ -623,7 +623,11 @@ export function $replaceTextRangeWithPills(
   newText: string,
   options: InsertTextOptions = {}
 ): void {
-  const { enableURLPills = false, enableCustomTemplatePills = false } = options;
+  const {
+    enableURLPills = false,
+    enableToolPills = false,
+    enableCustomTemplatePills = false,
+  } = options;
 
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) return;
@@ -640,6 +644,7 @@ export function $replaceTextRangeWithPills(
   const segments = parseTextForPills(newText, {
     includeNotes: true,
     includeURLs: enableURLPills,
+    includeTools: enableToolPills,
     includeCustomTemplates: enableCustomTemplatePills,
   });
 
