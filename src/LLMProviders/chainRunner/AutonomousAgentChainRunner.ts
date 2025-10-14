@@ -8,6 +8,8 @@ import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { deriveReadNoteDisplayName, ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
+import { err2String, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import { formatErrorChunk, processToolResults } from "@/utils/toolResultUtils";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
 import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
@@ -22,8 +24,8 @@ import {
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import {
   createToolCallMarker,
-  updateToolCallMarker,
   ensureEncodedToolCallMarkerResults,
+  updateToolCallMarker,
 } from "./utils/toolCallParser";
 import {
   deduplicateSources,
@@ -112,6 +114,7 @@ interface AgentFinalizationParams extends AgentRunContext {
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
+  private lastDisplayedContent = ""; // Track the last content displayed to user for error recovery
 
   private getAvailableTools(): SimpleTool<any, any>[] {
     const settings = getSettings();
@@ -254,13 +257,32 @@ ${params}
     const isPlusUser = await checkIsPlusUser({
       isAutonomousAgent: true,
     });
-    if (!isPlusUser) {
-      await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
-      return "";
-    }
 
+    // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
+
+    // Create ThinkBlockStreamer to manage all content and errors
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter);
+
+    if (!isPlusUser) {
+      await this.handleError(
+        new Error("Invalid license key"),
+        thinkStreamer.processErrorChunk.bind(thinkStreamer)
+      );
+      const errorResponse = thinkStreamer.close().content;
+
+      // Use handleResponse to properly save error to conversation history and memory
+      return this.handleResponse(
+        errorResponse,
+        userMessage,
+        abortController,
+        addMessage,
+        updateCurrentAiMessage,
+        undefined // no sources
+      );
+    }
+
     const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
 
     const context = await this.prepareAgentConversation(userMessage, adapter, chatModel);
@@ -295,8 +317,36 @@ ${params}
           );
         } catch (fallbackError) {
           logError("Fallback to regular Plus mode also failed:", fallbackError);
-          await this.handleError(fallbackError, addMessage, updateCurrentAiMessage);
-          return "";
+
+          // Use thinkStreamer to format and display the error
+          // If we have displayed content, add it first before the error
+          if (this.lastDisplayedContent) {
+            thinkStreamer.processChunk({ content: this.lastDisplayedContent });
+          }
+
+          // Append fallback error information to the existing error response
+          const autonomousAgentErrorMsg = err2String(error);
+
+          const fallbackErrorMsg =
+            `\n\nFallback to regular Plus mode also failed: ` + err2String(fallbackError);
+
+          await this.handleError(
+            new Error(autonomousAgentErrorMsg + fallbackErrorMsg),
+            thinkStreamer.processErrorChunk.bind(thinkStreamer)
+          );
+
+          fullAIResponse = thinkStreamer.close().content;
+
+          // Return immediately to prevent further execution
+          return this.handleResponse(
+            fullAIResponse,
+            userMessage,
+            abortController,
+            addMessage,
+            updateCurrentAiMessage,
+            undefined, // no sources
+            fullAIResponse // llmFormattedOutput
+          );
         }
       }
     }
@@ -542,6 +592,13 @@ ${params}
           originalUserPrompt
         );
 
+        // Handle tool execution error - format error for UI display
+        if (!result.success) {
+          // Format error with errorChunk tags for proper UI display
+          result.displayResult = formatErrorChunk(result.result, "Tool execution failed");
+          // Keep the original result for LLM processing (don't modify result.result)
+        }
+
         if (toolCall.name === "localSearch") {
           const processed = loopDeps.processLocalSearchResult(result);
           collectedSources.push(...processed.sources);
@@ -700,7 +757,9 @@ ${params}
       displayParts.push(currentIterationToolCallMessages.join("\n"));
     }
 
-    updateCurrentAiMessage(displayParts.join("\n\n"));
+    const currentDisplay = displayParts.join("\n\n");
+    this.lastDisplayedContent = currentDisplay; // Save for error handling
+    updateCurrentAiMessage(currentDisplay);
   }
 
   private isAbortRequested(abortController: AbortController): boolean {

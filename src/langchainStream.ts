@@ -4,6 +4,7 @@ import { ChatMessage } from "@/types/message";
 import { err2String, formatDateTime } from "./utils";
 import { logError } from "@/logger";
 import { v4 as uuidv4 } from "uuid";
+import { formatErrorChunk } from "@/utils/toolResultUtils";
 
 export type Role = "assistant" | "user" | "system";
 
@@ -32,13 +33,13 @@ export const getAIResponse = async (
     );
   } catch (error) {
     logError("Model request failed:", error);
-    const errorMessage = "Model request failed: " + err2String(error);
+    const errorMessage = formatErrorChunk("Model request failed: " + err2String(error));
 
     addMessage({
       id: uuidv4(),
       sender: AI_SENDER,
       isErrorMessage: true,
-      message: `Error: ${errorMessage}`,
+      message: errorMessage,
       isVisible: true,
       timestamp: formatDateTime(new Date()),
     });

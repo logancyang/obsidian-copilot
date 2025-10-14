@@ -1,5 +1,5 @@
 import ProjectManager from "@/LLMProviders/projectManager";
-import { ChatHistoryEntry, removeThinkTags, withSuppressedTokenWarnings } from "@/utils";
+import { ChatHistoryEntry, removeThinkTags, removeErrorTags, withSuppressedTokenWarnings } from "@/utils";
 
 export async function getStandaloneQuestion(
   question: string,
@@ -37,6 +37,7 @@ export async function getStandaloneQuestion(
       },
     ]);
 
-    return removeThinkTags(response.content as string);
+    const cleanedResponse = removeThinkTags(response.content as string);
+    return removeErrorTags(cleanedResponse);
   });
 }
