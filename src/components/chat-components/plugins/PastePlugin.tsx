@@ -71,7 +71,7 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
           includeNotes: true,
           includeURLs: enableURLPills,
           includeTools: true,
-          includeFolders: true,
+          includeCustomTemplates: true,
         });
 
         // Check if we found any valid pills

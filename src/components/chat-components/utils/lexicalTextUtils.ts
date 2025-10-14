@@ -87,6 +87,7 @@ export interface ParsedContent {
 export interface InsertTextOptions {
   enableURLPills?: boolean;
   enableToolPills?: boolean;
+  enableCustomTemplatePills?: boolean;
   insertAtSelection?: boolean;
 }
 
@@ -365,14 +366,14 @@ export function parseTextForPills(
     includeNotes?: boolean;
     includeURLs?: boolean;
     includeTools?: boolean;
-    includeFolders?: boolean;
+    includeCustomTemplates?: boolean;
   } = {}
 ): ParsedContent[] {
   const {
     includeNotes = true,
     includeURLs = false,
     includeTools = false,
-    includeFolders = false,
+    includeCustomTemplates = false,
   } = options;
   const segments: ParsedContent[] = [];
 
@@ -396,7 +397,7 @@ export function parseTextForPills(
     patternInfo.push({ type: "tools", groupCount: 1, startIndex: currentGroupIndex });
     currentGroupIndex += 1;
   }
-  if (includeFolders) {
+  if (includeCustomTemplates) {
     patterns.push("(\\{([^}]+)\\})"); // 2 groups: full match and custom template content
     patternInfo.push({ type: "customTemplates", groupCount: 2, startIndex: currentGroupIndex });
     currentGroupIndex += 2;
@@ -622,7 +623,7 @@ export function $replaceTextRangeWithPills(
   newText: string,
   options: InsertTextOptions = {}
 ): void {
-  const { enableURLPills = false } = options;
+  const { enableURLPills = false, enableCustomTemplatePills = false } = options;
 
   const selection = $getSelection();
   if (!$isRangeSelection(selection)) return;
@@ -639,6 +640,7 @@ export function $replaceTextRangeWithPills(
   const segments = parseTextForPills(newText, {
     includeNotes: true,
     includeURLs: enableURLPills,
+    includeCustomTemplates: enableCustomTemplatePills,
   });
 
   if (segments.length === 1 && segments[0].type === "text") {

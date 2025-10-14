@@ -81,6 +81,7 @@ export function SlashCommandPlugin(): JSX.Element {
             const insertedText = option.content || option.title;
             $replaceTextRangeWithPills(slashIndex, anchor.offset, insertedText, {
               enableURLPills: true, // Enable URL pill conversion for templates
+              enableCustomTemplatePills: true, // Enable custom template pill conversion ({activeNote}, {folderName})
             });
           }
         }
