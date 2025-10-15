@@ -13,7 +13,7 @@ import { ToolManager } from "@/tools/toolManager";
 import { extractChatHistory } from "@/utils";
 import { Vault } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
-import { memoryTool } from "@/tools/memoryTools";
+import { updateMemoryTool } from "@/tools/memoryTools";
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 type ToolCall = {
@@ -136,7 +136,7 @@ export class IntentAnalyzer {
       const cleanQuery = this.removeAtCommands(originalMessage);
 
       processedToolCalls.push({
-        tool: memoryTool,
+        tool: updateMemoryTool,
         args: {
           memoryContent: cleanQuery,
         },

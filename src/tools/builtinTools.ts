@@ -3,7 +3,7 @@ import { Vault } from "obsidian";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { createGetTagListTool } from "./TagTools";
-import { memoryTool } from "./memoryTools";
+import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import {
@@ -372,7 +372,7 @@ export function registerMemoryTool(): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
-    tool: memoryTool,
+    tool: updateMemoryTool,
     metadata: {
       id: "updateMemory",
       displayName: "Update Memory",
@@ -408,13 +408,13 @@ export function initializeBuiltinTools(vault?: Vault): void {
   // Only reinitialize if tools have changed or vault/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
   const shouldHaveFileTree = vault !== undefined;
-  const hasMemoryTool = registry.getToolMetadata("updateMemory") !== undefined;
+  const hasUpdateMemoryTool = registry.getToolMetadata("updateMemory") !== undefined;
   const shouldHaveMemoryTool = settings.enableSavedMemory;
 
   if (
     registry.getAllTools().length === 0 ||
     hasFileTree !== shouldHaveFileTree ||
-    hasMemoryTool !== shouldHaveMemoryTool
+    hasUpdateMemoryTool !== shouldHaveMemoryTool
   ) {
     // Clear any existing tools
     registry.clear();

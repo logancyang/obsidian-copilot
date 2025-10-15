@@ -27,7 +27,7 @@ graph TD
     K --> L[Recent Memory Update Complete]
 
     %% Saved Memory Flow
-    M[User Explicitly Asks to Remember] --> N[memoryTool called]
+    M[User Explicitly Asks to Remember] --> N[updateMemoryTool called]
     N --> O{enableSavedMemory?}
     O -->|Yes| P[Extract Memory Content]
     O -->|No| Z2[Skip Saved Memory]
@@ -57,7 +57,7 @@ graph TD
 
 **Saved Memories:**
 
-- **Trigger**: When user explicitly asks to remember something during chat and `memoryTool` is called
+- **Trigger**: When user explicitly asks to remember something during chat and `updateMemoryTool` is called
 - **Guard**: Only if `enableSavedMemory` setting is enabled
 - **Immediate**: Saves directly to file when invoked
 - **User notification**: Shows success/failure notice to user
@@ -76,7 +76,7 @@ graph TD
 
 ### Saved Memories:
 
-- **When**: User explicitly asks to remember something via `memoryTool`
+- **When**: User explicitly asks to remember something via `updateMemoryTool`
 - **Retention policy**: No limit - memories persist until manually deleted
 - **Content**:
   - Raw user-specified information to remember
@@ -133,10 +133,10 @@ The memory system behaves differently depending on which chat mode is active:
 ### Agent Mode (Autonomous Agent)
 
 - **Memory Retrieval**: ✅ Full access to both Recent Conversations and Saved Memories via system prompt
-- **Memory Saving**: ✅ Direct access to `memoryTool` through XML-based tool calling
+- **Memory Saving**: ✅ Direct access to `updateMemoryTool` through XML-based tool calling
 - **Behavior**:
   - AI autonomously decides when to save memories based on user requests
-  - Uses XML format: `<use_tool><name>memoryTool</name><memoryContent>...</memoryContent></use_tool>`
+  - Uses XML format: `<use_tool><name>updateMemoryTool</name><memoryContent>...</memoryContent></use_tool>`
   - Can reason step-by-step about whether something should be remembered
   - Shows user notifications when memories are saved
   - Access controlled by tool enablement settings (`autonomousAgentEnabledToolIds`)
