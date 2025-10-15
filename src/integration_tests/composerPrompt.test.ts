@@ -53,7 +53,7 @@ describe("Composer Instructions - Integration Tests", () => {
       model: "gemini-2.0-flash",
       generationConfig: {
         temperature: 0.1,
-        maxOutputTokens: 1000,
+        maxOutputTokens: 5000,
       },
       systemInstruction: DEFAULT_SYSTEM_PROMPT,
       safetySettings: [
