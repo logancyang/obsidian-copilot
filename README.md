@@ -41,7 +41,7 @@ Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based va
   <em>Copilot's Agent can call the proper tools on its own upon your request.</em>
 </p>
 <p align="center">
-  <img src="./images/product-ui-screenshot.jpeg" alt="Product UI screenshot" width="800"/>
+  <img src="./images/product-ui-screenshot.png" alt="Product UI screenshot" width="800"/>
 </p>
 
 ## Table of Contents
@@ -93,6 +93,18 @@ Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag
 2. Go to **Obsidian → Settings → Copilot → Basic** and paste the key into in the **Copilot Plus** card.
 
 ## Usage
+
+### Table of Contents
+- [Free User](#free-user)
+  - [Chat Mode](#chat-mode-reference-notes-and-discuss-ideas-with-copilot)
+  - [Vault QA Mode](#vault-qa-mode-chat-with-your-entire-vault)
+  - [Command Palette](#copilots-command-palette)
+  - [Relevant Notes](#relevant-notes-notes-suggestions-based-on-semantic-similarity-and-links)
+- [Copilot Plus/Believer](#copilot-plusbeliever)
+  - [Time-Based Queries](#get-precision-insights-from-a-specific-time-window)
+  - [Agent Mode](#agent-mode-autonomous-tool-calling)
+  - [Image Understanding](#understand-images-in-your-notes)
+  - [Multi-Source Analysis](#one-prompt-every-sourceinstant-summaries-from-pdfs-videos-and-web)
 
 ### Free User
 
@@ -160,6 +172,7 @@ Create commands and workflows in `Settings → Copilot → Command → Add Cmd`.
 </p>
 
 **Command Palette in Chat**
+
 Type `/` to use Command Palette in chat window.
 
 <p align="center">
