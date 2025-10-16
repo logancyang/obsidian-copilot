@@ -50,7 +50,7 @@ describe("Composer Instructions - Integration Tests", () => {
     // Initialize Google Generative AI client directly with the SDK
     genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
     model = genAI.getGenerativeModel({
-      model: "gemini-2.0-flash",
+      model: "gemini-2.5-flash-lite",
       generationConfig: {
         temperature: 0.1,
         maxOutputTokens: 1000,
@@ -91,6 +91,8 @@ describe("Composer Instructions - Integration Tests", () => {
           userPrompt + "\n\n<output_format>\n" + COMPOSER_OUTPUT_INSTRUCTIONS + "\n</output_format>"
         );
         const content = result.response.text();
+        // Log preview for inspection
+        console.log(`${testName} - Response preview:`, content);
 
         if (expectedBlocks == 0) {
           expect(content).not.toContain("<writeToFile>");
@@ -129,9 +131,6 @@ describe("Composer Instructions - Integration Tests", () => {
             }
           });
         }
-
-        // Log preview for inspection
-        console.log(`${testName} - Response preview:`, content.substring(0, 100) + "...");
       } catch (error) {
         console.error(`${testName} error:`, error);
         throw error;
@@ -180,7 +179,7 @@ describe("Composer Instructions - Integration Tests", () => {
 
   testComposerResponse(
     "Composer: create a canvas",
-    "@composer Create a canvas about water cycle",
+    "@composer Create a sample canvas with 3 nodes and 1 edge",
     1
   );
 });
