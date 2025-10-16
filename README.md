@@ -113,14 +113,14 @@ Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag
 Use `@` to add context and chat with your note.
 
 <p align="center">
-    <img src="./images/Add-Context.png" alt="Chat Mode" width="700" height="394">
+    <img src="./images/Add-Context.png" alt="Chat Mode" width="700">
 </p>
 
 Ask Copilot:
   > *Summarize [[Q3 Retrospective]] and identify the top 3 action items for Q4 based on the notes in {01-Projects}.*
 
 <p align="center">
-    <img src="./images/Chat-Mode.png" alt="Chat Mode" width="700" height="394">
+    <img src="./images/Chat-Mode.png" alt="Chat Mode" width="700">
 </p>
 
 #### **Vault QA Mode: chat with your entire vault**
@@ -130,7 +130,7 @@ Ask Copilot:
 
 
 <p align="center">
-    <img src="./images/Vault-Mode.png" alt="Vault Mode" width="700" height="394">
+    <img src="./images/Vault-Mode.png" alt="Vault Mode" width="700">
 </p>
 
 #### Copilot's Command Palette
@@ -142,7 +142,7 @@ right-click menu on selected text.
 Select text and add it to context. Recommend shortcut: `ctrl/cmd + L`
 
 <p align="center">
-    <img src="./images/Add-Selection-to-Context.png" alt="Add Selection to Context" width="700" height="394">
+    <img src="./images/Add-Selection-to-Context.png" alt="Add Selection to Context" width="700">
 </p>
 
 **Quick Command**
@@ -151,7 +151,7 @@ Select text and apply action without opening chat. Recommend shortcut: `ctrl/cmd
 
 
 <p align="center">
-    <img src="./images/Quick-Command.png" alt="Quick Command" width="700" height="394">
+    <img src="./images/Quick-Command.png" alt="Quick Command" width="700">
 </p>
 
 
@@ -160,7 +160,7 @@ Select text and apply action without opening chat. Recommend shortcut: `ctrl/cmd
 Select text and edit with one RIGHT click.
 
 <p align="center">
-    <img src="./images/One-Click-Commands.png" alt="One-Click Commands" width="700" height="394">
+    <img src="./images/One-Click-Commands.png" alt="One-Click Commands" width="700">
 </p>
 
 **Create your Command**
@@ -168,7 +168,7 @@ Select text and edit with one RIGHT click.
 Create commands and workflows in `Settings → Copilot → Command → Add Cmd`.
 
 <p align="center">
-    <img src="./images/Create-Command.png" alt="Create Command" width="700" height="394">
+    <img src="./images/Create-Command.png" alt="Create Command" width="700">
 </p>
 
 **Command Palette in Chat**
@@ -176,7 +176,7 @@ Create commands and workflows in `Settings → Copilot → Command → Add Cmd`.
 Type `/` to use Command Palette in chat window.
 
 <p align="center">
-    <img src="./images/Prompt-Palette.png" alt="Prompt Palette" width="700" height="394">
+    <img src="./images/Prompt-Palette.png" alt="Prompt Palette" width="700">
 </p>
 
 #### **Relevant Notes: notes suggestions based on semantic similarity and links**
@@ -186,7 +186,7 @@ Appears automatically when there's useful related content and links.
 Use it to quickly reference past research, ideas, or decisions—no need to search or switch tabs.
 
 <p align="center">
-    <img src="./images/Relevant-Notes.png" alt="Relevant Notes" width="700" height="394">
+    <img src="./images/Relevant-Notes.png" alt="Relevant Notes" width="700">
 </p>
 
 ### Copilot Plus/Believer
@@ -195,10 +195,12 @@ Copilot Plus brings powerful AI agentic capabilities, context-aware actions and 
 
 #### **Get Precision Insights From a Specific Time Window**
 
-  > *Summarize everything I worked on last week in {{01-Projects}} folder.*
+In agent mode, ask copilot:
+
+  > *What did I do last week?*
 
 <p align="center">
-    <img src="./images/Time-Based-Queries.png" alt="Time-Based Queries" width="700" height="394">
+    <img src="./images/Time-Based-Queries.png" alt="Time-Based Queries" width="700">
 </p>
 
 #### **Agent Mode: Autonomous Tool Calling**
@@ -210,7 +212,7 @@ Ask Copilot in agent mode:
   > *Research web and my vault and draft a note on AI SaaS onboarding best practices.*
 
 <p align="center">
-    <img src="./images/Agent-Mode.png" alt="Agent Mode" width="700" height="394">
+    <img src="./images/Agent-Mode.png" alt="Agent Mode" width="700">
 </p>
 
 #### **Understand Images in Your Notes**
@@ -222,7 +224,7 @@ Ask Copilot to analyze your wireframes:
   > *Analyze the wireframe in [[UX Design - Mobile App Wireframes]] and suggest improvements for the navigation flow.*
 
 <p align="center">
-    <img src="./images/Note-Image.png" alt="Image Understanding" width="700" height="394">
+    <img src="./images/Note-Image.png" alt="Image Understanding" width="700">
 </p>
 
 #### **One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**
@@ -236,7 +238,7 @@ In agent mode, ask Copilot
 
 
 <p align="center">
-    <img src="./images/One-Prompt-Every-Source.png" alt="One Prompt, Every Source" width="700" height="394">
+    <img src="./images/One-Prompt-Every-Source.png" alt="One Prompt, Every Source" width="700">
 </p>
 
 ## **Need Help?**
