@@ -138,7 +138,7 @@ export class IntentAnalyzer {
       processedToolCalls.push({
         tool: updateMemoryTool,
         args: {
-          memoryContent: cleanQuery,
+          statement: cleanQuery,
         },
       });
     }
