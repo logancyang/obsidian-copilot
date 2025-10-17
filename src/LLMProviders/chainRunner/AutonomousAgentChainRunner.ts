@@ -251,6 +251,7 @@ ${params}
     }
   ): Promise<string> {
     this.llmFormattedMessages = [];
+    this.lastDisplayedContent = ""; // Reset to prevent stale content from previous runs
     let fullAIResponse = "";
     let responseMetadata: ResponseMetadata | undefined;
 
@@ -816,6 +817,9 @@ ${params}
       llmFormattedOutput,
       responseMetadata
     );
+
+    // Reset after successful completion to prevent state leakage
+    this.lastDisplayedContent = "";
 
     return finalResponse;
   }

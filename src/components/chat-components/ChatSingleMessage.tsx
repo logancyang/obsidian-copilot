@@ -429,11 +429,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             let container = document.getElementById(`error-block-${errorId}`);
 
             if (!container) {
-              // Always append error blocks to the end
+              // Insert error block at the current stream position
+              const insertBefore = contentRef.current!.children[currentIndex];
               const errorDiv = document.createElement("div");
               errorDiv.className = "error-block-container";
               errorDiv.id = `error-block-${errorId}`;
-              contentRef.current!.appendChild(errorDiv);
+
+              if (insertBefore) {
+                contentRef.current!.insertBefore(errorDiv, insertBefore);
+              } else {
+                contentRef.current!.appendChild(errorDiv);
+              }
+
               container = errorDiv;
             }
 
@@ -449,7 +456,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             if (!isUnmountingRef.current && !rootRecord.isUnmounting) {
               renderErrorBlock(rootRecord, segment.error);
             }
-            // Note: Don't increment currentIndex for error blocks as they're appended to the end
+
+            currentIndex++;
           }
         });
 
