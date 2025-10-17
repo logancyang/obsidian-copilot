@@ -69,18 +69,16 @@ export default class CopilotView extends ItemView {
     this.root.render(
       <AppContext.Provider value={this.app}>
         <EventTargetContext.Provider value={this.eventTarget}>
-          <React.StrictMode>
-            <Tooltip.Provider delayDuration={0}>
-              <Chat
-                chainManager={this.chainManager}
-                updateUserMessageHistory={updateUserMessageHistory}
-                fileParserManager={this.fileParserManager}
-                plugin={this.plugin}
-                onSaveChat={handleSaveAsNote}
-                chatUIState={this.plugin.chatUIState}
-              />
-            </Tooltip.Provider>
-          </React.StrictMode>
+          <Tooltip.Provider delayDuration={0}>
+            <Chat
+              chainManager={this.chainManager}
+              updateUserMessageHistory={updateUserMessageHistory}
+              fileParserManager={this.fileParserManager}
+              plugin={this.plugin}
+              onSaveChat={handleSaveAsNote}
+              chatUIState={this.plugin.chatUIState}
+            />
+          </Tooltip.Provider>
         </EventTargetContext.Provider>
       </AppContext.Provider>
     );

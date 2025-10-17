@@ -20,8 +20,9 @@ export const useChatScrolling = ({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Generate consistent message key for DOM identification
+  // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
   const getMessageKey = useCallback((message: ChatMessage, index: number): string => {
-    return `message-${message.timestamp?.epoch || index}`;
+    return `message-${message.id || message.timestamp?.epoch || index}`;
   }, []);
 
   // Calculate min-height based on actual last user message size

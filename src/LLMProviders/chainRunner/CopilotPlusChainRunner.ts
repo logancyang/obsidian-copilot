@@ -19,7 +19,7 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
-import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
+import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { IntentAnalyzer } from "../intentAnalyzer";
@@ -282,8 +282,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     textContent: string,
     userMessage: ChatMessage,
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void
-  ): Promise<StreamingResult> {
+    thinkStreamer: ThinkBlockStreamer
+  ): Promise<void> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
@@ -335,7 +335,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     logInfo("Enhanced user message: ", enhancedUserMessage);
     logInfo("Final request to AI", { messages: messages.length });
     const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
-    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
 
     // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>
@@ -355,14 +354,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         thinkStreamer.processChunk(processedChunk);
       }
     }
-
-    const result = thinkStreamer.close();
-
-    return {
-      content: result.content,
-      wasTruncated: result.wasTruncated,
-      tokenUsage: result.tokenUsage,
-    };
   }
 
   async run(
@@ -378,23 +369,28 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { updateLoadingMessage } = options;
-    let fullAIResponse = "";
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
-    let currentPartialResponse = "";
-    let responseMetadata: ResponseMetadata | undefined;
+
     const isPlusUser = await checkIsPlusUser({
       isCopilotPlus: true,
     });
     if (!isPlusUser) {
-      await this.handleError(new Error("Invalid license key"), addMessage, updateCurrentAiMessage);
-      return "";
-    }
+      await this.handleError(
+        new Error("Invalid license key"),
+        thinkStreamer.processErrorChunk.bind(thinkStreamer)
+      );
+      const errorResponse = thinkStreamer.close().content;
 
-    // Wrapper to track partial response
-    const trackAndUpdateAiMessage = (message: string) => {
-      currentPartialResponse = message;
-      updateCurrentAiMessage(message);
-    };
+      return this.handleResponse(
+        errorResponse,
+        userMessage,
+        abortController,
+        addMessage,
+        updateCurrentAiMessage,
+        undefined // no sources
+      );
+    }
 
     try {
       logInfo("==== Step 1: Analyzing intent ====");
@@ -473,19 +469,12 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       );
 
       logInfo("Invoking LLM with all tool results");
-      const streamResult = await this.streamMultimodalResponse(
+      await this.streamMultimodalResponse(
         enhancedUserMessage,
         userMessage,
         abortController,
-        trackAndUpdateAiMessage
+        thinkStreamer
       );
-      fullAIResponse = streamResult.content;
-
-      // Store truncation metadata for handleResponse
-      responseMetadata = {
-        wasTruncated: streamResult.wasTruncated,
-        tokenUsage: streamResult.tokenUsage ?? undefined,
-      };
     } catch (error: any) {
       // Reset loading message to default
       updateLoadingMessage?.(LOADING_MESSAGES.DEFAULT);
@@ -495,7 +484,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, addMessage, updateCurrentAiMessage);
+        await this.handleError(error, thinkStreamer.processErrorChunk.bind(thinkStreamer));
       }
     }
 
@@ -505,10 +494,15 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       return "";
     }
 
-    // If aborted but not a new chat, use the partial response
-    if (abortController.signal.aborted && currentPartialResponse) {
-      fullAIResponse = currentPartialResponse;
-    }
+    // Get the response from thinkStreamer
+    const streamResult = thinkStreamer.close();
+    let fullAIResponse = streamResult.content;
+
+    // Store truncation metadata for handleResponse
+    const responseMetadata: ResponseMetadata | undefined = {
+      wasTruncated: streamResult.wasTruncated,
+      tokenUsage: streamResult.tokenUsage ?? undefined,
+    };
 
     // Add fallback sources if citations are enabled and missing
     const settings = getSettings();
