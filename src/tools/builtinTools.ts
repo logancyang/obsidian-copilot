@@ -3,7 +3,7 @@ import { Vault } from "obsidian";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { createGetTagListTool } from "./TagTools";
-import { memoryTool } from "./memoryTools";
+import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import {
@@ -373,24 +373,24 @@ export function registerMemoryTool(): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
-    tool: memoryTool,
+    tool: updateMemoryTool,
     metadata: {
-      id: "memoryTool",
-      displayName: "Save Memory",
-      description: "Save information to user memory when explicitly asked to remember something",
+      id: "updateMemory",
+      displayName: "Update Memory",
+      description:
+        "Save information to user memory when the user explicitly asks to remember something or update the memory",
       category: "memory",
       copilotCommands: ["@memory"],
       isAlwaysEnabled: true,
-      customPromptInstructions: `For memoryTool:
-- Use ONLY when the user explicitly asks you to remember something (phrases like "remember that", "don't forget", etc.)
-- DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
-- Extract the key information to remember from the user's message
+      customPromptInstructions: `For updateMemory:
+      - Use this tool to update the memory when the user explicitly asks to update the memory
+      - DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
 
-Example usage:
-<use_tool>
-<name>memoryTool</name>
-<memoryContent>User's favorite programming language is Python and they prefer functional programming style</memoryContent>
-</use_tool>`,
+      Example usage:
+      <use_tool>
+      <name>updateMemory</name>
+      <statement>I'm studying Japanese and I'm preparing for JLPT N3</statement>
+      </use_tool>`,
     },
   });
 }
@@ -409,13 +409,13 @@ export function initializeBuiltinTools(vault?: Vault): void {
   // Only reinitialize if tools have changed or vault/memory status has changed
   const hasFileTree = registry.getToolMetadata("getFileTree") !== undefined;
   const shouldHaveFileTree = vault !== undefined;
-  const hasMemoryTool = registry.getToolMetadata("memoryTool") !== undefined;
+  const hasUpdateMemoryTool = registry.getToolMetadata("updateMemory") !== undefined;
   const shouldHaveMemoryTool = settings.enableSavedMemory;
 
   if (
     registry.getAllTools().length === 0 ||
     hasFileTree !== shouldHaveFileTree ||
-    hasMemoryTool !== shouldHaveMemoryTool
+    hasUpdateMemoryTool !== shouldHaveMemoryTool
   ) {
     // Clear any existing tools
     registry.clear();
