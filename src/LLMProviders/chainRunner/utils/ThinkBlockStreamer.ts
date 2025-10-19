@@ -16,17 +16,24 @@ export class ThinkBlockStreamer {
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
-    private modelAdapter?: ModelAdapter
+    private modelAdapter?: ModelAdapter,
+    private excludeThinking: boolean = false
   ) {}
 
   private handleClaude37Chunk(content: any[]) {
     let textContent = "";
+    let hasThinkingContent = false;
     for (const item of content) {
       switch (item.type) {
         case "text":
           textContent += item.text;
           break;
         case "thinking":
+          hasThinkingContent = true;
+          // Skip thinking content if excludeThinking is enabled
+          if (this.excludeThinking) {
+            break;
+          }
           if (!this.hasOpenThinkBlock) {
             this.fullResponse += "\n<think>";
             this.hasOpenThinkBlock = true;
@@ -36,13 +43,13 @@ export class ThinkBlockStreamer {
             this.fullResponse += item.thinking;
           }
           this.updateCurrentAiMessage(this.fullResponse);
-          return true; // Indicate we handled a thinking chunk
+          break;
       }
     }
     if (textContent) {
       this.fullResponse += textContent;
     }
-    return false; // No thinking chunk handled
+    return hasThinkingContent;
   }
 
   private handleDeepseekChunk(chunk: any) {
@@ -53,6 +60,10 @@ export class ThinkBlockStreamer {
 
     // Handle deepseek reasoning/thinking content
     if (chunk.additional_kwargs?.reasoning_content) {
+      // Skip thinking content if excludeThinking is enabled
+      if (this.excludeThinking) {
+        return true; // Indicate we handled (but skipped) a thinking chunk
+      }
       if (!this.hasOpenThinkBlock) {
         this.fullResponse += "\n<think>";
         this.hasOpenThinkBlock = true;
@@ -64,61 +75,6 @@ export class ThinkBlockStreamer {
       return true; // Indicate we handled a thinking chunk
     }
     return false; // No thinking chunk handled
-  }
-
-  /**
-   * Handles GPT-5 reasoning chunks from OpenAI's Responses API
-   * GPT-5 returns reasoning in additional_kwargs.reasoning_details as an array
-   */
-  private handleGPT5Chunk(chunk: any) {
-    // Handle standard string content
-    if (typeof chunk.content === "string") {
-      this.fullResponse += chunk.content;
-    }
-
-    let handledReasoning = false;
-
-    // Handle GPT-5 reasoning details (structured format)
-    // Format: additional_kwargs.reasoning_details = [{ type: "reasoning.summary", summary: "text", format: "openai-responses-v1", index: 0 }]
-    if (
-      chunk.additional_kwargs?.reasoning_details &&
-      Array.isArray(chunk.additional_kwargs.reasoning_details)
-    ) {
-      const reasoningItems = chunk.additional_kwargs.reasoning_details.filter(
-        (item: any) => item.type === "reasoning.summary" && item.summary
-      );
-
-      if (reasoningItems.length > 0) {
-        if (!this.hasOpenThinkBlock) {
-          this.fullResponse += "\n<think>";
-          this.hasOpenThinkBlock = true;
-        }
-
-        // Concatenate all reasoning summaries
-        for (const item of reasoningItems) {
-          if (item.summary !== undefined) {
-            this.fullResponse += item.summary;
-          }
-        }
-        handledReasoning = true;
-      }
-    }
-
-    // Also check for reasoning content in additional_kwargs.reasoning (alternative format)
-    // Some providers may send reasoning as a string directly
-    if (
-      chunk.additional_kwargs?.reasoning &&
-      typeof chunk.additional_kwargs.reasoning === "string"
-    ) {
-      if (!this.hasOpenThinkBlock) {
-        this.fullResponse += "\n<think>";
-        this.hasOpenThinkBlock = true;
-      }
-      this.fullResponse += chunk.additional_kwargs.reasoning;
-      handledReasoning = true;
-    }
-
-    return handledReasoning;
   }
 
   processChunk(chunk: any) {
@@ -144,9 +100,6 @@ export class ThinkBlockStreamer {
     // Handle Claude 3.7 array-based content
     if (Array.isArray(chunk.content)) {
       handledThinking = this.handleClaude37Chunk(chunk.content);
-    } else if (chunk.additional_kwargs?.reasoning_details) {
-      // Handle GPT-5 reasoning format
-      handledThinking = this.handleGPT5Chunk(chunk);
     } else {
       // Handle deepseek format
       handledThinking = this.handleDeepseekChunk(chunk);

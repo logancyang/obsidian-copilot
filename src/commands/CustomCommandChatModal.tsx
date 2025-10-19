@@ -96,24 +96,6 @@ function CustomCommandChatModalContent({
   const commandTitle = command.title;
 
   /**
-   * Helper function to check if content has unclosed think block
-   * Returns true if currently in thinking phase
-   */
-  const isInThinkingPhase = (content: string | null): boolean => {
-    if (!content) return false;
-    const openTags = (content.match(/<think>/g) || []).length;
-    const closeTags = (content.match(/<\/think>/g) || []).length;
-    return openTags > closeTags;
-  };
-
-  /**
-   * Remove all <think>...</think> blocks from content
-   */
-  const removeThinkingBlocks = (content: string): string => {
-    return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-  };
-
-  /**
    * Compute the display value for the textarea
    */
   const displayValue = useMemo(() => {
@@ -130,11 +112,6 @@ function CustomCommandChatModalContent({
     // If generating but no content yet, show loading
     if (!aiCurrentMessage || aiCurrentMessage.trim() === "") {
       return "loading...";
-    }
-
-    // If currently in thinking phase, show thinking
-    if (isInThinkingPhase(aiCurrentMessage)) {
-      return "thinking...";
     }
 
     // Otherwise show the streaming content
@@ -160,10 +137,15 @@ function CustomCommandChatModalContent({
 
         const stream = await chainWithSignal.stream({ input });
 
-        // Initialize ThinkBlockStreamer to handle reasoning content from Claude, Deepseek, and GPT-5
-        const thinkStreamer = new ThinkBlockStreamer((message: string) => {
-          setAiCurrentMessage(message);
-        });
+        // Initialize ThinkBlockStreamer to handle reasoning content from Claude and Deepseek
+        // excludeThinking=true means thinking tokens are not included in the response
+        const thinkStreamer = new ThinkBlockStreamer(
+          (message: string) => {
+            setAiCurrentMessage(message);
+          },
+          undefined, // no model adapter
+          true // excludeThinking
+        );
 
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
@@ -175,14 +157,12 @@ function CustomCommandChatModalContent({
 
         if (!abortController.signal.aborted) {
           const trimmedResponse = result.content.trim();
-          // Remove thinking blocks from the final response
-          const cleanedResponse = removeThinkingBlocks(trimmedResponse);
-          setProcessedMessage(cleanedResponse);
+          setProcessedMessage(trimmedResponse);
           setGenerating(false);
 
-          await chatMemory.saveContext({ input }, { output: cleanedResponse });
+          await chatMemory.saveContext({ input }, { output: trimmedResponse });
 
-          return cleanedResponse;
+          return trimmedResponse;
         }
 
         return null;
@@ -247,9 +227,7 @@ function CustomCommandChatModalContent({
     } finally {
       if (abortController.signal.aborted) {
         setGenerating(false);
-        // Remove thinking blocks from the aborted response too
-        const cleanedMessage = aiCurrentMessage ? removeThinkingBlocks(aiCurrentMessage) : "";
-        setProcessedMessage(cleanedMessage);
+        setProcessedMessage(aiCurrentMessage ?? "");
       }
       abortControllerRef.current = null;
     }
