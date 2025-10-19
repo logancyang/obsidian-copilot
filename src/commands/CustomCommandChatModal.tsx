@@ -95,6 +95,52 @@ function CustomCommandChatModalContent({
 
   const commandTitle = command.title;
 
+  /**
+   * Helper function to check if content has unclosed think block
+   * Returns true if currently in thinking phase
+   */
+  const isInThinkingPhase = (content: string | null): boolean => {
+    if (!content) return false;
+    const openTags = (content.match(/<think>/g) || []).length;
+    const closeTags = (content.match(/<\/think>/g) || []).length;
+    return openTags > closeTags;
+  };
+
+  /**
+   * Remove all <think>...</think> blocks from content
+   */
+  const removeThinkingBlocks = (content: string): string => {
+    return content.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+  };
+
+  /**
+   * Compute the display value for the textarea
+   */
+  const displayValue = useMemo(() => {
+    // If we have a processed message, show that
+    if (processedMessage) {
+      return processedMessage;
+    }
+
+    // If not generating, show loading
+    if (!generating) {
+      return "loading...";
+    }
+
+    // If generating but no content yet, show loading
+    if (!aiCurrentMessage || aiCurrentMessage.trim() === "") {
+      return "loading...";
+    }
+
+    // If currently in thinking phase, show thinking
+    if (isInThinkingPhase(aiCurrentMessage)) {
+      return "thinking...";
+    }
+
+    // Otherwise show the streaming content
+    return aiCurrentMessage;
+  }, [processedMessage, generating, aiCurrentMessage]);
+
   // Reusable function to handle streaming responses wrapped in useCallback
   const streamResponse = useCallback(
     async (input: string, abortController: AbortController) => {
@@ -129,12 +175,14 @@ function CustomCommandChatModalContent({
 
         if (!abortController.signal.aborted) {
           const trimmedResponse = result.content.trim();
-          setProcessedMessage(trimmedResponse);
+          // Remove thinking blocks from the final response
+          const cleanedResponse = removeThinkingBlocks(trimmedResponse);
+          setProcessedMessage(cleanedResponse);
           setGenerating(false);
 
-          await chatMemory.saveContext({ input }, { output: trimmedResponse });
+          await chatMemory.saveContext({ input }, { output: cleanedResponse });
 
-          return trimmedResponse;
+          return cleanedResponse;
         }
 
         return null;
@@ -199,7 +247,9 @@ function CustomCommandChatModalContent({
     } finally {
       if (abortController.signal.aborted) {
         setGenerating(false);
-        setProcessedMessage(aiCurrentMessage ?? "");
+        // Remove thinking blocks from the aborted response too
+        const cleanedMessage = aiCurrentMessage ? removeThinkingBlocks(aiCurrentMessage) : "";
+        setProcessedMessage(cleanedMessage);
       }
       abortControllerRef.current = null;
     }
@@ -268,7 +318,7 @@ function CustomCommandChatModalContent({
         <textarea
           ref={textareaRef}
           className="tw-peer tw-h-60 tw-w-full tw-text-text"
-          value={processedMessage ?? aiCurrentMessage ?? "loading..."}
+          value={displayValue}
           disabled={processedMessage == null}
           onChange={(e) => setProcessedMessage(e.target.value)}
         />
