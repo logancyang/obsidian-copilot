@@ -92,33 +92,23 @@ const writeToFileSchema = z.object({
           * Use when writing structured data files like .json, .canvas, etc.
           * The object will be automatically converted to JSON string format
           
-          # Rules for Obsidian Canvas content
-          * For canvas files, both 'nodes' and 'edges' arrays must be properly closed with ]
-          * Every node must have: id, type, x, y, width, height
-          * Every edge must have: id, fromNode, toNode
-          * All IDs must be unique
-          * Edge fromNode and toNode must reference existing node IDs
+          # Canvas JSON Format (JSON Canvas spec 1.0)
+          Required node fields: id, type, x, y, width, height
+          Node types: "text" (needs text), "file" (needs file), "link" (needs url), "group" (optional label)
+          Optional node fields: color (hex #FF0000 or preset "1"-"6"), subpath (file nodes, starts with #)
+          Required edge fields: id, fromNode, toNode
+          Optional edge fields: fromSide/toSide ("top"/"right"/"bottom"/"left"), fromEnd/toEnd ("none"/"arrow"), color, label
+          All IDs must be unique. Edge nodes must reference existing node IDs.
           
-          # Example content of a canvas file (as object)
+          Example:
           {
             "nodes": [
-              {
-                "id": "1",
-                "type": "text",
-                "text": "Hello, world!",
-                "x": 0,
-                "y": 0,
-                "width": 200,
-                "height": 50
-              }
+              {"id": "1", "type": "text", "text": "Hello", "x": 0, "y": 0, "width": 200, "height": 50},
+              {"id": "2", "type": "file", "file": "note.md", "subpath": "#heading", "x": 250, "y": 0, "width": 200, "height": 100, "color": "2"},
+              {"id": "3", "type": "group", "label": "Group", "x": 0, "y": 100, "width": 300, "height": 150}
             ],
             "edges": [
-              {
-                "id": "e1-2",
-                "fromNode": "1",
-                "toNode": "2",
-                "label": "connects to"
-              }
+              {"id": "e1-2", "fromNode": "1", "toNode": "2", "fromSide": "right", "toSide": "left", "color": "3", "label": "links to"}
             ]
           }`),
 });

@@ -44,7 +44,7 @@ describe("parseTextForPills", () => {
         includeNotes: false,
         includeURLs: false,
         includeTools: false,
-        includeFolders: false,
+        includeCustomTemplates: false,
       });
 
       expect(result).toEqual([
@@ -228,7 +228,7 @@ describe("parseTextForPills", () => {
 
     it("should parse valid folder references", () => {
       const text = "Files in {Projects} folder";
-      const result = parseTextForPills(text, { includeFolders: true });
+      const result = parseTextForPills(text, { includeCustomTemplates: true });
 
       expect(result).toEqual([
         {
@@ -249,7 +249,7 @@ describe("parseTextForPills", () => {
 
     it("should keep invalid folder references as text", () => {
       const text = "Files in {Nonexistent} folder";
-      const result = parseTextForPills(text, { includeFolders: true });
+      const result = parseTextForPills(text, { includeCustomTemplates: true });
 
       expect(result).toEqual([
         {
@@ -341,7 +341,7 @@ describe("parseTextForPills", () => {
         includeURLs: true,
         includeTools: true,
         // Tags are no longer parsed as pills
-        includeFolders: true,
+        includeCustomTemplates: true,
       });
 
       expect(result).toHaveLength(7);
@@ -361,7 +361,7 @@ describe("parseTextForPills", () => {
         includeNotes: true,
         includeTools: true,
         // Tags are no longer parsed as pills
-        includeFolders: true,
+        includeCustomTemplates: true,
       });
 
       // Verify key segments: note-pill, invalid note text, tool-pill, invalid tool+tags text, folder-pill, invalid folder
@@ -391,7 +391,7 @@ describe("parseTextForPills", () => {
         includeNotes: true,
         includeURLs: true,
         includeTools: true,
-        includeFolders: true,
+        includeCustomTemplates: true,
       });
 
       expect(result).toEqual([
@@ -424,7 +424,7 @@ describe("parseTextForPills", () => {
       const result = parseTextForPills(text, {
         includeTools: true,
         // Tags are no longer parsed as pills
-        includeFolders: true,
+        includeCustomTemplates: true,
       });
 
       // @tool matches as invalid tool (not in AVAILABLE_TOOLS), tags appear as text, folders should match

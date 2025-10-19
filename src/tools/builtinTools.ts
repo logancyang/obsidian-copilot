@@ -28,7 +28,7 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
       description: "Search through your vault notes",
       category: "search",
       copilotCommands: ["@vault"],
-      customPromptInstructions: `For localSearch (searching notes in the vault):
+      customPromptInstructions: `For localSearch (searching notes based on their contents in the vault):
 - You MUST always provide both "query" (string) and "salientTerms" (array of strings)
 - salientTerms MUST be extracted from the user's original query - never invent new terms
 - They are keywords used for BM25 full-text search to find notes containing those exact words
@@ -319,6 +319,7 @@ export function registerFileTreeTool(vault: Vault): void {
 - Use to browse the vault's file structure
 - Use this tool when the user asks for the vault structure, or a specific file or folder but you are unsure about the exact path.
 - Use this tool too look up folders when user asks to create new notes under a folder.
+- Use this tool to look up files under certain folders.
 - DO NOT use this tool to look up note contents or metadata - use localSearch or readNote instead.
 - No parameters needed
 
