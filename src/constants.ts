@@ -805,6 +805,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   maxRecentConversations: 30,
   enableSavedMemory: true,
   enableInlineCitations: true,
+  quickCommandModelKey: undefined,
+  quickCommandIncludeNoteContext: true,
 };
 
 export const EVENT_NAMES = {

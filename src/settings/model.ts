@@ -148,6 +148,10 @@ export interface CopilotSettings {
   enableSavedMemory: boolean;
   /** Enable inline citations in AI responses with footnote-style references */
   enableInlineCitations: boolean;
+  /** Last selected model for quick command */
+  quickCommandModelKey: string | undefined;
+  /** Last checkbox state for including note context in quick command */
+  quickCommandIncludeNoteContext: boolean;
 }
 
 export const settingsStore = createStore();
@@ -400,6 +404,20 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure autosaveChat has a default value
   if (typeof sanitizedSettings.autosaveChat !== "boolean") {
     sanitizedSettings.autosaveChat = DEFAULT_SETTINGS.autosaveChat;
+  }
+
+  // Ensure quickCommandIncludeNoteContext has a default value
+  if (typeof sanitizedSettings.quickCommandIncludeNoteContext !== "boolean") {
+    sanitizedSettings.quickCommandIncludeNoteContext =
+      DEFAULT_SETTINGS.quickCommandIncludeNoteContext;
+  }
+
+  // Ensure quickCommandModelKey is either undefined or a string
+  if (
+    settingsToSanitize.quickCommandModelKey !== undefined &&
+    typeof settingsToSanitize.quickCommandModelKey !== "string"
+  ) {
+    sanitizedSettings.quickCommandModelKey = DEFAULT_SETTINGS.quickCommandModelKey;
   }
 
   // Ensure folder settings fall back to defaults when empty/whitespace

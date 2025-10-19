@@ -10,6 +10,7 @@ import { useModelKey } from "@/aiParams";
 import { CustomCommand } from "@/commands/type";
 import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 import CopilotPlugin from "@/main";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 
 interface QuickCommandProps {
   plugin: CopilotPlugin;
@@ -18,11 +19,13 @@ interface QuickCommandProps {
 
 export function QuickCommand({ plugin, onRemove }: QuickCommandProps) {
   const [prompt, setPrompt] = useState("");
-  const [includeActiveNote, setIncludeActiveNote] = useState(true);
+  const settings = useSettingsValue();
   const [selectedText, setSelectedText] = useState("");
   const [globalModelKey] = useModelKey();
-  const [selectedModelKey, setSelectedModelKey] = useState(globalModelKey);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const selectedModelKey = settings.quickCommandModelKey ?? globalModelKey;
+  const includeActiveNote = settings.quickCommandIncludeNoteContext;
 
   // Get the currently selected text from the editor
   useEffect(() => {
@@ -119,6 +122,20 @@ Response format: Match the format implied by the user's request (e.g., if they a
     }
   };
 
+  /**
+   * Handle model selection change and persist to settings
+   */
+  const handleModelChange = (modelKey: string) => {
+    updateSetting("quickCommandModelKey", modelKey);
+  };
+
+  /**
+   * Handle include note context checkbox change and persist to settings
+   */
+  const handleIncludeNoteContextChange = (checked: boolean) => {
+    updateSetting("quickCommandIncludeNoteContext", checked);
+  };
+
   return (
     <div
       className="tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-4"
@@ -140,14 +157,14 @@ Response format: Match the format implied by the user's request (e.g., if they a
               size="sm"
               variant="ghost"
               value={selectedModelKey}
-              onChange={setSelectedModelKey}
+              onChange={handleModelChange}
             />
 
             <div className="tw-flex tw-items-center tw-gap-2">
               <Checkbox
                 id="includeActiveNote"
                 checked={includeActiveNote}
-                onCheckedChange={(checked) => setIncludeActiveNote(!!checked)}
+                onCheckedChange={(checked) => handleIncludeNoteContextChange(!!checked)}
               />
               <label
                 htmlFor="includeActiveNote"
