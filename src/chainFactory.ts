@@ -6,8 +6,8 @@ import { StringOutputParser } from "@langchain/core/output_parsers";
 import { ChatPromptTemplate, PromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
-import { BaseChatMemory } from "langchain/memory";
-import { formatDocumentsAsString } from "langchain/util/document";
+import { BaseChatMemory } from "@langchain/classic/memory";
+import { formatDocumentsAsString } from "@langchain/classic/util/document";
 import { removeThinkTags } from "./utils";
 
 export interface LLMChainInput {
@@ -72,7 +72,7 @@ class ChainFactory {
   public static createNewLLMChain(args: LLMChainInput): RunnableSequence {
     const { llm, memory, prompt, abortController } = args;
 
-    const model = llm.bind({ signal: abortController?.signal });
+    const model = llm.withConfig({ signal: abortController?.signal });
     const instance = RunnableSequence.from([
       {
         input: (initialInput) => initialInput.input,

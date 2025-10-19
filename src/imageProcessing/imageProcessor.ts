@@ -8,11 +8,13 @@ export interface ImageContent {
   image_url: {
     url: string;
   };
+  [key: string]: unknown; // Index signature for LangChain compatibility
 }
 
 export interface TextContent {
   type: "text";
   text: string;
+  [key: string]: unknown; // Index signature for LangChain compatibility
 }
 
 export interface ImageProcessingResult {

@@ -3,6 +3,7 @@ import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { Button } from "@/components/ui/button";
 import { getModelDisplayText } from "@/components/ui/model-display";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { ThinkBlockStreamer } from "@/LLMProviders/chainRunner/utils/ThinkBlockStreamer";
 import { logError } from "@/logger";
 import { findCustomModel, insertIntoEditor } from "@/utils";
 import {
@@ -12,7 +13,7 @@ import {
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChatMemory, BufferMemory } from "langchain/memory";
+import { BaseChatMemory, BufferMemory } from "@langchain/classic/memory";
 import { ArrowBigUp, Bot, Command, Copy, CornerDownLeft, PenLine } from "lucide-react";
 import { App, Modal, Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -108,21 +109,26 @@ function CustomCommandChatModalContent({
         setAiCurrentMessage(null);
         setProcessedMessage(null);
         setGenerating(true);
-        let fullResponse = "";
 
-        const chainWithSignal = chatChain.bind({ signal: abortController.signal });
+        const chainWithSignal = chatChain.withConfig({ signal: abortController.signal });
 
         const stream = await chainWithSignal.stream({ input });
 
+        // Initialize ThinkBlockStreamer to handle reasoning content from Claude, Deepseek, and GPT-5
+        const thinkStreamer = new ThinkBlockStreamer((message: string) => {
+          setAiCurrentMessage(message);
+        });
+
         for await (const chunk of stream) {
           if (abortController.signal.aborted) break;
-          const chunkContent = typeof chunk.content === "string" ? chunk.content : "";
-          fullResponse += chunkContent;
-          setAiCurrentMessage(fullResponse);
+          thinkStreamer.processChunk(chunk);
         }
 
+        // Close the streamer to finalize the response and close any open think blocks
+        const result = thinkStreamer.close();
+
         if (!abortController.signal.aborted) {
-          const trimmedResponse = fullResponse.trim();
+          const trimmedResponse = result.content.trim();
           setProcessedMessage(trimmedResponse);
           setGenerating(false);
 

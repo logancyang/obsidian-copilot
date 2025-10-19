@@ -66,6 +66,61 @@ export class ThinkBlockStreamer {
     return false; // No thinking chunk handled
   }
 
+  /**
+   * Handles GPT-5 reasoning chunks from OpenAI's Responses API
+   * GPT-5 returns reasoning in additional_kwargs.reasoning_details as an array
+   */
+  private handleGPT5Chunk(chunk: any) {
+    // Handle standard string content
+    if (typeof chunk.content === "string") {
+      this.fullResponse += chunk.content;
+    }
+
+    let handledReasoning = false;
+
+    // Handle GPT-5 reasoning details (structured format)
+    // Format: additional_kwargs.reasoning_details = [{ type: "reasoning.summary", summary: "text", format: "openai-responses-v1", index: 0 }]
+    if (
+      chunk.additional_kwargs?.reasoning_details &&
+      Array.isArray(chunk.additional_kwargs.reasoning_details)
+    ) {
+      const reasoningItems = chunk.additional_kwargs.reasoning_details.filter(
+        (item: any) => item.type === "reasoning.summary" && item.summary
+      );
+
+      if (reasoningItems.length > 0) {
+        if (!this.hasOpenThinkBlock) {
+          this.fullResponse += "\n<think>";
+          this.hasOpenThinkBlock = true;
+        }
+
+        // Concatenate all reasoning summaries
+        for (const item of reasoningItems) {
+          if (item.summary !== undefined) {
+            this.fullResponse += item.summary;
+          }
+        }
+        handledReasoning = true;
+      }
+    }
+
+    // Also check for reasoning content in additional_kwargs.reasoning (alternative format)
+    // Some providers may send reasoning as a string directly
+    if (
+      chunk.additional_kwargs?.reasoning &&
+      typeof chunk.additional_kwargs.reasoning === "string"
+    ) {
+      if (!this.hasOpenThinkBlock) {
+        this.fullResponse += "\n<think>";
+        this.hasOpenThinkBlock = true;
+      }
+      this.fullResponse += chunk.additional_kwargs.reasoning;
+      handledReasoning = true;
+    }
+
+    return handledReasoning;
+  }
+
   processChunk(chunk: any) {
     // If we've already decided to truncate, don't process more chunks
     if (this.shouldTruncate) {
@@ -89,6 +144,9 @@ export class ThinkBlockStreamer {
     // Handle Claude 3.7 array-based content
     if (Array.isArray(chunk.content)) {
       handledThinking = this.handleClaude37Chunk(chunk.content);
+    } else if (chunk.additional_kwargs?.reasoning_details) {
+      // Handle GPT-5 reasoning format
+      handledThinking = this.handleGPT5Chunk(chunk);
     } else {
       // Handle deepseek format
       handledThinking = this.handleDeepseekChunk(chunk);

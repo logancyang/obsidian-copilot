@@ -10,6 +10,7 @@ import { deriveReadNoteDisplayName, ToolResultFormatter } from "@/tools/ToolResu
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { processToolResults } from "@/utils/toolResultUtils";
+import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {
@@ -773,8 +774,17 @@ ${params}
 
     while (retryCount <= maxRetries) {
       try {
+        // Convert ConversationMessage to LangChain BaseMessage format
+        const langchainMessages: BaseMessage[] = messages.map((msg) => {
+          if (msg.role === "user") {
+            return new HumanMessage(msg.content);
+          } else {
+            return new AIMessage(msg.content);
+          }
+        });
+
         const chatStream = await withSuppressedTokenWarnings(() =>
-          this.chainManager.chatModelManager.getChatModel().stream(messages, {
+          this.chainManager.chatModelManager.getChatModel().stream(langchainMessages, {
             signal: abortController.signal,
           })
         );

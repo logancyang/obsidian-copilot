@@ -1,7 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import { CHUNK_SIZE } from "@/constants";
 import { App, TFile } from "obsidian";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 
 /**
  * Chunk interface for unified search system

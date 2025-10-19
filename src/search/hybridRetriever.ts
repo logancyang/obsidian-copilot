@@ -14,7 +14,6 @@ import {
 } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
-import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
@@ -147,7 +146,7 @@ export class HybridRetriever extends BaseRetriever {
           const chatModel = ProjectManager.instance
             .getCurrentChainManager()
             .chatModelManager.getChatModel()
-            .bind({ temperature: 0 } as BaseChatModelCallOptions);
+            .withConfig({ tags: ["hyde_query_rewrite"], metadata: { temperature: 0 } });
 
           return chatModel.invoke(promptResult);
         });
