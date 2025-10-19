@@ -4,14 +4,14 @@ import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS } from "@/constants";
+import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
 import { Key, Loader2 } from "lucide-react";
-import { Notice } from "obsidian";
+import { Notice, Platform } from "obsidian";
 import React, { useState } from "react";
 import { ApiKeyDialog } from "./ApiKeyDialog";
 
@@ -231,6 +231,42 @@ export const BasicSettings: React.FC = () => {
             options={[
               { label: "Sidebar View", value: DEFAULT_OPEN_AREA.VIEW },
               { label: "Editor", value: DEFAULT_OPEN_AREA.EDITOR },
+            ]}
+          />
+
+          <SettingItem
+            type="select"
+            title="Send Shortcut"
+            description={
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Choose keyboard shortcut to send messages</span>
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                      <div className="tw-text-sm tw-font-medium tw-text-accent">
+                        Shortcut not working?
+                      </div>
+                      <div className="tw-text-xs tw-text-muted">
+                        If your selected shortcut doesn&#39;t work, check
+                        <strong>Obsidian&#39;s Settings → Hotkeys</strong> to see if another command
+                        is using the same key combination. <br />
+                        You may need to remove or change the conflicting hotkey first.
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
+            }
+            value={settings.defaultSendShortcut}
+            onChange={(value) => updateSetting("defaultSendShortcut", value as SEND_SHORTCUT)}
+            options={[
+              { label: "Enter", value: SEND_SHORTCUT.ENTER },
+              { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
+              {
+                label: Platform.isMacOS ? "⌘ + Enter" : "Ctrl + Enter",
+                value: SEND_SHORTCUT.CMD_ENTER,
+              },
+              { label: "Alt + Enter", value: SEND_SHORTCUT.ALT_ENTER },
             ]}
           />
 

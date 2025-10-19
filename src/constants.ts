@@ -650,6 +650,13 @@ export enum DEFAULT_OPEN_AREA {
   VIEW = "view",
 }
 
+export enum SEND_SHORTCUT {
+  ENTER = "enter",
+  SHIFT_ENTER = "shift+enter",
+  CMD_ENTER = "cmd+enter",
+  ALT_ENTER = "alt+enter",
+}
+
 export const COMMAND_IDS = {
   TRIGGER_QUICK_COMMAND: "trigger-quick-command",
   CLEAR_LOCAL_COPILOT_INDEX: "clear-local-copilot-index",
@@ -760,6 +767,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   generateAIChatTitleOnSave: true,
   includeActiveNoteAsContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
+  defaultSendShortcut: SEND_SHORTCUT.ENTER,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
   indexVaultToVectorStore: VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH,
   qaExclusions: DEFAULT_QA_EXCLUSIONS_SETTING,
