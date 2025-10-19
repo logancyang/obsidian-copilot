@@ -19,7 +19,7 @@ export const updateMemoryTool: SimpleTool<
   typeof memorySchema,
   { success: boolean; message: string }
 > = createTool({
-  name: "updateMemoryTool",
+  name: "updateMemory",
   description: "Update the user memory when the user explicitly asks to update the memory",
   schema: memorySchema,
   handler: async ({ statement }) => {
