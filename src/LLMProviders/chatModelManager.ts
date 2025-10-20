@@ -475,6 +475,23 @@ export default class ChatModelManager {
     return ChatModelManager.chatModel;
   }
 
+  /**
+   * langchain 1.0 TypeScript doesn't support temperature override in BaseChatModelCallOptions,
+   * so we need to create a new model instance with the specified temperature.
+   */
+  async getChatModelWithTemperature(temperature: number): Promise<BaseChatModel> {
+    const settings = getSettings();
+    const currentModel = settings.activeModels[0];
+
+    // Create a temporary model config with overridden temperature
+    const modelWithTempOverride: CustomModel = {
+      ...currentModel,
+      temperature,
+    };
+
+    return await this.createModelInstance(modelWithTempOverride);
+  }
+
   async setChatModel(model: CustomModel): Promise<void> {
     const modelKey = getModelKeyFromModel(model);
     try {

@@ -23,10 +23,11 @@ export async function getStandaloneQuestion(
 
   // Wrap the model call with token warning suppression
   return await withSuppressedTokenWarnings(async () => {
-    const chatModel = ProjectManager.instance
+    // Use temperature=0 for deterministic question condensation
+    const chatModel = await ProjectManager.instance
       .getCurrentChainManager()
-      .chatModelManager.getChatModel()
-      .withConfig({ tags: ["condense_question"], metadata: { temperature: 0 } });
+      .chatModelManager.getChatModelWithTemperature(0);
+
     const response = await chatModel.invoke([
       {
         role: "user",
