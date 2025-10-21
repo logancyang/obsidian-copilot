@@ -177,6 +177,19 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const activeFile = app.workspace.getActiveFile();
       const sourcePath = activeFile ? activeFile.path : "";
 
+      /**
+       * Escapes dataview code blocks to prevent execution in AI responses.
+       * Converts ```dataview to ```text and ```dataviewjs to ```javascript
+       * so they display as static code examples instead of executing queries.
+       */
+      const escapeDataviewCodeBlocks = (text: string): string => {
+        // Replace ```dataview (with optional whitespace before newline/end)
+        text = text.replace(/```dataview(\s*(?:\n|$))/g, "```text$1");
+        // Replace ```dataviewjs (with optional whitespace before newline/end)
+        text = text.replace(/```dataviewjs(\s*(?:\n|$))/g, "```javascript$1");
+        return text;
+      };
+
       const processCollapsibleSection = (
         content: string,
         tagName: string,
@@ -286,8 +299,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           .join("");
       };
 
+      // Escape dataview code blocks first to prevent execution
+      const dataviewEscaped = escapeDataviewCodeBlocks(content);
+
       // Process LaTeX
-      const latexProcessed = content
+      const latexProcessed = dataviewEscaped
         .replace(/\\\[\s*/g, "$$")
         .replace(/\s*\\\]/g, "$$")
         .replace(/\\\(\s*/g, "$")
