@@ -1,5 +1,10 @@
 import ProjectManager from "@/LLMProviders/projectManager";
-import { ChatHistoryEntry, removeThinkTags, removeErrorTags, withSuppressedTokenWarnings } from "@/utils";
+import {
+  ChatHistoryEntry,
+  removeErrorTags,
+  removeThinkTags,
+  withSuppressedTokenWarnings,
+} from "@/utils";
 
 export async function getStandaloneQuestion(
   question: string,

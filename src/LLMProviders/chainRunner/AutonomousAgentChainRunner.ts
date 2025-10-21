@@ -10,9 +10,7 @@ import { deriveReadNoteDisplayName, ToolResultFormatter } from "@/tools/ToolResu
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { err2String, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { formatErrorChunk, processToolResults } from "@/utils/toolResultUtils";
-import { getMessageRole, withSuppressedTokenWarnings } from "@/utils";
-import { processToolResults } from "@/utils/toolResultUtils";
-import { HumanMessage, AIMessage, BaseMessage } from "@langchain/core/messages";
+import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {

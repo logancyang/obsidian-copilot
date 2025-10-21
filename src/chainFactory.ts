@@ -8,7 +8,7 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "@langchain/classic/memory";
 import { formatDocumentsAsString } from "@langchain/classic/util/document";
-import { removeThinkTags, removeErrorTags } from "./utils";
+import { removeErrorTags, removeThinkTags } from "./utils";
 
 export interface LLMChainInput {
   llm: BaseLanguageModel;
