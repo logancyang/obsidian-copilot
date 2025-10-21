@@ -1,5 +1,5 @@
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import { BaseChatMemory, BufferWindowMemory } from "langchain/memory";
+import { BaseChatMemory, BufferWindowMemory } from "@langchain/classic/memory";
 import { BaseChatMessageHistory } from "@langchain/core/chat_history";
 
 export default class MemoryManager {

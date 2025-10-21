@@ -16,17 +16,24 @@ export class ThinkBlockStreamer {
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
-    private modelAdapter?: ModelAdapter
+    private modelAdapter?: ModelAdapter,
+    private excludeThinking: boolean = false
   ) {}
 
   private handleClaude37Chunk(content: any[]) {
     let textContent = "";
+    let hasThinkingContent = false;
     for (const item of content) {
       switch (item.type) {
         case "text":
           textContent += item.text;
           break;
         case "thinking":
+          hasThinkingContent = true;
+          // Skip thinking content if excludeThinking is enabled
+          if (this.excludeThinking) {
+            break;
+          }
           if (!this.hasOpenThinkBlock) {
             this.fullResponse += "\n<think>";
             this.hasOpenThinkBlock = true;
@@ -36,13 +43,13 @@ export class ThinkBlockStreamer {
             this.fullResponse += item.thinking;
           }
           this.updateCurrentAiMessage(this.fullResponse);
-          return true; // Indicate we handled a thinking chunk
+          break;
       }
     }
     if (textContent) {
       this.fullResponse += textContent;
     }
-    return false; // No thinking chunk handled
+    return hasThinkingContent;
   }
 
   private handleDeepseekChunk(chunk: any) {
@@ -53,6 +60,10 @@ export class ThinkBlockStreamer {
 
     // Handle deepseek reasoning/thinking content
     if (chunk.additional_kwargs?.reasoning_content) {
+      // Skip thinking content if excludeThinking is enabled
+      if (this.excludeThinking) {
+        return true; // Indicate we handled (but skipped) a thinking chunk
+      }
       if (!this.hasOpenThinkBlock) {
         this.fullResponse += "\n<think>";
         this.hasOpenThinkBlock = true;

@@ -206,7 +206,7 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.GOOGLE]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.googleApiKey),
-        modelName: modelName,
+        model: modelName,
         safetySettings: [
           {
             category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
@@ -246,7 +246,7 @@ export default class ChatModelManager {
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
-        modelName: modelName,
+        model: modelName,
       },
       [ChatModelProviders.OLLAMA]: {
         // ChatOllama has `model` instead of `modelName`!!
@@ -473,6 +473,23 @@ export default class ChatModelManager {
       throw new Error("No valid chat model available. Please check your API key settings.");
     }
     return ChatModelManager.chatModel;
+  }
+
+  /**
+   * langchain 1.0 TypeScript doesn't support temperature override in BaseChatModelCallOptions,
+   * so we need to create a new model instance with the specified temperature.
+   */
+  async getChatModelWithTemperature(temperature: number): Promise<BaseChatModel> {
+    const settings = getSettings();
+    const currentModel = settings.activeModels[0];
+
+    // Create a temporary model config with overridden temperature
+    const modelWithTempOverride: CustomModel = {
+      ...currentModel,
+      temperature,
+    };
+
+    return await this.createModelInstance(modelWithTempOverride);
   }
 
   async setChatModel(model: CustomModel): Promise<void> {

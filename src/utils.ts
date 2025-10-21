@@ -16,7 +16,7 @@ import { ChatMessage } from "@/types/message";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChain, RetrievalQAChain } from "langchain/chains";
+import { BaseChain, RetrievalQAChain } from "@langchain/classic/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
@@ -204,12 +204,12 @@ export const stringToChainType = (chain: string): ChainType => {
 // Remove after confirming chainManager no longer uses them
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (chain as any).last.bound.modelName || (chain as any).last.bound.model;
+  return (chain as any).last?.modelName || (chain as any).last?.model;
 };
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (chain as any).last.bound.retriever !== undefined;
+  return (chain as any).last?.retriever !== undefined;
 };
 
 export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {

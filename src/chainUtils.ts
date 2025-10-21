@@ -1,6 +1,5 @@
 import ProjectManager from "@/LLMProviders/projectManager";
 import { ChatHistoryEntry, removeThinkTags, withSuppressedTokenWarnings } from "@/utils";
-import { BaseChatModelCallOptions } from "@langchain/core/language_models/chat_models";
 
 export async function getStandaloneQuestion(
   question: string,
@@ -24,10 +23,11 @@ export async function getStandaloneQuestion(
 
   // Wrap the model call with token warning suppression
   return await withSuppressedTokenWarnings(async () => {
-    const chatModel = ProjectManager.instance
+    // Use temperature=0 for deterministic question condensation
+    const chatModel = await ProjectManager.instance
       .getCurrentChainManager()
-      .chatModelManager.getChatModel()
-      .bind({ temperature: 0 } as BaseChatModelCallOptions);
+      .chatModelManager.getChatModelWithTemperature(0);
+
     const response = await chatModel.invoke([
       {
         role: "user",
