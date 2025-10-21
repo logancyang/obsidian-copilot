@@ -26,6 +26,7 @@ import {
   getNotesFromPath,
   getNotesFromTags,
   processVariableNameForNotePath,
+  stripFrontmatter,
 } from "@/utils";
 import { sortByStrategy } from "@/utils/recentUsageManager";
 import {
@@ -42,12 +43,16 @@ export function validateCommandName(
 ): string | null {
   const trimmedName = name.trim();
 
-  if (currentCommandName && trimmedName === currentCommandName) {
-    return null; // No change is allowed
-  }
-
   if (!trimmedName) {
     return "Command name cannot be empty";
+  }
+
+  if (name !== trimmedName) {
+    return "Command name cannot have leading or trailing spaces";
+  }
+
+  if (currentCommandName && name === currentCommandName) {
+    return null; // No change needed
   }
 
   // eslint-disable-next-line no-control-regex
@@ -91,19 +96,6 @@ export function isCustomCommandFile(file: TAbstractFile): boolean {
   const relativePath = file.path.slice(folder.length + 1);
   if (relativePath.includes("/")) return false;
   return true;
-}
-
-/**
- * Utility to strip YAML frontmatter from markdown content.
- */
-function stripFrontmatter(content: string): string {
-  if (content.startsWith("---")) {
-    const end = content.indexOf("---", 3);
-    if (end !== -1) {
-      return content.slice(end + 3).trimStart();
-    }
-  }
-  return content;
 }
 
 export function hasOrderFrontmatter(file: TFile): boolean {
@@ -350,19 +342,22 @@ export interface ProcessedPromptResult {
 /**
  * Process a custom prompt by replacing variables and adding note contents.
  * Returns the processed prompt string and a list of files included in the processing.
+ *
+ * @param skipEmptyBraces - When true, treats `{}` as a literal and skips selected-text/active-note expansion.
  */
 export async function processPrompt(
   customPrompt: string,
   selectedText: string,
   vault: Vault,
-  activeNote?: TFile | null
+  activeNote?: TFile | null,
+  skipEmptyBraces: boolean = false
 ): Promise<ProcessedPromptResult> {
   const settings = getSettings();
   const includedFiles = new Set<TFile>();
 
   if (!settings.enableCustomPromptTemplating) {
     // If templating is disabled, check if activeNote should be included for {}
-    if (customPrompt.includes("{}") && !selectedText && activeNote) {
+    if (!skipEmptyBraces && customPrompt.includes("{}") && !selectedText && activeNote) {
       includedFiles.add(activeNote);
     }
     return {
@@ -383,7 +378,7 @@ export async function processPrompt(
   let additionalInfo = "";
   let activeNoteContent: string | null = null;
 
-  if (processedPrompt.includes("{}")) {
+  if (!skipEmptyBraces && processedPrompt.includes("{}")) {
     processedPrompt = processedPrompt.replace(/\{\}/g, `{${SELECTED_TEXT_TAG}}`);
     if (selectedText) {
       additionalInfo += `<${SELECTED_TEXT_TAG}>\n${selectedText}\n</${SELECTED_TEXT_TAG}>`;

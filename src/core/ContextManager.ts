@@ -56,7 +56,8 @@ export class ContextManager {
     includeActiveNote: boolean,
     activeNote: TFile | null,
     messageRepo: MessageRepository,
-    systemPrompt?: string
+    systemPrompt?: string,
+    systemPromptIncludedFiles: TFile[] = []
   ): Promise<ContextProcessingResult> {
     try {
       logInfo(`[ContextManager] Processing context for message ${message.id}`);
@@ -92,8 +93,10 @@ export class ContextManager {
           : { urlContext: "", imageUrls: [] };
 
       // 4. Process context notes (L3 - current turn only)
-      // Initialize tracking set with files already included from custom prompts
-      const processedNotePaths = new Set(includedFiles.map((file) => file.path));
+      // Initialize tracking set with files already included from custom prompts and system prompt
+      const processedNotePaths = new Set(
+        [...includedFiles, ...systemPromptIncludedFiles].map((file) => file.path)
+      );
       const contextNotes = message.context?.notes || [];
 
       // Add active note if requested and not already included
@@ -237,7 +240,8 @@ export class ContextManager {
     chainType: ChainType,
     includeActiveNote: boolean,
     activeNote: TFile | null,
-    systemPrompt?: string
+    systemPrompt?: string,
+    systemPromptIncludedFiles: TFile[] = []
   ): Promise<void> {
     const message = messageRepo.getMessage(messageId);
 
@@ -255,7 +259,8 @@ export class ContextManager {
       includeActiveNote,
       activeNote,
       messageRepo, // Use same repo for L2 building
-      systemPrompt
+      systemPrompt,
+      systemPromptIncludedFiles
     );
 
     messageRepo.updateProcessedText(message.id, processedContent, contextEnvelope);

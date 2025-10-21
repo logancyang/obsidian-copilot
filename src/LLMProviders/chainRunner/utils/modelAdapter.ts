@@ -194,7 +194,7 @@ class BaseModelAdapter implements ModelAdapter {
       {
         id: "base-system-prompt",
         label: "System prompt with memory",
-        source: "src/settings/model.ts#getSystemPromptWithMemory",
+        source: "src/system-prompts/systemPromptBuilder.ts#getSystemPromptWithMemory",
         content: normalizedBasePrompt,
       },
       {
