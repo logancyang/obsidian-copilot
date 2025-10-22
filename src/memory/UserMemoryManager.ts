@@ -83,35 +83,34 @@ export class UserMemoryManager {
   async updateSavedMemory(
     query: string,
     chatModel: BaseChatModel
-  ): Promise<{ success: boolean; content: string }> {
+  ): Promise<{ content?: string; error?: string }> {
     const settings = getSettings();
 
     // Only proceed if saved memory is enabled
     if (!settings.enableSavedMemory) {
-      logWarn("[UserMemoryManager] Saved memory is disabled, skipping save");
-      return { success: false, content: "" };
+      return { error: "Saved memory is disabled, skipping save" };
     }
 
     if (!query || query.trim() === "") {
-      logWarn("[UserMemoryManager] No content provided for saved memory");
-      return { success: false, content: "" };
+      return { error: "No content provided for saved memory" };
+    }
+
+    if (!chatModel) {
+      return { error: "No chat model available, skipping save" };
     }
 
     try {
       // Ensure user memory folder exists
       await this.ensureMemoryFolderExists();
       // Add to saved memories file
-      const content = await this.updateSavedMemoryFile(
+      const result = await this.updateSavedMemoryFile(
         this.getSavedMemoriesFilePath(),
         query,
         chatModel
       );
-
-      logInfo("[UserMemoryManager] Saved memory added successfully");
-      return { success: true, content: content };
+      return result;
     } catch (error) {
-      logError("[UserMemoryManager] Error saving memory:", error);
-      return { success: false, content: "" };
+      return { error: "Error saving memory: " + error.message };
     }
   }
 
@@ -247,7 +246,7 @@ export class UserMemoryManager {
     filePath: string,
     query: string,
     chatModel: BaseChatModel
-  ): Promise<string> {
+  ): Promise<{ content?: string; error?: string }> {
     const existingFile = this.app.vault.getAbstractFileByPath(filePath);
 
     // Load existing saved memories (may be empty)
@@ -256,8 +255,7 @@ export class UserMemoryManager {
 
     // Fast path: if no model available for some reason, append a bullet safely
     if (!chatModel) {
-      logError("[UserMemoryManager] No chat model available, skipping memory update");
-      return existingContent;
+      return { error: "No chat model available, skipping memory update" };
     }
 
     // Ask the model to produce a deduplicated/merged/conflict-free full list
@@ -297,11 +295,10 @@ ${query.trim()}
       const response = await chatModel.invoke(messages_llm);
       updatedContent = response.text ?? "";
     } catch (error) {
-      logError("[UserMemoryManager] LLM call failed while updating saved memories:", error);
+      return { error: "LLM call failed while updating saved memories: " + error.message };
     }
-    if (!updatedContent) {
-      logWarn("[UserMemoryManager] empty content returned from LLM, returning existing content");
-      return existingContent;
+    if (updatedContent == null || updatedContent.trim() === "") {
+      return { error: "Empty content returned from LLM" };
     }
 
     if (existingFile instanceof TFile) {
@@ -310,7 +307,7 @@ ${query.trim()}
       await this.app.vault.create(filePath, updatedContent);
     }
 
-    return updatedContent;
+    return { content: updatedContent };
   }
 
   /**

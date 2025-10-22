@@ -26,18 +26,19 @@ export const updateMemoryTool: SimpleTool<
     try {
       const memoryManager = new UserMemoryManager(app);
       const chatModel = ChatModelManager.getInstance().getChatModel();
-      const updatedMemory = await memoryManager.updateSavedMemory(statement, chatModel);
-      if (!updatedMemory.success) {
+      const result = await memoryManager.updateSavedMemory(statement, chatModel);
+
+      if (result.error) {
         return {
           success: false,
-          message: `Failed to update memory: ${statement}`,
+          message: result.error,
         };
       }
-      const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
 
+      const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
       return {
         success: true,
-        message: `Memory updated successfully into ${memoryFilePath}: ${updatedMemory.content}`,
+        message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
       };
     } catch (error) {
       logError("[updateMemoryTool] Error updating memory:", error);

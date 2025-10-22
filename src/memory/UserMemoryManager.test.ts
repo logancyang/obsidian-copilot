@@ -16,7 +16,7 @@ jest.mock("@/utils", () => ({
 import { UserMemoryManager } from "./UserMemoryManager";
 import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
-import { logInfo, logError, logWarn } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -466,10 +466,7 @@ The conversation covered advanced features and included code examples.`,
         mockChatModel
       );
 
-      expect(result).toEqual({ success: false, content: "" });
-      expect(logWarn).toHaveBeenCalledWith(
-        "[UserMemoryManager] Saved memory is disabled, skipping save"
-      );
+      expect(result).toEqual({ error: "Saved memory is disabled, skipping save" });
     });
 
     it("should skip saving when no content provided", async () => {
@@ -477,10 +474,7 @@ The conversation covered advanced features and included code examples.`,
 
       const result = await userMemoryManager.updateSavedMemory("", mockChatModel);
 
-      expect(result).toEqual({ success: false, content: "" });
-      expect(logWarn).toHaveBeenCalledWith(
-        "[UserMemoryManager] No content provided for saved memory"
-      );
+      expect(result).toEqual({ error: "No content provided for saved memory" });
     });
 
     it("should save memory content to Saved Memories file", async () => {
@@ -519,8 +513,7 @@ The conversation covered advanced features and included code examples.`,
       const createdContent = mockVault.create.mock.calls[0][1];
       expect(createdContent).not.toContain("**");
 
-      expect(result).toEqual({ success: true, content: llmMergedContent });
-      expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
+      expect(result).toEqual({ content: llmMergedContent });
     });
 
     it("should append to existing Saved Memories file", async () => {
@@ -563,8 +556,7 @@ The conversation covered advanced features and included code examples.`,
       const modifiedContent = mockVault.modify.mock.calls[0][1];
       expect(modifiedContent).not.toContain("**");
 
-      expect(result).toEqual({ success: true, content: mergedContent });
-      expect(logInfo).toHaveBeenCalledWith("[UserMemoryManager] Saved memory added successfully");
+      expect(result).toEqual({ content: mergedContent });
     });
 
     it("should handle errors during save operation", async () => {
@@ -575,11 +567,7 @@ The conversation covered advanced features and included code examples.`,
 
       const result = await userMemoryManager.updateSavedMemory("Test content", mockChatModel);
 
-      expect(result).toEqual({ success: false, content: "" });
-      expect(logError).toHaveBeenCalledWith(
-        "[UserMemoryManager] Error saving memory:",
-        expect.any(Error)
-      );
+      expect(result).toEqual({ error: "Error saving memory: Folder creation failed" });
     });
   });
 });
