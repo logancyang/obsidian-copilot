@@ -127,7 +127,7 @@ export class VaultDataManager {
   /**
    * Handles file rename events
    */
-  private handleFileRename = (file: TAbstractFile): void => {
+  private handleFileRename = (file: TAbstractFile, oldPath: string): void => {
     if (file instanceof TFile) {
       if (file.extension === "md" || file.extension === "pdf") {
         this.debouncedRefreshNotes();
@@ -162,7 +162,7 @@ export class VaultDataManager {
    * Debounced notes refresh - batches rapid file operations using lodash.debounce
    */
   private debouncedRefreshNotes = debounce(() => this.refreshNotes(), VAULT_DEBOUNCE_DELAY, {
-    leading: false,
+    leading: true,
     trailing: true,
   });
 
@@ -170,7 +170,7 @@ export class VaultDataManager {
    * Debounced folders refresh - batches rapid file operations using lodash.debounce
    */
   private debouncedRefreshFolders = debounce(() => this.refreshFolders(), VAULT_DEBOUNCE_DELAY, {
-    leading: false,
+    leading: true,
     trailing: true,
   });
 
@@ -181,7 +181,7 @@ export class VaultDataManager {
     () => this.refreshTagsFrontmatter(),
     VAULT_DEBOUNCE_DELAY,
     {
-      leading: false,
+      leading: true,
       trailing: true,
     }
   );
@@ -190,7 +190,7 @@ export class VaultDataManager {
    * Debounced all tags refresh - batches rapid file operations using lodash.debounce
    */
   private debouncedRefreshTagsAll = debounce(() => this.refreshTagsAll(), VAULT_DEBOUNCE_DELAY, {
-    leading: false,
+    leading: true,
     trailing: true,
   });
 
@@ -208,11 +208,10 @@ export class VaultDataManager {
     );
     const newFiles = [...markdownFiles, ...pdfFiles];
 
-    // Only update atom if data actually changed (stable reference optimization)
-    const currentFiles = settingsStore.get(notesAtom);
-    if (!this.arraysEqual(currentFiles, newFiles)) {
-      settingsStore.set(notesAtom, newFiles);
-    }
+    // Always update atom with new array reference to ensure React components re-render
+    // Note: Obsidian mutates TFile objects in-place (e.g., on rename), so we need new
+    // array references to trigger re-renders even when paths are the same
+    settingsStore.set(notesAtom, newFiles);
   };
 
   /**
@@ -225,11 +224,8 @@ export class VaultDataManager {
       .getAllLoadedFiles()
       .filter((file: TAbstractFile): file is TFolder => file instanceof TFolder);
 
-    // Only update atom if data actually changed
-    const currentFolders = settingsStore.get(foldersAtom);
-    if (!this.arraysEqual(currentFolders, newFolders)) {
-      settingsStore.set(foldersAtom, newFolders);
-    }
+    // Always update atom with new array reference to ensure React components re-render
+    settingsStore.set(foldersAtom, newFolders);
   };
 
   /**
@@ -250,11 +246,8 @@ export class VaultDataManager {
 
     const newTags = Array.from(tagSet).sort();
 
-    // Only update atom if data actually changed
-    const currentTags = settingsStore.get(tagsFrontmatterAtom);
-    if (!this.arraysEqual(currentTags, newTags)) {
-      settingsStore.set(tagsFrontmatterAtom, newTags);
-    }
+    // Always update atom with new array reference to ensure React components re-render
+    settingsStore.set(tagsFrontmatterAtom, newTags);
   };
 
   /**
@@ -275,30 +268,9 @@ export class VaultDataManager {
 
     const newTags = Array.from(tagSet).sort();
 
-    // Only update atom if data actually changed
-    const currentTags = settingsStore.get(tagsAllAtom);
-    if (!this.arraysEqual(currentTags, newTags)) {
-      settingsStore.set(tagsAllAtom, newTags);
-    }
+    // Always update atom with new array reference to ensure React components re-render
+    settingsStore.set(tagsAllAtom, newTags);
   };
-
-  /**
-   * Helper to compare arrays for equality (stable reference optimization).
-   * Prevents unnecessary re-renders when data hasn't actually changed.
-   */
-  private arraysEqual<T>(a: T[], b: T[]): boolean {
-    if (a.length !== b.length) return false;
-
-    // For file/folder arrays, compare by path
-    if (a.length > 0 && typeof (a[0] as any)?.path === "string") {
-      const aPaths = new Set((a as any[]).map((item) => item.path));
-      const bPaths = (b as any[]).map((item) => item.path);
-      return bPaths.every((path) => aPaths.has(path));
-    }
-
-    // For string arrays (tags), direct comparison
-    return a.every((val, idx) => val === b[idx]);
-  }
 
   /**
    * Cleans up event listeners and debounced functions.
