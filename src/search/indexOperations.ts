@@ -5,7 +5,7 @@ import { RateLimiter } from "@/rateLimiter";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
 import { MD5 } from "crypto-js";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import {

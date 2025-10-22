@@ -23,14 +23,21 @@ The Ultimate AI Assistant for Your Second Brain
 </p>
 
 
-## Overview
+## The What
 
-Copilot for Obsidian is your ultimate in‑vault AI assistant with chat-based vault search, web and youtube support, powerful context processing and ever-expanding agentic capabilities—all within Obsidian's highly customizable workspace.
+*Copilot for Obsidian* is your in‑vault AI assistant with chat-based vault search, web and YouTube support, powerful context processing, and ever-expanding agentic capabilities within Obsidian's highly customizable workspace - all while keeping your data under **your** control.
+
+## The Why
+Today's AI giants want **you trapped**: your data on their servers, prompts locked to their models, and switching costs that keep you paying. When they change pricing, shut down features, or terminate your account, you lose everything you built.
+
+We are building the opposite. Our goal is to create a portable agentic experience with no provider lock-in. **Data is always yours.** Use whatever LLM you like. Imagine that a brand new model drops, you run it on your own hardware, and it already knows about you (*long-term memory*), knows how to run *the same commands and tools* you have defined over time (as just markdown files), and becomes the thought partner and assistant that you *own*. This is AI that grows with you, not a subscription you're hostage to.
+
+This is the future we believe in. If you share this vision, please support this project!
 
 ## Key Features
 
 - **🔒 Your data is 100% yours**: Local search and storage, and full control of your data if you use self-hosted models.
-- **🧠 Bring Your Own Model**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create content.
+- **🧠 Bring Your Own Model**: Tap any OpenAI-compatible or local model to uncover insights, spark connections, and create content. 
 - **🖼️ Multimedia understanding**: Drop in webpages, YouTube videos, images, PDFs, EPUBS, or real-time web search for quick insights.
 - **🔍 Smart Vault Search**: Search your vault with chat, no setup required. Embeddings are optional. Copilot delivers results right away.
 - **✍️ Composer and Quick Commands**: Interact with your writing with chat, apply changes with 1 click.
