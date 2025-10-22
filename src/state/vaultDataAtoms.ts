@@ -126,8 +126,10 @@ export class VaultDataManager {
 
   /**
    * Handles file rename events
+   * Note: oldPath parameter is required by Obsidian's event signature but not used
+   * since we simply refresh all affected data structures
    */
-  private handleFileRename = (file: TAbstractFile, oldPath: string): void => {
+  private handleFileRename = (file: TAbstractFile, _oldPath: string): void => {
     if (file instanceof TFile) {
       if (file.extension === "md" || file.extension === "pdf") {
         this.debouncedRefreshNotes();
