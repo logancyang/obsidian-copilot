@@ -77,6 +77,75 @@ export class ThinkBlockStreamer {
     return false; // No thinking chunk handled
   }
 
+  /**
+   * Handle OpenRouter reasoning/thinking content
+   * OpenRouter exposes reasoning via:
+   * - delta.reasoning (streaming)
+   * - reasoning_details array (final response)
+   */
+  private handleOpenRouterChunk(chunk: any) {
+    let handledThinking = false;
+
+    // Handle streaming reasoning from delta
+    if (chunk.additional_kwargs?.delta?.reasoning) {
+      // Skip thinking content if excludeThinking is enabled
+      if (this.excludeThinking) {
+        return true;
+      }
+      if (!this.hasOpenThinkBlock) {
+        this.fullResponse += "\n<think>";
+        this.hasOpenThinkBlock = true;
+      }
+      this.fullResponse += chunk.additional_kwargs.delta.reasoning;
+      handledThinking = true;
+    }
+
+    // Handle reasoning_details from final response or accumulated chunks
+    // IMPORTANT: Only treat as thinking if the array has actual content
+    if (chunk.additional_kwargs?.reasoning_details) {
+      const details = chunk.additional_kwargs.reasoning_details;
+      if (Array.isArray(details) && details.length > 0) {
+        // Skip thinking content if excludeThinking is enabled
+        if (this.excludeThinking) {
+          return true;
+        }
+
+        for (const detail of details) {
+          if (detail.encrypted) {
+            // Show placeholder for encrypted reasoning
+            if (!this.hasOpenThinkBlock) {
+              this.fullResponse += "\n<think>";
+              this.hasOpenThinkBlock = true;
+            }
+            this.fullResponse += "[Encrypted reasoning]";
+            handledThinking = true;
+          } else if (detail.text) {
+            if (!this.hasOpenThinkBlock) {
+              this.fullResponse += "\n<think>";
+              this.hasOpenThinkBlock = true;
+            }
+            this.fullResponse += detail.text;
+            handledThinking = true;
+          } else if (detail.summary) {
+            if (!this.hasOpenThinkBlock) {
+              this.fullResponse += "\n<think>";
+              this.hasOpenThinkBlock = true;
+            }
+            this.fullResponse += detail.summary;
+            handledThinking = true;
+          }
+        }
+      }
+    }
+
+    // Handle standard string content (this is the actual response, not thinking)
+    if (typeof chunk.content === "string" && chunk.content) {
+      this.fullResponse += chunk.content;
+    }
+
+    return handledThinking;
+  }
+
   processChunk(chunk: any) {
     // If we've already decided to truncate, don't process more chunks
     if (this.shouldTruncate) {
@@ -95,20 +164,27 @@ export class ThinkBlockStreamer {
       this.tokenUsage = usage;
     }
 
-    let handledThinking = false;
+    // Determine if this chunk will handle thinking content
+    const isThinkingChunk =
+      Array.isArray(chunk.content) ||
+      chunk.additional_kwargs?.delta?.reasoning ||
+      (chunk.additional_kwargs?.reasoning_details &&
+        Array.isArray(chunk.additional_kwargs.reasoning_details) &&
+        chunk.additional_kwargs.reasoning_details.length > 0);
 
-    // Handle Claude 3.7 array-based content
-    if (Array.isArray(chunk.content)) {
-      handledThinking = this.handleClaude37Chunk(chunk.content);
-    } else {
-      // Handle deepseek format
-      handledThinking = this.handleDeepseekChunk(chunk);
-    }
-
-    // Close think block if we have one open and didn't handle thinking content
-    if (this.hasOpenThinkBlock && !handledThinking) {
+    // Close think block BEFORE processing non-thinking content
+    if (this.hasOpenThinkBlock && !isThinkingChunk) {
       this.fullResponse += "</think>";
       this.hasOpenThinkBlock = false;
+    }
+
+    // Now process the chunk
+    if (Array.isArray(chunk.content)) {
+      this.handleClaude37Chunk(chunk.content);
+    } else if (isThinkingChunk) {
+      this.handleOpenRouterChunk(chunk);
+    } else {
+      this.handleDeepseekChunk(chunk);
     }
 
     // Check if we should truncate streaming based on model adapter

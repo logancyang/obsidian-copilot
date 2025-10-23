@@ -3,6 +3,7 @@ import {
   BREVILABS_MODELS_BASE_URL,
   BUILTIN_CHAT_MODELS,
   ChatModelProviders,
+  ModelCapability,
   ProviderInfo,
 } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
@@ -32,6 +33,7 @@ import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { Notice } from "obsidian";
+import { ChatOpenRouter } from "./ChatOpenRouter";
 
 type ChatConstructorType = {
   new (config: any): any;
@@ -44,7 +46,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.COHEREAI]: ChatCohere,
   [ChatModelProviders.GOOGLE]: ChatGoogleGenerativeAI,
   [ChatModelProviders.XAI]: ChatXAI,
-  [ChatModelProviders.OPENROUTERAI]: ChatOpenAI,
+  [ChatModelProviders.OPENROUTERAI]: ChatOpenRouter,
   [ChatModelProviders.OLLAMA]: ChatOllama,
   [ChatModelProviders.LM_STUDIO]: ChatOpenAI,
   [ChatModelProviders.GROQ]: ChatGroq,
@@ -243,6 +245,8 @@ export default class ChatModelManager {
             "X-Title": "Obsidian Copilot",
           },
         },
+        // Enable reasoning if the model has the reasoning capability
+        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
