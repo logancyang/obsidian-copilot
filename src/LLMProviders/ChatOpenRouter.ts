@@ -3,6 +3,7 @@ import { AIMessageChunk } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { ChatOpenAI } from "@langchain/openai";
 import OpenAI from "openai";
+import { logInfo } from "@/logger";
 
 /**
  * ChatOpenRouter extends ChatOpenAI to support OpenRouter-specific features,
@@ -16,9 +17,16 @@ import OpenAI from "openai";
 export interface ChatOpenRouterInput extends BaseChatModelParams {
   /**
    * Enable reasoning/thinking tokens from OpenRouter
-   * When true, requests will include `reasoning: { enabled: true }`
+   * When true, requests will include reasoning parameters
    */
   enableReasoning?: boolean;
+
+  /**
+   * Reasoning effort level: "minimal", "low", "medium", or "high"
+   * Controls the amount of reasoning the model uses
+   * Note: "minimal" will be treated as "low" for OpenRouter
+   */
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
 
   // All other ChatOpenAI parameters
   modelName?: string;
@@ -36,15 +44,17 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
 
 export class ChatOpenRouter extends ChatOpenAI {
   private enableReasoning: boolean;
+  private reasoningEffort?: "minimal" | "low" | "medium" | "high";
   private openaiClient: OpenAI;
 
   constructor(fields: ChatOpenRouterInput) {
-    const { enableReasoning = false, ...rest } = fields;
+    const { enableReasoning = false, reasoningEffort, ...rest } = fields;
 
     // Pass all other parameters to ChatOpenAI
     super(rest);
 
     this.enableReasoning = enableReasoning;
+    this.reasoningEffort = reasoningEffort;
 
     // Create our own OpenAI client for raw access
     this.openaiClient = new OpenAI({
@@ -68,12 +78,27 @@ export class ChatOpenRouter extends ChatOpenAI {
       // - For Anthropic models: MUST use reasoning.max_tokens or reasoning.effort
       // - For other models: Can use reasoning.enabled
       // - max_tokens must be strictly higher than reasoning budget
-      return {
-        ...baseParams,
-        reasoning: {
-          max_tokens: 1024,
-        },
-      };
+
+      // Prefer effort if provided, otherwise fall back to max_tokens
+      if (this.reasoningEffort) {
+        // Map "minimal" to "low" since OpenRouter doesn't support "minimal"
+        const effort = this.reasoningEffort === "minimal" ? "low" : this.reasoningEffort;
+        logInfo(`OpenRouter reasoning enabled with effort: ${effort}`);
+        return {
+          ...baseParams,
+          reasoning: {
+            effort,
+          },
+        };
+      } else {
+        logInfo(`OpenRouter reasoning enabled with max_tokens: 1024`);
+        return {
+          ...baseParams,
+          reasoning: {
+            max_tokens: 1024,
+          },
+        };
+      }
     }
 
     return baseParams;

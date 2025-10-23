@@ -247,6 +247,12 @@ export default class ChatModelManager {
         },
         // Enable reasoning if the model has the reasoning capability
         enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
+        // Pass reasoning effort if configured and reasoning capability is enabled
+        reasoningEffort:
+          customModel.capabilities?.includes(ModelCapability.REASONING) &&
+          customModel.reasoningEffort
+            ? customModel.reasoningEffort
+            : undefined,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
