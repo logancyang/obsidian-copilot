@@ -49,13 +49,12 @@ const getErrorBlockRegistry = (): Map<string, Map<string, ToolCallRootRecord>> =
  */
 const pruneEmptyMessageEntry = (
   messageId: string,
-  messageRoots: Map<string, ToolCallRootRecord>
+  messageRoots: Map<string, ToolCallRootRecord>,
+  registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
   if (messageRoots.size > 0) {
     return;
   }
-
-  const registry = getRegistry();
   const currentRoots = registry.get(messageId);
 
   if (currentRoots === messageRoots) {
@@ -71,7 +70,8 @@ const disposeToolCallRoot = (
   messageRoots: Map<string, ToolCallRootRecord>,
   toolCallId: string,
   record: ToolCallRootRecord,
-  logContext: string
+  logContext: string,
+  registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
   try {
     record.root.unmount();
@@ -84,8 +84,7 @@ const disposeToolCallRoot = (
   if (messageRoots.get(toolCallId) === record) {
     messageRoots.delete(toolCallId);
   }
-
-  pruneEmptyMessageEntry(messageId, messageRoots);
+  pruneEmptyMessageEntry(messageId, messageRoots, registry);
 };
 
 /**
@@ -96,7 +95,8 @@ const scheduleToolCallRootDisposal = (
   messageRoots: Map<string, ToolCallRootRecord>,
   toolCallId: string,
   record: ToolCallRootRecord,
-  logContext: string
+  logContext: string,
+  registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
   if (record.isUnmounting) {
     return;
@@ -105,17 +105,15 @@ const scheduleToolCallRootDisposal = (
   record.isUnmounting = true;
 
   setTimeout(() => {
-    const registry = getRegistry();
     const currentRoots = registry.get(messageId);
     const currentRecord = currentRoots?.get(toolCallId);
 
     if (!currentRoots || currentRecord !== record) {
       record.isUnmounting = false;
-      pruneEmptyMessageEntry(messageId, messageRoots);
+      pruneEmptyMessageEntry(messageId, messageRoots, registry);
       return;
     }
-
-    disposeToolCallRoot(messageId, currentRoots, toolCallId, currentRecord, logContext);
+    disposeToolCallRoot(messageId, currentRoots, toolCallId, currentRecord, logContext, registry);
   }, 0);
 };
 
@@ -137,7 +135,8 @@ export const ensureToolCallRoot = (
       messageRoots,
       toolCallId,
       record,
-      `${logContext} (finalizing stale root)`
+      `${logContext} (finalizing stale root)`,
+      getRegistry()
     );
     record = undefined;
   }
@@ -173,7 +172,8 @@ export const ensureErrorBlockRoot = (
       messageRoots,
       errorId,
       record,
-      `${logContext} (finalizing stale error root)`
+      `${logContext} (finalizing stale error root)`,
+      getErrorBlockRegistry()
     );
     record = undefined;
   }
@@ -230,8 +230,14 @@ export const removeToolCallRoot = (
   if (!record) {
     return;
   }
-
-  scheduleToolCallRootDisposal(messageId, messageRoots, toolCallId, record, logContext);
+  scheduleToolCallRootDisposal(
+    messageId,
+    messageRoots,
+    toolCallId,
+    record,
+    logContext,
+    getRegistry()
+  );
 };
 
 /**
@@ -248,8 +254,14 @@ export const removeErrorBlockRoot = (
   if (!record) {
     return;
   }
-
-  scheduleToolCallRootDisposal(messageId, messageRoots, errorId, record, logContext);
+  scheduleToolCallRootDisposal(
+    messageId,
+    messageRoots,
+    errorId,
+    record,
+    logContext,
+    getErrorBlockRegistry()
+  );
 };
 
 /**
@@ -302,7 +314,8 @@ export const cleanupStaleToolCallRoots = (now: number = Date.now()): void => {
         messageRoots,
         toolCallId,
         record,
-        "stale message cleanup"
+        "stale message cleanup",
+        registry
       );
     });
   });
@@ -327,7 +340,8 @@ export const cleanupStaleErrorBlockRoots = (now: number = Date.now()): void => {
         messageRoots,
         errorId,
         record,
-        "stale error block cleanup"
+        "stale error block cleanup",
+        registry
       );
     });
   });
@@ -341,8 +355,9 @@ export const cleanupMessageToolCallRoots = (
   messageRoots: Map<string, ToolCallRootRecord>,
   logContext: string
 ): void => {
+  const registry = getRegistry();
   messageRoots.forEach((record, toolCallId) => {
-    scheduleToolCallRootDisposal(messageId, messageRoots, toolCallId, record, logContext);
+    scheduleToolCallRootDisposal(messageId, messageRoots, toolCallId, record, logContext, registry);
   });
 };
 
@@ -354,7 +369,8 @@ export const cleanupMessageErrorBlockRoots = (
   messageRoots: Map<string, ToolCallRootRecord>,
   logContext: string
 ): void => {
+  const registry = getErrorBlockRegistry();
   messageRoots.forEach((record, errorId) => {
-    scheduleToolCallRootDisposal(messageId, messageRoots, errorId, record, logContext);
+    scheduleToolCallRootDisposal(messageId, messageRoots, errorId, record, logContext, registry);
   });
 };
