@@ -1005,16 +1005,7 @@ export function checkModelApiKey(
       };
     }
 
-    const regionOrBaseUrl =
-      model.bedrockRegion || model.baseUrl || settings.amazonBedrockRegion || "us-east-1";
-    if (!regionOrBaseUrl) {
-      return {
-        hasApiKey: false,
-        errorNotice:
-          "Amazon Bedrock requires a region or custom base URL. Please set a region in Settings > API Keys or configure a base URL on the model.",
-      };
-    }
-
+    // Region defaults to us-east-1 if not specified, so API key is the only required check
     return { hasApiKey: true };
   }
 

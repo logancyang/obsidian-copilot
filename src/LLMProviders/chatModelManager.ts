@@ -432,15 +432,7 @@ export default class ChatModelManager {
     const resolvedRegion = explicitRegion || settingsRegion || "us-east-1";
     const baseUrlInput = customModel.baseUrl?.trim();
     const baseUrl = baseUrlInput ? baseUrlInput.replace(/\/+$/, "") : undefined;
-    const endpointBase =
-      baseUrl ||
-      (resolvedRegion ? `https://bedrock-runtime.${resolvedRegion}.amazonaws.com` : undefined);
-
-    if (!endpointBase) {
-      throw new Error(
-        "Amazon Bedrock requires either a region or base URL. Please set a region in Settings > API Keys or provide a base URL for the model."
-      );
-    }
+    const endpointBase = baseUrl || `https://bedrock-runtime.${resolvedRegion}.amazonaws.com`;
 
     const encodedModel = encodeURIComponent(modelName);
     const endpoint = `${endpointBase}/model/${encodedModel}/invoke`;
@@ -549,9 +541,8 @@ export default class ChatModelManager {
     if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
       const settings = getSettings();
       const apiKey = model.apiKey || settings.amazonBedrockApiKey;
-      const region = (model.bedrockRegion || settings.amazonBedrockRegion || "us-east-1").trim();
-      const baseUrl = model.baseUrl?.trim();
-      return Boolean(apiKey && (baseUrl || region));
+      // Region defaults to us-east-1 if not specified, so API key is the only requirement
+      return Boolean(apiKey);
     }
 
     const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
