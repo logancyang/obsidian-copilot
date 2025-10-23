@@ -64,6 +64,8 @@ export interface CopilotSettings {
   xaiApiKey: string;
   mistralApiKey: string;
   deepseekApiKey: string;
+  amazonBedrockApiKey: string;
+  amazonBedrockRegion: string;
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;

@@ -995,6 +995,29 @@ export function checkModelApiKey(
   hasApiKey: boolean;
   errorNotice?: string;
 } {
+  if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+    const apiKey = model.apiKey || settings.amazonBedrockApiKey;
+    if (!apiKey) {
+      return {
+        hasApiKey: false,
+        errorNotice:
+          "Amazon Bedrock API key is missing. Please add a key in Settings > API Keys or update the model configuration.",
+      };
+    }
+
+    const regionOrBaseUrl =
+      model.bedrockRegion || model.baseUrl || settings.amazonBedrockRegion || "us-east-1";
+    if (!regionOrBaseUrl) {
+      return {
+        hasApiKey: false,
+        errorNotice:
+          "Amazon Bedrock requires a region or custom base URL. Please set a region in Settings > API Keys or configure a base URL on the model.",
+      };
+    }
+
+    return { hasApiKey: true };
+  }
+
   const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
   const providerKeyName = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const hasNoApiKey = !model.apiKey && !settings[providerKeyName];

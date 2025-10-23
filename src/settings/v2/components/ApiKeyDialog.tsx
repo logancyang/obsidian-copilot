@@ -61,14 +61,17 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     return (settings[settingKey] ?? "") as string;
   };
 
-  const providers: ProviderKeyItem[] = getNeedSetKeyProvider().map((provider) => {
-    const providerKey = provider as SettingKeyProviders;
-    const apiKey = getApiKeyByProvider(providerKey);
-    return {
-      provider: providerKey,
-      apiKey,
-    };
-  });
+  const providers: ProviderKeyItem[] = getNeedSetKeyProvider()
+    .filter((provider) => provider !== ChatModelProviders.AMAZON_BEDROCK)
+    .map((provider) => {
+      const providerKey = provider as SettingKeyProviders;
+      const apiKey = getApiKeyByProvider(providerKey);
+
+      return {
+        provider: providerKey,
+        apiKey,
+      };
+    });
 
   const handleApiKeyChange = (provider: SettingKeyProviders, value: string) => {
     const currentKey = getApiKeyByProvider(provider);
