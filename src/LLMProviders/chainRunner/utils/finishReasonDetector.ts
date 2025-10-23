@@ -85,12 +85,24 @@ export function extractTokenUsage(chunk: any): {
     };
   }
 
-  // Anthropic/others format: usage with snake_case
+  // Anthropic/Bedrock/others format: usage with snake_case or camelCase
   if (metadata.usage) {
     return {
-      inputTokens: metadata.usage.input_tokens || metadata.usage.prompt_tokens,
-      outputTokens: metadata.usage.output_tokens || metadata.usage.completion_tokens,
-      totalTokens: metadata.usage.total_tokens,
+      inputTokens:
+        metadata.usage.input_tokens ||
+        metadata.usage.inputTokens || // Bedrock camelCase
+        metadata.usage.inputTokenCount || // Bedrock invocationMetrics
+        metadata.usage.prompt_tokens,
+      outputTokens:
+        metadata.usage.output_tokens ||
+        metadata.usage.outputTokens || // Bedrock camelCase
+        metadata.usage.outputTokenCount || // Bedrock invocationMetrics
+        metadata.usage.completion_tokens,
+      totalTokens:
+        metadata.usage.total_tokens ||
+        metadata.usage.totalTokens || // Bedrock camelCase
+        (metadata.usage.input_tokens || metadata.usage.inputTokenCount || 0) +
+          (metadata.usage.output_tokens || metadata.usage.outputTokenCount || 0),
     };
   }
 
