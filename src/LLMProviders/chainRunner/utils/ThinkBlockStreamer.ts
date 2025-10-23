@@ -46,6 +46,11 @@ export class ThinkBlockStreamer {
           break;
       }
     }
+    // Close think block before adding text content
+    if (textContent && this.hasOpenThinkBlock) {
+      this.fullResponse += "</think>";
+      this.hasOpenThinkBlock = false;
+    }
     if (textContent) {
       this.fullResponse += textContent;
     }
@@ -138,6 +143,12 @@ export class ThinkBlockStreamer {
       }
     }
 
+    // Close think block before adding regular content
+    if (typeof chunk.content === "string" && chunk.content && this.hasOpenThinkBlock) {
+      this.fullResponse += "</think>";
+      this.hasOpenThinkBlock = false;
+    }
+
     // Handle standard string content (this is the actual response, not thinking)
     if (typeof chunk.content === "string" && chunk.content) {
       this.fullResponse += chunk.content;
@@ -170,7 +181,8 @@ export class ThinkBlockStreamer {
       chunk.additional_kwargs?.delta?.reasoning ||
       (chunk.additional_kwargs?.reasoning_details &&
         Array.isArray(chunk.additional_kwargs.reasoning_details) &&
-        chunk.additional_kwargs.reasoning_details.length > 0);
+        chunk.additional_kwargs.reasoning_details.length > 0) ||
+      chunk.additional_kwargs?.reasoning_content; // Deepseek format
 
     // Close think block BEFORE processing non-thinking content
     if (this.hasOpenThinkBlock && !isThinkingChunk) {
@@ -179,11 +191,18 @@ export class ThinkBlockStreamer {
     }
 
     // Now process the chunk
+    // Route based on the actual chunk format
     if (Array.isArray(chunk.content)) {
+      // Claude format with content array
       this.handleClaude37Chunk(chunk.content);
+    } else if (chunk.additional_kwargs?.reasoning_content) {
+      // Deepseek format with reasoning_content
+      this.handleDeepseekChunk(chunk);
     } else if (isThinkingChunk) {
+      // OpenRouter format with delta.reasoning or reasoning_details
       this.handleOpenRouterChunk(chunk);
     } else {
+      // Default case: regular content or other formats
       this.handleDeepseekChunk(chunk);
     }
 
