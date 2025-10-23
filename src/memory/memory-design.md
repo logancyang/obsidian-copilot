@@ -27,21 +27,22 @@ graph TD
     K --> L[Recent Memory Update Complete]
 
     %% Saved Memory Flow
-    M[User Explicitly Asks to Remember] --> N[memoryTool called]
+    M[User Explicitly Asks to Remember] --> N[updateMemoryTool called]
     N --> O{enableSavedMemory?}
-    O -->|Yes| P[Extract Memory Content]
+    O -->|Yes| P[Ensure Memory Folder Exists]
     O -->|No| Z2[Skip Saved Memory]
-    P --> Q[Format as Bullet Point]
-    Q --> R[Append to Saved Memories.md]
-    R --> S[Saved Memory Complete]
+    P --> Q[Load Saved Memories]
+    Q --> R[Generate Merged Bullet List via LLM]
+    R --> S[Overwrite Saved Memories.md]
+    S --> T_saved[Saved Memory Complete]
 
     %% Memory Retrieval
-    T[LLM Request] --> U[getUserMemoryPrompt called]
-    U --> V[Load Recent Conversations]
-    U --> W[Load Saved Memories]
-    V --> X[Combine Memory Sections]
-    W --> X
-    X --> Y[Return Memory Context for LLM]
+    U[LLM Request] --> V[getUserMemoryPrompt called]
+    V --> W[Load Recent Conversations]
+    V --> X[Load Saved Memories]
+    W --> Y[Combine Memory Sections]
+    X --> Y
+    Y --> Z[Return Memory Context for LLM]
 ```
 
 ## Key Points
@@ -57,7 +58,7 @@ graph TD
 
 **Saved Memories:**
 
-- **Trigger**: When user explicitly asks to remember something during chat and `memoryTool` is called
+- **Trigger**: When user explicitly asks to remember something during chat and `updateMemoryTool` is called
 - **Guard**: Only if `enableSavedMemory` setting is enabled
 - **Immediate**: Saves directly to file when invoked
 - **User notification**: Shows success/failure notice to user
@@ -76,19 +77,23 @@ graph TD
 
 ### Saved Memories:
 
-- **When**: User explicitly asks to remember something via `memoryTool`
+- **When**: User explicitly asks to remember something via `updateMemoryTool`
 - **Retention policy**: No limit - memories persist until manually deleted
 - **Content**:
   - Raw user-specified information to remember
   - Personal facts, preferences, important decisions, or context
-- **Format**: Simple bullet-point list in markdown
+  - LLM-normalized bullet list that deduplicates and merges related statements
+  - Conflict resolution keeps the most recent truth and removes obsolete entries
+  - Preserves the language of the source statements
+- **Format**: Bullet-point list in markdown maintained by the LLM
 - **Storage**: `Saved Memories.md` in the configured memory folder
-- **File handling**: Appends new memories to existing file, creates if doesn't exist
+- **File handling**: Loads existing memories, asks the LLM to produce a fully merged list, and overwrites the file (creates if it doesn't exist)
 
 ### Message Processing Features:
 
 - **Conversation Titles**: LLM-extracted titles that capture main user intent (2-8 words)
 - **Conversation Summaries**: AI-generated 2-3 sentence summaries with key details and conclusions
+- **Saved Memory Normalization**: LLM produces a concise, deduplicated bullet list for long-term memories while resolving conflicts
 - **Memory Tool Integration**: Explicit memory saving via natural language commands
 - **Robust JSON Parsing**: Handles JSON responses wrapped in code blocks (common with Gemini and other LLMs) with fallback to plain JSON extraction
 - **Language-aware**: Uses the same language as the conversation for titles and summaries
@@ -114,6 +119,7 @@ graph TD
 - Fallback mechanisms for AI processing failures
 - Graceful handling of missing files and folders
 - User notifications for saved memory operations (success/failure)
+- Saved memory writes fall back with descriptive error messages if LLM responses are empty or unavailable
 - Robust JSON extraction from LLM responses with multiple parsing strategies (code blocks, inline JSON, fallback to raw content)
 - Race condition protection for concurrent memory updates
 
@@ -133,10 +139,10 @@ The memory system behaves differently depending on which chat mode is active:
 ### Agent Mode (Autonomous Agent)
 
 - **Memory Retrieval**: ✅ Full access to both Recent Conversations and Saved Memories via system prompt
-- **Memory Saving**: ✅ Direct access to `memoryTool` through XML-based tool calling
+- **Memory Saving**: ✅ Direct access to `updateMemoryTool` through XML-based tool calling
 - **Behavior**:
   - AI autonomously decides when to save memories based on user requests
-  - Uses XML format: `<use_tool><name>memoryTool</name><memoryContent>...</memoryContent></use_tool>`
+  - Uses XML format: `<use_tool><name>updateMemoryTool</name><memoryContent>...</memoryContent></use_tool>`
   - Can reason step-by-step about whether something should be remembered
   - Shows user notifications when memories are saved
   - Access controlled by tool enablement settings (`autonomousAgentEnabledToolIds`)

@@ -2,49 +2,51 @@ import { z } from "zod";
 import { createTool, SimpleTool } from "./SimpleTool";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logError } from "@/logger";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 
-// Define Zod schema for memoryTool
+// Define Zod schema for updateMemoryTool
 const memorySchema = z.object({
-  memoryContent: z
+  statement: z
     .string()
     .min(1)
-    .describe(
-      "The content to save to user's memory (information the user explicitly asked to remember)"
-    ),
+    .describe("The user statement for explicitly updating saved memories"),
 });
 
 /**
  * Memory tool for saving information that the user explicitly asks the assistant to remember
  */
-export const memoryTool: SimpleTool<typeof memorySchema, { success: boolean; message: string }> =
-  createTool({
-    name: "memoryTool",
-    description:
-      "Save information to user memory when the user explicitly asks to remember something",
-    schema: memorySchema,
-    handler: async ({ memoryContent }) => {
-      try {
-        const memoryManager = new UserMemoryManager(app);
-        const success = await memoryManager.addSavedMemory(memoryContent);
-        if (!success) {
-          return {
-            success: false,
-            message: `Failed to save memory: ${memoryContent}`,
-          };
-        }
-        const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
+export const updateMemoryTool: SimpleTool<
+  typeof memorySchema,
+  { success: boolean; message: string }
+> = createTool({
+  name: "updateMemory",
+  description: "Update the user memory when the user explicitly asks to update the memory",
+  schema: memorySchema,
+  handler: async ({ statement }) => {
+    try {
+      const memoryManager = new UserMemoryManager(app);
+      const chatModel = ChatModelManager.getInstance().getChatModel();
+      const result = await memoryManager.updateSavedMemory(statement, chatModel);
 
-        return {
-          success: true,
-          message: `Memory saved successfully into ${memoryFilePath}: ${memoryContent}`,
-        };
-      } catch (error) {
-        logError("[memoryTool] Error saving memory:", error);
-
+      if (result.error) {
         return {
           success: false,
-          message: `Failed to save memory: ${error.message}`,
+          message: result.error,
         };
       }
-    },
-  });
+
+      const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
+      return {
+        success: true,
+        message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
+      };
+    } catch (error) {
+      logError("[updateMemoryTool] Error updating memory:", error);
+
+      return {
+        success: false,
+        message: `Failed to save memory: ${error.message}`,
+      };
+    }
+  },
+});

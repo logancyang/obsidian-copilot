@@ -796,7 +796,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "youtubeTranscription",
     "writeToFile",
     "replaceInFile",
-    "memoryTool",
+    "updateMemory",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,
   verbosity: DEFAULT_MODEL_SETTING.VERBOSITY,
