@@ -827,9 +827,6 @@ If your plugin does not need CSS, delete this file.
   margin-right: 12px;
 }
 
-.model-card-title {
-}
-
 .model-provider-wrapper {
   display: flex;
   flex-direction: column;
@@ -953,6 +950,7 @@ If your plugin does not need CSS, delete this file.
   font-weight: var(--font-medium);
   min-width: var(--size-4-3);
   text-align: right;
+  white-space: nowrap;
 }
 
 .copilot-sources__text {

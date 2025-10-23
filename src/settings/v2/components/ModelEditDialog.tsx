@@ -387,6 +387,43 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                   )}
                 </>
               )}
+
+            {/* Reasoning Effort for OpenRouter models */}
+            {localModel.provider === "openrouterai" && (
+              <FormField>
+                <ParameterControl
+                  type="select"
+                  label="Reasoning Effort"
+                  value={localModel.reasoningEffort}
+                  onChange={(value) => handleLocalUpdate("reasoningEffort", value)}
+                  disableFn={() => handleLocalReset("reasoningEffort")}
+                  defaultValue="low"
+                  options={[
+                    { value: "low", label: "Low" },
+                    { value: "medium", label: "Medium" },
+                    { value: "high", label: "High" },
+                  ]}
+                  helpText={
+                    <>
+                      <p>
+                        Controls the amount of reasoning effort the model uses. Higher effort
+                        provides more thorough reasoning but takes longer.
+                      </p>
+                      <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                        <li>Low: Faster responses, basic reasoning (default)</li>
+                        <li>Medium: Balanced performance</li>
+                        <li>High: Thorough reasoning, slower responses</li>
+                      </ul>
+                      {!localModel.capabilities?.includes(ModelCapability.REASONING) && (
+                        <p className="tw-mt-2 tw-text-warning">
+                          Enable the &quot;Reasoning&quot; capability above to use this feature.
+                        </p>
+                      )}
+                    </>
+                  }
+                />
+              </FormField>
+            )}
           </>
         )}
       </div>
