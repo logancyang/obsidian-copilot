@@ -336,6 +336,7 @@ export interface ProviderResponseMap {
   [ChatModelProviders.OPENROUTERAI]: OpenRouterAIModelResponse;
   [ChatModelProviders.COPILOT_PLUS]: null;
   [ChatModelProviders.AZURE_OPENAI]: null;
+  [ChatModelProviders.AMAZON_BEDROCK]: unknown;
 }
 
 // Adapter type definition - converts provider-specific models to standard format
@@ -412,6 +413,7 @@ export const providerAdapters: ProviderModelAdapters = {
       name: model.id,
       provider: ChatModelProviders.XAI,
     })) || [],
+  [ChatModelProviders.AMAZON_BEDROCK]: (_data: unknown): StandardModel[] => [],
 
   [ChatModelProviders.OPENROUTERAI]: (data): StandardModel[] =>
     data.data?.map((model) => ({

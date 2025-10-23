@@ -146,6 +146,9 @@ export interface CustomModel {
   azureOpenAIApiVersion?: string;
   azureOpenAIApiEmbeddingDeploymentName?: string;
 
+  // Amazon Bedrock specific fields
+  bedrockRegion?: string;
+
   // OpenAI GPT-5 and O-series specific fields
   reasoningEffort?: "minimal" | "low" | "medium" | "high";
   verbosity?: "low" | "medium" | "high";

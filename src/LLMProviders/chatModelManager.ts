@@ -34,6 +34,7 @@ import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
+import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 
 type ChatConstructorType = {
   new (config: any): any;
@@ -54,6 +55,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
+  [ChatModelProviders.AMAZON_BEDROCK]: BedrockChatModel,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -85,6 +87,7 @@ export default class ChatModelManager {
     [ChatModelProviders.COPILOT_PLUS]: () => getSettings().plusLicenseKey,
     [ChatModelProviders.MISTRAL]: () => getSettings().mistralApiKey,
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
+    [ChatModelProviders.AMAZON_BEDROCK]: () => getSettings().amazonBedrockApiKey,
   } as const;
 
   private constructor() {
@@ -133,6 +136,8 @@ export default class ChatModelManager {
     const modelName = customModel.name;
     const modelInfo = getModelInfo(modelName);
     const { isThinkingEnabled } = modelInfo;
+    const resolvedTemperature = this.getTemperatureForModel(modelInfo, customModel, settings);
+    const maxTokens = customModel.maxTokens ?? settings.maxTokens;
 
     // Base config - temperature will be handled by provider-specific methods
     const baseConfig: Omit<ModelConfig, "maxTokens" | "maxCompletionTokens"> = {
@@ -142,7 +147,9 @@ export default class ChatModelManager {
       maxConcurrency: 3,
       enableCors: customModel.enableCors,
       // Add temperature for normal models (will be overridden by special configs if needed)
-      ...(!isThinkingEnabled && { temperature: customModel.temperature ?? settings.temperature }),
+      ...(!isThinkingEnabled && resolvedTemperature !== undefined
+        ? { temperature: resolvedTemperature }
+        : {}),
     };
 
     const providerConfig: {
@@ -311,10 +318,21 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
+      [ChatModelProviders.AMAZON_BEDROCK]: {} as BedrockChatModelFields,
     };
 
-    const selectedProviderConfig =
+    let selectedProviderConfig =
       providerConfig[customModel.provider as keyof typeof providerConfig] || {};
+
+    if (customModel.provider === ChatModelProviders.AMAZON_BEDROCK) {
+      selectedProviderConfig = await this.buildBedrockConfig(
+        customModel,
+        modelName,
+        settings,
+        maxTokens,
+        resolvedTemperature
+      );
+    }
 
     // Get provider-specific parameters (like topP, frequencyPenalty) that the provider supports
     const providerSpecificParams = this.getProviderSpecificParams(
@@ -323,13 +341,9 @@ export default class ChatModelManager {
     );
 
     // LangChain 0.6.6 handles token configuration for special models internally
-    const tokenConfig = isThinkingEnabled
-      ? {
-          maxTokens: customModel.maxTokens ?? settings.maxTokens,
-        }
-      : {
-          maxTokens: customModel.maxTokens ?? settings.maxTokens,
-        };
+    const tokenConfig = {
+      maxTokens,
+    };
 
     const finalConfig = {
       ...baseConfig,
@@ -387,6 +401,58 @@ export default class ChatModelManager {
     }
 
     return config;
+  }
+
+  /**
+   * Builds configuration for Amazon Bedrock models by merging custom overrides with global defaults.
+   * @param customModel - The model definition provided by the user.
+   * @param modelName - The resolved Bedrock model identifier to invoke.
+   * @param settings - Current Copilot settings.
+   * @param maxTokens - Maximum completion tokens requested for the invocation.
+   * @param temperature - Optional temperature override for the invocation.
+   */
+  private async buildBedrockConfig(
+    customModel: CustomModel,
+    modelName: string,
+    settings: CopilotSettings,
+    maxTokens: number,
+    temperature: number | undefined
+  ): Promise<BedrockChatModelFields> {
+    const apiKeySource = customModel.apiKey || settings.amazonBedrockApiKey;
+    if (!apiKeySource) {
+      throw new Error(
+        "Amazon Bedrock API key is not configured. Provide a key in Settings > API Keys or the model definition."
+      );
+    }
+
+    const apiKey = await getDecryptedKey(apiKeySource);
+
+    const explicitRegion = customModel.bedrockRegion?.trim();
+    const settingsRegion = settings.amazonBedrockRegion?.trim();
+    const resolvedRegion = explicitRegion || settingsRegion || "us-east-1";
+    const baseUrlInput = customModel.baseUrl?.trim();
+    const baseUrl = baseUrlInput ? baseUrlInput.replace(/\/+$/, "") : undefined;
+    const endpointBase = baseUrl || `https://bedrock-runtime.${resolvedRegion}.amazonaws.com`;
+
+    const encodedModel = encodeURIComponent(modelName);
+    const endpoint = `${endpointBase}/model/${encodedModel}/invoke`;
+    const streamEndpoint = `${endpointBase}/model/${encodedModel}/invoke-with-response-stream`;
+    const fetchImplementation = customModel.enableCors ? safeFetch : undefined;
+    const anthropicVersion = modelName.startsWith("anthropic.") ? "bedrock-2023-05-31" : undefined;
+
+    return {
+      modelName,
+      modelId: modelName,
+      apiKey,
+      endpoint,
+      streamEndpoint,
+      defaultMaxTokens: maxTokens,
+      defaultTemperature: temperature,
+      defaultTopP: customModel.topP,
+      anthropicVersion,
+      fetchImplementation,
+      streaming: customModel.stream ?? true,
+    };
   }
 
   /**
@@ -455,17 +521,36 @@ export default class ChatModelManager {
         }
 
         const constructor = this.getProviderConstructor(model);
-        const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
-
-        const apiKey = model.apiKey || getDefaultApiKey();
+        const hasCredentials = this.hasProviderCredentials(model);
         const modelKey = getModelKeyFromModel(model);
         modelMap[modelKey] = {
-          hasApiKey: Boolean(model.apiKey || apiKey),
+          hasApiKey: hasCredentials,
           AIConstructor: constructor,
           vendor: model.provider,
         };
       }
     });
+  }
+
+  /**
+   * Checks if a model has the necessary credentials configured for its provider.
+   * @param model - The custom model definition.
+   * @returns True when the provider requirements are satisfied, otherwise false.
+   */
+  private hasProviderCredentials(model: CustomModel): boolean {
+    if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+      const settings = getSettings();
+      const apiKey = model.apiKey || settings.amazonBedrockApiKey;
+      // Region defaults to us-east-1 if not specified, so API key is the only requirement
+      return Boolean(apiKey);
+    }
+
+    const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
+    if (!getDefaultApiKey) {
+      return Boolean(model.apiKey);
+    }
+
+    return Boolean(model.apiKey || getDefaultApiKey());
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {

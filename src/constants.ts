@@ -184,6 +184,7 @@ export enum ChatModelProviders {
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
+  AMAZON_BEDROCK = "amazon-bedrock",
 }
 
 export enum ModelCapability {
@@ -596,6 +597,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://api.deepseek.com/models",
     testModel: ChatModels.DEEPSEEK_CHAT,
   },
+  [ChatModelProviders.AMAZON_BEDROCK]: {
+    label: "Amazon Bedrock",
+    host: "https://bedrock-runtime.{region}.amazonaws.com",
+    keyManagementURL: "https://console.aws.amazon.com/iam/home#/security_credentials",
+    listModelURL: "",
+  },
   [EmbeddingModelProviders.COPILOT_PLUS]: {
     label: "Copilot Plus",
     host: BREVILABS_MODELS_BASE_URL,
@@ -623,6 +630,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   "copilot-plus": "plusLicenseKey",
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
+  "amazon-bedrock": "amazonBedrockApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -734,6 +742,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   xaiApiKey: "",
   mistralApiKey: "",
   deepseekApiKey: "",
+  amazonBedrockApiKey: "",
+  amazonBedrockRegion: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,

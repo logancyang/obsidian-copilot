@@ -95,9 +95,8 @@ export default class ChainManager {
   // Remove after confirming no dependencies
   private validateChainInitialization() {
     if (!this.chain || !isSupportedChain(this.chain)) {
-      console.error("Chain is not initialized properly, re-initializing chain: ", getChainType());
+      logInfo("Reinitializing chat chain after detecting missing or unsupported instance.");
       this.createChainWithNewModel({}, false);
-      // this.setChain(getChainType());
     }
   }
 

@@ -995,6 +995,20 @@ export function checkModelApiKey(
   hasApiKey: boolean;
   errorNotice?: string;
 } {
+  if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+    const apiKey = model.apiKey || settings.amazonBedrockApiKey;
+    if (!apiKey) {
+      return {
+        hasApiKey: false,
+        errorNotice:
+          "Amazon Bedrock API key is missing. Please add a key in Settings > API Keys or update the model configuration.",
+      };
+    }
+
+    // Region defaults to us-east-1 if not specified, so API key is the only required check
+    return { hasApiKey: true };
+  }
+
   const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
   const providerKeyName = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
   const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
