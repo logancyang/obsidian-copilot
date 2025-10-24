@@ -9,6 +9,7 @@ import { getSettings } from "@/settings/model";
 import {
   extractNoteFiles,
   removeThinkTags,
+  removeErrorTags,
   withSuppressedTokenWarnings,
   withTimeout,
 } from "@/utils";
@@ -153,7 +154,8 @@ export class HybridRetriever extends BaseRetriever {
 
         // Process the result
         if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
-          return removeThinkTags(rewrittenQueryObject.content as string);
+          const cleanedContent = removeThinkTags(rewrittenQueryObject.content as string);
+          return removeErrorTags(cleanedContent);
         }
 
         console.warn("Unexpected rewrittenQuery format. Falling back to original query.");

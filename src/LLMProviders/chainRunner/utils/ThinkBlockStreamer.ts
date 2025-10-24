@@ -1,6 +1,7 @@
 import { StreamingResult, TokenUsage } from "@/types/message";
 import { ModelAdapter } from "./modelAdapter";
 import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
+import { formatErrorChunk } from "@/utils/toolResultUtils";
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
@@ -10,6 +11,7 @@ import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
 export class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
   private fullResponse = "";
+  private errorResponse = "";
   private shouldTruncate = false;
   private wasTruncated = false;
   private tokenUsage: TokenUsage | null = null;
@@ -236,12 +238,21 @@ export class ThinkBlockStreamer {
     return truncated;
   }
 
+  processErrorChunk(errorMessage: string) {
+    this.errorResponse = formatErrorChunk(errorMessage);
+  }
+
   close(): StreamingResult {
     // Make sure to close any open think block at the end
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
-      this.updateCurrentAiMessage(this.fullResponse);
     }
+
+    if (this.errorResponse) {
+      this.fullResponse += this.errorResponse;
+    }
+
+    this.updateCurrentAiMessage(this.fullResponse);
 
     return {
       content: this.fullResponse,

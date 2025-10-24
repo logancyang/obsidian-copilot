@@ -10,11 +10,19 @@ export interface ToolCallMarker {
   endIndex: number;
 }
 
+export interface ErrorMarker {
+  id: string;
+  errorContent: string;
+  startIndex: number;
+  endIndex: number;
+}
+
 export interface ParsedMessage {
   segments: Array<{
-    type: "text" | "toolCall";
+    type: "text" | "toolCall" | "error";
     content: string;
     toolCall?: ToolCallMarker;
+    error?: ErrorMarker;
   }>;
 }
 
@@ -90,10 +98,76 @@ export function ensureEncodedToolCallMarkerResults(message: string): string {
 }
 
 /**
- * Parse tool call markers from a message
- * Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->
+ * Parse error chunks from a text segment
+ * Format: <errorChunk>error content</errorChunk>
  */
-export function parseToolCallMarkers(message: string): ParsedMessage {
+function parseErrorChunks(
+  text: string,
+  baseIndex: number = 0,
+  messagePrefix: string = ""
+): Array<{ type: "text" | "error"; content: string; error?: ErrorMarker }> {
+  const errorChunks: Array<{ type: "text" | "error"; content: string; error?: ErrorMarker }> = [];
+  const errorRegex = /<errorChunk>([\s\S]*?)<\/errorChunk>/g;
+
+  let lastIndex = 0;
+  let match;
+
+  while ((match = errorRegex.exec(text)) !== null) {
+    // Add text before the error chunk
+    if (match.index > lastIndex) {
+      errorChunks.push({
+        type: "text",
+        content: text.slice(lastIndex, match.index),
+      });
+    }
+
+    // Add the error chunk
+    // Use position-based ID for stability across re-renders
+    const [fullMatch, errorContent] = match;
+    const startIndex = baseIndex + match.index;
+    const errorId = messagePrefix ? `${messagePrefix}-error-${startIndex}` : `error-${startIndex}`;
+
+    errorChunks.push({
+      type: "error",
+      content: errorContent,
+      error: {
+        id: errorId,
+        errorContent: errorContent,
+        startIndex: startIndex,
+        endIndex: baseIndex + match.index + fullMatch.length,
+      },
+    });
+
+    lastIndex = match.index + fullMatch.length;
+  }
+
+  // Add any remaining text
+  if (lastIndex < text.length) {
+    errorChunks.push({
+      type: "text",
+      content: text.slice(lastIndex),
+    });
+  }
+
+  // If no error chunks found, return the entire text
+  if (errorChunks.length === 0) {
+    errorChunks.push({
+      type: "text",
+      content: text,
+    });
+  }
+
+  return errorChunks;
+}
+
+/**
+ * Parse tool call markers and error chunks from a message
+ * Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->
+ * Error Format: <errorChunk>error content</errorChunk>
+ * @param message - The message string to parse
+ * @param messageId - Optional message ID to ensure error IDs are unique across messages
+ */
+export function parseToolCallMarkers(message: string, messageId?: string): ParsedMessage {
   const segments: ParsedMessage["segments"] = [];
   // Use [\s\S] instead of . with 's' flag for compatibility with ES6
   const toolCallRegex =
@@ -103,11 +177,25 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
   let match;
 
   while ((match = toolCallRegex.exec(message)) !== null) {
-    // Add text before the tool call
+    // Add text before the tool call (and parse any error chunks in it)
     if (match.index > lastIndex) {
-      segments.push({
-        type: "text",
-        content: message.slice(lastIndex, match.index),
+      const textBefore = message.slice(lastIndex, match.index);
+      const parsedChunks = parseErrorChunks(textBefore, lastIndex, messageId);
+
+      // Only add non-empty text segments
+      parsedChunks.forEach((chunk) => {
+        if (chunk.type === "text" && chunk.content.trim()) {
+          segments.push({
+            type: "text",
+            content: chunk.content,
+          });
+        } else if (chunk.type === "error" && chunk.error) {
+          segments.push({
+            type: "error",
+            content: chunk.content,
+            error: chunk.error,
+          });
+        }
       });
     }
 
@@ -153,19 +241,44 @@ export function parseToolCallMarkers(message: string): ParsedMessage {
     lastIndex = match.index + fullMatch.length;
   }
 
-  // Add any remaining text
+  // Add any remaining text (and parse any error chunks in it)
   if (lastIndex < message.length) {
-    segments.push({
-      type: "text",
-      content: message.slice(lastIndex),
+    const remainingText = message.slice(lastIndex);
+    const parsedChunks = parseErrorChunks(remainingText, lastIndex, messageId);
+
+    parsedChunks.forEach((chunk) => {
+      if (chunk.type === "text" && chunk.content.trim()) {
+        segments.push({
+          type: "text",
+          content: chunk.content,
+        });
+      } else if (chunk.type === "error" && chunk.error) {
+        segments.push({
+          type: "error",
+          content: chunk.content,
+          error: chunk.error,
+        });
+      }
     });
   }
 
-  // If no tool calls found, return the entire message as text
+  // If no segments found, return the entire message as text (after checking for errors)
   if (segments.length === 0) {
-    segments.push({
-      type: "text",
-      content: message,
+    const parsedChunks = parseErrorChunks(message, 0, messageId);
+
+    parsedChunks.forEach((chunk) => {
+      if (chunk.type === "text") {
+        segments.push({
+          type: "text",
+          content: chunk.content,
+        });
+      } else if (chunk.type === "error" && chunk.error) {
+        segments.push({
+          type: "error",
+          content: chunk.content,
+          error: chunk.error,
+        });
+      }
     });
   }
 

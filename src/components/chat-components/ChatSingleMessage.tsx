@@ -2,20 +2,26 @@ import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
-  ContextNoteBadge,
-  ContextUrlBadge,
-  ContextTagBadge,
   ContextFolderBadge,
+  ContextNoteBadge,
+  ContextTagBadge,
+  ContextUrlBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
 import { TokenLimitWarning } from "@/components/chat-components/TokenLimitWarning";
 import {
+  cleanupMessageErrorBlockRoots,
   cleanupMessageToolCallRoots,
+  cleanupStaleErrorBlockRoots,
   cleanupStaleToolCallRoots,
+  ensureErrorBlockRoot,
   ensureToolCallRoot,
+  getMessageErrorBlockRoots,
   getMessageToolCallRoots,
-  renderToolCallBanner,
+  removeErrorBlockRoot,
   removeToolCallRoot,
+  renderErrorBlock,
+  renderToolCallBanner,
   type ToolCallRootRecord,
 } from "@/components/chat-components/toolCallRootManager";
 import { USER_SENDER } from "@/constants";
@@ -146,15 +152,22 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   const componentRef = useRef<Component | null>(null);
   const isUnmountingRef = useRef<boolean>(false);
   // Use a stable ID for the message to preserve tool call roots across re-renders
+  // Prefer message.id (persistent) over timestamp.epoch (regenerated on load)
   const messageId = useRef(
-    message.timestamp?.epoch
-      ? String(message.timestamp.epoch)
-      : `temp-${Date.now()}-${Math.random()}`
+    message.id ||
+      (message.timestamp?.epoch
+        ? String(message.timestamp.epoch)
+        : `temp-${Date.now()}-${Math.random()}`)
   );
 
   // Store roots in a global map to preserve them across component instances
   const rootsRef = useRef<Map<string, ToolCallRootRecord>>(
     getMessageToolCallRoots(messageId.current)
+  );
+
+  // Store error block roots separately to prevent ID collisions and race conditions
+  const errorRootsRef = useRef<Map<string, ToolCallRootRecord>>(
+    getMessageErrorBlockRoots(messageId.current)
   );
 
   const copyToClipboard = () => {
@@ -351,19 +364,28 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         componentRef.current = new Component();
       }
 
-      const processedMessage = preprocess(message.message);
-      const parsedMessage = parseToolCallMarkers(processedMessage);
+      const originMessage = message.message;
+      const processedMessage = preprocess(originMessage);
+      const parsedMessage = parseToolCallMarkers(processedMessage, messageId.current);
 
       if (!isUnmountingRef.current) {
-        // Track existing tool call IDs
+        // Track existing tool call and error block IDs
         const existingToolCallIds = new Set<string>();
-        const existingElements = contentRef.current.querySelectorAll('[id^="tool-call-"]');
-        existingElements.forEach((el) => {
+        const existingErrorIds = new Set<string>();
+
+        const existingToolCalls = contentRef.current.querySelectorAll('[id^="tool-call-"]');
+        existingToolCalls.forEach((el) => {
           const id = el.id.replace("tool-call-", "");
           existingToolCallIds.add(id);
         });
 
-        // Clear only text content divs, preserve tool call containers
+        const existingErrors = contentRef.current.querySelectorAll('[id^="error-block-"]');
+        existingErrors.forEach((el) => {
+          const id = el.id.replace("error-block-", "");
+          existingErrorIds.add(id);
+        });
+
+        // Clear only text content divs, preserve tool call and error block containers
         const textDivs = contentRef.current.querySelectorAll(".message-segment");
         textDivs.forEach((div) => div.remove());
 
@@ -418,6 +440,40 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
 
             currentIndex++;
+          } else if (segment.type === "error" && segment.error) {
+            const errorId = segment.error.id;
+            let container = document.getElementById(`error-block-${errorId}`);
+
+            if (!container) {
+              // Insert error block at the current stream position
+              const insertBefore = contentRef.current!.children[currentIndex];
+              const errorDiv = document.createElement("div");
+              errorDiv.className = "error-block-container";
+              errorDiv.id = `error-block-${errorId}`;
+
+              if (insertBefore) {
+                contentRef.current!.insertBefore(errorDiv, insertBefore);
+              } else {
+                contentRef.current!.appendChild(errorDiv);
+              }
+
+              container = errorDiv;
+            }
+
+            // Use dedicated error block root to prevent ID collisions with tool calls
+            const rootRecord = ensureErrorBlockRoot(
+              messageId.current,
+              errorRootsRef.current,
+              errorId,
+              container as HTMLElement,
+              "error render"
+            );
+
+            if (!isUnmountingRef.current && !rootRecord.isUnmounting) {
+              renderErrorBlock(rootRecord, segment.error);
+            }
+
+            currentIndex++;
           }
         });
 
@@ -437,10 +493,32 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
           }
         });
+
+        // Clean up any error blocks that no longer exist
+        const currentErrorIds = new Set(
+          parsedMessage.segments
+            .filter((s) => s.type === "error" && s.error)
+            .map((s) => s.error!.id)
+        );
+
+        existingErrorIds.forEach((id) => {
+          if (!currentErrorIds.has(id)) {
+            const element = document.getElementById(`error-block-${id}`);
+            if (element) {
+              removeErrorBlockRoot(
+                messageId.current,
+                errorRootsRef.current,
+                id,
+                "error block removal"
+              );
+              element.remove();
+            }
+          }
+        });
       }
     }
 
-    // Cleanup function
+    // Cleanup function - no longer needed as roots are managed by toolCallRootManager
     return () => {
       isUnmountingRef.current = true;
     };
@@ -451,10 +529,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     const currentComponentRef = componentRef;
     const currentMessageId = messageId.current;
     const messageRootsSnapshot = rootsRef.current;
+    const errorRootsSnapshot = errorRootsRef.current;
 
     // Clean up old message roots to prevent memory leaks (older than 1 hour)
     const cleanupOldRoots = () => {
       cleanupStaleToolCallRoots();
+      cleanupStaleErrorBlockRoots();
     };
 
     // Run cleanup on mount
@@ -473,9 +553,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         }
 
         // Only clean up roots if this is a temporary message (streaming message)
-        // Permanent messages keep their roots to preserve tool call banners
+        // Permanent messages keep their roots to preserve tool call banners and error blocks
         if (currentMessageId.startsWith("temp-")) {
           cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
+          cleanupMessageErrorBlockRoots(currentMessageId, errorRootsSnapshot, "component cleanup");
         }
       }, 0);
     };

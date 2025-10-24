@@ -1,13 +1,15 @@
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
 
+import { ErrorBlock } from "@/components/chat-components/ErrorBlock";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
-import type { ToolCallMarker } from "@/LLMProviders/chainRunner/utils/toolCallParser";
+import type { ErrorMarker, ToolCallMarker } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { logWarn } from "@/logger";
 
 declare global {
   interface Window {
     __copilotToolCallRoots?: Map<string, Map<string, ToolCallRootRecord>>;
+    __copilotErrorBlocks?: Map<string, Map<string, ToolCallRootRecord>>;
   }
 }
 
@@ -31,17 +33,28 @@ const getRegistry = (): Map<string, Map<string, ToolCallRootRecord>> => {
 };
 
 /**
+ * Retrieve the global registry that keeps track of error block React roots.
+ * Separate from tool call roots to prevent ID collisions and race conditions.
+ */
+const getErrorBlockRegistry = (): Map<string, Map<string, ToolCallRootRecord>> => {
+  if (!window.__copilotErrorBlocks) {
+    window.__copilotErrorBlocks = new Map<string, Map<string, ToolCallRootRecord>>();
+  }
+
+  return window.__copilotErrorBlocks;
+};
+
+/**
  * Remove the message entry from the registry when it no longer has active tool call roots.
  */
 const pruneEmptyMessageEntry = (
   messageId: string,
-  messageRoots: Map<string, ToolCallRootRecord>
+  messageRoots: Map<string, ToolCallRootRecord>,
+  registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
   if (messageRoots.size > 0) {
     return;
   }
-
-  const registry = getRegistry();
   const currentRoots = registry.get(messageId);
 
   if (currentRoots === messageRoots) {
@@ -57,7 +70,8 @@ const disposeToolCallRoot = (
   messageRoots: Map<string, ToolCallRootRecord>,
   toolCallId: string,
   record: ToolCallRootRecord,
-  logContext: string
+  logContext: string,
+  registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
   try {
     record.root.unmount();
@@ -70,8 +84,7 @@ const disposeToolCallRoot = (
   if (messageRoots.get(toolCallId) === record) {
     messageRoots.delete(toolCallId);
   }
-
-  pruneEmptyMessageEntry(messageId, messageRoots);
+  pruneEmptyMessageEntry(messageId, messageRoots, registry);
 };
 
 /**
@@ -82,7 +95,8 @@ const scheduleToolCallRootDisposal = (
   messageRoots: Map<string, ToolCallRootRecord>,
   toolCallId: string,
   record: ToolCallRootRecord,
-  logContext: string
+  logContext: string,
+  registry: Map<string, Map<string, ToolCallRootRecord>>
 ): void => {
   if (record.isUnmounting) {
     return;
@@ -91,17 +105,15 @@ const scheduleToolCallRootDisposal = (
   record.isUnmounting = true;
 
   setTimeout(() => {
-    const registry = getRegistry();
     const currentRoots = registry.get(messageId);
     const currentRecord = currentRoots?.get(toolCallId);
 
     if (!currentRoots || currentRecord !== record) {
       record.isUnmounting = false;
-      pruneEmptyMessageEntry(messageId, messageRoots);
+      pruneEmptyMessageEntry(messageId, messageRoots, registry);
       return;
     }
-
-    disposeToolCallRoot(messageId, currentRoots, toolCallId, currentRecord, logContext);
+    disposeToolCallRoot(messageId, currentRoots, toolCallId, currentRecord, logContext, registry);
   }, 0);
 };
 
@@ -123,7 +135,8 @@ export const ensureToolCallRoot = (
       messageRoots,
       toolCallId,
       record,
-      `${logContext} (finalizing stale root)`
+      `${logContext} (finalizing stale root)`,
+      getRegistry()
     );
     record = undefined;
   }
@@ -135,6 +148,43 @@ export const ensureToolCallRoot = (
     };
 
     messageRoots.set(toolCallId, record);
+  }
+
+  return record;
+};
+
+/**
+ * Ensure a React root exists for the provided error block container and return the root record.
+ * Uses a separate registry from tool calls to prevent ID collisions and race conditions.
+ */
+export const ensureErrorBlockRoot = (
+  messageId: string,
+  messageRoots: Map<string, ToolCallRootRecord>,
+  errorId: string,
+  container: HTMLElement,
+  logContext: string
+): ToolCallRootRecord => {
+  let record = messageRoots.get(errorId);
+
+  if (record?.isUnmounting) {
+    disposeToolCallRoot(
+      messageId,
+      messageRoots,
+      errorId,
+      record,
+      `${logContext} (finalizing stale error root)`,
+      getErrorBlockRegistry()
+    );
+    record = undefined;
+  }
+
+  if (!record) {
+    record = {
+      root: createRoot(container),
+      isUnmounting: false,
+    };
+
+    messageRoots.set(errorId, record);
   }
 
   return record;
@@ -160,6 +210,13 @@ export const renderToolCallBanner = (
 };
 
 /**
+ * Render the `ErrorBlock` component into the provided root record.
+ */
+export const renderErrorBlock = (record: ToolCallRootRecord, error: ErrorMarker): void => {
+  record.root.render(<ErrorBlock errorContent={error.errorContent} />);
+};
+
+/**
  * Schedule the removal of a tool call root from a message root collection.
  */
 export const removeToolCallRoot = (
@@ -173,8 +230,38 @@ export const removeToolCallRoot = (
   if (!record) {
     return;
   }
+  scheduleToolCallRootDisposal(
+    messageId,
+    messageRoots,
+    toolCallId,
+    record,
+    logContext,
+    getRegistry()
+  );
+};
 
-  scheduleToolCallRootDisposal(messageId, messageRoots, toolCallId, record, logContext);
+/**
+ * Schedule the removal of an error block root from a message root collection.
+ */
+export const removeErrorBlockRoot = (
+  messageId: string,
+  messageRoots: Map<string, ToolCallRootRecord>,
+  errorId: string,
+  logContext: string
+): void => {
+  const record = messageRoots.get(errorId);
+
+  if (!record) {
+    return;
+  }
+  scheduleToolCallRootDisposal(
+    messageId,
+    messageRoots,
+    errorId,
+    record,
+    logContext,
+    getErrorBlockRegistry()
+  );
 };
 
 /**
@@ -182,6 +269,22 @@ export const removeToolCallRoot = (
  */
 export const getMessageToolCallRoots = (messageId: string): Map<string, ToolCallRootRecord> => {
   const registry = getRegistry();
+  let messageRoots = registry.get(messageId);
+
+  if (!messageRoots) {
+    messageRoots = new Map<string, ToolCallRootRecord>();
+    registry.set(messageId, messageRoots);
+  }
+
+  return messageRoots;
+};
+
+/**
+ * Return (and create if necessary) the error block root map for a specific message.
+ * Uses a separate registry from tool calls to prevent ID collisions.
+ */
+export const getMessageErrorBlockRoots = (messageId: string): Map<string, ToolCallRootRecord> => {
+  const registry = getErrorBlockRegistry();
   let messageRoots = registry.get(messageId);
 
   if (!messageRoots) {
@@ -211,7 +314,34 @@ export const cleanupStaleToolCallRoots = (now: number = Date.now()): void => {
         messageRoots,
         toolCallId,
         record,
-        "stale message cleanup"
+        "stale message cleanup",
+        registry
+      );
+    });
+  });
+};
+
+/**
+ * Clean up error block roots for messages whose identifiers encode timestamps older than the configured threshold.
+ */
+export const cleanupStaleErrorBlockRoots = (now: number = Date.now()): void => {
+  const registry = getErrorBlockRegistry();
+
+  registry.forEach((messageRoots, messageId) => {
+    const timestamp = Number.parseInt(messageId, 10);
+
+    if (Number.isNaN(timestamp) || now - timestamp < STALE_ROOT_MAX_AGE_MS) {
+      return;
+    }
+
+    messageRoots.forEach((record, errorId) => {
+      scheduleToolCallRootDisposal(
+        messageId,
+        messageRoots,
+        errorId,
+        record,
+        "stale error block cleanup",
+        registry
       );
     });
   });
@@ -225,7 +355,22 @@ export const cleanupMessageToolCallRoots = (
   messageRoots: Map<string, ToolCallRootRecord>,
   logContext: string
 ): void => {
+  const registry = getRegistry();
   messageRoots.forEach((record, toolCallId) => {
-    scheduleToolCallRootDisposal(messageId, messageRoots, toolCallId, record, logContext);
+    scheduleToolCallRootDisposal(messageId, messageRoots, toolCallId, record, logContext, registry);
+  });
+};
+
+/**
+ * Schedule cleanup for all error block roots owned by a specific message.
+ */
+export const cleanupMessageErrorBlockRoots = (
+  messageId: string,
+  messageRoots: Map<string, ToolCallRootRecord>,
+  logContext: string
+): void => {
+  const registry = getErrorBlockRegistry();
+  messageRoots.forEach((record, errorId) => {
+    scheduleToolCallRootDisposal(messageId, messageRoots, errorId, record, logContext, registry);
   });
 };
