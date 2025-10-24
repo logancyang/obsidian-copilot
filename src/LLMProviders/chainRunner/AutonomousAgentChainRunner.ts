@@ -599,15 +599,19 @@ ${params}
         }
 
         if (toolCall.name === "localSearch") {
-          const processed = loopDeps.processLocalSearchResult(result);
-          collectedSources.push(...processed.sources);
-          result.result = loopDeps.applyCiCOrderingToLocalSearchResult(
-            processed.formattedForLLM,
-            originalUserPrompt || ""
-          );
-          result.displayResult = processed.formattedForDisplay;
+          if (result.success) {
+            const processed = loopDeps.processLocalSearchResult(result);
+            collectedSources.push(...processed.sources);
+            result.result = loopDeps.applyCiCOrderingToLocalSearchResult(
+              processed.formattedForLLM,
+              originalUserPrompt || ""
+            );
+            result.displayResult = processed.formattedForDisplay;
+          }
         } else if (toolCall.name === "readNote") {
-          result.displayResult = ToolResultFormatter.format("readNote", result.result);
+          if (result.success) {
+            result.displayResult = ToolResultFormatter.format("readNote", result.result);
+          }
         }
 
         toolResults.push(result);
