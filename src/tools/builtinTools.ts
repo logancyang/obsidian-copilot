@@ -320,7 +320,7 @@ export function registerFileTreeTool(vault: Vault): void {
       requiresVault: true,
       customPromptInstructions: `For getFileTree:
 - Use to browse the vault's file structure including paths of notes and folders
-- Always call this tool to get the path of specific notes or folders when you are not given the exact path.
+- Always call this tool to explore the exact path of notes or folders when you are not given the exact path.
 - DO NOT use this tool to look up note contents or metadata - use localSearch or readNote instead.
 - No parameters needed
 
