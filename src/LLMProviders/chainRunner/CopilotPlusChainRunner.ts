@@ -1,4 +1,3 @@
-import { getStandaloneQuestion } from "@/chainUtils";
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import {
   ABORT_REASON,
@@ -25,11 +24,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
-import {
-  addChatHistoryToMessages,
-  processedMessagesToTextOnly,
-  processRawChatHistory,
-} from "./utils/chatHistoryUtils";
+import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {
   addFallbackSources,
   formatSourceCatalog,
@@ -431,21 +426,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       const hasLocalSearchWithResults = localSearchResult && sources.length > 0;
 
       // Format chat history from memory
-      const memory = this.chainManager.memoryManager.getMemory();
-      const memoryVariables = await memory.loadMemoryVariables({});
-      const rawHistory = memoryVariables.history || [];
-
-      // Process history consistently - same data used for both LLM and question condensing
-      const processedHistory = processRawChatHistory(rawHistory);
-      const chatHistory = processedMessagesToTextOnly(processedHistory);
-
-      // Get standalone question if we have chat history
-      let questionForEnhancement = cleanedUserMessage;
-      if (chatHistory.length > 0) {
-        logInfo("Condensing question");
-        questionForEnhancement = await getStandaloneQuestion(cleanedUserMessage, chatHistory);
-        logInfo("Condensed standalone question: ", questionForEnhancement);
-      }
+      const questionForEnhancement = cleanedUserMessage;
 
       // Enhance with ALL tool outputs including localSearch
       let enhancedUserMessage = this.prepareEnhancedUserMessage(
