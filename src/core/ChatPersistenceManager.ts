@@ -4,7 +4,13 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { logError, logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
-import { ensureFolderExists, extractTextFromChunk, formatDateTime } from "@/utils";
+import {
+  ensureFolderExists,
+  extractTextFromChunk,
+  formatDateTime,
+  getUtf8ByteLength,
+  truncateToByteLimit,
+} from "@/utils";
 import { App, Notice, TFile, TFolder } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
@@ -445,9 +451,39 @@ ${conversationSummary}`;
     // Parse the custom format and replace variables
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
 
-    // Create the file name (limit to 100 characters to avoid excessively long names)
+    // Calculate byte budget for the topic
+    // Most filesystems have a 255-byte limit for filenames
+    // We use 200 bytes as a conservative safe limit to account for variations
+    const SAFE_FILENAME_BYTE_LIMIT = 200;
+
+    // Get the current project prefix if any
+    const currentProject = getCurrentProject();
+    const filePrefix = currentProject ? `${currentProject.id}__` : "";
+
+    // Calculate fixed components in bytes
+    const extensionBytes = getUtf8ByteLength(".md");
+    const filePrefixBytes = getUtf8ByteLength(filePrefix);
+
+    // Calculate the custom format overhead (everything except {$topic})
+    const formatOverhead = customFileName
+      .replace("{$topic}", "")
+      .replace("{$date}", timestampFileName.split("_")[0])
+      .replace("{$time}", timestampFileName.split("_")[1]);
+    const formatOverheadBytes = getUtf8ByteLength(formatOverhead);
+
+    // Calculate the maximum bytes available for the topic
+    const topicByteBudget = Math.max(
+      20, // Minimum 20 bytes for topic to ensure at least some meaningful text
+      SAFE_FILENAME_BYTE_LIMIT - extensionBytes - filePrefixBytes - formatOverheadBytes
+    );
+
+    // Replace spaces with underscores and truncate to byte limit
+    const topicWithUnderscores = topicForFilename.replace(/\s+/g, "_");
+    const truncatedTopic = truncateToByteLimit(topicWithUnderscores, topicByteBudget);
+
+    // Create the file name with the truncated topic
     customFileName = customFileName
-      .replace("{$topic}", topicForFilename.slice(0, 100).replace(/\s+/g, "_"))
+      .replace("{$topic}", truncatedTopic)
       .replace("{$date}", timestampFileName.split("_")[0])
       .replace("{$time}", timestampFileName.split("_")[1]);
 
@@ -460,11 +496,16 @@ ${conversationSummary}`;
       // eslint-disable-next-line no-control-regex
       .replace(/[\\/:*?"<>|\x00-\x1F]/g, "_");
 
-    // Add project ID as prefix for project-specific chat histories
-    const currentProject = getCurrentProject();
-    const filePrefix = currentProject ? `${currentProject.id}__` : "";
+    // Final safety check: ensure the complete basename fits within the limit
+    const baseNameWithPrefix = `${filePrefix}${sanitizedFileName}.md`;
+    if (getUtf8ByteLength(baseNameWithPrefix) > SAFE_FILENAME_BYTE_LIMIT) {
+      // If still too long, truncate the entire filename more aggressively
+      const availableForBasename = SAFE_FILENAME_BYTE_LIMIT - extensionBytes - filePrefixBytes;
+      const truncatedBasename = truncateToByteLimit(sanitizedFileName, availableForBasename);
+      return `${settings.defaultSaveFolder}/${filePrefix}${truncatedBasename}.md`;
+    }
 
-    return `${settings.defaultSaveFolder}/${filePrefix}${sanitizedFileName}.md`;
+    return `${settings.defaultSaveFolder}/${baseNameWithPrefix}`;
   }
 
   /**

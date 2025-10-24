@@ -1157,3 +1157,56 @@ export function isSourceModeOn(): boolean {
   const state = view.getState() as { source?: boolean };
   return state.source === true;
 }
+
+/**
+ * Calculate the UTF-8 byte length of a string.
+ * This is important for filesystem operations where filename limits are in bytes, not characters.
+ * @param str - The string to measure
+ * @returns The byte length when encoded as UTF-8
+ */
+export function getUtf8ByteLength(str: string): number {
+  // Use TextEncoder which always uses UTF-8 encoding
+  return new TextEncoder().encode(str).length;
+}
+
+/**
+ * Truncate a string to fit within a byte limit, ensuring UTF-8 character boundaries are respected.
+ * This prevents cutting multibyte UTF-8 sequences in the middle.
+ * @param str - The string to truncate
+ * @param byteLimit - Maximum number of bytes (not characters)
+ * @returns The truncated string that fits within the byte limit
+ */
+export function truncateToByteLimit(str: string, byteLimit: number): string {
+  if (byteLimit <= 0) {
+    return "";
+  }
+
+  // Fast path: if string already fits, return as-is
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(str);
+  if (bytes.length <= byteLimit) {
+    return str;
+  }
+
+  // Binary search to find the longest prefix that fits
+  let low = 0;
+  let high = str.length;
+  let result = "";
+
+  while (low <= high) {
+    const mid = Math.floor((low + high) / 2);
+    const candidate = str.substring(0, mid);
+    const candidateBytes = encoder.encode(candidate);
+
+    if (candidateBytes.length <= byteLimit) {
+      // This candidate fits, try a longer one
+      result = candidate;
+      low = mid + 1;
+    } else {
+      // This candidate is too long, try a shorter one
+      high = mid - 1;
+    }
+  }
+
+  return result;
+}
