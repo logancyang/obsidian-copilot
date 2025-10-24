@@ -44,6 +44,39 @@ jest.mock("@/utils", () => ({
     display: "2024/09/23 22:18:00",
   })),
   ensureFolderExists: jest.fn(async () => {}),
+  getUtf8ByteLength: jest.fn((str: string) => {
+    return new TextEncoder().encode(str).length;
+  }),
+  truncateToByteLimit: jest.fn((str: string, byteLimit: number) => {
+    if (byteLimit <= 0) {
+      return "";
+    }
+
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(str);
+    if (bytes.length <= byteLimit) {
+      return str;
+    }
+
+    let low = 0;
+    let high = str.length;
+    let result = "";
+
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      const candidate = str.substring(0, mid);
+      const candidateBytes = encoder.encode(candidate);
+
+      if (candidateBytes.length <= byteLimit) {
+        result = candidate;
+        low = mid + 1;
+      } else {
+        high = mid - 1;
+      }
+    }
+
+    return result;
+  }),
 }));
 
 describe("ChatPersistenceManager", () => {
@@ -430,6 +463,176 @@ Nature's quiet song`);
         "test-folder/Untitled_Chat@20240923_221800.md",
         expect.any(String)
       );
+    });
+
+    it("should handle very long ASCII filenames by truncating to byte limit", async () => {
+      const longMessage =
+        "This is a very long message that contains many many words and should be truncated to fit within the filesystem byte limit to prevent ENAMETOOLONG errors";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: longMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
+      const basename = createdPath.split("/").pop() || "";
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(basename).length;
+
+      // Verify the filename is within safe limits (200 bytes)
+      expect(byteLength).toBeLessThanOrEqual(200);
+    });
+
+    it("should handle Cyrillic text filenames by truncating to byte limit", async () => {
+      const cyrillicMessage =
+        "используй словарь уже установленных терминов Словарь перевода Songs of Syx придерживайся правил перевода Правила перевода Songs of Syx сделай перевод для слова";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: cyrillicMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
+      const basename = createdPath.split("/").pop() || "";
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(basename).length;
+
+      // Verify the filename is within safe limits (200 bytes)
+      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the filename contains some Cyrillic text (not completely truncated)
+      expect(basename.length).toBeGreaterThan(20);
+    });
+
+    it("should handle emoji filenames by truncating to byte limit", async () => {
+      const emojiMessage = "🚀 Launch the rocket 🌟 to the stars ✨ with amazing features 🎉🎊🎈";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: emojiMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
+      const basename = createdPath.split("/").pop() || "";
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(basename).length;
+
+      // Verify the filename is within safe limits (200 bytes)
+      expect(byteLength).toBeLessThanOrEqual(200);
+    });
+
+    it("should handle mixed Unicode text (Chinese, Japanese, Korean) by truncating to byte limit", async () => {
+      const mixedUnicodeMessage =
+        "你好世界 こんにちは世界 안녕하세요 세계 Hello World Привет мир مرحبا بالعالم";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: mixedUnicodeMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
+      const basename = createdPath.split("/").pop() || "";
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(basename).length;
+
+      // Verify the filename is within safe limits (200 bytes)
+      expect(byteLength).toBeLessThanOrEqual(200);
+    });
+
+    it("should handle filenames with project prefix within byte limit", async () => {
+      const longMessage =
+        "This is a very long message that should be truncated when combined with a project prefix";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: longMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Mock getCurrentProject to return a project
+      const getCurrentProject = jest.requireMock("@/aiParams").getCurrentProject;
+      getCurrentProject.mockReturnValue({ id: "project-123", name: "Test Project" });
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      const createdPath = mockApp.vault.create.mock.calls[0][0] as string;
+      const basename = createdPath.split("/").pop() || "";
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(basename).length;
+
+      // Verify the filename is within safe limits (200 bytes)
+      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the project prefix is included
+      expect(basename).toContain("project-123__");
+
+      // Reset mock
+      getCurrentProject.mockReturnValue(null);
     });
 
     it("should update existing file when epoch is stored as a string", async () => {

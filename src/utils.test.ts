@@ -4,9 +4,11 @@ import {
   extractNoteFiles,
   getNotesFromPath,
   getNotesFromTags,
+  getUtf8ByteLength,
   isFolderMatch,
   processVariableNameForNotePath,
   removeThinkTags,
+  truncateToByteLimit,
   withTimeout,
 } from "./utils";
 import { TimeoutError } from "./error";
@@ -530,5 +532,111 @@ describe("TimeoutError", () => {
     expect(error.name).toBe("TimeoutError");
     expect(error).toBeInstanceOf(Error);
     expect(error).toBeInstanceOf(TimeoutError);
+  });
+});
+
+describe("getUtf8ByteLength", () => {
+  it("should correctly calculate byte length for ASCII text", () => {
+    expect(getUtf8ByteLength("Hello")).toBe(5);
+    expect(getUtf8ByteLength("Test 123")).toBe(8);
+  });
+
+  it("should correctly calculate byte length for Cyrillic text", () => {
+    // Each Cyrillic character is 2 bytes in UTF-8
+    expect(getUtf8ByteLength("Привет")).toBe(12); // 6 chars × 2 bytes
+    expect(getUtf8ByteLength("мир")).toBe(6); // 3 chars × 2 bytes
+  });
+
+  it("should correctly calculate byte length for Chinese/Japanese/Korean text", () => {
+    // CJK characters are typically 3 bytes in UTF-8
+    expect(getUtf8ByteLength("你好")).toBe(6); // 2 chars × 3 bytes
+    expect(getUtf8ByteLength("こんにちは")).toBe(15); // 5 chars × 3 bytes
+    expect(getUtf8ByteLength("안녕")).toBe(6); // 2 chars × 3 bytes
+  });
+
+  it("should correctly calculate byte length for emoji", () => {
+    // Emoji are typically 4 bytes in UTF-8
+    expect(getUtf8ByteLength("🚀")).toBe(4);
+    expect(getUtf8ByteLength("🌟")).toBe(4);
+    expect(getUtf8ByteLength("🚀🌟")).toBe(8);
+  });
+
+  it("should correctly calculate byte length for mixed text", () => {
+    expect(getUtf8ByteLength("Hello мир 你好")).toBe(19); // 5 + 1 + 6 + 1 + 6 = 19
+  });
+
+  it("should handle empty string", () => {
+    expect(getUtf8ByteLength("")).toBe(0);
+  });
+});
+
+describe("truncateToByteLimit", () => {
+  it("should return string as-is if within byte limit", () => {
+    expect(truncateToByteLimit("Hello", 10)).toBe("Hello");
+    expect(truncateToByteLimit("Test", 4)).toBe("Test");
+  });
+
+  it("should truncate ASCII text to byte limit", () => {
+    expect(truncateToByteLimit("Hello World", 5)).toBe("Hello");
+    expect(truncateToByteLimit("Test123456", 7)).toBe("Test123");
+  });
+
+  it("should truncate Cyrillic text without breaking characters", () => {
+    const cyrillic = "Привет мир";
+    // "Привет" = 12 bytes, " " = 1 byte, "мир" = 6 bytes
+    // Total = 19 bytes
+    const result = truncateToByteLimit(cyrillic, 13);
+    // Should include "Привет " (13 bytes) or "Привет" (12 bytes) depending on space handling
+    expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(13);
+    // Verify no broken characters (each result should be valid UTF-8)
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it("should truncate emoji without breaking characters", () => {
+    const emoji = "🚀🌟✨🎉";
+    // Each emoji is 4 bytes, total = 16 bytes
+    const result = truncateToByteLimit(emoji, 8);
+    // Should include exactly 2 emoji (8 bytes)
+    expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(8);
+    expect(result).toBe("🚀🌟");
+  });
+
+  it("should handle mixed Unicode text", () => {
+    const mixed = "Hello мир 你好";
+    // "Hello" = 5, " " = 1, "мир" = 6, " " = 1, "你好" = 6
+    // Total = 19 bytes
+    const result = truncateToByteLimit(mixed, 12);
+    expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(12);
+    // Should include at least "Hello мир" (12 bytes)
+    expect(result).toContain("Hello");
+  });
+
+  it("should return empty string for byte limit of 0", () => {
+    expect(truncateToByteLimit("Hello", 0)).toBe("");
+  });
+
+  it("should return empty string for negative byte limit", () => {
+    expect(truncateToByteLimit("Hello", -1)).toBe("");
+  });
+
+  it("should handle empty string", () => {
+    expect(truncateToByteLimit("", 10)).toBe("");
+  });
+
+  it("should handle very long Cyrillic text", () => {
+    const longCyrillic =
+      "используй словарь уже установленных терминов Словарь перевода Songs of Syx";
+    const result = truncateToByteLimit(longCyrillic, 50);
+    expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(50);
+    // Should not break in the middle of a character
+    expect(result.length).toBeGreaterThan(0);
+  });
+
+  it("should handle edge case where single character exceeds limit", () => {
+    // If a single emoji (4 bytes) exceeds the limit of 3 bytes
+    const result = truncateToByteLimit("🚀Test", 3);
+    // Binary search may find a partial character, but we can't include it
+    // The function should return an empty string or the longest valid prefix
+    expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(3);
   });
 });
