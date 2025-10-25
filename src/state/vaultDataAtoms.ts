@@ -203,15 +203,10 @@ export class VaultDataManager {
   private refreshNotes = (): void => {
     if (!app?.vault) return;
 
-    const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
     const allFiles = app.vault.getFiles();
-    const pdfFiles = allFiles.filter(
-      (file): file is TFile => file instanceof TFile && file.extension === "pdf"
+    const newFiles = allFiles.filter(
+      (file): file is TFile => file instanceof TFile && isAllowedFileForNoteContext(file)
     );
-    const canvasFiles = allFiles.filter(
-      (file): file is TFile => file instanceof TFile && file.extension === "canvas"
-    );
-    const newFiles = [...markdownFiles, ...pdfFiles, ...canvasFiles];
 
     // Always update atom with new array reference to ensure React components re-render
     // Note: Obsidian mutates TFile objects in-place (e.g., on rename), so we need new
