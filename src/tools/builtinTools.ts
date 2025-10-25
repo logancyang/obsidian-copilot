@@ -208,7 +208,7 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 - Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
 - Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
 - Stop calling readNote as soon as you have the required information.
-- **IMPORTANT**: Always call getFileTree to get the exact note path before calling readNote.
+- Always call getFileTree to get the exact note path if it is not provided in the context before calling readNote.
 
 Example (first chunk):
 <use_tool>
