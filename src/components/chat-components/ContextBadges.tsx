@@ -39,6 +39,7 @@ export function ContextActiveNoteBadge({
 
   const tooltipContent = <div className="tw-text-left">{currentActiveFile.path}</div>;
   const isPdf = currentActiveFile.extension === "pdf";
+  const isCanvas = currentActiveFile.extension === "canvas";
 
   return (
     <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
@@ -49,6 +50,7 @@ export function ContextActiveNoteBadge({
         </TruncatedText>
         <span className="tw-text-xs tw-text-faint">Current</span>
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
       </div>
       {onRemove && (
         <Button
@@ -68,6 +70,7 @@ export function ContextActiveNoteBadge({
 export function ContextNoteBadge({ note, onRemove }: ContextNoteBadgeProps) {
   const tooltipContent = <div className="tw-text-left">{note.path}</div>;
   const isPdf = note.extension === "pdf";
+  const isCanvas = note.extension === "canvas";
 
   return (
     <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
@@ -77,6 +80,7 @@ export function ContextNoteBadge({ note, onRemove }: ContextNoteBadgeProps) {
           {note.basename}
         </TruncatedText>
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
       </div>
       {onRemove && (
         <Button

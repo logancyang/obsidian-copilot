@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { TFile, TFolder, TAbstractFile } from "obsidian";
 import debounce from "lodash.debounce";
 import { settingsStore } from "@/settings/model";
-import { getTagsFromNote } from "@/utils";
+import { getTagsFromNote, isAllowedFileForNoteContext } from "@/utils";
 import { logInfo } from "@/logger";
 
 /**
@@ -15,7 +15,7 @@ const VAULT_DEBOUNCE_DELAY = 250;
  * Jotai atoms for vault data - centralized, singleton-managed vault state
  *
  * Note: Atoms store ALL available data. Hooks filter based on parameters.
- * - notesAtom: ALL files (markdown + PDFs)
+ * - notesAtom: ALL files (markdown + PDFs + canvas)
  * - foldersAtom: ALL folders
  * - tagsFrontmatterAtom: Frontmatter tags only
  * - tagsAllAtom: All tags (frontmatter + inline)
@@ -62,7 +62,7 @@ export class VaultDataManager {
    * Initializes the vault data manager with event listeners.
    * Should be called once during plugin initialization.
    *
-   * Note: VaultDataManager tracks ALL files (md + PDFs) and ALL tags.
+   * Note: VaultDataManager tracks ALL files (md + PDFs + canvas) and ALL tags.
    * Filtering is done by hooks based on parameters.
    */
   public initialize(): void {
@@ -99,7 +99,7 @@ export class VaultDataManager {
    */
   private handleFileCreate = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || file.extension === "pdf") {
+      if (isAllowedFileForNoteContext(file)) {
         this.debouncedRefreshNotes();
         this.debouncedRefreshTagsFrontmatter();
         this.debouncedRefreshTagsAll();
@@ -114,7 +114,7 @@ export class VaultDataManager {
    */
   private handleFileDelete = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || file.extension === "pdf") {
+      if (isAllowedFileForNoteContext(file)) {
         this.debouncedRefreshNotes();
         this.debouncedRefreshTagsFrontmatter();
         this.debouncedRefreshTagsAll();
@@ -131,7 +131,7 @@ export class VaultDataManager {
    */
   private handleFileRename = (file: TAbstractFile, _oldPath: string): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || file.extension === "pdf") {
+      if (isAllowedFileForNoteContext(file)) {
         this.debouncedRefreshNotes();
         this.debouncedRefreshTagsFrontmatter();
         this.debouncedRefreshTagsAll();
@@ -197,18 +197,16 @@ export class VaultDataManager {
   });
 
   /**
-   * Refreshes the notes atom with ALL vault files (markdown + PDFs).
+   * Refreshes the notes atom with ALL vault files (markdown + PDFs + canvas).
    * Hooks will filter based on their parameters.
    */
   private refreshNotes = (): void => {
     if (!app?.vault) return;
 
-    const markdownFiles = app.vault.getMarkdownFiles() as TFile[];
     const allFiles = app.vault.getFiles();
-    const pdfFiles = allFiles.filter(
-      (file): file is TFile => file instanceof TFile && file.extension === "pdf"
+    const newFiles = allFiles.filter(
+      (file): file is TFile => file instanceof TFile && isAllowedFileForNoteContext(file)
     );
-    const newFiles = [...markdownFiles, ...pdfFiles];
 
     // Always update atom with new array reference to ensure React components re-render
     // Note: Obsidian mutates TFile objects in-place (e.g., on rename), so we need new

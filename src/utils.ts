@@ -316,11 +316,12 @@ export function getFileName(file: TFile): string {
 }
 
 /**
- * Check if a file is allowed for context (markdown, PDF, or canvas files)
+ * Check if a file is allowed for note context (markdown, PDF, or canvas files).
+ * This does NOT include images - images are handled separately in the UI.
  * @param file The file to check
- * @returns true if the file is allowed, false otherwise
+ * @returns true if the file is allowed for note context, false otherwise
  */
-export function isAllowedFileForContext(file: TFile | null): boolean {
+export function isAllowedFileForNoteContext(file: TFile | null): boolean {
   if (!file) return false;
   return file.extension === "md" || file.extension === "pdf" || file.extension === "canvas";
 }

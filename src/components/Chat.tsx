@@ -29,6 +29,7 @@ import {
 import { AppContext, EventTargetContext } from "@/context";
 import { ChatInputProvider, useChatInput } from "@/context/ChatInputContext";
 import { useChatManager } from "@/hooks/useChatManager";
+import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
@@ -108,6 +109,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(false);
 
+  // Ref for the chat container (used for drag-and-drop)
+  const chatContainerRef = useRef<HTMLDivElement>(null);
+
   // Safe setter utilities - automatically wrap state setters to prevent updates after unmount
   const safeSet = useMemo<{
     setCurrentAiMessage: (value: string) => void;
@@ -156,6 +160,16 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
+
+  // Drag-and-drop hook for file handling
+  const { isDragActive } = useChatFileDrop({
+    app,
+    contextNotes,
+    setContextNotes,
+    selectedImages,
+    onAddImage: (files) => setSelectedImages((prev) => [...prev, ...files]),
+    containerRef: chatContainerRef,
+  });
 
   const handleSendMessage = async ({
     toolCalls,
@@ -783,9 +797,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
 
   return (
-    <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+    <div ref={chatContainerRef} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div className="tw-h-full">
         <div className="tw-relative tw-flex tw-h-full tw-flex-col">
+          {isDragActive && (
+            <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary tw-opacity-80">
+              <span>Drop files here...</span>
+            </div>
+          )}
           {selectedChain === ChainType.PROJECT_CHAIN && (
             <div className={`${selectedChain === ChainType.PROJECT_CHAIN ? "tw-z-modal" : ""}`}>
               <ProjectList
