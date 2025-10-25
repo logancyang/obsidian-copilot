@@ -2,7 +2,7 @@ import { atom } from "jotai";
 import { TFile, TFolder, TAbstractFile } from "obsidian";
 import debounce from "lodash.debounce";
 import { settingsStore } from "@/settings/model";
-import { getTagsFromNote } from "@/utils";
+import { getTagsFromNote, isAllowedFileForNoteContext } from "@/utils";
 import { logInfo } from "@/logger";
 
 /**
@@ -99,7 +99,7 @@ export class VaultDataManager {
    */
   private handleFileCreate = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || file.extension === "pdf" || file.extension === "canvas") {
+      if (isAllowedFileForNoteContext(file)) {
         this.debouncedRefreshNotes();
         this.debouncedRefreshTagsFrontmatter();
         this.debouncedRefreshTagsAll();
@@ -114,7 +114,7 @@ export class VaultDataManager {
    */
   private handleFileDelete = (file: TAbstractFile): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || file.extension === "pdf" || file.extension === "canvas") {
+      if (isAllowedFileForNoteContext(file)) {
         this.debouncedRefreshNotes();
         this.debouncedRefreshTagsFrontmatter();
         this.debouncedRefreshTagsAll();
@@ -131,7 +131,7 @@ export class VaultDataManager {
    */
   private handleFileRename = (file: TAbstractFile, _oldPath: string): void => {
     if (file instanceof TFile) {
-      if (file.extension === "md" || file.extension === "pdf" || file.extension === "canvas") {
+      if (isAllowedFileForNoteContext(file)) {
         this.debouncedRefreshNotes();
         this.debouncedRefreshTagsFrontmatter();
         this.debouncedRefreshTagsAll();
