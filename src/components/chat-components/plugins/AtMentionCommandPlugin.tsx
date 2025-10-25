@@ -41,8 +41,8 @@ export function AtMentionCommandPlugin({
   // Load note content for preview using shared utilities
   const loadNoteContentForPreview = useCallback(async (file: TFile) => {
     try {
-      // Handle PDF files - treat as empty content (no preview)
-      if (file.extension === "pdf") {
+      // Handle PDF and canvas files - treat as empty content (no preview)
+      if (file.extension === "pdf" || file.extension === "canvas") {
         setCurrentPreviewContent("");
         return;
       }

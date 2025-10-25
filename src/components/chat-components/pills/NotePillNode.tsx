@@ -83,17 +83,23 @@ export class NotePillNode extends BasePillNode {
     element.setAttribute("data-lexical-note-pill", "true");
     element.setAttribute("data-note-title", this.__noteTitle);
     element.setAttribute("data-note-path", this.__notePath);
-    const displayName = this.__notePath.toLowerCase().endsWith(".pdf")
+    const lowerPath = this.__notePath.toLowerCase();
+    const displayName = lowerPath.endsWith(".pdf")
       ? `${this.__noteTitle}.pdf`
-      : this.__noteTitle;
+      : lowerPath.endsWith(".canvas")
+        ? `${this.__noteTitle}.canvas`
+        : this.__noteTitle;
     element.textContent = `[[${displayName}]]`;
     return { element };
   }
 
   getTextContent(): string {
-    const displayName = this.__notePath.toLowerCase().endsWith(".pdf")
+    const lowerPath = this.__notePath.toLowerCase();
+    const displayName = lowerPath.endsWith(".pdf")
       ? `${this.__noteTitle}.pdf`
-      : this.__noteTitle;
+      : lowerPath.endsWith(".canvas")
+        ? `${this.__noteTitle}.canvas`
+        : this.__noteTitle;
     return `[[${displayName}]]`;
   }
 
@@ -127,7 +133,9 @@ interface NotePillComponentProps {
 function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
   const noteTitle = node.getNoteTitle();
   const notePath = node.getNotePath();
-  const isPdf = notePath.toLowerCase().endsWith(".pdf");
+  const lowerPath = notePath.toLowerCase();
+  const isPdf = lowerPath.endsWith(".pdf");
+  const isCanvas = lowerPath.endsWith(".canvas");
 
   const tooltipContent = <div className="tw-text-left">{notePath}</div>;
 
@@ -141,6 +149,7 @@ function NotePillComponent({ node }: NotePillComponentProps): JSX.Element {
           tooltipContent={tooltipContent}
         />
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
       </div>
     </PillBadge>
   );
