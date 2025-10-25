@@ -48,6 +48,29 @@ function parseObsidianUri(uriString: string): string | null {
 }
 
 /**
+ * Parse multiple Obsidian URIs from a newline-separated string.
+ * This handles the case where multiple files are dropped from the nav bar,
+ * which come as a single string with URIs separated by newlines.
+ * @param uriString - String potentially containing multiple URIs
+ * @returns Array of file paths
+ */
+function parseObsidianUris(uriString: string): string[] {
+  // Split by newlines and filter empty lines
+  const lines = uriString.split("\n").filter((line) => line.trim());
+
+  // Parse each line as a URI
+  const filePaths: string[] = [];
+  for (const line of lines) {
+    const filePath = parseObsidianUri(line.trim());
+    if (filePath) {
+      filePaths.push(filePath);
+    }
+  }
+
+  return filePaths;
+}
+
+/**
  * Custom hook to handle drag-and-drop of files into the chat.
  * Supports:
  * - Dropping files from Obsidian nav bar (md, pdf, canvas, images)
@@ -134,55 +157,59 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
 
         for (const item of stringItems) {
           item.getAsString(async (data) => {
-            const filePath = parseObsidianUri(data);
+            // Parse URIs - handles both single and multiple files
+            const filePaths = parseObsidianUris(data);
 
-            if (!filePath) return;
+            // Process each file path
+            for (const filePath of filePaths) {
+              // Skip if we've already processed this file path
+              if (processedPaths.has(filePath)) continue;
+              processedPaths.add(filePath);
 
-            // Skip if we've already processed this file path
-            if (processedPaths.has(filePath)) return;
-            processedPaths.add(filePath);
+              const file = app.vault.getAbstractFileByPath(filePath);
 
-            const file = app.vault.getAbstractFileByPath(filePath);
-
-            // Ensure file exists and is a TFile
-            if (!(file instanceof TFile)) {
-              new Notice("File not found in vault");
-              return;
-            }
-
-            // Check if it's an image file
-            const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
-
-            if (isImage) {
-              // Handle as image
-              // Check for duplicate images
-              const isDuplicate = selectedImages.some((img) => img.name === file.name);
-              if (isDuplicate) {
-                new Notice("This image is already in the context");
-                return;
+              // Ensure file exists and is a TFile
+              if (!(file instanceof TFile)) {
+                new Notice("File not found in vault");
+                continue;
               }
 
-              // Read file as File object for image handling
-              const arrayBuffer = await app.vault.readBinary(file);
-              const blob = new Blob([arrayBuffer]);
-              const imageFile = new File([blob], file.name, { type: `image/${file.extension}` });
-              onAddImage([imageFile]);
-            } else if (isAllowedFileForNoteContext(file)) {
-              // Handle as note (md, pdf, canvas)
-              // Check for duplicate notes
-              const isDuplicate = contextNotes.some((note) => note.path === file.path);
-              if (isDuplicate) {
-                new Notice("This note is already in the context");
-                return;
-              }
+              // Check if it's an image file
+              const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
 
-              // Add to context notes
-              setContextNotes((prev) => [...prev, file]);
-            } else {
-              // Unsupported file type
-              new Notice(
-                `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
-              );
+              if (isImage) {
+                // Handle as image
+                // Check for duplicate images
+                const isDuplicate = selectedImages.some((img) => img.name === file.name);
+                if (isDuplicate) {
+                  new Notice("This image is already in the context");
+                  continue;
+                }
+
+                // Read file as File object for image handling
+                const arrayBuffer = await app.vault.readBinary(file);
+                const blob = new Blob([arrayBuffer]);
+                const imageFile = new File([blob], file.name, {
+                  type: `image/${file.extension}`,
+                });
+                onAddImage([imageFile]);
+              } else if (isAllowedFileForNoteContext(file)) {
+                // Handle as note (md, pdf, canvas)
+                // Check for duplicate notes
+                const isDuplicate = contextNotes.some((note) => note.path === file.path);
+                if (isDuplicate) {
+                  new Notice("This note is already in the context");
+                  continue;
+                }
+
+                // Add to context notes
+                setContextNotes((prev) => [...prev, file]);
+              } else {
+                // Unsupported file type
+                new Notice(
+                  `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
+                );
+              }
             }
           });
         }
