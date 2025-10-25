@@ -16,7 +16,7 @@ import { isPlusChain } from "@/utils";
 
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { isAllowedFileForContext } from "@/utils";
+import { isAllowedFileForNoteContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
@@ -105,7 +105,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const settings = useSettingsValue();
   const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
     const activeFile = app.workspace.getActiveFile();
-    return isAllowedFileForContext(activeFile) ? activeFile : null;
+    return isAllowedFileForNoteContext(activeFile) ? activeFile : null;
   });
   const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
@@ -113,6 +113,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
   const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
+  const [isNavBarDragging, setIsNavBarDragging] = useState(false);
 
   // Toggle states for vault, web search, composer, and autonomous agent
   const [vaultToggle, setVaultToggle] = useState(false);
@@ -512,7 +513,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       // Set new timeout
       timeoutId = setTimeout(() => {
         const activeNote = app.workspace.getActiveFile();
-        setCurrentActiveNote(isAllowedFileForContext(activeNote) ? activeNote : null);
+        setCurrentActiveNote(isAllowedFileForNoteContext(activeNote) ? activeNote : null);
       }, 100); // Wait 100ms after the last event because it fires multiple times
     };
 
@@ -525,7 +526,140 @@ const ChatInput: React.FC<ChatInputProps> = ({
     };
   }, [app.workspace]);
 
-  // Add dropzone configuration
+  // Helper function to parse Obsidian URI and get file path
+  const parseObsidianUri = (uriString: string): string | null => {
+    // Parse Obsidian URI format: obsidian://open?vault=...&file=...
+    const match = uriString.match(/obsidian:\/\/open\?vault=.*?&file=(.*)$/);
+    if (match) {
+      let filePath = decodeURIComponent(match[1]);
+      // Obsidian URIs for markdown files may omit the .md extension
+      if (!filePath.includes(".")) {
+        filePath += ".md";
+      }
+      return filePath;
+    }
+    return null;
+  };
+
+  // Handle native drag and drop for Obsidian nav bar files
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      if (e.dataTransfer) {
+        e.dataTransfer.dropEffect = "copy";
+
+        // Check if we have string items (Obsidian nav bar drag)
+        const hasStringItems = Array.from(e.dataTransfer.items).some(
+          (item) => item.kind === "string"
+        );
+
+        if (hasStringItems) {
+          setIsNavBarDragging(true);
+        }
+      }
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      // Only clear drag state if we're leaving the container entirely
+      if (e.currentTarget === e.target) {
+        setIsNavBarDragging(false);
+      }
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      if (!e.dataTransfer) return;
+      e.preventDefault();
+
+      // Clear drag state
+      setIsNavBarDragging(false);
+
+      const items = e.dataTransfer.items;
+      const stringItems: DataTransferItem[] = [];
+
+      // Collect string items (Obsidian nav bar drops)
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.kind === "string") {
+          stringItems.push(item);
+        }
+      }
+
+      // Track processed file paths to avoid duplicates when multiple string items
+      // contain the same file (Obsidian sometimes includes multiple formats)
+      const processedPaths = new Set<string>();
+
+      // Process Obsidian URI strings from nav bar
+      for (const item of stringItems) {
+        item.getAsString(async (data) => {
+          const filePath = parseObsidianUri(data);
+
+          if (!filePath) return;
+
+          // Skip if we've already processed this file path
+          if (processedPaths.has(filePath)) return;
+          processedPaths.add(filePath);
+
+          const file = app.vault.getAbstractFileByPath(filePath);
+
+          // Ensure file exists and is a TFile
+          if (!(file instanceof TFile)) {
+            new Notice("File not found in vault");
+            return;
+          }
+
+          // Check if it's an image file
+          const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
+
+          if (isImage) {
+            // Handle as image
+            // Check for duplicate images
+            const isDuplicate = selectedImages.some((img) => img.name === file.name);
+            if (isDuplicate) {
+              new Notice("This image is already in the context");
+              return;
+            }
+
+            // Read file as File object for image handling
+            const arrayBuffer = await app.vault.readBinary(file);
+            const blob = new Blob([arrayBuffer]);
+            const imageFile = new File([blob], file.name, { type: `image/${file.extension}` });
+            onAddImage([imageFile]);
+          } else if (isAllowedFileForNoteContext(file)) {
+            // Handle as note (md, pdf, canvas)
+            // Check for duplicate notes
+            const isDuplicate = contextNotes.some((note) => note.path === file.path);
+            if (isDuplicate) {
+              new Notice("This note is already in the context");
+              return;
+            }
+
+            // Add to context notes
+            setContextNotes((prev) => [...prev, file]);
+          } else {
+            // Unsupported file type
+            new Notice(
+              `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
+            );
+          }
+        });
+      }
+    };
+
+    container.addEventListener("dragover", handleDragOver);
+    container.addEventListener("dragleave", handleDragLeave);
+    container.addEventListener("drop", handleDrop);
+
+    return () => {
+      container.removeEventListener("dragover", handleDragOver);
+      container.removeEventListener("dragleave", handleDragLeave);
+      container.removeEventListener("drop", handleDrop);
+    };
+  }, [app.vault, contextNotes, selectedImages, onAddImage, setContextNotes]);
+
+  // Add dropzone configuration for file system image drops
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     accept: {
       "image/*": [".png", ".gif", ".jpeg", ".jpg", ".webp"],
@@ -672,9 +806,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
         />
         <input {...getInputProps()} />
         {/* Overlay that appears when dragging */}
-        {isDragActive && (
+        {(isDragActive || isNavBarDragging) && (
           <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
-            <span>Drop images here...</span>
+            <span>Drop files here...</span>
           </div>
         )}
       </div>
