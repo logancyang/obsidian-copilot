@@ -325,7 +325,7 @@ export default class ChainManager {
   ) {
     const { ignoreSystemMessage = false } = options;
 
-    logInfo("Step 0: Initial user message:\n", userMessage);
+    logInfo("Step 0: Initial user message:\n", userMessage.message);
 
     this.validateChatModel();
     this.validateChainInitialization();

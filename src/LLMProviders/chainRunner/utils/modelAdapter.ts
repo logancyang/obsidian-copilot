@@ -254,16 +254,12 @@ Example for "meetings about project X last week":
 2. Use localSearch with query "meetings about project X"
 3. salientTerms: ["meetings", "project", "X"] - these words exist in the original query
 
-
 ## File-related Queries
-When creating a new file in given folder, you must use the getFileTree tool to confirm folder first unless user explicitly ask to create new folders
 
-Example for "create a new note in the projects folder":
-1. Call getFileTree to get the exact folder path
-2. Use writeToFile with the folder path
-
-Example for "create a new note about topic X":
-1. Use writeToFile with the path "topicX.md" for creating the note in the root folder
+### Handle ambiguity in folder/note paths
+When user mentions a folder name (e.g., "meetings folder") or a note name (e.g., "meeting note template") without providing an exact path,
+you MUST first call getFileTree to find the folder or notes best matching the user's query.
+If multiple results or no result, you should ask the user to provide a more specific path.
 `,
     });
 

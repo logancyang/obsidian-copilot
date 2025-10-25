@@ -424,6 +424,22 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       },
     },
     {
+      description: "should call getFileTree for note creation prompt",
+      prompt:
+        "Create a new note in myrealpage meetings folder about a meeting i just had with an agent named Mark. Include the details that Mark is switching to eXP. Make edits and create a notion task. And then use the quick note template for the template frontmatteer of that note.",
+      expectedCalls: [
+        {
+          toolName: "getFileTree",
+          mockedReturnValue: "File tree structure",
+        },
+      ],
+      finalOutputValidator: (output) => {
+        // This test only verifies that getFileTree is called, not the exact sequence
+        // The main validation logic will check that getFileTree is in the actual calls
+        expect(output).toBeTruthy();
+      },
+    },
+    {
       description: "should handle basic queries without tool requirements",
       prompt: "Hello! Can you tell me a fun fact about programming?",
       expectedCalls: [], // No specific tools expected for this simple query
@@ -543,56 +559,72 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
         `📄 Final response (${finalResponse.length} chars): ${finalResponse.substring(0, 500)}...`
       );
 
-      // Validate tool call order and presence
-      const expectedToolNames = testCase.expectedCalls.map((call) => call.toolName);
-      const actualToolNames = actualToolCalls.map((call) => call.name);
+      // Special handling for getFileTree test - only check if it's called
+      if (testCase.description.includes("getFileTree")) {
+        const actualToolNames = actualToolCalls.map((call) => call.name);
+        const hasGetFileTree = actualToolNames.includes("getFileTree");
 
-      // Check if the number of calls match
-      if (actualToolCalls.length !== testCase.expectedCalls.length) {
-        const errorMsg = `Expected ${testCase.expectedCalls.length} tool calls but got ${actualToolCalls.length}. Expected: [${expectedToolNames.join(", ")}], Actual: [${actualToolNames.join(", ")}]`;
-        console.error(`❌ ${errorMsg}`);
-        throw new Error(errorMsg);
-      }
-
-      // Check if any actual tool calls were not expected
-      const unexpectedToolCalls = actualToolNames.filter(
-        (toolName) => !expectedToolNames.includes(toolName)
-      );
-      if (unexpectedToolCalls.length > 0) {
-        const errorMsg = `Unexpected tool calls found: ${unexpectedToolCalls.join(", ")}. Expected only: [${expectedToolNames.join(", ")}]`;
-        console.error(`❌ ${errorMsg}`);
-        throw new Error(errorMsg);
-      }
-
-      // Check if any expected tool calls were not made
-      const missingToolCalls = expectedToolNames.filter(
-        (toolName) => !actualToolNames.includes(toolName)
-      );
-      if (missingToolCalls.length > 0) {
-        const errorMsg = `Missing expected tool calls: ${missingToolCalls.join(", ")}. Actual calls: [${actualToolNames.join(", ")}]`;
-        console.error(`❌ ${errorMsg}`);
-        throw new Error(errorMsg);
-      }
-
-      // Validate the order of tool calls
-      for (let i = 0; i < testCase.expectedCalls.length; i++) {
-        const expectedToolName = testCase.expectedCalls[i].toolName;
-        const actualToolName = actualToolCalls[i].name;
-
-        if (expectedToolName !== actualToolName) {
-          const errorMsg = `Tool call order mismatch at position ${i + 1}. Expected: ${expectedToolName}, Got: ${actualToolName}. Expected order: [${expectedToolNames.join(", ")}], Actual order: [${actualToolNames.join(", ")}]`;
+        if (!hasGetFileTree) {
+          const errorMsg = `Expected getFileTree to be called but it wasn't. Actual calls: [${actualToolNames.join(", ")}]`;
           console.error(`❌ ${errorMsg}`);
           throw new Error(errorMsg);
         }
-      }
 
-      // Validate arguments for each tool call in order
-      for (let i = 0; i < testCase.expectedCalls.length; i++) {
-        const expectedCall = testCase.expectedCalls[i];
-        const actualCall = actualToolCalls[i];
+        console.log(
+          `✅ getFileTree was called as expected. All tool calls: [${actualToolNames.join(", ")}]`
+        );
+      } else {
+        // Standard validation for other tests
+        const expectedToolNames = testCase.expectedCalls.map((call) => call.toolName);
+        const actualToolNames = actualToolCalls.map((call) => call.name);
 
-        if (expectedCall.argumentValidator) {
-          expectedCall.argumentValidator(actualCall.args);
+        // Check if the number of calls match
+        if (actualToolCalls.length !== testCase.expectedCalls.length) {
+          const errorMsg = `Expected ${testCase.expectedCalls.length} tool calls but got ${actualToolCalls.length}. Expected: [${expectedToolNames.join(", ")}], Actual: [${actualToolNames.join(", ")}]`;
+          console.error(`❌ ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+
+        // Check if any actual tool calls were not expected
+        const unexpectedToolCalls = actualToolNames.filter(
+          (toolName) => !expectedToolNames.includes(toolName)
+        );
+        if (unexpectedToolCalls.length > 0) {
+          const errorMsg = `Unexpected tool calls found: ${unexpectedToolCalls.join(", ")}. Expected only: [${expectedToolNames.join(", ")}]`;
+          console.error(`❌ ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+
+        // Check if any expected tool calls were not made
+        const missingToolCalls = expectedToolNames.filter(
+          (toolName) => !actualToolNames.includes(toolName)
+        );
+        if (missingToolCalls.length > 0) {
+          const errorMsg = `Missing expected tool calls: ${missingToolCalls.join(", ")}. Actual calls: [${actualToolNames.join(", ")}]`;
+          console.error(`❌ ${errorMsg}`);
+          throw new Error(errorMsg);
+        }
+
+        // Validate the order of tool calls
+        for (let i = 0; i < testCase.expectedCalls.length; i++) {
+          const expectedToolName = testCase.expectedCalls[i].toolName;
+          const actualToolName = actualToolCalls[i].name;
+
+          if (expectedToolName !== actualToolName) {
+            const errorMsg = `Tool call order mismatch at position ${i + 1}. Expected: ${expectedToolName}, Got: ${actualToolName}. Expected order: [${expectedToolNames.join(", ")}], Actual order: [${actualToolNames.join(", ")}]`;
+            console.error(`❌ ${errorMsg}`);
+            throw new Error(errorMsg);
+          }
+        }
+
+        // Validate arguments for each tool call in order
+        for (let i = 0; i < testCase.expectedCalls.length; i++) {
+          const expectedCall = testCase.expectedCalls[i];
+          const actualCall = actualToolCalls[i];
+
+          if (expectedCall.argumentValidator) {
+            expectedCall.argumentValidator(actualCall.args);
+          }
         }
       }
 
