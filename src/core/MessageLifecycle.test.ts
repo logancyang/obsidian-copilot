@@ -94,11 +94,17 @@ describe("Message Lifecycle with Context Notes - Complete Example", () => {
     displayMessages = messageRepository.getDisplayMessages();
     expect(displayMessages[0].message).toBe("Please summarize the key points");
 
-    // LLM View - includes full context
+    // LLM History View - returns display text only (no context)
+    // Context should come from envelope (L3 layer), not baked into history
     const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toBe(processedTextWithContext);
-    expect(llmMessages[0].message).toContain("Team Meeting - January 15, 2024");
-    expect(llmMessages[0].message).toContain("Launch date moved to Q2 2024");
+    expect(llmMessages[0].message).toBe("Please summarize the key points");
+    expect(llmMessages[0].message).not.toContain("Team Meeting - January 15, 2024");
+
+    // LLM Current Turn - use getLLMMessage(id) for message with context
+    const llmCurrentMessage = messageRepository.getLLMMessage(messageId);
+    expect(llmCurrentMessage?.message).toBe(processedTextWithContext);
+    expect(llmCurrentMessage?.message).toContain("Team Meeting - January 15, 2024");
+    expect(llmCurrentMessage?.message).toContain("Launch date moved to Q2 2024");
 
     // Step 5: AI responds based on the context
     const aiResponse = `Based on the meeting notes, here are the key points:
@@ -142,16 +148,19 @@ The team appears to be taking a pragmatic approach with a focused MVP scope and 
       sender: AI_SENDER,
     });
 
-    // Step 7: Verify what LLM sees for potential follow-up
+    // Step 7: Verify what LLM history contains (for chat memory)
     const llmView = messageRepository.getLLMMessages();
     expect(llmView).toHaveLength(2);
 
-    // LLM sees user message with full context
-    expect(llmView[0].message).toContain("Please summarize the key points");
-    expect(llmView[0].message).toContain("Team Meeting - January 15, 2024");
+    // LLM history contains raw messages only (no context)
+    expect(llmView[0].message).toBe("Please summarize the key points");
+    expect(llmView[0].message).not.toContain("Team Meeting - January 15, 2024");
 
-    // LLM sees its own response
+    // LLM history contains AI response
     expect(llmView[1].message).toContain("Based on the meeting notes");
+
+    // Context metadata is preserved (envelope may or may not be built depending on flow)
+    expect(llmView[0].context).toBeDefined();
   });
 
   it("should handle message edit with context reprocessing", () => {
@@ -210,9 +219,15 @@ Attendees: Alice (PM), Bob (Dev), Charlie (QA)
     const displayMessages = messageRepository.getDisplayMessages();
     expect(displayMessages[0].message).toBe("List the attendees and their roles");
 
+    // LLM history view contains display text only
     const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain("List the attendees and their roles");
-    expect(llmMessages[0].message).toContain("Alice (PM), Bob (Dev), Charlie (QA)");
+    expect(llmMessages[0].message).toBe("List the attendees and their roles");
+    expect(llmMessages[0].message).not.toContain("Alice (PM), Bob (Dev), Charlie (QA)");
+
+    // Full context available via getLLMMessage(id)
+    const llmMessage = messageRepository.getLLMMessage(messageId);
+    expect(llmMessage?.message).toContain("List the attendees and their roles");
+    expect(llmMessage?.message).toContain("Alice (PM), Bob (Dev), Charlie (QA)");
   });
 
   it("should maintain context through conversation", () => {
@@ -275,9 +290,14 @@ Q4: $250k
     expect(messages[1].context).toBeUndefined();
     expect(messages[2].context).toBeUndefined();
 
-    // But LLM still has access to full conversation
+    // LLM history contains raw messages only (no context in history)
     const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain("<note_context>");
-    expect(llmMessages[0].message).toContain("<title>budget</title>");
+    expect(llmMessages[0].message).not.toContain("<note_context>");
+    expect(llmMessages[0].message).not.toContain("<title>budget</title>");
+
+    // Context available via getLLMMessage(id) for current turn processing
+    const firstMessage = messageRepository.getLLMMessage(llmMessages[0].id!);
+    expect(firstMessage?.message).toContain("<note_context>");
+    expect(firstMessage?.message).toContain("<title>budget</title>");
   });
 });

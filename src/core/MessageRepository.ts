@@ -1,3 +1,4 @@
+import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { formatDateTime } from "@/utils";
 import { ChatMessage, MessageContext, NewChatMessage, StoredMessage } from "@/types/message";
 import { logInfo } from "@/logger";
@@ -55,6 +56,7 @@ export class MessageRepository {
         sender: message.sender,
         timestamp,
         context: message.context,
+        contextEnvelope: message.contextEnvelope,
         isVisible: message.isVisible !== false,
         isErrorMessage: message.isErrorMessage,
         sources: message.sources,
@@ -83,6 +85,7 @@ export class MessageRepository {
       sender,
       timestamp,
       context,
+      contextEnvelope: undefined,
       isVisible: true,
       isErrorMessage: false,
       content,
@@ -127,15 +130,25 @@ export class MessageRepository {
 
   /**
    * Update the processed text for a message (after context processing)
+   *
+   * TRANSITIONAL METHOD - Updates both processedText (legacy) and contextEnvelope (new)
+   * during Phase 1 migration. After ChainRunner migration (Phase 2), this can be
+   * simplified to only update contextEnvelope.
    */
-  updateProcessedText(id: string, processedText: string): boolean {
+  updateProcessedText(
+    id: string,
+    processedText: string,
+    contextEnvelope?: PromptContextEnvelope
+  ): boolean {
     const message = this.messages.find((msg) => msg.id === id);
     if (!message) {
       logInfo(`[MessageRepository] Message not found for processed text update: ${id}`);
       return false;
     }
 
+    // TRANSITIONAL: Update both for backward compatibility
     message.processedText = processedText;
+    message.contextEnvelope = contextEnvelope;
     logInfo(`[MessageRepository] Updated processed text for message ${id}`);
     return true;
   }
@@ -197,6 +210,7 @@ export class MessageRepository {
         timestamp: msg.timestamp,
         isVisible: true,
         context: msg.context,
+        contextEnvelope: msg.contextEnvelope,
         isErrorMessage: msg.isErrorMessage,
         sources: msg.sources,
         content: msg.content,
@@ -205,8 +219,16 @@ export class MessageRepository {
   }
 
   /**
-   * Get a specific message for LLM processing
-   * Returns processedText (with context) for the message
+   * Get a specific message for LLM processing with full context
+   *
+   * TRANSITIONAL METHOD - Returns processedText (concatenated context) for
+   * legacy ChainRunners that haven't migrated to envelope-based prompts.
+   *
+   * MIGRATION NOTE:
+   * - Phase 1: Use this for current turn processing in legacy runners
+   * - Phase 2+: Prefer contextEnvelope with LayerToMessagesConverter
+   *
+   * Returns processedText (with context) for the message.
    */
   getLLMMessage(id: string): ChatMessage | undefined {
     const msg = this.messages.find((m) => m.id === id);
@@ -214,12 +236,13 @@ export class MessageRepository {
 
     return {
       id: msg.id,
-      message: msg.processedText,
+      message: msg.processedText, // TRANSITIONAL: Full context (legacy format)
       originalMessage: msg.displayText,
       sender: msg.sender,
       timestamp: msg.timestamp,
       isVisible: false, // LLM messages are not for display
       context: msg.context,
+      contextEnvelope: msg.contextEnvelope, // NEW: Use this for envelope-based runners
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,
@@ -229,17 +252,22 @@ export class MessageRepository {
 
   /**
    * Get all messages for LLM conversation history
-   * Returns processedText for all messages
+   * IMPORTANT: Returns displayText only (raw messages without context)
+   * to prevent context duplication in chat memory.
+   *
+   * Context should be added per-turn via the envelope (L3 layer),
+   * not baked into the chat history.
    */
   getLLMMessages(): ChatMessage[] {
     return this.messages.map((msg) => ({
       id: msg.id,
-      message: msg.processedText,
+      message: msg.displayText, // Changed from processedText to prevent context duplication
       originalMessage: msg.displayText,
       sender: msg.sender,
       timestamp: msg.timestamp,
       isVisible: false,
       context: msg.context,
+      contextEnvelope: msg.contextEnvelope,
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,
@@ -261,6 +289,7 @@ export class MessageRepository {
       timestamp: msg.timestamp,
       isVisible: msg.isVisible,
       context: msg.context,
+      contextEnvelope: msg.contextEnvelope,
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,
@@ -280,6 +309,7 @@ export class MessageRepository {
         sender: msg.sender,
         timestamp: msg.timestamp || formatDateTime(new Date()),
         context: msg.context,
+        contextEnvelope: msg.contextEnvelope,
         isVisible: msg.isVisible !== false,
         isErrorMessage: msg.isErrorMessage,
         sources: msg.sources,
