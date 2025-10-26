@@ -146,72 +146,77 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
         }
       }
 
-      // Track processed file paths to avoid duplicates when multiple string items
-      // contain the same file (Obsidian sometimes includes multiple formats)
-      const processedPaths = new Set<string>();
-
       // Process Obsidian URI strings from nav bar
       if (stringItems.length > 0) {
         // Stop propagation to prevent other handlers from processing the same drop
         e.stopPropagation();
 
-        for (const item of stringItems) {
-          item.getAsString(async (data) => {
-            // Parse URIs - handles both single and multiple files
-            const filePaths = parseObsidianUris(data);
+        // Collect all URI strings first to avoid race conditions
+        // getAsString is async and multiple callbacks could run concurrently
+        const uriStringPromises = stringItems.map(
+          (item) =>
+            new Promise<string>((resolve) => {
+              item.getAsString((data) => resolve(data));
+            })
+        );
 
-            // Process each file path
-            for (const filePath of filePaths) {
-              // Skip if we've already processed this file path
-              if (processedPaths.has(filePath)) continue;
-              processedPaths.add(filePath);
+        const uriStrings = await Promise.all(uriStringPromises);
 
-              const file = app.vault.getAbstractFileByPath(filePath);
+        // Parse all URIs and collect unique file paths
+        const allFilePaths = new Set<string>();
+        for (const uriString of uriStrings) {
+          const filePaths = parseObsidianUris(uriString);
+          for (const filePath of filePaths) {
+            allFilePaths.add(filePath);
+          }
+        }
 
-              // Ensure file exists and is a TFile
-              if (!(file instanceof TFile)) {
-                new Notice("File not found in vault");
-                continue;
-              }
+        // Now process each unique file path sequentially
+        for (const filePath of allFilePaths) {
+          const file = app.vault.getAbstractFileByPath(filePath);
 
-              // Check if it's an image file
-              const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
+          // Ensure file exists and is a TFile
+          if (!(file instanceof TFile)) {
+            new Notice("File not found in vault");
+            continue;
+          }
 
-              if (isImage) {
-                // Handle as image
-                // Check for duplicate images
-                const isDuplicate = selectedImages.some((img) => img.name === file.name);
-                if (isDuplicate) {
-                  new Notice("This image is already in the context");
-                  continue;
-                }
+          // Check if it's an image file
+          const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
 
-                // Read file as File object for image handling
-                const arrayBuffer = await app.vault.readBinary(file);
-                const blob = new Blob([arrayBuffer]);
-                const imageFile = new File([blob], file.name, {
-                  type: `image/${file.extension}`,
-                });
-                onAddImage([imageFile]);
-              } else if (isAllowedFileForNoteContext(file)) {
-                // Handle as note (md, pdf, canvas)
-                // Check for duplicate notes
-                const isDuplicate = contextNotes.some((note) => note.path === file.path);
-                if (isDuplicate) {
-                  new Notice("This note is already in the context");
-                  continue;
-                }
-
-                // Add to context notes
-                setContextNotes((prev) => [...prev, file]);
-              } else {
-                // Unsupported file type
-                new Notice(
-                  `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
-                );
-              }
+          if (isImage) {
+            // Handle as image
+            // Check for duplicate images
+            const isDuplicate = selectedImages.some((img) => img.name === file.name);
+            if (isDuplicate) {
+              new Notice("This image is already in the context");
+              continue;
             }
-          });
+
+            // Read file as File object for image handling
+            const arrayBuffer = await app.vault.readBinary(file);
+            const blob = new Blob([arrayBuffer]);
+            const imageFile = new File([blob], file.name, {
+              type: `image/${file.extension}`,
+            });
+            onAddImage([imageFile]);
+          } else if (isAllowedFileForNoteContext(file)) {
+            // Handle as note (md, pdf, canvas)
+            // Check for duplicate notes
+            const isDuplicate = contextNotes.some((note) => note.path === file.path);
+            if (isDuplicate) {
+              new Notice("This note is already in the context");
+              continue;
+            }
+
+            // Add to context notes
+            setContextNotes((prev) => [...prev, file]);
+          } else {
+            // Unsupported file type
+            new Notice(
+              `Unsupported file type: ${file.extension}. Supported types: md, pdf, canvas, and images.`
+            );
+          }
         }
       } else if (fileItems.length > 0) {
         // Process external file drops (images only)
