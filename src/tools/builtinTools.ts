@@ -208,6 +208,7 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 - Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
 - Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
 - Stop calling readNote as soon as you have the required information.
+- Always call getFileTree to get the exact note path if it is not provided in the context before calling readNote.
 
 Example (first chunk):
 <use_tool>
@@ -239,6 +240,8 @@ Example (next chunk):
 - You MUST explicitly call writeToFile for any intent of updating or creating files
 - Do not call writeToFile tool again if the result is not accepted
 - Do not call writeToFile tool if no change needs to be made
+- Always create new notes in root folder or folders the user explicitly specifies
+- When creating a new note in a folder, you MUST use getFileTree to get the exact folder path first
 
 Example usage:
 <use_tool>
@@ -316,17 +319,21 @@ export function registerFileTreeTool(vault: Vault): void {
       isAlwaysEnabled: true,
       requiresVault: true,
       customPromptInstructions: `For getFileTree:
-- Use to browse the vault's file structure
-- Use this tool when the user asks for the vault structure, or a specific file or folder but you are unsure about the exact path.
-- Use this tool too look up folders when user asks to create new notes under a folder.
-- Use this tool to look up files under certain folders.
+- Use to browse the vault's file structure including paths of notes and folders
+- Always call this tool to explore the exact path of notes or folders when you are not given the exact path.
 - DO NOT use this tool to look up note contents or metadata - use localSearch or readNote instead.
 - No parameters needed
 
 Example usage:
 <use_tool>
 <name>getFileTree</name>
-</use_tool>`,
+</use_tool>
+
+Example queries that should use getFileTree:
+- "Create a new note in the projects folder" -> call getFileTree to get the exact folder path of projects folder
+- "Create a new note using the quick note template" -> call getFileTree to look up the exact folder path of the quick note template
+- "How many files are in the projects folder" -> call getFileTree to list all files in the projects folder
+`,
     },
   });
 }
