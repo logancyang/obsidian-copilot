@@ -1,4 +1,4 @@
-import { PromptContextEnvelope } from "@/context/PromptContextTypes";
+import { PromptContextEnvelope, PromptLayerSegment } from "@/context/PromptContextTypes";
 import { logInfo } from "@/logger";
 
 /**
@@ -63,14 +63,28 @@ export class LayerToMessagesConverter {
     const l4Strip = envelope.layers.find((l) => l.id === "L4_STRIP");
     const l5User = envelope.layers.find((l) => l.id === "L5_USER");
 
-    // Add L1 (System) as system message if present
+    // Build stable prefix: L1 + L2 (cacheable system message)
+    // L2 contains ALL context items ever seen (cumulative)
     if (includeSystemMessage && l1System && l1System.text) {
+      const systemParts: string[] = [l1System.text];
+
+      // Add L2 (cumulative context) if present
+      if (l2Previous && l2Previous.text) {
+        systemParts.push(
+          "\n## Context Library\n\nThe following notes are available for reference:\n\n" +
+            l2Previous.text
+        );
+        if (debug) {
+          logInfo("[LayerToMessagesConverter] Added L2 (cumulative context) to system");
+        }
+      }
+
       messages.push({
         role: "system",
-        content: l1System.text,
+        content: systemParts.join("\n"),
       });
       if (debug) {
-        logInfo("[LayerToMessagesConverter] Added L1 (System) message");
+        logInfo("[LayerToMessagesConverter] Added L1 (System) + L2 (Cumulative) as stable prefix");
       }
     }
 
@@ -84,29 +98,73 @@ export class LayerToMessagesConverter {
       }
     }
 
-    // Build user message content
+    // Build user message: L3 (smart references/content) + L5
+    // L3 intelligently references items already in L2 by ID, includes full content for new items
     if (mergeUserContent) {
-      // Most common case: merge L2, L3, L5 into a single user message
       const userContentParts: string[] = [];
 
-      if (l2Previous && l2Previous.text) {
-        userContentParts.push(l2Previous.text);
-        if (debug) {
-          logInfo("[LayerToMessagesConverter] Added L2 (Previous) to user message");
-        }
-      }
+      // Process L3 using structured segments (not regex!)
+      if (l3Turn && l3Turn.segments.length > 0 && l2Previous) {
+        // Build set of item IDs already in L2 (cumulative context library)
+        const l2ItemIds = new Set<string>(l2Previous.segments.map((seg) => seg.id));
 
-      if (l3Turn && l3Turn.text) {
+        // Separate L3 segments into: items already in L2 vs. new items
+        const referencedIds: string[] = [];
+        const newSegments: PromptLayerSegment[] = [];
+
+        for (const segment of l3Turn.segments) {
+          if (l2ItemIds.has(segment.id)) {
+            // Item already in L2, just reference by ID
+            referencedIds.push(segment.id);
+          } else {
+            // Item not in L2, include full content
+            newSegments.push(segment);
+          }
+        }
+
+        // Build L3 content
+        if (referencedIds.length > 0 || newSegments.length > 0) {
+          const l3Parts: string[] = [];
+
+          // Add references to items already in L2
+          if (referencedIds.length > 0) {
+            l3Parts.push(
+              "Context attached to this message:\n" +
+                referencedIds.map((id) => `- ${id}`).join("\n") +
+                "\n\nFind them in the Context Library in the system prompt above."
+            );
+          }
+
+          // Add full content for new items
+          if (newSegments.length > 0) {
+            l3Parts.push(newSegments.map((seg) => seg.content).join("\n"));
+          }
+
+          userContentParts.push(l3Parts.join("\n\n"));
+          if (debug) {
+            logInfo(
+              `[LayerToMessagesConverter] Added L3: ${referencedIds.length} references, ${newSegments.length} new items`
+            );
+          }
+        }
+      } else if (l3Turn && l3Turn.text) {
+        // No L2 or no segments, use text as-is (fallback for legacy or simple cases)
         userContentParts.push(l3Turn.text);
         if (debug) {
-          logInfo("[LayerToMessagesConverter] Added L3 (Turn) to user message");
+          logInfo("[LayerToMessagesConverter] Added L3 (all new context)");
         }
       }
 
+      // Add separator before L5 if we have context
+      if (userContentParts.length > 0 && l5User && l5User.text) {
+        userContentParts.push("---\n\n[User query]:");
+      }
+
+      // Add L5 (user message)
       if (l5User && l5User.text) {
         userContentParts.push(l5User.text);
         if (debug) {
-          logInfo("[LayerToMessagesConverter] Added L5 (User) to user message");
+          logInfo("[LayerToMessagesConverter] Added L5 (user message)");
         }
       }
 
@@ -118,10 +176,6 @@ export class LayerToMessagesConverter {
       }
     } else {
       // Alternative: separate messages for each layer (rarely used)
-      // This can be useful for providers with special handling for previous context
-      if (l2Previous && l2Previous.text) {
-        messages.push({ role: "user", content: l2Previous.text });
-      }
       if (l3Turn && l3Turn.text) {
         messages.push({ role: "user", content: l3Turn.text });
       }
@@ -142,13 +196,40 @@ export class LayerToMessagesConverter {
   }
 
   /**
-   * Extract just the user content from an envelope (L2+L3+L5 merged).
-   * This is useful when you need the full context without the system message.
+   * Extract just the user content from an envelope (L3 smart references + L5).
+   * L2 is part of the system message, so it's not included here.
+   * L3 intelligently references items in L2 by ID, or includes full content for new items.
    *
    * @param envelope The prompt context envelope
-   * @returns Merged user content string
+   * @returns Merged user content string (smart context + user message)
    */
   static extractUserContent(envelope: PromptContextEnvelope): string {
+    const l3Turn = envelope.layers.find((l) => l.id === "L3_TURN");
+    const l5User = envelope.layers.find((l) => l.id === "L5_USER");
+
+    const parts: string[] = [];
+
+    // L3 includes smart references/content
+    if (l3Turn && l3Turn.text) {
+      parts.push(l3Turn.text);
+    }
+
+    if (l5User && l5User.text) {
+      parts.push(l5User.text);
+    }
+
+    return parts.join("\n\n");
+  }
+
+  /**
+   * Extract the full context including L2 (L2+L3+L5).
+   * This should only be used for special cases like multimodal image extraction
+   * where you need access to ALL context including the cumulative library.
+   *
+   * @param envelope The prompt context envelope
+   * @returns Merged content including all context
+   */
+  static extractFullContext(envelope: PromptContextEnvelope): string {
     const l2Previous = envelope.layers.find((l) => l.id === "L2_PREVIOUS");
     const l3Turn = envelope.layers.find((l) => l.id === "L3_TURN");
     const l5User = envelope.layers.find((l) => l.id === "L5_USER");

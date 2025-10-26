@@ -1,9 +1,11 @@
+import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { logMarkdownBlock } from "@/logger";
 
 interface PromptPayloadSnapshot {
   timestamp: string;
   modelName?: string;
   serializedMessages: string;
+  contextEnvelope?: PromptContextEnvelope;
 }
 
 let latestSnapshot: PromptPayloadSnapshot | null = null;
@@ -38,18 +40,55 @@ function safeSerialize(value: unknown): string {
 }
 
 /**
+ * Format the layered context envelope for human-readable debugging.
+ * Shows each layer (L1-L5) clearly with clean, minimal formatting.
+ */
+function formatLayeredContext(envelope: PromptContextEnvelope): string {
+  const lines: string[] = [];
+
+  // Metadata line
+  lines.push(
+    `msg:${envelope.messageId ?? "N/A"} | conv:${envelope.conversationId ?? "N/A"} | v${envelope.version}`
+  );
+  lines.push("");
+
+  // Show each layer
+  for (const layer of envelope.layers) {
+    const stableIcon = layer.stable ? "🔒" : "⚡";
+    const hashShort = layer.hash.substring(0, 8);
+
+    lines.push(`${stableIcon} ${layer.id} (${hashShort})`);
+
+    // Show layer text
+    if (layer.text) {
+      lines.push(layer.text);
+    } else {
+      lines.push("(empty)");
+    }
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * Record the latest prompt payload destined for the LLM so it can be shared on demand.
  *
- * @param params - Metadata describing the payload and the message array.
+ * @param params - Metadata describing the payload, message array, and optional context envelope.
  */
-export function recordPromptPayload(params: { messages: unknown[]; modelName?: string }): void {
-  const { messages, modelName } = params;
+export function recordPromptPayload(params: {
+  messages: unknown[];
+  modelName?: string;
+  contextEnvelope?: PromptContextEnvelope;
+}): void {
+  const { messages, modelName, contextEnvelope } = params;
 
   try {
     latestSnapshot = {
       timestamp: new Date().toISOString(),
       modelName,
       serializedMessages: safeSerialize(messages),
+      contextEnvelope,
     };
   } catch {
     // Fall back to best-effort stringification to avoid blocking logging entirely.
@@ -57,6 +96,7 @@ export function recordPromptPayload(params: { messages: unknown[]; modelName?: s
       timestamp: new Date().toISOString(),
       modelName,
       serializedMessages: String(messages),
+      contextEnvelope,
     };
   }
 }
@@ -70,19 +110,39 @@ export function clearRecordedPromptPayload(): void {
 
 /**
  * Flush the recorded payload into the Copilot log file using a markdown block.
+ * Shows the ACTUAL messages sent to the LLM, plus layered metadata if available.
  */
 export async function flushRecordedPromptPayloadToLog(): Promise<void> {
   if (!latestSnapshot) {
     return;
   }
 
-  const { timestamp, modelName, serializedMessages } = latestSnapshot;
-  const headerLines = [
-    `### Agent Prompt Payload — ${timestamp}${modelName ? ` (model: ${modelName})` : ""}`,
+  const { timestamp, modelName, serializedMessages, contextEnvelope } = latestSnapshot;
+
+  // Always show the actual messages JSON (what really gets sent to the LLM)
+  const lines = [
+    `### Prompt — ${timestamp}${modelName ? ` — ${modelName}` : ""}`,
+    "",
+    "**Actual Messages Sent to LLM:**",
+    "",
+    "```json",
+    serializedMessages,
+    "```",
+    "",
   ];
 
-  logMarkdownBlock([...headerLines, "```json", serializedMessages, "```", ""]);
+  // If we have a context envelope, also show the layered breakdown for context
+  if (contextEnvelope) {
+    const layeredView = formatLayeredContext(contextEnvelope);
+    lines.push("**Layered Context Metadata:**");
+    lines.push("");
+    lines.push("```");
+    lines.push(layeredView);
+    lines.push("```");
+    lines.push("");
+  }
 
+  logMarkdownBlock(lines);
   latestSnapshot = null;
 }
 

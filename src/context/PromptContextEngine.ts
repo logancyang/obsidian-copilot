@@ -1,4 +1,4 @@
-import { createHash } from "crypto";
+import { SHA256 } from "crypto-js";
 import { logInfo } from "@/logger";
 import {
   PROMPT_LAYER_LABELS,
@@ -126,11 +126,10 @@ export class PromptContextEngine {
 
   /**
    * Compute a SHA-256 hash for the supplied value.
+   * Uses crypto-js for mobile compatibility (no Node.js crypto).
    */
   private hash(value: string): string {
-    return createHash("sha256")
-      .update(value || "")
-      .digest("hex");
+    return SHA256(value || "").toString();
   }
 
   /**

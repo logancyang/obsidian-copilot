@@ -83,10 +83,12 @@ describe("LayerToMessagesConverter", () => {
       expect(messages[0].role).toBe("system");
       expect(messages[1].role).toBe("user");
       expect(messages[1].content).toContain("Context about note.md");
+      expect(messages[1].content).toContain("---");
+      expect(messages[1].content).toContain("[User query]:");
       expect(messages[1].content).toContain("Summarize this");
     });
 
-    it("should include L2 (Previous) in user message", () => {
+    it("should include L2 in system message and L3 with smart references", () => {
       const envelope = createMockEnvelope([
         {
           id: "L1_SYSTEM",
@@ -98,18 +100,38 @@ describe("LayerToMessagesConverter", () => {
         },
         {
           id: "L2_PREVIOUS",
-          label: "Previous Turn Context",
-          text: "Previous turn note content",
+          label: "Context Library",
+          text: "<note_context><path>Notes/existing.md</path><content>Existing content</content></note_context>",
           stable: true,
-          segments: [],
+          segments: [
+            {
+              id: "Notes/existing.md",
+              content:
+                "<note_context><path>Notes/existing.md</path><content>Existing content</content></note_context>",
+              stable: true,
+            },
+          ],
           hash: "l2-hash",
         },
         {
           id: "L3_TURN",
-          label: "Turn Context",
-          text: "Turn context",
+          label: "New Context",
+          text: "<note_context><path>Notes/existing.md</path><content>Existing content</content></note_context>\n<note_context><path>Notes/new.md</path><content>New content</content></note_context>",
           stable: false,
-          segments: [],
+          segments: [
+            {
+              id: "Notes/existing.md",
+              content:
+                "<note_context><path>Notes/existing.md</path><content>Existing content</content></note_context>",
+              stable: true,
+            },
+            {
+              id: "Notes/new.md",
+              content:
+                "<note_context><path>Notes/new.md</path><content>New content</content></note_context>",
+              stable: false,
+            },
+          ],
           hash: "l3-hash",
         },
         {
@@ -125,8 +147,20 @@ describe("LayerToMessagesConverter", () => {
       const messages = LayerToMessagesConverter.convert(envelope);
 
       expect(messages).toHaveLength(2);
-      expect(messages[1].content).toContain("Previous turn note content");
-      expect(messages[1].content).toContain("Turn context");
+      // L2 (cumulative library) should be in system message
+      expect(messages[0].content).toContain("## Context Library");
+      expect(messages[0].content).toContain("Existing content");
+      // User message should have:
+      // - Reference to existing.md (already in L2)
+      // - Full content for new.md (not in L2)
+      // - Separator "[User query]:"
+      // - User query
+      expect(messages[1].content).toContain("Context attached");
+      expect(messages[1].content).toContain("Notes/existing.md");
+      expect(messages[1].content).toContain("Find them in the Context Library");
+      expect(messages[1].content).toContain("New content");
+      expect(messages[1].content).toContain("---");
+      expect(messages[1].content).toContain("[User query]:");
       expect(messages[1].content).toContain("User query");
     });
 
@@ -244,10 +278,58 @@ describe("LayerToMessagesConverter", () => {
 
       const userContent = LayerToMessagesConverter.extractUserContent(envelope);
 
-      expect(userContent).toContain("Previous turn content");
+      // extractUserContent returns L3 (new context) + L5 only
+      // L2 (cumulative library) is in system message
+      expect(userContent).not.toContain("Previous turn content");
       expect(userContent).toContain("Turn context");
       expect(userContent).toContain("User query");
       expect(userContent).not.toContain("System prompt");
+    });
+
+    it("should extract full context including L2 cumulative library (L2+L3+L5)", () => {
+      const envelope = createMockEnvelope([
+        {
+          id: "L1_SYSTEM",
+          label: "System & Policies",
+          text: "System prompt",
+          stable: true,
+          segments: [],
+          hash: "l1-hash",
+        },
+        {
+          id: "L2_PREVIOUS",
+          label: "Context Library",
+          text: "Cumulative context",
+          stable: true,
+          segments: [],
+          hash: "l2-hash",
+        },
+        {
+          id: "L3_TURN",
+          label: "New Context",
+          text: "New turn context",
+          stable: false,
+          segments: [],
+          hash: "l3-hash",
+        },
+        {
+          id: "L5_USER",
+          label: "User Message",
+          text: "User query",
+          stable: false,
+          segments: [],
+          hash: "l5-hash",
+        },
+      ]);
+
+      const fullContext = LayerToMessagesConverter.extractFullContext(envelope);
+
+      // extractFullContext returns L2 (cumulative) + L3 (new) + L5
+      // Used for special cases like multimodal image extraction
+      expect(fullContext).toContain("Cumulative context");
+      expect(fullContext).toContain("New turn context");
+      expect(fullContext).toContain("User query");
+      expect(fullContext).not.toContain("System prompt");
     });
 
     it("should handle envelope with only L5", () => {

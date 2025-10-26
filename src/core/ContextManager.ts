@@ -72,14 +72,13 @@ export class ContextManager {
       );
 
       // 2. Build L2 context from previous turns (for cache stability)
-      // Pass current message context for deduplication (L3 takes priority over L2)
+      // L2 contains ALL previous context (cumulative library)
       const l2Context = await this.buildL2ContextFromPreviousTurns(
         message.id!,
         messageRepo,
         fileParserManager,
         vault,
-        chainType,
-        message.context
+        chainType
       );
 
       // 3. Extract URLs and process them (for Copilot Plus chain)
@@ -259,14 +258,16 @@ export class ContextManager {
 
   /**
    * Build L2 context from previous turns in the conversation.
-   * Collects all context from messages before the current one.
+   * Creates cumulative "Context Library" with ALL previous context (no deduplication).
+   * LayerToMessagesConverter handles smart referencing in L3:
+   * - Items in L2 → referenced by path
+   * - Items NOT in L2 → full content
    *
    * @param currentMessageId - ID of the current message (exclude from L2)
    * @param messageRepo - Repository containing message history
    * @param fileParserManager - For processing notes
    * @param vault - For accessing files
    * @param chainType - Current chain type (for restrictions)
-   * @param currentTurnContext - Context from current turn to exclude from L2 (for deduplication)
    * @returns Processed context string with XML tags
    */
   private async buildL2ContextFromPreviousTurns(
@@ -274,8 +275,7 @@ export class ContextManager {
     messageRepo: MessageRepository,
     fileParserManager: FileParserManager,
     vault: Vault,
-    chainType: ChainType,
-    currentTurnContext?: MessageContext
+    chainType: ChainType
   ): Promise<string> {
     // Get all messages (display view)
     const allMessages = messageRepo.getDisplayMessages();
@@ -334,24 +334,11 @@ export class ContextManager {
       // TODO: Collect tag contexts (if needed)
     }
 
-    // Deduplicate: Remove any items that appear in current turn's context (L3 takes priority)
-    if (currentTurnContext) {
-      // Remove current turn notes from L2
-      const currentTurnNotePaths = new Set(
-        (currentTurnContext.notes || []).map((note) => note.path)
-      );
-      for (const notePath of currentTurnNotePaths) {
-        uniqueNotes.delete(notePath);
-      }
-
-      // Remove current turn URLs from L2
-      const currentTurnUrls = new Set(currentTurnContext.urls || []);
-      for (const url of currentTurnUrls) {
-        uniqueUrls.delete(url);
-      }
-
-      // TODO: Remove current turn selected text, folders, tags (if needed)
-    }
+    // IMPORTANT: Do NOT deduplicate with current turn context!
+    // L2 should contain ALL previous context items (cumulative library).
+    // LayerToMessagesConverter will handle smart referencing:
+    // - Items in L2 → reference by ID in L3
+    // - Items NOT in L2 → full content in L3
 
     // Sort by first appearance for stable ordering
     const sortedNotes = Array.from(uniqueNotes.values()).sort((a, b) => a.firstSeen - b.firstSeen);
@@ -400,23 +387,25 @@ export class ContextManager {
       ];
     }
 
-    // L2: Previous Turn Context - auto-promoted from previous L3
+    // L2: Previous Turn Context - one segment per note with path as ID
     if (params.l2PreviousContext) {
-      layerSegments.L2_PREVIOUS = [
-        {
-          id: "previous_context",
-          content: params.l2PreviousContext,
-          stable: true, // Stable when user doesn't add new context
-          metadata: { source: "previous_turns" },
-        },
-      ];
+      const l2Segments = this.parseContextIntoSegments(params.l2PreviousContext, true);
+      if (l2Segments.length > 0) {
+        layerSegments.L2_PREVIOUS = l2Segments;
+      }
     }
 
-    // L3: Turn Context - varies per turn
+    // L3: Turn Context - one segment per note with path as ID
     const turnSegments: PromptLayerSegment[] = [];
-    this.appendTurnContextSegment(turnSegments, "notes", params.noteContextAddition, {
-      source: "notes",
-    });
+
+    // Parse notes into individual segments
+    if (params.noteContextAddition) {
+      const noteSegments = this.parseContextIntoSegments(params.noteContextAddition, false);
+      turnSegments.push(...noteSegments);
+    }
+
+    // Parse other context types (tags, folders, URLs, selected text)
+    // For now, keep these as single segments
     this.appendTurnContextSegment(turnSegments, "tags", params.tagContextAddition, {
       source: "tags",
     });
@@ -453,6 +442,45 @@ export class ContextManager {
         chainType: params.chainType,
       },
     });
+  }
+
+  /**
+   * Parse context XML string into individual segments (one per note/context item)
+   * Extracts <note_context> and <active_note> blocks and creates segments with path as ID
+   */
+  private parseContextIntoSegments(contextXml: string, stable: boolean): PromptLayerSegment[] {
+    if (!contextXml.trim()) {
+      return [];
+    }
+
+    const segments: PromptLayerSegment[] = [];
+
+    // Match both <note_context> and <active_note> blocks
+    const noteContextRegex =
+      /<(?:note_context|active_note)>[\s\S]*?<\/(?:note_context|active_note)>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = noteContextRegex.exec(contextXml)) !== null) {
+      const block = match[0];
+
+      // Extract path from the block
+      const pathMatch = /<path>([^<]+)<\/path>/.exec(block);
+      if (!pathMatch) continue;
+
+      const notePath = pathMatch[1];
+
+      segments.push({
+        id: notePath, // Use note path as unique ID for comparison
+        content: block,
+        stable,
+        metadata: {
+          source: stable ? "previous_turns" : "current_turn",
+          notePath,
+        },
+      });
+    }
+
+    return segments;
   }
 
   private appendTurnContextSegment(

@@ -48,75 +48,125 @@ Copilot’s current prompt construction glues every note, tag, folder, tool resu
 
 ## Target Layered Prefix Model
 
-| Layer                         | Source                                                                                      | Update trigger                                        | Rendering & caching notes                                                                                                                                                                              |
-| ----------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **L1: System & Policies**     | `DEFAULT_SYSTEM_PROMPT`, user overrides, user memory snapshot                               | Only when system settings or saved memory change      | Canonical renderer strips timestamps, extra whitespace. Hash persisted per conversation for cache validation.                                                                                          |
-| **L2: Previous Turn Context** | Context from all previous turns (notes, URLs, PDFs) that aren't in current turn             | Automatically updated: previous turn's L3 moves to L2 | **Auto-promotion**: Previous turn's context automatically moves here. Stable when user stops adding new context. Deduplicated by unique ID (note path, URL). Sorted by first appearance for stability. |
-| **L3: Current Turn Context**  | Context attached to the **current** user message only (active note, newly added notes/URLs) | Every turn                                            | Only contains context from the latest turn. Empty if user doesn't add new context.                                                                                                                     |
-| **L4: Conversation History**  | LangChain memory (raw messages without context)                                             | Each turn adds new Q/A pair                           | Past turns are stable. Only grows with new conversation turns.                                                                                                                                         |
-| **L5: User Message**          | Raw user input                                                                              | Every turn                                            | Always last; remains the message body the UI shows.                                                                                                                                                    |
+| Layer                            | Source                                                                            | Update trigger                                                   | Rendering & caching notes                                                                                                                                                         |
+| -------------------------------- | --------------------------------------------------------------------------------- | ---------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **L1: System & Policies**        | `DEFAULT_SYSTEM_PROMPT`, user overrides, user memory snapshot                     | Only when system settings or saved memory change                 | Canonical renderer strips timestamps, extra whitespace. Hash persisted per conversation for cache validation.                                                                     |
+| **L2: Context Library**          | **Cumulative set of ALL context items ever attached** (notes, URLs, PDFs)         | Grows monotonically: new context items added, never removed      | **Cumulative library**: Contains all notes/context ever seen. Formatted as "Context Library" in system message. Grows as new context is added. Maximizes cache stability.         |
+| **L3: Smart Context References** | **Unique IDs** (paths) for items in L2 + **full content** for new items not in L2 | Every turn: list IDs for items in L2, full content for new items | **Smart referencing**: Lists paths/IDs for items already in L2 with "find them in the system prompt above". Includes full content only for brand-new items. Minimizes redundancy. |
+| **L4: Conversation History**     | LangChain memory (raw messages without context)                                   | Each turn adds new Q/A pair                                      | Past turns are stable. Only grows with new conversation turns.                                                                                                                    |
+| **L5: User Message**             | Raw user input                                                                    | Every turn                                                       | User's actual question/request. Minimal payload.                                                                                                                                  |
 
-## Smart Context Promotion: L2 Auto-Population
+## Simple Cumulative Context: L2 as Context Library
 
 ### Key Insight
 
-Instead of manual pinning, we automatically promote context from previous turns to L2. This creates a **naturally stable prefix** that mirrors user intent:
+Instead of complex deduplication logic, L2 is a **simple cumulative library** of all context ever seen:
 
-- **L3**: "What I just added this turn"
-- **L2**: "What I added in previous turns"
+- **L2**: Cumulative set of ALL context items ever attached (full content, grows monotonically)
+- **L3**: Smart referencing - lists IDs for items already in L2, includes full content only for NEW items
+- **Minimal redundancy**: Items in L2 are referenced by path/ID in L3, not repeated
 
 ### Example Conversation
 
 ```
-Turn 1: User asks "Summarize this" with project-spec.md attached
+Turn 1: User adds project-spec.md
   L1: System prompt
   L2: (empty)
-  L3: <note_context>project-spec.md</note_context>
+  L3: <note_context>project-spec.md (full content)</note_context>  ← NEW, includes full content
   L5: "Summarize this"
 
-Turn 2: User asks "What's the API?" with api-docs.md attached
+Turn 2: User keeps project-spec.md, adds api-docs.md
   L1: System prompt (stable ✅)
-  L2: <note_context>project-spec.md</note_context> ← moved from Turn 1
-  L3: <note_context>api-docs.md</note_context>
+  L2: <note_context>project-spec.md (full content)</note_context>  ← Added to library
+  L3: "Context attached:
+        - Piano Lessons/project-spec.md
+       Find them in the Context Library above."
+       <note_context>api-docs.md (full content)</note_context>  ← NEW
+
+       ---
+
+       [User query]:
   L5: "What's the API?"
 
-Turn 3: User asks "Explain that" (no new context)
+Turn 3: User keeps project-spec.md only (no new context)
   L1: System prompt (stable ✅)
-  L2: <note_context>project-spec.md</note_context>
-      <note_context>api-docs.md</note_context> ← STABLE! Cache hit!
-  L3: (empty)
+  L2: <note_context>project-spec.md (full)</note_context>
+      <note_context>api-docs.md (full)</note_context>  ← STABLE! Cache hit!
+  L3: "Context attached:
+        - Piano Lessons/project-spec.md
+       Find them in the Context Library above."  ← Just ID reference
+
+       ---
+
+       [User query]:
   L5: "Explain that"
 
-Turn 4: User asks "Debug this" with error-log.md attached
+Turn 4: User keeps project-spec.md, adds error-log.md
   L1: System prompt (stable ✅)
-  L2: <note_context>project-spec.md</note_context>
-      <note_context>api-docs.md</note_context> ← Still stable!
-  L3: <note_context>error-log.md</note_context>
+  L2: <note_context>project-spec.md (full)</note_context>
+      <note_context>api-docs.md (full)</note_context>  ← STABLE! Cache hit!
+  L3: "Context attached:
+        - Piano Lessons/project-spec.md
+       Find them in the Context Library above."
+       <note_context>error-log.md (full content)</note_context>  ← NEW
+
+       ---
+
+       [User query]:
   L5: "Debug this"
 ```
 
 ### Benefits
 
-1. **Automatic cache optimization**: L1+L2 become stable after user stops adding context
-2. **Respects user intent**: Current turn's context in L3, previous in L2
-3. **No manual management**: No UI needed for pinning/unpinning
-4. **Zero duplication**: Each note appears exactly once (either L2 or L3, never both)
-5. **Stable ordering**: L2 sorted by first appearance (deterministic across turns)
+1. **Maximum cache stability**: L2 grows monotonically, never shrinks → cache hits maximized
+2. **Minimal redundancy**: Items in L2 referenced by ID in L3, not re-sent → minimal tokens
+3. **Smart referencing**: AI told "find them in the Context Library above" → clear instructions
+4. **Efficient for repeated context**: Same notes used across turns stay in L2, just referenced by path
+5. **Simple logic**: Set membership test to decide ID vs. full content
 
-### Deduplication Rules
+### Simple Rules
 
-1. **By unique identifier**:
+1. **L2 Accumulation** (Cumulative Library):
+
+   - Create empty L2 set
+   - For each turn: add any NEW context items to L2 (by unique ID)
+   - L2 only grows, never shrinks
+   - Formatted as "## Context Library" in system message
+
+2. **L3 Smart References** (IDs for known items, full content for new):
+
+   - For current turn: check which context items are attached
+   - Items already in L2 → list their IDs/paths with "find them in Context Library above"
+   - Items NOT in L2 yet → include full content
+   - Minimizes redundancy while keeping AI informed
+
+3. **Unique Identifiers**:
 
    - Notes: Full file path (`note.path`)
    - URLs: Full URL string
    - Selected text: Source file path + line range
    - Dataview blocks: Source file path + query hash
 
-2. **Priority**: If context appears in current turn (L3), it's removed from L2
+4. **L3 Format**:
 
-   - User re-attaches previous note → moves from L2 back to L3
+   ```
+   Context attached to this message:
+   - Piano Lessons/Lesson 4.md
+   - DailyNotes/2025-09-27.md
 
-3. **Ordering**: L2 sorted by first appearance timestamp (stable)
+   Find them in the Context Library in the system prompt above.
+
+   <note_context>
+   <title>New Note</title>
+   <path>path/to/new.md</path>
+   <content>full content here</content>
+   </note_context>
+
+   ---
+
+   [User query]:
+   What is the lesson plan for today?
+   ```
 
 ### Implementation Strategy
 
@@ -293,11 +343,57 @@ After reviewing the initial implementation, we made several simplifications to p
 ### Completed (Phase 2)
 
 - **L2 Auto-Promotion**: Implemented `buildL2ContextFromPreviousTurns()` in `ContextManager` that collects context from all previous user messages
-- **Deduplication Logic**: L3 (current turn) takes priority over L2 (previous turns) - items in L3 are removed from L2
+- **Removed Deduplication Bug**: Fixed critical bug where L2 was removing items that appeared in current turn, breaking cache stability
+- **Cumulative L2**: L2 now contains ALL previous context (no deduplication) - grows monotonically
+- **Segment-Based Smart Referencing**: Parse XML into one segment per note with path as ID for proper comparison
 - **Stable Ordering**: L2 context sorted by first appearance timestamp for deterministic cache hits
 - **Type System Updates**: Renamed `L2_PINNED` → `L2_PREVIOUS` to reflect auto-promotion design
-- **LayerToMessagesConverter**: Updated to handle L2_PREVIOUS with proper merging into user messages
-- **All Tests Passing**: 1,173 tests pass including updated ChatManager and LayerToMessagesConverter tests
+- **LayerToMessagesConverter**: Smart referencing - items in L2 referenced by path in L3, new items get full content
+- **All Tests Passing**: 1,161 tests pass including updated ChatManager and LayerToMessagesConverter tests
+
+## Bug Fix Summary (2025-01-25)
+
+### Bug: L2 Context Deduplication Breaking Cache Stability
+
+**Problem:**
+The `buildL2ContextFromPreviousTurns()` method was removing items from L2 if they also appeared in the current turn's context. This violated the core design principle that L2 should be cumulative and monotonically growing.
+
+**Symptom:**
+When a note appeared in multiple consecutive turns (e.g., user keeps same active note while chatting), the note would:
+
+- Turn 1: Appear in L3 with full content
+- Turn 2: Should move to L2, but was removed because it's still active
+- Turn 2: Appear in L3 with full content AGAIN (incorrect - should be referenced by ID)
+- Result: Same note content sent twice, breaking cache
+
+**Root Cause:**
+Lines 337-354 in ContextManager.ts had deduplication logic that deleted items from L2 if they matched current turn context:
+
+```typescript
+// WRONG: Removes items from L2 that appear in current turn
+if (currentTurnContext) {
+  const currentTurnNotePaths = new Set((currentTurnContext.notes || []).map((note) => note.path));
+  for (const notePath of currentTurnNotePaths) {
+    uniqueNotes.delete(notePath); // BUG: Prevents L2 accumulation
+  }
+}
+```
+
+**Fix:**
+
+1. Removed the deduplication logic from `buildL2ContextFromPreviousTurns()`
+2. L2 now contains ALL previous context (no filtering)
+3. Added `parseContextIntoSegments()` to create one segment per note with path as ID
+4. LayerToMessagesConverter compares segment IDs to decide:
+   - Item in L2 → reference by path in L3
+   - Item NOT in L2 → full content in L3
+
+**Result:**
+
+- L2 grows monotonically ✅
+- Items referenced by ID when in L2 ✅
+- Cache hits maximized ✅
+- All 1,161 tests passing ✅
 
 ### In Progress (Phase 3)
 
