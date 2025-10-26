@@ -1211,3 +1211,34 @@ export function truncateToByteLimit(str: string, byteLimit: number): string {
 
   return result;
 }
+
+/**
+ * Opens a file in the workspace, reusing an existing tab if the file is already open.
+ * @param file - The TFile to open
+ * @param focusIfOpen - If true, focuses the existing leaf if the file is already open (default: true)
+ */
+export async function openFileInWorkspace(file: TFile, focusIfOpen: boolean = true): Promise<void> {
+  // Check if the file is already open in any leaf
+  let existingLeaf = null;
+  app.workspace.iterateAllLeaves((leaf) => {
+    if (
+      leaf.view.getViewType() === "markdown" ||
+      leaf.view.getViewType() === "pdf" ||
+      leaf.view.getViewType() === "canvas"
+    ) {
+      const viewFile = (leaf.view as any).file;
+      if (viewFile && viewFile.path === file.path) {
+        existingLeaf = leaf;
+      }
+    }
+  });
+
+  if (existingLeaf && focusIfOpen) {
+    // File is already open, focus the existing leaf
+    app.workspace.setActiveLeaf(existingLeaf, { focus: true });
+  } else if (!existingLeaf) {
+    // File is not open, open it in a new tab
+    const leaf = app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
+  }
+}

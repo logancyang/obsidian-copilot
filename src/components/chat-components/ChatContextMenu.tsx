@@ -14,7 +14,7 @@ import { ChainType } from "@/chainFactory";
 import { Separator } from "@/components/ui/separator";
 import { useChainType } from "@/aiParams";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
-import { isPlusChain } from "@/utils";
+import { isPlusChain, openFileInWorkspace } from "@/utils";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -97,6 +97,13 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     }, 100);
   };
 
+  /**
+   * Handles clicking on a badge to open the file in a new tab (or focus existing tab)
+   */
+  const handleBadgeClick = (file: TFile) => {
+    openFileInWorkspace(file);
+  };
+
   const uniqueNotes = React.useMemo(() => {
     const notesMap = new Map(contextNotes.map((note) => [note.path, note]));
     return Array.from(notesMap.values());
@@ -152,10 +159,11 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         </Popover>
       </div>
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
-        {includeActiveNote && (
+        {includeActiveNote && currentActiveFile && (
           <ContextActiveNoteBadge
             currentActiveFile={currentActiveFile}
             onRemove={() => onRemoveContext("activeNote", "")}
+            onClick={() => handleBadgeClick(currentActiveFile)}
           />
         )}
         {uniqueNotes.map((note) => (
@@ -163,6 +171,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
             key={note.path}
             note={note}
             onRemove={() => onRemoveContext("notes", note.path)}
+            onClick={() => handleBadgeClick(note)}
           />
         ))}
         {uniqueUrls.map((url) => (
