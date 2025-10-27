@@ -110,6 +110,11 @@ describe("KeyboardPlugin - checkShortcutMatch", () => {
         const event = createMockKeyboardEvent({ metaKey: true, altKey: true });
         expect(checkShortcutMatch(event, SEND_SHORTCUT.CMD_ENTER)).toBe(false);
       });
+
+      it("should not match Cmd+Ctrl+Enter (both modifiers)", () => {
+        const event = createMockKeyboardEvent({ metaKey: true, ctrlKey: true });
+        expect(checkShortcutMatch(event, SEND_SHORTCUT.CMD_ENTER)).toBe(false);
+      });
     });
 
     describe("on Windows/Linux", () => {
@@ -138,6 +143,11 @@ describe("KeyboardPlugin - checkShortcutMatch", () => {
 
       it("should not match when Alt is also pressed", () => {
         const event = createMockKeyboardEvent({ ctrlKey: true, altKey: true });
+        expect(checkShortcutMatch(event, SEND_SHORTCUT.CMD_ENTER)).toBe(false);
+      });
+
+      it("should not match Ctrl+Meta+Enter (both modifiers)", () => {
+        const event = createMockKeyboardEvent({ ctrlKey: true, metaKey: true });
         expect(checkShortcutMatch(event, SEND_SHORTCUT.CMD_ENTER)).toBe(false);
       });
     });

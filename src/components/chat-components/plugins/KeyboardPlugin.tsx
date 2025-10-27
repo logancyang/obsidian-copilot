@@ -61,7 +61,9 @@ export function checkShortcutMatch(event: KeyboardEvent, shortcut: SEND_SHORTCUT
     case SEND_SHORTCUT.SHIFT_ENTER:
       return event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
     case SEND_SHORTCUT.CMD_ENTER:
-      return (Platform.isMacOS ? event.metaKey : event.ctrlKey) && !event.shiftKey && !event.altKey;
+      return Platform.isMacOS
+        ? event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey
+        : event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey;
     case SEND_SHORTCUT.ALT_ENTER:
       return event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey;
     default:
