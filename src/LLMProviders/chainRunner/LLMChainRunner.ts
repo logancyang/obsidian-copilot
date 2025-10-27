@@ -1,9 +1,8 @@
 import { ABORT_REASON } from "@/constants";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
-import { getSystemPromptWithMemory } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
-import { extractChatHistory, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
+import { extractChatHistory, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -11,102 +10,63 @@ import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 export class LLMChainRunner extends BaseChainRunner {
   /**
    * Construct messages array using envelope-based context (L1-L5 layers)
-   * Falls back to legacy if no envelope is available
+   * Requires context envelope - throws error if unavailable
    */
   private async constructMessages(userMessage: ChatMessage): Promise<any[]> {
+    // Require envelope for LLM chain
+    if (!userMessage.contextEnvelope) {
+      throw new Error(
+        "[LLMChainRunner] Context envelope is required but not available. Cannot proceed with LLM chain."
+      );
+    }
+
+    logInfo("[LLMChainRunner] Using envelope-based context");
+
     // Get chat history from memory (L4)
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
     const chatHistory = extractChatHistory(memoryVariables);
 
-    // Try envelope-based approach first
-    if (userMessage.contextEnvelope) {
-      logInfo("[LLMChainRunner] Using envelope-based context");
+    // Convert envelope to messages (L1 system + L2+L3+L5 user)
+    const baseMessages = LayerToMessagesConverter.convert(userMessage.contextEnvelope, {
+      includeSystemMessage: true,
+      mergeUserContent: true,
+      debug: false,
+    });
 
-      // Convert envelope to messages (L1 system + L2+L3+L5 user)
-      const baseMessages = LayerToMessagesConverter.convert(userMessage.contextEnvelope, {
-        includeSystemMessage: true,
-        mergeUserContent: true,
-        debug: false,
-      });
-
-      // Insert L4 (chat history) between system and user
-      const messages: any[] = [];
-
-      // Add system message (L1)
-      const systemMessage = baseMessages.find((m) => m.role === "system");
-      if (systemMessage) {
-        messages.push(systemMessage);
-      }
-
-      // Add chat history (L4)
-      for (const entry of chatHistory) {
-        messages.push({ role: entry.role, content: entry.content });
-      }
-
-      // Add user message (L2+L3+L5 merged)
-      const userMessageContent = baseMessages.find((m) => m.role === "user");
-      if (userMessageContent) {
-        // Handle multimodal content if present
-        if (userMessage.content && Array.isArray(userMessage.content)) {
-          // Merge envelope text with multimodal content (images)
-          const updatedContent = userMessage.content.map((item: any) => {
-            if (item.type === "text") {
-              return { ...item, text: userMessageContent.content };
-            }
-            return item;
-          });
-          messages.push({
-            role: "user",
-            content: updatedContent,
-          });
-        } else {
-          messages.push(userMessageContent);
-        }
-      }
-
-      return messages;
-    }
-
-    // Legacy fallback: construct messages manually
-    logInfo("[LLMChainRunner] Using legacy context construction");
+    // Insert L4 (chat history) between system and user
     const messages: any[] = [];
 
-    // Add system message if available
-    const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
-    const chatModel = this.chainManager.chatModelManager.getChatModel();
-
-    if (systemPrompt) {
-      messages.push({
-        role: getMessageRole(chatModel),
-        content: systemPrompt,
-      });
+    // Add system message (L1)
+    const systemMessage = baseMessages.find((m) => m.role === "system");
+    if (systemMessage) {
+      messages.push(systemMessage);
     }
 
-    // Add chat history
+    // Add chat history (L4)
     for (const entry of chatHistory) {
       messages.push({ role: entry.role, content: entry.content });
     }
 
-    // Add current user message - support multimodal content if available
-    if (userMessage.content && Array.isArray(userMessage.content)) {
-      // For multimodal messages with images, replace the text content with processed text
-      const updatedContent = userMessage.content.map((item: any) => {
-        if (item.type === "text") {
-          // Use processed message text that includes context
-          return { ...item, text: userMessage.message };
-        }
-        return item;
-      });
-      messages.push({
-        role: "user",
-        content: updatedContent,
-      });
-    } else {
-      messages.push({
-        role: "user",
-        content: userMessage.message,
-      });
+    // Add user message (L2+L3+L5 merged)
+    const userMessageContent = baseMessages.find((m) => m.role === "user");
+    if (userMessageContent) {
+      // Handle multimodal content if present
+      if (userMessage.content && Array.isArray(userMessage.content)) {
+        // Merge envelope text with multimodal content (images)
+        const updatedContent = userMessage.content.map((item: any) => {
+          if (item.type === "text") {
+            return { ...item, text: userMessageContent.content };
+          }
+          return item;
+        });
+        messages.push({
+          role: "user",
+          content: updatedContent,
+        });
+      } else {
+        messages.push(userMessageContent);
+      }
     }
 
     return messages;

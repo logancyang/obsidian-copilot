@@ -257,8 +257,8 @@ Turn 4: User keeps project-spec.md, adds error-log.md
 
 2. **Runner Adoption**
 
-   - Update `LLMChainRunner`, `CopilotPlusChainRunner`, `AutonomousAgentChainRunner`, `ProjectChainRunner`, and `VaultQAChainRunner` to prefer `PromptContextEnvelope.llmMessages`.
-   - Maintain a fallback path to the old `userMessage.message` until confidence is high.
+   - Update `LLMChainRunner`, `CopilotPlusChainRunner`, `AutonomousAgentChainRunner`, `ProjectChainRunner`, and `VaultQAChainRunner` to rely on `PromptContextEnvelope.llmMessages`.
+   - Remove legacy prompt construction for these runners in the same release so the migration is atomic.
    - Ensure tool streaming (`ActionBlockStreamer`, `ThinkBlockStreamer`) keeps functioning because the outer `ChainRunner` API stays untouched.
 
 3. **Provider Enhancements**
@@ -401,7 +401,7 @@ if (currentTurnContext) {
 
 ### Next (Phase 4)
 
-- Wire envelopes into remaining ChainRunners (Plus, Project, VaultQA, Autonomous Agent)
+- Wire envelopes into remaining ChainRunners (Plus, Project, VaultQA, Autonomous Agent) and remove legacy prompt assembly in the same pass
 - Add cache stability monitoring and validation
 - Add integration tests for L2 auto-promotion behavior
 - Test multimodal (images) with envelope-based extraction
@@ -411,6 +411,65 @@ if (currentTurnContext) {
 - Provider-specific cache controls (Anthropic `cache_control`, Gemini explicit cache)
 - Optional manual pinning UI (for users who want explicit control)
 - L4 summarization (if needed - LangChain memory may be sufficient)
+
+### Image Handling Constraints
+
+- **No L2 Promotion for Image-Bearing Notes**: When building the L2 Context Library, skip any note that contains embedded images (wiki images, markdown `![]()` links, pasted data URIs, etc.). Those notes stay out of the cacheable prefix so we do not repeatedly transmit large binary payloads inside the stable system message.
+- **Active Note Only for Vision Models**: Image extraction (and subsequent conversion to multimodal message content) should use _only_ the active note for the current turn. Even if multiple context notes are attached, their images are ignored unless the note is the active editor file selected by the user. This keeps the vision payload tightly aligned with explicit user intent and avoids accidentally leaking private media.
+- **Envelope Awareness**: When an envelope is present, multimodal runners call `LayerToMessagesConverter.extractFullContext()` solely to locate the relevant `<active_note>` block, not to sweep L2. Legacy (no-envelope) behavior remains unchanged, but once all runners migrate we enforce the rule by filtering segments before image resolution.
+
+## CopilotPlus & Agent Tool System Migration Plan
+
+### Tool Output Layer Placement (Q1 & Q3)
+
+- **Local Search (Vault RAG) → System Layer**: Treat the `<localSearch>` XML payload exactly like VaultQA’s retrieved document block. When an envelope is present, append the rendered search context + citation guidance directly to the system segment AFTER L1+L2. This keeps cached prefixes stable (L1/L2) while ensuring RAG payloads stay tied to the turn that produced them. Local search results are **never promoted to L2**; they remain per-turn content so stale snippets do not accumulate in the Context Library.
+- **Other Tool Results → L3 Turn Segments**: Outputs from `webSearch`, `getFileTree`, `timeRange`, composer helper tools, etc., become `L3_TURN` segments. Each tool contributes one segment with metadata `{ source: "tool", toolName }`. These segments are ephemeral and are not promoted to L2; repetition simply yields the same segment hash per turn.
+- **Mixed Tool Scenarios**: If a turn contains both local search and other tools, the system message receives the RAG block while the remaining tool outputs live in L3. When no envelope is available, we fall back to the legacy concatenated string (ensuring backward compatibility).
+- **Tool Result Persistence Policy**: L2 remains strictly for user-attached artifacts (notes, selected text, folders, URLs). Tool outputs—regardless of source—stay in L3. This keeps the Context Library compact and avoids polluting the cacheable prefix with transient API responses.
+
+### Intent Planning via Client Chat Models (Q2)
+
+- **Broca Retirement**: CopilotPlus will stop relying on the Broca intent API for tool selection. License verification continues to use the existing Plus entitlement endpoint, but tool planning happens locally.
+- **ToolCallPlanner**: Introduce a shared planner (reused later by the Agent runner) that invokes the user’s configured chat model with a lightweight schema describing available tools. The planner request includes:
+  - `L5_USER`: raw user query (pre-commands, composer tags, etc.).
+  - `L3_SUMMARY`: a capped summary of attached context (titles/paths + short abstracts). We do **not** stream the entire L3 content to the planner; instead, we include deterministic metadata and up to N (default 2) short snippets to provide relevance hints without exploding tokens.
+  - No L2 payload is needed because L2 is already summarized inside `L3_SUMMARY`.
+- **Prompt Contract**: The planner asks the chat model to emit a JSON tool-call array identical to today’s `IntentAnalyzer` output, but with explicit schema validation. This allows us to reuse existing tool execution code paths.
+- **Agent Runner Alignment**: The Agent chain already performs multi-step tool reasoning. Once CopilotPlus uses the same planner, migrating the Agent runner simply means swapping its initial planning call to the shared helper while keeping its iterative loop logic intact.
+
+### Composer Instructions (Q4)
+
+- `@composer` directives remain part of L5. They are user-driven instructions that apply only to the current turn, so treating them as user content maintains fidelity with what the user typed. However, we ensure the planner sees the post-processed L5 (including composer tags) so that it can choose tools appropriately (e.g., avoid localSearch when the user explicitly requests formatting-only operations).
+
+### Multimodal & Image Extraction (Challenge 3)
+
+- Use `LayerToMessagesConverter.extractFullContext(envelope)` when resolving embedded images. This pulls L2 + L3 + L5 into a single string so the existing regex-based resolver continues to find `![[image.png]]` wherever they live. We gate this call behind an envelope check; legacy behavior stays unchanged when no context envelope is present.
+
+### Local Search Citation Tracking (Challenge 4)
+
+- The `lastCitationSources` cache continues to work because the local search formatter still produces XML with source IDs. When injecting the RAG payload into the system message, we also attach the numbered source catalog so the LLM can produce in-line `[ ^n ]` references. The fallback `addSourcestoResponse` now checks `hasInlineCitations()` before appending sources, ensuring we only add the footer when the model attempted citations.
+
+### Tool Output Formatting (Challenge 5)
+
+- `renderCiCMessage()` becomes an L3 helper that takes the list of non-localSearch tool segments and returns a deterministic block. For legacy consumers (no envelope), CopilotPlus still appends the combined tool context directly to the user message string. Within the envelope pipeline, each tool segment’s metadata retains its name and hash so LayerToMessagesConverter can produce stable references if we later decide to cache them.
+
+### Implementation Roadmap
+
+1. **Shared Tool Planner**: Build `ToolCallPlanner` that consumes L5 + summarized L3 metadata and returns the tool call array via the user’s chat model. Wire CopilotPlus to this planner and keep Broca solely for license checks (until that endpoint itself is replaced).
+2. **Tool Segment Builder**: Add helpers that transform tool outputs into either L1 (localSearch) or L3 segments with clear metadata. This builder is shared between CopilotPlus and Agent runners to keep formatting identical.
+3. **CopilotPlus Runner Migration**:
+   - Replace intentAnalyzer usage with `ToolCallPlanner`.
+   - Adopt the envelope-first message construction pipeline (LayerToMessagesConverter → inject RAG block → chat history → user message + tool segments).
+   - Update multimodal/image extraction to read from `extractFullContext()`.
+4. **Agent Runner Migration** (follow-up phase):
+   - Reuse the same planner + segment builder.
+   - Ensure multi-step tool reasoning loops consume/produce L3 segments without bypassing the envelope.
+5. **Testing**:
+   - Add planner prompt fixtures (no tools, localSearch only, mixed tools).
+   - Snapshot tests for tool segment rendering to guarantee deterministic hashes.
+   - Regression suite covering composer instructions, multimodal attachments, and fallback behavior with no envelope.
+
+This plan answers the previously open questions and keeps CopilotPlus and Agent runners on a converged, modular foundation for the new layered context system.
 
 ## ProcessedText Evolution & Migration Path
 

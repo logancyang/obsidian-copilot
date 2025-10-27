@@ -5,7 +5,7 @@ import { logInfo } from "@/logger";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { MergedSemanticRetriever } from "@/search/v3/MergedSemanticRetriever";
 import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
-import { getSettings, getSystemPrompt } from "@/settings/model";
+import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import {
   extractChatHistory,
@@ -42,10 +42,17 @@ export class VaultQAChainRunner extends BaseChainRunner {
     try {
       // Tiered lexical retriever doesn't need index check - it builds indexes on demand
 
+      // Require envelope for VaultQA
+      const envelope = userMessage.contextEnvelope;
+      if (!envelope) {
+        throw new Error(
+          "[VaultQA] Context envelope is required but not available. Cannot proceed with VaultQA chain."
+        );
+      }
+
       // Step 1: Extract L5 (raw user query) from envelope
       // Tags MUST be extracted from L5 BEFORE condensing to preserve them for tag-aware retrieval
-      const envelope = userMessage.contextEnvelope;
-      const l5User = envelope?.layers.find((l) => l.id === "L5_USER");
+      const l5User = envelope.layers.find((l) => l.id === "L5_USER");
       const rawUserQuery = l5User?.text || userMessage.message;
 
       // Step 2: Extract tags from raw query (BEFORE condensing!)
@@ -128,83 +135,45 @@ export class VaultQAChainRunner extends BaseChainRunner {
         context +
         getQACitationInstructionsConditional(settings.enableInlineCitations, sourceCatalog);
 
-      // Try envelope-based approach first
-      if (envelope) {
-        logInfo(
-          "[VaultQA] Using envelope-based context construction with LayerToMessagesConverter"
-        );
+      // Build messages using envelope-based context construction
+      logInfo("[VaultQA] Using envelope-based context construction with LayerToMessagesConverter");
 
-        // Use LayerToMessagesConverter to get base messages with L1+L2 system, L3+L5 user
-        // This ensures smart referencing and L2 Context Library are preserved
-        const baseMessages = LayerToMessagesConverter.convert(envelope, {
-          includeSystemMessage: true,
-          mergeUserContent: true,
-          debug: false,
+      // Use LayerToMessagesConverter to get base messages with L1+L2 system, L3+L5 user
+      // This ensures smart referencing and L2 Context Library are preserved
+      const baseMessages = LayerToMessagesConverter.convert(envelope, {
+        includeSystemMessage: true,
+        mergeUserContent: true,
+        debug: false,
+      });
+
+      // Find system message (contains L1 + L2 Context Library)
+      const systemMessage = baseMessages.find((m) => m.role === "system");
+      if (systemMessage) {
+        // Append RAG results to system message after L1+L2
+        // System now contains: L1 (system prompt) + L2 (Context Library) + RAG results + citations
+        systemMessage.content += qaInstructions;
+        messages.push({
+          role: getMessageRole(chatModel),
+          content: systemMessage.content,
         });
+      }
 
-        // Find system message (contains L1 + L2 Context Library)
-        const systemMessage = baseMessages.find((m) => m.role === "system");
-        if (systemMessage) {
-          // Append RAG results to system message after L1+L2
-          // System now contains: L1 (system prompt) + L2 (Context Library) + RAG results + citations
-          systemMessage.content += qaInstructions;
-          messages.push({
-            role: getMessageRole(chatModel),
-            content: systemMessage.content,
-          });
-        }
+      // Insert L4 (chat history) between system and user
+      for (const entry of chatHistory) {
+        messages.push({ role: entry.role, content: entry.content });
+      }
 
-        // Insert L4 (chat history) between system and user
-        for (const entry of chatHistory) {
-          messages.push({ role: entry.role, content: entry.content });
-        }
-
-        // Add user message (L3 smart references + L5)
-        // LayerToMessagesConverter already handles smart referencing:
-        // - Items in L2 → referenced by ID
-        // - Items NOT in L2 → full content
-        const userMessageContent = baseMessages.find((m) => m.role === "user");
-        if (userMessageContent) {
-          // Handle multimodal content if present
-          if (userMessage.content && Array.isArray(userMessage.content)) {
-            const updatedContent = userMessage.content.map((item: any) => {
-              if (item.type === "text") {
-                return { ...item, text: userMessageContent.content };
-              }
-              return item;
-            });
-            messages.push({
-              role: "user",
-              content: updatedContent,
-            });
-          } else {
-            messages.push(userMessageContent);
-          }
-        }
-      } else {
-        // Legacy fallback: no envelope
-        logInfo("[VaultQA] Using legacy context construction (no envelope)");
-
-        const systemPrompt = getSystemPrompt();
-        const fullSystemMessage = systemPrompt + qaInstructions;
-
-        if (fullSystemMessage) {
-          messages.push({
-            role: getMessageRole(chatModel),
-            content: fullSystemMessage,
-          });
-        }
-
-        // Add chat history
-        for (const entry of chatHistory) {
-          messages.push({ role: entry.role, content: entry.content });
-        }
-
-        // Add current user question - support multimodal content if available
+      // Add user message (L3 smart references + L5)
+      // LayerToMessagesConverter already handles smart referencing:
+      // - Items in L2 → referenced by ID
+      // - Items NOT in L2 → full content
+      const userMessageContent = baseMessages.find((m) => m.role === "user");
+      if (userMessageContent) {
+        // Handle multimodal content if present
         if (userMessage.content && Array.isArray(userMessage.content)) {
           const updatedContent = userMessage.content.map((item: any) => {
             if (item.type === "text") {
-              return { ...item, text: userMessage.message };
+              return { ...item, text: userMessageContent.content };
             }
             return item;
           });
@@ -213,10 +182,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
             content: updatedContent,
           });
         } else {
-          messages.push({
-            role: "user",
-            content: userMessage.message,
-          });
+          messages.push(userMessageContent);
         }
       }
 
