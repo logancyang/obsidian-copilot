@@ -8,7 +8,6 @@ import { PasswordInput } from "@/components/ui/password-input";
 
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
-  DEFAULT_MODEL_SETTING,
   ChatModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
@@ -22,7 +21,7 @@ import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
 import { App, Modal, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { ParameterControl } from "@/components/ui/parameter-controls";
+import { ModelParametersEditor } from "@/components/ui/ModelParametersEditor";
 
 interface ModelEditModalContentProps {
   model: CustomModel;
@@ -249,197 +248,14 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               </div>
             </FormField>
 
-            <FormField>
-              <ParameterControl
-                type={"slider"}
-                optional={false}
-                label="Token limit"
-                value={localModel.maxTokens ?? settings.maxTokens}
-                onChange={(value) => handleLocalUpdate("maxTokens", value)}
-                max={65000}
-                min={100}
-                step={100}
-                defaultValue={DEFAULT_MODEL_SETTING.MAX_TOKENS}
-                helpText={
-                  <>
-                    <p>
-                      The maximum number of <em>output tokens</em> to generate. Default is{" "}
-                      {DEFAULT_MODEL_SETTING.MAX_TOKENS}.
-                    </p>
-                    <em>
-                      This number plus the length of your prompt (input tokens) must be smaller than
-                      the context window of the model.
-                    </em>
-                  </>
-                }
-              />
-            </FormField>
-
-            <FormField>
-              <ParameterControl
-                type={"slider"}
-                optional={false}
-                label="Temperature"
-                value={localModel.temperature ?? settings.temperature}
-                onChange={(value) => handleLocalUpdate("temperature", value)}
-                max={2}
-                min={0}
-                step={0.05}
-                defaultValue={DEFAULT_MODEL_SETTING.TEMPERATURE}
-                helpText={`Default is ${DEFAULT_MODEL_SETTING.TEMPERATURE}. Higher values will result in more creativeness, but also more mistakes. Set to 0 for no randomness.`}
-              />
-            </FormField>
-
-            <FormField>
-              <ParameterControl
-                type={"slider"}
-                label="Top-P"
-                value={localModel.topP}
-                onChange={(value) => handleLocalUpdate("topP", value)}
-                disableFn={() => handleLocalReset("topP")}
-                max={1}
-                min={0}
-                step={0.05}
-                defaultValue={0.9}
-                helpText="Default value is 0.9, the smaller the value, the less variety in the answers, the easier to understand, the larger the value, the larger the range of the AI's vocabulary, the more diverse"
-              />
-            </FormField>
-
-            <FormField>
-              <ParameterControl
-                type={"slider"}
-                label="Frequency Penalty"
-                value={localModel.frequencyPenalty}
-                onChange={(value) => handleLocalUpdate("frequencyPenalty", value)}
-                disableFn={() => handleLocalReset("frequencyPenalty")}
-                max={2}
-                min={0}
-                step={0.05}
-                defaultValue={0}
-                helpText={
-                  <>
-                    <p>
-                      The frequency penalty parameter tells the model not to repeat a word that has
-                      already been used multiple times in the conversation.
-                    </p>
-                    <em>
-                      The higher the value, the more the model is penalized for repeating words.
-                    </em>
-                  </>
-                }
-              />
-            </FormField>
-
-            {/* Reasoning Effort and Verbosity for GPT-5 and O-series models */}
-            {localModel.provider === "openai" &&
-              (localModel.name.startsWith("gpt-5") ||
-                localModel.name.startsWith("o1") ||
-                localModel.name.startsWith("o3") ||
-                localModel.name.startsWith("o4")) && (
-                <>
-                  <FormField>
-                    <ParameterControl
-                      type="select"
-                      label="Reasoning Effort"
-                      value={localModel.reasoningEffort}
-                      onChange={(value) => handleLocalUpdate("reasoningEffort", value)}
-                      disableFn={() => handleLocalReset("reasoningEffort")}
-                      defaultValue={
-                        settings.reasoningEffort ?? DEFAULT_MODEL_SETTING.REASONING_EFFORT
-                      }
-                      options={[
-                        ...(localModel.name.startsWith("gpt-5")
-                          ? [{ value: "minimal", label: "Minimal" }]
-                          : []),
-                        { value: "low", label: "Low" },
-                        { value: "medium", label: "Medium" },
-                        { value: "high", label: "High" },
-                      ]}
-                      helpText={
-                        <>
-                          <p>
-                            Controls the amount of reasoning effort the model uses. Higher effort
-                            provides more thorough reasoning but takes longer. Note: thinking tokens
-                            are not available yet!
-                          </p>
-                          <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                            <li>Minimal: Fastest responses, minimal reasoning (GPT-5 only)</li>
-                            <li>Low: Faster responses, basic reasoning (default)</li>
-                            <li>Medium: Balanced performance</li>
-                            <li>High: Thorough reasoning, slower responses</li>
-                          </ul>
-                        </>
-                      }
-                    />
-                  </FormField>
-
-                  {/* Verbosity only for GPT-5 models */}
-                  {localModel.name.startsWith("gpt-5") && (
-                    <FormField>
-                      <ParameterControl
-                        type="select"
-                        label="Verbosity"
-                        value={localModel.verbosity}
-                        onChange={(value) => handleLocalUpdate("verbosity", value)}
-                        disableFn={() => handleLocalReset("verbosity")}
-                        defaultValue={settings.verbosity ?? DEFAULT_MODEL_SETTING.VERBOSITY}
-                        options={[
-                          { value: "low", label: "Low" },
-                          { value: "medium", label: "Medium" },
-                          { value: "high", label: "High" },
-                        ]}
-                        helpText={
-                          <>
-                            <p>Controls the length and detail of the model responses.</p>
-                            <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                              <li>Low: Concise, brief responses</li>
-                              <li>Medium: Balanced detail</li>
-                              <li>High: Detailed, comprehensive responses</li>
-                            </ul>
-                          </>
-                        }
-                      />
-                    </FormField>
-                  )}
-                </>
-              )}
-
-            {/* Reasoning Effort for OpenRouter models */}
-            {localModel.provider === "openrouterai" && (
-              <FormField>
-                <ParameterControl
-                  type="select"
-                  label="Reasoning Effort"
-                  value={localModel.reasoningEffort}
-                  onChange={(value) => handleLocalUpdate("reasoningEffort", value)}
-                  disableFn={() => handleLocalReset("reasoningEffort")}
-                  defaultValue="low"
-                  options={[
-                    { value: "low", label: "Low" },
-                    { value: "medium", label: "Medium" },
-                    { value: "high", label: "High" },
-                  ]}
-                  helpText={
-                    <>
-                      <p>
-                        Controls the amount of reasoning effort the model uses. Higher effort
-                        provides more thorough reasoning but takes longer.
-                      </p>
-                      <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                        <li>Low: Faster responses, basic reasoning (default)</li>
-                        <li>Medium: Balanced performance</li>
-                        <li>High: Thorough reasoning, slower responses</li>
-                      </ul>
-                      {!localModel.capabilities?.includes(ModelCapability.REASONING) && (
-                        <p className="tw-mt-2 tw-text-warning">
-                          Enable the &quot;Reasoning&quot; capability above to use this feature.
-                        </p>
-                      )}
-                    </>
-                  }
-                />
-              </FormField>
-            )}
+            {/* Model Parameters Editor */}
+            <ModelParametersEditor
+              model={localModel}
+              settings={settings}
+              onChange={handleLocalUpdate}
+              onReset={handleLocalReset}
+              showTokenLimit={true}
+            />
           </>
         )}
       </div>

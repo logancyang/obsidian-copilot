@@ -8,6 +8,7 @@ import {
   useModelKey,
   useSelectedTextContexts,
 } from "@/aiParams";
+import { resetSessionSystemPromptSettings } from "@/system-prompts";
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
@@ -581,6 +582,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Clear messages through the new architecture
     chatUIState.clearMessages();
 
+    // Reset all session-level system prompt settings to global defaults
+    resetSessionSystemPromptSettings();
+
     // Additional UI state reset specific to this component
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
@@ -647,6 +651,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     async (id: string) => {
       try {
         await plugin.loadChatById(id);
+        // Reset all session-level system prompt settings to global defaults when loading a chat
+        resetSessionSystemPromptSettings();
       } catch (error) {
         logError("Error loading chat:", error);
         new Notice("Failed to load chat.");
