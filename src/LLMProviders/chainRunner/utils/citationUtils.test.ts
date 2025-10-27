@@ -5,6 +5,7 @@ import {
   getQACitationInstructions,
   getVaultCitationGuidance,
   hasExistingCitations,
+  hasInlineCitations,
   normalizeCitations,
   processInlineCitations,
   sanitizeContentForCitations,
@@ -149,6 +150,48 @@ More content
 [^1]: [[How to Make Wealth]]
 [^2]: [[Superlinear Returns]]`;
       expect(hasExistingCitations(userExample)).toBe(true);
+    });
+  });
+
+  describe("hasInlineCitations", () => {
+    it("should detect inline citations in body text", () => {
+      const responseWithInlineCitations = "This is a claim [^1] and another claim [^2].";
+      expect(hasInlineCitations(responseWithInlineCitations)).toBe(true);
+
+      const multipleCitations = "First claim [^1]. Second claim [^2]. Third claim [^3].";
+      expect(hasInlineCitations(multipleCitations)).toBe(true);
+    });
+
+    it("should detect inline citations with footnote definitions", () => {
+      const fullResponse = `This is a claim [^1] and another [^2].
+
+#### Sources
+[^1]: [[Doc One]]
+[^2]: [[Doc Two]]`;
+      expect(hasInlineCitations(fullResponse)).toBe(true);
+    });
+
+    it("should return false for responses without inline citations", () => {
+      const responseWithoutCitations = "Just regular content here";
+      expect(hasInlineCitations(responseWithoutCitations)).toBe(false);
+
+      const responseWithOnlyFootnoteDefinitions = `Content here
+
+[^1]: [[Document]]
+[^2]: [[Another]]`;
+      // This should still detect [^1] and [^2] in the footnote definitions
+      expect(hasInlineCitations(responseWithOnlyFootnoteDefinitions)).toBe(true);
+    });
+
+    it("should handle edge cases", () => {
+      expect(hasInlineCitations("")).toBe(false);
+      expect(hasInlineCitations(null as any)).toBe(false);
+      expect(hasInlineCitations(undefined as any)).toBe(false);
+    });
+
+    it("should NOT confuse markdown links with citations", () => {
+      const responseWithLinks = "Check [this link](url) and [[wikilink]] here";
+      expect(hasInlineCitations(responseWithLinks)).toBe(false);
     });
   });
 

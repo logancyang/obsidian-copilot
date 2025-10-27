@@ -158,6 +158,17 @@ export function hasExistingCitations(response: string): boolean {
 }
 
 /**
+ * Detects if response contains inline citation markers in the body text (like [^1], [^2], etc.).
+ * This is different from hasExistingCitations which checks for the Sources section.
+ */
+export function hasInlineCitations(response: string): boolean {
+  const content = response || "";
+  // Look for [^digits] patterns in the text (inline citations)
+  // This should match [^1], [^2], etc. used in the body text
+  return /\[\^\d+\]/.test(content);
+}
+
+/**
  * Provides web-search-specific citation instructions using markdown links.
  */
 export function getWebSearchCitationInstructions(enableInlineCitations: boolean): string {
@@ -393,7 +404,7 @@ export function updateCitationsForConsolidation(
 ): string {
   if (consolidationMap.size === 0) return content;
 
-  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (match, nums) => {
+  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_match, nums) => {
     const parts = nums.split(/\s*,\s*/);
     const remappedParts = parts.map((n: string) => {
       const oldNum = parseInt(n, 10);
