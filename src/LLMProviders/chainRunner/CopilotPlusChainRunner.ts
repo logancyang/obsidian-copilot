@@ -46,6 +46,7 @@ import {
 } from "./utils/cicPromptUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
+import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
@@ -296,9 +297,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
-    localSearchOutput: any | null,
-    otherToolOutputs: any[],
-    hasLocalSearchWithResults: boolean,
+    allToolOutputs: any[],
     abortController: AbortController,
     thinkStreamer: ThinkBlockStreamer
   ): Promise<void> {
@@ -331,22 +330,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       debug: false,
     });
 
-    // Find system message (contains L1 + L2 Context Library)
+    // Add system message (L1 + L2 Context Library only - no tool results)
     const systemMessage = baseMessages.find((m) => m.role === "system");
     if (systemMessage) {
-      // Append localSearch RAG results to system message (after L1+L2)
-      // This treats localSearch like VaultQA's retrieved documents
-      if (localSearchOutput?.output) {
-        let ragInstruction = "";
-        if (hasLocalSearchWithResults && otherToolOutputs.length === 0) {
-          // LocalSearch only → QA-style instruction
-          ragInstruction =
-            "\n\nAnswer the question with as detailed as possible based only on the following context:\n";
-        }
-        systemMessage.content += ragInstruction + localSearchOutput.output;
-        logInfo("[CopilotPlus] Added localSearch RAG to system message");
-      }
-
       messages.push({
         role: getMessageRole(chatModel),
         content: systemMessage.content,
@@ -361,14 +347,12 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     if (userMessageContent) {
       let finalUserContent;
 
-      // Only use CiC formatting when we have OTHER tools (non-localSearch)
-      // LocalSearch goes to system message, so we don't need CiC wrapping
-      // LayerToMessagesConverter already provides properly formatted L3+L5 with smart references
-      const hasOtherTools = otherToolOutputs.length > 0;
+      // All tools (including localSearch) are formatted uniformly and added to user message
+      const hasTools = allToolOutputs.length > 0;
 
-      if (hasOtherTools) {
-        // Wrap other tool outputs with user content using CiC format
-        const toolContext = this.formatOtherToolOutputs(otherToolOutputs);
+      if (hasTools) {
+        // Format all tool outputs and prepend to user content using CiC format
+        const toolContext = this.formatAllToolOutputs(allToolOutputs);
         const shouldLabelQuestion = false; // Don't label question when we have tools
 
         finalUserContent = renderCiCMessage(
@@ -377,7 +361,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
           shouldLabelQuestion
         );
       } else {
-        // No other tools (QA-only or plain chat) - use converter's output as-is
+        // No tools - use converter's output as-is
         // Smart references are already properly formatted by LayerToMessagesConverter
         finalUserContent = userMessageContent.content;
       }
@@ -406,6 +390,15 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     logInfo("Final request to AI", { messages: messages.length });
+
+    // Record the payload for debugging (includes layered view if envelope available)
+    const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
+    recordPromptPayload({
+      messages,
+      modelName,
+      contextEnvelope: userMessage.contextEnvelope,
+    });
+
     const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
 
     // Wrap the stream call with warning suppression
@@ -505,14 +498,9 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Use sources from tool execution
       sources = toolSources;
 
-      // Separate localSearch from other tools
-      // LocalSearch goes to system message (like VaultQA RAG), others go to user message (L3)
-      const localSearchOutput = toolOutputs.find(
-        (output) => output.tool === "localSearch" && output.output != null
-      );
-      const otherToolOutputs = toolOutputs.filter((output) => output.tool !== "localSearch");
-
-      const hasLocalSearchWithResults = !!(localSearchOutput && sources.length > 0);
+      // All tools (including localSearch) are treated uniformly
+      // They all go to the user message with consistent formatting
+      const allToolOutputs = toolOutputs.filter((output) => output.output != null);
 
       // Prepare textContent with composer instructions if needed
       // This is checked in streamMultimodalResponse to append to final user content
@@ -525,9 +513,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       await this.streamMultimodalResponse(
         textContentWithComposer,
         userMessage,
-        localSearchOutput,
-        otherToolOutputs,
-        hasLocalSearchWithResults,
+        allToolOutputs,
         abortController,
         thinkStreamer
       );
@@ -696,7 +682,12 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const settings = getSettings();
     const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
-    const innerContent = buildLocalSearchInnerContent(guidance, formattedContent);
+    // Add RAG instruction (like VaultQA) to ensure model uses the context
+    const ragInstruction = "Answer the question based only on the following context:";
+    const innerContent = buildLocalSearchInnerContent(
+      `${ragInstruction}\n\n${guidance}`,
+      formattedContent
+    );
 
     // Wrap in XML-like tags for better LLM understanding
     return wrapLocalSearchPayload(innerContent, timeExpression);
@@ -768,10 +759,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   /**
-   * Formats other tool outputs (non-localSearch) for L3 user message.
-   * LocalSearch goes to system message, everything else goes here.
+   * Formats all tool outputs uniformly for user message.
+   * All tools (localSearch, webSearch, getFileTree, etc.) are treated the same.
    */
-  private formatOtherToolOutputs(toolOutputs: any[]): string {
+  private formatAllToolOutputs(toolOutputs: any[]): string {
     if (toolOutputs.length === 0) return "";
 
     const formattedOutputs = toolOutputs

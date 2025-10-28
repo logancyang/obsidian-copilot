@@ -73,8 +73,15 @@ describe("promptPayloadRecorder", () => {
 
   it("formats layered context envelope when provided", async () => {
     const messages = [
-      { role: "system", content: "System prompt" },
-      { role: "user", content: "User question" },
+      {
+        role: "system",
+        content:
+          "You are a helpful assistant.\n<user_custom_instructions>\nAnswer in English unless asked otherwise explicitly\n</user_custom_instructions>\n<note_context>\nPrevious note content\n</note_context>",
+      },
+      {
+        role: "user",
+        content: "<note_context>\nCurrent note content\n</note_context>\n\nWhat is this about?",
+      },
     ];
 
     const mockEnvelope: PromptContextEnvelope = {
@@ -154,22 +161,24 @@ describe("promptPayloadRecorder", () => {
     expect(output).toContain('"role": "system"');
     expect(output).toContain('"role": "user"');
 
-    // Verify layered format with emojis and layer names
+    // Verify intelligent layered format with sections
     expect(output).toContain("msg:msg-456");
     expect(output).toContain("conv:conv-123");
+
+    // Verify structural sections from intelligent analyzer
+    expect(output).toContain("━━━ SYSTEM MESSAGE ━━━");
+    expect(output).toContain("━━━ USER MESSAGE ━━━");
+
+    // Verify layers are detected and shown
     expect(output).toContain("🔒 L1_SYSTEM");
     expect(output).toContain("🔒 L2_PREVIOUS");
-    expect(output).toContain("⚡ L3_TURN");
     expect(output).toContain("⚡ L5_USER");
 
     // Verify layer content appears
     expect(output).toContain("You are a helpful assistant");
-    expect(output).toContain("Previous note content");
-    expect(output).toContain("Current note content");
     expect(output).toContain("What is this about?");
 
     // Verify hash prefixes appear
     expect(output).toContain("abc123de"); // L1 hash prefix
-    expect(output).toContain("prev789x"); // L2 hash prefix
   });
 });

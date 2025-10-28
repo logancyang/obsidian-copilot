@@ -146,12 +146,9 @@ export class VaultQAChainRunner extends BaseChainRunner {
         debug: false,
       });
 
-      // Find system message (contains L1 + L2 Context Library)
+      // Add system message (L1 + L2 Context Library only - no RAG)
       const systemMessage = baseMessages.find((m) => m.role === "system");
       if (systemMessage) {
-        // Append RAG results to system message after L1+L2
-        // System now contains: L1 (system prompt) + L2 (Context Library) + RAG results + citations
-        systemMessage.content += qaInstructions;
         messages.push({
           role: getMessageRole(chatModel),
           content: systemMessage.content,
@@ -163,17 +160,21 @@ export class VaultQAChainRunner extends BaseChainRunner {
         messages.push({ role: entry.role, content: entry.content });
       }
 
-      // Add user message (L3 smart references + L5)
+      // Add user message with RAG prepended
+      // User message now contains: RAG results + citations + L3 smart references + L5
       // LayerToMessagesConverter already handles smart referencing:
       // - Items in L2 → referenced by ID
       // - Items NOT in L2 → full content
       const userMessageContent = baseMessages.find((m) => m.role === "user");
       if (userMessageContent) {
+        // Prepend RAG results and citations to user content with proper separator
+        const enhancedUserContent = qaInstructions + "\n\n" + userMessageContent.content;
+
         // Handle multimodal content if present
         if (userMessage.content && Array.isArray(userMessage.content)) {
           const updatedContent = userMessage.content.map((item: any) => {
             if (item.type === "text") {
-              return { ...item, text: userMessageContent.content };
+              return { ...item, text: enhancedUserContent };
             }
             return item;
           });
@@ -182,7 +183,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
             content: updatedContent,
           });
         } else {
-          messages.push(userMessageContent);
+          messages.push({
+            role: "user",
+            content: enhancedUserContent,
+          });
         }
       }
 
