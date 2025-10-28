@@ -118,6 +118,7 @@ Turn 3: User keeps project-spec.md only
    - ✅ `VaultQAChainRunner` envelope-based
    - ✅ `CopilotPlusChainRunner` envelope-based with uniform tool handling
    - ✅ `AutonomousAgentChainRunner` envelope-based with iterative tool loop
+   - ✅ `ProjectChainRunner` envelope-based with project context in L1
 
 ### 🎯 Current Design: Uniform Tool Placement
 
@@ -134,7 +135,6 @@ All tools (`localSearch`, `webSearch`, `getFileTree`, etc.) are treated uniforml
 
 **Next Phase**:
 
-- Project chain migration to envelope
 - Cache stability monitoring
 
 **Future Enhancements** (deferred):
@@ -175,10 +175,48 @@ All tools (`localSearch`, `webSearch`, `getFileTree`, etc.) are treated uniforml
 - L5 text flows through adapter hints so GPT/Claude reminders continue to fire.
 - Iterative tool loop reuses existing Think/Action streamers; prompt recorder receives envelope for each run.
 
-### Projects Chain Runner (Pending)
+### ProjectChainRunner
 
-- Still on legacy prompt assembly.
-- Migration will follow the same pattern: envelope extraction, system/user construction via converter, and tool formatting parity.
+- Fully migrated to envelope-based context construction.
+- Project context automatically added to L1 via `ChatManager.getSystemPromptForMessage()`.
+- No special-case logic needed - inherits all behavior from `CopilotPlusChainRunner`.
+
+#### Implementation
+
+1. **Centralized L1 assembly with helper method.**
+   Added `ChatManager.getSystemPromptForMessage(chainType)` that calls `await getSystemPromptWithMemory(...)`, then (for `PROJECT_CHAIN` only) appends project system/context blocks:
+
+   ```ts
+   async getSystemPromptForMessage(chainType: ChainType): Promise<string> {
+     const basePrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+
+     // Special case: Add project context for project chain
+     if (chainType === ChainType.PROJECT_CHAIN) {
+       const project = getCurrentProject();
+       if (project) {
+         const context = await ProjectManager.instance.getProjectContext(project.id);
+         let result = `${basePrompt}\n\n<project_system_prompt>\n${project.systemPrompt}\n</project_system_prompt>`;
+
+         // Only add project_context block if context exists (guards against null)
+         if (context) {
+           result += `\n\n<project_context>\n${context}\n</project_context>`;
+         }
+
+         return result;
+       }
+     }
+     return basePrompt;
+   }
+   ```
+
+2. **Null guard for project context.**
+   When `ProjectManager.instance.getProjectContext()` returns `null` (e.g., context still loading or cache miss), the `<project_context>` block is omitted entirely rather than interpolating the literal string "null" into L1.
+
+3. **Envelope integration.**
+   The helper's return value is passed into `processMessageContext` / `reprocessMessageContext`. `PromptContextEngine` serializes the full string into the L1 layer, so `ProjectChainRunner` drops its bespoke `getSystemPrompt` override and reuses the envelope just like Copilot Plus.
+
+4. **Simplified ProjectChainRunner.**
+   The class is now just a pass-through to `CopilotPlusChainRunner` with no overrides - project context automatically appears in L1 via `ChatManager`.
 
 ---
 

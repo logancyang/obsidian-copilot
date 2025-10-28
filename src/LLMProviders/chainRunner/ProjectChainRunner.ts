@@ -1,26 +1,11 @@
-import { getCurrentProject } from "@/aiParams";
-import { getSystemPrompt } from "@/settings/model";
-import ProjectManager from "../projectManager";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 
+/**
+ * ProjectChainRunner - Chain runner for project-based chats
+ *
+ * Project context is automatically added to L1 via ChatManager.getSystemPromptForMessage()
+ * No override needed - inherits all behavior from CopilotPlusChainRunner
+ */
 export class ProjectChainRunner extends CopilotPlusChainRunner {
-  protected async getSystemPrompt(): Promise<string> {
-    // NOTE: Currently memory is not enabled for project mode, so we don't need to use getSystemPromptWithMemory
-    let finalPrompt = getSystemPrompt();
-    const projectConfig = getCurrentProject();
-    if (!projectConfig) {
-      return finalPrompt;
-    }
-
-    // Get context asynchronously
-    const context = await ProjectManager.instance.getProjectContext(projectConfig.id);
-    finalPrompt = `${finalPrompt}\n\n<project_system_prompt>\n${projectConfig.systemPrompt}\n</project_system_prompt>`;
-
-    // TODO: Move project context out of the system prompt and into the user prompt.
-    if (context) {
-      finalPrompt = `${finalPrompt}\n\n <project_context>\n${context}\n</project_context>`;
-    }
-
-    return finalPrompt;
-  }
+  // No overrides needed - project context automatically in L1 via ChatManager
 }
