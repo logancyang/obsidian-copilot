@@ -53,7 +53,13 @@ LLM Processing ← Chain Memory ← getLLMMessages() ← MessageRepository
 
 ```typescript
 // Add new message
-addMessage(displayText: string, processedText: string, sender: string, context?: MessageContext): string
+addMessage(
+  displayText: string,
+  processedText: string,
+  sender: string,
+  context?: MessageContext,
+  content?: MessageContent[]
+): string
 
 // Get computed views
 getDisplayMessages(): ChatMessage[]  // For UI rendering
@@ -61,12 +67,18 @@ getLLMMessages(): ChatMessage[]      // For AI processing
 
 // Edit operations
 editMessage(id: string, newDisplayText: string): boolean
-updateProcessedText(id: string, processedText: string, contextEnvelope?: PromptContextEnvelope): boolean
+updateProcessedText(
+  id: string,
+  processedText: string,
+  contextEnvelope?: PromptContextEnvelope
+): boolean
 
 // Bulk operations
 truncateAfterMessageId(messageId: string): void
 loadMessages(messages: ChatMessage[]): void
 ```
+
+> **Storing envelopes**: When `ChatManager` calls `addMessage` with a full `NewChatMessage`, it includes the `contextEnvelope` property so the repository keeps both the legacy `processedText` and the canonical layered representation. The string-based overload remains for low-level utilities and test fixtures.
 
 ### 2. ChatManager (`src/core/ChatManager.ts`)
 
@@ -80,6 +92,13 @@ loadMessages(messages: ChatMessage[]): void
 - Manages context processing lifecycle
 - **Project Isolation**: Maintains separate MessageRepository per project
 - **Persistence**: Integrates with ChatPersistenceManager for saving/loading
+
+**Envelope Lifecycle**:
+
+1. User sends a message → `ContextManager.processMessageContext()` returns both `processedContent` **and** a `PromptContextEnvelope`.
+2. `ChatManager` stores the envelope with `MessageRepository.updateProcessedText(...)`.
+3. When any chain runner executes, it reads `userMessage.contextEnvelope` and feeds it to `LayerToMessagesConverter.convert()` to materialize the L1-L5 prompt structure.
+4. Regeneration or edits call `reprocessMessageContext`, ensuring a fresh envelope replaces the stale one.
 
 **Key Operations**:
 
@@ -167,6 +186,7 @@ private notifyListeners(): void
 - **Context Processing**: Handles notes, URLs, selected text, tags, and folders
 - **Reprocessing**: Regenerates fresh context when messages are edited
 - **Envelope Building**: Creates `PromptContextEnvelope` with structured layers and hashes
+- **Chain-Aware Processing**: Applies chain-specific rules (e.g., Copilot Plus URL processing, active-note handling for vision models)
 
 **Core Methods**:
 
@@ -364,6 +384,13 @@ When a user types "Summarize this note" and attaches "meeting-notes.md":
 ### Context XML Format
 
 All context is wrapped in semantic XML tags for clear structure:
+
+> Layered Prompting: During Phase 3 the raw XML is still captured in `processedText` for backward compatibility, but the canonical representation sent to the LLM comes from the envelope layers:
+>
+> - **L1_SYSTEM / L2_PREVIOUS**: Stable prefixes rendered from accumulated context
+> - **L3_TURN**: Turn-specific smart references that either link back to L2 or embed full content
+> - **L4_STRIP**: Chat history managed by memory
+> - **L5_USER**: The user’s raw message (plus composer directives when present)
 
 #### Note Context
 

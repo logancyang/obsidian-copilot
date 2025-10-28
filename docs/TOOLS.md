@@ -23,6 +23,13 @@ The system uses a three-layer approach for providing tool instructions to LLMs:
 3. **Model-Specific Adaptations** (in `modelAdapter.ts`)
    - Last resort for model-specific quirks
 
+### Layered Prompt Integration
+
+- `ContextManager` promotes user-attached artifacts from earlier turns into **L2 (Context Library)**, so every chain runner starts with the same cacheable system prefix.
+- When a tool executes during the current turn, its XML payload is prepended to the **user message** (L3 + L5) using `renderCiCMessage(...)`. Nothing is injected into the system message, keeping L1/L2 stable.
+- `LayerToMessagesConverter.convert(envelope, { includeSystemMessage: true, mergeUserContent: true })` materializes the base messages; runners then append tool XML before sending to the model.
+- `promptPayloadRecorder` inspects the final payload and highlights tool blocks in its layered view, making it easy to debug the L1-L5 structure.
+
 ### Why Two Layers: Schema vs Custom Instructions
 
 **Key Difference**: Schema descriptions document parameters, while custom instructions provide XML invocation examples.

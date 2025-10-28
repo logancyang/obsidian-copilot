@@ -387,23 +387,36 @@ if (l3Turn) {
 
 #### Chat Persistence
 
-**Saving**:
+**Saving** (ChatPersistenceManager.formatChatContent):
 
 1. Save `displayText` (UI view) to markdown
-2. Save context metadata (`notes[]`, `tags[]`, `folders[]`, `urls[]`)
-3. Optional: Save `contextEnvelope` for faster reload
+2. Save context metadata with **full vault-relative paths**:
+   - Notes: `[Context: Notes: Piano Lessons/Lesson 4.md, DailyNotes/2025-01-27.md]`
+   - URLs, tags, folders saved as-is
+3. `contextEnvelope` NOT saved (deliberate - want fresh content on load)
 
-**Loading**:
+**Loading** (ChatPersistenceManager.parseContextString):
 
-1. Display: Show `displayText` in UI
-2. Reconstruction: Rebuild L3 from context metadata
-3. Memory: Store `displayText` only in LangChain history
+1. Parse context metadata from markdown
+2. Resolve note paths via vault lookup:
+   - **Primary**: Resolve by full path (`app.vault.getAbstractFileByPath()`)
+   - **Fallback**: Resolve by basename if unique (backward compatibility)
+   - **Skip**: If deleted or ambiguous, log warning and continue
+3. Return resolved TFile[] for context.notes
+4. When conversation continues: `buildL2ContextFromPreviousTurns()` processes resolved notes with fresh content
 
 **Stale Context Handling**:
 
-- Deleted note: Skip, log warning
-- Changed content: Use current content (expected)
-- Moved note: Resolve by basename
+- **Deleted note**: Skip with warning, continue without it
+- **Changed content**: Use current content (expected - provides fresh context)
+- **Moved note**: Resolves via basename fallback if unique, otherwise skips
+- **Ambiguous basename**: Multiple matches → skip with warning listing all matches
+
+**Backward Compatibility** (2025-01-27 update):
+
+- **Old chats** (basenames only): Basename fallback resolution attempts vault-wide search
+- **New chats** (full paths): Direct resolution, faster and unambiguous
+- **Migration**: Automatic - no user action needed
 
 ### Backward Compatibility
 
