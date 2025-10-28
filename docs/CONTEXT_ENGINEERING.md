@@ -117,6 +117,7 @@ Turn 3: User keeps project-spec.md only
    - ✅ `LLMChainRunner` envelope-based
    - ✅ `VaultQAChainRunner` envelope-based
    - ✅ `CopilotPlusChainRunner` envelope-based with uniform tool handling
+   - ✅ `AutonomousAgentChainRunner` envelope-based with iterative tool loop
 
 ### 🎯 Current Design: Uniform Tool Placement
 
@@ -133,7 +134,7 @@ All tools (`localSearch`, `webSearch`, `getFileTree`, etc.) are treated uniforml
 
 **Next Phase**:
 
-- Agent chain migration to envelope
+- Project chain migration to envelope
 - Cache stability monitoring
 
 **Future Enhancements** (deferred):
@@ -141,6 +142,43 @@ All tools (`localSearch`, `webSearch`, `getFileTree`, etc.) are treated uniforml
 - Provider-specific cache controls (Anthropic `cache_control`, Gemini explicit cache)
 - L4 conversation strip with summarization
 - Optional manual pinning UI
+
+---
+
+## Chain Integration Summary
+
+### LLMChainRunner
+
+- Replaced legacy prompt assembly with `LayerToMessagesConverter` output.
+- System message = envelope L1 + L2 only; no tool payloads injected.
+- User message = L3 smart references + L5; supports composer instructions via shared helper.
+- Payload recorder logs layered view for every request.
+
+### VaultQAChainRunner
+
+- Uses envelope-derived system message (L1/L2) plus chat history before user turn.
+- Vault RAG results and citation guidance prepended to user message, keeping system cacheable.
+- Applies CiC ordering so the user question follows retrieved documents.
+- Multimodal handling respects envelope rules (images only from active note).
+
+### CopilotPlusChainRunner
+
+- Intent analysis still Broca-based (ToolCallPlanner pending), but prompt assembly is envelope-first.
+- All tool outputs (localSearch, webSearch, file tree, etc.) formatted uniformly and prepended to user message.
+- LocalSearch payload now embeds “answer from context” guidance and citation catalog inside the tool block.
+- Composer instructions appended once to avoid duplication; payload recorder captures tool XML alongside L3/L5.
+
+### AutonomousAgentChainRunner
+
+- Validates envelope presence and reuses converter for baseline messages.
+- System prompt combines envelope L1/L2 with tool descriptions from model adapters (no duplicate base prompt).
+- L5 text flows through adapter hints so GPT/Claude reminders continue to fire.
+- Iterative tool loop reuses existing Think/Action streamers; prompt recorder receives envelope for each run.
+
+### Projects Chain Runner (Pending)
+
+- Still on legacy prompt assembly.
+- Migration will follow the same pattern: envelope extraction, system/user construction via converter, and tool formatting parity.
 
 ---
 
@@ -481,19 +519,83 @@ if (currentTurnContext) {
 - LLM chain envelope migration
 - VaultQA chain envelope migration
 - CopilotPlus chain envelope migration + uniform tools
+- Agent chain envelope migration + iterative tool loop
 - Payload logging with layered view
 
-**Phase 4** (In Progress):
-
-- Project chain migration
-- Agent chain migration
-- Cache monitoring and validation
-
-**Phase 5** (Deferred):
+**Phase 4** (Deferred):
 
 - Provider-specific cache controls
 - Optional manual pinning UI
 - L4 conversation strip with summarization
+
+### Agent Chain Runner Implementation
+
+**Goal**: Integrate the autonomous agent chain with the layered context system, following the same envelope-first architecture as CopilotPlus while preserving the iterative tool execution loop.
+
+**Implementation** (Completed 2025-01-27):
+
+The agent chain integration follows the CopilotPlus pattern with minimal changes to support the unique iterative tool loop:
+
+**1. Envelope Extraction & Validation**
+
+- Added envelope validation at start of `run()` method
+- Fails fast with clear error if envelope missing
+- Logs envelope-based context construction for debugging
+
+**2. System Message Construction**
+
+```typescript
+// Extract L1+L2 from envelope via LayerToMessagesConverter
+const baseMessages = LayerToMessagesConverter.convert(envelope, {
+  includeSystemMessage: true,
+  mergeUserContent: true,
+});
+
+// Combine with tool descriptions from model adapter
+const systemContent = [
+  systemMessage?.content || "", // L1 + L2 from envelope
+  toolDescriptionsPrompt || "", // Tool descriptions + guidelines
+]
+  .filter(Boolean)
+  .join("\n\n");
+```
+
+**3. Initial User Message Assembly**
+
+- Extract L3 (smart references) + L5 (user query) from converter
+- Build multimodal content if images present (inherited from CopilotPlus)
+- No adapter enhancement needed (envelope contains formatted content)
+
+**4. Original Prompt Extraction**
+
+- Extract L5 text for CiC ordering in tool results
+- Used by `applyCiCOrderingToLocalSearchResult()` to append question
+
+**5. Agent Loop (Unchanged)**
+
+- Tool execution, parsing, and result formatting remain identical
+- Tool results added to conversation as assistant/user message pairs
+- CiC ordering applied to localSearch results as before
+- ThinkBlockStreamer and ActionBlockStreamer preserved
+- Iteration history and source collection unchanged
+
+**Key Design Points**:
+
+- **Minimal changes**: Only `prepareAgentConversation()` and envelope extraction modified
+- **Tool system preserved**: All tool execution, streaming, and display logic unchanged
+- **Message structure**: System (L1+L2+tools) → History → User (L3+L5) → Agent loop
+- **Tool results**: Continue to be added to conversation messages, never promoted to L2
+- **Multimodal support**: Image extraction inherited from CopilotPlus base class
+
+**Differences from CopilotPlus**:
+
+| Aspect             | CopilotPlus                               | Agent                                       |
+| ------------------ | ----------------------------------------- | ------------------------------------------- |
+| **Tool Execution** | Pre-run (single batch via IntentAnalyzer) | Iterative loop (multi-turn)                 |
+| **Tool Results**   | Formatted once, prepended to user message | Accumulated across iterations               |
+| **System Prompt**  | L1 + L2                                   | L1 + L2 + tool descriptions + guidelines    |
+| **Conversation**   | Single turn                               | Multiple assistant/user pairs per iteration |
+| **Streaming**      | ThinkBlockStreamer only                   | ThinkBlockStreamer + ActionBlockStreamer    |
 
 ---
 

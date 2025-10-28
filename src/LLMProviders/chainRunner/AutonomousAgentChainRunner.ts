@@ -14,6 +14,7 @@ import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {
+  joinPromptSections,
   messageRequiresTools,
   ModelAdapter,
   ModelAdapterFactory,
@@ -40,6 +41,7 @@ import {
   appendInlineCitationReminder,
   ensureCiCOrderingWithQuestion,
 } from "./utils/cicPromptUtils";
+import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { PromptDebugReport } from "./utils/toolPromptDebugger";
@@ -173,20 +175,6 @@ ${params}
     return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
   }
 
-  private async generateSystemPrompt(): Promise<string> {
-    const availableTools = this.getAvailableTools();
-
-    // Use model adapter for clean model-specific handling
-    const chatModel = this.chainManager.chatModelManager.getChatModel();
-    const adapter = ModelAdapterFactory.createAdapter(chatModel);
-
-    return AutonomousAgentChainRunner.generateSystemPrompt(
-      availableTools,
-      adapter,
-      this.chainManager.userMemoryManager
-    );
-  }
-
   /**
    * Build an annotated prompt report for debugging tool call prompting.
    *
@@ -284,7 +272,17 @@ ${params}
 
     const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
 
-    const context = await this.prepareAgentConversation(userMessage, adapter, chatModel);
+    // Validate and extract context envelope (required)
+    const envelope = userMessage.contextEnvelope;
+    if (!envelope) {
+      throw new Error(
+        "[Agent] Context envelope is required but not available. Cannot proceed with autonomous agent."
+      );
+    }
+
+    logInfo("[Agent] Using envelope-based context construction");
+
+    const context = await this.prepareAgentConversation(userMessage, chatModel);
 
     try {
       const loopResult = await this.executeAgentLoop({
@@ -367,13 +365,11 @@ ${params}
    * and the initial user message tailored for the active model.
    *
    * @param userMessage - The initiating user message from the UI.
-   * @param adapter - Model adapter used for user message enhancement.
    * @param chatModel - The active chat model instance.
    * @returns Aggregated context required for the autonomous agent loop.
    */
   private async prepareAgentConversation(
     userMessage: ChatMessage,
-    adapter: ModelAdapter,
     chatModel: any
   ): Promise<AgentRunContext> {
     const conversationMessages: ConversationMessage[] = [];
@@ -387,37 +383,93 @@ ${params}
       applyCiCOrderingToLocalSearchResult: this.applyCiCOrderingToLocalSearchResult.bind(this),
     };
 
+    // Extract envelope (validated in run())
+    const envelope = userMessage.contextEnvelope!;
+
+    // Use LayerToMessagesConverter to get base messages with L1+L2 system, L3+L5 user
+    const baseMessages = LayerToMessagesConverter.convert(envelope, {
+      includeSystemMessage: true,
+      mergeUserContent: true,
+      debug: false,
+    });
+
+    // Get memory for chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
     const rawHistory = memoryVariables.history || [];
 
-    const customSystemPrompt = await this.generateSystemPrompt();
-    if (customSystemPrompt) {
+    // Build system message: L1+L2 from envelope + tool-only sections
+    const systemMessage = baseMessages.find((m) => m.role === "system");
+
+    // Build tool-only sections (excluding base prompt which is already in L1)
+    const adapter = ModelAdapterFactory.createAdapter(chatModel);
+    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+    const registry = ToolRegistry.getInstance();
+    const toolMetadata = availableTools
+      .map((tool) => registry.getToolMetadata(tool.name))
+      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
+
+    const allSections = adapter.buildSystemPromptSections(
+      "", // Pass empty base prompt since we already have L1+L2 from envelope
+      toolDescriptions,
+      availableTools.map((t) => t.name),
+      toolMetadata
+    );
+
+    // Filter out base-system-prompt section (already in L1 from envelope)
+    const toolOnlySections = allSections.filter((s) => s.id !== "base-system-prompt");
+    const toolDescriptionsPrompt = joinPromptSections(toolOnlySections);
+
+    if (systemMessage || toolDescriptionsPrompt) {
+      const systemContent = [
+        systemMessage?.content || "", // L1 + L2 from envelope
+        toolDescriptionsPrompt || "", // Tool-specific sections only
+      ]
+        .filter(Boolean)
+        .join("\n\n");
+
       conversationMessages.push({
         role: getMessageRole(chatModel),
-        content: customSystemPrompt,
+        content: systemContent,
       });
     }
 
+    // Insert L4 (chat history) between system and user
     addChatHistoryToMessages(rawHistory, conversationMessages);
 
-    const isMultimodal = this.isMultimodalModel(chatModel);
-    const requiresTools = messageRequiresTools(userMessage.message);
-    const enhancedUserMessage = adapter.enhanceUserMessage(userMessage.message, requiresTools);
-    const content: string | MessageContent[] = isMultimodal
-      ? await this.buildMessageContent(enhancedUserMessage, userMessage)
-      : enhancedUserMessage;
+    // Extract L5 for original prompt and adapter enhancement
+    const l5User = envelope.layers.find((l) => l.id === "L5_USER");
+    const l5Text = l5User?.text || "";
+    const originalUserPrompt = l5Text || userMessage.originalMessage || userMessage.message;
 
-    conversationMessages.push({
-      role: "user",
-      content,
-    });
+    // Extract user content (L3 smart references + L5) from base messages
+    const userMessageContent = baseMessages.find((m) => m.role === "user");
+    if (userMessageContent) {
+      const isMultimodal = this.isMultimodalModel(chatModel);
+
+      // Apply adapter enhancement to restore model-specific tool reminders
+      // (e.g., "REMINDER: Use the <use_tool> XML format" for GPT models)
+      const requiresTools = messageRequiresTools(l5Text);
+      const enhancedUserContent = adapter.enhanceUserMessage(
+        userMessageContent.content,
+        requiresTools
+      );
+
+      const content: string | MessageContent[] = isMultimodal
+        ? await this.buildMessageContent(enhancedUserContent, userMessage)
+        : enhancedUserContent;
+
+      conversationMessages.push({
+        role: "user",
+        content,
+      });
+    }
 
     return {
       conversationMessages,
       iterationHistory,
       collectedSources,
-      originalUserPrompt: userMessage.originalMessage || userMessage.message,
+      originalUserPrompt,
       loopDeps,
     };
   }
@@ -802,6 +854,7 @@ ${params}
       recordPromptPayload({
         messages: [...conversationMessages],
         modelName: modelNameForLog,
+        contextEnvelope: userMessage.contextEnvelope,
       });
     }
 
