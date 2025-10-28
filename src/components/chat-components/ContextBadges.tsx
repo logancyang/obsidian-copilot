@@ -7,6 +7,7 @@ import { ContextBadgeWrapper } from "./ContextBadgeWrapper";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
+  onClick?: () => void;
 }
 
 interface ContextNoteBadgeProps extends BaseContextBadgeProps {
@@ -32,6 +33,7 @@ interface ContextActiveNoteBadgeProps extends BaseContextBadgeProps {
 export function ContextActiveNoteBadge({
   currentActiveFile,
   onRemove,
+  onClick,
 }: ContextActiveNoteBadgeProps) {
   if (!currentActiveFile) {
     return null;
@@ -39,9 +41,10 @@ export function ContextActiveNoteBadge({
 
   const tooltipContent = <div className="tw-text-left">{currentActiveFile.path}</div>;
   const isPdf = currentActiveFile.extension === "pdf";
+  const isCanvas = currentActiveFile.extension === "canvas";
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove} isClickable={!!onClick} onClick={onClick}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <FileText className="tw-size-3" />
         <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
@@ -49,12 +52,16 @@ export function ContextActiveNoteBadge({
         </TruncatedText>
         <span className="tw-text-xs tw-text-faint">Current</span>
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
       </div>
       {onRemove && (
         <Button
           variant="ghost2"
           size="fit"
-          onClick={onRemove}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
           aria-label="Remove from context"
           className="tw-text-muted"
         >
@@ -65,24 +72,29 @@ export function ContextActiveNoteBadge({
   );
 }
 
-export function ContextNoteBadge({ note, onRemove }: ContextNoteBadgeProps) {
+export function ContextNoteBadge({ note, onRemove, onClick }: ContextNoteBadgeProps) {
   const tooltipContent = <div className="tw-text-left">{note.path}</div>;
   const isPdf = note.extension === "pdf";
+  const isCanvas = note.extension === "canvas";
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove} isClickable={!!onClick} onClick={onClick}>
       <div className="tw-flex tw-items-center tw-gap-1">
         <FileText className="tw-size-3" />
         <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
           {note.basename}
         </TruncatedText>
         {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
       </div>
       {onRemove && (
         <Button
           variant="ghost2"
           size="fit"
-          onClick={onRemove}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove();
+          }}
           aria-label="Remove from context"
           className="tw-text-muted"
         >

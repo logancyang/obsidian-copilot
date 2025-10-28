@@ -5,7 +5,7 @@ declare const app: App;
 
 /**
  * Loads and processes note content for preview display.
- * Handles PDF files, frontmatter stripping, and content truncation.
+ * Handles PDF and canvas files, frontmatter stripping, and content truncation.
  *
  * @param file - The file to load content from
  * @param maxLength - Maximum length for truncated content (default: 500)
@@ -16,8 +16,8 @@ export async function loadNoteContentForPreview(
   maxLength: number = 500
 ): Promise<string> {
   try {
-    // Handle PDF files - treat as empty content (no preview)
-    if (file.extension === "pdf") {
+    // Handle PDF and canvas files - treat as empty content (no preview)
+    if (file.extension === "pdf" || file.extension === "canvas") {
       return "";
     }
 

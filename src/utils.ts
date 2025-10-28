@@ -316,11 +316,12 @@ export function getFileName(file: TFile): string {
 }
 
 /**
- * Check if a file is allowed for context (markdown, PDF, or canvas files)
+ * Check if a file is allowed for note context (markdown, PDF, or canvas files).
+ * This does NOT include images - images are handled separately in the UI.
  * @param file The file to check
- * @returns true if the file is allowed, false otherwise
+ * @returns true if the file is allowed for note context, false otherwise
  */
-export function isAllowedFileForContext(file: TFile | null): boolean {
+export function isAllowedFileForNoteContext(file: TFile | null): boolean {
   if (!file) return false;
   return file.extension === "md" || file.extension === "pdf" || file.extension === "canvas";
 }
@@ -1209,4 +1210,35 @@ export function truncateToByteLimit(str: string, byteLimit: number): string {
   }
 
   return result;
+}
+
+/**
+ * Opens a file in the workspace, reusing an existing tab if the file is already open.
+ * @param file - The TFile to open
+ * @param focusIfOpen - If true, focuses the existing leaf if the file is already open (default: true)
+ */
+export async function openFileInWorkspace(file: TFile, focusIfOpen: boolean = true): Promise<void> {
+  // Check if the file is already open in any leaf
+  let existingLeaf = null;
+  app.workspace.iterateAllLeaves((leaf) => {
+    if (
+      leaf.view.getViewType() === "markdown" ||
+      leaf.view.getViewType() === "pdf" ||
+      leaf.view.getViewType() === "canvas"
+    ) {
+      const viewFile = (leaf.view as any).file;
+      if (viewFile && viewFile.path === file.path) {
+        existingLeaf = leaf;
+      }
+    }
+  });
+
+  if (existingLeaf && focusIfOpen) {
+    // File is already open, focus the existing leaf
+    app.workspace.setActiveLeaf(existingLeaf, { focus: true });
+  } else if (!existingLeaf) {
+    // File is not open, open it in a new tab
+    const leaf = app.workspace.getLeaf("tab");
+    await leaf.openFile(file);
+  }
 }

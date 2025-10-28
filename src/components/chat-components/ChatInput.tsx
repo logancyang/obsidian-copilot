@@ -16,11 +16,10 @@ import { isPlusChain } from "@/utils";
 
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
-import { isAllowedFileForContext } from "@/utils";
+import { isAllowedFileForNoteContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { useDropzone } from "react-dropzone";
 import { $getSelection, $isRangeSelection } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
@@ -105,7 +104,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const settings = useSettingsValue();
   const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
     const activeFile = app.workspace.getActiveFile();
-    return isAllowedFileForContext(activeFile) ? activeFile : null;
+    return isAllowedFileForNoteContext(activeFile) ? activeFile : null;
   });
   const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
@@ -512,7 +511,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       // Set new timeout
       timeoutId = setTimeout(() => {
         const activeNote = app.workspace.getActiveFile();
-        setCurrentActiveNote(isAllowedFileForContext(activeNote) ? activeNote : null);
+        setCurrentActiveNote(isAllowedFileForNoteContext(activeNote) ? activeNote : null);
       }, 100); // Wait 100ms after the last event because it fires multiple times
     };
 
@@ -524,18 +523,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       app.workspace.offref(eventRef); // Remove event listener
     };
   }, [app.workspace]);
-
-  // Add dropzone configuration
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: {
-      "image/*": [".png", ".gif", ".jpeg", ".jpg", ".webp"],
-    },
-    onDrop: (acceptedFiles) => {
-      onAddImage(acceptedFiles);
-    },
-    noClick: true, // Prevents clicking on textarea from opening file dialog
-    noDragEventsBubbling: true,
-  });
 
   const onEditorReady = useCallback((editor: any) => {
     lexicalEditorRef.current = editor;
@@ -638,7 +625,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         </div>
       )}
 
-      <div className="tw-relative" {...getRootProps()}>
+      <div className="tw-relative">
         {isProjectLoading && (
           <div className="tw-absolute tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-bg-primary tw-opacity-80 tw-backdrop-blur-sm">
             <div className="tw-flex tw-items-center tw-gap-2">
@@ -670,13 +657,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           currentActiveFile={currentActiveNote}
           currentChain={currentChain}
         />
-        <input {...getInputProps()} />
-        {/* Overlay that appears when dragging */}
-        {isDragActive && (
-          <div className="tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-rounded-md tw-border tw-border-dashed tw-bg-primary">
-            <span>Drop images here...</span>
-          </div>
-        )}
       </div>
 
       <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
