@@ -45,6 +45,7 @@ describe("MessageRepository", () => {
         timestamp: mockFormattedDateTime,
         isVisible: true,
         context: undefined,
+        contextEnvelope: undefined,
         isErrorMessage: false,
         sources: undefined,
         content: undefined,
@@ -63,6 +64,7 @@ describe("MessageRepository", () => {
 
       const message = messageRepo.getMessage(messageId);
       expect(message?.context).toEqual(context);
+      expect(message?.contextEnvelope).toBeUndefined();
     });
 
     it("should store both display and processed text", () => {
@@ -70,6 +72,7 @@ describe("MessageRepository", () => {
 
       const displayMessage = messageRepo.getMessage(messageId);
       expect(displayMessage?.message).toBe("Hello");
+      expect(displayMessage?.contextEnvelope).toBeUndefined();
 
       const llmMessage = messageRepo.getLLMMessage(messageId);
       expect(llmMessage?.message).toBe("Hello with context added");
@@ -88,6 +91,7 @@ describe("MessageRepository", () => {
       expect(messages[1].message).toBe("Response");
       expect(messages[0].isVisible).toBe(true);
       expect(messages[1].isVisible).toBe(true);
+      expect(messages[0].contextEnvelope).toBeUndefined();
     });
 
     it("should filter out invisible messages", () => {
@@ -103,17 +107,22 @@ describe("MessageRepository", () => {
   });
 
   describe("getLLMMessages", () => {
-    it("should return all messages with processed text", () => {
-      messageRepo.addMessage("Hello", "Hello with context", "user");
+    it("should return all messages with display text (for history, no context)", () => {
+      const id1 = messageRepo.addMessage("Hello", "Hello with context", "user");
       messageRepo.addMessage("Response", "Response", "AI");
 
+      // getLLMMessages() returns display text for chat history (no context)
       const messages = messageRepo.getLLMMessages();
 
       expect(messages).toHaveLength(2);
-      expect(messages[0].message).toBe("Hello with context");
+      expect(messages[0].message).toBe("Hello"); // Display text only
       expect(messages[1].message).toBe("Response");
       expect(messages[0].isVisible).toBe(false); // LLM messages are not visible
       expect(messages[1].isVisible).toBe(false);
+
+      // For full context, use getLLMMessage(id)
+      const fullMessage = messageRepo.getLLMMessage(id1);
+      expect(fullMessage?.message).toBe("Hello with context");
     });
   });
 

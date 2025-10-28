@@ -54,17 +54,23 @@ describe("Message Context XML Tag Formatting", () => {
 </content>
 </note_context>`;
 
-    messageRepository.addMessage(userMessage, processedText, USER_SENDER, context);
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
 
-    const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain("<note_context>");
-    expect(llmMessages[0].message).toContain("<title>quarterly-review</title>");
-    expect(llmMessages[0].message).toContain("<path>reports/quarterly-review.md</path>");
-    expect(llmMessages[0].message).toContain("<ctime>");
-    expect(llmMessages[0].message).toContain("<mtime>");
-    expect(llmMessages[0].message).toContain("<content>");
-    expect(llmMessages[0].message).toContain("</content>");
-    expect(llmMessages[0].message).toContain("</note_context>");
+    // Get the full message with processed context (not history view)
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    expect(fullMessage?.message).toContain("<note_context>");
+    expect(fullMessage?.message).toContain("<title>quarterly-review</title>");
+    expect(fullMessage?.message).toContain("<path>reports/quarterly-review.md</path>");
+    expect(fullMessage?.message).toContain("<ctime>");
+    expect(fullMessage?.message).toContain("<mtime>");
+    expect(fullMessage?.message).toContain("<content>");
+    expect(fullMessage?.message).toContain("</content>");
+    expect(fullMessage?.message).toContain("</note_context>");
   });
 
   it("should format URL content with proper XML tags", () => {
@@ -96,15 +102,21 @@ The landscape of artificial intelligence continues to evolve rapidly. Here are t
 </content>
 </url_content>`;
 
-    messageRepository.addMessage(userMessage, processedText, USER_SENDER, context);
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
 
-    const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain("<url_content>");
-    expect(llmMessages[0].message).toContain("<url>https://example.com/ai-trends-2024</url>");
-    expect(llmMessages[0].message).toContain("<content>");
-    expect(llmMessages[0].message).toContain("AI Trends for 2024");
-    expect(llmMessages[0].message).toContain("</content>");
-    expect(llmMessages[0].message).toContain("</url_content>");
+    // Get the full message with processed context
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    expect(fullMessage?.message).toContain("<url_content>");
+    expect(fullMessage?.message).toContain("<url>https://example.com/ai-trends-2024</url>");
+    expect(fullMessage?.message).toContain("<content>");
+    expect(fullMessage?.message).toContain("AI Trends for 2024");
+    expect(fullMessage?.message).toContain("</content>");
+    expect(fullMessage?.message).toContain("</url_content>");
   });
 
   it("should format selected text with proper XML tags", () => {
@@ -142,18 +154,24 @@ function fibonacci(n) {
 </content>
 </selected_text>`;
 
-    messageRepository.addMessage(userMessage, processedText, USER_SENDER, context);
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
 
-    const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain(`<${SELECTED_TEXT_TAG}>`);
-    expect(llmMessages[0].message).toContain("<title>Recursion Examples</title>");
-    expect(llmMessages[0].message).toContain("<path>algorithms/recursion.md</path>");
-    expect(llmMessages[0].message).toContain("<start_line>45</start_line>");
-    expect(llmMessages[0].message).toContain("<end_line>49</end_line>");
-    expect(llmMessages[0].message).toContain("<content>");
-    expect(llmMessages[0].message).toContain("function fibonacci");
-    expect(llmMessages[0].message).toContain("</content>");
-    expect(llmMessages[0].message).toContain(`</${SELECTED_TEXT_TAG}>`);
+    // Get the full message with processed context
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    expect(fullMessage?.message).toContain(`<${SELECTED_TEXT_TAG}>`);
+    expect(fullMessage?.message).toContain("<title>Recursion Examples</title>");
+    expect(fullMessage?.message).toContain("<path>algorithms/recursion.md</path>");
+    expect(fullMessage?.message).toContain("<start_line>45</start_line>");
+    expect(fullMessage?.message).toContain("<end_line>49</end_line>");
+    expect(fullMessage?.message).toContain("<content>");
+    expect(fullMessage?.message).toContain("function fibonacci");
+    expect(fullMessage?.message).toContain("</content>");
+    expect(fullMessage?.message).toContain(`</${SELECTED_TEXT_TAG}>`);
   });
 
   it("should handle multiple contexts with proper XML structure", () => {
@@ -212,10 +230,16 @@ The Single Responsibility Principle states that a class should have only one rea
 </content>
 </selected_text>`;
 
-    messageRepository.addMessage(userMessage, processedText, USER_SENDER, context);
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
 
-    const llmMessages = messageRepository.getLLMMessages();
-    const message = llmMessages[0].message;
+    // Get the full message with processed context
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    const message = fullMessage!.message;
 
     // Verify all three context types are present with proper tags
     expect(message).toContain("<note_context>");
@@ -256,13 +280,19 @@ The Single Responsibility Principle states that a class should have only one rea
 <error>[Error: Could not process file]</error>
 </note_context_error>`;
 
-    messageRepository.addMessage(userMessage, processedText, USER_SENDER, context);
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
 
-    const llmMessages = messageRepository.getLLMMessages();
-    expect(llmMessages[0].message).toContain("<note_context_error>");
-    expect(llmMessages[0].message).toContain("<title>corrupted-file</title>");
-    expect(llmMessages[0].message).toContain("<path>corrupted-file.pdf</path>");
-    expect(llmMessages[0].message).toContain("<error>[Error: Could not process file]</error>");
-    expect(llmMessages[0].message).toContain("</note_context_error>");
+    // Get the full message with processed context
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    expect(fullMessage?.message).toContain("<note_context_error>");
+    expect(fullMessage?.message).toContain("<title>corrupted-file</title>");
+    expect(fullMessage?.message).toContain("<path>corrupted-file.pdf</path>");
+    expect(fullMessage?.message).toContain("<error>[Error: Could not process file]</error>");
+    expect(fullMessage?.message).toContain("</note_context_error>");
   });
 });

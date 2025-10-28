@@ -30,6 +30,10 @@ import { ChatMessage, MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 
 const USER_SENDER = "user";
+const createContextResult = (content = "Hello with context") => ({
+  processedContent: content,
+  contextEnvelope: undefined,
+});
 
 describe("ChatManager", () => {
   let chatManager: ChatManager;
@@ -120,7 +124,7 @@ describe("ChatManager", () => {
       mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
       mockMessageRepo.addMessage.mockReturnValue("msg-1");
       mockMessageRepo.getMessage.mockReturnValue(mockMessage);
-      mockContextManager.processMessageContext.mockResolvedValue("Hello with context");
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
       const result = await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN);
@@ -139,11 +143,14 @@ describe("ChatManager", () => {
         mockPlugin.app.vault,
         ChainType.LLM_CHAIN,
         false,
-        mockActiveFile
+        mockActiveFile,
+        expect.anything(), // messageRepo
+        expect.any(String) // systemPrompt
       );
       expect(mockMessageRepo.updateProcessedText).toHaveBeenCalledWith(
         "msg-1",
-        "Hello with context"
+        "Hello with context",
+        undefined
       );
     });
 
@@ -159,7 +166,7 @@ describe("ChatManager", () => {
       mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
       mockMessageRepo.addMessage.mockReturnValue("msg-1");
       mockMessageRepo.getMessage.mockReturnValue(mockMessage);
-      mockContextManager.processMessageContext.mockResolvedValue("Hello with context");
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
       await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
@@ -189,7 +196,7 @@ describe("ChatManager", () => {
       mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
       mockMessageRepo.addMessage.mockReturnValue("msg-1");
       mockMessageRepo.getMessage.mockReturnValue(mockMessage);
-      mockContextManager.processMessageContext.mockResolvedValue("Hello with context");
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
       mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
       const result = await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
@@ -241,7 +248,8 @@ describe("ChatManager", () => {
         mockPlugin.app.vault,
         ChainType.LLM_CHAIN,
         false,
-        mockActiveFile
+        mockActiveFile,
+        expect.any(String) // systemPrompt
       );
     });
 
@@ -490,7 +498,7 @@ describe("ChatManager", () => {
         mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
         mockMessageRepo.addMessage.mockReturnValue("msg-1");
         mockMessageRepo.getMessage.mockReturnValue(mockMessage);
-        mockContextManager.processMessageContext.mockResolvedValue("Hello with context");
+        mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
         mockMessageRepo.updateProcessedText.mockReturnValue(true);
 
         await chatManager.sendMessage("Hello", context, ChainType.LLM_CHAIN, true);
@@ -549,7 +557,8 @@ describe("ChatManager", () => {
           mockPlugin.app.vault,
           ChainType.LLM_CHAIN,
           false,
-          mockActiveFile
+          mockActiveFile,
+          expect.any(String) // systemPrompt
         );
       });
     });

@@ -1,6 +1,12 @@
 import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { processPrompt } from "@/commands/customCommandUtils";
+import { PromptContextEngine } from "@/context/PromptContextEngine";
+import {
+  PromptContextEnvelope,
+  PromptLayerId,
+  PromptLayerSegment,
+} from "@/context/PromptContextTypes";
 import { ContextProcessor } from "@/contextProcessor";
 import { logInfo } from "@/logger";
 import { Mention } from "@/mentions/Mention";
@@ -23,10 +29,12 @@ export class ContextManager {
   private static instance: ContextManager;
   private contextProcessor: ContextProcessor;
   private mention: Mention;
+  private promptContextEngine: PromptContextEngine;
 
   private constructor() {
     this.contextProcessor = ContextProcessor.getInstance();
     this.mention = Mention.getInstance();
+    this.promptContextEngine = PromptContextEngine.getInstance();
   }
 
   static getInstance(): ContextManager {
@@ -46,8 +54,10 @@ export class ContextManager {
     vault: Vault,
     chainType: ChainType,
     includeActiveNote: boolean,
-    activeNote: TFile | null
-  ): Promise<string> {
+    activeNote: TFile | null,
+    messageRepo: MessageRepository,
+    systemPrompt?: string
+  ): Promise<ContextProcessingResult> {
     try {
       logInfo(`[ContextManager] Processing context for message ${message.id}`);
 
@@ -61,7 +71,17 @@ export class ContextManager {
         activeNote
       );
 
-      // 2. Extract URLs and process them (for Copilot Plus chain)
+      // 2. Build L2 context from previous turns (for cache stability)
+      // L2 contains ALL previous context (cumulative library)
+      const l2Context = await this.buildL2ContextFromPreviousTurns(
+        message.id!,
+        messageRepo,
+        fileParserManager,
+        vault,
+        chainType
+      );
+
+      // 3. Extract URLs and process them (for Copilot Plus chain)
       // Process URLs from context (only URLs explicitly added to context via URL pills)
       // This ensures url4llm is only called for URLs that appear in the context menu,
       // not for all URLs found in the message text.
@@ -71,7 +91,7 @@ export class ContextManager {
           ? await this.mention.processUrlList(contextUrls)
           : { urlContext: "", imageUrls: [] };
 
-      // 3. Process context notes
+      // 4. Process context notes (L3 - current turn only)
       // Initialize tracking set with files already included from custom prompts
       const processedNotePaths = new Set(includedFiles.map((file) => file.path));
       const contextNotes = message.context?.notes || [];
@@ -101,7 +121,7 @@ export class ContextManager {
       // Add processed context notes to tracking set
       notes.forEach((note) => processedNotePaths.add(note.path));
 
-      // 4. Process context tags
+      // 5. Process context tags
       const contextTags = message.context?.tags || [];
       let tagContextAddition = "";
 
@@ -130,7 +150,7 @@ export class ContextManager {
         }
       }
 
-      // 5. Process context folders
+      // 6. Process context folders
       const contextFolders = message.context?.folders || [];
       let folderContextAddition = "";
 
@@ -159,12 +179,13 @@ export class ContextManager {
         }
       }
 
-      // 6. Process selected text contexts
+      // 7. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 7. Combine everything (note context before URL context)
+      // 8. Combine everything (L2 previous context, then L3 current turn context)
       const finalProcessedMessage =
         processedUserMessage +
+        l2Context +
         noteContextAddition +
         tagContextAddition +
         folderContextAddition +
@@ -172,10 +193,29 @@ export class ContextManager {
         selectedTextContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
-      return finalProcessedMessage;
+      const contextEnvelope = this.buildPromptContextEnvelope({
+        chainType,
+        message,
+        systemPrompt: systemPrompt || "",
+        processedUserMessage,
+        l2PreviousContext: l2Context,
+        noteContextAddition,
+        tagContextAddition,
+        folderContextAddition,
+        urlContext: urlContextAddition.urlContext,
+        selectedText: selectedTextContextAddition,
+      });
+
+      return {
+        processedContent: finalProcessedMessage,
+        contextEnvelope,
+      };
     } catch (error) {
       logInfo(`[ContextManager] Error processing context for message ${message.id}:`, error);
-      return message.originalMessage || message.message; // Return original on error
+      return {
+        processedContent: message.originalMessage || message.message,
+        contextEnvelope: undefined,
+      };
     }
   }
 
@@ -190,7 +230,8 @@ export class ContextManager {
     vault: Vault,
     chainType: ChainType,
     includeActiveNote: boolean,
-    activeNote: TFile | null
+    activeNote: TFile | null,
+    systemPrompt?: string
   ): Promise<void> {
     const message = messageRepo.getMessage(messageId);
 
@@ -200,17 +241,265 @@ export class ContextManager {
 
     logInfo(`[ContextManager] Reprocessing context for message ${messageId}`);
 
-    const processedContent = await this.processMessageContext(
+    const { processedContent, contextEnvelope } = await this.processMessageContext(
       message,
       fileParserManager,
       vault,
       chainType,
       includeActiveNote,
-      activeNote
+      activeNote,
+      messageRepo, // Use same repo for L2 building
+      systemPrompt
     );
 
-    messageRepo.updateProcessedText(message.id, processedContent);
+    messageRepo.updateProcessedText(message.id, processedContent, contextEnvelope);
     logInfo(`[ContextManager] Completed context reprocessing for message ${messageId}`);
+  }
+
+  /**
+   * Build L2 context from previous turns in the conversation.
+   * Creates cumulative "Context Library" with ALL previous context (no deduplication).
+   * LayerToMessagesConverter handles smart referencing in L3:
+   * - Items in L2 → referenced by path
+   * - Items NOT in L2 → full content
+   *
+   * @param currentMessageId - ID of the current message (exclude from L2)
+   * @param messageRepo - Repository containing message history
+   * @param fileParserManager - For processing notes
+   * @param vault - For accessing files
+   * @param chainType - Current chain type (for restrictions)
+   * @returns Processed context string with XML tags
+   */
+  private async buildL2ContextFromPreviousTurns(
+    currentMessageId: string,
+    messageRepo: MessageRepository,
+    fileParserManager: FileParserManager,
+    vault: Vault,
+    chainType: ChainType
+  ): Promise<string> {
+    // Get all messages (display view)
+    const allMessages = messageRepo.getDisplayMessages();
+
+    // Find current message index
+    const currentIndex = allMessages.findIndex((msg) => msg.id === currentMessageId);
+    if (currentIndex === -1 || currentIndex === 0) {
+      // No previous messages or message not found
+      return "";
+    }
+
+    // Get all previous messages (user messages only, not AI responses)
+    const previousMessages = allMessages
+      .slice(0, currentIndex)
+      .filter((msg) => msg.sender === "user");
+
+    // Collect unique context items by their IDs, tracking first appearance
+    interface ContextItem {
+      file: TFile;
+      firstSeen: number; // timestamp for stable ordering
+    }
+
+    const uniqueNotes = new Map<string, ContextItem>();
+    const uniqueUrls = new Map<string, { url: string; firstSeen: number }>();
+
+    // Collect from all previous user messages
+    for (const msg of previousMessages) {
+      if (!msg.context) continue;
+
+      // Collect notes
+      if (msg.context.notes) {
+        for (const note of msg.context.notes) {
+          if (!uniqueNotes.has(note.path)) {
+            uniqueNotes.set(note.path, {
+              file: note,
+              firstSeen: msg.timestamp?.epoch || Date.now(),
+            });
+          }
+        }
+      }
+
+      // Collect URLs
+      if (msg.context.urls) {
+        for (const url of msg.context.urls) {
+          if (!uniqueUrls.has(url)) {
+            uniqueUrls.set(url, {
+              url,
+              firstSeen: msg.timestamp?.epoch || Date.now(),
+            });
+          }
+        }
+      }
+
+      // TODO: Collect selected text contexts (if needed)
+      // TODO: Collect folder contexts (if needed)
+      // TODO: Collect tag contexts (if needed)
+    }
+
+    // IMPORTANT: Do NOT deduplicate with current turn context!
+    // L2 should contain ALL previous context items (cumulative library).
+    // LayerToMessagesConverter will handle smart referencing:
+    // - Items in L2 → reference by ID in L3
+    // - Items NOT in L2 → full content in L3
+
+    // Sort by first appearance for stable ordering
+    const sortedNotes = Array.from(uniqueNotes.values()).sort((a, b) => a.firstSeen - b.firstSeen);
+
+    // Process notes into XML format (reuse existing processor)
+    let l2Context = "";
+
+    if (sortedNotes.length > 0) {
+      const noteFiles = sortedNotes.map((item) => item.file);
+      const processedNotes = await this.contextProcessor.processContextNotes(
+        new Set(), // Don't exclude any notes
+        fileParserManager,
+        vault,
+        noteFiles,
+        false, // Don't include active note (it goes in L3)
+        null,
+        chainType
+      );
+      l2Context += processedNotes;
+    }
+
+    // TODO: Process URLs similarly
+
+    return l2Context;
+  }
+
+  private buildPromptContextEnvelope(
+    params: BuildPromptContextEnvelopeParams
+  ): PromptContextEnvelope | undefined {
+    const messageId = params.message.id;
+    if (!messageId) {
+      return undefined;
+    }
+
+    const layerSegments: Partial<Record<PromptLayerId, PromptLayerSegment[]>> = {};
+
+    // L1: System & Policies - stable across conversation
+    if (params.systemPrompt) {
+      layerSegments.L1_SYSTEM = [
+        {
+          id: "system",
+          content: params.systemPrompt,
+          stable: true,
+          metadata: { source: "system_prompt" },
+        },
+      ];
+    }
+
+    // L2: Previous Turn Context - one segment per note with path as ID
+    if (params.l2PreviousContext) {
+      const l2Segments = this.parseContextIntoSegments(params.l2PreviousContext, true);
+      if (l2Segments.length > 0) {
+        layerSegments.L2_PREVIOUS = l2Segments;
+      }
+    }
+
+    // L3: Turn Context - one segment per note with path as ID
+    const turnSegments: PromptLayerSegment[] = [];
+
+    // Parse notes into individual segments
+    if (params.noteContextAddition) {
+      const noteSegments = this.parseContextIntoSegments(params.noteContextAddition, false);
+      turnSegments.push(...noteSegments);
+    }
+
+    // Parse other context types (tags, folders, URLs, selected text)
+    // For now, keep these as single segments
+    this.appendTurnContextSegment(turnSegments, "tags", params.tagContextAddition, {
+      source: "tags",
+    });
+    this.appendTurnContextSegment(turnSegments, "folders", params.folderContextAddition, {
+      source: "folders",
+    });
+    this.appendTurnContextSegment(turnSegments, "urls", params.urlContext, {
+      source: "urls",
+    });
+    this.appendTurnContextSegment(turnSegments, "selected_text", params.selectedText, {
+      source: "selected_text",
+    });
+
+    if (turnSegments.length > 0) {
+      layerSegments.L3_TURN = turnSegments;
+    }
+
+    // L5: User Message - varies per turn
+    layerSegments.L5_USER = [
+      {
+        id: `${messageId}-user`,
+        content: params.processedUserMessage,
+        stable: false,
+        metadata: { source: "user_input" },
+      },
+    ];
+
+    return this.promptContextEngine.buildEnvelope({
+      conversationId: null,
+      messageId,
+      layerSegments,
+      metadata: {
+        debugLabel: `message:${messageId}`,
+        chainType: params.chainType,
+      },
+    });
+  }
+
+  /**
+   * Parse context XML string into individual segments (one per note/context item)
+   * Extracts <note_context> and <active_note> blocks and creates segments with path as ID
+   */
+  private parseContextIntoSegments(contextXml: string, stable: boolean): PromptLayerSegment[] {
+    if (!contextXml.trim()) {
+      return [];
+    }
+
+    const segments: PromptLayerSegment[] = [];
+
+    // Match both <note_context> and <active_note> blocks
+    const noteContextRegex =
+      /<(?:note_context|active_note)>[\s\S]*?<\/(?:note_context|active_note)>/g;
+    let match: RegExpExecArray | null;
+
+    while ((match = noteContextRegex.exec(contextXml)) !== null) {
+      const block = match[0];
+
+      // Extract path from the block
+      const pathMatch = /<path>([^<]+)<\/path>/.exec(block);
+      if (!pathMatch) continue;
+
+      const notePath = pathMatch[1];
+
+      segments.push({
+        id: notePath, // Use note path as unique ID for comparison
+        content: block,
+        stable,
+        metadata: {
+          source: stable ? "previous_turns" : "current_turn",
+          notePath,
+        },
+      });
+    }
+
+    return segments;
+  }
+
+  private appendTurnContextSegment(
+    target: PromptLayerSegment[],
+    segmentId: string,
+    content: string,
+    metadata: Record<string, unknown>
+  ) {
+    const normalized = (content || "").trim();
+    if (!normalized) {
+      return;
+    }
+
+    target.push({
+      id: `${segmentId}`,
+      content: normalized,
+      stable: false,
+      metadata,
+    });
   }
 
   /**
@@ -260,4 +549,25 @@ export class ContextManager {
   getSelectedTextContexts() {
     return getSelectedTextContexts();
   }
+}
+
+/**
+ * Result returned by ContextManager after processing context for a message.
+ */
+export interface ContextProcessingResult {
+  processedContent: string;
+  contextEnvelope?: PromptContextEnvelope;
+}
+
+interface BuildPromptContextEnvelopeParams {
+  chainType: ChainType;
+  message: ChatMessage;
+  systemPrompt: string;
+  processedUserMessage: string;
+  l2PreviousContext: string;
+  noteContextAddition: string;
+  tagContextAddition: string;
+  folderContextAddition: string;
+  urlContext: string;
+  selectedText: string;
 }

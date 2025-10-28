@@ -2,6 +2,8 @@
 
 This document describes the new message management and context processing architecture that replaced the legacy SharedState system. The new design follows clean architecture principles with a single source of truth, computed views, and complete project isolation.
 
+**Note**: For detailed information about the layered context system (L1-L5 layers, L2 auto-promotion, cache optimization), see [CONTEXT_ENGINEERING.md](./CONTEXT_ENGINEERING.md).
+
 ## Architecture Principles
 
 ### Single Source of Truth
@@ -51,7 +53,13 @@ LLM Processing ← Chain Memory ← getLLMMessages() ← MessageRepository
 
 ```typescript
 // Add new message
-addMessage(displayText: string, processedText: string, sender: string, context?: MessageContext): string
+addMessage(
+  displayText: string,
+  processedText: string,
+  sender: string,
+  context?: MessageContext,
+  content?: MessageContent[]
+): string
 
 // Get computed views
 getDisplayMessages(): ChatMessage[]  // For UI rendering
@@ -59,12 +67,18 @@ getLLMMessages(): ChatMessage[]      // For AI processing
 
 // Edit operations
 editMessage(id: string, newDisplayText: string): boolean
-updateProcessedText(id: string, processedText: string): boolean
+updateProcessedText(
+  id: string,
+  processedText: string,
+  contextEnvelope?: PromptContextEnvelope
+): boolean
 
 // Bulk operations
 truncateAfterMessageId(messageId: string): void
 loadMessages(messages: ChatMessage[]): void
 ```
+
+> **Storing envelopes**: When `ChatManager` calls `addMessage` with a full `NewChatMessage`, it includes the `contextEnvelope` property so the repository keeps both the legacy `processedText` and the canonical layered representation. The string-based overload remains for low-level utilities and test fixtures.
 
 ### 2. ChatManager (`src/core/ChatManager.ts`)
 
@@ -78,6 +92,13 @@ loadMessages(messages: ChatMessage[]): void
 - Manages context processing lifecycle
 - **Project Isolation**: Maintains separate MessageRepository per project
 - **Persistence**: Integrates with ChatPersistenceManager for saving/loading
+
+**Envelope Lifecycle**:
+
+1. User sends a message → `ContextManager.processMessageContext()` returns both `processedContent` **and** a `PromptContextEnvelope`.
+2. `ChatManager` stores the envelope with `MessageRepository.updateProcessedText(...)`.
+3. When any chain runner executes, it reads `userMessage.contextEnvelope` and feeds it to `LayerToMessagesConverter.convert()` to materialize the L1-L5 prompt structure.
+4. Regeneration or edits call `reprocessMessageContext`, ensuring a fresh envelope replaces the stale one.
 
 **Key Operations**:
 
@@ -155,13 +176,36 @@ private notifyListeners(): void
 
 ### 4. ContextManager (`src/core/ContextManager.ts`)
 
-**Purpose**: Handles context processing and reprocessing
+**Purpose**: Handles context processing and reprocessing with layered context architecture
 
 **Key Features**:
 
-- Processes message context (notes, URLs, selected text)
-- Reprocesses context when messages are edited
-- Ensures fresh context for LLM processing
+- **Layered Context System**: Builds structured L1-L5 context layers (see CONTEXT_ENGINEERING.md)
+- **L2 Auto-Promotion**: Automatically promotes previous turn's context to L2 for cache stability
+- **Deduplication**: Ensures context appears only once (L3 takes priority over L2)
+- **Context Processing**: Handles notes, URLs, selected text, tags, and folders
+- **Reprocessing**: Regenerates fresh context when messages are edited
+- **Envelope Building**: Creates `PromptContextEnvelope` with structured layers and hashes
+- **Chain-Aware Processing**: Applies chain-specific rules (e.g., Copilot Plus URL processing, active-note handling for vision models)
+
+**Core Methods**:
+
+```typescript
+// Process context for new message (includes L2 building from history)
+async processMessageContext(
+  message: ChatMessage,
+  fileParserManager: FileParserManager,
+  vault: Vault,
+  chainType: ChainType,
+  includeActiveNote: boolean,
+  activeNote: TFile | null,
+  messageRepo: MessageRepository,
+  systemPrompt?: string
+): Promise<ContextProcessingResult>
+
+// Reprocess context for edited message
+async reprocessMessageContext(messageId: string, ...): Promise<void>
+```
 
 ### 5. ChatPersistenceManager (`src/core/ChatPersistenceManager.ts`)
 
@@ -341,6 +385,13 @@ When a user types "Summarize this note" and attaches "meeting-notes.md":
 
 All context is wrapped in semantic XML tags for clear structure:
 
+> Layered Prompting: During Phase 3 the raw XML is still captured in `processedText` for backward compatibility, but the canonical representation sent to the LLM comes from the envelope layers:
+>
+> - **L1_SYSTEM / L2_PREVIOUS**: Stable prefixes rendered from accumulated context
+> - **L3_TURN**: Turn-specific smart references that either link back to L2 or embed full content
+> - **L4_STRIP**: Chat history managed by memory
+> - **L5_USER**: The user’s raw message (plus composer directives when present)
+
 #### Note Context
 
 ```xml
@@ -414,7 +465,7 @@ MessageRepository.addMessage() // Store with basic content
     ↓
 ContextManager.processMessageContext() // Add context
     ↓
-MessageRepository.updateProcessedText() // Update with context
+MessageRepository.updateProcessedText() // Update with processed text + context envelope
     ↓
 ChatManager.updateChainMemory() // Sync to LLM
     ↓
@@ -675,6 +726,11 @@ console.log({
 ```
 
 ## Related Files
+
+### Documentation
+
+- `docs/CONTEXT_ENGINEERING.md` - Layered context system design and L2 auto-promotion details
+- `docs/MESSAGE_ARCHITECTURE.md` - This document (message management architecture)
 
 ### Core Implementation
 

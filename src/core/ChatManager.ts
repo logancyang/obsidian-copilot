@@ -1,4 +1,4 @@
-import { getSettings } from "@/settings/model";
+import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { ChainType } from "@/chainFactory";
 import { logInfo } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
@@ -128,18 +128,23 @@ export class ChatManager {
         throw new Error(`Failed to retrieve message ${messageId}`);
       }
 
+      // Get system prompt for L1 layer
+      const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+
       // Process context to generate LLM content
-      const processedContent = await this.contextManager.processMessageContext(
+      const { processedContent, contextEnvelope } = await this.contextManager.processMessageContext(
         message,
         this.fileParserManager,
         this.plugin.app.vault,
         chainType,
         includeActiveNote,
-        activeNote
+        activeNote,
+        currentRepo, // Pass MessageRepository for L2 building
+        systemPrompt
       );
 
       // Update the processed content
-      currentRepo.updateProcessedText(messageId, processedContent);
+      currentRepo.updateProcessedText(messageId, processedContent, contextEnvelope);
 
       logInfo(`[ChatManager] Successfully sent message ${messageId}`);
       return messageId;
@@ -170,6 +175,7 @@ export class ChatManager {
 
       // Reprocess context for the edited message
       const activeNote = this.plugin.app.workspace.getActiveFile();
+      const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
       await this.contextManager.reprocessMessageContext(
         messageId,
         currentRepo,
@@ -177,7 +183,8 @@ export class ChatManager {
         this.plugin.app.vault,
         chainType,
         includeActiveNote,
-        activeNote
+        activeNote,
+        systemPrompt
       );
 
       // Update chain memory with fresh LLM messages

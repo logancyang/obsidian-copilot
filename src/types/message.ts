@@ -1,3 +1,4 @@
+import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { TFile } from "obsidian";
 
 /**
@@ -99,6 +100,9 @@ export interface ChatMessage {
   /** Context attached to this message */
   context?: MessageContext;
 
+  /** Layered prompt context envelope */
+  contextEnvelope?: PromptContextEnvelope;
+
   /** Whether this is an error message */
   isErrorMessage?: boolean;
 
@@ -121,10 +125,39 @@ export type NewChatMessage = Omit<ChatMessage, "id"> & { id?: string };
 export interface StoredMessage {
   id: string;
   displayText: string; // What user typed/what AI responded
-  processedText: string; // For user messages: with context added. For AI: same as display
+
+  /**
+   * TRANSITIONAL FIELD - Legacy concatenated context (Phase 1)
+   *
+   * For user messages: displayText + context (notes, tags, folders, URLs) concatenated
+   * For AI messages: same as displayText
+   *
+   * DEPRECATION PLAN:
+   * - Phase 1 (Current): Both processedText and contextEnvelope populated
+   * - Phase 2 (After ChainRunner migration): Computed from contextEnvelope.serializedText
+   * - Phase 3 (Future): Remove this field entirely, use contextEnvelope only
+   *
+   * DO NOT USE FOR:
+   * - Chat history (use displayText to avoid context duplication)
+   * - New LLM requests (use contextEnvelope)
+   *
+   * USE ONLY FOR:
+   * - Legacy ChainRunners during transition
+   * - Backward compatibility with old saved chats
+   * - Fallback when envelope building fails
+   */
+  processedText: string;
+
   sender: string;
   timestamp: FormattedDateTime;
   context?: MessageContext;
+
+  /**
+   * NEW: Structured L1-L5 layers for prompt construction
+   * This is the primary format for LLM requests going forward.
+   */
+  contextEnvelope?: PromptContextEnvelope;
+
   isVisible: boolean;
   isErrorMessage?: boolean;
   sources?: { title: string; path: string; score: number; explanation?: any }[];

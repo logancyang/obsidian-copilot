@@ -1,7 +1,7 @@
 import { getCurrentProject } from "@/aiParams";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import {
@@ -165,7 +165,7 @@ export class ChatPersistenceManager {
 
           if (message.context.notes?.length) {
             contextParts.push(
-              `Notes: ${message.context.notes.map((note) => note.basename).join(", ")}`
+              `Notes: ${message.context.notes.map((note) => note.path).join(", ")}`
             );
           }
 
@@ -293,12 +293,43 @@ export class ChatPersistenceManager {
       if (trimmed.startsWith("Notes: ")) {
         const notesStr = trimmed.substring(7); // Remove "Notes: "
         if (notesStr) {
-          // For notes, we only have basenames. Create TFile-like objects with path = basename
-          // This is a limitation since we don't save full paths, but it's better than nothing
-          context.notes = notesStr.split(", ").map((basename) => ({
-            basename: basename.trim(),
-            path: basename.trim(), // Use basename as path since we don't have the full path
-          }));
+          // Parse note paths and resolve to TFile objects
+          context.notes = notesStr
+            .split(", ")
+            .map((pathStr) => {
+              const trimmedPath = pathStr.trim();
+
+              // Try to resolve by full path first (new format)
+              const file = this.app.vault.getAbstractFileByPath(trimmedPath);
+              if (file instanceof TFile) {
+                return file;
+              }
+
+              // Backward compatibility: If path not found, try basename resolution
+              const basename = trimmedPath.includes("/")
+                ? trimmedPath.split("/").pop()!
+                : trimmedPath;
+
+              const matches = this.app.vault
+                .getMarkdownFiles()
+                .filter((f) => f.basename === basename);
+
+              if (matches.length === 1) {
+                logInfo(
+                  `[ChatPersistenceManager] Resolved legacy basename "${basename}" to ${matches[0].path}`
+                );
+                return matches[0];
+              } else if (matches.length > 1) {
+                logWarn(
+                  `[ChatPersistenceManager] Ambiguous basename "${basename}", skipping. Matches: ${matches.map((f) => f.path).join(", ")}`
+                );
+              } else {
+                logWarn(`[ChatPersistenceManager] Note not found: ${trimmedPath}`);
+              }
+
+              return null;
+            })
+            .filter((note): note is TFile => note !== null);
         }
       } else if (trimmed.startsWith("URLs: ")) {
         const urlsStr = trimmed.substring(6); // Remove "URLs: "

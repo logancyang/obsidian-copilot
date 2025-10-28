@@ -6,6 +6,7 @@ import {
   MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT,
   ModelCapability,
 } from "@/constants";
+import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import {
   ImageBatchProcessor,
   ImageContent,
@@ -45,6 +46,7 @@ import {
 } from "./utils/cicPromptUtils";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
+import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
@@ -190,27 +192,46 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
     // Process embedded images only if setting is enabled
     if (settings.passMarkdownImages) {
-      // Determine source path for resolving wikilinks
-      let sourcePath: string | undefined;
+      // IMPORTANT: Only extract images from the active note
+      // Never from L2 (promoted notes) or attached context notes
+      const envelope = userMessage.contextEnvelope;
 
-      // First, check if we have context notes
-      if (userMessage.context?.notes && userMessage.context.notes.length > 0) {
-        // Use the first note in context as the source path
-        sourcePath = userMessage.context.notes[0].path;
-      } else {
-        // Fallback to active file if no context notes
-        const activeFile = this.chainManager.app?.workspace.getActiveFile();
-        if (activeFile) {
-          sourcePath = activeFile.path;
-        }
+      if (!envelope) {
+        throw new Error(
+          "[CopilotPlus] Context envelope is required but not available. Cannot extract images."
+        );
       }
 
-      // Extract note content (excluding URL content) for image processing
-      const noteContent = this.extractNoteContent(textContent);
-      if (noteContent) {
-        const embeddedImages = await this.extractEmbeddedImages(noteContent, sourcePath);
-        if (embeddedImages.length > 0) {
-          imageSources.push({ urls: embeddedImages, type: "embedded" });
+      // Extract ONLY from <active_note> block in L3
+      const l3Turn = envelope.layers.find((l) => l.id === "L3_TURN");
+      if (l3Turn) {
+        // Find <active_note> block
+        const activeNoteRegex = /<active_note>([\s\S]*?)<\/active_note>/;
+        const activeNoteMatch = activeNoteRegex.exec(l3Turn.text);
+
+        if (activeNoteMatch) {
+          const activeNoteBlock = activeNoteMatch[1];
+
+          // Extract path from <path> tag
+          const pathRegex = /<path>(.*?)<\/path>/;
+          const pathMatch = pathRegex.exec(activeNoteBlock);
+          const sourcePath = pathMatch ? pathMatch[1] : undefined;
+
+          // Extract content from <content> tag
+          const contentRegex = /<content>([\s\S]*?)<\/content>/;
+          const contentMatch = contentRegex.exec(activeNoteBlock);
+          const activeNoteContent = contentMatch ? contentMatch[1] : "";
+
+          if (activeNoteContent) {
+            logInfo(
+              "[CopilotPlus] Extracting images from active note only:",
+              sourcePath || "no source path"
+            );
+            const embeddedImages = await this.extractEmbeddedImages(activeNoteContent, sourcePath);
+            if (embeddedImages.length > 0) {
+              imageSources.push({ urls: embeddedImages, type: "embedded" });
+            }
+          }
         }
       }
     }
@@ -276,59 +297,108 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   private async streamMultimodalResponse(
     textContent: string,
     userMessage: ChatMessage,
+    allToolOutputs: any[],
     abortController: AbortController,
     thinkStreamer: ThinkBlockStreamer
   ): Promise<void> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
     const memoryVariables = await memory.loadMemoryVariables({});
-    // Use the raw history array which contains BaseMessage objects
     const rawHistory = memoryVariables.history || [];
 
-    // Create messages array starting with system message
+    // Get chat model
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const isMultimodalCurrent = this.isMultimodalModel(chatModel);
+
+    // Create messages array
     const messages: any[] = [];
 
-    // Add system message if available
-    let fullSystemMessage = await this.getSystemPrompt();
-
-    // Add chat history context to system message if exists
-    if (rawHistory.length > 0) {
-      fullSystemMessage +=
-        "\n\nThe following is the relevant conversation history. Use this context to maintain consistency in your responses:";
+    // Envelope-based context construction (required)
+    const envelope = userMessage.contextEnvelope;
+    if (!envelope) {
+      throw new Error(
+        "[CopilotPlus] Context envelope is required but not available. Cannot proceed with CopilotPlus chain."
+      );
     }
 
-    // Get chat model for role determination for O-series models
-    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    logInfo("[CopilotPlus] Using envelope-based context construction");
 
-    // Add the combined system message with appropriate role
-    if (fullSystemMessage) {
+    // Use LayerToMessagesConverter to get base messages with L1+L2 system, L3+L5 user
+    const baseMessages = LayerToMessagesConverter.convert(envelope, {
+      includeSystemMessage: true,
+      mergeUserContent: true,
+      debug: false,
+    });
+
+    // Add system message (L1 + L2 Context Library only - no tool results)
+    const systemMessage = baseMessages.find((m) => m.role === "system");
+    if (systemMessage) {
       messages.push({
         role: getMessageRole(chatModel),
-        content: `${fullSystemMessage}\nIMPORTANT: Maintain consistency with previous responses in the conversation. If you've provided information about a person or topic before, use that same information in follow-up questions.`,
+        content: systemMessage.content,
       });
     }
 
-    // Add chat history - safely handle different message formats
+    // Insert L4 (chat history) between system and user
     addChatHistoryToMessages(rawHistory, messages);
 
-    // Get the current chat model
-    const chatModelCurrent = this.chainManager.chatModelManager.getChatModel();
-    const isMultimodalCurrent = this.isMultimodalModel(chatModelCurrent);
+    // Find user message (L3 smart references + L5)
+    const userMessageContent = baseMessages.find((m) => m.role === "user");
+    if (userMessageContent) {
+      let finalUserContent;
 
-    // Build message content with text and images for multimodal models, or just text for text-only models
-    const content: string | MessageContent[] = isMultimodalCurrent
-      ? await this.buildMessageContent(textContent, userMessage)
-      : textContent;
+      // All tools (including localSearch) are formatted uniformly and added to user message
+      const hasTools = allToolOutputs.length > 0;
 
-    // Add current user message
-    messages.push({
-      role: "user",
-      content,
+      if (hasTools) {
+        // Format all tool outputs and prepend to user content using CiC format
+        const toolContext = this.formatAllToolOutputs(allToolOutputs);
+        const shouldLabelQuestion = false; // Don't label question when we have tools
+
+        finalUserContent = renderCiCMessage(
+          toolContext,
+          userMessageContent.content, // L3 smart refs + L5 from converter
+          shouldLabelQuestion
+        );
+      } else {
+        // No tools - use converter's output as-is
+        // Smart references are already properly formatted by LayerToMessagesConverter
+        finalUserContent = userMessageContent.content;
+      }
+
+      // Add composer instructions if textContent has them
+      // (textContent already has composer instructions appended via appendComposerInstructionsIfNeeded)
+      if (
+        textContent.includes("<OUTPUT_FORMAT>") &&
+        !finalUserContent.includes("<OUTPUT_FORMAT>")
+      ) {
+        const composerMatch = textContent.match(/<OUTPUT_FORMAT>[\s\S]*?<\/OUTPUT_FORMAT>/);
+        if (composerMatch) {
+          finalUserContent += "\n\n" + composerMatch[0];
+        }
+      }
+
+      // Build message content with text and images for multimodal models
+      const content: string | MessageContent[] = isMultimodalCurrent
+        ? await this.buildMessageContent(finalUserContent, userMessage)
+        : finalUserContent;
+
+      messages.push({
+        role: "user",
+        content,
+      });
+    }
+
+    logInfo("Final request to AI", { messages: messages.length });
+
+    // Record the payload for debugging (includes layered view if envelope available)
+    const modelName = (chatModel as { modelName?: string } | undefined)?.modelName;
+    recordPromptPayload({
+      messages,
+      modelName,
+      contextEnvelope: userMessage.contextEnvelope,
     });
 
-    const enhancedUserMessage = content instanceof Array ? (content[0] as any).text : content;
-    logInfo("Enhanced user message: ", enhancedUserMessage);
-    logInfo("Final request to AI", { messages: messages.length });
     const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
 
     // Wrap the stream call with warning suppression
@@ -390,8 +460,17 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     try {
       logInfo("==== Step 1: Analyzing intent ====");
       let toolCalls;
-      // Use the original message for intent analysis
-      const messageForAnalysis = userMessage.originalMessage || userMessage.message;
+
+      // Extract L5 (raw user query) from envelope for intent analysis
+      const envelope = userMessage.contextEnvelope;
+      if (!envelope) {
+        throw new Error(
+          "[CopilotPlus] Context envelope is required but not available. Cannot proceed with CopilotPlus chain."
+        );
+      }
+      const l5User = envelope.layers.find((l) => l.id === "L5_USER");
+      const messageForAnalysis = l5User?.text || userMessage.originalMessage || userMessage.message;
+
       try {
         toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
       } catch (error: any) {
@@ -419,40 +498,22 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // Use sources from tool execution
       sources = toolSources;
 
-      // Check if localSearch has results
-      const localSearchResult = toolOutputs.find(
-        (output) => output.tool === "localSearch" && output.output != null
-      );
-      const hasLocalSearchWithResults = localSearchResult && sources.length > 0;
+      // All tools (including localSearch) are treated uniformly
+      // They all go to the user message with consistent formatting
+      const allToolOutputs = toolOutputs.filter((output) => output.output != null);
 
-      // Format chat history from memory
-      const questionForEnhancement = cleanedUserMessage;
-
-      // Enhance with ALL tool outputs including localSearch
-      let enhancedUserMessage = this.prepareEnhancedUserMessage(
-        questionForEnhancement,
-        toolOutputs
-      );
-
-      // If localSearch has actual results and no other tools, add QA-style instruction to maintain same behavior
-      const hasOtherTools = toolOutputs.some(
-        (output) => output.tool !== "localSearch" && output.output != null
-      );
-      if (hasLocalSearchWithResults && !hasOtherTools) {
-        // The QA format is already handled in prepareEnhancedUserMessage, just add the instruction
-        enhancedUserMessage = `Answer the question with as detailed as possible based only on the following context:\n${enhancedUserMessage}`;
-      }
-
-      // Append composer instruction to the end of text prompt to enhance instruction following.
-      enhancedUserMessage = this.appendComposerInstructionsIfNeeded(
-        enhancedUserMessage,
+      // Prepare textContent with composer instructions if needed
+      // This is checked in streamMultimodalResponse to append to final user content
+      const textContentWithComposer = this.appendComposerInstructionsIfNeeded(
+        cleanedUserMessage,
         userMessage
       );
 
-      logInfo("Invoking LLM with all tool results");
+      logInfo("Invoking LLM with envelope-based context construction");
       await this.streamMultimodalResponse(
-        enhancedUserMessage,
+        textContentWithComposer,
         userMessage,
+        allToolOutputs,
         abortController,
         thinkStreamer
       );
@@ -512,48 +573,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return fullAIResponse;
   }
 
-  private getSources(
-    documents: any
-  ): { title: string; path: string; score: number; explanation?: any }[] {
-    if (!documents || !Array.isArray(documents)) {
-      logWarn("No valid documents provided to getSources");
-      return [];
-    }
-    return this.sortUniqueDocsByScore(documents);
-  }
-
-  private sortUniqueDocsByScore(documents: any[]): any[] {
-    const uniqueDocs = new Map<string, any>();
-
-    // Iterate through all documents
-    for (const doc of documents) {
-      if (!doc.title || (!doc?.score && !doc?.rerank_score)) {
-        logWarn("Invalid document structure:", doc);
-        continue;
-      }
-
-      // Use path as the unique key, falling back to title if path is not available
-      const key = doc.path || doc.title;
-      const currentDoc = uniqueDocs.get(key);
-      const isReranked = doc && "rerank_score" in doc;
-      const docScore = isReranked ? doc.rerank_score : doc.score;
-
-      // If the document doesn't exist in the map, or if the new doc has a higher score, update the map
-      if (!currentDoc || docScore > (currentDoc.score ?? 0)) {
-        uniqueDocs.set(key, {
-          title: doc.title,
-          path: doc.path || doc.title, // Use path if available, otherwise use title
-          score: docScore,
-          isReranked: isReranked,
-          explanation: doc.explanation || null, // Preserve explanation data
-        });
-      }
-    }
-
-    // Convert the map values back to an array and sort by score in descending order
-    return Array.from(uniqueDocs.values()).sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
-  }
-
   private async executeToolCalls(
     toolCalls: any[],
     updateLoadingMessage?: (message: string) => void
@@ -598,65 +617,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
   // Persist citation lines built for this turn to reuse in fallback
   private lastCitationSources: { title?: string; path?: string }[] | null = null;
-
-  private prepareEnhancedUserMessage(userMessage: string, toolOutputs: any[]) {
-    let context = "";
-    let hasLocalSearchWithResults = false;
-
-    // Check if localSearch has actual results (non-empty documents array)
-    const localSearchOutput = toolOutputs.find(
-      (output) => output.tool === "localSearch" && output.output != null
-    );
-
-    if (localSearchOutput && typeof localSearchOutput.output === "string") {
-      // Detect presence via XML content
-      if (/<document>/.test(localSearchOutput.output)) {
-        hasLocalSearchWithResults = true;
-      }
-    }
-
-    const validOutputs = toolOutputs.filter((output) => output.output != null);
-
-    if (validOutputs.length > 0) {
-      // Don't add "Additional context" header if only localSearch with results to maintain QA format
-      const contextHeader =
-        hasLocalSearchWithResults && validOutputs.length === 1
-          ? ""
-          : "\n\n# Additional context:\n\n";
-      const rawContext =
-        contextHeader +
-        validOutputs
-          .map((output) => {
-            let content = output.output;
-
-            // localSearch results are already formatted by executeToolCalls
-            // No need for special processing here
-
-            // Ensure content is string
-            if (typeof content !== "string") {
-              content = JSON.stringify(content);
-            }
-
-            // localSearch is already wrapped in XML tags, don't double-wrap
-            if (output.tool === "localSearch") {
-              return content;
-            }
-
-            // All other tools get wrapped consistently
-            return `<${output.tool}>\n${content}\n</${output.tool}>`;
-          })
-          .join("\n\n");
-
-      context = rawContext.trim();
-    }
-
-    if (!context) {
-      return userMessage;
-    }
-
-    const shouldLabelQuestion = hasLocalSearchWithResults && validOutputs.length === 1;
-    return renderCiCMessage(context, userMessage, shouldLabelQuestion);
-  }
 
   protected getTimeExpression(toolCalls: any[]): string {
     const timeRangeCall = toolCalls.find((call) => call.tool.name === "getTimeRangeMs");
@@ -711,20 +671,23 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const catalogLines = formatSourceCatalog(sourceEntries);
 
     // Also keep a numbered mapping for fallback use only (if model emits footnotes but forgets Sources)
-    this.lastCitationSources = withIds
-      .slice(0, Math.min(20, withIds.length))
-      .map((d: any, i: number) => {
-        const title = d.title || d.path || "Untitled";
-        return {
-          title,
-          path: d.path || undefined,
-        };
-      });
+    this.lastCitationSources = withIds.slice(0, Math.min(20, withIds.length)).map((d: any) => {
+      const title = d.title || d.path || "Untitled";
+      return {
+        title,
+        path: d.path || undefined,
+      };
+    });
 
     const settings = getSettings();
     const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
 
-    const innerContent = buildLocalSearchInnerContent(guidance, formattedContent);
+    // Add RAG instruction (like VaultQA) to ensure model uses the context
+    const ragInstruction = "Answer the question based only on the following context:";
+    const innerContent = buildLocalSearchInnerContent(
+      `${ragInstruction}\n\n${guidance}`,
+      formattedContent
+    );
 
     // Wrap in XML-like tags for better LLM understanding
     return wrapLocalSearchPayload(innerContent, timeExpression);
@@ -793,5 +756,25 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
 
   protected async getSystemPrompt(): Promise<string> {
     return getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+  }
+
+  /**
+   * Formats all tool outputs uniformly for user message.
+   * All tools (localSearch, webSearch, getFileTree, etc.) are treated the same.
+   */
+  private formatAllToolOutputs(toolOutputs: any[]): string {
+    if (toolOutputs.length === 0) return "";
+
+    const formattedOutputs = toolOutputs
+      .map((output) => {
+        let content = output.output;
+        if (typeof content !== "string") {
+          content = JSON.stringify(content);
+        }
+        return `<${output.tool}>\n${content}\n</${output.tool}>`;
+      })
+      .join("\n\n");
+
+    return "# Additional context:\n\n" + formattedOutputs;
   }
 }

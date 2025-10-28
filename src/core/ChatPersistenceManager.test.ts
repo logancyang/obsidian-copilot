@@ -91,12 +91,12 @@ describe("ChatPersistenceManager", () => {
     // Setup mock app
     mockApp = {
       vault: {
-        getAbstractFileByPath: jest.fn(),
+        getAbstractFileByPath: jest.fn().mockReturnValue(null), // Default: file not found
         createFolder: jest.fn(),
         create: jest.fn(),
         modify: jest.fn(),
         read: jest.fn(),
-        getMarkdownFiles: jest.fn().mockReturnValue([]),
+        getMarkdownFiles: jest.fn().mockReturnValue([]), // Default: no files
       },
       metadataCache: {
         getFileCache: jest.fn(),
@@ -857,6 +857,21 @@ ${formattedContent}`;
     });
 
     it("should preserve context information through save and load cycle", async () => {
+      // Create mock TFile for the note - must use Object.create to pass instanceof check
+      const mockTFile = Object.create(TFile.prototype);
+      mockTFile.basename = "typescript-guide.md";
+      mockTFile.path = "docs/typescript-guide.md";
+      mockTFile.extension = "md";
+      mockTFile.name = "typescript-guide.md";
+
+      // Mock vault to return the file when resolving by path
+      mockApp.vault.getAbstractFileByPath = jest.fn().mockImplementation((path: string) => {
+        return path === "docs/typescript-guide.md" ? mockTFile : null;
+      });
+
+      // Recreate persistence manager with the updated mock
+      const testPersistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+
       const originalMessages: ChatMessage[] = [
         {
           id: "1",
@@ -869,7 +884,7 @@ ${formattedContent}`;
           },
           isVisible: true,
           context: {
-            notes: [{ basename: "typescript-guide.md", path: "docs/typescript-guide.md" } as any],
+            notes: [mockTFile],
             urls: ["https://typescriptlang.org"],
             tags: ["programming", "typescript"],
             folders: ["docs/"],
@@ -889,7 +904,10 @@ ${formattedContent}`;
       ];
 
       // Format the content
-      const formattedContent = (persistenceManager as any).formatChatContent(originalMessages);
+      const formattedContent = (testPersistenceManager as any).formatChatContent(originalMessages);
+
+      // Verify the formatted content contains the full path (not just basename)
+      expect(formattedContent).toContain("docs/typescript-guide.md");
 
       // Add frontmatter
       const fullContent = `---
@@ -902,7 +920,7 @@ tags:
 ${formattedContent}`;
 
       // Parse it back
-      const parsedMessages = (persistenceManager as any).parseChatContent(fullContent);
+      const parsedMessages = (testPersistenceManager as any).parseChatContent(fullContent);
 
       // Verify the messages match
       expect(parsedMessages).toHaveLength(2);
@@ -913,6 +931,7 @@ ${formattedContent}`;
       expect(parsedMessages[0].context).toBeDefined();
       expect(parsedMessages[0].context.notes).toHaveLength(1);
       expect(parsedMessages[0].context.notes[0].basename).toBe("typescript-guide.md");
+      expect(parsedMessages[0].context.notes[0].path).toBe("docs/typescript-guide.md");
       expect(parsedMessages[0].context.urls).toEqual(["https://typescriptlang.org"]);
       expect(parsedMessages[0].context.tags).toEqual(["programming", "typescript"]);
       expect(parsedMessages[0].context.folders).toHaveLength(1);
@@ -920,6 +939,110 @@ ${formattedContent}`;
 
       // Second message should not have context
       expect(parsedMessages[1].context).toBeUndefined();
+    });
+
+    it("should resolve legacy basename-only context (backward compatibility)", async () => {
+      // Create mock TFile for the note
+      const mockTFile = {
+        basename: "typescript-guide.md",
+        path: "docs/typescript-guide.md",
+        extension: "md",
+        name: "typescript-guide.md",
+      } as TFile;
+
+      // Mock vault to return the file for basename resolution (legacy format)
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null); // Path lookup fails
+      mockApp.vault.getMarkdownFiles.mockReturnValue([mockTFile]); // Basename lookup succeeds
+
+      // Old format: just basename, no path
+      const content = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+**user**: What are the files about TypeScript?
+[Context: Notes: typescript-guide.md]
+[Timestamp: 2024/09/23 22:18:00]
+
+**ai**: Here's what I found about TypeScript in your files...
+[Timestamp: 2024/09/23 22:18:01]`;
+
+      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+
+      expect(parsedMessages).toHaveLength(2);
+      expect(parsedMessages[0].context).toBeDefined();
+      expect(parsedMessages[0].context.notes).toHaveLength(1);
+      expect(parsedMessages[0].context.notes[0].basename).toBe("typescript-guide.md");
+      expect(parsedMessages[0].context.notes[0].path).toBe("docs/typescript-guide.md");
+    });
+
+    it("should handle ambiguous basename resolution gracefully", async () => {
+      // Create two mock TFiles with the same basename
+      const mockTFile1 = {
+        basename: "typescript-guide.md",
+        path: "docs/typescript-guide.md",
+        extension: "md",
+        name: "typescript-guide.md",
+      } as TFile;
+
+      const mockTFile2 = {
+        basename: "typescript-guide.md",
+        path: "archive/typescript-guide.md",
+        extension: "md",
+        name: "typescript-guide.md",
+      } as TFile;
+
+      // Mock vault to return multiple files with same basename
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
+      mockApp.vault.getMarkdownFiles.mockReturnValue([mockTFile1, mockTFile2]);
+
+      // Old format: basename matches multiple files, but has other context items
+      const content = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+**user**: What are the files about TypeScript?
+[Context: Notes: typescript-guide.md | URLs: https://typescriptlang.org]
+[Timestamp: 2024/09/23 22:18:00]`;
+
+      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+
+      // Should skip ambiguous note (logs warning) but preserve other context
+      expect(parsedMessages).toHaveLength(1);
+      expect(parsedMessages[0].context).toBeDefined();
+      expect(parsedMessages[0].context.notes).toHaveLength(0); // Skipped due to ambiguity
+      expect(parsedMessages[0].context.urls).toEqual(["https://typescriptlang.org"]); // Other context preserved
+    });
+
+    it("should handle deleted notes gracefully", async () => {
+      // Mock vault to return null (file not found)
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
+      mockApp.vault.getMarkdownFiles.mockReturnValue([]); // No files match basename
+
+      // Note path that doesn't exist, but has other context items
+      const content = `---
+epoch: 1695513480000
+modelKey: gpt-4
+tags:
+  - copilot-conversation
+---
+
+**user**: What are the files about TypeScript?
+[Context: Notes: docs/deleted-file.md | Tags: typescript, programming]
+[Timestamp: 2024/09/23 22:18:00]`;
+
+      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+
+      // Should skip missing note (logs warning) but preserve other context
+      expect(parsedMessages).toHaveLength(1);
+      expect(parsedMessages[0].context).toBeDefined();
+      expect(parsedMessages[0].context.notes).toHaveLength(0); // Skipped - not found
+      expect(parsedMessages[0].context.tags).toEqual(["typescript", "programming"]); // Other context preserved
     });
 
     it("should handle messages without context (backward compatibility)", async () => {
