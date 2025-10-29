@@ -22,7 +22,7 @@ export class ThinkBlockStreamer {
     private excludeThinking: boolean = false
   ) {}
 
-  private handleClaude37Chunk(content: any[]) {
+  private handleClaudeChunk(content: any[]) {
     let textContent = "";
     let hasThinkingContent = false;
     for (const item of content) {
@@ -170,7 +170,7 @@ export class ThinkBlockStreamer {
     // Route based on the actual chunk format
     if (Array.isArray(chunk.content)) {
       // Claude format with content array
-      this.handleClaude37Chunk(chunk.content);
+      this.handleClaudeChunk(chunk.content);
     } else if (chunk.additional_kwargs?.reasoning_content) {
       // Deepseek format with reasoning_content
       this.handleDeepseekChunk(chunk);
