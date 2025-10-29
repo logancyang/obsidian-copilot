@@ -22,7 +22,7 @@ export class ThinkBlockStreamer {
     private excludeThinking: boolean = false
   ) {}
 
-  private handleClaude37Chunk(content: any[]) {
+  private handleClaudeChunk(content: any[]) {
     let textContent = "";
     let hasThinkingContent = false;
     for (const item of content) {
@@ -86,14 +86,24 @@ export class ThinkBlockStreamer {
 
   /**
    * Handle OpenRouter reasoning/thinking content
-   * OpenRouter exposes reasoning via:
-   * - delta.reasoning (streaming)
-   * - reasoning_details array (final response)
+   *
+   * OpenRouter exposes reasoning via two channels:
+   * - delta.reasoning (streaming, token-by-token)
+   * - reasoning_details (cumulative transcript array)
+   *
+   * STRATEGY: We use ONLY delta.reasoning for thinking content.
+   *
+   * Why delta-only?
+   * - Provides minimal latency (streaming as tokens arrive)
+   * - No duplication issues (single source of truth)
+   * - No complex cumulative bookkeeping needed
+   *
+   * Trade-offs:
+   * - Models that only populate reasoning_details (without delta.reasoning) won't show thinking
+   * - This is acceptable for now as most models use delta.reasoning for streaming
    */
   private handleOpenRouterChunk(chunk: any) {
-    let handledThinking = false;
-
-    // Handle streaming reasoning from delta
+    // Only process delta.reasoning (streaming), ignore reasoning_details entirely
     if (chunk.additional_kwargs?.delta?.reasoning) {
       // Skip thinking content if excludeThinking is enabled
       if (this.excludeThinking) {
@@ -104,45 +114,7 @@ export class ThinkBlockStreamer {
         this.hasOpenThinkBlock = true;
       }
       this.fullResponse += chunk.additional_kwargs.delta.reasoning;
-      handledThinking = true;
-    }
-
-    // Handle reasoning_details from final response or accumulated chunks
-    // IMPORTANT: Only treat as thinking if the array has actual content
-    if (chunk.additional_kwargs?.reasoning_details) {
-      const details = chunk.additional_kwargs.reasoning_details;
-      if (Array.isArray(details) && details.length > 0) {
-        // Skip thinking content if excludeThinking is enabled
-        if (this.excludeThinking) {
-          return true;
-        }
-
-        for (const detail of details) {
-          if (detail.encrypted) {
-            // Show placeholder for encrypted reasoning
-            if (!this.hasOpenThinkBlock) {
-              this.fullResponse += "\n<think>";
-              this.hasOpenThinkBlock = true;
-            }
-            this.fullResponse += "[Encrypted reasoning]";
-            handledThinking = true;
-          } else if (detail.text) {
-            if (!this.hasOpenThinkBlock) {
-              this.fullResponse += "\n<think>";
-              this.hasOpenThinkBlock = true;
-            }
-            this.fullResponse += detail.text;
-            handledThinking = true;
-          } else if (detail.summary) {
-            if (!this.hasOpenThinkBlock) {
-              this.fullResponse += "\n<think>";
-              this.hasOpenThinkBlock = true;
-            }
-            this.fullResponse += detail.summary;
-            handledThinking = true;
-          }
-        }
-      }
+      return true; // Handled thinking
     }
 
     // Close think block before adding regular content
@@ -156,7 +128,7 @@ export class ThinkBlockStreamer {
       this.fullResponse += chunk.content;
     }
 
-    return handledThinking;
+    return false; // No thinking handled
   }
 
   processChunk(chunk: any) {
@@ -178,6 +150,8 @@ export class ThinkBlockStreamer {
     }
 
     // Determine if this chunk will handle thinking content
+    // Note: For OpenRouter, we process only delta.reasoning, but we still need to recognize
+    // reasoning_details as a thinking chunk to prevent premature think block closure
     const isThinkingChunk =
       Array.isArray(chunk.content) ||
       chunk.additional_kwargs?.delta?.reasoning ||
@@ -196,7 +170,7 @@ export class ThinkBlockStreamer {
     // Route based on the actual chunk format
     if (Array.isArray(chunk.content)) {
       // Claude format with content array
-      this.handleClaude37Chunk(chunk.content);
+      this.handleClaudeChunk(chunk.content);
     } else if (chunk.additional_kwargs?.reasoning_content) {
       // Deepseek format with reasoning_content
       this.handleDeepseekChunk(chunk);
