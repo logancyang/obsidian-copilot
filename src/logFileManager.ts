@@ -30,32 +30,11 @@ class LogFileManager {
     return "copilot/copilot-log.md"; // under copilot/
   }
 
-  /** Ensure buffer is loaded with up to last 500 lines from existing file. */
+  /** Ensure the log manager is initialized. Always starts with an empty buffer. */
   private async ensureInitialized() {
     if (this.initialized) return;
-    try {
-      if (!this.hasVault()) {
-        this.initialized = true;
-        return;
-      }
-      const path = this.getLogPath();
-      const exists = await app.vault.adapter.exists(path);
-      if (exists) {
-        const content = await app.vault.adapter.read(path);
-        // Normalize line endings and split
-        const lines = content.split(/\r?\n/).filter((l) => l.length > 0);
-        if (lines.length > this.maxLines) {
-          this.buffer = lines.slice(lines.length - this.maxLines);
-        } else {
-          this.buffer = lines;
-        }
-      }
-    } catch {
-      // Ignore read errors; start fresh
-      this.buffer = [];
-    } finally {
-      this.initialized = true;
-    }
+    // Start with empty buffer - log file is only an export artifact
+    this.initialized = true;
   }
 
   private hasVault(): boolean {
