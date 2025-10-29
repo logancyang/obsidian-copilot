@@ -2,7 +2,6 @@ import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { COMMAND_PRIORITY_LOW, KEY_ENTER_COMMAND } from "lexical";
 import { SEND_SHORTCUT } from "@/constants";
-import { Platform } from "obsidian";
 
 /**
  * Props for the KeyboardPlugin component
@@ -16,7 +15,7 @@ interface KeyboardPluginProps {
 
 /**
  * Lexical plugin that handles keyboard shortcuts for the chat input.
- * Supports configurable send shortcuts: Enter, Shift+Enter, Cmd+Enter, Alt+Enter
+ * Supports configurable send shortcuts: Enter, Shift+Enter
  */
 export function KeyboardPlugin({ onSubmit, sendShortcut }: KeyboardPluginProps) {
   const [editor] = useLexicalComposerContext();
@@ -60,12 +59,6 @@ export function checkShortcutMatch(event: KeyboardEvent, shortcut: SEND_SHORTCUT
       return !event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
     case SEND_SHORTCUT.SHIFT_ENTER:
       return event.shiftKey && !event.metaKey && !event.ctrlKey && !event.altKey;
-    case SEND_SHORTCUT.CMD_ENTER:
-      return Platform.isMacOS
-        ? event.metaKey && !event.shiftKey && !event.altKey && !event.ctrlKey
-        : event.ctrlKey && !event.shiftKey && !event.altKey && !event.metaKey;
-    case SEND_SHORTCUT.ALT_ENTER:
-      return event.altKey && !event.shiftKey && !event.metaKey && !event.ctrlKey;
     default:
       return false;
   }

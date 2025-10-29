@@ -11,7 +11,7 @@ import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/setting
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
 import { Key, Loader2 } from "lucide-react";
-import { Notice, Platform } from "obsidian";
+import { Notice } from "obsidian";
 import React, { useState } from "react";
 import { ApiKeyDialog } from "./ApiKeyDialog";
 
@@ -248,8 +248,8 @@ export const BasicSettings: React.FC = () => {
                       </div>
                       <div className="tw-text-xs tw-text-muted">
                         If your selected shortcut doesn&#39;t work, check
-                        <strong>Obsidian&#39;s Settings → Hotkeys</strong> to see if another command
-                        is using the same key combination. <br />
+                        <strong> Obsidian&#39;s Settings → Hotkeys</strong> to see if another
+                        command is using the same key combination. <br />
                         You may need to remove or change the conflicting hotkey first.
                       </div>
                     </div>
@@ -262,11 +262,6 @@ export const BasicSettings: React.FC = () => {
             options={[
               { label: "Enter", value: SEND_SHORTCUT.ENTER },
               { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
-              {
-                label: Platform.isMacOS ? "⌘ + Enter" : "Ctrl + Enter",
-                value: SEND_SHORTCUT.CMD_ENTER,
-              },
-              { label: "Alt + Enter", value: SEND_SHORTCUT.ALT_ENTER },
             ]}
           />
 

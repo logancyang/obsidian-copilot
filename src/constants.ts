@@ -653,8 +653,6 @@ export enum DEFAULT_OPEN_AREA {
 export enum SEND_SHORTCUT {
   ENTER = "enter",
   SHIFT_ENTER = "shift+enter",
-  CMD_ENTER = "cmd+enter",
-  ALT_ENTER = "alt+enter",
 }
 
 export const COMMAND_IDS = {

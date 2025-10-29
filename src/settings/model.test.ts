@@ -78,26 +78,4 @@ describe("sanitizeSettings - defaultSendShortcut migration", () => {
 
     expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.SHIFT_ENTER);
   });
-
-  it("should preserve valid CMD_ENTER shortcut", () => {
-    const settingsWithCmdEnter = {
-      ...DEFAULT_SETTINGS,
-      defaultSendShortcut: SEND_SHORTCUT.CMD_ENTER,
-    };
-
-    const sanitized = sanitizeSettings(settingsWithCmdEnter);
-
-    expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.CMD_ENTER);
-  });
-
-  it("should preserve valid ALT_ENTER shortcut", () => {
-    const settingsWithAltEnter = {
-      ...DEFAULT_SETTINGS,
-      defaultSendShortcut: SEND_SHORTCUT.ALT_ENTER,
-    };
-
-    const sanitized = sanitizeSettings(settingsWithAltEnter);
-
-    expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ALT_ENTER);
-  });
 });
