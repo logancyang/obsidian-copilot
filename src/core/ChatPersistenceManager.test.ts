@@ -493,8 +493,8 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (200 bytes)
-      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the filename is within safe limits (100 bytes)
+      expect(byteLength).toBeLessThanOrEqual(100);
     });
 
     it("should handle Cyrillic text filenames by truncating to byte limit", async () => {
@@ -525,8 +525,8 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (200 bytes)
-      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the filename is within safe limits (100 bytes)
+      expect(byteLength).toBeLessThanOrEqual(100);
       // Verify the filename contains some Cyrillic text (not completely truncated)
       expect(basename.length).toBeGreaterThan(20);
     });
@@ -558,8 +558,8 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (200 bytes)
-      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the filename is within safe limits (100 bytes)
+      expect(byteLength).toBeLessThanOrEqual(100);
     });
 
     it("should handle mixed Unicode text (Chinese, Japanese, Korean) by truncating to byte limit", async () => {
@@ -590,8 +590,8 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (200 bytes)
-      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the filename is within safe limits (100 bytes)
+      expect(byteLength).toBeLessThanOrEqual(100);
     });
 
     it("should handle filenames with project prefix within byte limit", async () => {
@@ -626,13 +626,190 @@ Nature's quiet song`);
       const encoder = new TextEncoder();
       const byteLength = encoder.encode(basename).length;
 
-      // Verify the filename is within safe limits (200 bytes)
-      expect(byteLength).toBeLessThanOrEqual(200);
+      // Verify the filename is within safe limits (100 bytes)
+      expect(byteLength).toBeLessThanOrEqual(100);
       // Verify the project prefix is included
       expect(basename).toContain("project-123__");
 
       // Reset mock
       getCurrentProject.mockReturnValue(null);
+    });
+
+    it("should fallback to minimal filename when ENAMETOOLONG error occurs", async () => {
+      // Real-world scenario from user log: very long Cyrillic message that triggers ENAMETOOLONG
+      const cyrillicMessage =
+        "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx придерживайся правил перевода Правила перевода Songs of Syx сделай перевод для слова";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: cyrillicMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1729873880000,
+            display: "2025/10/25 16:11:20",
+            fileName: "20251025_161120",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      // Mock the vault.create to throw ENAMETOOLONG on first call, succeed on second
+      let createCallCount = 0;
+      mockApp.vault.create.mockImplementation((path: string, content: string) => {
+        createCallCount++;
+        if (createCallCount === 1) {
+          // First call: throw ENAMETOOLONG error (simulating the original filename being too long)
+          const error = new Error(
+            "ENAMETOOLONG: name too long, open '/home/user/vault/copilot/copilot-conversations/1)_используй_словарь_уже_установленных_терминов_Словарь_перевода_Songs_of@20251025_161120.md'"
+          );
+          return Promise.reject(error);
+        } else {
+          // Second call: succeed with fallback filename
+          return Promise.resolve({
+            path,
+            basename: path.split("/").pop(),
+          } as TFile);
+        }
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Verify that vault.create was called twice (once failed, once succeeded)
+      expect(mockApp.vault.create).toHaveBeenCalledTimes(2);
+
+      // First call should have used the preferred (long) filename
+      const firstCallPath = mockApp.vault.create.mock.calls[0][0] as string;
+      expect(firstCallPath).toContain("используй_словарь");
+
+      // Second call should have used the minimal fallback filename
+      const secondCallPath = mockApp.vault.create.mock.calls[1][0] as string;
+      expect(secondCallPath).toBe("test-folder/chat-1729873880000.md");
+
+      // Verify the fallback filename is very short (should be under 30 bytes)
+      const fallbackBasename = secondCallPath.split("/").pop() || "";
+      const encoder = new TextEncoder();
+      const byteLength = encoder.encode(fallbackBasename).length;
+      expect(byteLength).toBeLessThan(30);
+
+      // Verify a warning was logged about using minimal filename
+      expect(jest.mocked(Notice)).toHaveBeenCalledWith(
+        expect.stringContaining("chat-1729873880000.md")
+      );
+    });
+
+    it("should include project prefix in fallback filename for project chats", async () => {
+      const cyrillicMessage =
+        "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: cyrillicMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1729873880000,
+            display: "2025/10/25 16:11:20",
+            fileName: "20251025_161120",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Mock getCurrentProject to return a project
+      const getCurrentProject = jest.requireMock("@/aiParams").getCurrentProject;
+      getCurrentProject.mockReturnValue({ id: "songs-of-syx", name: "Songs of Syx Translation" });
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      // Mock the vault.create to throw ENAMETOOLONG on first call, succeed on second
+      let createCallCount = 0;
+      mockApp.vault.create.mockImplementation((path: string) => {
+        createCallCount++;
+        if (createCallCount === 1) {
+          const error = new Error("ENAMETOOLONG: name too long");
+          return Promise.reject(error);
+        } else {
+          return Promise.resolve({
+            path,
+            basename: path.split("/").pop(),
+          } as TFile);
+        }
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Second call should have project prefix in fallback filename
+      const secondCallPath = mockApp.vault.create.mock.calls[1][0] as string;
+      expect(secondCallPath).toBe("test-folder/songs-of-syx__chat-1729873880000.md");
+
+      // Verify basename starts with project prefix (so getChatHistoryFiles will find it)
+      const basename = secondCallPath.split("/").pop() || "";
+      expect(basename).toMatch(/^songs-of-syx__/);
+
+      // Reset mock
+      getCurrentProject.mockReturnValue(null);
+    });
+
+    it("should handle repeated saves with fallback filename (conflict handling)", async () => {
+      const cyrillicMessage =
+        "1) используй словарь уже установленных терминов Словарь перевода Songs of Syx";
+
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: cyrillicMessage,
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1729873880000,
+            display: "2025/10/25 16:11:20",
+            fileName: "20251025_161120",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFallbackFile = Object.create(TFile.prototype);
+      Object.assign(existingFallbackFile, {
+        path: "test-folder/chat-1729873880000.md",
+        basename: "chat-1729873880000",
+      });
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test-folder/chat-1729873880000.md") {
+          return existingFallbackFile;
+        }
+        return null;
+      });
+
+      // Mock the vault.create to throw errors on both calls
+      mockApp.vault.create.mockImplementation((path: string) => {
+        if (path.includes("используй")) {
+          // First call: ENAMETOOLONG
+          return Promise.reject(new Error("ENAMETOOLONG: name too long"));
+        } else {
+          // Second call (fallback): File already exists
+          return Promise.reject(new Error("File already exists"));
+        }
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Verify that vault.modify was called to update the existing fallback file
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFallbackFile,
+        expect.stringContaining("используй словарь")
+      );
+
+      // Verify the correct notices were shown
+      expect(jest.mocked(Notice)).toHaveBeenCalledWith(
+        "Existing chat note found - updating it now."
+      );
     });
 
     it("should update existing file when epoch is stored as a string", async () => {

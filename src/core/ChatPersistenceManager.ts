@@ -14,6 +14,8 @@ import {
 import { App, Notice, TFile, TFolder } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
+const SAFE_FILENAME_BYTE_LIMIT = 100;
+
 /**
  * ChatPersistenceManager - Handles saving and loading chat messages
  *
@@ -54,9 +56,9 @@ export class ChatPersistenceManager {
         ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter?.topic
         : undefined;
 
-      const fileName = existingFile
+      const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(messages, firstMessageEpoch, undefined);
+        : this.generateFileName(messages, firstMessageEpoch, existingTopic);
 
       const noteContent = this.generateNoteContent(
         chatContent,
@@ -73,12 +75,12 @@ export class ChatPersistenceManager {
       } else {
         // If the file doesn't exist, create a new one
         try {
-          targetFile = await this.app.vault.create(fileName, noteContent);
-          new Notice(`Chat saved as note: ${fileName}`);
-          logInfo(`[ChatPersistenceManager] Created new chat file: ${fileName}`);
+          targetFile = await this.app.vault.create(preferredFileName, noteContent);
+          new Notice(`Chat saved as note: ${preferredFileName}`);
+          logInfo(`[ChatPersistenceManager] Created new chat file: ${preferredFileName}`);
         } catch (error) {
           if (this.isFileAlreadyExistsError(error)) {
-            const conflictFile = this.app.vault.getAbstractFileByPath(fileName);
+            const conflictFile = this.app.vault.getAbstractFileByPath(preferredFileName);
             if (conflictFile && conflictFile instanceof TFile) {
               // Update existingTopic to prevent unnecessary regeneration
               existingTopic =
@@ -92,6 +94,35 @@ export class ChatPersistenceManager {
               );
             } else {
               throw error;
+            }
+          } else if (this.isNameTooLongError(error)) {
+            // Single fallback: minimal guaranteed-to-work filename with project prefix
+            const currentProject = getCurrentProject();
+            const filePrefix = currentProject ? `${currentProject.id}__` : "";
+            const fallbackName = `${settings.defaultSaveFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
+
+            try {
+              targetFile = await this.app.vault.create(fallbackName, noteContent);
+              new Notice(`Chat saved as note: ${fallbackName}`);
+              logWarn(
+                `[ChatPersistenceManager] Used minimal filename due to length constraints: ${fallbackName}`
+              );
+            } catch (fallbackError) {
+              if (this.isFileAlreadyExistsError(fallbackError)) {
+                const conflictFile = this.app.vault.getAbstractFileByPath(fallbackName);
+                if (conflictFile && conflictFile instanceof TFile) {
+                  await this.app.vault.modify(conflictFile, noteContent);
+                  targetFile = conflictFile;
+                  new Notice("Existing chat note found - updating it now.");
+                  logInfo(
+                    `[ChatPersistenceManager] Resolved fallback save conflict by updating existing chat file: ${conflictFile.path}`
+                  );
+                } else {
+                  throw fallbackError;
+                }
+              } else {
+                throw fallbackError;
+              }
             }
           } else {
             throw error;
@@ -442,7 +473,10 @@ ${conversationSummary}`;
   }
 
   /**
-   * Generate a file name for the chat
+   * Generate a file name for the chat.
+   * @param messages - The conversation messages used to derive the topic.
+   * @param firstMessageEpoch - Epoch timestamp of the first message in the chat.
+   * @param topic - Optional pre-computed topic to use for the filename.
    */
   private generateFileName(
     messages: ChatMessage[],
@@ -481,11 +515,6 @@ ${conversationSummary}`;
 
     // Parse the custom format and replace variables
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
-
-    // Calculate byte budget for the topic
-    // Most filesystems have a 255-byte limit for filenames
-    // We use 200 bytes as a conservative safe limit to account for variations
-    const SAFE_FILENAME_BYTE_LIMIT = 200;
 
     // Get the current project prefix if any
     const currentProject = getCurrentProject();
@@ -613,6 +642,21 @@ ${chatContent}`;
     } catch (error) {
       logError("[ChatPersistenceManager] Error applying AI topic to file:", error);
     }
+  }
+
+  /**
+   * Determine whether an error corresponds to an ENAMETOOLONG filesystem failure.
+   * @param error - The thrown error.
+   * @returns True when the error message indicates a name-length constraint violation.
+   */
+  private isNameTooLongError(error: unknown): boolean {
+    if (!error) {
+      return false;
+    }
+
+    const message = error instanceof Error ? error.message : String(error);
+    const normalized = message.toLowerCase();
+    return normalized.includes("enametoolong") || normalized.includes("name too long");
   }
 
   /**
