@@ -166,6 +166,8 @@ export enum ChatModels {
   OPENROUTER_GPT_41 = "openai/gpt-4.1",
   OPENROUTER_GPT_41_MINI = "openai/gpt-4.1-mini",
   OPENROUTER_GROK_4_FAST = "x-ai/grok-4-fast",
+  SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
+  SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
 }
 
 // Model Providers
@@ -185,6 +187,7 @@ export enum ChatModelProviders {
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
   AMAZON_BEDROCK = "amazon-bedrock",
+  SILICONFLOW = "siliconflow",
 }
 
 export enum ModelCapability {
@@ -381,6 +384,25 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     capabilities: [ModelCapability.REASONING],
   },
+  {
+    name: ChatModels.SILICONFLOW_DEEPSEEK_V3,
+    provider: ChatModelProviders.SILICONFLOW,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    baseUrl: "https://api.siliconflow.com/v1",
+  },
+  {
+    name: ChatModels.SILICONFLOW_DEEPSEEK_R1,
+    provider: ChatModelProviders.SILICONFLOW,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    baseUrl: "https://api.siliconflow.com/v1",
+    capabilities: [ModelCapability.REASONING],
+  },
 ];
 
 export enum EmbeddingModelProviders {
@@ -393,6 +415,7 @@ export enum EmbeddingModelProviders {
   OPENAI_FORMAT = "3rd party (openai-format)",
   COPILOT_PLUS = "copilot-plus",
   COPILOT_PLUS_JINA = "copilot-plus-jina",
+  SILICONFLOW = "siliconflow",
 }
 
 export enum EmbeddingModels {
@@ -406,6 +429,7 @@ export enum EmbeddingModels {
   COPILOT_PLUS_SMALL = "copilot-plus-small",
   COPILOT_PLUS_LARGE = "copilot-plus-large",
   COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
+  SILICONFLOW_QWEN3_EMBEDDING_0_6B = "Qwen/Qwen3-Embedding-0.6B",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
@@ -483,6 +507,15 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     isBuiltIn: true,
     isEmbeddingModel: true,
   },
+  {
+    name: EmbeddingModels.SILICONFLOW_QWEN3_EMBEDDING_0_6B,
+    provider: EmbeddingModelProviders.SILICONFLOW,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+    core: true,
+    baseUrl: "https://api.siliconflow.com/v1",
+  },
 ];
 
 // Embedding Models
@@ -529,6 +562,13 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     keyManagementURL: "https://platform.openai.com/api-keys",
     listModelURL: "https://api.openai.com/v1/models",
     testModel: ChatModels.GPT_41,
+  },
+  [ChatModelProviders.SILICONFLOW]: {
+    label: "SiliconFlow",
+    host: "https://api.siliconflow.com/v1",
+    keyManagementURL: "https://cloud.siliconflow.com/me/account/ak",
+    listModelURL: "https://api.siliconflow.com/v1/models",
+    testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
   [ChatModelProviders.AZURE_OPENAI]: {
     label: "Azure OpenAI",
@@ -631,6 +671,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   mistralai: "mistralApiKey",
   deepseek: "deepseekApiKey",
   "amazon-bedrock": "amazonBedrockApiKey",
+  siliconflow: "siliconflowApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -749,6 +790,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   deepseekApiKey: "",
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
+  siliconflowApiKey: "",
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
   embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
