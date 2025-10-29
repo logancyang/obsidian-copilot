@@ -13,6 +13,8 @@ import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";
 import { getMatchingPatterns, getVectorLength, shouldIndexFile } from "./searchUtils";
 
+const INTEGRITY_CHECK_YIELD_INTERVAL = 25;
+
 export interface OramaDocument {
   id: string;
   title: string;
@@ -737,11 +739,20 @@ export class DBOperations {
       const indexedFiles = await this.getIndexedFiles();
 
       // Check each file for embeddings
-      for (const filePath of indexedFiles) {
+      for (let index = 0; index < indexedFiles.length; index += 1) {
+        const filePath = indexedFiles[index];
         const hasEmbeddings = await this.hasEmbeddings(filePath);
         if (!hasEmbeddings) {
           this.markFileMissingEmbeddings(filePath);
         }
+
+        if ((index + 1) % INTEGRITY_CHECK_YIELD_INTERVAL === 0) {
+          await this.yieldToEventLoop();
+        }
+      }
+
+      if (indexedFiles.length % INTEGRITY_CHECK_YIELD_INTERVAL !== 0) {
+        await this.yieldToEventLoop();
       }
 
       const missingEmbeddings = this.getFilesMissingEmbeddings();
@@ -754,5 +765,25 @@ export class DBOperations {
       logError("Error checking index integrity:", err);
       throw new CustomError("Failed to check index integrity.");
     }
+  }
+
+  /**
+   * Yield control to the browser event loop so long-running integrity checks do not freeze the UI.
+   */
+  private async yieldToEventLoop(): Promise<void> {
+    await new Promise<void>((resolve) => {
+      if (typeof window !== "undefined") {
+        const idleWindow = window as Window & {
+          requestIdleCallback?: (callback: IdleRequestCallback) => number;
+        };
+
+        if (idleWindow.requestIdleCallback) {
+          idleWindow.requestIdleCallback(() => resolve());
+          return;
+        }
+      }
+
+      setTimeout(resolve, 0);
+    });
   }
 }
