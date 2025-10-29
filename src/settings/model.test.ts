@@ -1,5 +1,10 @@
-import { COPILOT_FOLDER_ROOT, DEFAULT_QA_EXCLUSIONS_SETTING } from "@/constants";
-import { sanitizeQaExclusions } from "@/settings/model";
+import {
+  COPILOT_FOLDER_ROOT,
+  DEFAULT_QA_EXCLUSIONS_SETTING,
+  DEFAULT_SETTINGS,
+  SEND_SHORTCUT,
+} from "@/constants";
+import { sanitizeQaExclusions, sanitizeSettings } from "@/settings/model";
 
 describe("sanitizeQaExclusions", () => {
   it("defaults to copilot root when value is not a string", () => {
@@ -26,5 +31,51 @@ describe("sanitizeQaExclusions", () => {
       encodeURIComponent("folder/"),
       encodeURIComponent(COPILOT_FOLDER_ROOT),
     ]);
+  });
+});
+
+describe("sanitizeSettings - defaultSendShortcut migration", () => {
+  it("should use default when defaultSendShortcut is missing", () => {
+    const settingsWithoutShortcut = {
+      ...DEFAULT_SETTINGS,
+      defaultSendShortcut: undefined as any,
+    };
+
+    const sanitized = sanitizeSettings(settingsWithoutShortcut);
+
+    expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ENTER);
+  });
+
+  it("should use default when defaultSendShortcut is invalid", () => {
+    const settingsWithInvalidShortcut = {
+      ...DEFAULT_SETTINGS,
+      defaultSendShortcut: "invalid-shortcut" as any,
+    };
+
+    const sanitized = sanitizeSettings(settingsWithInvalidShortcut);
+
+    expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ENTER);
+  });
+
+  it("should preserve valid ENTER shortcut", () => {
+    const settingsWithEnter = {
+      ...DEFAULT_SETTINGS,
+      defaultSendShortcut: SEND_SHORTCUT.ENTER,
+    };
+
+    const sanitized = sanitizeSettings(settingsWithEnter);
+
+    expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.ENTER);
+  });
+
+  it("should preserve valid SHIFT_ENTER shortcut", () => {
+    const settingsWithShiftEnter = {
+      ...DEFAULT_SETTINGS,
+      defaultSendShortcut: SEND_SHORTCUT.SHIFT_ENTER,
+    };
+
+    const sanitized = sanitizeSettings(settingsWithShiftEnter);
+
+    expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.SHIFT_ENTER);
   });
 });

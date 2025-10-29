@@ -14,6 +14,7 @@ import {
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
+  SEND_SHORTCUT,
 } from "@/constants";
 import { logInfo } from "@/logger";
 
@@ -105,6 +106,7 @@ export interface CopilotSettings {
   embeddingRequestsPerMin: number;
   embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
+  defaultSendShortcut: SEND_SHORTCUT;
   disableIndexOnMobile: boolean;
   showSuggestedPrompts: boolean;
   showRelevantNotes: boolean;
@@ -420,6 +422,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     typeof settingsToSanitize.quickCommandModelKey !== "string"
   ) {
     sanitizedSettings.quickCommandModelKey = DEFAULT_SETTINGS.quickCommandModelKey;
+  }
+
+  // Ensure defaultSendShortcut has a valid value
+  if (!Object.values(SEND_SHORTCUT).includes(sanitizedSettings.defaultSendShortcut)) {
+    sanitizedSettings.defaultSendShortcut = DEFAULT_SETTINGS.defaultSendShortcut;
   }
 
   // Ensure folder settings fall back to defaults when empty/whitespace

@@ -31,6 +31,7 @@ import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
 import { ChainType } from "@/chainFactory";
+import { useSettingsValue } from "@/settings/model";
 
 interface LexicalEditorProps {
   value: string;
@@ -84,6 +85,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
   const chatInputContext = useChatInput();
+  const settings = useSettingsValue();
 
   // Register editor and focus handler with context
   useEffect(() => {
@@ -159,7 +161,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           />
           <OnChangePlugin onChange={handleEditorChange} />
           <HistoryPlugin />
-          <KeyboardPlugin onSubmit={onSubmit} />
+          <KeyboardPlugin onSubmit={onSubmit} sendShortcut={settings.defaultSendShortcut} />
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={setFocusFn} onEditorReady={handleEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
