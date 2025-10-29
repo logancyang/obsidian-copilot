@@ -1,9 +1,11 @@
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { ChainType } from "@/chainFactory";
+import { getCurrentProject } from "@/aiParams";
 import { logInfo } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
+import ProjectManager from "@/LLMProviders/projectManager";
 import { updateChatMemory } from "@/chatUtils";
 import CopilotPlugin from "@/main";
 import { ContextManager } from "./ContextManager";
@@ -83,6 +85,34 @@ export class ChatManager {
   }
 
   /**
+   * Build system prompt for the current message, including project context if in project mode.
+   *
+   * @param chainType - The chain type being used
+   * @returns System prompt with project context appended if applicable
+   */
+  private async getSystemPromptForMessage(chainType: ChainType): Promise<string> {
+    const basePrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+
+    // Special case: Add project context for project chain
+    if (chainType === ChainType.PROJECT_CHAIN) {
+      const project = getCurrentProject();
+      if (project) {
+        const context = await ProjectManager.instance.getProjectContext(project.id);
+        let result = `${basePrompt}\n\n<project_system_prompt>\n${project.systemPrompt}\n</project_system_prompt>`;
+
+        // Only add project_context block if context exists
+        if (context) {
+          result += `\n\n<project_context>\n${context}\n</project_context>`;
+        }
+
+        return result;
+      }
+    }
+
+    return basePrompt;
+  }
+
+  /**
    * Send a new message with context processing
    */
   async sendMessage(
@@ -128,8 +158,8 @@ export class ChatManager {
         throw new Error(`Failed to retrieve message ${messageId}`);
       }
 
-      // Get system prompt for L1 layer
-      const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+      // Get system prompt for L1 layer (includes project context if in project mode)
+      const systemPrompt = await this.getSystemPromptForMessage(chainType);
 
       // Process context to generate LLM content
       const { processedContent, contextEnvelope } = await this.contextManager.processMessageContext(
@@ -175,7 +205,7 @@ export class ChatManager {
 
       // Reprocess context for the edited message
       const activeNote = this.plugin.app.workspace.getActiveFile();
-      const systemPrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+      const systemPrompt = await this.getSystemPromptForMessage(chainType);
       await this.contextManager.reprocessMessageContext(
         messageId,
         currentRepo,

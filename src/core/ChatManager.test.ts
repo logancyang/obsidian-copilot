@@ -22,6 +22,23 @@ jest.mock("./ChatPersistenceManager", () => ({
     saveChat: jest.fn().mockResolvedValue({ success: true, path: "/test/path.md" }),
   })),
 }));
+
+jest.mock("@/aiParams", () => ({
+  getCurrentProject: jest.fn().mockReturnValue(null),
+}));
+
+jest.mock("@/LLMProviders/projectManager", () => ({
+  default: {
+    instance: {
+      getProjectContext: jest.fn().mockResolvedValue(null),
+    },
+  },
+}));
+
+jest.mock("@/settings/model", () => ({
+  getSystemPromptWithMemory: jest.fn().mockResolvedValue("Test system prompt"),
+  getSettings: jest.fn().mockReturnValue({}),
+}));
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";
