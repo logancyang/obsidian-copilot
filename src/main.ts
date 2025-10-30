@@ -297,7 +297,10 @@ export default class CopilotPlugin extends Plugin {
     } else {
       this.app.workspace.revealLeaf(leaves[0]);
     }
-    this.emitChatIsVisible();
+    // Small delay to ensure React component is ready to receive the focus event
+    setTimeout(() => {
+      this.emitChatIsVisible();
+    }, 50);
   }
 
   async deactivateView() {
