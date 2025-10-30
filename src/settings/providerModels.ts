@@ -323,6 +323,27 @@ export interface OpenRouterAIModel {
   per_request_limits?: Record<string, string>;
 }
 
+// SiliconFlow response model definition
+export interface SiliconFlowModelResponse {
+  object: string;
+  data: SiliconFlowModel[];
+}
+
+/**
+ {
+ "id": "deepseek-ai/DeepSeek-V3",
+ "object": "model",
+ "created": 0,
+ "owned_by": ""
+ }
+ */
+export interface SiliconFlowModel {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
 // Response type mapping
 export interface ProviderResponseMap {
   [ChatModelProviders.OPENAI]: OpenAIModelResponse;
@@ -334,6 +355,7 @@ export interface ProviderResponseMap {
   [ChatModelProviders.GROQ]: GroqModelResponse;
   [ChatModelProviders.XAI]: XAIModelResponse;
   [ChatModelProviders.OPENROUTERAI]: OpenRouterAIModelResponse;
+  [ChatModelProviders.SILICONFLOW]: SiliconFlowModelResponse;
   [ChatModelProviders.COPILOT_PLUS]: null;
   [ChatModelProviders.AZURE_OPENAI]: null;
   [ChatModelProviders.AMAZON_BEDROCK]: unknown;
@@ -420,6 +442,13 @@ export const providerAdapters: ProviderModelAdapters = {
       id: model.id,
       name: model.id,
       provider: ChatModelProviders.OPENROUTERAI,
+    })) || [],
+
+  [ChatModelProviders.SILICONFLOW]: (data): StandardModel[] =>
+    data.data?.map((model) => ({
+      id: model.id,
+      name: model.id,
+      provider: ChatModelProviders.SILICONFLOW,
     })) || [],
 };
 

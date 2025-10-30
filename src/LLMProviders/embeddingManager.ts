@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CustomModel } from "@/aiParams";
-import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders } from "@/constants";
+import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -27,6 +27,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
   [EmbeddingModelProviders.LM_STUDIO]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
+  [EmbeddingModelProviders.SILICONFLOW]: CustomOpenAIEmbeddings,
 } as const;
 
 type EmbeddingProviderConstructorMap = typeof EMBEDDING_PROVIDER_CONSTRUCTORS;
@@ -54,6 +55,7 @@ export default class EmbeddingManager {
     [EmbeddingModelProviders.OLLAMA]: () => "default-key",
     [EmbeddingModelProviders.LM_STUDIO]: () => "default-key",
     [EmbeddingModelProviders.OPENAI_FORMAT]: () => "default-key",
+    [EmbeddingModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
   };
 
   private constructor() {
@@ -277,6 +279,15 @@ export default class EmbeddingManager {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,
           dangerouslyAllowBrowser: true,
+        },
+      },
+      [EmbeddingModelProviders.SILICONFLOW]: {
+        modelName,
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.siliconflowApiKey),
+        batchSize: getSettings().embeddingBatchSize,
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[EmbeddingModelProviders.SILICONFLOW].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
     };
