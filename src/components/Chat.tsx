@@ -33,6 +33,7 @@ import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import { getAIResponse } from "@/langchainStream";
 import ChainManager from "@/LLMProviders/chainManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
+import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
 import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -574,6 +575,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleNewChat = useCallback(async () => {
     clearRecordedPromptPayload();
+    await logFileManager.clear();
     handleStopGenerating(ABORT_REASON.NEW_CHAT);
 
     // Analyze chat messages for memory if enabled
