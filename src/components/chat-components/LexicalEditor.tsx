@@ -87,6 +87,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   const chatInputContext = useChatInput();
   const settings = useSettingsValue();
 
+  // Wrapper to properly set function state (avoids React's updater function interpretation)
+  const handleFocusRegistration = React.useCallback((fn: () => void) => {
+    setFocusFn(() => fn);
+  }, []);
+
   // Register editor and focus handler with context
   useEffect(() => {
     if (editorInstance) {
@@ -163,7 +168,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <HistoryPlugin />
           <KeyboardPlugin onSubmit={onSubmit} sendShortcut={settings.defaultSendShortcut} />
           <ValueSyncPlugin value={value} />
-          <FocusPlugin onFocus={setFocusFn} onEditorReady={handleEditorReady} />
+          <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
           {onURLsChange && (
             <URLPillSyncPlugin onURLsChange={onURLsChange} onURLsRemoved={onURLsRemoved} />
