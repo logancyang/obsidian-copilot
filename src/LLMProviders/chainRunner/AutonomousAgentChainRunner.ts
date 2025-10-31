@@ -208,11 +208,7 @@ ${params}
     localSearchPayload: string,
     originalPrompt: string
   ): string {
-    const settings = getSettings();
-    const promptWithReminder = appendInlineCitationReminder(
-      originalPrompt,
-      Boolean(settings?.enableInlineCitations)
-    );
+    const promptWithReminder = appendInlineCitationReminder(originalPrompt);
     return ensureCiCOrderingWithQuestion(localSearchPayload, promptWithReminder);
   }
 

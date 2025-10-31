@@ -29,17 +29,12 @@ export function wrapLocalSearchPayload(innerContent: string, timeExpression: str
 }
 
 /**
- * Append an inline citation reminder to the user's question when enabled.
+ * Append an inline citation reminder to the user's question.
  *
  * @param question - The original user question.
- * @param shouldRemind - Whether inline citations are enabled and the reminder should be added.
- * @returns The question with the reminder appended when required.
+ * @returns The question with the reminder appended if not already present.
  */
-export function appendInlineCitationReminder(question: string, shouldRemind: boolean): string {
-  if (!shouldRemind) {
-    return question;
-  }
-
+export function appendInlineCitationReminder(question: string): string {
   const reminder = "Have inline citations according to the guidance.";
   const trimmedQuestion = question.trimEnd();
 
@@ -58,28 +53,24 @@ export function appendInlineCitationReminder(question: string, shouldRemind: boo
  * Produces a CiC-aligned prompt by placing context first and the user question last.
  * @param contextSection Prepared instruction/context block.
  * @param userQuestion Original user message.
- * @param labelQuestion Whether to prefix the question with a clarifying label.
  * @returns String formatted according to CiC ordering.
  */
-export function renderCiCMessage(
-  contextSection: string,
-  userQuestion: string,
-  labelQuestion: boolean
-): string {
+export function renderCiCMessage(contextSection: string, userQuestion: string): string {
   const contextBlock = contextSection.trim();
   if (!contextBlock) {
     return userQuestion;
   }
 
-  const questionBlock = labelQuestion ? `Question: ${userQuestion}` : userQuestion;
-  return `${contextBlock}\n\n${questionBlock}`;
+  return `${contextBlock}\n\n${userQuestion}`;
 }
 
 /**
- * Ensure a CiC payload appends the user's question, avoiding duplicates when the question already exists.
+ * Ensure a CiC payload appends the user's question with a "[User query]:" label, avoiding duplicates when the question already exists.
+ * Uses the same label format as LayerToMessagesConverter for consistency across chains.
+ * Used in AutonomousAgent to clearly separate tool results from the original user query.
  * @param localSearchPayload XML-wrapped local search payload.
  * @param originalUserQuestion The original user question to append.
- * @returns CiC ordered payload with the question appended when missing.
+ * @returns CiC ordered payload with the labeled question appended when missing.
  */
 export function ensureCiCOrderingWithQuestion(
   localSearchPayload: string,
@@ -95,5 +86,6 @@ export function ensureCiCOrderingWithQuestion(
     return localSearchPayload;
   }
 
-  return renderCiCMessage(localSearchPayload, trimmedQuestion, true);
+  // Use same label format as LayerToMessagesConverter for consistency
+  return renderCiCMessage(localSearchPayload, `[User query]:\n${trimmedQuestion}`);
 }

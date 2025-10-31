@@ -28,7 +28,6 @@ import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
-import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
@@ -145,7 +144,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const settings = useSettingsValue();
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -336,10 +334,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
 
       // Transform markdown sources section into HTML structure
-      const sourcesSectionProcessed = processInlineCitations(
-        writeToFileSectionProcessed,
-        settings.enableInlineCitations
-      );
+      const sourcesSectionProcessed = processInlineCitations(writeToFileSectionProcessed);
 
       // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
@@ -351,7 +346,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       return noteLinksProcessed;
     },
-    [app, isStreaming, settings.enableInlineCitations]
+    [app, isStreaming]
   );
 
   useEffect(() => {

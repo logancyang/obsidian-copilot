@@ -16,7 +16,7 @@ import {
 import { BaseChainRunner } from "./BaseChainRunner";
 import {
   formatSourceCatalog,
-  getQACitationInstructionsConditional,
+  getQACitationInstructions,
   sanitizeContentForCitations,
   addFallbackSources,
   hasInlineCitations,
@@ -133,7 +133,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const qaInstructions =
         "\n\nAnswer the question based only on the following context:\n" +
         context +
-        getQACitationInstructionsConditional(settings.enableInlineCitations, sourceCatalog);
+        getQACitationInstructions(sourceCatalog);
 
       // Build messages using envelope-based context construction
       logInfo("[VaultQA] Using envelope-based context construction with LayerToMessagesConverter");
@@ -256,8 +256,6 @@ export class VaultQAChainRunner extends BaseChainRunner {
   }
 
   private addSourcestoResponse(response: string): string {
-    const settings = getSettings();
-
     // Only add sources if the AI actually cited them (has inline citations like [^1], [^2])
     // Don't add fallback sources if there are no citations in the response
     if (!hasInlineCitations(response)) {
@@ -267,7 +265,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
     const retrievedDocs = this.chainManager.getRetrievedDocuments();
     const sources = extractUniqueTitlesFromDocs(retrievedDocs).map((title) => ({ title }));
 
-    return addFallbackSources(response, sources, settings.enableInlineCitations);
+    return addFallbackSources(response, sources);
   }
 
   /**

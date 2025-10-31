@@ -36,13 +36,17 @@ IMPORTANT: Each source definition must follow this exact pattern:
 // ===== INSTRUCTION GENERATORS =====
 
 /**
- * Generates citation instructions with source catalog for vault searches.
+ * Generates comprehensive guidance for local search results including citation rules,
+ * image inclusion instructions, and source catalog.
  */
-export function getVaultCitationGuidance(sourceCatalog: string[]): string {
+export function getLocalSearchGuidance(sourceCatalog: string[]): string {
   return `
 
 <guidance>
 ${CITATION_RULES}
+
+IMAGE INCLUSION:
+When the retrieved documents contain relevant images (in formats like ![alt](image.png) or ![[image.png]]), include them in your response at appropriate locations using their exact original markdown format from the source.
 
 Source Catalog (for reference only):
 ${sourceCatalog.join("\n")}
@@ -68,43 +72,14 @@ const MAX_FALLBACK_SOURCES = 20;
 // ===== CENTRALIZED CITATION CONTROL =====
 
 /**
- * Gets appropriate citation instructions based on settings.
- * Returns empty string if citations are disabled.
- */
-export function getCitationInstructions(
-  enableInlineCitations: boolean,
-  sourceCatalog: string[]
-): string {
-  if (!enableInlineCitations) {
-    return "";
-  }
-  return getVaultCitationGuidance(sourceCatalog);
-}
-
-/**
- * Gets QA citation instructions based on settings.
- * Returns empty string if citations are disabled.
- */
-export function getQACitationInstructionsConditional(
-  enableInlineCitations: boolean,
-  sourceCatalog: string
-): string {
-  if (!enableInlineCitations) {
-    return "";
-  }
-  return getQACitationInstructions(sourceCatalog);
-}
-
-/**
- * Adds fallback sources to response if citations are missing and citations are enabled.
+ * Adds fallback sources to response if citations are missing.
  */
 export function addFallbackSources(
   response: string,
-  sources: { title?: string; path?: string }[],
-  enableInlineCitations: boolean
+  sources: { title?: string; path?: string }[]
 ): string {
   // Input validation
-  if (!enableInlineCitations || !sources?.length || !response) {
+  if (!sources?.length || !response) {
     return response || "";
   }
 
@@ -171,11 +146,7 @@ export function hasInlineCitations(response: string): boolean {
 /**
  * Provides web-search-specific citation instructions using markdown links.
  */
-export function getWebSearchCitationInstructions(enableInlineCitations: boolean): string {
-  if (!enableInlineCitations) {
-    return "";
-  }
-
+export function getWebSearchCitationInstructions(): string {
   return `\n\n${WEB_CITATION_RULES}`;
 }
 
@@ -504,20 +475,14 @@ function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): 
 
 /**
  * Main function to process inline citations in content.
- * Uses settings to determine if inline citations should be processed.
+ * Processes footnote-style citations and consolidates sources.
  */
-export function processInlineCitations(content: string, useInlineCitations: boolean): string {
+export function processInlineCitations(content: string): string {
   const sourcesSection = extractSourcesSection(content);
   if (!sourcesSection) return content;
 
   let { mainContent, sourcesBlock } = sourcesSection;
   sourcesBlock = normalizeSourcesBlock(sourcesBlock);
-
-  // If inline citations are disabled, use simple expandable sources list
-  if (!useInlineCitations) {
-    const simpleItems = parseSimpleSources(sourcesBlock);
-    return buildSourcesDetails(mainContent, simpleItems);
-  }
 
   // Process inline citations
   const footnoteLines = parseFootnoteDefinitions(sourcesBlock);

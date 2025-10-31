@@ -1,9 +1,8 @@
 import {
   addFallbackSources,
   formatSourceCatalog,
-  getCitationInstructions,
+  getLocalSearchGuidance,
   getQACitationInstructions,
-  getVaultCitationGuidance,
   hasExistingCitations,
   hasInlineCitations,
   normalizeCitations,
@@ -195,15 +194,16 @@ More content
     });
   });
 
-  describe("getVaultCitationGuidance", () => {
-    it("should format vault citation guidance with source catalog", () => {
+  describe("getLocalSearchGuidance", () => {
+    it("should format local search guidance with citation rules, image inclusion, and source catalog", () => {
       const sourceCatalog = ["- [[Doc 1]] (path1.md)", "- [[Doc 2]] (path2.md)"];
-      const result = getVaultCitationGuidance(sourceCatalog);
+      const result = getLocalSearchGuidance(sourceCatalog);
 
       expect(result).toContain("<guidance>");
       expect(result).toContain("</guidance>");
       expect(result).toContain("CITATION RULES:");
       expect(result).toContain("START with [^1]");
+      expect(result).toContain("IMAGE INCLUSION:");
       expect(result).toContain("Source Catalog (for reference only):");
       expect(result).toContain("- [[Doc 1]] (path1.md)");
       expect(result).toContain("- [[Doc 2]] (path2.md)");
@@ -224,28 +224,28 @@ More content
   });
 
   describe("processInlineCitations", () => {
-    it("should process inline citations when enabled", () => {
+    it("should process inline citations with footnote format", () => {
       const content = `Some content here
 
 #### Sources:
 [^1]: [[Document 1]]
 [^2]: [[Document 2]]`;
 
-      const result = processInlineCitations(content, true);
+      const result = processInlineCitations(content);
       expect(result).toContain("copilot-sources__summary");
       expect(result).toContain('copilot-sources__index">[1]');
       expect(result).toContain('copilot-sources__text">[[Document 1]]');
       expect(result).toContain('copilot-sources__text">[[Document 2]]');
     });
 
-    it("should use simple expandable list when disabled", () => {
+    it("should handle simple list format", () => {
       const content = `Some content here
 
 #### Sources:
 - [[Document 1]]
 - [[Document 2]]`;
 
-      const result = processInlineCitations(content, false);
+      const result = processInlineCitations(content);
       expect(result).toContain("copilot-sources__summary");
       expect(result).toContain('copilot-sources__index">[1]');
       expect(result).toContain('copilot-sources__text">[[Document 1]]');
@@ -254,53 +254,27 @@ More content
 
     it("should return unchanged content when no sources section", () => {
       const content = "Just regular content without sources";
-      const result = processInlineCitations(content, true);
+      const result = processInlineCitations(content);
       expect(result).toBe(content);
     });
   });
 
-  describe("getCitationInstructions", () => {
-    it("should return citation instructions when enabled", () => {
-      const sourceCatalog = ["- [[Doc 1]] (path1.md)"];
-      const result = getCitationInstructions(true, sourceCatalog);
-
-      expect(result).toContain("CITATION RULES:");
-      expect(result).toContain("<guidance>");
-      expect(result).toContain("Doc 1");
-    });
-
-    it("should return empty string when disabled", () => {
-      const sourceCatalog = ["- [[Doc 1]] (path1.md)"];
-      const result = getCitationInstructions(false, sourceCatalog);
-
-      expect(result).toBe("");
-    });
-  });
-
   describe("addFallbackSources", () => {
-    it("should add sources when citations enabled and missing", () => {
+    it("should add sources when missing", () => {
       const response = "Some content without sources";
       const sources = [{ title: "Document 1" }, { title: "Document 2" }];
 
-      const result = addFallbackSources(response, sources, true);
+      const result = addFallbackSources(response, sources);
       expect(result).toContain("#### Sources:");
       expect(result).toContain("[^1]: [[Document 1]]");
       expect(result).toContain("[^2]: [[Document 2]]");
-    });
-
-    it("should not add sources when citations disabled", () => {
-      const response = "Some content without sources";
-      const sources = [{ title: "Document 1" }];
-
-      const result = addFallbackSources(response, sources, false);
-      expect(result).toBe(response);
     });
 
     it("should not add sources when already present", () => {
       const response = "Some content\n#### Sources:\n[^1]: [[Existing]]";
       const sources = [{ title: "Document 1" }];
 
-      const result = addFallbackSources(response, sources, true);
+      const result = addFallbackSources(response, sources);
       expect(result).toBe(response);
     });
 
@@ -308,14 +282,14 @@ More content
       const response = "Some content";
       const sources: any[] = [];
 
-      const result = addFallbackSources(response, sources, true);
+      const result = addFallbackSources(response, sources);
       expect(result).toBe(response);
     });
 
     it("should handle invalid inputs gracefully", () => {
-      expect(addFallbackSources("", [{ title: "Doc" }], true)).toBe("");
-      expect(addFallbackSources(null as any, [{ title: "Doc" }], true)).toBe("");
-      expect(addFallbackSources(undefined as any, [{ title: "Doc" }], true)).toBe("");
+      expect(addFallbackSources("", [{ title: "Doc" }])).toBe("");
+      expect(addFallbackSources(null as any, [{ title: "Doc" }])).toBe("");
+      expect(addFallbackSources(undefined as any, [{ title: "Doc" }])).toBe("");
     });
   });
 
@@ -387,7 +361,7 @@ More content
 [^9]: [[2024-03-13]]
 [^18]: [[2024-04-08]]`;
 
-      const result = processInlineCitations(content, true);
+      const result = processInlineCitations(content);
 
       // CRITICAL: Each citation must map to the correct source
       // After processing, we expect:
@@ -431,7 +405,7 @@ More content
 [^3]: [[How to Make Wealth]]
 [^4]: [[Superlinear Returns]]`;
 
-      const result = processInlineCitations(content, true);
+      const result = processInlineCitations(content);
 
       // Should consolidate the 3 "How to Make Wealth" entries into 1
       expect(result).toContain(
@@ -468,7 +442,7 @@ More content
 [^17]: [[Document C]]
 [^22]: [[Document B]]`;
 
-      const result = processInlineCitations(content, true);
+      const result = processInlineCitations(content);
 
       // Expected renumbering based on first mention:
       // [^14] (first mention) -> [1] -> [[Document B]]
@@ -505,7 +479,7 @@ More content
 [^7]: [[Superlinear Returns]]
 [^8]: [[How to Do Great Work]]`;
 
-      const result = processInlineCitations(content, true);
+      const result = processInlineCitations(content);
 
       // CRITICAL: Both consecutive citations must be processed correctly
       // [^7] (first mention) -> [1] -> [[Superlinear Returns]]
