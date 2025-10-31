@@ -491,7 +491,19 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
 
         // Call the real Gemini model
         const response = await realGeminiModel.invoke(conversationMessages);
-        const fullResponse = response.content || response.text || "";
+
+        // Ensure fullResponse is always a string (handle multimodal/array content)
+        const fullResponse = (() => {
+          const content = response.content || response.text || "";
+          if (typeof content === "string") {
+            return content;
+          }
+          if (Array.isArray(content)) {
+            // For multimodal content, extract text parts
+            return content.map((part: any) => part.text || JSON.stringify(part)).join(" ");
+          }
+          return JSON.stringify(content);
+        })();
 
         console.log(
           `📤 Model response (${fullResponse.length} chars): ${fullResponse.substring(0, 300)}...`
