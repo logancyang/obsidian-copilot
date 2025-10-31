@@ -126,6 +126,10 @@ Example - "search the web for python tutorials":
       isAlwaysEnabled: true,
       customPromptInstructions: `For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
 
+- If the user mentions a specific city, country, or timezone name (e.g., "Tokyo", "Japan", "JST"), you MUST convert it to the correct UTC offset and pass it via the timezoneOffset parameter (e.g., "+9").
+- Only omit timezoneOffset when the user asks for the current local time without naming any location or timezone.
+- If you cannot confidently determine the offset from the user request, ask the user to clarify before calling the tool.
+
 Example 1 - "what time is it" (local time):
 <use_tool>
 <name>getCurrentTime</name>
