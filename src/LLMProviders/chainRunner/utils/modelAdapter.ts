@@ -280,7 +280,6 @@ If multiple results or no result, you should ask the user to provide a more spec
         "src/LLMProviders/chainRunner/utils/modelAdapter.ts#BaseModelAdapter.buildSystemPromptSections",
       content: `## General Guidelines
 - Think hard about whether a query could potentially be answered from personal knowledge or notes, if yes, call a vault search (localSearch) first
-- Only use web search if: the query explicitly asks for web search, OR the query explicitly requires current/web information
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.
