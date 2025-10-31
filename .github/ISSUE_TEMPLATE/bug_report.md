@@ -7,11 +7,13 @@ assignees: ""
 ---
 
 - [ ] Disable all other plugins besides Copilot **(required)**
-- [ ] Screenshot of note + Copilot chat pane + dev console added **(required)**
+- [ ] Log file generated via "Copilot: Create Log File" command or Settings -> Advanced -> Create Log File **(required)**
+- [ ] Screenshot of note + Copilot chat pane + dev console added **(optional)**
 
 Copilot version:
+Model used:
 
-(Bug report without the above will be closed)
+(Bug reports missing the required items above will be closed)
 
 **Describe how to reproduce**
 A clear and concise description of what the bug is. Clear steps to reproduce the behavior
