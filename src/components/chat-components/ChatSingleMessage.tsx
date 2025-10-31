@@ -201,6 +201,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         return text;
       };
 
+      /**
+       * Escapes tasks code blocks to prevent execution in AI responses.
+       * Converts ```tasks to ```text so they display as static code examples
+       * instead of executing task queries.
+       */
+      const escapeTasksCodeBlocks = (text: string): string => {
+        // Replace ```tasks (with optional whitespace before newline/end)
+        text = text.replace(/```tasks(\s*(?:\n|$))/g, "```text$1");
+        return text;
+      };
+
       const processCollapsibleSection = (
         content: string,
         tagName: string,
@@ -313,8 +324,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       // Escape dataview code blocks first to prevent execution
       const dataviewEscaped = escapeDataviewCodeBlocks(content);
 
+      // Escape tasks code blocks to prevent execution
+      const tasksEscaped = escapeTasksCodeBlocks(dataviewEscaped);
+
       // Process LaTeX
-      const latexProcessed = dataviewEscaped
+      const latexProcessed = tasksEscaped
         .replace(/\\\[\s*/g, "$$")
         .replace(/\s*\\\]/g, "$$")
         .replace(/\\\(\s*/g, "$")
