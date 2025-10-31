@@ -253,12 +253,22 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
+    name: ChatModels.GROK_4_FAST,
+    provider: ChatModelProviders.XAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: false,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
     name: ChatModels.OPENROUTER_GROK_4_FAST,
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.GPT_5,
