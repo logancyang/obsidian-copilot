@@ -16,6 +16,7 @@ import {
 } from "@/settings/model";
 import {
   err2String,
+  findCustomModel,
   getModelInfo,
   ModelInfo,
   safeFetch,
@@ -589,16 +590,77 @@ export default class ChatModelManager {
   }
 
   /**
+   * Helper to validate a model config has valid credentials and meets entitlement requirements.
+   * Does NOT check believerExclusive - that's validated at usage time, not selection time.
+   */
+  private isModelConfigValid(model: CustomModel, settings: CopilotSettings): boolean {
+    const modelKey = getModelKeyFromModel(model);
+    const modelInfo = ChatModelManager.modelMap[modelKey];
+
+    // Check if model exists in map and has API key
+    if (!modelInfo || !modelInfo.hasApiKey) {
+      return false;
+    }
+
+    // Check Copilot Plus entitlement requirements
+    if (model.plusExclusive && !settings.isPlusUser) {
+      return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Resolves the active chat model for temperature override operations.
+   * Uses a single source of truth: getModelKey() -> findCustomModel()
+   * Falls back to first valid model in settings.activeModels if current selection is invalid.
+   *
+   * Note: believerExclusive models are trusted if explicitly selected by the user,
+   * but skipped in fallback to avoid selecting them for non-Believer users.
+   */
+  private resolveModelForTemperatureOverride(): CustomModel {
+    const settings = getSettings();
+
+    // Try to get the user's currently selected model
+    try {
+      const currentModelKey = getModelKey();
+      if (currentModelKey) {
+        const model = findCustomModel(currentModelKey, settings.activeModels);
+
+        // Validate it (trust believerExclusive if user selected it)
+        if (this.isModelConfigValid(model, settings)) {
+          return model;
+        }
+      }
+    } catch {
+      // Model not found or invalid, fall through to fallback
+    }
+
+    // Fallback: Find first valid model in settings.activeModels
+    // Skip believerExclusive models in fallback to avoid selecting them for non-Believer users
+    for (const model of settings.activeModels) {
+      if (model.enabled && !model.believerExclusive && this.isModelConfigValid(model, settings)) {
+        return model;
+      }
+    }
+
+    // No valid model found
+    throw new Error(
+      "No valid chat model available for temperature override. " +
+        "Please check your API key settings and ensure at least one model is properly configured."
+    );
+  }
+
+  /**
    * langchain 1.0 TypeScript doesn't support temperature override in BaseChatModelCallOptions,
    * so we need to create a new model instance with the specified temperature.
    */
   async getChatModelWithTemperature(temperature: number): Promise<BaseChatModel> {
-    const settings = getSettings();
-    const currentModel = settings.activeModels[0];
+    const modelConfig = this.resolveModelForTemperatureOverride();
 
     // Create a temporary model config with overridden temperature
     const modelWithTempOverride: CustomModel = {
-      ...currentModel,
+      ...modelConfig,
       temperature,
     };
 
@@ -706,7 +768,7 @@ export default class ChatModelManager {
     if (!selectedModel?.hasApiKey) {
       // Clear the current chat model
       ChatModelManager.chatModel = null;
-      console.log("Failed to reinitialize model due to missing API key");
+      logInfo("Failed to reinitialize model due to missing API key");
     }
   }
 
