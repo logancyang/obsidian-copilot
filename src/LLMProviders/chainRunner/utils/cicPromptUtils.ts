@@ -69,3 +69,29 @@ export function ensureCiCOrderingWithQuestion(
   // Use same label format as LayerToMessagesConverter for consistency
   return renderCiCMessage(localSearchPayload, `[User query]:\n${trimmedQuestion}`);
 }
+
+/**
+ * Inserts citation guidance immediately before the user query label, keeping tool context intact.
+ * @param payload Serialized CiC payload containing tool outputs and user query.
+ * @param guidance Guidance block (typically <guidance>...</guidance>) to insert.
+ * @returns Payload with guidance positioned before `[User query]:` or appended when label missing.
+ */
+export function injectGuidanceBeforeUserQuery(payload: string, guidance?: string | null): string {
+  const trimmedGuidance = guidance?.trim();
+  if (!trimmedGuidance) {
+    return payload;
+  }
+
+  const userQueryLabel = "[User query]:";
+  const labelIndex = payload.indexOf(userQueryLabel);
+  if (labelIndex === -1) {
+    const trimmedPayload = payload.trimEnd();
+    const joiner = trimmedPayload.length > 0 ? "\n\n" : "";
+    return `${trimmedPayload}${joiner}${trimmedGuidance}`;
+  }
+
+  const prefix = payload.slice(0, labelIndex).trimEnd();
+  const suffix = payload.slice(labelIndex).trimStart();
+
+  return `${prefix}\n\n${trimmedGuidance}\n\n${suffix}`;
+}

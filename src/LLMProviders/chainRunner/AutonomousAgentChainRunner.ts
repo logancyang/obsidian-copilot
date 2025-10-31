@@ -196,8 +196,9 @@ ${params}
 
   /**
    * Apply CiC ordering by appending the original user question after the local search payload.
+   * Guidance is now self-contained within each localSearch payload from prepareLocalSearchResult.
    *
-   * @param localSearchPayload - XML-wrapped local search payload prepared for the LLM.
+   * @param localSearchPayload - XML-wrapped local search payload prepared for the LLM (includes guidance).
    * @param originalPrompt - The original user prompt (before any enhancements).
    * @returns Payload with question appended using CiC ordering when needed.
    */
@@ -205,32 +206,7 @@ ${params}
     localSearchPayload: string,
     originalPrompt: string
   ): string {
-    const payloadWithQuestion = ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
-
-    const guidance = this.lastLocalSearchGuidance?.trim();
-    this.lastLocalSearchGuidance = null;
-
-    if (!guidance?.length) {
-      return payloadWithQuestion;
-    }
-
-    const trimmedPayload = payloadWithQuestion.trim();
-    const trimmedQuestion = originalPrompt.trim();
-    if (!trimmedQuestion.length) {
-      return [trimmedPayload, guidance].filter(Boolean).join("\n\n");
-    }
-
-    const userQueryLabel = "[User query]:";
-    const labelIndex = payloadWithQuestion.indexOf(userQueryLabel);
-    if (labelIndex === -1) {
-      return [trimmedPayload, guidance].filter(Boolean).join("\n\n");
-    }
-
-    const beforeQuestion = payloadWithQuestion.slice(0, labelIndex).trimEnd();
-    const questionSection = payloadWithQuestion.slice(labelIndex).trimStart();
-    return [beforeQuestion, guidance, questionSection]
-      .filter((section) => section.trim().length > 0)
-      .join("\n\n");
+    return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {

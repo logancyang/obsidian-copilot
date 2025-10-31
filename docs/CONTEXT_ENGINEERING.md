@@ -165,7 +165,8 @@ All tools (`localSearch`, `webSearch`, `getFileTree`, etc.) are treated uniforml
 
 - Intent analysis still Broca-based (ToolCallPlanner pending), but prompt assembly is envelope-first.
 - All tool outputs (localSearch, webSearch, file tree, etc.) formatted uniformly and prepended to user message.
-- LocalSearch payload now embeds “answer from context” guidance and citation catalog inside the tool block.
+- LocalSearch payload is self-contained: includes RAG instruction, documents, and citation guidance all within the `<localSearch>` block.
+- Each localSearch call carries its own guidance block (source catalog + citation rules), ensuring correct citations in multi-search turns.
 - Composer instructions appended once to avoid duplication; payload recorder captures tool XML alongside L3/L5.
 
 ### AutonomousAgentChainRunner
@@ -339,11 +340,11 @@ const finalUserContent = renderCiCMessage(
 <localSearch timeRange="last week">
 Answer the question based only on the following context:
 
-<guidance>
-[Citation rules...]
-</guidance>
-
 [Retrieved documents...]
+
+<guidance>
+[Citation rules and source catalog...]
+</guidance>
 </localSearch>
 
 <webSearch>
@@ -356,7 +357,8 @@ Answer the question based only on the following context:
 - Each tool wrapped as `<toolName>content</toolName>`
 - Prepended to user message via `renderCiCMessage()`
 - RAG instruction ("Answer based on context") included in localSearch output
-- Citation guidance travels with RAG results
+- Citation guidance included directly within each `<localSearch>` block (self-contained)
+- Multi-search turns: each localSearch has its own guidance block with source mappings
 - Turn-specific, never cached in L2
 
 ### Intent Analysis

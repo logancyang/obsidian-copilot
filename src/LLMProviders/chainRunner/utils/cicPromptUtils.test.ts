@@ -1,6 +1,7 @@
 import {
   buildLocalSearchInnerContent,
   ensureCiCOrderingWithQuestion,
+  injectGuidanceBeforeUserQuery,
   renderCiCMessage,
   wrapLocalSearchPayload,
 } from "./cicPromptUtils";
@@ -71,6 +72,42 @@ describe("cicPromptUtils", () => {
       const payload = "<localSearch>\n<context/>\n</localSearch>";
 
       expect(ensureCiCOrderingWithQuestion(payload, "   ")).toBe(payload);
+    });
+  });
+
+  describe("injectGuidanceBeforeUserQuery", () => {
+    const guidance = "<guidance>\nRules\n</guidance>";
+
+    it("places guidance before user query label when present", () => {
+      const payload = "# Additional context:\n\n<context>\n</context>\n\n[User query]:\nWhat?";
+      const result = injectGuidanceBeforeUserQuery(payload, guidance);
+
+      expect(result).toBe(
+        "# Additional context:\n\n<context>\n</context>\n\n<guidance>\nRules\n</guidance>\n\n[User query]:\nWhat?"
+      );
+    });
+
+    it("appends guidance when user query label missing", () => {
+      const payload = "<context>\n</context>";
+      const result = injectGuidanceBeforeUserQuery(payload, guidance);
+
+      expect(result).toBe("<context>\n</context>\n\n<guidance>\nRules\n</guidance>");
+    });
+
+    it("leaves payload unchanged when guidance empty", () => {
+      const payload = "<context>\n</context>";
+      expect(injectGuidanceBeforeUserQuery(payload, "")).toBe(payload);
+      expect(injectGuidanceBeforeUserQuery(payload, null)).toBe(payload);
+      expect(injectGuidanceBeforeUserQuery(payload, undefined)).toBe(payload);
+    });
+
+    it("handles payloads with trailing whitespace before label", () => {
+      const payload = "# Additional context:\n\n<context>\n</context>\n  \n\n[User query]:\nWhat?";
+      const result = injectGuidanceBeforeUserQuery(payload, guidance);
+
+      expect(result).toBe(
+        "# Additional context:\n\n<context>\n</context>\n\n<guidance>\nRules\n</guidance>\n\n[User query]:\nWhat?"
+      );
     });
   });
 });
