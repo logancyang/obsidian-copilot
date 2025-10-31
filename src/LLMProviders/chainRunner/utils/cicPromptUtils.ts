@@ -3,13 +3,14 @@
  */
 
 /**
- * Builds the ordered inner payload for a localSearch result, placing guidance before documents.
- * @param guidance Citation guidance or instructions associated with the search results.
+ * Builds the ordered inner payload for a localSearch result, placing optional lead-in
+ * instructions ahead of the serialized documents.
+ * @param introText Context-setting instructions to show before the documents.
  * @param formattedContent Serialized documents selected for inclusion.
  * @returns Combined payload string with minimal whitespace.
  */
-export function buildLocalSearchInnerContent(guidance: string, formattedContent: string): string {
-  const sections = [guidance, formattedContent]
+export function buildLocalSearchInnerContent(introText: string, formattedContent: string): string {
+  const sections = [introText, formattedContent]
     .map((section) => section?.trim())
     .filter((section): section is string => Boolean(section));
 
@@ -26,27 +27,6 @@ export function wrapLocalSearchPayload(innerContent: string, timeExpression: str
   const payload = innerContent ? `\n${innerContent}\n` : "";
   const timeAttribute = timeExpression ? ` timeRange="${timeExpression}"` : "";
   return `<localSearch${timeAttribute}>${payload}</localSearch>`;
-}
-
-/**
- * Append an inline citation reminder to the user's question.
- *
- * @param question - The original user question.
- * @returns The question with the reminder appended if not already present.
- */
-export function appendInlineCitationReminder(question: string): string {
-  const reminder = "Have inline citations according to the guidance.";
-  const trimmedQuestion = question.trimEnd();
-
-  if (!trimmedQuestion) {
-    return reminder;
-  }
-
-  if (trimmedQuestion.toLowerCase().includes(reminder.toLowerCase())) {
-    return trimmedQuestion;
-  }
-
-  return `${trimmedQuestion}\n\n${reminder}`;
 }
 
 /**

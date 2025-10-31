@@ -608,6 +608,12 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return { toolOutputs, sources: deduplicateSources(allSources) };
   }
 
+  /**
+   * Retains the most recent local search guidance block so downstream ordering logic
+   * can position it adjacent to the user query.
+   */
+  protected lastLocalSearchGuidance: string | null = null;
+
   // Persist citation lines built for this turn to reuse in fallback
   private lastCitationSources: { title?: string; path?: string }[] | null = null;
 
@@ -617,6 +623,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   private prepareLocalSearchResult(documents: any[], timeExpression: string): string {
+    this.lastLocalSearchGuidance = null;
+
     // First filter documents with includeInContext
     const includedDocs = documents.filter((doc) => doc.includeInContext);
 
@@ -672,14 +680,12 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       };
     });
 
-    const guidance = getLocalSearchGuidance(catalogLines);
+    const guidance = getLocalSearchGuidance(catalogLines).trim();
+    this.lastLocalSearchGuidance = guidance.length > 0 ? guidance : null;
 
     // Add RAG instruction (like VaultQA) to ensure model uses the context
     const ragInstruction = "Answer the question based only on the following context:";
-    const innerContent = buildLocalSearchInnerContent(
-      `${ragInstruction}\n\n${guidance}`,
-      formattedContent
-    );
+    const innerContent = buildLocalSearchInnerContent(ragInstruction, formattedContent);
 
     // Wrap in XML-like tags for better LLM understanding
     return wrapLocalSearchPayload(innerContent, timeExpression);

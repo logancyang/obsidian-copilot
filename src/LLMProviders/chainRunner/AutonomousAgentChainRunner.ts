@@ -37,10 +37,7 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
-import {
-  appendInlineCitationReminder,
-  ensureCiCOrderingWithQuestion,
-} from "./utils/cicPromptUtils";
+import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
@@ -208,8 +205,32 @@ ${params}
     localSearchPayload: string,
     originalPrompt: string
   ): string {
-    const promptWithReminder = appendInlineCitationReminder(originalPrompt);
-    return ensureCiCOrderingWithQuestion(localSearchPayload, promptWithReminder);
+    const payloadWithQuestion = ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
+
+    const guidance = this.lastLocalSearchGuidance?.trim();
+    this.lastLocalSearchGuidance = null;
+
+    if (!guidance?.length) {
+      return payloadWithQuestion;
+    }
+
+    const trimmedPayload = payloadWithQuestion.trim();
+    const trimmedQuestion = originalPrompt.trim();
+    if (!trimmedQuestion.length) {
+      return [trimmedPayload, guidance].filter(Boolean).join("\n\n");
+    }
+
+    const userQueryLabel = "[User query]:";
+    const labelIndex = payloadWithQuestion.indexOf(userQueryLabel);
+    if (labelIndex === -1) {
+      return [trimmedPayload, guidance].filter(Boolean).join("\n\n");
+    }
+
+    const beforeQuestion = payloadWithQuestion.slice(0, labelIndex).trimEnd();
+    const questionSection = payloadWithQuestion.slice(labelIndex).trimStart();
+    return [beforeQuestion, guidance, questionSection]
+      .filter((section) => section.trim().length > 0)
+      .join("\n\n");
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {

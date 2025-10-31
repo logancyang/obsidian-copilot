@@ -1,5 +1,4 @@
 import {
-  appendInlineCitationReminder,
   buildLocalSearchInnerContent,
   ensureCiCOrderingWithQuestion,
   renderCiCMessage,
@@ -8,13 +7,13 @@ import {
 
 describe("cicPromptUtils", () => {
   describe("buildLocalSearchInnerContent", () => {
-    it("orders guidance before documents and trims whitespace", () => {
-      const guidance = "\n<guidance>Rules</guidance>\n";
+    it("orders intro text before documents and trims whitespace", () => {
+      const intro = "\nIntro block\n";
       const documents = "\n<document>Doc</document>\n";
 
-      const inner = buildLocalSearchInnerContent(guidance, documents);
+      const inner = buildLocalSearchInnerContent(intro, documents);
 
-      expect(inner).toBe("<guidance>Rules</guidance>\n\n<document>Doc</document>");
+      expect(inner).toBe("Intro block\n\n<document>Doc</document>");
     });
 
     it("returns empty string when both inputs are blank", () => {
@@ -47,29 +46,6 @@ describe("cicPromptUtils", () => {
 
     it("returns the original question when context is blank", () => {
       expect(renderCiCMessage("  \n  ", "What?")).toBe("What?");
-    });
-  });
-
-  describe("appendInlineCitationReminder", () => {
-    it("appends reminder when question has content", () => {
-      const result = appendInlineCitationReminder("Summarize my notes.");
-
-      expect(result).toBe(
-        "Summarize my notes.\n\nHave inline citations according to the guidance."
-      );
-    });
-
-    it("avoids duplicating reminder when already present", () => {
-      const question = "Summarize. Have inline citations according to the guidance.";
-      const result = appendInlineCitationReminder(question);
-
-      expect(result).toBe("Summarize. Have inline citations according to the guidance.");
-    });
-
-    it("returns reminder alone when question is blank", () => {
-      const result = appendInlineCitationReminder("   ");
-
-      expect(result).toBe("Have inline citations according to the guidance.");
     });
   });
 
