@@ -2,10 +2,10 @@ import { getSettings } from "@/settings/model";
 import { Vault } from "obsidian";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
-import { createGetTagListTool } from "./TagTools";
 import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
+import { createGetTagListTool } from "./TagTools";
 import {
   convertTimeBetweenTimezonesTool,
   getCurrentTimeTool,
@@ -96,17 +96,20 @@ For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
     metadata: {
       id: "webSearch",
       displayName: "Web Search",
-      description: "Search the internet for information",
+      description:
+        "Search the INTERNET (NOT vault notes) when user explicitly asks for web/online information",
       category: "search",
       copilotCommands: ["@websearch", "@web"],
       customPromptInstructions: `For webSearch:
-- Only use when the user explicitly requests web/internet search
+- ONLY use when the user's query contains explicit web-search intent like:
+  * "web search", "internet search", "online search"
+  * "Google", "search online", "look up online", "search the web"
 - Always provide an empty chatHistory array
 
-Example usage:
+Example - "search the web for python tutorials":
 <use_tool>
 <name>webSearch</name>
-<query>piano learning techniques</query>
+<query>python tutorials</query>
 <chatHistory>[]</chatHistory>
 </use_tool>`,
     },
@@ -122,6 +125,10 @@ Example usage:
       category: "time",
       isAlwaysEnabled: true,
       customPromptInstructions: `For time queries (IMPORTANT: Always use UTC offsets, not timezone names):
+
+- If the user mentions a specific city, country, or timezone name (e.g., "Tokyo", "Japan", "JST"), you MUST convert it to the correct UTC offset and pass it via the timezoneOffset parameter (e.g., "+9").
+- Only omit timezoneOffset when the user asks for the current local time without naming any location or timezone.
+- If you cannot confidently determine the offset from the user request, ask the user to clarify before calling the tool.
 
 Example 1 - "what time is it" (local time):
 <use_tool>

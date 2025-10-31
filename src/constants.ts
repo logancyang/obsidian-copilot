@@ -862,7 +862,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableRecentConversations: true,
   maxRecentConversations: 30,
   enableSavedMemory: true,
-  enableInlineCitations: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
 };

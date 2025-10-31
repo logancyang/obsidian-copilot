@@ -29,7 +29,7 @@ import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
 import {
   addFallbackSources,
   formatSourceCatalog,
-  getCitationInstructions,
+  getLocalSearchGuidance,
   sanitizeContentForCitations,
   type SourceCatalogEntry,
 } from "./utils/citationUtils";
@@ -353,12 +353,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       if (hasTools) {
         // Format all tool outputs and prepend to user content using CiC format
         const toolContext = this.formatAllToolOutputs(allToolOutputs);
-        const shouldLabelQuestion = false; // Don't label question when we have tools
 
         finalUserContent = renderCiCMessage(
           toolContext,
-          userMessageContent.content, // L3 smart refs + L5 from converter
-          shouldLabelQuestion
+          userMessageContent.content // L3 smart refs + L5 from converter
         );
       } else {
         // No tools - use converter's output as-is
@@ -546,18 +544,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       tokenUsage: streamResult.tokenUsage ?? undefined,
     };
 
-    // Add fallback sources if citations are enabled and missing
-    const settings = getSettings();
+    // Add fallback sources if citations are missing
     const fallbackSources =
       this.lastCitationSources && this.lastCitationSources.length > 0
         ? this.lastCitationSources
         : ((sources as any[]) || []).map((source) => ({ title: source.title, path: source.path }));
 
-    fullAIResponse = addFallbackSources(
-      fullAIResponse,
-      fallbackSources,
-      settings.enableInlineCitations
-    );
+    fullAIResponse = addFallbackSources(fullAIResponse, fallbackSources);
 
     await this.handleResponse(
       fullAIResponse,
@@ -679,8 +672,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       };
     });
 
-    const settings = getSettings();
-    const guidance = getCitationInstructions(settings.enableInlineCitations, catalogLines);
+    const guidance = getLocalSearchGuidance(catalogLines);
 
     // Add RAG instruction (like VaultQA) to ensure model uses the context
     const ragInstruction = "Answer the question based only on the following context:";

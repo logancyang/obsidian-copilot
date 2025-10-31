@@ -299,7 +299,7 @@ const webSearchTool = createTool({
           // Instruct the model to use footnote-style citations and definitions.
           // Chat UI will render [^n] as [n] for readability and show a simple numbered Sources list.
           // When inserted into a note, the original [^n] footnotes will remain valid Markdown footnotes.
-          instruction: getWebSearchCitationInstructions(getSettings().enableInlineCitations),
+          instruction: getWebSearchCitationInstructions(),
         },
       ];
 

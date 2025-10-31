@@ -39,59 +39,54 @@ describe("cicPromptUtils", () => {
   });
 
   describe("renderCiCMessage", () => {
-    it("places context before question and adds label when requested", () => {
-      const combined = renderCiCMessage("context block", "What?", true);
+    it("places context before question", () => {
+      const combined = renderCiCMessage("context block", "What?");
 
-      expect(combined).toBe("context block\n\nQuestion: What?");
+      expect(combined).toBe("context block\n\nWhat?");
     });
 
     it("returns the original question when context is blank", () => {
-      expect(renderCiCMessage("  \n  ", "What?", false)).toBe("What?");
+      expect(renderCiCMessage("  \n  ", "What?")).toBe("What?");
     });
   });
 
   describe("appendInlineCitationReminder", () => {
-    it("appends reminder when enabled and question has content", () => {
-      const result = appendInlineCitationReminder("Summarize my notes.", true);
+    it("appends reminder when question has content", () => {
+      const result = appendInlineCitationReminder("Summarize my notes.");
 
       expect(result).toBe(
         "Summarize my notes.\n\nHave inline citations according to the guidance."
       );
     });
 
-    it("returns original question when reminder disabled", () => {
-      const result = appendInlineCitationReminder("Summarize my notes.", false);
-
-      expect(result).toBe("Summarize my notes.");
-    });
-
     it("avoids duplicating reminder when already present", () => {
       const question = "Summarize. Have inline citations according to the guidance.";
-      const result = appendInlineCitationReminder(question, true);
+      const result = appendInlineCitationReminder(question);
 
       expect(result).toBe("Summarize. Have inline citations according to the guidance.");
     });
 
     it("returns reminder alone when question is blank", () => {
-      const result = appendInlineCitationReminder("   ", true);
+      const result = appendInlineCitationReminder("   ");
 
       expect(result).toBe("Have inline citations according to the guidance.");
     });
   });
 
   describe("ensureCiCOrderingWithQuestion", () => {
-    it("appends the trimmed question after the payload when missing", () => {
+    it("appends the trimmed question with [User query]: label after the payload when missing", () => {
       const payload = "<localSearch>\n<context/>\n</localSearch>";
       const question = "  What did I do last week?  ";
 
       const result = ensureCiCOrderingWithQuestion(payload, question);
 
-      expect(result).toBe(renderCiCMessage(payload, "What did I do last week?", true));
+      // Should add "[User query]:" label (same format as LayerToMessagesConverter)
+      expect(result).toBe(renderCiCMessage(payload, "[User query]:\nWhat did I do last week?"));
     });
 
     it("returns payload unchanged when question already included", () => {
       const question = "What did I do last week?";
-      const payload = renderCiCMessage("<localSearch />", question, true);
+      const payload = renderCiCMessage("<localSearch />", `[User query]:\n${question}`);
 
       expect(ensureCiCOrderingWithQuestion(payload, question)).toBe(payload);
     });
