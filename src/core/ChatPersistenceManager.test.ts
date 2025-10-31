@@ -1243,4 +1243,226 @@ tags:
       expect(parsedMessages[1].context).toBeUndefined();
     });
   });
+
+  describe("modelKey escaping in frontmatter", () => {
+    it("should properly escape modelKey with special YAML characters", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      // Test with user-defined display name containing special characters
+      await persistenceManager.saveChat("[芥兰]Gemini-2.5-pro|3rd party");
+
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).toContain('modelKey: "[芥兰]Gemini-2.5-pro|3rd party"');
+    });
+
+    it("should properly escape modelKey with slashes", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("x-ai/grok-4-fast");
+
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).toContain('modelKey: "x-ai/grok-4-fast"');
+    });
+
+    it("should properly escape modelKey with pipe characters", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("copilot-plus-flash|copilot-plus");
+
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).toContain('modelKey: "copilot-plus-flash|copilot-plus"');
+    });
+
+    it("should properly escape modelKey with embedded quotes", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat('model"with"quotes|provider');
+
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).toContain('modelKey: "model\\"with\\"quotes|provider"');
+    });
+
+    it("should properly escape modelKey with embedded backslashes", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+
+      await persistenceManager.saveChat("model\\with\\backslash|provider");
+
+      const savedContent = mockApp.vault.create.mock.calls[0][1];
+      expect(savedContent).toContain('modelKey: "model\\\\with\\\\backslash|provider"');
+    });
+
+    it("should preserve modelKey through save-load round trip with special characters", async () => {
+      const testModelKey = "[芥兰]Gemini-2.5-pro|3rd party";
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Generate the note content
+      const chatContent = (persistenceManager as any).formatChatContent(messages);
+      const noteContent = (persistenceManager as any).generateNoteContent(
+        chatContent,
+        messages[0].timestamp!.epoch,
+        testModelKey
+      );
+
+      // Verify the content contains properly quoted modelKey
+      expect(noteContent).toContain(`modelKey: "${testModelKey}"`);
+
+      // Parse the content back and check frontmatter
+      const lines = noteContent.split("\n");
+      const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
+      expect(modelKeyLine).toBe(`modelKey: "${testModelKey}"`);
+    });
+
+    it("should preserve modelKey with quotes through save-load round trip", async () => {
+      const testModelKey = 'model"with"quotes|provider';
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Generate the note content
+      const chatContent = (persistenceManager as any).formatChatContent(messages);
+      const noteContent = (persistenceManager as any).generateNoteContent(
+        chatContent,
+        messages[0].timestamp!.epoch,
+        testModelKey
+      );
+
+      // Verify the content contains properly escaped quotes
+      expect(noteContent).toContain('modelKey: "model\\"with\\"quotes|provider"');
+
+      // Parse the content back and check frontmatter
+      const lines = noteContent.split("\n");
+      const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
+      expect(modelKeyLine).toBe('modelKey: "model\\"with\\"quotes|provider"');
+    });
+
+    it("should preserve modelKey with backslashes through save-load round trip", async () => {
+      const testModelKey = "model\\with\\backslash|provider";
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Test message",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      // Generate the note content
+      const chatContent = (persistenceManager as any).formatChatContent(messages);
+      const noteContent = (persistenceManager as any).generateNoteContent(
+        chatContent,
+        messages[0].timestamp!.epoch,
+        testModelKey
+      );
+
+      // Verify the content contains properly escaped backslashes
+      expect(noteContent).toContain('modelKey: "model\\\\with\\\\backslash|provider"');
+
+      // Parse the content back and check frontmatter
+      const lines = noteContent.split("\n");
+      const modelKeyLine = lines.find((line: string) => line.startsWith("modelKey:"));
+      expect(modelKeyLine).toBe('modelKey: "model\\\\with\\\\backslash|provider"');
+    });
+  });
 });

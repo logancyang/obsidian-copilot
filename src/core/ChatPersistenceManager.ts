@@ -17,6 +17,14 @@ import { MessageRepository } from "./MessageRepository";
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 
 /**
+ * Escape a string for safe YAML double-quoted string value
+ * Escapes backslashes and double quotes to prevent YAML parsing errors
+ */
+function escapeYamlString(str: string): string {
+  return str.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
  * ChatPersistenceManager - Handles saving and loading chat messages
  *
  * This class is responsible for:
@@ -582,7 +590,7 @@ ${conversationSummary}`;
 
     return `---
 epoch: ${firstMessageEpoch}
-modelKey: ${modelKey}
+modelKey: "${escapeYamlString(modelKey)}"
 ${topic ? `topic: "${topic}"` : ""}
 ${currentProject ? `projectId: ${currentProject.id}` : ""}
 ${currentProject ? `projectName: ${currentProject.name}` : ""}
