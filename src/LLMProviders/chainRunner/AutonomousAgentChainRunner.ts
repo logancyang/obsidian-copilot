@@ -37,10 +37,7 @@ import {
   ToolExecutionResult,
 } from "./utils/toolExecution";
 
-import {
-  appendInlineCitationReminder,
-  ensureCiCOrderingWithQuestion,
-} from "./utils/cicPromptUtils";
+import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
@@ -199,8 +196,9 @@ ${params}
 
   /**
    * Apply CiC ordering by appending the original user question after the local search payload.
+   * Guidance is now self-contained within each localSearch payload from prepareLocalSearchResult.
    *
-   * @param localSearchPayload - XML-wrapped local search payload prepared for the LLM.
+   * @param localSearchPayload - XML-wrapped local search payload prepared for the LLM (includes guidance).
    * @param originalPrompt - The original user prompt (before any enhancements).
    * @returns Payload with question appended using CiC ordering when needed.
    */
@@ -208,8 +206,7 @@ ${params}
     localSearchPayload: string,
     originalPrompt: string
   ): string {
-    const promptWithReminder = appendInlineCitationReminder(originalPrompt);
-    return ensureCiCOrderingWithQuestion(localSearchPayload, promptWithReminder);
+    return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
   }
 
   private getTemporaryToolCallId(toolName: string, index: number): string {

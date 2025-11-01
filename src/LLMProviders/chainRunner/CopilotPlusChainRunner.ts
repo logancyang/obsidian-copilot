@@ -299,7 +299,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     userMessage: ChatMessage,
     allToolOutputs: any[],
     abortController: AbortController,
-    thinkStreamer: ThinkBlockStreamer
+    thinkStreamer: ThinkBlockStreamer,
+    originalUserQuestion: string
   ): Promise<void> {
     // Get chat history
     const memory = this.chainManager.memoryManager.getMemory();
@@ -350,18 +351,42 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       // All tools (including localSearch) are formatted uniformly and added to user message
       const hasTools = allToolOutputs.length > 0;
 
+      const ensureUserQueryLabel = (content: string): string => {
+        const userQueryLabel = "[User query]:";
+        if (content.includes(userQueryLabel)) {
+          return content;
+        }
+
+        const trimmedContent = content.trimEnd();
+        const sections: string[] = [];
+        if (trimmedContent.length > 0) {
+          sections.push(trimmedContent);
+        }
+
+        const trimmedQuestion =
+          originalUserQuestion.trim() ||
+          userMessage.message?.trim() ||
+          userMessage.originalMessage?.trim() ||
+          "";
+        if (trimmedQuestion.length > 0) {
+          sections.push(`${userQueryLabel}\n${trimmedQuestion}`);
+        } else {
+          sections.push(userQueryLabel);
+        }
+
+        return sections.join("\n\n");
+      };
+
       if (hasTools) {
         // Format all tool outputs and prepend to user content using CiC format
         const toolContext = this.formatAllToolOutputs(allToolOutputs);
 
-        finalUserContent = renderCiCMessage(
-          toolContext,
-          userMessageContent.content // L3 smart refs + L5 from converter
-        );
+        const userContentWithLabel = ensureUserQueryLabel(userMessageContent.content);
+        finalUserContent = renderCiCMessage(toolContext, userContentWithLabel);
       } else {
         // No tools - use converter's output as-is
         // Smart references are already properly formatted by LayerToMessagesConverter
-        finalUserContent = userMessageContent.content;
+        finalUserContent = ensureUserQueryLabel(userMessageContent.content);
       }
 
       // Add composer instructions if textContent has them
@@ -513,7 +538,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         userMessage,
         allToolOutputs,
         abortController,
-        thinkStreamer
+        thinkStreamer,
+        cleanedUserMessage
       );
     } catch (error: any) {
       // Reset loading message to default
@@ -576,7 +602,18 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const toolOutputs = [];
     const allSources: { title: string; path: string; score: number; explanation?: any }[] = [];
 
+    // TODO: remove this hack until better solution in place (logan, wenzheng)
+    // Skip getFileTree if localSearch is already being called to avoid redundant work
+    const hasLocalSearch = toolCalls.some((tc) => tc.tool.name === "localSearch");
+
     for (const toolCall of toolCalls) {
+      // TODO: remove this hack until better solution in place (logan, wenzheng)
+      // Skip getFileTree when localSearch is present
+      if (toolCall.tool.name === "getFileTree" && hasLocalSearch) {
+        logInfo("Skipping getFileTree since localSearch is already active");
+        continue;
+      }
+
       logInfo(`Step 2: Calling tool: ${toolCall.tool.name}`);
       if (toolCall.tool.name === "localSearch") {
         updateLoadingMessage?.(LOADING_MESSAGES.READING_FILES);
@@ -672,17 +709,18 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       };
     });
 
-    const guidance = getLocalSearchGuidance(catalogLines);
+    // Build guidance block with citation rules and source catalog
+    const guidance = getLocalSearchGuidance(catalogLines).trim();
 
     // Add RAG instruction (like VaultQA) to ensure model uses the context
     const ragInstruction = "Answer the question based only on the following context:";
-    const innerContent = buildLocalSearchInnerContent(
-      `${ragInstruction}\n\n${guidance}`,
-      formattedContent
-    );
+    const documentsSection = buildLocalSearchInnerContent(ragInstruction, formattedContent);
+
+    // Include guidance directly in the payload, making it self-contained
+    const fullInnerContent = guidance ? `${documentsSection}\n\n${guidance}` : documentsSection;
 
     // Wrap in XML-like tags for better LLM understanding
-    return wrapLocalSearchPayload(innerContent, timeExpression);
+    return wrapLocalSearchPayload(fullInnerContent, timeExpression);
   }
 
   /**

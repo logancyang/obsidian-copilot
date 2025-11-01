@@ -73,8 +73,12 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
 
   const formattedResult = useMemo(() => formatToolResult(toolName, result), [toolName, result]);
 
+  // Defensive check: If we have a result, the tool is definitely done executing
+  // This prevents infinite rolling animation if marker update fails or is delayed
+  const actuallyExecuting = isExecuting && !result;
+
   // Don't allow expanding while executing
-  const canExpand = !isExecuting && formattedResult !== null;
+  const canExpand = !actuallyExecuting && formattedResult !== null;
 
   return (
     <Collapsible
@@ -87,11 +91,11 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
       <div
         className={cn(
           "tw-rounded-md tw-border tw-border-border tw-bg-secondary/50",
-          isExecuting && "tw-relative tw-overflow-hidden"
+          actuallyExecuting && "tw-relative tw-overflow-hidden"
         )}
       >
         {/* Shimmer effect overlay */}
-        {isExecuting && (
+        {actuallyExecuting && (
           <div className="tw-absolute tw-inset-0 tw-z-[1] tw-overflow-hidden">
             <div
               className="tw-absolute tw-inset-0 -tw-translate-x-full"
@@ -115,18 +119,18 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
             <span className="tw-text-base">{emoji}</span>
             <span className="tw-font-medium">
               {toolName === "readNote"
-                ? `${isExecuting ? "Reading" : "Read"} ${displayName}`
-                : `${isExecuting ? "Calling" : "Called"} ${displayName}`}
-              {isExecuting && toolName !== "readNote" && "..."}
+                ? `${actuallyExecuting ? "Reading" : "Read"} ${displayName}`
+                : `${actuallyExecuting ? "Calling" : "Called"} ${displayName}`}
+              {actuallyExecuting && toolName !== "readNote" && "..."}
             </span>
-            {isExecuting && confirmationMessage && (
+            {actuallyExecuting && confirmationMessage && (
               <span className="tw-text-xs tw-text-muted">• {confirmationMessage}...</span>
             )}
           </div>
 
           <div className="tw-flex tw-items-center tw-gap-2">
             {/* Future: Accept/Reject buttons */}
-            {!isExecuting && onAccept && onReject && (
+            {!actuallyExecuting && onAccept && onReject && (
               <>
                 <button
                   onClick={(e) => {
