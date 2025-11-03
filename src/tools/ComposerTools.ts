@@ -40,6 +40,11 @@ async function getFile(file_path: string): Promise<TFile> {
   }
 }
 
+/**
+ * Show the ApplyView preview UI for file changes and return the user decision.
+ * @param file_path - Vault-relative path to the file
+ * @param content - Target content to compare against current file content
+ */
 async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
   const file = await getFile(file_path);
   const activeFile = app.workspace.getActiveFile();
@@ -111,11 +116,25 @@ const writeToFileSchema = z.object({
               {"id": "e1-2", "fromNode": "1", "toNode": "2", "fromSide": "right", "toSide": "left", "color": "3", "label": "links to"}
             ]
           }`),
+  confirmation: z
+    .preprocess((val) => {
+      if (typeof val === "string") {
+        const lc = val.trim().toLowerCase();
+        if (lc === "true") return true;
+        if (lc === "false") return false;
+      }
+      return val;
+    }, z.boolean())
+    .optional()
+    .default(true)
+    .describe(
+      `(Optional) Whether to ask for change confirmation with preview UI before writing changes. Default: true. Set to false to skip preview and apply changes immediately.`
+    ),
 });
 
 const writeToFileTool = createTool({
   name: "writeToFile",
-  description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI. 
+  description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI.
 
       # Steps to find the the target path
       1. Extract the target file information from user message and find out the file path from the context.
@@ -123,9 +142,26 @@ const writeToFileTool = createTool({
       3. If still failed to find the target file or the file path, ask the user to specify the target file.
       `,
   schema: writeToFileSchema,
-  handler: async ({ path, content }) => {
+  handler: async ({ path, content, confirmation = true }) => {
     // Convert object content to JSON string if needed
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
+
+    if (confirmation === false) {
+      try {
+        const file = await getFile(path);
+        await app.vault.modify(file, contentString);
+        return JSON.stringify({
+          result: "accepted" as ApplyViewResult,
+          message:
+            "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
+        });
+      } catch (error) {
+        return JSON.stringify({
+          result: "failed" as ApplyViewResult,
+          message: `Error writing to file without preview: ${error?.message || error}`,
+        });
+      }
+    }
 
     const result = await show_preview(path, contentString);
     // Simple JSON wrapper for consistent parsing
