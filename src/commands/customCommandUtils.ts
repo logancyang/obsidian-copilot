@@ -19,7 +19,7 @@ import {
 } from "./state";
 import { PromptSortStrategy } from "@/types";
 import {
-  extractNoteFiles,
+  extractTemplateNoteFiles,
   getFileContent,
   getFileName,
   getNotesFromPath,
@@ -240,8 +240,10 @@ export async function processCommandPrompt(
  * {copilot-selection} is the legacy custom command special placeholder. It must
  * be skipped when processing custom prompts because it's handled differently
  * by the custom command prompt processor.
+ *
+ * Also excludes {[[...]]} patterns which are handled separately by extractTemplateNoteFiles.
  */
-const VARIABLE_REGEX = /\{(?!copilot-selection\})([^}]+)\}/g;
+const VARIABLE_REGEX = /\{(?!copilot-selection\}|\[\[)([^}]+)\}/g;
 
 /**
  * Represents the result of processing a custom prompt variable.
@@ -399,8 +401,8 @@ export async function processPrompt(
     }
   }
 
-  // Process [[note title]] syntax
-  const noteLinkFiles = extractNoteFiles(processedPrompt, vault);
+  // Process {[[note title]]} syntax - only wikilinks wrapped in curly braces
+  const noteLinkFiles = extractTemplateNoteFiles(processedPrompt, vault);
   for (const noteFile of noteLinkFiles) {
     // Check if this note wasn't already included via a variable
     // We use the Set's reference equality which works for TFile objects
