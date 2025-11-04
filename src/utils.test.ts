@@ -2,6 +2,7 @@ import * as Obsidian from "obsidian";
 import { TFile } from "obsidian";
 import {
   extractNoteFiles,
+  extractTemplateNoteFiles,
   getNotesFromPath,
   getNotesFromTags,
   getUtf8ByteLength,
@@ -379,6 +380,74 @@ describe("extractNoteFiles", () => {
   it("should handle note titles with special characters", () => {
     const query = "Important notes: [[Note-1]], [[Note_2]], and [[Note#3]].";
     const result = extractNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note-1.md", "Note_2.md", "Note#3.md"]);
+  });
+});
+
+describe("extractTemplateNoteFiles", () => {
+  let mockVault: Obsidian.Vault;
+
+  beforeEach(() => {
+    mockVault = new Obsidian.Vault();
+  });
+
+  it("should extract single note title wrapped in curly braces", () => {
+    const query = "Please refer to {[[Note1]]} for more information.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md"]);
+  });
+
+  it("should extract multiple note titles wrapped in curly braces", () => {
+    const query = "Please refer to {[[Note1]]} and {[[Note2]]} for more information.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
+  });
+
+  it("should handle note titles with spaces", () => {
+    const query = "Check out {[[Note 1]]} and {[[Another Note]]} for details.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note 1.md", "Another Note.md"]);
+  });
+
+  it("should handle duplicate note titles", () => {
+    const query = "Refer to {[[Note1]]}, {[[Note2]]}, and {[[Note1]]} again.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md", "Note2.md"]);
+  });
+
+  it("should NOT extract bare wikilinks without curly braces", () => {
+    const query = "This [[Note1]] should not be extracted.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    expect(result).toEqual([]);
+  });
+
+  it("should only extract wikilinks with curly braces, ignoring bare ones", () => {
+    const query = "Extract {[[Note1]]} but not [[Note2]].";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    const resultPaths = result.map((f) => f.path);
+    expect(resultPaths).toEqual(["Note1.md"]);
+  });
+
+  it("should return empty array when no {[[...]]} patterns found", () => {
+    const query = "There are no template note patterns in this string.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    expect(result).toEqual([]);
+  });
+
+  it("should return empty array when only bare [[...]] patterns exist", () => {
+    const query = "Only [[Note1]] and [[Note2]] exist here.";
+    const result = extractTemplateNoteFiles(query, mockVault);
+    expect(result).toEqual([]);
+  });
+
+  it("should handle note titles with special characters", () => {
+    const query = "Important notes: {[[Note-1]]}, {[[Note_2]]}, and {[[Note#3]]}.";
+    const result = extractTemplateNoteFiles(query, mockVault);
     const resultPaths = result.map((f) => f.path);
     expect(resultPaths).toEqual(["Note-1.md", "Note_2.md", "Note#3.md"]);
   });

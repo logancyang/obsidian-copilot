@@ -472,44 +472,90 @@ export function extractChatHistory(memoryVariables: MemoryVariables): ChatHistor
   return chatHistory;
 }
 
+/**
+ * Core logic for extracting note files from wikilink patterns.
+ * Resolves note titles/paths to TFile objects, handling both unique titles and full paths.
+ *
+ * @param noteTitles - Array of note title/path strings extracted from wikilinks
+ * @param vault - Obsidian vault instance
+ * @returns Array of unique TFile objects
+ */
+function resolveNoteFilesFromTitles(noteTitles: string[], vault: Vault): TFile[] {
+  const uniqueFiles = new Map<string, TFile>();
+
+  noteTitles.forEach((noteTitle) => {
+    // First try to get file by full path
+    const file = vault.getAbstractFileByPath(noteTitle);
+
+    if (file instanceof TFile) {
+      // Found by path, use it directly
+      uniqueFiles.set(file.path, file);
+    } else {
+      // Try to find by title
+      const files = vault.getMarkdownFiles();
+      const matchingFiles = files.filter((f) => f.basename === noteTitle);
+
+      if (matchingFiles.length > 0) {
+        if (isNoteTitleUnique(noteTitle, vault)) {
+          // Only one file with this title, use it
+          uniqueFiles.set(matchingFiles[0].path, matchingFiles[0]);
+        } else {
+          // Multiple files with same title - this shouldn't happen
+          // as we should be using full paths for duplicate titles
+          console.warn(
+            `Found multiple files with title "${noteTitle}". Expected a full path for duplicate titles.`
+          );
+        }
+      }
+    }
+  });
+
+  return Array.from(uniqueFiles.values());
+}
+
+/**
+ * Extract note files from text containing wikilinks: [[note title]]
+ * Used by search/retrieval systems to find explicitly mentioned notes.
+ *
+ * @param query - Text containing [[...]] patterns
+ * @param vault - Obsidian vault instance
+ * @returns Array of unique TFile objects matching the [[...]] patterns
+ */
 export function extractNoteFiles(query: string, vault: Vault): TFile[] {
   // Use a regular expression to extract note titles and paths wrapped in [[]]
   const regex = /\[\[(.*?)\]\]/g;
   const matches = query.match(regex);
-  const uniqueFiles = new Map<string, TFile>();
 
-  if (matches) {
-    matches.forEach((match) => {
-      const inner = match.slice(2, -2);
-
-      // First try to get file by full path
-      const file = vault.getAbstractFileByPath(inner);
-
-      if (file instanceof TFile) {
-        // Found by path, use it directly
-        uniqueFiles.set(file.path, file);
-      } else {
-        // Try to find by title
-        const files = vault.getMarkdownFiles();
-        const matchingFiles = files.filter((f) => f.basename === inner);
-
-        if (matchingFiles.length > 0) {
-          if (isNoteTitleUnique(inner, vault)) {
-            // Only one file with this title, use it
-            uniqueFiles.set(matchingFiles[0].path, matchingFiles[0]);
-          } else {
-            // Multiple files with same title - this shouldn't happen
-            // as we should be using full paths for duplicate titles
-            console.warn(
-              `Found multiple files with title "${inner}". Expected a full path for duplicate titles.`
-            );
-          }
-        }
-      }
-    });
+  if (!matches) {
+    return [];
   }
 
-  return Array.from(uniqueFiles.values());
+  // Extract inner content from [[...]]
+  const noteTitles = matches.map((match) => match.slice(2, -2));
+  return resolveNoteFilesFromTitles(noteTitles, vault);
+}
+
+/**
+ * Extract note files from text containing wikilinks wrapped in curly braces: {[[note title]]}
+ * This is specifically for custom prompt templating where only {[[...]]} syntax should trigger
+ * note content inclusion.
+ *
+ * @param query - Text containing {[[...]]} patterns
+ * @param vault - Obsidian vault instance
+ * @returns Array of unique TFile objects matching the {[[...]]} patterns
+ */
+export function extractTemplateNoteFiles(query: string, vault: Vault): TFile[] {
+  // Use a regular expression to extract note titles and paths wrapped in {[[]]}
+  const regex = /\{\[\[(.*?)\]\]\}/g;
+  const matches = query.match(regex);
+
+  if (!matches) {
+    return [];
+  }
+
+  // Extract inner content from {[[...]]}
+  const noteTitles = matches.map((match) => match.slice(3, -3));
+  return resolveNoteFilesFromTitles(noteTitles, vault);
 }
 
 // Helper function to check if a note title is unique in the vault

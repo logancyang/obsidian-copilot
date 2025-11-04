@@ -4,7 +4,7 @@ import { getFileContent, getFileName, getNotesFromPath } from "@/utils";
 
 // Mock the dependencies
 jest.mock("@/utils", () => ({
-  extractNoteFiles: jest.fn().mockReturnValue([]),
+  extractTemplateNoteFiles: jest.fn().mockReturnValue([]),
   getFileContent: jest.fn(),
   getFileName: jest.fn(),
   getNotesFromPath: jest.fn(),
@@ -108,7 +108,7 @@ describe("XML Escaping in processPrompt", () => {
     } as TFile;
 
     (getNotesFromPath as jest.Mock).mockResolvedValue([]);
-    jest.requireMock("@/utils").extractNoteFiles.mockReturnValue([mockNote]);
+    jest.requireMock("@/utils").extractTemplateNoteFiles.mockReturnValue([mockNote]);
     (getFileContent as jest.Mock).mockResolvedValue("Content with & and < and >");
 
     const result = await processPrompt(customPrompt, "", mockVault, mockActiveNote);
