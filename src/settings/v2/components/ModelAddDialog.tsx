@@ -147,7 +147,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       enabled: true,
       isBuiltIn: false,
       baseUrl: "",
-      apiKey: provider === ChatModelProviders.AMAZON_BEDROCK ? "" : getDefaultApiKey(provider),
+      apiKey: getDefaultApiKey(provider),
       isEmbeddingModel,
       capabilities: [],
     };
@@ -222,7 +222,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     setModel({
       ...model,
       provider,
-      apiKey: provider === ChatModelProviders.AMAZON_BEDROCK ? "" : getDefaultApiKey(provider),
+      apiKey: getDefaultApiKey(provider),
       ...(provider === ChatModelProviders.OPENAI ? { openAIOrgId: settings.openAIOrgId } : {}),
       ...(provider === ChatModelProviders.AZURE_OPENAI
         ? {

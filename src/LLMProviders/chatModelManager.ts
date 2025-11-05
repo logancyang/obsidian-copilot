@@ -455,7 +455,9 @@ export default class ChatModelManager {
     const endpoint = `${endpointBase}/model/${encodedModel}/invoke`;
     const streamEndpoint = `${endpointBase}/model/${encodedModel}/invoke-with-response-stream`;
     const fetchImplementation = customModel.enableCors ? safeFetch : undefined;
-    const anthropicVersion = modelName.startsWith("anthropic.") ? "bedrock-2023-05-31" : undefined;
+    // Inference profiles prefix Anthropic identifiers (e.g. global.anthropic.*), so look for the segment anywhere.
+    const requiresAnthropicVersion = /(^|\.)anthropic\./.test(modelName);
+    const anthropicVersion = requiresAnthropicVersion ? "bedrock-2023-05-31" : undefined;
 
     return {
       modelName,
