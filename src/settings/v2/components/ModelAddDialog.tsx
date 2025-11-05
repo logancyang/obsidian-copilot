@@ -366,7 +366,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           return (
             <FormField
               label="Region (optional)"
-              description="Defaults to us-east-1 when left blank unless a custom base URL is provided."
+              description="Defaults to us-east-1 when left blank. With inference profiles (global., us., eu., apac.), region is auto-managed."
             >
               <Input
                 type="text"
@@ -448,11 +448,20 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             required
             error={errors.name}
             errorMessage="Model name is required"
+            description={
+              model.provider === ChatModelProviders.AMAZON_BEDROCK && !isEmbeddingModel
+                ? "For Bedrock, use cross-region inference profile IDs (global., us., eu., or apac. prefix) for better reliability. Regional IDs without prefixes may fail."
+                : undefined
+            }
           >
             <Input
               type="text"
               placeholder={`Enter model name (e.g. ${
-                isEmbeddingModel ? "text-embedding-3-small" : "gpt-4"
+                model.provider === ChatModelProviders.AMAZON_BEDROCK && !isEmbeddingModel
+                  ? "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  : isEmbeddingModel
+                    ? "text-embedding-3-small"
+                    : "gpt-4"
               })`}
               value={model.name}
               onChange={(e) => {

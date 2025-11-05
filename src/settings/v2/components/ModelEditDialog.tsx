@@ -182,7 +182,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
         {isBedrockProvider && (
           <FormField
             label="Region (optional)"
-            description="Defaults to us-east-1 when left blank unless this model defines a custom base URL."
+            description="Defaults to us-east-1 when left blank. With inference profiles (global., us., eu., apac.), region is auto-managed."
           >
             <Input
               type="text"
