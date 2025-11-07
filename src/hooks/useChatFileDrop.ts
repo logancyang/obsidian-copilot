@@ -29,21 +29,29 @@ export interface UseChatFileDropReturn {
 }
 
 /**
- * Helper function to parse Obsidian URI and extract file path
+ * Helper function to parse Obsidian URI and resolve to a TFile.
+ * Uses the file system as source of truth: tries loading the file path directly,
+ * and if that fails, tries adding .md extension (for markdown files without extension).
+ * @param app - The Obsidian app instance
  * @param uriString - The URI string to parse
- * @returns The file path, or null if parsing failed
+ * @returns The resolved TFile, or null if file not found
  */
-function parseObsidianUri(uriString: string): string | null {
+function parseObsidianUri(app: App, uriString: string): TFile | null {
   // Parse Obsidian URI format: obsidian://open?vault=...&file=...
   const match = uriString.match(/obsidian:\/\/open\?vault=.*?&file=(.*)$/);
-  if (match) {
-    let filePath = decodeURIComponent(match[1]);
-    // Obsidian URIs for markdown files may omit the .md extension
-    if (!filePath.includes(".")) {
-      filePath += ".md";
-    }
-    return filePath;
-  }
+  if (!match) return null;
+
+  const filePath = decodeURIComponent(match[1]);
+
+  // Try 1: Load file as-is (works for images, pdfs, canvas, and .md files)
+  let file = app.vault.getAbstractFileByPath(filePath);
+  if (file instanceof TFile) return file;
+
+  // Try 2: Add .md extension (for markdown files without extension in URI)
+  file = app.vault.getAbstractFileByPath(filePath + ".md");
+  if (file instanceof TFile) return file;
+
+  // Give up - file not found
   return null;
 }
 
@@ -51,23 +59,24 @@ function parseObsidianUri(uriString: string): string | null {
  * Parse multiple Obsidian URIs from a newline-separated string.
  * This handles the case where multiple files are dropped from the nav bar,
  * which come as a single string with URIs separated by newlines.
+ * @param app - The Obsidian app instance
  * @param uriString - String potentially containing multiple URIs
- * @returns Array of file paths
+ * @returns Array of resolved TFile objects
  */
-function parseObsidianUris(uriString: string): string[] {
+function parseObsidianUris(app: App, uriString: string): TFile[] {
   // Split by newlines and filter empty lines
   const lines = uriString.split("\n").filter((line) => line.trim());
 
-  // Parse each line as a URI
-  const filePaths: string[] = [];
+  // Parse each line as a URI and collect resolved files
+  const files: TFile[] = [];
   for (const line of lines) {
-    const filePath = parseObsidianUri(line.trim());
-    if (filePath) {
-      filePaths.push(filePath);
+    const file = parseObsidianUri(app, line.trim());
+    if (file) {
+      files.push(file);
     }
   }
 
-  return filePaths;
+  return files;
 }
 
 /**
@@ -162,25 +171,17 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
 
         const uriStrings = await Promise.all(uriStringPromises);
 
-        // Parse all URIs and collect unique file paths
-        const allFilePaths = new Set<string>();
+        // Parse all URIs and collect unique files (deduplicate by path)
+        const fileMap = new Map<string, TFile>();
         for (const uriString of uriStrings) {
-          const filePaths = parseObsidianUris(uriString);
-          for (const filePath of filePaths) {
-            allFilePaths.add(filePath);
+          const files = parseObsidianUris(app, uriString);
+          for (const file of files) {
+            fileMap.set(file.path, file);
           }
         }
 
-        // Now process each unique file path sequentially
-        for (const filePath of allFilePaths) {
-          const file = app.vault.getAbstractFileByPath(filePath);
-
-          // Ensure file exists and is a TFile
-          if (!(file instanceof TFile)) {
-            new Notice("File not found in vault");
-            continue;
-          }
-
+        // Now process each unique file sequentially
+        for (const file of fileMap.values()) {
           // Check if it's an image file
           const isImage = ["png", "gif", "jpeg", "jpg", "webp"].includes(file.extension);
 
@@ -246,7 +247,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
       container.removeEventListener("dragleave", handleDragLeave);
       container.removeEventListener("drop", handleDrop);
     };
-  }, [app.vault, contextNotes, selectedImages, onAddImage, setContextNotes, containerRef]);
+  }, [app, contextNotes, selectedImages, onAddImage, setContextNotes, containerRef]);
 
   return { isDragActive };
 }
