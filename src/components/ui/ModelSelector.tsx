@@ -60,7 +60,7 @@ export function ModelSelector({
         </Button>
       </DropdownMenuTrigger>
 
-      <DropdownMenuContent align="start">
+      <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
         {settings.activeModels
           .filter((model) => model.enabled)
           .map((model) => {
