@@ -212,6 +212,10 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
 
         if (triggerIndex !== -1) {
           const query = textContent.slice(triggerIndex + triggerLength, cursorOffset);
+          // Close menu if query starts with space
+          if (query.startsWith(" ")) {
+            return null;
+          }
           return { triggerIndex, query };
         }
       } else {
@@ -234,6 +238,10 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
 
         if (triggerIndex !== -1) {
           const query = textContent.slice(triggerIndex + 1, cursorOffset);
+          // Close menu if query starts with space
+          if (query.startsWith(" ")) {
+            return null;
+          }
           return { triggerIndex, query };
         }
       }
