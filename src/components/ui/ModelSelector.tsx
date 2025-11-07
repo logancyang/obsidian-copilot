@@ -11,8 +11,11 @@ import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String } from "@/utils";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { getApiKeyForProvider, isRequiredChatModel } from "@/utils/modelUtils";
-import { SettingKeyProviders } from "@/constants";
+import {
+  getApiKeyForProvider,
+  isRequiredChatModel,
+  providerRequiresApiKey,
+} from "@/utils/modelUtils";
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -39,11 +42,21 @@ export function ModelSelector({
     (model) => model.enabled && getModelKeyFromModel(model) === value
   );
 
-  // Filter models: show required models or models with valid API keys
+  // Filter models: show required models, local models, or models with valid API keys
   const showModels = settings.activeModels.filter((model) => {
     const isRequired = isRequiredChatModel(model);
-    const hasApiKey = !!getApiKeyForProvider(model.provider as SettingKeyProviders, model);
-    return isRequired || hasApiKey;
+    if (isRequired) {
+      return true;
+    }
+
+    // Local providers don't require API keys
+    if (!providerRequiresApiKey(model.provider)) {
+      return true;
+    }
+
+    // Cloud providers need API keys
+    const hasApiKey = !!getApiKeyForProvider(model.provider, model);
+    return hasApiKey;
   });
   return (
     <DropdownMenu>

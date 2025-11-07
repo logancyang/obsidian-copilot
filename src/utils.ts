@@ -1078,12 +1078,11 @@ export function checkModelApiKey(
   const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
   const hasNoApiKey = !getApiKeyForProvider(model.provider as SettingKeyProviders, model);
 
-  if (hasNoApiKey) {
+  // For Providers that require setting a key in the dialog, an inspection is necessary.
+  if (needSetKeyPath && hasNoApiKey) {
     const notice =
-      `Please configure API Key for ${model.name} in settings first.\n` +
-      (needSetKeyPath
-        ? "Path: Settings > copilot plugin > Basic Tab > Set Keys"
-        : "Check license key (Basic Tab) Or  model config (Model Tab)");
+      `Please configure API Key for ${model.name} in settings first.` +
+      "\nPath: Settings > copilot plugin > Basic Tab > Set Keys";
     return {
       hasApiKey: false,
       errorNotice: notice,

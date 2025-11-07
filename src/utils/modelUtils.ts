@@ -8,6 +8,24 @@ import { getSettings } from "@/settings/model";
 import { CustomModel } from "@/aiParams";
 
 /**
+ * Check if a provider requires an API key.
+ * Local providers (OLLAMA, LM_STUDIO, OPENAI_FORMAT) don't require API keys.
+ *
+ * @param provider - The provider to check
+ * @returns true if the provider requires an API key, false for local providers
+ *
+ * @example
+ * if (providerRequiresApiKey(model.provider)) {
+ *   // This is a cloud provider, check for API key
+ * } else {
+ *   // This is a local provider, no API key needed
+ * }
+ */
+export function providerRequiresApiKey(provider: string): provider is SettingKeyProviders {
+  return provider in ProviderSettingsKeyMap;
+}
+
+/**
  * Get API key for a provider, with model-specific key taking precedence over global settings.
  *
  * @param provider - The provider to get the API key for
