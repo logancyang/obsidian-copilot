@@ -316,6 +316,12 @@ export function getFileName(file: TFile): string {
 }
 
 /**
+ * Valid file extensions for note context.
+ * This does NOT include images - images are handled separately in the UI.
+ */
+export const ALLOWED_NOTE_CONTEXT_EXTENSIONS = ["md", "pdf", "canvas"];
+
+/**
  * Check if a file is allowed for note context (markdown, PDF, or canvas files).
  * This does NOT include images - images are handled separately in the UI.
  * @param file The file to check
@@ -323,7 +329,7 @@ export function getFileName(file: TFile): string {
  */
 export function isAllowedFileForNoteContext(file: TFile | null): boolean {
   if (!file) return false;
-  return file.extension === "md" || file.extension === "pdf" || file.extension === "canvas";
+  return ALLOWED_NOTE_CONTEXT_EXTENSIONS.includes(file.extension);
 }
 
 /**
