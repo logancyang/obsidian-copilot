@@ -17,6 +17,7 @@ import {
   getProviderLabel,
   safeFetch,
 } from "@/utils";
+import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
@@ -55,17 +56,11 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     setSelectedModel(null);
   }, []); // Empty dependency array ensures this runs on mount
 
-  // Get API key by provider
-  const getApiKeyByProvider = (provider: SettingKeyProviders): string => {
-    const settingKey = ProviderSettingsKeyMap[provider];
-    return (settings[settingKey] ?? "") as string;
-  };
-
   const providers: ProviderKeyItem[] = getNeedSetKeyProvider()
     .filter((provider) => provider !== ChatModelProviders.AMAZON_BEDROCK)
     .map((provider) => {
       const providerKey = provider as SettingKeyProviders;
-      const apiKey = getApiKeyByProvider(providerKey);
+      const apiKey = getApiKeyForProvider(providerKey);
 
       return {
         provider: providerKey,
@@ -74,7 +69,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     });
 
   const handleApiKeyChange = (provider: SettingKeyProviders, value: string) => {
-    const currentKey = getApiKeyByProvider(provider);
+    const currentKey = getApiKeyForProvider(provider);
     if (currentKey !== value) {
       updateSetting(ProviderSettingsKeyMap[provider], value);
       // Mark models as needing refresh for this provider
@@ -174,7 +169,7 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     let verificationError = "";
 
     try {
-      const apiKey = getApiKeyByProvider(selectedModel.provider);
+      const apiKey = getApiKeyForProvider(selectedModel.provider);
       const customModel: CustomModel = {
         name: selectedModel.name,
         provider: selectedModel.provider,
