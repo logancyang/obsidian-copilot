@@ -255,7 +255,16 @@ Example usage:
 <name>writeToFile</name>
 <path>path/to/note.md</path>
 <content>FULL CONTENT OF THE NOTE</content>
-</use_tool>`,
+</use_tool>
+
+Example usage with user explicitly asks to skip preview or confirmation:
+<use_tool>
+<name>writeToFile</name>
+<path>path/to/note.md</path>
+<content>FULL CONTENT OF THE NOTE</content>
+<confirmation>false</confirmation>
+</use_tool>
+`,
     },
   },
   {
