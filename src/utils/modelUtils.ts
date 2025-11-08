@@ -45,13 +45,16 @@ export function getApiKeyForProvider(provider: SettingKeyProviders, model?: Cust
 }
 
 /**
- * List of models that are always required and cannot be disabled.
+ * Get the list of models that are always required and cannot be disabled.
  * These models provide essential functionality for the plugin.
+ * Uses a getter function to avoid circular dependency issues.
  */
-const REQUIRED_MODELS: ReadonlyArray<{ name: string; provider: string }> = [
-  { name: ChatModels.COPILOT_PLUS_FLASH, provider: ChatModelProviders.COPILOT_PLUS },
-  { name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH, provider: ChatModelProviders.OPENROUTERAI },
-];
+function getRequiredModels(): ReadonlyArray<{ name: string; provider: string }> {
+  return [
+    { name: ChatModels.COPILOT_PLUS_FLASH, provider: ChatModelProviders.COPILOT_PLUS },
+    { name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH, provider: ChatModelProviders.OPENROUTERAI },
+  ];
+}
 
 /**
  * Checks if a model is required and should always be enabled.
@@ -66,7 +69,7 @@ const REQUIRED_MODELS: ReadonlyArray<{ name: string; provider: string }> = [
  * }
  */
 export function isRequiredChatModel(model: CustomModel): boolean {
-  return REQUIRED_MODELS.some(
+  return getRequiredModels().some(
     (required) => required.name === model.name && required.provider === model.provider
   );
 }
