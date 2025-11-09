@@ -1,6 +1,7 @@
 import { err2String } from "@/errorFormat";
 import { TFile } from "obsidian";
 import { ensureFolderExists } from "@/utils";
+import { getSettings } from "@/settings/model";
 
 type LogLevel = "INFO" | "WARN" | "ERROR";
 
@@ -151,25 +152,101 @@ class LogFileManager {
     }
   }
 
+  /**
+   * Sanitize settings by removing only API keys and license keys.
+   * Recursively handles nested objects and arrays (e.g., CustomModel.apiKey in activeModels).
+   */
+  private sanitizeSettingsForLog(): Record<string, unknown> {
+    const settings = getSettings();
+    return this.removeKeysRecursive(settings) as Record<string, unknown>;
+  }
+
+  /**
+   * Recursively clone an object/array while removing API keys and license keys.
+   */
+  private removeKeysRecursive(value: unknown): unknown {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    // Handle arrays
+    if (Array.isArray(value)) {
+      return value.map((item) => this.removeKeysRecursive(item));
+    }
+
+    // Handle plain objects
+    if (typeof value === "object" && value.constructor === Object) {
+      const result: Record<string, unknown> = {};
+      const obj = value as Record<string, unknown>;
+
+      for (const [key, val] of Object.entries(obj)) {
+        // Skip API keys, license keys, and infrastructure identifiers
+        if (
+          /apiKey$/i.test(key) ||
+          /licenseKey$/i.test(key) ||
+          /_api_key$/i.test(key) ||
+          /_license_key$/i.test(key) ||
+          /orgId$/i.test(key) ||
+          /instanceName$/i.test(key) ||
+          /deploymentName$/i.test(key) ||
+          /apiVersion$/i.test(key)
+        ) {
+          continue;
+        }
+        result[key] = this.removeKeysRecursive(val);
+      }
+
+      return result;
+    }
+
+    // Return primitives as-is
+    return value;
+  }
+
   async openLogFile(): Promise<void> {
-    await this.flush();
     if (!this.hasVault()) return;
     const path = this.getLogPath();
-    let file = app.vault.getAbstractFileByPath(path) as TFile | null;
+
+    // Snapshot the current buffer
+    const bufferSnapshot = [...this.buffer];
+
+    // Append sanitized settings to the snapshot (not to the actual buffer)
     try {
-      if (!file) {
-        // Create file if missing so it can be opened
-        const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
-        if (folder) {
-          await ensureFolderExists(folder);
-        }
-        file = await app.vault.create(
-          path,
-          this.buffer.join("\n") + (this.buffer.length ? "\n" : "")
-        );
+      const sanitizedSettings = this.sanitizeSettingsForLog();
+      const settingsJson = JSON.stringify(sanitizedSettings, null, 2);
+      const settingsLines = ["", "## Settings", "```json", ...settingsJson.split("\n"), "```"];
+
+      // Add settings to the snapshot
+      bufferSnapshot.push(...settingsLines);
+    } catch {
+      // If settings export fails, continue without settings block
+    }
+
+    // Flush the snapshot to disk
+    try {
+      const content = bufferSnapshot.join("\n") + (bufferSnapshot.length ? "\n" : "");
+      const folder = path.includes("/") ? path.split("/").slice(0, -1).join("/") : "";
+      if (folder) {
+        await ensureFolderExists(folder);
       }
-      const leaf = app.workspace.getLeaf(true);
-      await leaf.openFile(file);
+
+      const fileExists = await app.vault.adapter.exists(path);
+      if (fileExists) {
+        await app.vault.adapter.write(path, content);
+      } else {
+        await app.vault.create(path, content);
+      }
+    } catch {
+      // Swallow write errors; logging should never crash the app
+    }
+
+    // Original buffer unchanged; open the file
+    const file = app.vault.getAbstractFileByPath(path) as TFile | null;
+    try {
+      if (file) {
+        const leaf = app.workspace.getLeaf(true);
+        await leaf.openFile(file);
+      }
     } catch {
       // ignore
     }
