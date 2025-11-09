@@ -222,7 +222,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
               const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
               if (!hasApiKey && errorNotice) {
                 new Notice(errorNotice);
-                return;
+                // Allow the selection to proceed despite missing API key
               }
               handleInputChange("projectModelKey", value);
             }}
