@@ -74,6 +74,8 @@ export default class ChatModelManager {
     }
   >;
 
+  private static readonly ANTHROPIC_THINKING_BUDGET_TOKENS = 2048;
+
   private readonly providerApiKeyMap: Record<ChatModelProviders, () => string> = {
     [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
     [ChatModelProviders.GOOGLE]: () => getSettings().googleApiKey,
@@ -185,7 +187,10 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         ...(isThinkingEnabled && {
-          thinking: { type: "enabled", budget_tokens: 2048 },
+          thinking: {
+            type: "enabled",
+            budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
+          },
         }),
       },
       [ChatModelProviders.AZURE_OPENAI]: {
@@ -790,11 +795,15 @@ export default class ChatModelManager {
       const modelConfig = await this.getModelConfig(modelToTest);
       // eslint-disable-next-line @typescript-eslint/no-unused-vars
       const { streaming, maxTokens, maxCompletionTokens, ...pingConfig } = modelConfig;
-      // For ping, just use minimal config
-      const tokenConfig = { maxTokens: 30 };
 
-      // Check if it's a GPT-5 model and enable Responses API for proper support
+      // Check model capabilities to determine appropriate maxTokens
       const modelInfo = getModelInfo(model.name);
+
+      // For thinking-enabled models, maxTokens must be greater than thinking.budget_tokens (2048)
+      // For other models, use minimal tokens for a fast ping
+      const pingMaxTokens = modelInfo.isThinkingEnabled ? 4096 : 30;
+      const tokenConfig = { maxTokens: pingMaxTokens };
+
       const constructorConfig: any = {
         ...pingConfig,
         ...tokenConfig,
