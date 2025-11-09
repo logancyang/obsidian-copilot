@@ -1116,12 +1116,14 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       payload.max_tokens = resolvedMaxTokens;
     }
 
+    // Always set anthropic_version when available (required for all Claude requests on Bedrock)
+    if (this.anthropicVersion) {
+      payload.anthropic_version = this.anthropicVersion;
+    }
+
     // Handle thinking mode for Claude models
     // Only enable if user has explicitly enabled REASONING capability for this model
     if (this.enableThinking) {
-      if (this.anthropicVersion) {
-        payload.anthropic_version = this.anthropicVersion;
-      }
       // Enable thinking mode for Claude models on Bedrock
       // This allows the model to generate reasoning tokens
       payload.thinking = {
