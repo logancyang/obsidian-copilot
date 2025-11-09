@@ -28,6 +28,7 @@ export interface BedrockChatModelFields extends BaseChatModelParams {
   defaultTemperature?: number;
   defaultTopP?: number;
   anthropicVersion?: string;
+  enableThinking?: boolean; // Enable extended thinking mode (requires REASONING capability)
   fetchImplementation?: FetchImplementation;
   streaming?: boolean;
 }
@@ -45,6 +46,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   private readonly defaultTemperature?: number;
   private readonly defaultTopP?: number;
   private readonly anthropicVersion?: string;
+  private readonly enableThinking: boolean;
 
   constructor(fields: BedrockChatModelFields) {
     const {
@@ -56,6 +58,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       defaultTemperature,
       defaultTopP,
       anthropicVersion,
+      enableThinking,
       fetchImplementation,
       ...baseParams
     } = fields;
@@ -92,6 +95,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     this.defaultTemperature = defaultTemperature;
     this.defaultTopP = defaultTopP;
     this.anthropicVersion = anthropicVersion;
+    this.enableThinking = enableThinking ?? false;
   }
 
   _llmType(): string {
@@ -1113,9 +1117,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
 
     // Handle thinking mode for Claude models
-    const enableThinking = Boolean(this.anthropicVersion);
-    if (enableThinking) {
-      payload.anthropic_version = this.anthropicVersion;
+    // Only enable if user has explicitly enabled REASONING capability for this model
+    if (this.enableThinking) {
+      if (this.anthropicVersion) {
+        payload.anthropic_version = this.anthropicVersion;
+      }
       // Enable thinking mode for Claude models on Bedrock
       // This allows the model to generate reasoning tokens
       payload.thinking = {

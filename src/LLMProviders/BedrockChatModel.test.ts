@@ -23,13 +23,15 @@ const buildEventStreamChunk = (payload: string): string => {
   return Buffer.from(buffer).toString("base64");
 };
 
-const createModel = (): BedrockChatModel =>
+const createModel = (enableThinking = false): BedrockChatModel =>
   new BedrockChatModel({
     modelId: "anthropic.claude-3-haiku-20240307-v1:0",
     apiKey: "test-key",
     endpoint: "https://example.com/model/anthropic.claude-3-haiku-20240307-v1%3A0/invoke",
     streamEndpoint:
       "https://example.com/model/anthropic.claude-3-haiku-20240307-v1%3A0/invoke-with-response-stream",
+    anthropicVersion: "bedrock-2023-05-31",
+    enableThinking,
     fetchImplementation: jest.fn(),
   });
 
@@ -329,6 +331,56 @@ describe("BedrockChatModel streaming decode", () => {
         type: "thinking",
         thinking: "",
       });
+    });
+  });
+
+  describe("thinking mode enablement", () => {
+    it("includes thinking parameter when enableThinking is true", () => {
+      const model = createModel(true);
+      const requestBody = (model as any).buildRequestBody([
+        { role: "user", content: "test", _getType: () => "human" },
+      ]);
+
+      expect(requestBody.thinking).toEqual({
+        type: "enabled",
+        budget_tokens: 2048,
+      });
+      expect(requestBody.temperature).toBe(1);
+      expect(requestBody.anthropic_version).toBe("bedrock-2023-05-31");
+    });
+
+    it("does not include thinking parameter when enableThinking is false", () => {
+      const model = createModel(false);
+      const requestBody = (model as any).buildRequestBody(
+        [{ role: "user", content: "test", _getType: () => "human" }],
+        { temperature: 0.7 }
+      );
+
+      expect(requestBody.thinking).toBeUndefined();
+      expect(requestBody.temperature).toBe(0.7);
+      expect(requestBody.anthropic_version).toBeUndefined();
+    });
+
+    it("respects user temperature when thinking is disabled", () => {
+      const model = createModel(false);
+      const requestBody = (model as any).buildRequestBody(
+        [{ role: "user", content: "test", _getType: () => "human" }],
+        { temperature: 0.5 }
+      );
+
+      expect(requestBody.temperature).toBe(0.5);
+      expect(requestBody.thinking).toBeUndefined();
+    });
+
+    it("forces temperature to 1 when thinking is enabled", () => {
+      const model = createModel(true);
+      const requestBody = (model as any).buildRequestBody(
+        [{ role: "user", content: "test", _getType: () => "human" }],
+        { temperature: 0.5 } // User tries to set 0.5, should be overridden to 1
+      );
+
+      expect(requestBody.temperature).toBe(1);
+      expect(requestBody.thinking).toBeDefined();
     });
   });
 });
