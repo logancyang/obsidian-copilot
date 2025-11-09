@@ -48,6 +48,9 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   private readonly anthropicVersion?: string;
   private readonly enableThinking: boolean;
 
+  // Public modelName property for LangChain capability detection
+  public readonly modelName: string;
+
   constructor(fields: BedrockChatModelFields) {
     const {
       modelId,
@@ -88,6 +91,9 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       );
     }
 
+    // Store modelId as modelName for capability detection
+    // This allows CopilotPlusChainRunner.hasCapability() to find the model configuration
+    this.modelName = modelId;
     this.apiKey = apiKey;
     this.endpoint = endpoint;
     this.streamEndpoint = streamEndpoint;
@@ -1068,13 +1074,57 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return undefined;
   }
 
+  /**
+   * Convert OpenAI image format to Claude's Messages API format
+   * @param imageUrl The image URL (data URL with base64)
+   * @returns Claude-formatted image content block or null if invalid
+   */
+  private convertImageContent(imageUrl: string): {
+    type: "image";
+    source: { type: "base64"; media_type: string; data: string };
+  } | null {
+    try {
+      // Parse data URL format: data:image/jpeg;base64,<base64-string>
+      const dataUrlMatch = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+      if (!dataUrlMatch) {
+        return null;
+      }
+
+      const [, mediaType, base64Data] = dataUrlMatch;
+      if (!mediaType || !base64Data) {
+        return null;
+      }
+
+      // Validate it's an image media type
+      if (!mediaType.startsWith("image/")) {
+        return null;
+      }
+
+      return {
+        type: "image",
+        source: {
+          type: "base64",
+          media_type: mediaType,
+          data: base64Data,
+        },
+      };
+    } catch (error) {
+      logError("Error converting image content:", error);
+      return null;
+    }
+  }
+
   private buildRequestBody(
     messages: BaseMessage[],
     options?: BedrockChatModelCallOptions
   ): Record<string, unknown> {
+    type ContentBlock =
+      | { type: "text"; text: string }
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+
     const conversation: Array<{
       role: "assistant" | "user";
-      content: Array<{ type: "text"; text: string }>;
+      content: ContentBlock[];
     }> = [];
     const systemPrompts: string[] = [];
 
@@ -1085,20 +1135,54 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       }
 
       const messageType = message._getType();
+
+      // Handle system messages (always text-only)
       if (messageType === "system") {
-        systemPrompts.push(content);
+        const textContent = typeof content === "string" ? content : "";
+        if (textContent) {
+          systemPrompts.push(textContent);
+        }
         return;
       }
 
-      conversation.push({
-        role: messageType === "ai" ? "assistant" : "user",
-        content: [
-          {
-            type: "text",
-            text: content,
-          },
-        ],
-      });
+      // Process content blocks
+      const contentBlocks: ContentBlock[] = [];
+
+      if (typeof content === "string") {
+        // Simple text message
+        contentBlocks.push({
+          type: "text",
+          text: content,
+        });
+      } else if (Array.isArray(content)) {
+        // Multimodal message with text and/or images
+        for (const block of content) {
+          if (block.type === "text" && typeof block.text === "string") {
+            // Text block
+            contentBlocks.push({
+              type: "text",
+              text: block.text,
+            });
+          } else if (block.type === "image_url" && block.image_url?.url) {
+            // Image block in OpenAI format - convert to Claude format
+            const claudeImage = this.convertImageContent(block.image_url.url);
+            if (claudeImage) {
+              contentBlocks.push(claudeImage);
+            }
+          } else if (block.type === "image" && block.source) {
+            // Already in Claude format
+            contentBlocks.push(block as ContentBlock);
+          }
+        }
+      }
+
+      // Only add message if it has content blocks
+      if (contentBlocks.length > 0) {
+        conversation.push({
+          role: messageType === "ai" ? "assistant" : "user",
+          content: contentBlocks,
+        });
+      }
     });
 
     const resolvedMaxTokens = options?.maxTokens ?? this.defaultMaxTokens;
@@ -1148,14 +1232,57 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return payload;
   }
 
-  private normaliseMessageContent(message: BaseMessage): string {
+  /**
+   * Normalize message content, preserving multimodal content (text + images)
+   * @param message The BaseMessage to normalize
+   * @returns Either a string (text-only) or an array of content blocks (multimodal)
+   */
+  private normaliseMessageContent(
+    message: BaseMessage
+  ): string | Array<{ type: string; [key: string]: any }> {
     const { content } = message;
 
+    // Handle string content (simple text message)
     if (typeof content === "string") {
       return content;
     }
 
+    // Handle array content (potentially multimodal with text and images)
     if (Array.isArray(content)) {
+      // Check if this is multimodal content with images
+      const hasImages = content.some(
+        (part) =>
+          typeof part === "object" &&
+          part !== null &&
+          (part.type === "image_url" || part.type === "image")
+      );
+
+      // If it has images, preserve the array structure for multimodal processing
+      if (hasImages) {
+        return content
+          .map((part) => {
+            if (typeof part === "string") {
+              return { type: "text", text: part };
+            }
+            if (typeof part === "object" && part !== null) {
+              // Already structured content (text or image)
+              if (part.type === "text" || part.type === "image_url" || part.type === "image") {
+                return part;
+              }
+              // Try to extract text from other formats
+              if ("text" in part && typeof part.text === "string") {
+                return { type: "text", text: part.text };
+              }
+              if ("content" in part && typeof part.content === "string") {
+                return { type: "text", text: part.content };
+              }
+            }
+            return null;
+          })
+          .filter((part): part is { type: string; [key: string]: any } => part !== null);
+      }
+
+      // No images, flatten to string
       return content
         .map((part) => {
           if (typeof part === "string") {
@@ -1174,6 +1301,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
         .join("");
     }
 
+    // Handle object content with text property
     if (typeof content === "object" && content !== null && "text" in content) {
       const textContent = (content as { text?: string }).text;
       return textContent ?? "";
