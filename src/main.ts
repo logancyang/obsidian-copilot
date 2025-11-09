@@ -1,6 +1,7 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { CustomModel, getCurrentProject } from "@/aiParams";
+import { CustomModel, getCurrentProject, setSelectedTextContexts } from "@/aiParams";
+import { SelectedTextContext } from "@/types/message";
 import { AutocompleteService } from "@/autocomplete/autocompleteService";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
@@ -47,6 +48,7 @@ import {
 import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { extractChatTitle, extractChatDate } from "@/utils/chatHistoryUtils";
+import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface
 
@@ -62,6 +64,8 @@ export default class CopilotPlugin extends Plugin {
   private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
+  private selectionDebounceTimer?: number;
+  private selectionChangeHandler?: () => void;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -165,6 +169,9 @@ export default class CopilotPlugin extends Plugin {
     this.app.workspace.onLayoutReady(() => {
       this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
     });
+
+    // Initialize automatic selection handler
+    this.initSelectionHandler();
   }
 
   async onunload() {
@@ -179,6 +186,10 @@ export default class CopilotPlugin extends Plugin {
     this.customCommandRegister.cleanup();
     this.settingsUnsubscriber?.();
     this.autocompleteService?.destroy();
+
+    // Cleanup selection handler
+    this.cleanupSelectionHandler();
+    this.clearSelectionContext();
 
     // Best-effort flush of log file
     await logFileManager.flush();
@@ -250,6 +261,100 @@ export default class CopilotPlugin extends Plugin {
         }
       })
     );
+  }
+
+  /**
+   * Initialize automatic text selection handler
+   * Listens to selectionchange events and automatically adds selected text to chat context
+   */
+  initSelectionHandler() {
+    this.selectionChangeHandler = () => {
+      // Clear existing debounce timer
+      if (this.selectionDebounceTimer) {
+        window.clearTimeout(this.selectionDebounceTimer);
+      }
+
+      // Debounce selection changes to avoid excessive triggers
+      this.selectionDebounceTimer = window.setTimeout(() => {
+        this.handleSelectionChange();
+      }, 500);
+    };
+
+    // Register the DOM selection change event
+    document.addEventListener("selectionchange", this.selectionChangeHandler);
+  }
+
+  /**
+   * Clean up selection handler on plugin unload
+   */
+  cleanupSelectionHandler() {
+    if (this.selectionDebounceTimer) {
+      window.clearTimeout(this.selectionDebounceTimer);
+    }
+    if (this.selectionChangeHandler) {
+      document.removeEventListener("selectionchange", this.selectionChangeHandler);
+    }
+  }
+
+  /**
+   * Clears the auto-selected text context if one was previously captured
+   */
+  private clearSelectionContext() {
+    setSelectedTextContexts([]);
+  }
+
+  /**
+   * Stores the provided selection as the active selected text context
+   */
+  private setSelectionContext(context: SelectedTextContext) {
+    setSelectedTextContexts([context]);
+  }
+
+  /**
+   * Handle text selection changes
+   * Only processes selections from markdown editors
+   */
+  handleSelectionChange() {
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (!activeView || !activeView.editor) {
+      return;
+    }
+
+    const editor = activeView.editor;
+    const selectedText = editor.getSelection();
+
+    // Only process non-empty selections
+    if (!selectedText || !selectedText.trim()) {
+      return;
+    }
+
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) {
+      return;
+    }
+
+    // Get selection range to determine line numbers
+    const selectionRange = editor.listSelections()[0];
+    if (!selectionRange) {
+      return;
+    }
+
+    const anchorLine = selectionRange.anchor.line + 1;
+    const headLine = selectionRange.head.line + 1;
+    const startLine = Math.min(anchorLine, headLine);
+    const endLine = Math.max(anchorLine, headLine);
+
+    // Create selected text context
+    const selectedTextContext: SelectedTextContext = {
+      id: uuidv4(),
+      content: selectedText,
+      noteTitle: activeFile.basename,
+      notePath: activeFile.path,
+      startLine,
+      endLine,
+    };
+
+    this.setSelectionContext(selectedTextContext);
   }
 
   private getCurrentEditorOrDummy(): Editor {

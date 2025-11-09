@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import {
   ContextFolderBadge,
   ContextNoteBadge,
+  ContextSelectedTextBadge,
   ContextTagBadge,
   ContextUrlBadge,
 } from "@/components/chat-components/ContextBadges";
@@ -76,7 +77,8 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
     (!context.notes?.length &&
       !context.urls?.length &&
       !context.tags?.length &&
-      !context.folders?.length)
+      !context.folders?.length &&
+      !context.selectedTextContexts?.length)
   ) {
     return null;
   }
@@ -121,6 +123,18 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{folder}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.selectedTextContexts?.map((selectedText, index) => (
+        <Tooltip key={`selectedText-${index}-${selectedText.id}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextSelectedTextBadge selectedText={selectedText} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">
+            {selectedText.notePath}
+          </TooltipContent>
         </Tooltip>
       ))}
     </div>

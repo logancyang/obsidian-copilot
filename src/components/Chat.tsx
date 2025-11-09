@@ -128,6 +128,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
 
   const [selectedTextContexts] = useSelectedTextContexts();
+  const hasSelectedTextContext = selectedTextContexts.length > 0;
+  const effectiveIncludeActiveNote = includeActiveNote && !hasSelectedTextContext;
   const projectContextStatus = useProjectContextStatus();
 
   // Calculate whether to show ProgressCard based on status and user preference
@@ -253,7 +255,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         displayText,
         context,
         currentChain,
-        includeActiveNote,
+        effectiveIncludeActiveNote,
         content.length > 0 ? content : undefined
       );
 
@@ -397,7 +399,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           messageToEdit.id!,
           newMessage,
           currentChain,
-          includeActiveNote
+          effectiveIncludeActiveNote
         );
 
         if (!success) {
@@ -450,7 +452,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       chatHistory,
       chatUIState,
       currentChain,
-      includeActiveNote,
+      effectiveIncludeActiveNote,
       addMessage,
       chainManager,
       settings.debug,
