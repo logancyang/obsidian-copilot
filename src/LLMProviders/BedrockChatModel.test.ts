@@ -384,4 +384,222 @@ describe("BedrockChatModel streaming decode", () => {
       expect(requestBody.thinking).toBeDefined();
     });
   });
+
+  describe("vision support", () => {
+    describe("convertImageContent", () => {
+      it("converts valid data URL to Claude image format", () => {
+        const model = createModel();
+        const dataUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
+        const result = (model as any).convertImageContent(dataUrl);
+
+        expect(result).toEqual({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/jpeg",
+            data: "/9j/4AAQSkZJRg==",
+          },
+        });
+      });
+
+      it("handles PNG images", () => {
+        const model = createModel();
+        const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
+        const result = (model as any).convertImageContent(dataUrl);
+
+        expect(result).toEqual({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/png",
+            data: "iVBORw0KGgoAAAANSUhEUg==",
+          },
+        });
+      });
+
+      it("returns null for invalid data URL format", () => {
+        const model = createModel();
+        const invalidUrl = "not-a-data-url";
+        const result = (model as any).convertImageContent(invalidUrl);
+
+        expect(result).toBeNull();
+      });
+
+      it("returns null for non-image media type", () => {
+        const model = createModel();
+        const dataUrl = "data:text/plain;base64,SGVsbG8gV29ybGQ=";
+        const result = (model as any).convertImageContent(dataUrl);
+
+        expect(result).toBeNull();
+      });
+    });
+
+    describe("normaliseMessageContent", () => {
+      it("preserves array content with images", () => {
+        const model = createModel();
+        const message = {
+          content: [
+            { type: "text", text: "What's in this image?" },
+            {
+              type: "image_url",
+              image_url: { url: "data:image/jpeg;base64,/9j/4AAQSkZJRg==" },
+            },
+          ],
+          _getType: () => "human",
+        };
+
+        const result = (model as any).normaliseMessageContent(message);
+
+        expect(Array.isArray(result)).toBe(true);
+        expect(result).toHaveLength(2);
+        expect(result[0]).toEqual({ type: "text", text: "What's in this image?" });
+        expect(result[1]).toEqual({
+          type: "image_url",
+          image_url: { url: "data:image/jpeg;base64,/9j/4AAQSkZJRg==" },
+        });
+      });
+
+      it("flattens array content without images to string", () => {
+        const model = createModel();
+        const message = {
+          content: [
+            { type: "text", text: "Hello " },
+            { type: "text", text: "world!" },
+          ],
+          _getType: () => "human",
+        };
+
+        const result = (model as any).normaliseMessageContent(message);
+
+        expect(typeof result).toBe("string");
+        expect(result).toBe("Hello world!");
+      });
+
+      it("returns string content unchanged", () => {
+        const model = createModel();
+        const message = {
+          content: "Simple text message",
+          _getType: () => "human",
+        };
+
+        const result = (model as any).normaliseMessageContent(message);
+
+        expect(result).toBe("Simple text message");
+      });
+    });
+
+    describe("buildRequestBody with images", () => {
+      it("includes images in request body for multimodal messages", () => {
+        const model = createModel();
+        const messages = [
+          {
+            content: [
+              { type: "text", text: "What's in this image?" },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/jpeg;base64,/9j/4AAQSkZJRg==" },
+              },
+            ],
+            _getType: () => "human",
+          },
+        ];
+
+        const requestBody = (model as any).buildRequestBody(messages);
+
+        expect(requestBody.messages).toHaveLength(1);
+        expect(requestBody.messages[0].content).toHaveLength(2);
+
+        // Check text block
+        expect(requestBody.messages[0].content[0]).toEqual({
+          type: "text",
+          text: "What's in this image?",
+        });
+
+        // Check image block (converted to Claude format)
+        expect(requestBody.messages[0].content[1]).toEqual({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: "image/jpeg",
+            data: "/9j/4AAQSkZJRg==",
+          },
+        });
+      });
+
+      it("handles multiple images in a single message", () => {
+        const model = createModel();
+        const messages = [
+          {
+            content: [
+              { type: "text", text: "Compare these images:" },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/jpeg;base64,IMAGE1DATA" },
+              },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/png;base64,IMAGE2DATA" },
+              },
+            ],
+            _getType: () => "human",
+          },
+        ];
+
+        const requestBody = (model as any).buildRequestBody(messages);
+
+        expect(requestBody.messages[0].content).toHaveLength(3);
+        expect(requestBody.messages[0].content[0].type).toBe("text");
+        expect(requestBody.messages[0].content[1].type).toBe("image");
+        expect(requestBody.messages[0].content[1].source.media_type).toBe("image/jpeg");
+        expect(requestBody.messages[0].content[2].type).toBe("image");
+        expect(requestBody.messages[0].content[2].source.media_type).toBe("image/png");
+      });
+
+      it("handles text-only messages correctly", () => {
+        const model = createModel();
+        const messages = [
+          {
+            content: "Just text, no images",
+            _getType: () => "human",
+          },
+        ];
+
+        const requestBody = (model as any).buildRequestBody(messages);
+
+        expect(requestBody.messages).toHaveLength(1);
+        expect(requestBody.messages[0].content).toHaveLength(1);
+        expect(requestBody.messages[0].content[0]).toEqual({
+          type: "text",
+          text: "Just text, no images",
+        });
+      });
+
+      it("skips invalid images and keeps valid content", () => {
+        const model = createModel();
+        const messages = [
+          {
+            content: [
+              { type: "text", text: "Valid text" },
+              {
+                type: "image_url",
+                image_url: { url: "invalid-url" }, // Invalid - should be skipped
+              },
+              {
+                type: "image_url",
+                image_url: { url: "data:image/jpeg;base64,VALIDDATA" }, // Valid
+              },
+            ],
+            _getType: () => "human",
+          },
+        ];
+
+        const requestBody = (model as any).buildRequestBody(messages);
+
+        // Should have text + 1 valid image (invalid one skipped)
+        expect(requestBody.messages[0].content).toHaveLength(2);
+        expect(requestBody.messages[0].content[0].type).toBe("text");
+        expect(requestBody.messages[0].content[1].type).toBe("image");
+      });
+    });
+  });
 });
