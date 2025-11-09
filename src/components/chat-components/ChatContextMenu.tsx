@@ -110,13 +110,15 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   }, [contextNotes]);
 
   const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
+  const hasSelectedText = selectedTextContexts.length > 0;
+  const activeNoteVisible = includeActiveNote && !hasSelectedText && Boolean(currentActiveFile);
 
   const hasContext =
     uniqueNotes.length > 0 ||
     uniqueUrls.length > 0 ||
     selectedTextContexts.length > 0 ||
     contextFolders.length > 0 ||
-    includeActiveNote;
+    activeNoteVisible;
 
   // Get contextStatus from the shared hook
   const getContextStatusIcon = () => {
@@ -159,7 +161,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
         </Popover>
       </div>
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
-        {includeActiveNote && currentActiveFile && (
+        {activeNoteVisible && currentActiveFile && (
           <ContextActiveNoteBadge
             currentActiveFile={currentActiveFile}
             onRemove={() => onRemoveContext("activeNote", "")}
