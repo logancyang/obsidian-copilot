@@ -509,13 +509,6 @@ export interface ProviderMetadata {
 
 // Unified provider information
 export const ProviderInfo: Record<Provider, ProviderMetadata> = {
-  [ChatModelProviders.COHEREAI]: {
-    label: "Cohere",
-    host: "https://api.cohere.com",
-    keyManagementURL: "https://dashboard.cohere.ai/api-keys",
-    listModelURL: "https://api.cohere.com/v1/models",
-    testModel: ChatModels.COMMAND_R,
-  },
   [ChatModelProviders.OPENROUTERAI]: {
     label: "OpenRouter",
     host: "https://openrouter.ai/api/v1/",
@@ -530,33 +523,19 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://generativelanguage.googleapis.com/v1beta/models",
     testModel: ChatModels.GEMINI_FLASH,
   },
-  [ChatModelProviders.OPENAI]: {
-    label: "OpenAI",
-    host: "https://api.openai.com",
-    keyManagementURL: "https://platform.openai.com/api-keys",
-    listModelURL: "https://api.openai.com/v1/models",
-    testModel: ChatModels.GPT_41,
-  },
-  [ChatModelProviders.SILICONFLOW]: {
-    label: "SiliconFlow",
-    host: "https://api.siliconflow.com/v1",
-    keyManagementURL: "https://cloud.siliconflow.com/me/account/ak",
-    listModelURL: "https://api.siliconflow.com/v1/models",
-    testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
-  },
-  [ChatModelProviders.AZURE_OPENAI]: {
-    label: "Azure OpenAI",
-    host: "",
-    keyManagementURL: "",
-    listModelURL: "",
-    testModel: ChatModels.AZURE_OPENAI,
-  },
   [ChatModelProviders.ANTHROPIC]: {
     label: "Anthropic",
     host: "https://api.anthropic.com/",
     keyManagementURL: "https://console.anthropic.com/settings/keys",
     listModelURL: "https://api.anthropic.com/v1/models",
     testModel: ChatModels.CLAUDE_4_SONNET,
+  },
+  [ChatModelProviders.OPENAI]: {
+    label: "OpenAI",
+    host: "https://api.openai.com",
+    keyManagementURL: "https://platform.openai.com/api-keys",
+    listModelURL: "https://api.openai.com/v1/models",
+    testModel: ChatModels.GPT_41,
   },
   [ChatModelProviders.XAI]: {
     label: "XAI",
@@ -565,12 +544,33 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://api.x.ai/v1/models",
     testModel: ChatModels.GROK_4_FAST,
   },
+  [ChatModelProviders.AZURE_OPENAI]: {
+    label: "Azure OpenAI",
+    host: "",
+    keyManagementURL: "",
+    listModelURL: "",
+    testModel: ChatModels.AZURE_OPENAI,
+  },
   [ChatModelProviders.GROQ]: {
     label: "Groq",
     host: "https://api.groq.com/openai",
     keyManagementURL: "https://console.groq.com/keys",
     listModelURL: "https://api.groq.com/openai/v1/models",
     testModel: ChatModels.GROQ_LLAMA_8b,
+  },
+  [ChatModelProviders.COHEREAI]: {
+    label: "Cohere",
+    host: "https://api.cohere.com",
+    keyManagementURL: "https://dashboard.cohere.ai/api-keys",
+    listModelURL: "https://api.cohere.com/v1/models",
+    testModel: ChatModels.COMMAND_R,
+  },
+  [ChatModelProviders.SILICONFLOW]: {
+    label: "SiliconFlow",
+    host: "https://api.siliconflow.com/v1",
+    keyManagementURL: "https://cloud.siliconflow.com/me/account/ak",
+    listModelURL: "https://api.siliconflow.com/v1/models",
+    testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
   [ChatModelProviders.OLLAMA]: {
     label: "Ollama",

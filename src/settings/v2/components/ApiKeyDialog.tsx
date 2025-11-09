@@ -61,17 +61,15 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
     return (settings[settingKey] ?? "") as string;
   };
 
-  const providers: ProviderKeyItem[] = getNeedSetKeyProvider()
-    .filter((provider) => provider !== ChatModelProviders.AMAZON_BEDROCK)
-    .map((provider) => {
-      const providerKey = provider as SettingKeyProviders;
-      const apiKey = getApiKeyByProvider(providerKey);
+  const providers: ProviderKeyItem[] = getNeedSetKeyProvider().map((provider) => {
+    const providerKey = provider as SettingKeyProviders;
+    const apiKey = getApiKeyByProvider(providerKey);
 
-      return {
-        provider: providerKey,
-        apiKey,
-      };
-    });
+    return {
+      provider: providerKey,
+      apiKey,
+    };
+  });
 
   const handleApiKeyChange = (provider: SettingKeyProviders, value: string) => {
     const currentKey = getApiKeyByProvider(provider);
@@ -241,168 +239,180 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
 
       <div className="tw-space-y-6 tw-py-4">
         <div className="tw-space-y-4">
-          {providers.map((item: ProviderKeyItem) => (
-            <React.Fragment key={item.provider}>
-              <div className="tw-flex tw-flex-col tw-gap-2">
-                <div className="tw-flex tw-items-end tw-gap-2 tw-font-medium">
-                  <div className="tw-truncate">{getProviderLabel(item.provider)}</div>
-                </div>
-                <div className="tw-flex tw-flex-row tw-items-center tw-gap-2">
-                  <div className="tw-flex-1">
-                    <PasswordInput
-                      className="tw-max-w-full"
-                      value={item.apiKey}
-                      onChange={(v) => handleApiKeyChange(item.provider, v)}
-                    />
+          {providers.map((item: ProviderKeyItem) => {
+            const providerInfo = getProviderInfo(item.provider);
+            const supportsModelImport = Boolean(providerInfo.listModelURL);
+
+            return (
+              <React.Fragment key={item.provider}>
+                <div className="tw-flex tw-flex-col tw-gap-2">
+                  <div className="tw-flex tw-items-end tw-gap-2 tw-font-medium">
+                    <div className="tw-truncate">{getProviderLabel(item.provider)}</div>
                   </div>
-                  <div className="">
-                    <Button
-                      onClick={() => {
-                        const nextExpanded =
-                          expandedProvider === item.provider ? null : item.provider;
-                        setExpandedProvider(nextExpanded);
-                        if (
-                          nextExpanded &&
-                          item.apiKey &&
-                          modelsByProvider[item.provider] === undefined &&
-                          loadingProvider !== item.provider &&
-                          errorProvider !== item.provider
-                        ) {
-                          fetchModelsForProvider(item.provider, item.apiKey);
-                        }
-                      }}
-                      disabled={!item.apiKey}
-                      variant="secondary"
-                      className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-px-4 tw-py-2"
-                    >
-                      Add Model
-                      {expandedProvider === item.provider ? (
-                        <ChevronUp className="tw-ml-1 tw-size-4" />
-                      ) : (
-                        <ChevronDown className="tw-ml-1 tw-size-4" />
-                      )}
-                    </Button>
-                  </div>
-                </div>
-                <div>
-                  {getProviderInfo(item.provider).keyManagementURL && (
-                    <a
-                      href={getProviderInfo(item.provider).keyManagementURL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="tw-text-[10px] tw-text-accent hover:tw-text-accent-hover sm:tw-text-xs"
-                    >
-                      Get {getProviderLabel(item.provider)} Key
-                    </a>
-                  )}
-                </div>
-              </div>
-              <Collapsible open={expandedProvider === item.provider} className="tw-mt-2">
-                <CollapsibleContent className="tw-rounded-md tw-p-3">
-                  <div className="tw-flex tw-flex-col tw-gap-2">
-                    <FormField
-                      label="Model"
-                      description="Add the currently selected model to model List. After adding, please check the Model Tab."
-                    >
+                  <div className="tw-flex tw-flex-row tw-items-center tw-gap-2">
+                    <div className="tw-flex-1">
+                      <PasswordInput
+                        className="tw-max-w-full"
+                        value={item.apiKey}
+                        onChange={(v) => handleApiKeyChange(item.provider, v)}
+                      />
+                    </div>
+                    {supportsModelImport && (
                       <div>
-                        <div className="tw-flex tw-items-center tw-gap-2">
-                          <div className="tw-flex-1">
-                            <ObsidianNativeSelect
-                              options={
-                                modelsByProvider[item.provider]
-                                  ?.sort((a, b) => a.name.localeCompare(b.name))
-                                  .map((model) => ({
-                                    label: model.name,
-                                    value: model.id,
-                                  })) || []
-                              }
-                              onChange={(e) => {
-                                const value = e.target.value;
-                                const model = modelsByProvider[item.provider]?.find(
-                                  (m) => m.id === value
-                                );
-                                if (model) {
-                                  setSelectedModel({
-                                    id: model.id,
-                                    name: model.name,
-                                    provider: item.provider,
-                                  });
-                                }
-                              }}
-                              onClick={() => {
-                                if (
-                                  item.apiKey &&
-                                  modelsByProvider[item.provider] === undefined &&
-                                  loadingProvider !== item.provider &&
-                                  errorProvider !== item.provider
-                                ) {
-                                  fetchModelsForProvider(item.provider, item.apiKey);
-                                }
-                              }}
-                              value={
-                                selectedModel?.provider === item.provider ? selectedModel.id : ""
-                              }
-                              placeholder="Select Model"
-                              disabled={
-                                !item.apiKey ||
-                                loadingProvider === item.provider ||
-                                (errorProvider === item.provider &&
-                                  modelsByProvider[item.provider] !== null)
-                              }
-                            />
-                          </div>
-                          <div className="tw-w-[72px]">
-                            <Button
-                              onClick={verifyAndAddModel}
-                              disabled={
-                                !selectedModel ||
-                                selectedModel.provider !== item.provider ||
-                                verifyingModel
-                              }
-                              variant="secondary"
-                              size="sm"
-                              className="tw-w-full tw-whitespace-nowrap"
-                            >
-                              {verifyingModel ? (
-                                <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
-                              ) : (
-                                "Add"
-                              )}
-                            </Button>
-                          </div>
-                        </div>
-                        <div className="tw-mt-1 tw-text-xs">
-                          {loadingProvider === item.provider && (
-                            <div className="tw-p-1 tw-text-muted">Loading models...</div>
+                        <Button
+                          onClick={() => {
+                            const nextExpanded =
+                              expandedProvider === item.provider ? null : item.provider;
+                            setExpandedProvider(nextExpanded);
+                            if (
+                              nextExpanded &&
+                              item.apiKey &&
+                              modelsByProvider[item.provider] === undefined &&
+                              loadingProvider !== item.provider &&
+                              errorProvider !== item.provider
+                            ) {
+                              fetchModelsForProvider(item.provider, item.apiKey);
+                            }
+                          }}
+                          disabled={!item.apiKey}
+                          variant="secondary"
+                          className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-px-4 tw-py-2"
+                        >
+                          Add Model
+                          {expandedProvider === item.provider ? (
+                            <ChevronUp className="tw-ml-1 tw-size-4" />
+                          ) : (
+                            <ChevronDown className="tw-ml-1 tw-size-4" />
                           )}
-                          {errorProvider === item.provider && (
-                            <div className="tw-p-1 tw-text-error">
-                              Failed to load models.
-                              {modelsByProvider[item.provider] === null &&
-                                " Check API Key or network."}
-                            </div>
-                          )}
-                          {modelsByProvider[item.provider] &&
-                            modelsByProvider[item.provider]!.length === 0 && (
-                              <div className="tw-p-1 tw-text-muted">
-                                No models available for this provider.
-                              </div>
-                            )}
-                          {modelsByProvider[item.provider] === undefined &&
-                            errorProvider !== item.provider &&
-                            loadingProvider !== item.provider && (
-                              <div className="tw-p-1 tw-text-muted">
-                                Click to load models or expand to try again if API key was changed.
-                              </div>
-                            )}
-                        </div>
+                        </Button>
                       </div>
-                    </FormField>
+                    )}
                   </div>
-                </CollapsibleContent>
-              </Collapsible>
-            </React.Fragment>
-          ))}
+                  <div>
+                    {providerInfo.keyManagementURL && (
+                      <a
+                        href={providerInfo.keyManagementURL}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="tw-text-[10px] tw-text-accent hover:tw-text-accent-hover sm:tw-text-xs"
+                      >
+                        Get {getProviderLabel(item.provider)} Key
+                      </a>
+                    )}
+                  </div>
+                </div>
+                {supportsModelImport && (
+                  <Collapsible open={expandedProvider === item.provider} className="tw-mt-2">
+                    <CollapsibleContent className="tw-rounded-md tw-p-3">
+                      <div className="tw-flex tw-flex-col tw-gap-2">
+                        <FormField
+                          label="Model"
+                          description="Add the currently selected model to model List. After adding, please check the Model Tab."
+                        >
+                          <div>
+                            <div className="tw-flex tw-items-center tw-gap-2">
+                              <div className="tw-flex-1">
+                                <ObsidianNativeSelect
+                                  options={
+                                    modelsByProvider[item.provider]
+                                      ?.sort((a, b) => a.name.localeCompare(b.name))
+                                      .map((model) => ({
+                                        label: model.name,
+                                        value: model.id,
+                                      })) || []
+                                  }
+                                  onChange={(e) => {
+                                    const value = e.target.value;
+                                    const model = modelsByProvider[item.provider]?.find(
+                                      (m) => m.id === value
+                                    );
+                                    if (model) {
+                                      setSelectedModel({
+                                        id: model.id,
+                                        name: model.name,
+                                        provider: item.provider,
+                                      });
+                                    }
+                                  }}
+                                  onClick={() => {
+                                    if (
+                                      item.apiKey &&
+                                      modelsByProvider[item.provider] === undefined &&
+                                      loadingProvider !== item.provider &&
+                                      errorProvider !== item.provider
+                                    ) {
+                                      fetchModelsForProvider(item.provider, item.apiKey);
+                                    }
+                                  }}
+                                  value={
+                                    selectedModel?.provider === item.provider
+                                      ? selectedModel.id
+                                      : ""
+                                  }
+                                  placeholder="Select Model"
+                                  disabled={
+                                    !item.apiKey ||
+                                    loadingProvider === item.provider ||
+                                    (errorProvider === item.provider &&
+                                      modelsByProvider[item.provider] !== null)
+                                  }
+                                />
+                              </div>
+                              <div className="tw-w-[72px]">
+                                <Button
+                                  onClick={verifyAndAddModel}
+                                  disabled={
+                                    !selectedModel ||
+                                    selectedModel.provider !== item.provider ||
+                                    verifyingModel
+                                  }
+                                  variant="secondary"
+                                  size="sm"
+                                  className="tw-w-full tw-whitespace-nowrap"
+                                >
+                                  {verifyingModel ? (
+                                    <Loader2 className="tw-mr-2 tw-size-4 tw-animate-spin" />
+                                  ) : (
+                                    "Add"
+                                  )}
+                                </Button>
+                              </div>
+                            </div>
+                            <div className="tw-mt-1 tw-text-xs">
+                              {loadingProvider === item.provider && (
+                                <div className="tw-p-1 tw-text-muted">Loading models...</div>
+                              )}
+                              {errorProvider === item.provider && (
+                                <div className="tw-p-1 tw-text-error">
+                                  Failed to load models.
+                                  {modelsByProvider[item.provider] === null &&
+                                    " Check API Key or network."}
+                                </div>
+                              )}
+                              {modelsByProvider[item.provider] &&
+                                modelsByProvider[item.provider]!.length === 0 && (
+                                  <div className="tw-p-1 tw-text-muted">
+                                    No models available for this provider.
+                                  </div>
+                                )}
+                              {modelsByProvider[item.provider] === undefined &&
+                                errorProvider !== item.provider &&
+                                loadingProvider !== item.provider && (
+                                  <div className="tw-p-1 tw-text-muted">
+                                    Click to load models or expand to try again if API key was
+                                    changed.
+                                  </div>
+                                )}
+                            </div>
+                          </div>
+                        </FormField>
+                      </div>
+                    </CollapsibleContent>
+                  </Collapsible>
+                )}
+              </React.Fragment>
+            );
+          })}
         </div>
       </div>
 

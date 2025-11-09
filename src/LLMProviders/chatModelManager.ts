@@ -458,6 +458,8 @@ export default class ChatModelManager {
     // Inference profiles prefix Anthropic identifiers (e.g. global.anthropic.*), so look for the segment anywhere.
     const requiresAnthropicVersion = /(^|\.)anthropic\./.test(modelName);
     const anthropicVersion = requiresAnthropicVersion ? "bedrock-2023-05-31" : undefined;
+    // Only enable thinking mode if user has explicitly enabled REASONING capability
+    const enableThinking = customModel.capabilities?.includes(ModelCapability.REASONING) ?? false;
 
     return {
       modelName,
@@ -469,6 +471,7 @@ export default class ChatModelManager {
       defaultTemperature: temperature,
       defaultTopP: customModel.topP,
       anthropicVersion,
+      enableThinking,
       fetchImplementation,
       streaming: customModel.stream ?? true,
     };
