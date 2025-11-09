@@ -358,7 +358,8 @@ describe("BedrockChatModel streaming decode", () => {
 
       expect(requestBody.thinking).toBeUndefined();
       expect(requestBody.temperature).toBe(0.7);
-      expect(requestBody.anthropic_version).toBeUndefined();
+      // anthropic_version should always be present when provided (required for all Bedrock requests)
+      expect(requestBody.anthropic_version).toBe("bedrock-2023-05-31");
     });
 
     it("respects user temperature when thinking is disabled", () => {
