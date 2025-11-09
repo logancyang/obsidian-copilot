@@ -4,6 +4,7 @@ import { TFile } from "obsidian";
 import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
 import { ContextBadgeWrapper } from "./ContextBadgeWrapper";
+import { SelectedTextContext } from "@/types/message";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
@@ -24,6 +25,10 @@ interface ContextTagBadgeProps extends BaseContextBadgeProps {
 
 interface ContextFolderBadgeProps extends BaseContextBadgeProps {
   folder: string;
+}
+
+interface ContextSelectedTextBadgeProps extends BaseContextBadgeProps {
+  selectedText: SelectedTextContext;
 }
 
 interface ContextActiveNoteBadgeProps extends BaseContextBadgeProps {
@@ -174,6 +179,45 @@ export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps
         <TruncatedText className="tw-max-w-40" tooltipContent={folder} alwaysShowTooltip>
           {folder}
         </TruncatedText>
+      </div>
+      {onRemove && (
+        <Button
+          variant="ghost2"
+          size="fit"
+          onClick={onRemove}
+          aria-label="Remove from context"
+          className="tw-text-muted"
+        >
+          <X className="tw-size-4" />
+        </Button>
+      )}
+    </ContextBadgeWrapper>
+  );
+}
+
+export function ContextSelectedTextBadge({
+  selectedText,
+  onRemove,
+}: ContextSelectedTextBadgeProps) {
+  const lineRange =
+    selectedText.startLine === selectedText.endLine
+      ? `L${selectedText.startLine}`
+      : `L${selectedText.startLine}-${selectedText.endLine}`;
+
+  const tooltipContent = (
+    <div className="tw-text-left">
+      {selectedText.notePath} ({lineRange})
+    </div>
+  );
+
+  return (
+    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
+      <div className="tw-flex tw-items-center tw-gap-1">
+        <FileText className="tw-size-3" />
+        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+          {selectedText.noteTitle}
+        </TruncatedText>
+        <span className="tw-text-xs tw-text-faint">{lineRange}</span>
       </div>
       {onRemove && (
         <Button
