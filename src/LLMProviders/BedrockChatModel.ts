@@ -211,7 +211,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     let byteBuffer = new Uint8Array(0);
     let stopReason: string | undefined;
     let usage: Record<string, unknown> | undefined;
-    let hasYielded = false;
+    let hasYieldedAnswer = false; // Track if we've yielded actual answer text (not just thinking)
     const debugEvents: string[] = [];
 
     try {
@@ -270,7 +270,18 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
           if (processed.deltaChunks.length > 0) {
             for (const chunk of processed.deltaChunks) {
-              hasYielded = hasYielded || Boolean(chunk.text);
+              // Check if this chunk contains actual answer text (not just thinking)
+              // Thinking chunks have content array with type: "thinking"
+              // Answer chunks have content array with type: "text" or plain string content
+              const isThinkingChunk =
+                Array.isArray(chunk.message.content) &&
+                chunk.message.content.length > 0 &&
+                chunk.message.content[0]?.type === "thinking";
+
+              if (!isThinkingChunk && chunk.text) {
+                hasYieldedAnswer = true;
+              }
+
               yield chunk;
             }
           }
@@ -293,19 +304,19 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       yield this.buildTerminalMetadataChunk(stopReason, usage);
     }
 
-    if (!hasYielded) {
+    if (!hasYieldedAnswer) {
       logWarn(
-        `[${requestId}] Stream complete but no text yielded. Usage: ${JSON.stringify(usage)}, stopReason: ${stopReason}`
+        `[${requestId}] Stream complete but no answer text yielded (only thinking or no content). Usage: ${JSON.stringify(usage)}, stopReason: ${stopReason}`
       );
       if (debugEvents.length > 0) {
         logInfo(
-          `[${requestId}] Amazon Bedrock streaming produced no delta text. Sample events: ${debugEvents
+          `[${requestId}] Amazon Bedrock streaming produced no answer text. Sample events: ${debugEvents
             .slice(0, 5)
             .join(" | ")}`
         );
       }
       logWarn(
-        `[${requestId}] Amazon Bedrock streaming returned no content. Falling back to non-streaming response.`
+        `[${requestId}] Amazon Bedrock streaming returned no answer content. Falling back to non-streaming response.`
       );
       const fallback = await this._generate(messages, options, runManager);
       const fallbackText = fallback.generations[0]?.text ?? "";
@@ -328,6 +339,50 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     } catch {
       return null;
     }
+  }
+
+  /**
+   * Builds Claude-style content items from Bedrock delta events.
+   * This enables ThinkBlockStreamer to recognize thinking vs text content.
+   *
+   * @param event - The decoded Bedrock event payload
+   * @returns Claude-style content array or null if not classifiable
+   */
+  private buildContentItemsFromDelta(
+    event: any
+  ): Array<{ type: string; text?: string; thinking?: string }> | null {
+    if (!event || typeof event !== "object") {
+      return null;
+    }
+
+    // Check for content_block_delta format (nested delta)
+    const delta = event.content_block_delta?.delta || event.contentBlockDelta?.delta || event.delta;
+
+    if (!delta || typeof delta !== "object") {
+      return null;
+    }
+
+    const deltaType = delta.type;
+
+    // Handle thinking content (both "thinking" and "thinking_delta")
+    if (deltaType === "thinking" || deltaType === "thinking_delta") {
+      const thinkingContent = delta.thinking;
+      if (typeof thinkingContent === "string" && thinkingContent.length > 0) {
+        return [{ type: "thinking", thinking: thinkingContent }];
+      }
+      // Even if thinking is empty/undefined, signal that this is a thinking block
+      return [{ type: "thinking", thinking: "" }];
+    }
+
+    // Handle text_delta content
+    if (deltaType === "text_delta" || deltaType === "text") {
+      const textContent = delta.text;
+      if (typeof textContent === "string" && textContent.length > 0) {
+        return [{ type: "text", text: textContent }];
+      }
+    }
+
+    return null;
   }
 
   private async processStreamEvent(
@@ -359,30 +414,71 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
         }
 
         const chunkMetadata = this.buildChunkMetadata(innerEvent);
-        const deltaText = this.extractStreamText(innerEvent);
-        if (deltaText) {
+
+        // Try to build structured content (Claude-style arrays)
+        const contentItems = this.buildContentItemsFromDelta(innerEvent);
+
+        if (contentItems && contentItems.length > 0) {
+          // We have structured content (thinking or text)
+          const isThinking = contentItems[0]?.type === "thinking";
+          const deltaText = isThinking
+            ? contentItems[0].thinking || ""
+            : contentItems[0]?.text || "";
+
+          const additionalKwargs: Record<string, unknown> = {};
+
+          // For thinking content, also populate additional_kwargs.delta.reasoning
+          // This provides compatibility with OpenRouter format
+          if (isThinking && deltaText) {
+            additionalKwargs.delta = { reasoning: deltaText };
+          }
+
           const messageChunk = new AIMessageChunk({
-            content: deltaText,
+            content: contentItems, // Use array format for ThinkBlockStreamer
             response_metadata: chunkMetadata,
+            ...(Object.keys(additionalKwargs).length > 0
+              ? { additional_kwargs: additionalKwargs }
+              : {}),
           });
 
           const generationChunk = new ChatGenerationChunk({
             message: messageChunk,
-            text: deltaText,
+            text: deltaText, // Keep text field for backward compatibility
             generationInfo: chunkMetadata,
           });
 
           deltaChunks.push(generationChunk);
           hasText = true;
-          if (runManager) {
+          if (runManager && deltaText) {
             await runManager.handleLLMNewToken(deltaText);
           }
         } else {
-          // Only log if it's an unexpected event type that should have had text
-          if (innerEvent.type === "content_block_delta") {
-            const summary = `No text in content_block_delta event: ${this.describeEvent(innerEvent)}`;
-            debugSummaries.push(summary);
-            logWarn(`processStreamEvent: ${summary}`);
+          // Fall back to string-based extraction for non-structured content
+          const deltaText = this.extractStreamText(innerEvent);
+          if (deltaText) {
+            const messageChunk = new AIMessageChunk({
+              content: deltaText,
+              response_metadata: chunkMetadata,
+            });
+
+            const generationChunk = new ChatGenerationChunk({
+              message: messageChunk,
+              text: deltaText,
+              generationInfo: chunkMetadata,
+            });
+
+            deltaChunks.push(generationChunk);
+            hasText = true;
+            if (runManager) {
+              await runManager.handleLLMNewToken(deltaText);
+            }
+          } else {
+            // Only log if it's an unexpected event type that should have had content
+            if (innerEvent.type === "content_block_delta") {
+              const summary = `No content in content_block_delta event: ${this.describeEvent(innerEvent)}`;
+              debugSummaries.push(summary);
+              logWarn(`processStreamEvent: ${summary}`);
+            }
           }
         }
 
@@ -398,21 +494,59 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       }
     } else {
       const chunkMetadata = this.buildChunkMetadata(event);
-      const deltaText = this.extractStreamText(event);
-      if (deltaText) {
+
+      // Try to build structured content (Claude-style arrays)
+      const contentItems = this.buildContentItemsFromDelta(event);
+
+      if (contentItems && contentItems.length > 0) {
+        // We have structured content (thinking or text)
+        const isThinking = contentItems[0]?.type === "thinking";
+        const deltaText = isThinking ? contentItems[0].thinking || "" : contentItems[0]?.text || "";
+
+        const additionalKwargs: Record<string, unknown> = {};
+
+        // For thinking content, also populate additional_kwargs.delta.reasoning
+        if (isThinking && deltaText) {
+          additionalKwargs.delta = { reasoning: deltaText };
+        }
+
         const messageChunk = new AIMessageChunk({
-          content: deltaText,
+          content: contentItems, // Use array format for ThinkBlockStreamer
           response_metadata: chunkMetadata,
+          ...(Object.keys(additionalKwargs).length > 0
+            ? { additional_kwargs: additionalKwargs }
+            : {}),
         });
+
         const generationChunk = new ChatGenerationChunk({
           message: messageChunk,
-          text: deltaText,
+          text: deltaText, // Keep text field for backward compatibility
           generationInfo: chunkMetadata,
         });
+
         deltaChunks.push(generationChunk);
         hasText = true;
-        if (runManager) {
+        if (runManager && deltaText) {
           await runManager.handleLLMNewToken(deltaText);
+        }
+      } else {
+        // Fall back to string-based extraction for non-structured content
+        const deltaText = this.extractStreamText(event);
+        if (deltaText) {
+          const messageChunk = new AIMessageChunk({
+            content: deltaText,
+            response_metadata: chunkMetadata,
+          });
+          const generationChunk = new ChatGenerationChunk({
+            message: messageChunk,
+            text: deltaText,
+            generationInfo: chunkMetadata,
+          });
+          deltaChunks.push(generationChunk);
+          hasText = true;
+          if (runManager) {
+            await runManager.handleLLMNewToken(deltaText);
+          }
         }
       }
 
@@ -507,7 +641,8 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     const firstNonWhitespace = this.findFirstNonWhitespaceByte(bytes);
     if (firstNonWhitespace === 0x7b || firstNonWhitespace === 0x5b) {
       const direct = this.decodeUtf8(bytes);
-      return this.splitJsonLines(direct);
+      const lines = this.splitJsonLines(direct);
+      return lines;
     }
 
     const eventMessages = this.decodeEventStreamMessages(bytes);
@@ -679,6 +814,22 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   private extractStreamText(event: any): string | null {
     if (!event || typeof event !== "object") {
       return null;
+    }
+
+    // Check for thinking/reasoning fields first (fallback for non-streaming or debugging)
+    // This ensures thinking content is never silently dropped
+    const thinkingCandidates: Array<unknown> = [
+      event.delta?.thinking,
+      event.content_block_delta?.delta?.thinking,
+      event.contentBlockDelta?.delta?.thinking,
+      event.delta?.reasoning_content, // Deepseek compatibility
+      event.reasoning_content,
+    ];
+
+    for (const value of thinkingCandidates) {
+      if (typeof value === "string" && value.length > 0) {
+        return value;
+      }
     }
 
     const directValues: Array<unknown> = [
@@ -960,14 +1111,30 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     if (resolvedMaxTokens !== undefined) {
       payload.max_tokens = resolvedMaxTokens;
     }
-    if (resolvedTemperature !== undefined) {
-      payload.temperature = resolvedTemperature;
+
+    // Handle thinking mode for Claude models
+    const enableThinking = Boolean(this.anthropicVersion);
+    if (enableThinking) {
+      payload.anthropic_version = this.anthropicVersion;
+      // Enable thinking mode for Claude models on Bedrock
+      // This allows the model to generate reasoning tokens
+      payload.thinking = {
+        type: "enabled",
+        budget_tokens: 2048,
+      };
+      // When thinking is enabled, temperature must be 1
+      // https://docs.claude.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
+      payload.temperature = 1;
+      logInfo("[BedrockChatModel] Enabled thinking mode for Claude model with temperature=1");
+    } else {
+      // Only set temperature if thinking is NOT enabled
+      if (resolvedTemperature !== undefined) {
+        payload.temperature = resolvedTemperature;
+      }
     }
+
     if (resolvedTopP !== undefined) {
       payload.top_p = resolvedTopP;
-    }
-    if (this.anthropicVersion) {
-      payload.anthropic_version = this.anthropicVersion;
     }
 
     return payload;
