@@ -31,7 +31,8 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   11. Always respond in the language of the user's query.
   12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.
   13. If the user mentions "tags", it most likely means tags in Obsidian note properties.
-  14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.`;
+  14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.
+  15. For markdown lists, always use '- ' (hyphen followed by exactly one space) for bullet points, with no leading spaces before the hyphen. Never use '*' (asterisk) for bullets.`;
 
 export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in <writeToFile> tags.
 
@@ -167,21 +168,21 @@ export enum ChatModels {
 
 // Model Providers
 export enum ChatModelProviders {
+  OPENROUTERAI = "openrouterai",
   OPENAI = "openai",
   OPENAI_FORMAT = "3rd party (openai-format)",
-  AZURE_OPENAI = "azure openai",
   ANTHROPIC = "anthropic",
-  COHEREAI = "cohereai",
   GOOGLE = "google",
   XAI = "xai",
-  OPENROUTERAI = "openrouterai",
+  AMAZON_BEDROCK = "amazon-bedrock",
+  AZURE_OPENAI = "azure openai",
   GROQ = "groq",
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
-  AMAZON_BEDROCK = "amazon-bedrock",
+  COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
 }
 
