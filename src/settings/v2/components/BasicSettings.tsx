@@ -382,6 +382,16 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="switch"
+            title="Auto-Add Text Selection to Context"
+            description="Automatically add selected text to chat context when you make a text selection in markdown notes. Disable to use manual command instead."
+            checked={settings.autoIncludeTextSelection}
+            onCheckedChange={(checked) => {
+              updateSetting("autoIncludeTextSelection", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
             title="Images in Markdown"
             description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
             checked={settings.passMarkdownImages}

@@ -315,6 +315,12 @@ export default class CopilotPlugin extends Plugin {
    * Only processes selections from markdown editors
    */
   handleSelectionChange() {
+    // Check if auto-inclusion is enabled
+    const settings = getSettings();
+    if (!settings.autoIncludeTextSelection) {
+      return;
+    }
+
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (!activeView || !activeView.editor) {
       return;

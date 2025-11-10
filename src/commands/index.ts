@@ -19,8 +19,10 @@ import { checkIsPlusUser } from "@/plusUtils";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
+import { SelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
+import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
 
 /**
@@ -361,6 +363,48 @@ export function registerCommands(
     const newValue = !currentSettings.enableAutocomplete;
     updateSetting("enableAutocomplete", newValue);
     new Notice(`Copilot autocomplete ${newValue ? "enabled" : "disabled"}`);
+  });
+
+  // Add selection to chat context command (manual)
+  addEditorCommand(plugin, COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT, async (editor: Editor) => {
+    const selectedText = editor.getSelection();
+    if (!selectedText) {
+      new Notice("No text selected");
+      return;
+    }
+
+    const activeFile = plugin.app.workspace.getActiveFile();
+    if (!activeFile) {
+      new Notice("No active file");
+      return;
+    }
+
+    // Get selection range to determine line numbers
+    const selectionRange = editor.listSelections()[0];
+    if (!selectionRange) {
+      new Notice("Could not determine selection range");
+      return;
+    }
+
+    const startLine = selectionRange.anchor.line + 1; // Convert to 1-based line numbers
+    const endLine = selectionRange.head.line + 1;
+
+    // Create selected text context
+    const selectedTextContext: SelectedTextContext = {
+      id: uuidv4(),
+      content: selectedText,
+      noteTitle: activeFile.basename,
+      notePath: activeFile.path,
+      startLine: Math.min(startLine, endLine),
+      endLine: Math.max(startLine, endLine),
+    };
+
+    // Replace selected text contexts (consistent with auto mode behavior)
+    const { setSelectedTextContexts } = await import("@/aiParams");
+    setSelectedTextContexts([selectedTextContext]);
+
+    // Open chat window to show the context was added
+    plugin.activateView();
   });
 
   // Add command to create a new custom command
