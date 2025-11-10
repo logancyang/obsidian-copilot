@@ -31,7 +31,8 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   11. Always respond in the language of the user's query.
   12. Do NOT mention the additional context provided such as getCurrentTime and getTimeRangeMs if it's irrelevant to the user message.
   13. If the user mentions "tags", it most likely means tags in Obsidian note properties.
-  14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.`;
+  14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.
+  15. For markdown lists, always use '- ' (hyphen followed by exactly one space) for bullet points, with no leading spaces before the hyphen. Never use '*' (asterisk) for bullets.`;
 
 export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in <writeToFile> tags.
 
@@ -167,21 +168,21 @@ export enum ChatModels {
 
 // Model Providers
 export enum ChatModelProviders {
+  OPENROUTERAI = "openrouterai",
   OPENAI = "openai",
   OPENAI_FORMAT = "3rd party (openai-format)",
-  AZURE_OPENAI = "azure openai",
   ANTHROPIC = "anthropic",
-  COHEREAI = "cohereai",
   GOOGLE = "google",
   XAI = "xai",
-  OPENROUTERAI = "openrouterai",
+  AMAZON_BEDROCK = "amazon-bedrock",
+  AZURE_OPENAI = "azure openai",
   GROQ = "groq",
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
   COPILOT_PLUS = "copilot-plus",
   MISTRAL = "mistralai",
   DEEPSEEK = "deepseek",
-  AMAZON_BEDROCK = "amazon-bedrock",
+  COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
 }
 
@@ -682,6 +683,7 @@ export const COMMAND_IDS = {
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
   TOGGLE_AUTOCOMPLETE: "toggle-autocomplete",
+  ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
   ADD_CUSTOM_COMMAND: "add-custom-command",
   APPLY_CUSTOM_COMMAND: "apply-custom-command",
   OPEN_LOG_FILE: "open-log-file",
@@ -709,6 +711,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search semantic index (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
   [COMMAND_IDS.TOGGLE_AUTOCOMPLETE]: "Toggle autocomplete",
+  [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "Add new custom command",
   [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "Apply custom command",
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
@@ -829,6 +832,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
+  autoIncludeTextSelection: true,
 };
 
 export const EVENT_NAMES = {

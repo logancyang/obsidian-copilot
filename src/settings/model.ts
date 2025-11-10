@@ -155,6 +155,8 @@ export interface CopilotSettings {
   quickCommandModelKey: string | undefined;
   /** Last checkbox state for including note context in quick command */
   quickCommandIncludeNoteContext: boolean;
+  /** Automatically add text selections to chat context */
+  autoIncludeTextSelection: boolean;
 }
 
 export const settingsStore = createStore();
@@ -416,6 +418,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     typeof settingsToSanitize.quickCommandModelKey !== "string"
   ) {
     sanitizedSettings.quickCommandModelKey = DEFAULT_SETTINGS.quickCommandModelKey;
+  }
+
+  // Ensure autoIncludeTextSelection has a default value
+  if (typeof sanitizedSettings.autoIncludeTextSelection !== "boolean") {
+    sanitizedSettings.autoIncludeTextSelection = DEFAULT_SETTINGS.autoIncludeTextSelection;
   }
 
   // Ensure defaultSendShortcut has a valid value

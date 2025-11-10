@@ -13,6 +13,15 @@ export function registerContextMenu(menu: Menu) {
     const submenu = (item as any).submenu;
     if (!submenu) return;
 
+    // Add the main selection command
+    submenu.addItem((subItem: any) => {
+      subItem.setTitle("Add selection to chat context").onClick(() => {
+        (app as any).commands.executeCommandById(
+          `copilot:${COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT}`
+        );
+      });
+    });
+
     submenu.addItem((subItem: any) => {
       subItem.setTitle("Trigger quick command").onClick(() => {
         (app as any).commands.executeCommandById(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);

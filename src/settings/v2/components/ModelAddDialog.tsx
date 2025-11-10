@@ -69,7 +69,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   const settings = getSettings();
   const defaultProvider = isEmbeddingModel
     ? EmbeddingModelProviders.OPENAI
-    : ChatModelProviders.OPENAI;
+    : ChatModelProviders.OPENROUTERAI;
 
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
