@@ -1,9 +1,9 @@
 import { ChainType } from "@/chainFactory";
 import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
@@ -266,6 +266,74 @@ export const BasicSettings: React.FC = () => {
           />
 
           <SettingItem
+            type="switch"
+            title="Include Current Note in Context Menu"
+            description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
+            checked={settings.includeActiveNoteAsContext}
+            onCheckedChange={(checked) => {
+              updateSetting("includeActiveNoteAsContext", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Auto-Add Text Selection to Context"
+            description="Automatically add selected text to chat context when you make a text selection in markdown notes. Disable to use manual command instead."
+            checked={settings.autoIncludeTextSelection}
+            onCheckedChange={(checked) => {
+              updateSetting("autoIncludeTextSelection", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Images in Markdown"
+            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
+            checked={settings.passMarkdownImages}
+            onCheckedChange={(checked) => {
+              updateSetting("passMarkdownImages", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Suggested Prompts"
+            description="Show suggested prompts in the chat view"
+            checked={settings.showSuggestedPrompts}
+            onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Relevant Notes"
+            description="Show relevant notes in the chat view"
+            checked={settings.showRelevantNotes}
+            onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
+          />
+        </div>
+      </section>
+
+      {/* Saving Conversations Section */}
+      <section>
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">Saving Conversations</div>
+        <div className="tw-space-y-4">
+          <SettingItem
+            type="switch"
+            title="Autosave Chat"
+            description="Automatically saves the chat after every user message and AI response."
+            checked={settings.autosaveChat}
+            onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Generate AI Chat Title on Save"
+            description="When enabled, uses an AI model to generate a concise title for saved chat notes. When disabled, uses the first 10 words of the first user message."
+            checked={settings.generateAIChatTitleOnSave}
+            onCheckedChange={(checked) => updateSetting("generateAIChatTitleOnSave", checked)}
+          />
+
+          <SettingItem
             type="text"
             title="Default Conversation Folder Name"
             description="The default folder name where chat conversations will be saved. Default is 'copilot/copilot-conversations'"
@@ -352,69 +420,6 @@ export const BasicSettings: React.FC = () => {
               </Button>
             </div>
           </SettingItem>
-
-          {/* Feature Toggle Group */}
-          <SettingItem
-            type="switch"
-            title="Autosave Chat"
-            description="Automatically saves the chat after every user message and AI response."
-            checked={settings.autosaveChat}
-            onCheckedChange={(checked) => updateSetting("autosaveChat", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Generate AI Chat Title on Save"
-            description="When enabled, uses an AI model to generate a concise title for saved chat notes. When disabled, uses the first 10 words of the first user message."
-            checked={settings.generateAIChatTitleOnSave}
-            onCheckedChange={(checked) => updateSetting("generateAIChatTitleOnSave", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Include Current Note in Context Menu"
-            description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
-            checked={settings.includeActiveNoteAsContext}
-            onCheckedChange={(checked) => {
-              updateSetting("includeActiveNoteAsContext", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Auto-Add Text Selection to Context"
-            description="Automatically add selected text to chat context when you make a text selection in markdown notes. Disable to use manual command instead."
-            checked={settings.autoIncludeTextSelection}
-            onCheckedChange={(checked) => {
-              updateSetting("autoIncludeTextSelection", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Images in Markdown"
-            description="Pass embedded images in markdown to the AI along with the text. Only works with multimodal models."
-            checked={settings.passMarkdownImages}
-            onCheckedChange={(checked) => {
-              updateSetting("passMarkdownImages", checked);
-            }}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Suggested Prompts"
-            description="Show suggested prompts in the chat view"
-            checked={settings.showSuggestedPrompts}
-            onCheckedChange={(checked) => updateSetting("showSuggestedPrompts", checked)}
-          />
-
-          <SettingItem
-            type="switch"
-            title="Relevant Notes"
-            description="Show relevant notes in the chat view"
-            checked={settings.showRelevantNotes}
-            onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
-          />
         </div>
       </section>
     </div>
