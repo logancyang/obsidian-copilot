@@ -789,6 +789,49 @@ When the user mentions "my notes" or "my vault", use the localSearch tool.
 3. DO NOT wait for permission to use tools
 4. Use tools based on the user's request
 
+🚨 CRITICAL: SEQUENTIAL vs PARALLEL TOOL CALLS 🚨
+
+When one tool's OUTPUT is needed as INPUT to another tool, you MUST make them in SEPARATE responses:
+1. Call the FIRST tool
+2. STOP and wait for the result
+3. In the NEXT response, use the result from step 1 in the SECOND tool call
+
+❌ WRONG (DO NOT DO THIS):
+User: "Recap my last week"
+Your response:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>last week</timeExpression>
+</use_tool>
+<use_tool>
+<name>localSearch</name>
+<timeRange>{"startTime":1234567890,"endTime":9876543210}</timeRange>
+</use_tool>
+
+This is WRONG because you're hallucinating the timeRange values! You don't know what getTimeRangeMs will return yet!
+
+✅ CORRECT (DO THIS):
+User: "Recap my last week"
+Your FIRST response:
+<use_tool>
+<name>getTimeRangeMs</name>
+<timeExpression>last week</timeExpression>
+</use_tool>
+
+[STOP HERE - WAIT FOR RESULT]
+
+System provides: {"startTime":1753660800000,"endTime":1754265600000}
+
+Your SECOND response:
+<use_tool>
+<name>localSearch</name>
+<query>recap my last week</query>
+<salientTerms>[]</salientTerms>
+<timeRange>{"startTime":1753660800000,"endTime":1754265600000}</timeRange>
+</use_tool>
+
+RULE: NEVER make up or guess parameter values. If you need a tool's output, call that tool FIRST, then WAIT for the result.
+
 PATTERN FOR MULTI-STEP REQUESTS:
 User: "based on my project roadmap notes and create summary"
 Your response:
