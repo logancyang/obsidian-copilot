@@ -808,7 +808,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableWordCompletion: false,
   lastDismissedVersion: null,
   passMarkdownImages: true,
-  enableAutonomousAgent: false,
+  enableAutonomousAgent: true,
   enableCustomPromptTemplating: true,
   enableSemanticSearchV3: false,
   enableLexicalBoosts: true,
@@ -832,7 +832,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
-  autoIncludeTextSelection: true,
+  autoIncludeTextSelection: false,
 };
 
 export const EVENT_NAMES = {
