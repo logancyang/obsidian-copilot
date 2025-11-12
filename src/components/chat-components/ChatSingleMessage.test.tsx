@@ -8,7 +8,21 @@ import type { App } from "obsidian";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
 jest.mock("@/settings/model", () => ({
-  useSettingsValue: jest.fn(() => ({ enableInlineCitations: true })),
+  useSettingsValue: jest.fn(() => ({
+    enableInlineCitations: true,
+    activeModels: [
+      {
+        name: "test-model",
+        provider: "test-provider",
+        enabled: true,
+        capabilities: ["reasoning"],
+      },
+    ],
+  })),
+}));
+
+jest.mock("@/aiParams", () => ({
+  useModelKey: jest.fn(() => ["test-model|test-provider", jest.fn()]),
 }));
 
 jest.mock("@/LLMProviders/chainRunner/utils/toolCallParser", () => ({
