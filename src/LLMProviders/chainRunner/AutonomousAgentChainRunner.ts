@@ -1,3 +1,4 @@
+import { ModelCapability } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -242,8 +243,12 @@ ${params}
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
 
+    // Check if the current model has reasoning capability
+    const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
+    const excludeThinking = !hasReasoning;
+
     // Create ThinkBlockStreamer to manage all content and errors
-    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter);
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter, excludeThinking);
 
     if (!isPlusUser) {
       await this.handleError(
@@ -878,7 +883,12 @@ ${params}
     updateCurrentAiMessage: (message: string) => void,
     adapter: ModelAdapter
   ): Promise<StreamingResult> {
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter);
+    // Check if the current model has reasoning capability
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
+    const excludeThinking = !hasReasoning;
+
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter, excludeThinking);
 
     const maxRetries = 2;
     let retryCount = 0;
