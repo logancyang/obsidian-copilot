@@ -140,6 +140,11 @@ export const useChatScrolling = ({
 
   // Scroll to bottom only when user messages are added
   useEffect(() => {
+    // Reset ref if chat history shrinks (new chat, deleted messages)
+    if (chatHistory.length < prevChatLengthRef.current) {
+      prevChatLengthRef.current = chatHistory.length;
+    }
+
     if (chatHistory.length > 0) {
       // Check if a new message was added
       const hasNewMessage = chatHistory.length > prevChatLengthRef.current;
