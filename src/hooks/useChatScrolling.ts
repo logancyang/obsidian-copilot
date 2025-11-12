@@ -18,6 +18,7 @@ export const useChatScrolling = ({
   const [containerMinHeight, setContainerMinHeight] = useState(0);
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
+  const prevChatLengthRef = useRef<number>(0);
 
   // Generate consistent message key for DOM identification
   // Using message IDs is better, as in the case of a network disconnection, the timestamps of two messages could be identical.
@@ -137,15 +138,23 @@ export const useChatScrolling = ({
     scrollToBottom("instant");
   }, [scrollToBottom]);
 
-  // Scroll to bottom only when user messages are added (not AI messages)
+  // Scroll to bottom only when user messages are added
   useEffect(() => {
     if (chatHistory.length > 0) {
-      const lastMessage = chatHistory[chatHistory.length - 1];
-      if (lastMessage && lastMessage.sender === USER_SENDER) {
-        scrollToBottom();
+      // Check if a new message was added
+      const hasNewMessage = chatHistory.length > prevChatLengthRef.current;
+
+      if (hasNewMessage) {
+        const lastMessage = chatHistory[chatHistory.length - 1];
+        // Only scroll for user messages
+        if (lastMessage && lastMessage.sender === USER_SENDER) {
+          scrollToBottom();
+        }
+        // Update the ref
+        prevChatLengthRef.current = chatHistory.length;
       }
     }
-  }, [chatHistory.length, chatHistory, scrollToBottom]);
+  }, [chatHistory, scrollToBottom]);
 
   return {
     containerMinHeight,
