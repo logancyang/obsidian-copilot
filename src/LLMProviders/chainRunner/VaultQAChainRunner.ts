@@ -1,4 +1,4 @@
-import { ABORT_REASON, RETRIEVED_DOCUMENT_TAG } from "@/constants";
+import { ABORT_REASON, ModelCapability, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { getStandaloneQuestion } from "@/chainUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
@@ -10,6 +10,7 @@ import { ChatMessage } from "@/types/message";
 import {
   extractChatHistory,
   extractUniqueTitlesFromDocs,
+  findCustomModel,
   getMessageRole,
   withSuppressedTokenWarnings,
 } from "@/utils";
@@ -24,6 +25,7 @@ import {
 } from "./utils/citationUtils";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
+import { getModelKey } from "@/aiParams";
 
 export class VaultQAChainRunner extends BaseChainRunner {
   async run(
@@ -37,7 +39,24 @@ export class VaultQAChainRunner extends BaseChainRunner {
       updateLoading?: (loading: boolean) => void;
     }
   ): Promise<string> {
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage);
+    // Check if the current model has reasoning capability
+    const settings = getSettings();
+    const modelKey = getModelKey();
+    let excludeThinking = false;
+
+    try {
+      const currentModel = findCustomModel(modelKey, settings.activeModels);
+      // Exclude thinking blocks if model doesn't have REASONING capability
+      excludeThinking = !currentModel.capabilities?.includes(ModelCapability.REASONING);
+    } catch (error) {
+      // If we can't find the model, default to including thinking blocks
+      logInfo(
+        "Could not determine model capabilities, defaulting to include thinking blocks",
+        error
+      );
+    }
+
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, undefined, excludeThinking);
 
     try {
       // Tiered lexical retriever doesn't need index check - it builds indexes on demand

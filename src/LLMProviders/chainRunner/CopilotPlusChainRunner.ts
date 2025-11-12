@@ -272,7 +272,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     return messageContent;
   }
 
-  private hasCapability(model: BaseChatModel, capability: ModelCapability): boolean {
+  protected hasCapability(model: BaseChatModel, capability: ModelCapability): boolean {
     const modelName = (model as any).modelName || (model as any).model || "";
     const customModel = this.chainManager.chatModelManager.findModelByName(modelName);
     return customModel?.capabilities?.includes(capability) ?? false;
@@ -457,7 +457,17 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
   ): Promise<string> {
     const { updateLoadingMessage } = options;
-    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage);
+
+    // Check if the current model has reasoning capability
+    const chatModel = this.chainManager.chatModelManager.getChatModel();
+    const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
+    const excludeThinking = !hasReasoning;
+
+    const thinkStreamer = new ThinkBlockStreamer(
+      updateCurrentAiMessage,
+      undefined,
+      excludeThinking
+    );
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
 
     const isPlusUser = await checkIsPlusUser({
