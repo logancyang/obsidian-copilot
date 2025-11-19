@@ -1,9 +1,9 @@
 {
-  "id": "copilot",
-  "name": "Copilot",
+  "id": "aiDAPTIV-Integration-Obsidian",
+  "name": "aiDAPTIV-Integration-Obsidian",
   "version": "3.1.3",
   "minAppVersion": "0.15.0",
-  "description": "Your AI Copilot: Chat with Your Second Brain, Learn Faster, Work Smarter.",
+  "description": "Phison aiDAPTIV Integration for Obsidian",
   "author": "Logan Yang",
   "authorUrl": "https://twitter.com/logancyang",
   "fundingUrl": {
