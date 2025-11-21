@@ -12,7 +12,6 @@ import { TFile } from "obsidian";
  * - Delegates all business logic to ChatManager
  * - Provides subscription mechanism for React components
  * - No complex recovery or validation logic
- * - Uses setTimeout scheduling to ensure React completes renders before state notifications
  */
 export class ChatUIState {
   private listeners: Set<() => void> = new Set();
@@ -20,7 +19,7 @@ export class ChatUIState {
   constructor(private chatManager: ChatManager) {
     // Set up callback for immediate UI updates when messages are created
     this.chatManager.setOnMessageCreatedCallback(() => {
-      this.scheduleNotify();
+      this.notifyListeners();
     });
   }
 
@@ -39,25 +38,16 @@ export class ChatUIState {
   }
 
   /**
-   * Schedule notification to occur after current render completes.
-   * Uses setTimeout to push notification to next event loop tick, ensuring React
-   * has completed its current render cycle before the state change notification.
-   *
-   * Note: No debouncing - multiple state changes will queue multiple timeouts.
-   * This is intentional to ensure all state changes trigger re-renders.
+   * Notify all listeners of state changes
    */
-  private scheduleNotify(): void {
-    // Use setTimeout(0) to push to next event loop tick
-    // This gives React time to complete current render before notification
-    setTimeout(() => {
-      this.listeners.forEach((listener) => {
-        try {
-          listener();
-        } catch (error) {
-          logInfo(`[ChatUIState] Error in listener:`, error);
-        }
-      });
-    }, 0);
+  private notifyListeners(): void {
+    this.listeners.forEach((listener) => {
+      try {
+        listener();
+      } catch (error) {
+        logInfo(`[ChatUIState] Error in listener:`, error);
+      }
+    });
   }
 
   // ================================
@@ -81,7 +71,7 @@ export class ChatUIState {
       includeActiveNote,
       content
     );
-    this.scheduleNotify();
+    this.notifyListeners();
     return messageId;
   }
 
@@ -101,7 +91,7 @@ export class ChatUIState {
       includeActiveNote
     );
     if (success) {
-      this.scheduleNotify();
+      this.notifyListeners();
     }
     return success;
   }
@@ -119,15 +109,15 @@ export class ChatUIState {
       onUpdateCurrentMessage,
       (message) => {
         onAddMessage(message);
-        this.scheduleNotify();
+        this.notifyListeners();
       },
       () => {
         // Notify immediately after truncation
-        this.scheduleNotify();
+        this.notifyListeners();
       }
     );
     if (success) {
-      this.scheduleNotify();
+      this.notifyListeners();
     }
     return success;
   }
@@ -138,7 +128,7 @@ export class ChatUIState {
   async deleteMessage(messageId: string): Promise<boolean> {
     const success = await this.chatManager.deleteMessage(messageId);
     if (success) {
-      this.scheduleNotify();
+      this.notifyListeners();
     }
     return success;
   }
@@ -148,7 +138,7 @@ export class ChatUIState {
    */
   clearMessages(): void {
     this.chatManager.clearMessages();
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 
   /**
@@ -156,7 +146,7 @@ export class ChatUIState {
    */
   async truncateAfterMessageId(messageId: string): Promise<void> {
     await this.chatManager.truncateAfterMessageId(messageId);
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 
   // ================================
@@ -207,7 +197,7 @@ export class ChatUIState {
    */
   addMessage(message: ChatMessage): void {
     this.chatManager.addMessage(message);
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 
   /**
@@ -222,7 +212,7 @@ export class ChatUIState {
    */
   replaceMessages(messages: ChatMessage[]): void {
     this.chatManager.loadMessages(messages);
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 
   // ================================
@@ -241,7 +231,7 @@ export class ChatUIState {
    */
   async loadMessages(messages: ChatMessage[]): Promise<void> {
     await this.chatManager.loadMessages(messages);
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 
   /**
@@ -249,7 +239,7 @@ export class ChatUIState {
    */
   async handleProjectSwitch(): Promise<void> {
     await this.chatManager.handleProjectSwitch();
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 
   /**
@@ -264,6 +254,6 @@ export class ChatUIState {
    */
   async loadChatHistory(file: TFile): Promise<void> {
     await this.chatManager.loadChatHistory(file);
-    this.scheduleNotify();
+    this.notifyListeners();
   }
 }

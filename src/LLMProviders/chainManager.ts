@@ -38,9 +38,6 @@ export default class ChainManager {
   private retrievalChain: RunnableSequence;
   private retrievedDocuments: Document[] = [];
 
-  // Stores model initialization errors to be thrown when chain is actually used
-  private pendingModelError: Error | null = null;
-
   public getRetrievedDocuments(): Document[] {
     return this.retrievedDocuments;
   }
@@ -63,22 +60,12 @@ export default class ChainManager {
     this.initialize();
 
     subscribeToSettingsChange(async () => {
-      try {
-        await this.createChainWithNewModel();
-      } catch (error) {
-        // Silently fail during settings change - errors will be shown when user sends a message
-        logInfo("Chain update after settings change failed:", error);
-      }
+      await this.createChainWithNewModel();
     });
   }
 
   private async initialize() {
-    try {
-      await this.createChainWithNewModel();
-    } catch (error) {
-      // Silently fail during initialization - errors will be shown when user sends first message
-      logInfo("Initial chain setup failed (this is normal for new users without API keys):", error);
-    }
+    await this.createChainWithNewModel();
   }
 
   // TODO: These methods are deprecated - chain runners now use direct chat model calls
@@ -96,15 +83,10 @@ export default class ChainManager {
   }
 
   private validateChatModel() {
-    // If there's a pending model initialization error, throw it now
-    if (this.pendingModelError) {
-      throw this.pendingModelError;
-    }
-
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
       const errorMsg =
         "Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.";
-      // Don't show popup notice - let error propagate to be handled by chat interface
+      new Notice(errorMsg);
       throw new Error(errorMsg);
     }
   }
@@ -141,7 +123,7 @@ export default class ChainManager {
       chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
 
     if (!newModelKey) {
-      // Don't show popup notice - let error propagate to be handled by chat interface
+      new Notice("No model key found");
       throw new Error("No model key found");
     }
 
@@ -179,8 +161,6 @@ export default class ChainManager {
           ...currentProject?.modelConfigs,
         };
         await this.chatModelManager.setChatModel(mergedModel);
-        // Clear pending error on successful model initialization
-        this.pendingModelError = null;
       }
 
       // Must update the chatModel for chain because ChainFactory always
@@ -189,8 +169,6 @@ export default class ChainManager {
       this.setChain(chainType, options);
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
-      // Store the error to be thrown when the chain is actually used
-      this.pendingModelError = error instanceof Error ? error : new Error(String(error));
       logError(`createChainWithNewModel failed: ${error}`);
       logInfo(`modelKey: ${newModelKey}`);
     }

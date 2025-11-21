@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { ChainType } from "@/chainFactory";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { ChatUIState } from "@/state/ChatUIState";
@@ -7,29 +7,26 @@ import { ChatUIState } from "@/state/ChatUIState";
  * React hook for using ChatManager through ChatUIState
  *
  * This provides a clean React integration that:
- * - Manages local state synchronization with forced re-renders
+ * - Manages local state synchronization
  * - Provides memoized callback functions
  * - Handles subscriptions and cleanup
  * - Maintains compatibility with existing Chat component API
  */
 export function useChatManager(chatUIState: ChatUIState) {
-  // Use reducer to force re-renders on external state changes
-  const [, forceUpdate] = useReducer((x: number) => x + 1, 0);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
 
-  // Subscribe to state changes and force re-render
+  // Subscribe to state changes
   useEffect(() => {
+    // Initial sync
+    setMessages([...chatUIState.getMessages()]);
+
     // Subscribe to updates
     const unsubscribe = chatUIState.subscribe(() => {
-      // Force a re-render which will call getMessages() below
-      forceUpdate();
+      setMessages([...chatUIState.getMessages()]);
     });
 
     return unsubscribe;
   }, [chatUIState]);
-
-  // Always get fresh messages on each render
-  // This ensures we always have the latest data
-  const messages = chatUIState.getMessages();
 
   // ================================
   // MESSAGE OPERATIONS

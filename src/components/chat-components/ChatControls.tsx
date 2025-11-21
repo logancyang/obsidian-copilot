@@ -281,7 +281,7 @@ export function ChatControls({
                   onCloseProject?.();
                 }}
               >
-                projects
+                copilot plus
                 <SquareArrowOutUpRight className="tw-size-3" />
               </DropdownMenuItem>
             )}
