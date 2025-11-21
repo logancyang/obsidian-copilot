@@ -163,7 +163,7 @@ export const BasicSettings: React.FC = () => {
               const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
               if (!hasApiKey && errorNotice) {
                 new Notice(errorNotice);
-                // Allow the selection to proceed despite missing API key
+                return;
               }
               updateSetting("defaultModelKey", value);
             }}

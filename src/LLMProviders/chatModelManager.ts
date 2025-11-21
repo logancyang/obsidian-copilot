@@ -695,8 +695,7 @@ export default class ChatModelManager {
       }
     } catch (error) {
       logError(error);
-      // Don't show popup notice - let error propagate to be handled by chat interface
-      throw new Error(`Error creating model: ${modelKey} - ${err2String(error)}`);
+      new Notice(`Error creating model: ${modelKey}`);
     }
   }
 
@@ -708,14 +707,8 @@ export default class ChatModelManager {
       throw new Error(`No model found for: ${modelKey}`);
     }
     if (!selectedModel.hasApiKey) {
-      // Provide specific error message for Plus models
-      if (model.provider === ChatModelProviders.COPILOT_PLUS) {
-        throw new Error(
-          `Copilot Plus license key is not configured. Please enter your license key in the Copilot Plus section at the top of Basic Settings to use ${model.name}.`
-        );
-      }
       const errorMessage = `API key is not provided for the model: ${modelKey}.`;
-      // Don't show popup notice - let error propagate to be handled by chat interface
+      new Notice(errorMessage);
       throw new Error(errorMessage);
     }
 

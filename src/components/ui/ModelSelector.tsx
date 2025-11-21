@@ -70,8 +70,9 @@ export function ModelSelector({
                 key={getModelKeyFromModel(model)}
                 onSelect={async (event) => {
                   if (!hasApiKey && errorNotice) {
+                    event.preventDefault();
                     new Notice(errorNotice);
-                    // Allow the selection to proceed despite missing API key
+                    return;
                   }
 
                   try {
@@ -90,6 +91,7 @@ export function ModelSelector({
                     }
                   }
                 }}
+                className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
               >
                 <ModelDisplay model={model} iconSize={12} />
               </DropdownMenuItem>

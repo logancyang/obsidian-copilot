@@ -4,6 +4,7 @@ import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
+import { Notice } from "obsidian";
 
 export interface BrocaResponse {
   response: {
@@ -107,10 +108,10 @@ export class BrevilabsClient {
 
   private checkLicenseKey() {
     if (!getSettings().plusLicenseKey) {
-      // Don't show popup notice - let error propagate to be handled by the caller
-      throw new Error(
-        "Copilot Plus license key not found. Please enter your license key in the Copilot Plus section at the top of Basic Settings."
+      new Notice(
+        "Copilot Plus license key not found. Please enter your license key in the settings."
       );
+      throw new Error("License key not initialized");
     }
   }
 
