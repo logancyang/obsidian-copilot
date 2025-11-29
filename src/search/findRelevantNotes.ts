@@ -16,8 +16,11 @@ const LINKS_WEIGHT = 0.3;
  */
 async function getNoteEmbeddings(notePath: string, db: Orama<any>): Promise<number[][]> {
   const debug = getSettings().debug;
-  const hits = await DBOperations.getDocsByPath(db, notePath);
-  if (!hits) {
+  // Use getAllDocuments + filter for correct Unicode/Chinese path handling
+  const allDocs = await DBOperations.getAllDocuments(db);
+  const hits = allDocs.filter((doc: any) => doc.path === notePath);
+
+  if (hits.length === 0) {
     if (debug) {
       console.log("No hits found for note:", notePath);
     }
@@ -25,14 +28,14 @@ async function getNoteEmbeddings(notePath: string, db: Orama<any>): Promise<numb
   }
 
   const embeddings: number[][] = [];
-  for (const hit of hits) {
-    if (!hit?.document?.embedding) {
+  for (const doc of hits) {
+    if (!doc?.embedding) {
       if (debug) {
         console.log("No embedding found for note:", notePath);
       }
       continue;
     }
-    embeddings.push(hit.document.embedding);
+    embeddings.push(doc.embedding);
   }
   return embeddings;
 }
