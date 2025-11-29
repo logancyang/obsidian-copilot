@@ -99,7 +99,18 @@ async function calculateSimilarityScore({
   const allHits = searchResults.flat();
 
   // Aggregate by taking max score per note path
-  return getHighestScoreHits(allHits, filePath);
+  const aggregatedHits = getHighestScoreHits(allHits, filePath);
+
+  // Cap to top MAX_K results to prevent unbounded growth from multi-chunk notes
+  if (aggregatedHits.size <= MAX_K) {
+    return aggregatedHits;
+  }
+
+  const topK = Array.from(aggregatedHits.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_K);
+
+  return new Map(topK);
 }
 
 function getNoteLinks(file: TFile) {
