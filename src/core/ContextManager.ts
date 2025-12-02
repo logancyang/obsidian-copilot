@@ -71,15 +71,9 @@ export class ContextManager {
         activeNote
       );
 
-      // 2. Build L2 context from previous turns (for cache stability)
-      // L2 contains ALL previous context (cumulative library)
-      const l2Context = await this.buildL2ContextFromPreviousTurns(
-        message.id!,
-        messageRepo,
-        fileParserManager,
-        vault,
-        chainType
-      );
+      // 2. Build L2 context from previous turns (DISABLED for KV cache stability)
+      // L2 disabled: We want stable system prompt to hit KV cache
+      // Previously: L2 contained ALL previous context (cumulative library)
 
       // 3. Extract URLs and process them (for Copilot Plus chain)
       // Process URLs from context (only URLs explicitly added to context via URL pills)
@@ -182,15 +176,15 @@ export class ContextManager {
       // 7. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 8. Combine everything (L2 previous context, then L3 current turn context)
+      // 8. Combine everything - context (L3 only, no L2), then user message
+      // L2 removed for KV cache stability (system prompt must remain stable)
       const finalProcessedMessage =
-        processedUserMessage +
-        l2Context +
         noteContextAddition +
         tagContextAddition +
         folderContextAddition +
         urlContextAddition.urlContext +
-        selectedTextContextAddition;
+        selectedTextContextAddition +
+        processedUserMessage;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
       const contextEnvelope = this.buildPromptContextEnvelope({
@@ -198,7 +192,7 @@ export class ContextManager {
         message,
         systemPrompt: systemPrompt || "",
         processedUserMessage,
-        l2PreviousContext: l2Context,
+        l2PreviousContext: "", // Disabled for KV cache stability
         noteContextAddition,
         tagContextAddition,
         folderContextAddition,

@@ -64,8 +64,6 @@ describe("Message Lifecycle with Context Notes - Complete Example", () => {
 <note_context>
 <title>meeting-notes-2024-01-15</title>
 <path>meeting-notes-2024-01-15.md</path>
-<ctime>2024-01-15T10:00:00.000Z</ctime>
-<mtime>2024-01-15T14:30:00.000Z</mtime>
 <content>
 # Team Meeting - January 15, 2024
 
@@ -187,8 +185,6 @@ The team appears to be taking a pragmatic approach with a focused MVP scope and 
 <note_context>
 <title>meeting</title>
 <path>meeting.md</path>
-<ctime>2024-01-10T09:00:00.000Z</ctime>
-<mtime>2024-01-10T10:00:00.000Z</mtime>
 <content>
 Attendees: Alice, Bob, Charlie
 </content>
@@ -207,8 +203,6 @@ Attendees: Alice, Bob, Charlie
 <note_context>
 <title>meeting</title>
 <path>meeting.md</path>
-<ctime>2024-01-10T09:00:00.000Z</ctime>
-<mtime>2024-01-10T10:30:00.000Z</mtime>
 <content>
 Attendees: Alice (PM), Bob (Dev), Charlie (QA)
 </content>
@@ -252,8 +246,6 @@ Attendees: Alice (PM), Bob (Dev), Charlie (QA)
 <note_context>
 <title>budget</title>
 <path>budget.md</path>
-<ctime>2024-01-01T08:00:00.000Z</ctime>
-<mtime>2024-01-05T16:00:00.000Z</mtime>
 <content>
 Q1: $100k
 Q2: $150k

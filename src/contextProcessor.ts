@@ -564,12 +564,8 @@ export class ContextProcessor {
             ? await this.buildMarkdownContextContent(note, vault, fileParserManager, currentChain)
             : await fileParserManager.parseFile(note, vault);
 
-        // Get file metadata
-        const stats = await vault.adapter.stat(note.path);
-        const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
-        const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
-
-        additionalContext += `\n\n<${prompt_tag}>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
+        // Build note context without timestamps for better KV cache reuse
+        additionalContext += `\n\n<${prompt_tag}>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
       } catch (error) {
         logError(`Error processing file ${note.path}:`, error);
         additionalContext += `\n\n<${prompt_tag}_error>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;

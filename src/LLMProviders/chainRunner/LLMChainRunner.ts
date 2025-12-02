@@ -3,7 +3,7 @@ import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
-import { extractChatHistory, findCustomModel, withSuppressedTokenWarnings } from "@/utils";
+import { findCustomModel, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
@@ -24,10 +24,11 @@ export class LLMChainRunner extends BaseChainRunner {
 
     logInfo("[LLMChainRunner] Using envelope-based context");
 
-    // Get chat history from memory (L4)
-    const memory = this.chainManager.memoryManager.getMemory();
-    const memoryVariables = await memory.loadMemoryVariables({});
-    const chatHistory = extractChatHistory(memoryVariables);
+    // Skip chat history (L4) to avoid including previous conversation turns
+
+    // const memory = this.chainManager.memoryManager.getMemory();
+    // const memoryVariables = await memory.loadMemoryVariables({});
+    // const chatHistory = extractChatHistory(memoryVariables);
 
     // Convert envelope to messages (L1 system + L2+L3+L5 user)
     const baseMessages = LayerToMessagesConverter.convert(userMessage.contextEnvelope, {
@@ -36,7 +37,7 @@ export class LLMChainRunner extends BaseChainRunner {
       debug: false,
     });
 
-    // Insert L4 (chat history) between system and user
+    // Build messages array without chat history
     const messages: any[] = [];
 
     // Add system message (L1)
@@ -45,10 +46,7 @@ export class LLMChainRunner extends BaseChainRunner {
       messages.push(systemMessage);
     }
 
-    // Add chat history (L4)
-    for (const entry of chatHistory) {
-      messages.push({ role: entry.role, content: entry.content });
-    }
+    // Skip chat history (L4) - intentionally omitted to avoid including previous conversation turns
 
     // Add user message (L2+L3+L5 merged)
     const userMessageContent = baseMessages.find((m) => m.role === "user");

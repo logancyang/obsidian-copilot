@@ -124,13 +124,12 @@ export class UserMemoryManager {
       const settings = getSettings();
       let memoryPrompt = "";
 
-      // Add recent conversations if enabled
+      // Add recent conversations if enabled (without timestamps for better KV cache)
       if (settings.enableRecentConversations && this.recentConversationsContent) {
         memoryPrompt += `<recent_conversations>
         ${this.recentConversationsContent}
         </recent_conversations>
 
-        The current time is ${this.getTimestamp()}.
         <recent_conversations> are the recent conversations between you and the user. 
         You can use it to provide more context for your responses. 
         Only use the recent conversations if they are relevant to the current conversation.`;
@@ -172,10 +171,9 @@ export class UserMemoryManager {
     chatModel: BaseChatModel
   ): Promise<string> {
     const { title, summary } = await this.extractTitleAndSummary(messages, chatModel);
-    const timestamp = this.getTimestamp();
 
+    // Remove timestamp for better KV cache reuse
     let section = `## ${title}\n`;
-    section += `**Time:** ${timestamp}\n`;
     section += `**Summary:** ${summary}\n`;
 
     return section;

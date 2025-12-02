@@ -33,8 +33,6 @@ describe("Message Context XML Tag Formatting", () => {
 <note_context>
 <title>quarterly-review</title>
 <path>reports/quarterly-review.md</path>
-<ctime>2024-03-15T09:00:00.000Z</ctime>
-<mtime>2024-03-20T15:30:00.000Z</mtime>
 <content>
 # Q1 2024 Quarterly Review
 
@@ -66,8 +64,6 @@ describe("Message Context XML Tag Formatting", () => {
     expect(fullMessage?.message).toContain("<note_context>");
     expect(fullMessage?.message).toContain("<title>quarterly-review</title>");
     expect(fullMessage?.message).toContain("<path>reports/quarterly-review.md</path>");
-    expect(fullMessage?.message).toContain("<ctime>");
-    expect(fullMessage?.message).toContain("<mtime>");
     expect(fullMessage?.message).toContain("<content>");
     expect(fullMessage?.message).toContain("</content>");
     expect(fullMessage?.message).toContain("</note_context>");
@@ -204,8 +200,6 @@ function fibonacci(n) {
 <note_context>
 <title>design-patterns</title>
 <path>design-patterns.md</path>
-<ctime>2024-02-01T10:00:00.000Z</ctime>
-<mtime>2024-02-15T14:00:00.000Z</mtime>
 <content>
 # Design Patterns Overview
 
