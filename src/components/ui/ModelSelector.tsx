@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import { Notice } from "obsidian";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -70,9 +69,7 @@ export function ModelSelector({
                 key={getModelKeyFromModel(model)}
                 onSelect={async (event) => {
                   if (!hasApiKey && errorNotice) {
-                    event.preventDefault();
-                    new Notice(errorNotice);
-                    return;
+                    setModelError(errorNotice);
                   }
 
                   try {
@@ -81,7 +78,6 @@ export function ModelSelector({
                   } catch (error) {
                     const msg = `Model switch failed: ` + err2String(error);
                     setModelError(msg);
-                    new Notice(msg);
                     // Restore to the last valid model
                     const lastValidModel = settings.activeModels.find(
                       (m) => m.enabled && getModelKeyFromModel(m) === value
@@ -91,7 +87,7 @@ export function ModelSelector({
                     }
                   }
                 }}
-                className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
+                className={!hasApiKey ? "tw-opacity-70" : ""}
               >
                 <ModelDisplay model={model} iconSize={12} />
               </DropdownMenuItem>

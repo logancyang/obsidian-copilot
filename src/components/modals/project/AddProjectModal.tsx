@@ -221,8 +221,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
 
               const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
               if (!hasApiKey && errorNotice) {
-                new Notice(errorNotice);
-                return;
+                // Keep selection allowed; error will surface in chat on send
               }
               handleInputChange("projectModelKey", value);
             }}
