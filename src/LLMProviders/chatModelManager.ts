@@ -33,6 +33,7 @@ import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatOllama } from "@langchain/ollama";
 import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
+import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
@@ -666,7 +667,6 @@ export default class ChatModelManager {
   }
 
   async setChatModel(model: CustomModel): Promise<void> {
-    const modelKey = getModelKeyFromModel(model);
     try {
       const modelInstance = await this.createModelInstance(model);
       ChatModelManager.chatModel = modelInstance;
@@ -683,7 +683,7 @@ export default class ChatModelManager {
       }
     } catch (error) {
       logError(error);
-      new Notice(`Error creating model: ${modelKey}`);
+      throw error;
     }
   }
 
@@ -696,8 +696,12 @@ export default class ChatModelManager {
     }
     if (!selectedModel.hasApiKey) {
       const errorMessage = `API key is not provided for the model: ${modelKey}.`;
-      new Notice(errorMessage);
-      throw new Error(errorMessage);
+      if (model.provider === ChatModelProviders.COPILOT_PLUS) {
+        throw new MissingPlusLicenseError(
+          "Copilot Plus license key is not configured. Please enter your license key in the Copilot Plus section at the top of Basic Settings."
+        );
+      }
+      throw new MissingApiKeyError(errorMessage);
     }
 
     const modelConfig = await this.getModelConfig(model);

@@ -19,6 +19,7 @@ import { logError, logInfo } from "@/logger";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
+import { MissingModelKeyError } from "@/error";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -47,6 +48,7 @@ export default class ChainManager {
   public memoryManager: MemoryManager;
   public promptManager: PromptManager;
   public userMemoryManager: UserMemoryManager;
+  private pendingModelError: Error | null = null;
 
   constructor(app: App) {
     // Instantiate singletons
@@ -83,11 +85,14 @@ export default class ChainManager {
   }
 
   private validateChatModel() {
+    if (this.pendingModelError) {
+      throw this.pendingModelError;
+    }
+
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
       const errorMsg =
         "Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.";
-      new Notice(errorMsg);
-      throw new Error(errorMsg);
+      throw new MissingModelKeyError(errorMsg);
     }
   }
 
@@ -112,6 +117,7 @@ export default class ChainManager {
     options: SetChainOptions = {},
     neededReInitChatMode: boolean = true
   ): Promise<void> {
+    let newModelKey: string | undefined;
     const chainType = getChainType();
     const currentProject = getCurrentProject();
 
@@ -119,15 +125,14 @@ export default class ChainManager {
       return;
     }
 
-    let newModelKey =
-      chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
-
-    if (!newModelKey) {
-      new Notice("No model key found");
-      throw new Error("No model key found");
-    }
-
     try {
+      newModelKey =
+        chainType === ChainType.PROJECT_CHAIN ? currentProject?.projectModelKey : getModelKey();
+
+      if (!newModelKey) {
+        throw new MissingModelKeyError("No model key found. Please select a model in settings.");
+      }
+
       if (neededReInitChatMode) {
         let customModel = findCustomModel(newModelKey, getSettings().activeModels);
         if (!customModel) {
@@ -161,6 +166,7 @@ export default class ChainManager {
           ...currentProject?.modelConfigs,
         };
         await this.chatModelManager.setChatModel(mergedModel);
+        this.pendingModelError = null;
       }
 
       // Must update the chatModel for chain because ChainFactory always
@@ -169,8 +175,9 @@ export default class ChainManager {
       this.setChain(chainType, options);
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
+      this.pendingModelError = error instanceof Error ? error : new Error(String(error));
       logError(`createChainWithNewModel failed: ${error}`);
-      logInfo(`modelKey: ${newModelKey}`);
+      logInfo(`modelKey: ${newModelKey || getModelKey()}`);
     }
   }
 

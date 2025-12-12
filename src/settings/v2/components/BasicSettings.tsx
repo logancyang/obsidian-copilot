@@ -162,8 +162,7 @@ export const BasicSettings: React.FC = () => {
 
               const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
               if (!hasApiKey && errorNotice) {
-                new Notice(errorNotice);
-                return;
+                // Keep selection allowed; error will surface in chat on send
               }
               updateSetting("defaultModelKey", value);
             }}
