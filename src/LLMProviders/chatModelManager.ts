@@ -45,6 +45,7 @@ type ChatConstructorType = {
 const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
   [ChatModelProviders.AZURE_OPENAI]: ChatOpenAI,
+  [ChatModelProviders.AZURE_AI_FOUNDRY]: ChatOpenAI,
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
   [ChatModelProviders.COHEREAI]: ChatCohere,
   [ChatModelProviders.GOOGLE]: ChatGoogleGenerativeAI,
@@ -81,6 +82,7 @@ export default class ChatModelManager {
     [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
     [ChatModelProviders.GOOGLE]: () => getSettings().googleApiKey,
     [ChatModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
+    [ChatModelProviders.AZURE_AI_FOUNDRY]: () => "default-key",
     [ChatModelProviders.ANTHROPIC]: () => getSettings().anthropicApiKey,
     [ChatModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
     [ChatModelProviders.OPENROUTERAI]: () => getSettings().openRouterAiApiKey,
@@ -218,6 +220,8 @@ export default class ChatModelManager {
           customModel
         ),
       },
+      // Azure AI Foundry config is dynamically built based on model type (OpenAI or Anthropic)
+      [ChatModelProviders.AZURE_AI_FOUNDRY]: {} as any,
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
         model: modelName,
@@ -357,6 +361,17 @@ export default class ChatModelManager {
       );
     }
 
+    if (customModel.provider === ChatModelProviders.AZURE_AI_FOUNDRY) {
+      selectedProviderConfig = await this.buildAzureAIFoundryConfig(
+        customModel,
+        modelName,
+        settings,
+        maxTokens,
+        resolvedTemperature,
+        isThinkingEnabled
+      );
+    }
+
     // Get provider-specific parameters (like topP, frequencyPenalty) that the provider supports
     const providerSpecificParams = this.getProviderSpecificParams(
       customModel.provider as ChatModelProviders,
@@ -484,6 +499,79 @@ export default class ChatModelManager {
   }
 
   /**
+   * Builds configuration for Azure AI Foundry models.
+   * Azure AI Foundry supports two API formats:
+   * - OpenAI-compatible: For GPT models (gpt-4o, o1, etc.)
+   * - Anthropic-native: For Claude models (claude-sonnet-4-5, etc.)
+   */
+  private async buildAzureAIFoundryConfig(
+    customModel: CustomModel,
+    modelName: string,
+    settings: CopilotSettings,
+    maxTokens: number,
+    temperature: number | undefined,
+    isThinkingEnabled: boolean
+  ): Promise<any> {
+    const apiKey = await getDecryptedKey(customModel.apiKey || "");
+    const endpoint = customModel.azureAIFoundryEndpoint || customModel.baseUrl || "";
+
+    // Determine model type - defaults to "openai" for backward compatibility
+    const modelType = customModel.azureAIFoundryModelType || "openai";
+
+    if (modelType === "anthropic") {
+      // Anthropic models use the native Anthropic Messages API via Azure AI Foundry
+      // SDK pattern: new AnthropicFoundry({ apiKey, baseURL, apiVersion: "2023-06-01" })
+      // Endpoint format: https://{resource}.services.ai.azure.com/anthropic/
+      const anthropicBaseUrl = endpoint.replace(/\/+$/, "");
+
+      return {
+        anthropicApiKey: apiKey,
+        model: modelName,
+        anthropicApiUrl: anthropicBaseUrl,
+        clientOptions: {
+          defaultHeaders: {
+            "anthropic-dangerous-direct-browser-access": "true",
+            // Azure AI Foundry uses "api-key" header for authentication
+            "api-key": apiKey,
+            // Required anthropic-version header
+            "anthropic-version": "2023-06-01",
+          },
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+        ...(isThinkingEnabled && {
+          thinking: {
+            type: "enabled",
+            budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
+          },
+        }),
+      };
+    }
+
+    // OpenAI models use the Azure OpenAI-compatible API
+    // Endpoint format: https://{resource}.cognitiveservices.azure.com/ or https://{resource}.openai.azure.com/
+    // The API requires api-version as a query parameter
+    const apiVersion = customModel.azureAIFoundryApiVersion || "2024-12-01-preview";
+    const normalizedEndpoint = endpoint.replace(/\/+$/, "");
+
+    return {
+      modelName: modelName,
+      apiKey: apiKey,
+      configuration: {
+        baseURL: `${normalizedEndpoint}/openai/deployments/${modelName}`,
+        fetch: customModel.enableCors ? safeFetch : undefined,
+        defaultQuery: {
+          "api-version": apiVersion,
+        },
+        defaultHeaders: {
+          "Content-Type": "application/json",
+          "api-key": apiKey,
+        },
+      },
+      ...this.getOpenAISpecialConfig(modelName, maxTokens, temperature, customModel),
+    };
+  }
+
+  /**
    * Returns provider-specific parameters (like topP, frequencyPenalty) based on what the provider supports
    * This prevents passing undefined values to providers that don't support them
    */
@@ -497,6 +585,7 @@ export default class ChatModelManager {
         [
           ChatModelProviders.OPENAI,
           ChatModelProviders.AZURE_OPENAI,
+          ChatModelProviders.AZURE_AI_FOUNDRY,
           ChatModelProviders.ANTHROPIC,
           ChatModelProviders.GOOGLE,
           ChatModelProviders.OPENROUTERAI,
@@ -519,6 +608,7 @@ export default class ChatModelManager {
         [
           ChatModelProviders.OPENAI,
           ChatModelProviders.AZURE_OPENAI,
+          ChatModelProviders.AZURE_AI_FOUNDRY,
           ChatModelProviders.OPENROUTERAI,
           ChatModelProviders.OLLAMA,
           ChatModelProviders.LM_STUDIO,
@@ -575,6 +665,12 @@ export default class ChatModelManager {
       return Boolean(apiKey);
     }
 
+    // Azure AI Foundry requires both an API key and an endpoint
+    if (model.provider === ChatModelProviders.AZURE_AI_FOUNDRY) {
+      const endpoint = model.azureAIFoundryEndpoint || model.baseUrl;
+      return Boolean(model.apiKey && endpoint);
+    }
+
     const getDefaultApiKey = this.providerApiKeyMap[model.provider as ChatModelProviders];
     if (!getDefaultApiKey) {
       return Boolean(model.apiKey);
@@ -584,6 +680,15 @@ export default class ChatModelManager {
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {
+    // Azure AI Foundry uses different constructors based on model type
+    if (model.provider === ChatModelProviders.AZURE_AI_FOUNDRY) {
+      const modelType = model.azureAIFoundryModelType || "openai";
+      if (modelType === "anthropic") {
+        return ChatAnthropic;
+      }
+      return ChatOpenAI;
+    }
+
     const constructor: ChatConstructorType =
       CHAT_PROVIDER_CONSTRUCTORS[model.provider as ChatModelProviders];
     if (!constructor) {

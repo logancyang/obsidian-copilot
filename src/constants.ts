@@ -176,6 +176,7 @@ export enum ChatModelProviders {
   XAI = "xai",
   AMAZON_BEDROCK = "amazon-bedrock",
   AZURE_OPENAI = "azure openai",
+  AZURE_AI_FOUNDRY = "azure-ai-foundry",
   GROQ = "groq",
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
@@ -195,7 +196,8 @@ export enum ModelCapability {
 export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
   reasoning: "This model supports general reasoning tasks.",
   vision: "This model supports image inputs.",
-  websearch: "This model can access the internet.",
+  websearch:
+    "This model has native web search at the provider level (e.g., Perplexity). Separate from Copilot's @websearch tool.",
 };
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
@@ -378,6 +380,7 @@ export enum EmbeddingModelProviders {
   COHEREAI = "cohereai",
   GOOGLE = "google",
   AZURE_OPENAI = "azure openai",
+  AZURE_AI_FOUNDRY = "azure-ai-foundry",
   OLLAMA = "ollama",
   LM_STUDIO = "lm-studio",
   OPENAI_FORMAT = "3rd party (openai-format)",
@@ -496,7 +499,10 @@ export type Provider = ChatModelProviders | EmbeddingModelProviders;
 
 export type SettingKeyProviders = Exclude<
   ChatModelProviders,
-  ChatModelProviders.OPENAI_FORMAT | ChatModelProviders.LM_STUDIO | ChatModelProviders.OLLAMA
+  | ChatModelProviders.OPENAI_FORMAT
+  | ChatModelProviders.LM_STUDIO
+  | ChatModelProviders.OLLAMA
+  | ChatModelProviders.AZURE_AI_FOUNDRY
 >;
 
 // Provider metadata interface
@@ -609,6 +615,12 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     label: "Amazon Bedrock",
     host: "https://bedrock-runtime.{region}.amazonaws.com",
     keyManagementURL: "https://console.aws.amazon.com/iam/home#/security_credentials",
+    listModelURL: "",
+  },
+  [ChatModelProviders.AZURE_AI_FOUNDRY]: {
+    label: "Azure AI Foundry",
+    host: "",
+    keyManagementURL: "https://ai.azure.com",
     listModelURL: "",
   },
   [EmbeddingModelProviders.COPILOT_PLUS]: {

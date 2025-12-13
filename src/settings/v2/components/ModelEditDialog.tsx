@@ -10,6 +10,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   DEFAULT_MODEL_SETTING,
   ChatModelProviders,
+  EmbeddingModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
   Provider,
@@ -19,6 +20,13 @@ import {
 } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { App, Modal, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -46,6 +54,12 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   const [providerInfo, setProviderInfo] = useState<ProviderMetadata>({} as ProviderMetadata);
   const settings = getSettings();
   const isBedrockProvider = localModel.provider === ChatModelProviders.AMAZON_BEDROCK;
+  const isAzureOpenAIProvider =
+    localModel.provider === ChatModelProviders.AZURE_OPENAI ||
+    localModel.provider === EmbeddingModelProviders.AZURE_OPENAI;
+  const isAzureAIFoundryProvider =
+    localModel.provider === ChatModelProviders.AZURE_AI_FOUNDRY ||
+    localModel.provider === EmbeddingModelProviders.AZURE_AI_FOUNDRY;
 
   const getDefaultApiKey = (provider: Provider): string => {
     return (settings[ProviderSettingsKeyMap[provider as SettingKeyProviders]] as string) || "";
@@ -126,7 +140,23 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   return (
     <div className="tw-space-y-3 tw-p-4">
       <div className="tw-space-y-3">
-        <FormField label="Model Name" required>
+        <FormField
+          label={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">Model Name</span>
+              <HelpTooltip
+                content={
+                  <div className="tw-text-sm tw-text-muted">
+                    The exact model identifier used by the API (e.g., gpt-4o, claude-3-opus,
+                    text-embedding-3-small)
+                  </div>
+                }
+                contentClassName="tw-max-w-96"
+              />
+            </div>
+          }
+          required
+        >
           <Input
             type="text"
             disabled={localModel.core}
@@ -166,11 +196,40 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           />
         </FormField>
 
-        <FormField label="Provider">
+        <FormField
+          label={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">Provider</span>
+              <HelpTooltip
+                content={
+                  <div className="tw-text-sm tw-text-muted">
+                    The AI service provider for this model. Cannot be changed after creation.
+                  </div>
+                }
+                contentClassName="tw-max-w-96"
+              />
+            </div>
+          }
+        >
           <Input type="text" value={getProviderLabel(localModel.provider)} disabled />
         </FormField>
 
-        <FormField label="Base URL" description="Leave it blank, unless you are using a proxy.">
+        <FormField
+          label={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">Base URL</span>
+              <HelpTooltip
+                content={
+                  <div className="tw-text-sm tw-text-muted">
+                    Custom API endpoint URL. Leave blank to use the provider&apos;s default
+                    endpoint. Only needed when using a proxy or self-hosted instance.
+                  </div>
+                }
+                contentClassName="tw-max-w-96"
+              />
+            </div>
+          }
+        >
           <Input
             type="text"
             placeholder={getPlaceholderUrl()}
@@ -181,8 +240,23 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
         {isBedrockProvider && (
           <FormField
-            label="Region (optional)"
-            description="Defaults to us-east-1 when left blank. With inference profiles (global., us., eu., apac.), region is auto-managed."
+            label={
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">Region</span>
+                <HelpTooltip
+                  content={
+                    <div className="tw-text-sm tw-text-muted">
+                      <p>AWS region for Bedrock. Defaults to us-east-1 when left blank.</p>
+                      <p className="tw-mt-1">
+                        With inference profiles (global., us., eu., apac. prefix), region is
+                        auto-managed.
+                      </p>
+                    </div>
+                  }
+                  contentClassName="tw-max-w-96"
+                />
+              </div>
+            }
           >
             <Input
               type="text"
@@ -193,7 +267,228 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           </FormField>
         )}
 
-        <FormField label="API Key">
+        {isAzureOpenAIProvider && (
+          <>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">Instance Name</span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Your Azure OpenAI resource name. Found in the Azure portal under your Azure
+                        OpenAI resource.
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
+                  />
+                </div>
+              }
+            >
+              <Input
+                type="text"
+                placeholder="Enter Azure OpenAI API Instance Name"
+                value={localModel.azureOpenAIApiInstanceName || ""}
+                onChange={(e) => handleLocalUpdate("azureOpenAIApiInstanceName", e.target.value)}
+              />
+            </FormField>
+
+            {!isEmbeddingModel ? (
+              <FormField
+                label={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">Deployment Name</span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-text-sm tw-text-muted">
+                          The deployment name you chose when deploying your model in Azure. This is
+                          your actual model identifier.
+                        </div>
+                      }
+                      contentClassName="tw-max-w-96"
+                    />
+                  </div>
+                }
+              >
+                <Input
+                  type="text"
+                  placeholder="Enter Azure OpenAI API Deployment Name"
+                  value={localModel.azureOpenAIApiDeploymentName || ""}
+                  onChange={(e) =>
+                    handleLocalUpdate("azureOpenAIApiDeploymentName", e.target.value)
+                  }
+                />
+              </FormField>
+            ) : (
+              <FormField
+                label={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">Embedding Deployment Name</span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-text-sm tw-text-muted">
+                          The deployment name for your embedding model in Azure OpenAI.
+                        </div>
+                      }
+                      contentClassName="tw-max-w-96"
+                    />
+                  </div>
+                }
+              >
+                <Input
+                  type="text"
+                  placeholder="Enter Azure OpenAI API Embedding Deployment Name"
+                  value={localModel.azureOpenAIApiEmbeddingDeploymentName || ""}
+                  onChange={(e) =>
+                    handleLocalUpdate("azureOpenAIApiEmbeddingDeploymentName", e.target.value)
+                  }
+                />
+              </FormField>
+            )}
+
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">API Version</span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Azure OpenAI API version (e.g., 2024-02-15-preview). Check Azure
+                        documentation for the latest supported versions.
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
+                  />
+                </div>
+              }
+            >
+              <Input
+                type="text"
+                placeholder="Enter Azure OpenAI API Version"
+                value={localModel.azureOpenAIApiVersion || ""}
+                onChange={(e) => handleLocalUpdate("azureOpenAIApiVersion", e.target.value)}
+              />
+            </FormField>
+          </>
+        )}
+
+        {isAzureAIFoundryProvider && (
+          <>
+            {!isEmbeddingModel && (
+              <FormField
+                label={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">Model Type</span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-text-sm tw-text-muted">
+                          <p>Select the API type based on your model:</p>
+                          <ul className="tw-mt-1 tw-list-disc tw-pl-4">
+                            <li>OpenAI: For GPT-4o, GPT-5, o1, etc.</li>
+                            <li>Anthropic: For Claude models</li>
+                          </ul>
+                        </div>
+                      }
+                      contentClassName="tw-max-w-96"
+                    />
+                  </div>
+                }
+              >
+                <Select
+                  value={localModel.azureAIFoundryModelType || "openai"}
+                  onValueChange={(value: "openai" | "anthropic") =>
+                    handleLocalUpdate("azureAIFoundryModelType", value)
+                  }
+                >
+                  <SelectTrigger className="tw-w-full">
+                    <SelectValue placeholder="Select model type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="openai">OpenAI (GPT-4o, GPT-5, etc.)</SelectItem>
+                    <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+            )}
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">Endpoint URL</span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        {localModel.azureAIFoundryModelType === "anthropic" ? (
+                          <p>
+                            Your Azure AI Foundry endpoint for Anthropic models. Format:
+                            https://&lt;resource&gt;.services.ai.azure.com/anthropic/
+                          </p>
+                        ) : (
+                          <p>
+                            Your Azure AI Foundry endpoint for OpenAI models. Format:
+                            https://&lt;resource&gt;.cognitiveservices.azure.com/
+                          </p>
+                        )}
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
+                  />
+                </div>
+              }
+            >
+              <Input
+                type="text"
+                placeholder={
+                  localModel.azureAIFoundryModelType === "anthropic"
+                    ? "https://<resource>.services.ai.azure.com/anthropic/"
+                    : "https://<resource>.cognitiveservices.azure.com/"
+                }
+                value={localModel.azureAIFoundryEndpoint || ""}
+                onChange={(e) => handleLocalUpdate("azureAIFoundryEndpoint", e.target.value)}
+              />
+            </FormField>
+            {localModel.azureAIFoundryModelType !== "anthropic" && (
+              <FormField
+                label={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">API Version</span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-text-sm tw-text-muted">
+                          Azure OpenAI API version. Defaults to 2024-12-01-preview if not specified.
+                        </div>
+                      }
+                      contentClassName="tw-max-w-96"
+                    />
+                  </div>
+                }
+              >
+                <Input
+                  type="text"
+                  placeholder="2024-12-01-preview"
+                  value={localModel.azureAIFoundryApiVersion || ""}
+                  onChange={(e) => handleLocalUpdate("azureAIFoundryApiVersion", e.target.value)}
+                />
+              </FormField>
+            )}
+          </>
+        )}
+
+        <FormField
+          label={
+            <div className="tw-flex tw-items-center tw-gap-1.5">
+              <span className="tw-leading-none">API Key</span>
+              <HelpTooltip
+                content={
+                  <div className="tw-text-sm tw-text-muted">
+                    Your authentication key for the provider&apos;s API. Keep this secret and never
+                    share it.
+                  </div>
+                }
+                contentClassName="tw-max-w-96"
+              />
+            </div>
+          }
+        >
           <PasswordInput
             placeholder={`Enter ${providerInfo.label || "Provider"} API Key`}
             value={displayApiKey}
