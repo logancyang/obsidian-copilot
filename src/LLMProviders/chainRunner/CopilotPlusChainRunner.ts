@@ -19,10 +19,14 @@ import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
+import { ToolRegistry } from "@/tools/ToolRegistry";
+import { initializeBuiltinTools } from "@/tools/builtinTools";
+import { localSearchTool, webSearchTool } from "@/tools/SearchTools";
+import { updateMemoryTool } from "@/tools/memoryTools";
+import { extractChatHistory } from "@/utils";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { IntentAnalyzer } from "../intentAnalyzer";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
 import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
@@ -47,8 +51,254 @@ import {
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
+import { ModelAdapterFactory, joinPromptSections } from "./utils/modelAdapter";
+import { parseXMLToolCalls } from "./utils/xmlParsing";
+import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
+import ProjectManager from "@/LLMProviders/projectManager";
+import { isProjectMode } from "@/aiParams";
+
+type ToolCallWithExecutor = {
+  tool: any;
+  args: any;
+};
 
 export class CopilotPlusChainRunner extends BaseChainRunner {
+  /**
+   * Get available tools for Copilot Plus chain.
+   * Uses a minimal set of utility tools: time tools and file tree.
+   * Search tools are handled via @commands.
+   */
+  protected getAvailableToolsForPlanning(): SimpleTool<any, any>[] {
+    const registry = ToolRegistry.getInstance();
+
+    // Initialize tools if not already done
+    if (registry.getAllTools().length === 0) {
+      initializeBuiltinTools(this.chainManager.app?.vault);
+    }
+
+    // Get all tools as SimpleTool instances
+    const allTools = registry.getAllTools().map((def) => def.tool);
+
+    // Return only utility tools that need automatic detection
+    // Other tools (@vault, @websearch, @memory) are handled by @command logic
+    return allTools.filter((tool) => {
+      return (
+        tool.name === "getCurrentTime" ||
+        tool.name === "convertTimeBetweenTimezones" ||
+        tool.name === "getTimeInfoByEpoch" ||
+        tool.name === "getTimeRangeMs" ||
+        tool.name === "getFileTree"
+      );
+    });
+  }
+
+  /**
+   * Generate tool descriptions in XML format for the model.
+   * Reuses the same format as autonomous agent.
+   */
+  public static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
+    return availableTools
+      .map((tool) => {
+        let params = "";
+
+        // Extract parameters from Zod schema
+        const parameters = extractParametersFromZod(tool.schema);
+        if (Object.keys(parameters).length > 0) {
+          params = Object.entries(parameters)
+            .map(([key, description]) => `<${key}>${description}</${key}>`)
+            .join("\n");
+        }
+
+        return `<${tool.name}>
+<description>${tool.description}</description>
+<parameters>
+${params}
+</parameters>
+</${tool.name}>`;
+      })
+      .join("\n\n");
+  }
+
+  /**
+   * Use model-based planning to determine which tools to call.
+   * Replaces the Broca API call with chat model tool planning.
+   */
+  private async planToolCalls(
+    userMessage: string,
+    chatModel: BaseChatModel
+  ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[] }> {
+    const availableTools = this.getAvailableToolsForPlanning();
+    const adapter = ModelAdapterFactory.createAdapter(chatModel);
+    const toolDescriptions = CopilotPlusChainRunner.generateToolDescriptions(availableTools);
+
+    // Build a lightweight planning prompt
+    const registry = ToolRegistry.getInstance();
+    const toolMetadata = availableTools
+      .map((tool) => registry.getToolMetadata(tool.name))
+      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
+
+    const allSections = adapter.buildSystemPromptSections(
+      "You are a helpful AI assistant. Analyze the user's message and determine if any tools should be called.",
+      toolDescriptions,
+      availableTools.map((t) => t.name),
+      toolMetadata
+    );
+
+    let planningPrompt = joinPromptSections(allSections);
+
+    // Add salient term extraction instruction to the planning prompt
+    planningPrompt += `\n\nIMPORTANT: After any tool calls (or if no tools are needed), extract key search terms from the user's message.
+Output them in this format:
+<salient_terms>
+<term>first keyword</term>
+<term>second keyword</term>
+</salient_terms>
+
+Guidelines for salient terms:
+- Extract meaningful nouns, topics, and specific concepts
+- Exclude common words like "what", "how", "my", "the", "a", "an"
+- Exclude time expressions (those are handled separately)
+- If the message has no meaningful search terms, output empty <salient_terms></salient_terms>
+- Use the EXACT words from the user's message (preserve language/spelling)`;
+
+    // Create a simple planning request
+    const planningMessages = [
+      {
+        role: getMessageRole(chatModel),
+        content: planningPrompt,
+      },
+      {
+        role: "user",
+        content: userMessage,
+      },
+    ];
+
+    logInfo("[CopilotPlus] Requesting tool planning from model...");
+
+    // Get model response for planning
+    const response = await withSuppressedTokenWarnings(() => chatModel.invoke(planningMessages));
+
+    const responseText =
+      typeof response.content === "string" ? response.content : String(response.content);
+
+    logInfo("[CopilotPlus] Model planning response:", responseText.substring(0, 500));
+
+    // Parse tool calls from response
+    const parsedCalls = parseXMLToolCalls(responseText);
+
+    // Extract salient terms from <salient_terms> block
+    const salientTerms = this.extractSalientTerms(responseText);
+
+    // Convert parsed calls to executor format
+    const toolCalls: ToolCallWithExecutor[] = [];
+    for (const parsedCall of parsedCalls) {
+      const tool = availableTools.find((t) => t.name === parsedCall.name);
+      if (tool) {
+        toolCalls.push({ tool, args: parsedCall.args });
+      }
+    }
+
+    return { toolCalls, salientTerms };
+  }
+
+  /**
+   * Extract salient terms from model response.
+   * Looks for <salient_terms><term>...</term></salient_terms> format.
+   */
+  private extractSalientTerms(responseText: string): string[] {
+    const salientTermsMatch = responseText.match(/<salient_terms>([\s\S]*?)<\/salient_terms>/);
+    if (!salientTermsMatch) {
+      return [];
+    }
+
+    const termsBlock = salientTermsMatch[1];
+    const termMatches = termsBlock.matchAll(/<term>(.*?)<\/term>/g);
+    const terms: string[] = [];
+
+    for (const match of termMatches) {
+      const term = match[1].trim();
+      if (term) {
+        terms.push(term);
+      }
+    }
+
+    return terms;
+  }
+
+  /**
+   * Process @commands in the user message and add corresponding tool calls.
+   * Handles @vault, @websearch/@web, and @memory commands.
+   */
+  private async processAtCommands(
+    userMessage: string,
+    existingToolCalls: ToolCallWithExecutor[],
+    context: { salientTerms: string[]; timeRange?: any }
+  ): Promise<ToolCallWithExecutor[]> {
+    const message = userMessage.toLowerCase();
+    const cleanQuery = this.removeAtCommands(userMessage);
+    const toolCalls = [...existingToolCalls];
+
+    // Handle @vault command
+    if (message.includes("@vault")) {
+      // Check if localSearch is already planned
+      const hasLocalSearch = toolCalls.some((tc) => tc.tool.name === "localSearch");
+      if (!hasLocalSearch) {
+        toolCalls.push({
+          tool: localSearchTool,
+          args: {
+            query: cleanQuery,
+            salientTerms: context.salientTerms,
+            timeRange: context.timeRange,
+          },
+        });
+      }
+    }
+
+    // Handle @websearch command and also support @web for backward compatibility
+    if (message.includes("@websearch") || message.includes("@web")) {
+      const hasWebSearch = toolCalls.some((tc) => tc.tool.name === "webSearch");
+      if (!hasWebSearch) {
+        const memory = ProjectManager.instance.getCurrentChainManager().memoryManager.getMemory();
+        const memoryVariables = await memory.loadMemoryVariables({});
+        const chatHistory = extractChatHistory(memoryVariables);
+
+        toolCalls.push({
+          tool: webSearchTool,
+          args: {
+            query: cleanQuery,
+            chatHistory,
+          },
+        });
+      }
+    }
+
+    // Handle @memory command
+    if (message.includes("@memory")) {
+      const hasUpdateMemory = toolCalls.some((tc) => tc.tool.name === "updateMemory");
+      if (!hasUpdateMemory) {
+        toolCalls.push({
+          tool: updateMemoryTool,
+          args: {
+            statement: cleanQuery,
+          },
+        });
+      }
+    }
+
+    return toolCalls;
+  }
+
+  /**
+   * Remove @command tokens from the user message.
+   */
+  private removeAtCommands(message: string): string {
+    return message
+      .split(" ")
+      .filter((word) => !AVAILABLE_TOOLS.includes(word.toLowerCase()))
+      .join(" ")
+      .trim();
+  }
+
   private async processImageUrls(urls: string[]): Promise<ImageProcessingResult> {
     const failedImages: string[] = [];
     const processedImages = await ImageBatchProcessor.processUrlBatch(
@@ -491,10 +741,10 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     }
 
     try {
-      logInfo("==== Step 1: Analyzing intent ====");
-      let toolCalls;
+      logInfo("==== Step 1: Planning tools ====");
+      let toolCalls: ToolCallWithExecutor[];
 
-      // Extract L5 (raw user query) from envelope for intent analysis
+      // Extract L5 (raw user query) from envelope for tool planning
       const envelope = userMessage.contextEnvelope;
       if (!envelope) {
         throw new Error(
@@ -505,7 +755,40 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       const messageForAnalysis = l5User?.text || userMessage.originalMessage || userMessage.message;
 
       try {
-        toolCalls = await IntentAnalyzer.analyzeIntent(messageForAnalysis);
+        // Use model-based planning instead of Broca
+        const chatModel = this.chainManager.chatModelManager.getChatModel();
+        const planningResult = await this.planToolCalls(messageForAnalysis, chatModel);
+
+        // Execute getTimeRangeMs immediately if present (needed for localSearch timeRange)
+        // We execute it once here and remove it from toolCalls to avoid double execution
+        let timeRange: any = undefined;
+        const timeRangeCall = planningResult.toolCalls.find(
+          (tc) => tc.tool.name === "getTimeRangeMs"
+        );
+        if (timeRangeCall) {
+          timeRange = await ToolManager.callTool(timeRangeCall.tool, timeRangeCall.args);
+          logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
+        }
+
+        // Filter tool calls: skip getFileTree in project mode, skip getTimeRangeMs if already executed
+        const filteredToolCalls = planningResult.toolCalls.filter((tc) => {
+          if (tc.tool.name === "getFileTree" && isProjectMode()) {
+            logInfo("Skipping getFileTree in project mode");
+            return false;
+          }
+          if (tc.tool.name === "getTimeRangeMs" && timeRange) {
+            logInfo("Skipping getTimeRangeMs - already executed during planning");
+            return false;
+          }
+          return true;
+        });
+
+        // Process @commands - this may add localSearch, webSearch, or updateMemory
+        // Pass timeRange in context so @vault commands can use it
+        toolCalls = await this.processAtCommands(messageForAnalysis, filteredToolCalls, {
+          salientTerms: planningResult.salientTerms,
+          timeRange,
+        });
       } catch (error: any) {
         return this.handleResponse(
           getApiErrorMessage(error),
@@ -516,12 +799,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
         );
       }
 
-      // Use the same removeAtCommands logic as IntentAnalyzer
-      const cleanedUserMessage = userMessage.message
-        .split(" ")
-        .filter((word) => !AVAILABLE_TOOLS.includes(word.toLowerCase()))
-        .join(" ")
-        .trim();
+      // Clean user message by removing @command tokens
+      const cleanedUserMessage = this.removeAtCommands(userMessage.message);
 
       const { toolOutputs, sources: toolSources } = await this.executeToolCalls(
         toolCalls,
