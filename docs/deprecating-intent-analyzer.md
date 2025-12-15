@@ -1,6 +1,6 @@
 # Deprecating `IntentAnalyzer` and Broca
 
-This document captures the current responsibilities of the Copilot Plus intent analysis flow (`IntentAnalyzer` + Brevilabs “broca” API) and outlines a safe migration path to remove it while keeping Copilot Plus functionality aligned with the autonomous agent experience.
+This document captures the current responsibilities of the Copilot Plus intent analysis flow (`IntentAnalyzer` + Brevilabs “broca” API) and outlines a safe migration path to remove it while keeping Copilot Plus functionality aligned with the autonomous agent experience. The end state is simple: the user-facing chat model (same family as the agent chain) owns tool planning, salient term extraction, and time-expression handling; Broca is fully removed.
 
 ## Current Responsibilities
 
@@ -15,7 +15,7 @@ This document captures the current responsibilities of the Copilot Plus intent a
   - `@websearch` / `@web` → forces `webSearch`.
   - `@memory` → forces `updateMemory`.
 - **Plus-specific salient term injection**: any Broca `salience_terms` array is passed into `localSearch` unchanged, altering recall compared with the agent chain. Our discovery shows this causes divergence between Plus and agent results; we need both flows to end up using the same salient term set.
-- **Implicit license enforcement**: `/broca` is the only per-turn API call guaranteed to touch Brevilabs. Although license validation also uses `/license` (`checkIsPlusUser`), Broca acts as the continuous touch point that can detect expired keys mid-session.
+- **Implicit license enforcement**: `/broca` is the only per-turn API call guaranteed to touch Brevilabs. Although license validation also uses `/license` (`checkIsPlusUser`), Broca acts as the continuous touch point that can detect expired keys mid-session. **Today**: `checkIsPlusUser` already runs per turn in both Copilot Plus and Autonomous Agent chain runners; keep that behavior when Broca goes away (no extra moving parts).
 
 ## Known Consumers and Side Effects
 
@@ -28,11 +28,12 @@ This document captures the current responsibilities of the Copilot Plus intent a
 
 - **Feature parity**: Copilot Plus must keep working with vault search, timeline questions, web search, file tree lookup, and memory updates.
 - **License verification**: every chat turn must continue to check Plus eligibility (either by retaining a per-turn Brevilabs call or by adding an explicit `/license` check with caching and backoff).
-- **Minimal prompt drift**: Copilot Plus prompts currently do not include the aggressive tool-calling instructions used by the autonomous agent; the migration should not break existing prompt tuning until the replacement strategy is ready.
+- **Minimal prompt drift**: Copilot Plus prompts currently do not include the aggressive tool-calling instructions used by the autonomous agent; the migration should not break existing prompt tuning until the replacement strategy is ready. Prefer reusing existing agent instructions instead of inventing new ones.
 - **Zero regression for `@` commands**: the existing inline overrides are user-facing affordances.
-- **Search recall**: any solution must surface the same or better salient term quality as the agent chain to avoid regressions highlighted in recent investigations.
+- **Search recall**: any solution must surface the same or better salient term quality as the agent chain to avoid regressions highlighted in recent investigations; salient terms should come from the user chat model (agent-style extraction), not Broca.
 - **Plus/agent parity**: after migration, the Plus chain must feed the vault search pipeline with the same query string, expanded variants, and salient term list that the agent chain would generate for the identical user input.
 - **Scoped automatic detection**: only the utility tools without explicit UI affordances (`getCurrentTime`, `convertTimeBetweenTimezones`, `getTimeRangeMs`, `getTimeInfoByEpoch`, `getFileTree`) need automatic invocation; everything else can be triggered through toggles or `@tool` commands.
+- **Self-host readiness**: future “self-host” mode must be able to (a) bypass live license checks (or use a short-lived cached verification) and (b) avoid all Brevilabs API calls while keeping the rest of the product functional, without branching code paths everywhere.
 
 ## Migration Plan
 
@@ -40,32 +41,39 @@ This document captures the current responsibilities of the Copilot Plus intent a
 
 1. **Instrument current intent decisions**: add temporary logging (behind debug flag) to record Broca output, executed tools, and overrides. Purpose: baseline behavior before refactor.
 2. **Map tool usage**: capture how frequently each Broca tool is invoked to prioritise feature parity work.
-3. **Clarify license expectations**: confirm with product whether `/license` checks can replace Broca for per-turn validation, or if a lighter “heartbeat” endpoint is needed.
+3. **Clarify license expectations**: confirm with product whether `/license` checks can replace Broca for per-turn validation, or if a lighter “heartbeat” endpoint is needed. (Current code already calls `/license` per turn via `checkIsPlusUser`; keep this as the baseline.)
 
 ### Phase 1 – Surface-Agnostic Tool Planning
 
-4. **Extract shared tool planner interface**: design a new planner (e.g., `PlusToolPlanner`) that returns the same `{ tool, args }[]` shape as `IntentAnalyzer`. Plan for multiple implementations (Broca, agent-driven, heuristic).
-5. **Port `@` command handling**: move `processAtCommands` logic into the new planner so overrides are planner-agnostic.
-6. **Adopt agent-style salient term generation**: introduce a reusable salience extractor (likely the agent instruction set or a deterministic tokenizer) so Plus mode produces the same salient terms the agent chain would compute.
-7. **Define utility auto-detection rules**: implement deterministic heuristics for the remaining auto-triggered tools (time/time-range/time-info/file-tree) so the planner can schedule them without LLM help.
+4. **Extract shared tool planner interface**: design a single planner abstraction (e.g., `PlusToolPlanner`) that returns `{ tool, args }[]`. Default implementation uses the same chat-model planning as the agent; keep Broca only as a temporary hidden fallback.
+5. **Port `@` command handling**: move `processAtCommands` into the planner; keep `chatHistory` enrichment for `@websearch/@web`. One place, one behavior.
+6. **Adopt agent-style salient term generation**: reuse the agent chain’s salience extraction via the chat model. Remove Broca salience entirely; no parallel salience paths.
+7. **Utility auto-detection**: rely on the chat-model planner for time/time-range/time-info/file-tree, with a minimal heuristic fallback for obvious time expressions. Preserve project-mode guardrails (skip vault-level `getFileTree` in projects).
 
 ### Phase 2 – Replace Broca for Tool Scheduling
 
-8. **Reuse ModelAdapter-driven planning**: embed a constrained agent loop (single-iteration tool planner) that leverages the existing XML instructions used by autonomous agent models. Limit to deciding tool calls; keep Copilot Plus response streaming as-is.
-9. **Fallback heuristics**: provide deterministic patterns for the utility tools to guard against planner failures and avoid unneeded LLM calls for searches already controlled by UI toggles.
-10. **Feature flag & dogfood**: gate the new planner behind a runtime toggle (`settings.debugPlanner` or remote flag) to test against Broca in parallel, and compare Plus/agent query-expansion outputs in telemetry to ensure they match.
+8. **Reuse ModelAdapter-driven planning**: embed a single-iteration agent-style planner that emits localSearch/webSearch/time tools with the same parameters (query + salience terms + timeRange) the agent chain would produce.
+9. **Fallback heuristics**: keep deterministic fallbacks for time expressions; compute timeRange once and pass it to localSearch. Avoid extra tool calls.
+10. **Feature flag & dogfood**: gate the new planner behind a toggle to compare against Broca; collect salience/time parity telemetry. Keep toggles minimal.
 
 ### Phase 3 – License Enforcement Replacement
 
-11. **Introduce explicit per-turn license check**: call `validateLicenseKey` (or a new lightweight endpoint) at the start of each Plus turn. Cache results for the current conversation with TTL to avoid redundant traffic within a single turn.
-12. **Graceful degradation**: if validation fails or is unreachable, surface the same error handling as today (e.g., show invalid key notice, disable Plus features).
+11. **Per-turn license check**: keep the current per-turn `checkIsPlusUser` in Copilot Plus, Agent, and Projects. If you cache, cache per turn only. Centralize this so there is one path.
+12. **Graceful degradation**: if validation fails or is unreachable, show the same invalid-key flow. Add a single override hook to bypass in self-host mode (no scattered flags).
 
 ### Phase 4 – Removal & Cleanup
 
-13. **Switch default planner**: once the new planner reaches parity, flip the feature flag so Copilot Plus no longer calls Broca. Keep Broca behind a hidden fallback flag for one release.
-14. **Delete `IntentAnalyzer`**: remove the class, its tests, and references. Update imports (`initializeBuiltinTools` already handles tool registration outside IntentAnalyzer).
-15. **Retire `BrevilabsClient.broca`**: delete the method and any unused types. Keep `/license` and other endpoints.
-16. **Documentation & migration notes**: update `AGENTS.md`, `TODO.md`, and any user-facing Plus documentation to note the new flow.
+13. **Switch default planner**: flip the feature flag when parity is reached; Broca stays as a hidden one-release fallback.
+14. **Delete `IntentAnalyzer`**: remove the class, tests, and references; drop `initTools` from `src/main.ts` (tool registration already handled elsewhere).
+15. **Retire `BrevilabsClient.broca`**: remove the method and unused types; keep `/license` and others.
+16. **Documentation & migration notes**: update `AGENTS.md`, `TODO.md`, and user-facing Plus docs.
+
+### Phase 5 – Prepare for Self-Host Mode
+
+17. **Abstract Brevilabs dependencies**: one provider interface for license, web search, rerank, youtube, url/pdf ingestion. Default = Brevilabs; self-host = offline/no-op or user-supplied.
+18. **Configurable license gate**: single setting for “offline verified” (short-lived cache) or “skip verification” (self-host). Copilot Plus/Projects should read from the provider, not from BrevilabsClient directly.
+19. **Feature degradation without Brevilabs**: define one behavior for missing endpoints (disable specific tools or route to user-provided endpoints) without branching everywhere. Keep telemetry resilient when Broca/Brevilabs events are absent.
+20. **Testing and telemetry updates**: cover provider modes (online vs self-host) and update dashboards for the absence of Broca events.
 
 ## Risks and Mitigations
 
