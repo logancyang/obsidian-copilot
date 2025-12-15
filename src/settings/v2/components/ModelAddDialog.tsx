@@ -440,21 +440,25 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                   }}
                 />
               </FormField>
-              {model.azureAIFoundryModelType !== "anthropic" && (
-                <FormField
-                  label="API Version"
-                  description="Azure OpenAI API version (defaults to 2024-12-01-preview)"
-                >
-                  <Input
-                    type="text"
-                    placeholder="2024-12-01-preview"
-                    value={model.azureAIFoundryApiVersion || ""}
-                    onChange={(e) =>
-                      setModel({ ...model, azureAIFoundryApiVersion: e.target.value })
-                    }
-                  />
-                </FormField>
-              )}
+              <FormField
+                label="API Version"
+                description={
+                  model.azureAIFoundryModelType === "anthropic"
+                    ? "Azure AI Foundry API version for Anthropic (defaults to 2023-06-01)"
+                    : "Azure OpenAI API version (defaults to 2024-12-01-preview)"
+                }
+              >
+                <Input
+                  type="text"
+                  placeholder={
+                    model.azureAIFoundryModelType === "anthropic"
+                      ? "2023-06-01"
+                      : "2024-12-01-preview"
+                  }
+                  value={model.azureAIFoundryApiVersion || ""}
+                  onChange={(e) => setModel({ ...model, azureAIFoundryApiVersion: e.target.value })}
+                />
+              </FormField>
             </>
           );
         default:

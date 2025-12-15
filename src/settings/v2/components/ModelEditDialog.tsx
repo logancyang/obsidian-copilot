@@ -446,30 +446,42 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                 onChange={(e) => handleLocalUpdate("azureAIFoundryEndpoint", e.target.value)}
               />
             </FormField>
-            {localModel.azureAIFoundryModelType !== "anthropic" && (
-              <FormField
-                label={
-                  <div className="tw-flex tw-items-center tw-gap-1.5">
-                    <span className="tw-leading-none">API Version</span>
-                    <HelpTooltip
-                      content={
-                        <div className="tw-text-sm tw-text-muted">
-                          Azure OpenAI API version. Defaults to 2024-12-01-preview if not specified.
-                        </div>
-                      }
-                      contentClassName="tw-max-w-96"
-                    />
-                  </div>
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">API Version</span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        {localModel.azureAIFoundryModelType === "anthropic" ? (
+                          <p>
+                            Azure AI Foundry API version for Anthropic. Defaults to 2023-06-01 if
+                            not specified.
+                          </p>
+                        ) : (
+                          <p>
+                            Azure OpenAI API version. Defaults to 2024-12-01-preview if not
+                            specified.
+                          </p>
+                        )}
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
+                  />
+                </div>
+              }
+            >
+              <Input
+                type="text"
+                placeholder={
+                  localModel.azureAIFoundryModelType === "anthropic"
+                    ? "2023-06-01"
+                    : "2024-12-01-preview"
                 }
-              >
-                <Input
-                  type="text"
-                  placeholder="2024-12-01-preview"
-                  value={localModel.azureAIFoundryApiVersion || ""}
-                  onChange={(e) => handleLocalUpdate("azureAIFoundryApiVersion", e.target.value)}
-                />
-              </FormField>
-            )}
+                value={localModel.azureAIFoundryApiVersion || ""}
+                onChange={(e) => handleLocalUpdate("azureAIFoundryApiVersion", e.target.value)}
+              />
+            </FormField>
           </>
         )}
 

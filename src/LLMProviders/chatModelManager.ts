@@ -523,6 +523,7 @@ export default class ChatModelManager {
       // SDK pattern: new AnthropicFoundry({ apiKey, baseURL, apiVersion: "2023-06-01" })
       // Endpoint format: https://{resource}.services.ai.azure.com/anthropic/
       const anthropicBaseUrl = endpoint.replace(/\/+$/, "");
+      const apiVersion = customModel.azureAIFoundryApiVersion || "2023-06-01";
 
       return {
         anthropicApiKey: apiKey,
@@ -534,7 +535,10 @@ export default class ChatModelManager {
             // Azure AI Foundry uses "api-key" header for authentication
             "api-key": apiKey,
             // Required anthropic-version header
-            "anthropic-version": "2023-06-01",
+            "anthropic-version": apiVersion,
+          },
+          defaultQuery: {
+            "api-version": apiVersion,
           },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
