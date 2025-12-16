@@ -835,12 +835,17 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     };
 
     // Add fallback sources if citations are missing
+    const settings = getSettings();
     const fallbackSources =
       this.lastCitationSources && this.lastCitationSources.length > 0
         ? this.lastCitationSources
         : ((sources as any[]) || []).map((source) => ({ title: source.title, path: source.path }));
 
-    fullAIResponse = addFallbackSources(fullAIResponse, fallbackSources);
+    fullAIResponse = addFallbackSources(
+      fullAIResponse,
+      fallbackSources,
+      settings.enableInlineCitations
+    );
 
     await this.handleResponse(
       fullAIResponse,
@@ -974,7 +979,8 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     });
 
     // Build guidance block with citation rules and source catalog
-    const guidance = getLocalSearchGuidance(catalogLines).trim();
+    const settings = getSettings();
+    const guidance = getLocalSearchGuidance(catalogLines, settings.enableInlineCitations).trim();
 
     // Add RAG instruction (like VaultQA) to ensure model uses the context
     const ragInstruction = "Answer the question based only on the following context:";

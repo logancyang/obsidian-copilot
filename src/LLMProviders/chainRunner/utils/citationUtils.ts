@@ -39,7 +39,22 @@ IMPORTANT: Each source definition must follow this exact pattern:
  * Generates comprehensive guidance for local search results including citation rules,
  * image inclusion instructions, and source catalog.
  */
-export function getLocalSearchGuidance(sourceCatalog: string[]): string {
+export function getLocalSearchGuidance(
+  sourceCatalog: string[],
+  enableInlineCitations: boolean = true
+): string {
+  if (!enableInlineCitations) {
+    return `
+
+<guidance>
+IMAGE INCLUSION:
+When the retrieved documents contain relevant images (in formats like ![alt](image.png) or ![[image.png]]), include them in your response at appropriate locations using their exact original markdown format from the source.
+
+Source Catalog (for reference only):
+${sourceCatalog.join("\n")}
+</guidance>`;
+  }
+
   return `
 
 <guidance>
@@ -56,7 +71,14 @@ ${sourceCatalog.join("\n")}
 /**
  * Generates citation instructions for QA contexts.
  */
-export function getQACitationInstructions(sourceCatalog: string): string {
+export function getQACitationInstructions(
+  sourceCatalog: string,
+  enableInlineCitations: boolean = true
+): string {
+  if (!enableInlineCitations) {
+    return "";
+  }
+
   return `
 
 ${CITATION_RULES}
@@ -76,8 +98,14 @@ const MAX_FALLBACK_SOURCES = 20;
  */
 export function addFallbackSources(
   response: string,
-  sources: { title?: string; path?: string }[]
+  sources: { title?: string; path?: string }[],
+  enableInlineCitations: boolean = true
 ): string {
+  // If inline citations are disabled, don't add fallback sources
+  if (!enableInlineCitations) {
+    return response || "";
+  }
+
   // Input validation
   if (!sources?.length || !response) {
     return response || "";
@@ -146,7 +174,11 @@ export function hasInlineCitations(response: string): boolean {
 /**
  * Provides web-search-specific citation instructions using markdown links.
  */
-export function getWebSearchCitationInstructions(): string {
+export function getWebSearchCitationInstructions(enableInlineCitations: boolean = true): string {
+  if (!enableInlineCitations) {
+    return "";
+  }
+
   return `\n\n${WEB_CITATION_RULES}`;
 }
 
@@ -477,7 +509,15 @@ function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): 
  * Main function to process inline citations in content.
  * Processes footnote-style citations and consolidates sources.
  */
-export function processInlineCitations(content: string): string {
+export function processInlineCitations(
+  content: string,
+  enableInlineCitations: boolean = true
+): string {
+  // If inline citations are disabled, return content as-is
+  if (!enableInlineCitations) {
+    return content;
+  }
+
   const sourcesSection = extractSourcesSection(content);
   if (!sourcesSection) return content;
 

@@ -379,7 +379,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
 
       // Transform markdown sources section into HTML structure
-      const sourcesSectionProcessed = processInlineCitations(writeToFileSectionProcessed);
+      const sourcesSectionProcessed = processInlineCitations(
+        writeToFileSectionProcessed,
+        settings.enableInlineCitations
+      );
 
       // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
@@ -391,7 +394,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       return noteLinksProcessed;
     },
-    [app, isStreaming, shouldProcessThinkBlocks]
+    [app, isStreaming, shouldProcessThinkBlocks, settings.enableInlineCitations]
   );
 
   useEffect(() => {
