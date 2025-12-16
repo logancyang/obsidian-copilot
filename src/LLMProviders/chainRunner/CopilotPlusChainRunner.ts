@@ -147,8 +147,13 @@ ${params}
     let planningPrompt = joinPromptSections(allSections);
 
     // Add salient term extraction instruction to the planning prompt
-    planningPrompt += `\n\nIMPORTANT: After any tool calls (or if no tools are needed), extract key search terms from the user's message.
-Output them in this format:
+    planningPrompt += `\n\nIMPORTANT: Respond ONLY with XML blocks. Do not include any natural language explanations, apologies, or commentary.
+
+Your response must contain:
+1. Tool calls (if needed): <use_tool>...</use_tool>
+2. Salient terms (always): <salient_terms><term>keyword</term></salient_terms>
+
+Format for salient terms:
 <salient_terms>
 <term>first keyword</term>
 <term>second keyword</term>
@@ -159,7 +164,9 @@ Guidelines for salient terms:
 - Exclude common words like "what", "how", "my", "the", "a", "an"
 - Exclude time expressions (those are handled separately)
 - If the message has no meaningful search terms, output empty <salient_terms></salient_terms>
-- Use the EXACT words from the user's message (preserve language/spelling)`;
+- Use the EXACT words from the user's message (preserve language/spelling)
+
+OUTPUT ONLY XML - NO OTHER TEXT.`;
 
     // Create a simple planning request
     const planningMessages = [
@@ -319,38 +326,6 @@ Guidelines for salient terms:
     );
     ImageBatchProcessor.showFailedImagesNotice(failedImages);
     return processedImages;
-  }
-
-  private extractNoteContent(textContent: string): string {
-    // Extract content from both <note_context> and <active_note> blocks, but not from <url_content> blocks
-    const noteContextRegex = /<note_context>([\s\S]*?)<\/note_context>/g;
-    const activeNoteRegex = /<active_note>([\s\S]*?)<\/active_note>/g;
-    const contentRegex = /<content>([\s\S]*?)<\/content>/g;
-
-    let noteContent = "";
-    let match;
-
-    // Find all note_context blocks
-    while ((match = noteContextRegex.exec(textContent)) !== null) {
-      const noteBlock = match[1];
-      // Extract content from within this note_context block
-      let contentMatch;
-      while ((contentMatch = contentRegex.exec(noteBlock)) !== null) {
-        noteContent += contentMatch[1] + "\n\n";
-      }
-    }
-
-    // Find all active_note blocks
-    while ((match = activeNoteRegex.exec(textContent)) !== null) {
-      const noteBlock = match[1];
-      // Extract content from within this active_note block
-      let contentMatch;
-      while ((contentMatch = contentRegex.exec(noteBlock)) !== null) {
-        noteContent += contentMatch[1] + "\n\n";
-      }
-    }
-
-    return noteContent.trim();
   }
 
   private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
