@@ -766,6 +766,19 @@ ${params}
       loopDeps.availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
     );
 
+    // Remove any accidental background-tool markers to avoid orphaned spinners
+    if (currentIterationToolCallMessages.length > 0 && backgroundToolNames.size > 0) {
+      const backgroundPrefixes = Array.from(backgroundToolNames).map(
+        (name) => `temporary-tool-call-id-${name}-`
+      );
+      for (let i = currentIterationToolCallMessages.length - 1; i >= 0; i -= 1) {
+        const message = currentIterationToolCallMessages[i];
+        if (backgroundPrefixes.some((prefix) => message.includes(prefix))) {
+          currentIterationToolCallMessages.splice(i, 1);
+        }
+      }
+    }
+
     const visibleToolNames: string[] = [];
     toolCalls.forEach((toolCall) => {
       if (!backgroundToolNames.has(toolCall.name)) {
@@ -777,7 +790,9 @@ ${params}
     if (partialToolName) {
       const lastToolNameIndex = fullMessage.lastIndexOf(partialToolName);
       if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
-        visibleToolNames.push(partialToolName);
+        if (!backgroundToolNames.has(partialToolName)) {
+          visibleToolNames.push(partialToolName);
+        }
       }
     }
 
