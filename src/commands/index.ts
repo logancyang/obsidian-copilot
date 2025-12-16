@@ -18,7 +18,7 @@ import { checkIsPlusUser } from "@/plusUtils";
 // Debug modals removed with search v3
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { CopilotSettings, getSettings, updateSetting } from "@/settings/model";
+import { CopilotSettings } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
@@ -393,10 +393,6 @@ export function registerCommands(
       const fileCache = FileCache.getInstance<string>();
       await fileCache.clear();
 
-      // Clear autocomplete cache
-      const { AutocompleteCache } = await import("@/cache/autocompleteCache");
-      AutocompleteCache.getInstance().clear();
-
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
       logError("Error clearing Copilot caches:", error);
@@ -424,14 +420,6 @@ export function registerCommands(
       logError("Error clearing Copilot log file:", error);
       new Notice("Failed to clear Copilot log file.");
     }
-  });
-
-  // Add toggle autocomplete command
-  addCommand(plugin, COMMAND_IDS.TOGGLE_AUTOCOMPLETE, () => {
-    const currentSettings = getSettings();
-    const newValue = !currentSettings.enableAutocomplete;
-    updateSetting("enableAutocomplete", newValue);
-    new Notice(`Copilot autocomplete ${newValue ? "enabled" : "disabled"}`);
   });
 
   // Add selection to chat context command (manual)

@@ -2,7 +2,6 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { CustomModel, getCurrentProject, setSelectedTextContexts } from "@/aiParams";
 import { SelectedTextContext } from "@/types/message";
-import { AutocompleteService } from "@/autocomplete/autocompleteService";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -60,7 +59,6 @@ export default class CopilotPlugin extends Plugin {
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   settingsUnsubscriber?: () => void;
-  private autocompleteService: AutocompleteService;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
   private selectionDebounceTimer?: number;
@@ -162,8 +160,6 @@ export default class CopilotPlugin extends Plugin {
       })
     );
 
-    // Initialize autocomplete service
-    this.autocompleteService = AutocompleteService.getInstance(this);
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.app.workspace.onLayoutReady(() => {
       this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
@@ -184,7 +180,6 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister.cleanup();
     this.settingsUnsubscriber?.();
-    this.autocompleteService?.destroy();
 
     // Cleanup selection handler
     this.cleanupSelectionHandler();

@@ -3,7 +3,6 @@ import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
-import { AcceptKeyOption } from "@/autocomplete/codemirrorIntegration";
 import { type ChainType } from "@/chainFactory";
 import {
   BUILTIN_CHAT_MODELS,
@@ -116,10 +115,6 @@ export interface CopilotSettings {
   // undefined means never checked
   isPlusUser: boolean | undefined;
   inlineEditCommands: LegacyCommandSettings[] | undefined;
-  enableAutocomplete: boolean;
-  autocompleteAcceptKey: AcceptKeyOption;
-  allowAdditionalContext: boolean;
-  enableWordCompletion: boolean;
   projectList: Array<ProjectConfig>;
   passMarkdownImages: boolean;
   enableAutonomousAgent: boolean;
@@ -167,10 +162,6 @@ export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
-
-  // TODO: Force autocomplete features off until user-customizable prompts return
-  newSettings.enableAutocomplete = false;
-  newSettings.enableWordCompletion = false;
   settingsStore.set(settingsAtom, newSettings);
 }
 
@@ -342,20 +333,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   if (typeof sanitizedSettings.enableCustomPromptTemplating !== "boolean") {
     sanitizedSettings.enableCustomPromptTemplating = DEFAULT_SETTINGS.enableCustomPromptTemplating;
   }
-
-  // Ensure allowAdditionalContext has a default value
-  if (typeof sanitizedSettings.allowAdditionalContext !== "boolean") {
-    sanitizedSettings.allowAdditionalContext = DEFAULT_SETTINGS.allowAdditionalContext;
-  }
-
-  // Ensure enableWordCompletion has a default value
-  if (typeof sanitizedSettings.enableWordCompletion !== "boolean") {
-    sanitizedSettings.enableWordCompletion = DEFAULT_SETTINGS.enableWordCompletion;
-  }
-
-  // TODO: Force autocomplete features off until user-customizable prompts return
-  sanitizedSettings.enableAutocomplete = false;
-  sanitizedSettings.enableWordCompletion = false;
 
   // Ensure autonomousAgentMaxIterations has a valid value
   const autonomousAgentMaxIterations = Number(settingsToSanitize.autonomousAgentMaxIterations);

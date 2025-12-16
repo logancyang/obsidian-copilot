@@ -67,20 +67,6 @@ export interface LicenseResponse {
   plan: string;
 }
 
-export interface AutocompleteResponse {
-  response: {
-    completion: string;
-  };
-  elapsed_time_ms: number;
-}
-
-export interface WordCompleteResponse {
-  response: {
-    selected_word: string;
-  };
-  elapsed_time_ms: number;
-}
-
 export class BrevilabsClient {
   private static instance: BrevilabsClient;
   private pluginVersion: string = "Unknown";
@@ -384,45 +370,6 @@ export class BrevilabsClient {
       throw new Error("No data returned from youtube4llm");
     }
 
-    return data;
-  }
-
-  async autocomplete(
-    prefix: string,
-    noteContext: string = "",
-    relevant_notes: string = ""
-  ): Promise<AutocompleteResponse> {
-    const { data, error } = await this.makeRequest<AutocompleteResponse>("/autocomplete", {
-      prompt: prefix,
-      note_context: noteContext,
-      relevant_notes: relevant_notes,
-      max_tokens: 64,
-    });
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new Error("No data returned from autocomplete");
-    }
-    return data;
-  }
-
-  async wordcomplete(
-    prefix: string,
-    suffix: string = "",
-    suggestions: string[]
-  ): Promise<WordCompleteResponse> {
-    const { data, error } = await this.makeRequest<WordCompleteResponse>("/wordcomplete", {
-      prefix: prefix,
-      suffix: suffix,
-      suggestions: suggestions,
-    });
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new Error("No data returned from wordcomplete");
-    }
     return data;
   }
 }
