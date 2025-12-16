@@ -274,7 +274,7 @@ async function extractVariablesFromPrompt(
       if (activeNote) {
         const content = await getFileContent(activeNote, vault);
         if (content) {
-          variableResult.content = `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(activeNote)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`;
+          variableResult.content = `<${VARIABLE_NOTE_TAG}>\n<path>${activeNote.path}</path>\n## ${getFileName(activeNote)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`;
           variableResult.files.push(activeNote);
         }
       } else {
@@ -292,7 +292,7 @@ async function extractVariablesFromPrompt(
         const content = await getFileContent(file, vault);
         if (content) {
           notesContent.push(
-            `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
+            `<${VARIABLE_NOTE_TAG}>\n<path>${file.path}</path>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
           );
           variableResult.files.push(file);
         }
@@ -306,7 +306,7 @@ async function extractVariablesFromPrompt(
         const content = await getFileContent(file, vault);
         if (content) {
           notesContent.push(
-            `<${VARIABLE_NOTE_TAG}>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
+            `<${VARIABLE_NOTE_TAG}>\n<path>${file.path}</path>\n## ${getFileName(file)}\n\n${content}\n</${VARIABLE_NOTE_TAG}>`
           );
           variableResult.files.push(file);
         }
