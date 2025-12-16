@@ -96,6 +96,7 @@ export interface CopilotSettings {
   debug: boolean;
   enableEncryption: boolean;
   maxSourceChunks: number;
+  enableInlineCitations: boolean;
   qaExclusions: string;
   qaInclusions: string;
   groqApiKey: string;
@@ -327,6 +328,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
+  }
+
+  // Ensure enableInlineCitations has a default value
+  if (typeof sanitizedSettings.enableInlineCitations !== "boolean") {
+    sanitizedSettings.enableInlineCitations = DEFAULT_SETTINGS.enableInlineCitations;
   }
 
   // Ensure enableCustomPromptTemplating has a default value

@@ -776,6 +776,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   debug: false,
   enableEncryption: false,
   maxSourceChunks: 15,
+  enableInlineCitations: true,
   groqApiKey: "",
   activeModels: BUILTIN_CHAT_MODELS,
   activeEmbeddingModels: BUILTIN_EMBEDDING_MODELS,
