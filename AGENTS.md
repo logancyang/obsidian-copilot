@@ -192,6 +192,15 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
   - `logError()` for errors
 - Import from logger: `import { logInfo, logWarn, logError } from "@/logger"`
 
+### CSS & Styling
+
+- **NEVER edit `styles.css` directly** - This is a generated file
+- **Source file**: `src/styles/tailwind.css` - Edit this file for custom CSS
+- **Build process**: `npm run build:tailwind` compiles `src/styles/tailwind.css` → `styles.css`
+- **Tailwind classes**: Use Tailwind utility classes in components (see `tailwind.config.js` for available classes)
+- **Custom CSS**: Add custom styles to `src/styles/tailwind.css` after the `@import` statements
+- After editing CSS, always run `npm run build` to regenerate `styles.css`
+
 ## Testing Guidelines
 
 - Unit tests use Jest with TypeScript support
@@ -261,6 +270,27 @@ The TODO.md should be:
 - For technical debt and known issues, see [`TECHDEBT.md`](./docs/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
 
+### AWS Bedrock Usage
+
+**IMPORTANT**: When using AWS Bedrock, always use **cross-region inference profile IDs** for better reliability and availability:
+
+- **Global** (recommended): `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+  - Routes to any commercial AWS region automatically
+  - Best for reliability and performance
+- **US**: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **EU**: `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **APAC**: `apac.anthropic.claude-sonnet-4-5-20250929-v1:0`
+
+❌ **Avoid regional model IDs** (without prefix): `anthropic.claude-sonnet-4-5-20250929-v1:0`
+
+- These only work in specific regions and often fail
+- Not recommended for production use
+
+**References:**
+
+- [AWS Bedrock Cross-Region Inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)
+- [Supported Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html)
+
 ### Obsidian Plugin Environment
 
 - **Global `app` variable**: In Obsidian plugins, `app` is a globally available variable that provides access to the Obsidian API. It's automatically available in all files without needing to import or declare it.
@@ -278,3 +308,4 @@ The TODO.md should be:
   - Non-project chats stored in default repository
   - Backwards compatible - loads existing messages from ProjectManager cache
   - Zero configuration required - works automatically
+- Check @tailwind.config.js to understand what tailwind css classnames are available

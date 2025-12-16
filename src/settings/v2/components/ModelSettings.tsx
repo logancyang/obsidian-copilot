@@ -112,10 +112,29 @@ export const ModelSettings: React.FC = () => {
   };
 
   const handleRefreshChatModels = () => {
-    // Get all custom models (non-built-in models)
-    const customModels = settings.activeModels.filter((model) => !model.isBuiltIn);
+    // Get all custom models (models not in the built-in list)
+    // Check both isBuiltIn flag AND whether the model exists in BUILTIN_CHAT_MODELS
+    const customModels = settings.activeModels.filter((model) => {
+      // If explicitly marked as not built-in, it's custom
+      if (model.isBuiltIn === false) {
+        // But exclude models that exist in BUILTIN_CHAT_MODELS (like SiliconFlow)
+        const existsInBuiltIn = BUILTIN_CHAT_MODELS.some(
+          (builtIn) => builtIn.name === model.name && builtIn.provider === model.provider
+        );
+        return !existsInBuiltIn;
+      }
+      // If isBuiltIn is undefined/null, check if it exists in built-in list
+      if (model.isBuiltIn === undefined || model.isBuiltIn === null) {
+        const existsInBuiltIn = BUILTIN_CHAT_MODELS.some(
+          (builtIn) => builtIn.name === model.name && builtIn.provider === model.provider
+        );
+        return !existsInBuiltIn;
+      }
+      // If isBuiltIn is true, it's a built-in model
+      return false;
+    });
 
-    // Create a new array with built-in models and custom models
+    // Create a new array with built-in models first, then custom models
     const updatedModels = [...BUILTIN_CHAT_MODELS, ...customModels];
 
     // Update the settings
@@ -124,10 +143,29 @@ export const ModelSettings: React.FC = () => {
   };
 
   const handleRefreshEmbeddingModels = () => {
-    // Get all custom models (non-built-in models)
-    const customModels = settings.activeEmbeddingModels.filter((model) => !model.isBuiltIn);
+    // Get all custom models (models not in the built-in list)
+    // Check both isBuiltIn flag AND whether the model exists in BUILTIN_EMBEDDING_MODELS
+    const customModels = settings.activeEmbeddingModels.filter((model) => {
+      // If explicitly marked as not built-in, it's custom
+      if (model.isBuiltIn === false) {
+        // But exclude models that exist in BUILTIN_EMBEDDING_MODELS
+        const existsInBuiltIn = BUILTIN_EMBEDDING_MODELS.some(
+          (builtIn) => builtIn.name === model.name && builtIn.provider === model.provider
+        );
+        return !existsInBuiltIn;
+      }
+      // If isBuiltIn is undefined/null, check if it exists in built-in list
+      if (model.isBuiltIn === undefined || model.isBuiltIn === null) {
+        const existsInBuiltIn = BUILTIN_EMBEDDING_MODELS.some(
+          (builtIn) => builtIn.name === model.name && builtIn.provider === model.provider
+        );
+        return !existsInBuiltIn;
+      }
+      // If isBuiltIn is true, it's a built-in model
+      return false;
+    });
 
-    // Create a new array with built-in models and custom models
+    // Create a new array with built-in models first, then custom models
     const updatedModels = [...BUILTIN_EMBEDDING_MODELS, ...customModels];
 
     // Update the settings

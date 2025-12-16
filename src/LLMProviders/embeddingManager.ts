@@ -3,7 +3,12 @@ import { CustomModel } from "@/aiParams";
 import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
-import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import {
+  CopilotSettings,
+  getModelKeyFromModel,
+  getSettings,
+  subscribeToSettingsChange,
+} from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -24,6 +29,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
   [EmbeddingModelProviders.AZURE_OPENAI]: AzureOpenAIEmbeddings,
+  [EmbeddingModelProviders.AZURE_AI_FOUNDRY]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
   [EmbeddingModelProviders.LM_STUDIO]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
@@ -52,6 +58,7 @@ export default class EmbeddingManager {
     [EmbeddingModelProviders.COHEREAI]: () => getSettings().cohereApiKey,
     [EmbeddingModelProviders.GOOGLE]: () => getSettings().googleApiKey,
     [EmbeddingModelProviders.AZURE_OPENAI]: () => getSettings().azureOpenAIApiKey,
+    [EmbeddingModelProviders.AZURE_AI_FOUNDRY]: () => "default-key",
     [EmbeddingModelProviders.OLLAMA]: () => "default-key",
     [EmbeddingModelProviders.LM_STUDIO]: () => "default-key",
     [EmbeddingModelProviders.OPENAI_FORMAT]: () => "default-key",
@@ -255,6 +262,11 @@ export default class EmbeddingManager {
           settings.azureOpenAIApiEmbeddingDeploymentName,
         azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
       },
+      [EmbeddingModelProviders.AZURE_AI_FOUNDRY]: await this.buildAzureAIFoundryEmbeddingConfig(
+        customModel,
+        modelName,
+        settings
+      ),
       [EmbeddingModelProviders.OLLAMA]: {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         model: modelName,
@@ -296,6 +308,39 @@ export default class EmbeddingManager {
       providerConfig[customModel.provider as EmbeddingModelProviders] || {};
 
     return { ...baseConfig, ...selectedProviderConfig };
+  }
+
+  /**
+   * Builds configuration for Azure AI Foundry embedding models.
+   * Uses the same Azure OpenAI-compatible API pattern as chat models.
+   * SDK pattern: new AzureOpenAI({ endpoint, apiKey, deployment, apiVersion })
+   */
+  private async buildAzureAIFoundryEmbeddingConfig(
+    customModel: CustomModel,
+    modelName: string,
+    settings: CopilotSettings
+  ): Promise<any> {
+    const apiKey = await getDecryptedKey(customModel.apiKey || "");
+    const endpoint = customModel.azureAIFoundryEndpoint || customModel.baseUrl || "";
+    const apiVersion = customModel.azureAIFoundryApiVersion || "2024-04-01-preview";
+    const normalizedEndpoint = endpoint.replace(/\/+$/, "");
+
+    return {
+      modelName,
+      openAIApiKey: apiKey,
+      batchSize: settings.embeddingBatchSize,
+      configuration: {
+        baseURL: `${normalizedEndpoint}/openai/deployments/${modelName}`,
+        fetch: customModel.enableCors ? safeFetch : undefined,
+        defaultQuery: {
+          "api-version": apiVersion,
+        },
+        defaultHeaders: {
+          "Content-Type": "application/json",
+          "api-key": apiKey,
+        },
+      },
+    };
   }
 
   async ping(model: CustomModel): Promise<boolean> {

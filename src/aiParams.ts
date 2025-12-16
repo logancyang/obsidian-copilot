@@ -146,6 +146,11 @@ export interface CustomModel {
   azureOpenAIApiVersion?: string;
   azureOpenAIApiEmbeddingDeploymentName?: string;
 
+  // Azure AI Foundry specific fields
+  azureAIFoundryEndpoint?: string;
+  azureAIFoundryModelType?: "openai" | "anthropic";
+  azureAIFoundryApiVersion?: string;
+
   // Amazon Bedrock specific fields
   bedrockRegion?: string;
 

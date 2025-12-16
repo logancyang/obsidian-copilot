@@ -48,6 +48,7 @@ interface FormErrors {
   apiVersion: boolean;
   displayName: boolean;
   bedrockRegion: boolean;
+  azureAIFoundryEndpoint: boolean;
 }
 
 interface ModelAddDialogProps {
@@ -82,6 +83,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     apiVersion: false,
     displayName: false,
     bedrockRegion: false,
+    azureAIFoundryEndpoint: false,
   });
 
   const setError = (field: keyof FormErrors, value: boolean) => {
@@ -97,6 +99,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       apiVersion: false,
       displayName: false,
       bedrockRegion: false,
+      azureAIFoundryEndpoint: false,
     });
   };
 
@@ -130,6 +133,13 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       newErrors.bedrockRegion = false;
     } else {
       newErrors.bedrockRegion = false;
+    }
+
+    // Validate Azure AI Foundry specific fields
+    if (model.provider === ChatModelProviders.AZURE_AI_FOUNDRY) {
+      const endpoint = model.azureAIFoundryEndpoint || model.baseUrl;
+      newErrors.azureAIFoundryEndpoint = !endpoint;
+      if (!endpoint) isValid = false;
     }
 
     setErrors(newErrors);
@@ -186,6 +196,9 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       azureOpenAIApiEmbeddingDeploymentName:
         modelData.azureOpenAIApiEmbeddingDeploymentName?.trim(),
       azureOpenAIApiVersion: modelData.azureOpenAIApiVersion?.trim(),
+      azureAIFoundryEndpoint: modelData.azureAIFoundryEndpoint?.trim(),
+      azureAIFoundryModelType: modelData.azureAIFoundryModelType,
+      azureAIFoundryApiVersion: modelData.azureAIFoundryApiVersion?.trim(),
       bedrockRegion: modelData.bedrockRegion?.trim(),
     };
   };
@@ -379,6 +392,75 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               />
             </FormField>
           );
+        case ChatModelProviders.AZURE_AI_FOUNDRY:
+          return (
+            <>
+              <FormField
+                label="Model Type"
+                required
+                description="Select the API type for your model"
+              >
+                <Select
+                  value={model.azureAIFoundryModelType || "openai"}
+                  onValueChange={(value: "openai" | "anthropic") =>
+                    setModel({ ...model, azureAIFoundryModelType: value })
+                  }
+                >
+                  <SelectTrigger className="tw-w-full">
+                    <SelectValue placeholder="Select model type" />
+                  </SelectTrigger>
+                  <SelectContent container={dialogElement}>
+                    <SelectItem value="openai">OpenAI (GPT-4o, GPT-5, etc.)</SelectItem>
+                    <SelectItem value="anthropic">Anthropic (Claude)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </FormField>
+              <FormField
+                label="Endpoint URL"
+                required
+                error={errors.azureAIFoundryEndpoint}
+                errorMessage="Endpoint URL is required"
+                description={
+                  model.azureAIFoundryModelType === "anthropic"
+                    ? "e.g., https://<resource>.services.ai.azure.com/anthropic/"
+                    : "e.g., https://<resource>.cognitiveservices.azure.com/"
+                }
+              >
+                <Input
+                  type="text"
+                  placeholder={
+                    model.azureAIFoundryModelType === "anthropic"
+                      ? "https://<resource>.services.ai.azure.com/anthropic/"
+                      : "https://<resource>.cognitiveservices.azure.com/"
+                  }
+                  value={model.azureAIFoundryEndpoint || ""}
+                  onChange={(e) => {
+                    setModel({ ...model, azureAIFoundryEndpoint: e.target.value });
+                    setError("azureAIFoundryEndpoint", false);
+                  }}
+                />
+              </FormField>
+              <FormField
+                label="API Version"
+                description={
+                  model.azureAIFoundryModelType === "anthropic"
+                    ? "Azure AI Foundry API version for Anthropic (defaults to 2023-06-01)"
+                    : "Azure OpenAI API version (defaults to 2024-12-01-preview)"
+                }
+              >
+                <Input
+                  type="text"
+                  placeholder={
+                    model.azureAIFoundryModelType === "anthropic"
+                      ? "2023-06-01"
+                      : "2024-12-01-preview"
+                  }
+                  value={model.azureAIFoundryApiVersion || ""}
+                  onChange={(e) => setModel({ ...model, azureAIFoundryApiVersion: e.target.value })}
+                />
+              </FormField>
+            </>
+          );
         default:
           return null;
       }
@@ -410,6 +492,15 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   };
 
   const getPlaceholderUrl = () => {
+    if (model.provider === ChatModelProviders.AZURE_AI_FOUNDRY) {
+      if (model.azureAIFoundryEndpoint) {
+        return model.azureAIFoundryEndpoint;
+      }
+      return model.azureAIFoundryModelType === "anthropic"
+        ? "https://<resource>.services.ai.azure.com/anthropic/"
+        : "https://<resource>.cognitiveservices.azure.com/";
+    }
+
     if (model.provider !== ChatModelProviders.AZURE_OPENAI) {
       return providerInfo.host;
     }

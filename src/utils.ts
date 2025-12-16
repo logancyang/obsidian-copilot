@@ -1032,6 +1032,7 @@ export function getNeedSetKeyProvider() {
     ChatModelProviders.OLLAMA,
     ChatModelProviders.LM_STUDIO,
     ChatModelProviders.AZURE_OPENAI,
+    ChatModelProviders.AZURE_AI_FOUNDRY,
     EmbeddingModelProviders.COPILOT_PLUS,
     EmbeddingModelProviders.COPILOT_PLUS_JINA,
   ];
@@ -1059,6 +1060,26 @@ export function checkModelApiKey(
     }
 
     // Region defaults to us-east-1 if not specified, so API key is the only required check
+    return { hasApiKey: true };
+  }
+
+  // Azure AI Foundry requires both API key and endpoint to be set on the model
+  if (model.provider === ChatModelProviders.AZURE_AI_FOUNDRY) {
+    const endpoint = model.azureAIFoundryEndpoint || model.baseUrl;
+    if (!model.apiKey) {
+      return {
+        hasApiKey: false,
+        errorNotice:
+          "Azure AI Foundry API key is missing. Please update the model configuration with your API key.",
+      };
+    }
+    if (!endpoint) {
+      return {
+        hasApiKey: false,
+        errorNotice:
+          "Azure AI Foundry endpoint is missing. Please update the model configuration with your endpoint URL.",
+      };
+    }
     return { hasApiKey: true };
   }
 
