@@ -45,7 +45,6 @@ import {
   TFolder,
   WorkspaceLeaf,
 } from "obsidian";
-import { IntentAnalyzer } from "./LLMProviders/intentAnalyzer";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { extractChatTitle, extractChatDate } from "@/utils/chatHistoryUtils";
 import { v4 as uuidv4 } from "uuid";
@@ -135,7 +134,7 @@ export default class CopilotPlugin extends Plugin {
       }
     });
 
-    IntentAnalyzer.initTools(this.app.vault);
+    // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {

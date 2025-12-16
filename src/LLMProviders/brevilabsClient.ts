@@ -6,20 +6,6 @@ import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
 
-export interface BrocaResponse {
-  response: {
-    tool_calls: Array<{
-      tool: string;
-      args: {
-        [key: string]: any;
-      };
-    }>;
-    salience_terms: string[];
-  };
-  elapsed_time_ms: number;
-  detail?: string;
-}
-
 export interface RerankResponse {
   response: {
     object: string;
@@ -259,21 +245,6 @@ export class BrevilabsClient {
     }
     turnOnPlus();
     return { isValid: true, plan: data?.plan };
-  }
-
-  async broca(userMessage: string, isProjectMode: boolean): Promise<BrocaResponse> {
-    const { data, error } = await this.makeRequest<BrocaResponse>("/broca", {
-      message: userMessage,
-      is_project_mode: isProjectMode,
-    });
-    if (error) {
-      throw error;
-    }
-    if (!data) {
-      throw new Error("No data returned from broca");
-    }
-
-    return data;
   }
 
   async rerank(query: string, documents: string[]): Promise<RerankResponse> {

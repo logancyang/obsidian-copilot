@@ -29,35 +29,36 @@ chainRunner/
 
 ## Tool Calling Systems Comparison
 
-### 1. Legacy Tool Calling (CopilotPlusChainRunner)
+### 1. Model-Based Tool Planning (CopilotPlusChainRunner)
 
 **How it works:**
 
-- Uses Brevilabs API (`IntentAnalyzer.analyzeIntent()`) to analyze user intent
-- Determines which tools to call based on the analysis
-- Executes tools synchronously before sending to LLM
+- Uses chat model with tool descriptions to plan which tools to call
+- Model outputs tool calls in XML format (e.g., `<use_tool><name>...</name><args>...</args></use_tool>`)
+- Executes tools synchronously before sending to LLM for final response
 - Enhances user message with tool outputs as context
+- Supports `@` commands for explicit tool invocation (`@vault`, `@websearch`, `@memory`)
 
 **Flow:**
 
 ```
-User Message → Intent Analysis → Tool Execution → Enhanced Prompt → LLM Response
+User Message → Model Planning → Tool Execution → Enhanced Prompt → LLM Response
 ```
 
 **Example:**
 
 ```typescript
-// 1. Analyze intent
-const toolCalls = await IntentAnalyzer.analyzeIntent(message);
+// 1. Plan tools using model
+const { toolCalls, salientTerms } = await this.planToolCalls(message, chatModel);
 
-// 2. Execute tools
+// 2. Process @commands (add localSearch, webSearch, etc. if needed)
+toolCalls = await this.processAtCommands(message, toolCalls, { salientTerms });
+
+// 3. Execute tools
 const toolOutputs = await this.executeToolCalls(toolCalls);
 
-// 3. Enhance message with context
-const enhancedMessage = this.prepareEnhancedUserMessage(message, toolOutputs);
-
 // 4. Send to LLM
-const response = await this.streamMultimodalResponse(enhancedMessage, ...);
+const response = await this.streamMultimodalResponse(message, toolOutputs, ...);
 ```
 
 **Tools Available:**
