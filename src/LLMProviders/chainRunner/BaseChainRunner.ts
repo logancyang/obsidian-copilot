@@ -37,6 +37,19 @@ export abstract class BaseChainRunner implements ChainRunner {
     }
   ): Promise<string>;
 
+  /**
+   * Handles a completed LLM response by saving conversation memory, updating the chat history, and logging summary details.
+   *
+   * @param fullAIResponse - The final response content to present.
+   * @param userMessage - The originating user message.
+   * @param abortController - Abort controller used to track cancellation reasons.
+   * @param addMessage - Callback to append a message to the UI state.
+   * @param updateCurrentAiMessage - Callback to update the streaming message placeholder.
+   * @param sources - Optional sources associated with the response.
+   * @param llmFormattedOutput - Optional formatted output string for memory storage.
+   * @param responseMetadata - Optional metadata describing truncation or token usage.
+   * @returns The full AI response text.
+   */
   protected async handleResponse(
     fullAIResponse: string,
     userMessage: ChatMessage,
@@ -121,6 +134,12 @@ export abstract class BaseChainRunner implements ChainRunner {
     return fullAIResponse;
   }
 
+  /**
+   * Logs provider errors and streams a user-friendly message to the UI.
+   *
+   * @param error - Raw provider error object.
+   * @param processErrorChunk - Callback used to stream error text to the UI.
+   */
   protected async handleError(error: any, processErrorChunk: (message: string) => void) {
     const msg = err2String(error);
     logError("Error during LLM invocation:", msg);
@@ -139,16 +158,24 @@ export abstract class BaseChainRunner implements ChainRunner {
     }
 
     logError(errorData);
-    processErrorChunk(this.enhancedErrorMsg(errorMessage, msg));
+    processErrorChunk(this.enhancedErrorMsg(errorMessage, msg, error));
   }
 
-  private enhancedErrorMsg(errorMessage: string, msg: string) {
+  /**
+   * Builds an enhanced user-facing error message that includes targeted guidance when authentication failures are detected.
+   *
+   * @param errorMessage - The provider-specific error message or code.
+   * @param msg - Normalized error string used for diagnostics.
+   * @param error - Raw error object returned from the provider SDK.
+   * @returns A formatted error string suitable for streaming to the UI.
+   */
+  private enhancedErrorMsg(errorMessage: string, msg: string, error: unknown) {
     // remove langchain troubleshooting URL from error message
     const ignoreEndIndex = errorMessage.search("Troubleshooting URL");
     errorMessage = ignoreEndIndex !== -1 ? errorMessage.slice(0, ignoreEndIndex) : errorMessage;
 
     // add more user guide for invalid API key
-    if (msg.search(/401|invalid|not valid/gi) !== -1) {
+    if (this.isAuthenticationError(error, msg)) {
       errorMessage =
         "Something went wrong. Please check if you have set your API key." +
         "\nPath: Settings > copilot plugin > Basic Tab > Set Keys." +
@@ -157,5 +184,47 @@ export abstract class BaseChainRunner implements ChainRunner {
         errorMessage;
     }
     return errorMessage;
+  }
+
+  /**
+   * Determines whether an error is likely related to authentication or missing API credentials.
+   *
+   * @param error - Raw provider error object.
+   * @param normalizedMessage - Fallback message string for heuristic matching.
+   * @returns True if the error indicates an authentication problem.
+   */
+  private isAuthenticationError(error: unknown, normalizedMessage: string): boolean {
+    const responseError = (error as { response?: { status?: number; data?: any } })?.response;
+    const errorData = responseError?.data?.error ?? (error as { error?: unknown })?.error;
+    const rawStatus = responseError?.status ?? (errorData as { status?: number | string })?.status;
+    const statusCode =
+      typeof rawStatus === "string"
+        ? Number.parseInt(rawStatus, 10)
+        : (rawStatus as number | undefined);
+    const errorObject =
+      typeof errorData === "object" && errorData !== null
+        ? (errorData as Record<string, unknown>)
+        : undefined;
+    const loweredMessage = (
+      typeof errorObject?.message === "string" ? errorObject.message : normalizedMessage
+    ).toLowerCase();
+    const loweredCode = typeof errorObject?.code === "string" ? errorObject.code.toLowerCase() : "";
+    const loweredType = typeof errorObject?.type === "string" ? errorObject.type.toLowerCase() : "";
+
+    if (statusCode === 401) {
+      return true;
+    }
+
+    const authHints = [
+      "api key",
+      "apikey",
+      "unauthorized",
+      "authentication",
+      "invalid authentication",
+    ];
+    return authHints.some(
+      (hint) =>
+        loweredMessage.includes(hint) || loweredCode.includes(hint) || loweredType.includes(hint)
+    );
   }
 }
