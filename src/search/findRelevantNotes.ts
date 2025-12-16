@@ -4,7 +4,6 @@ import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { TFile } from "obsidian";
 
-const MIN_SIMILARITY_SCORE = 0.4;
 const MAX_K = 20;
 const ORIGINAL_WEIGHT = 0.7;
 const LINKS_WEIGHT = 0.3;
@@ -39,29 +38,6 @@ async function getNoteEmbeddings(notePath: string, db: Orama<any>): Promise<numb
 }
 
 /**
- * Gets the average embedding for the given embeddings.
- * @param noteEmbeddings - The embeddings of the original note.
- * @returns The average embedding.
- */
-function getAverageEmbedding(noteEmbeddings: number[][]): number[] {
-  if (noteEmbeddings.length === 0) {
-    return [];
-  }
-
-  const embeddingLength = noteEmbeddings[0].length;
-  const averageEmbedding = Array(embeddingLength).fill(0);
-  for (const embedding of noteEmbeddings) {
-    for (let i = 0; i < embeddingLength; i++) {
-      averageEmbedding[i] += embedding[i];
-    }
-  }
-  for (let i = 0; i < embeddingLength; i++) {
-    averageEmbedding[i] /= noteEmbeddings.length;
-  }
-  return averageEmbedding;
-}
-
-/**
  * Gets the highest score hits for each note and removes the current file path
  * from the results.
  * @param hits - The hits to get the highest score for.
@@ -84,6 +60,13 @@ function getHighestScoreHits(hits: Result<InternalTypedDocument<any>>[], current
   return hitMap;
 }
 
+/**
+ * Calculates the similarity score for the given file path by searching with each
+ * chunk embedding individually (no averaging) and aggregating results by max score.
+ * @param db - The Orama database.
+ * @param filePath - The file path to calculate similarity scores for.
+ * @returns A map of note paths to their highest similarity scores.
+ */
 async function calculateSimilarityScore({
   db,
   filePath,
@@ -94,19 +77,40 @@ async function calculateSimilarityScore({
   const debug = getSettings().debug;
 
   const currentNoteEmbeddings = await getNoteEmbeddings(filePath, db);
-  const averageEmbedding = getAverageEmbedding(currentNoteEmbeddings);
-  if (averageEmbedding.length === 0) {
+  if (currentNoteEmbeddings.length === 0) {
     if (debug) {
       console.log("No embeddings found for note:", filePath);
     }
     return new Map();
   }
 
-  const hits = await DBOperations.getDocsByEmbedding(db, averageEmbedding, {
-    limit: MAX_K,
-    similarity: MIN_SIMILARITY_SCORE,
-  });
-  return getHighestScoreHits(hits, filePath);
+  // Search with EACH chunk embedding separately (no averaging)
+  // Use Promise.all() to parallelize searches for better performance
+  const searchPromises = currentNoteEmbeddings.map((embedding) =>
+    DBOperations.getDocsByEmbedding(db, embedding, {
+      limit: MAX_K,
+      similarity: 0, // No hard threshold - use top-K ranking
+    })
+  );
+
+  const searchResults = await Promise.all(searchPromises);
+
+  // Flatten all hits from all chunk searches
+  const allHits = searchResults.flat();
+
+  // Aggregate by taking max score per note path
+  const aggregatedHits = getHighestScoreHits(allHits, filePath);
+
+  // Cap to top MAX_K results to prevent unbounded growth from multi-chunk notes
+  if (aggregatedHits.size <= MAX_K) {
+    return aggregatedHits;
+  }
+
+  const topK = Array.from(aggregatedHits.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_K);
+
+  return new Map(topK);
 }
 
 function getNoteLinks(file: TFile) {

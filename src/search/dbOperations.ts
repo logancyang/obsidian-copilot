@@ -295,13 +295,11 @@ export class DBOperations {
   public static async getDocsByPath(db: Orama<any>, path: string) {
     if (!db) throw new Error("DB not initialized");
     if (!path) return;
-    const result = await search(db, {
-      term: path,
-      properties: ["path"],
-      exact: true,
-      includeVectors: true,
-    });
-    return result.hits;
+    // Use getAllDocuments + JS filter for reliable path matching (handles Unicode/Chinese correctly)
+    const allDocs = await DBOperations.getAllDocuments(db);
+    const filtered = allDocs.filter((doc: any) => doc.path === path);
+    // Return in same format as before (hits with document and score)
+    return filtered.map((doc: any) => ({ document: doc, score: 1 }));
   }
 
   public static async getDocsByEmbedding(
