@@ -54,6 +54,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { isRequiredChatModel } from "@/utils/modelUtils";
 
 const CAPABILITY_ICONS: Record<
   ModelCapability,
@@ -291,6 +292,7 @@ const DesktopSortableTableRow: React.FC<{
           <Checkbox
             id={`${getModelKeyFromModel(model)}-enabled`}
             checked={model.enabled}
+            disabled={model.enabled && isRequiredChatModel(model)}
             onCheckedChange={(checked: boolean) => onUpdateModel({ ...model, enabled: checked })}
             className="tw-mx-auto"
           />

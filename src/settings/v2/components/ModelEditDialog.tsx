@@ -12,13 +12,12 @@ import {
   ChatModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
-  Provider,
   ProviderMetadata,
-  ProviderSettingsKeyMap,
   SettingKeyProviders,
 } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
+import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { App, Modal, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -46,10 +45,6 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   const [providerInfo, setProviderInfo] = useState<ProviderMetadata>({} as ProviderMetadata);
   const settings = getSettings();
   const isBedrockProvider = localModel.provider === ChatModelProviders.AMAZON_BEDROCK;
-
-  const getDefaultApiKey = (provider: Provider): string => {
-    return (settings[ProviderSettingsKeyMap[provider as SettingKeyProviders]] as string) || "";
-  };
 
   useEffect(() => {
     setLocalModel(model);
@@ -120,7 +115,10 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
     description,
   })) as Array<{ id: ModelCapability; label: string; description: string }>;
 
-  const displayApiKey = localModel.apiKey || getDefaultApiKey(localModel.provider as Provider);
+  const displayApiKey = getApiKeyForProvider(
+    localModel.provider as SettingKeyProviders,
+    localModel
+  );
   const showOtherParameters = !isEmbeddingModel && localModel.provider !== "copilot-plus-jina";
 
   return (

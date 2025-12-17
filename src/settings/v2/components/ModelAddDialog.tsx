@@ -27,15 +27,14 @@ import {
   EmbeddingModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
-  Provider,
   ProviderMetadata,
-  ProviderSettingsKeyMap,
   SettingKeyProviders,
 } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
 import { logError } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
+import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { ChevronDown, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
@@ -136,10 +135,6 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     return isValid;
   };
 
-  const getDefaultApiKey = (provider: Provider): string => {
-    return (settings[ProviderSettingsKeyMap[provider as SettingKeyProviders]] as string) || "";
-  };
-
   const getInitialModel = (provider = defaultProvider): CustomModel => {
     const baseModel = {
       name: "",
@@ -147,7 +142,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       enabled: true,
       isBuiltIn: false,
       baseUrl: "",
-      apiKey: getDefaultApiKey(provider),
+      apiKey: getApiKeyForProvider(provider as SettingKeyProviders),
       isEmbeddingModel,
       capabilities: [],
     };
@@ -222,7 +217,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     setModel({
       ...model,
       provider,
-      apiKey: getDefaultApiKey(provider),
+      apiKey: getApiKeyForProvider(provider as SettingKeyProviders),
       ...(provider === ChatModelProviders.OPENAI ? { openAIOrgId: settings.openAIOrgId } : {}),
       ...(provider === ChatModelProviders.AZURE_OPENAI
         ? {
