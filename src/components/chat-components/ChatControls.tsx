@@ -15,6 +15,7 @@ import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   AlertTriangle,
+  CheckCircle,
   ChevronDown,
   Download,
   FileText,
@@ -359,6 +360,19 @@ export function ChatControls({
                 Relevant Note
               </div>
               <SettingSwitch checked={settings.showRelevantNotes} />
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="tw-flex tw-justify-between"
+              onSelect={(e) => {
+                e.preventDefault();
+                updateSetting("autoAcceptEdits", !settings.autoAcceptEdits);
+              }}
+            >
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <CheckCircle className="tw-size-4" />
+                Auto-accept Edits
+              </div>
+              <SettingSwitch checked={settings.autoAcceptEdits} />
             </DropdownMenuItem>
             {selectedChain === ChainType.PROJECT_CHAIN ? (
               <>

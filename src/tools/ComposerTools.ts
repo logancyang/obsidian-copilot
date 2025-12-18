@@ -5,6 +5,7 @@ import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createTool } from "./SimpleTool";
 import { ensureFolderExists } from "@/utils";
+import { getSettings } from "@/settings/model";
 
 async function getFile(file_path: string): Promise<TFile> {
   let file = app.vault.getAbstractFileByPath(file_path);
@@ -146,7 +147,11 @@ const writeToFileTool = createTool({
     // Convert object content to JSON string if needed
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
-    if (confirmation === false) {
+    // Check if auto-accept edits is enabled in settings
+    const settings = getSettings();
+    const shouldBypassConfirmation = settings.autoAcceptEdits || confirmation === false;
+
+    if (shouldBypassConfirmation) {
       try {
         const file = await getFile(path);
         await app.vault.modify(file, contentString);
@@ -305,6 +310,26 @@ const replaceInFileTool = createTool({
 
       if (originalContent === modifiedContent) {
         return `No changes made to ${path}. The search text was not found or replacement resulted in identical content. Call writeToFile instead`;
+      }
+
+      // Check if auto-accept edits is enabled in settings
+      const settings = getSettings();
+      if (settings.autoAcceptEdits) {
+        // Bypass preview and apply changes directly
+        try {
+          await app.vault.modify(file, modifiedContent);
+          return JSON.stringify({
+            result: "accepted" as ApplyViewResult,
+            blocksApplied: changesApplied,
+            message: `Applied ${changesApplied} SEARCH/REPLACE block(s) without preview. Do not call this tool again to modify this file in response to the current user request.`,
+          });
+        } catch (error) {
+          return JSON.stringify({
+            result: "failed" as ApplyViewResult,
+            blocksApplied: changesApplied,
+            message: `Error applying changes without preview: ${error?.message || error}`,
+          });
+        }
       }
 
       // Show preview of changes
