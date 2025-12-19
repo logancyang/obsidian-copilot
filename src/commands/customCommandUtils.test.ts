@@ -13,12 +13,18 @@ import * as settingsModelModule from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
 import { DEFAULT_SETTINGS } from "@/constants";
+import { logWarn } from "@/logger";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   TFile: jest.fn(),
   Vault: jest.fn(),
+}));
+
+// Mock logger
+jest.mock("@/logger", () => ({
+  logWarn: jest.fn(),
 }));
 
 // Mock the utility functions
@@ -34,14 +40,8 @@ jest.mock("@/utils", () => ({
 describe("processedPrompt()", () => {
   let mockVault: Vault;
   let mockActiveNote: TFile;
-  let originalConsoleWarn: typeof console.warn;
 
   beforeEach(() => {
-    // Save original console.warn
-    originalConsoleWarn = console.warn;
-    // Mock console.warn
-    console.warn = jest.fn();
-
     // Reset mocks before each test
     jest.clearAllMocks();
     jest.resetAllMocks();
@@ -62,11 +62,6 @@ describe("processedPrompt()", () => {
       path: "path/to/active/note.md",
       basename: "Active Note",
     } as TFile;
-  });
-
-  afterEach(() => {
-    // Restore original console.warn
-    console.warn = originalConsoleWarn;
   });
 
   it("should add 1 context and selectedText", async () => {
@@ -145,6 +140,19 @@ describe("processedPrompt()", () => {
       "Rewrite the following text {selected_text}\n\n<selected_text>\nhere is some selected text 12345\n</selected_text>"
     );
     expect(result.includedFiles).toEqual([]);
+  });
+
+  it("should treat {} as literal when skipEmptyBraces is true", async () => {
+    const customPrompt = "Rewrite the following text {}";
+    const selectedText = "here is some selected text 12345";
+
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote, true);
+
+    // {} should be preserved as literal, not replaced
+    expect(result.processedPrompt).toBe("Rewrite the following text {}\n\n");
+    expect(result.includedFiles).toEqual([]);
+    expect(result.processedPrompt).not.toContain("<selected_text>");
+    expect(result.processedPrompt).not.toContain("{selected_text}");
   });
 
   it("should process {activeNote} correctly", async () => {
@@ -569,7 +577,7 @@ describe("processedPrompt()", () => {
     );
     expect(result.includedFiles).toContain(mockActiveNote);
     // Expect the warning for the invalid variable
-    expect(console.warn).toHaveBeenCalledWith("No notes found for variable: invalidVariable");
+    expect(logWarn).toHaveBeenCalledWith("No notes found for variable: invalidVariable");
   });
 });
 
@@ -788,6 +796,17 @@ describe("validateCommandName", () => {
 
   it("returns null if unchanged currentCommandName", () => {
     expect(validateCommandName("Command One", baseCommands, "Command One")).toBeNull();
-    expect(validateCommandName("  Command One  ", baseCommands, "Command One")).toBeNull();
+  });
+
+  it("returns error for names with leading or trailing whitespace", () => {
+    expect(validateCommandName("  Command One  ", baseCommands)).toBe(
+      "Command name cannot have leading or trailing spaces"
+    );
+    expect(validateCommandName(" Leading", baseCommands)).toBe(
+      "Command name cannot have leading or trailing spaces"
+    );
+    expect(validateCommandName("Trailing ", baseCommands)).toBe(
+      "Command name cannot have leading or trailing spaces"
+    );
   });
 });

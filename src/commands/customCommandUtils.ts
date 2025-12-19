@@ -11,6 +11,7 @@ import {
 import { CustomCommand } from "@/commands/type";
 import { normalizePath, Notice, TAbstractFile, TFile, Vault, Editor } from "obsidian";
 import { getSettings } from "@/settings/model";
+import { logWarn } from "@/logger";
 import {
   updateCachedCommands,
   getCachedCustomCommands,
@@ -40,12 +41,16 @@ export function validateCommandName(
 ): string | null {
   const trimmedName = name.trim();
 
-  if (currentCommandName && trimmedName === currentCommandName) {
-    return null; // No change is allowed
-  }
-
   if (!trimmedName) {
     return "Command name cannot be empty";
+  }
+
+  if (name !== trimmedName) {
+    return "Command name cannot have leading or trailing spaces";
+  }
+
+  if (currentCommandName && name === currentCommandName) {
+    return null; // No change needed
   }
 
   // eslint-disable-next-line no-control-regex
@@ -321,7 +326,7 @@ async function extractVariablesFromPrompt(
       if (variableName.startsWith('"')) {
         // DO NOTHING as the user probably wants to write a JSON object
       } else {
-        console.warn(`No notes found for variable: ${variableName}`);
+        logWarn(`No notes found for variable: ${variableName}`);
       }
     }
   }
@@ -340,19 +345,22 @@ export interface ProcessedPromptResult {
 /**
  * Process a custom prompt by replacing variables and adding note contents.
  * Returns the processed prompt string and a list of files included in the processing.
+ *
+ * @param skipEmptyBraces - When true, treats `{}` as a literal and skips selected-text/active-note expansion.
  */
 export async function processPrompt(
   customPrompt: string,
   selectedText: string,
   vault: Vault,
-  activeNote?: TFile | null
+  activeNote?: TFile | null,
+  skipEmptyBraces: boolean = false
 ): Promise<ProcessedPromptResult> {
   const settings = getSettings();
   const includedFiles = new Set<TFile>();
 
   if (!settings.enableCustomPromptTemplating) {
     // If templating is disabled, check if activeNote should be included for {}
-    if (customPrompt.includes("{}") && !selectedText && activeNote) {
+    if (!skipEmptyBraces && customPrompt.includes("{}") && !selectedText && activeNote) {
       includedFiles.add(activeNote);
     }
     return {
@@ -373,7 +381,7 @@ export async function processPrompt(
   let additionalInfo = "";
   let activeNoteContent: string | null = null;
 
-  if (processedPrompt.includes("{}")) {
+  if (!skipEmptyBraces && processedPrompt.includes("{}")) {
     processedPrompt = processedPrompt.replace(/\{\}/g, `{${SELECTED_TEXT_TAG}}`);
     if (selectedText) {
       additionalInfo += `<${SELECTED_TEXT_TAG}>\n${selectedText}\n</${SELECTED_TEXT_TAG}>`;
