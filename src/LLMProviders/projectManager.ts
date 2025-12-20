@@ -16,10 +16,11 @@ import { logError, logInfo, logWarn } from "@/logger";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange, updateSetting } from "@/settings/model";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
+import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { App, Notice, TFile } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
 import ChainManager from "./chainManager";
@@ -34,6 +35,7 @@ export default class ProjectManager {
   private readonly projectContextCache: ProjectContextCache;
   private fileParserManager: FileParserManager;
   private loadTracker: ProjectLoadTracker;
+  private readonly projectUsageTimestampsManager = new RecentUsageManager<string>();
 
   private constructor(app: App, plugin: CopilotPlugin) {
     this.app = app;
@@ -90,8 +92,8 @@ export default class ProjectManager {
       for (const nextProject of nextProjects) {
         const prevProject = prevProjects.find((p) => p.id === nextProject.id);
         if (prevProject) {
-          // Check if project configuration has changed
-          if (JSON.stringify(prevProject) !== JSON.stringify(nextProject)) {
+          // Check if project configuration has changed (ignoring UsageTimestamps)
+          if (this.hasMeaningfulProjectConfigChange(prevProject, nextProject)) {
             // Compare project configuration changes and selectively update cache
             await this.compareAndUpdateCache(prevProject, nextProject);
 
@@ -109,6 +111,19 @@ export default class ProjectManager {
     });
   }
 
+  /**
+   * Determine whether a project configuration change should trigger cache reloads.
+   * Ignores `UsageTimestamps` updates used for "recently used" sorting.
+   */
+  private hasMeaningfulProjectConfigChange(
+    prevProject: ProjectConfig,
+    nextProject: ProjectConfig
+  ): boolean {
+    const prevComparable = { ...prevProject, UsageTimestamps: 0 };
+    const nextComparable = { ...nextProject, UsageTimestamps: 0 };
+    return JSON.stringify(prevComparable) !== JSON.stringify(nextComparable);
+  }
+
   public static getInstance(app: App, plugin: CopilotPlugin): ProjectManager {
     if (!ProjectManager.instance) {
       ProjectManager.instance = new ProjectManager(app, plugin);
@@ -122,6 +137,49 @@ export default class ProjectManager {
 
   public getCurrentProjectId(): string | null {
     return this.currentProjectId;
+  }
+
+  /**
+   * Touch the project's usage timestamp in settings with throttled persistence.
+   * Memory is always updated immediately (for UI sorting), but settings writes are throttled.
+   */
+  private touchProjectUsageTimestamps(project: ProjectConfig): void {
+    // Always update memory for immediate UI feedback
+    this.projectUsageTimestampsManager.touch(project.id);
+
+    // Check if we should persist to settings (throttled)
+    const currentProjects = getSettings().projectList || [];
+    const persistedProject = currentProjects.find((p) => p.id === project.id);
+    if (!persistedProject) {
+      return;
+    }
+
+    const timestampToPersist = this.projectUsageTimestampsManager.shouldPersist(
+      project.id,
+      persistedProject.UsageTimestamps
+    );
+
+    if (timestampToPersist === null) {
+      return;
+    }
+
+    updateSetting(
+      "projectList",
+      currentProjects.map((p) =>
+        p.id === project.id ? { ...p, UsageTimestamps: timestampToPersist } : p
+      )
+    );
+
+    // Mark persistence successful for throttling purposes
+    this.projectUsageTimestampsManager.markPersisted(project.id, timestampToPersist);
+  }
+
+  /**
+   * Get the project usage timestamps manager for use in sorting.
+   * This allows UI components to use in-memory values for immediate feedback.
+   */
+  public getProjectUsageTimestampsManager(): RecentUsageManager<string> {
+    return this.projectUsageTimestampsManager;
   }
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {
@@ -167,6 +225,9 @@ export default class ProjectManager {
 
       // fresh chat view
       this.refreshChatView();
+
+      // Touch "recently used" timestamp only after a successful switch.
+      this.touchProjectUsageTimestamps(project);
 
       logInfo(`Switched to project: ${project.name}`);
     } catch (error) {

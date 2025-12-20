@@ -60,9 +60,11 @@ export class ChatPersistenceManager {
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);
-      let existingTopic = existingFile
-        ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter?.topic
+      const existingFrontmatter = existingFile
+        ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter
         : undefined;
+      let existingTopic = existingFrontmatter?.topic;
+      const existingLastAccessedAt = existingFrontmatter?.lastAccessedAt;
 
       const preferredFileName = existingFile
         ? existingFile.path
@@ -72,7 +74,8 @@ export class ChatPersistenceManager {
         chatContent,
         firstMessageEpoch,
         modelKey,
-        existingTopic
+        existingTopic,
+        existingLastAccessedAt
       );
       let targetFile: TFile | null = existingFile;
 
@@ -90,11 +93,21 @@ export class ChatPersistenceManager {
           if (this.isFileAlreadyExistsError(error)) {
             const conflictFile = this.app.vault.getAbstractFileByPath(preferredFileName);
             if (conflictFile && conflictFile instanceof TFile) {
-              // Update existingTopic to prevent unnecessary regeneration
-              existingTopic =
-                this.app.metadataCache.getFileCache(conflictFile)?.frontmatter?.topic ??
-                existingTopic;
-              await this.app.vault.modify(conflictFile, noteContent);
+              // Read existing frontmatter to preserve lastAccessedAt and topic
+              const conflictFrontmatter =
+                this.app.metadataCache.getFileCache(conflictFile)?.frontmatter;
+              existingTopic = conflictFrontmatter?.topic ?? existingTopic;
+              const conflictLastAccessedAt = conflictFrontmatter?.lastAccessedAt;
+
+              // Regenerate content with preserved frontmatter values
+              const updatedContent = this.generateNoteContent(
+                chatContent,
+                firstMessageEpoch,
+                modelKey,
+                existingTopic,
+                conflictLastAccessedAt
+              );
+              await this.app.vault.modify(conflictFile, updatedContent);
               targetFile = conflictFile;
               new Notice("Existing chat note found - updating it now.");
               logInfo(
@@ -119,7 +132,21 @@ export class ChatPersistenceManager {
               if (this.isFileAlreadyExistsError(fallbackError)) {
                 const conflictFile = this.app.vault.getAbstractFileByPath(fallbackName);
                 if (conflictFile && conflictFile instanceof TFile) {
-                  await this.app.vault.modify(conflictFile, noteContent);
+                  // Read existing frontmatter to preserve lastAccessedAt
+                  const conflictFrontmatter =
+                    this.app.metadataCache.getFileCache(conflictFile)?.frontmatter;
+                  const conflictLastAccessedAt = conflictFrontmatter?.lastAccessedAt;
+                  const conflictTopic = conflictFrontmatter?.topic;
+
+                  // Regenerate content with preserved frontmatter values
+                  const updatedContent = this.generateNoteContent(
+                    chatContent,
+                    firstMessageEpoch,
+                    modelKey,
+                    conflictTopic,
+                    conflictLastAccessedAt
+                  );
+                  await this.app.vault.modify(conflictFile, updatedContent);
                   targetFile = conflictFile;
                   new Notice("Existing chat note found - updating it now.");
                   logInfo(
@@ -600,7 +627,8 @@ ${conversationSummary}`;
     chatContent: string,
     firstMessageEpoch: number,
     modelKey: string,
-    topic?: string
+    topic?: string,
+    lastAccessedAt?: number
   ): string {
     const settings = getSettings();
     const currentProject = getCurrentProject();
@@ -609,6 +637,7 @@ ${conversationSummary}`;
 epoch: ${firstMessageEpoch}
 modelKey: "${escapeYamlString(modelKey)}"
 ${topic ? `topic: "${topic}"` : ""}
+${lastAccessedAt ? `lastAccessedAt: ${lastAccessedAt}` : ""}
 ${currentProject ? `projectId: ${currentProject.id}` : ""}
 ${currentProject ? `projectName: ${currentProject.name}` : ""}
 tags:

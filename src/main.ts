@@ -19,7 +19,7 @@ import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/c
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
@@ -54,7 +54,12 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import { extractChatTitle, extractChatDate } from "@/utils/chatHistoryUtils";
+import {
+  extractChatDate,
+  extractChatLastAccessedAtMs,
+  extractChatTitle,
+} from "@/utils/chatHistoryUtils";
+import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface
@@ -73,6 +78,7 @@ export default class CopilotPlugin extends Plugin {
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
   private webSelectionTracker?: WebSelectionTracker;
+  private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -582,11 +588,82 @@ export default class CopilotPlugin extends Plugin {
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
     const files = await this.getChatHistoryFiles();
-    return files.map((file) => ({
-      id: file.path,
-      title: extractChatTitle(file),
-      createdAt: extractChatDate(file),
-    }));
+    return files.map((file) => {
+      const createdAt = extractChatDate(file);
+      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
+
+      // Use effective last used time (prefers in-memory value for immediate UI updates)
+      const effectiveLastAccessedAtMs = this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
+        file.path,
+        persistedLastAccessedAtMs ?? createdAt.getTime()
+      );
+      const lastAccessedAt = new Date(effectiveLastAccessedAtMs);
+
+      return {
+        id: file.path,
+        title: extractChatTitle(file),
+        createdAt,
+        lastAccessedAt,
+      };
+    });
+  }
+
+  /**
+   * Record that a chat history file was accessed by updating its `lastAccessedAt`
+   * YAML frontmatter field (epoch ms), with in-memory tracking and throttled persistence.
+   *
+   * Memory is always updated immediately (for UI sorting), but disk writes are throttled and monotonic.
+   */
+  private async touchChatHistoryLastAccessedAt(file: TFile): Promise<void> {
+    try {
+      // Always update memory for immediate UI feedback
+      this.chatHistoryLastAccessedAtManager.touch(file.path);
+
+      // Check if we should persist to disk (throttled)
+      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
+      const timestampToPersist = this.chatHistoryLastAccessedAtManager.shouldPersist(
+        file.path,
+        persistedLastAccessedAtMs
+      );
+
+      if (timestampToPersist === null) {
+        return;
+      }
+
+      if (!this.app.fileManager?.processFrontMatter) {
+        return;
+      }
+
+      let persistedAtMs = timestampToPersist;
+
+      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+        // Monotonic protection: ensure we never write an older timestamp
+        const existingValue = Number(frontmatter.lastAccessedAt);
+        const existingAtMs =
+          Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
+
+        persistedAtMs = Math.max(existingAtMs, timestampToPersist);
+
+        if (existingAtMs === persistedAtMs) {
+          return;
+        }
+
+        frontmatter.lastAccessedAt = persistedAtMs;
+      });
+
+      // Mark persistence successful for throttling purposes
+      this.chatHistoryLastAccessedAtManager.markPersisted(file.path, persistedAtMs);
+    } catch (error) {
+      logWarn(`[CopilotPlugin] Failed to update chat lastAccessedAt for ${file.path}`, error);
+    }
+  }
+
+  /**
+   * Get the chat history last accessed at manager for use in sorting.
+   * This allows UI components to use in-memory values for immediate feedback.
+   */
+  getChatHistoryLastAccessedAtManager(): RecentUsageManager<string> {
+    return this.chatHistoryLastAccessedAtManager;
   }
 
   async loadChatHistory(file: TFile) {
@@ -602,6 +679,9 @@ export default class CopilotPlugin extends Plugin {
 
     // Load messages using ChatUIState (which now uses ChatPersistenceManager internally)
     await this.chatUIState.loadChatHistory(file);
+
+    // Touch "lastAccessedAt" timestamp (throttled to avoid frequent writes)
+    void this.touchChatHistoryLastAccessedAt(file);
 
     // Update the view
     const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])

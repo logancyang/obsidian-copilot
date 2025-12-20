@@ -1,9 +1,19 @@
-import { getChatDisplayText } from "@/utils/chatHistoryUtils";
+import {
+  extractChatDate,
+  extractChatLastAccessedAtMs,
+  extractChatTitle,
+  getChatDisplayText,
+} from "@/utils/chatHistoryUtils";
+import { getSettings } from "@/settings/model";
+import { sortByStrategy } from "@/utils/recentUsageManager";
 import { App, FuzzySuggestModal, TFile } from "obsidian";
 
 export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
   private onChooseFile: (file: TFile) => void;
 
+  /**
+   * Create a modal for selecting a chat history file from the vault.
+   */
   constructor(
     app: App,
     private chatFiles: TFile[],
@@ -13,25 +23,28 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
     this.onChooseFile = onChooseFile;
   }
 
+  /**
+   * Return chat history files sorted by the persisted chat history sort strategy.
+   */
   getItems(): TFile[] {
-    return this.chatFiles.sort((a, b) => {
-      const getEpoch = (file: TFile) => {
-        const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
-        return frontmatter && frontmatter.epoch ? frontmatter.epoch : file.stat.ctime;
-      };
-
-      const epochA = getEpoch(a);
-      const epochB = getEpoch(b);
-
-      // Sort in descending order (most recent first)
-      return epochB - epochA;
+    const sortStrategy = getSettings().chatHistorySortStrategy;
+    return sortByStrategy(this.chatFiles, sortStrategy, {
+      getName: (file) => extractChatTitle(file),
+      getCreatedAtMs: (file) => extractChatDate(file).getTime(),
+      getLastUsedAtMs: (file) => extractChatLastAccessedAtMs(file),
     });
   }
 
+  /**
+   * Render the display label for a chat history file.
+   */
   getItemText(file: TFile): string {
     return getChatDisplayText(file);
   }
 
+  /**
+   * Handle user selection.
+   */
   onChooseItem(file: TFile, _evt: MouseEvent | KeyboardEvent) {
     this.onChooseFile(file);
   }

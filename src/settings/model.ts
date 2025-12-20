@@ -4,6 +4,7 @@ import { v4 as uuidv4 } from "uuid";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 import { type ChainType } from "@/chainFactory";
+import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
@@ -104,6 +105,8 @@ export interface CopilotSettings {
   activeEmbeddingModels: Array<CustomModel>;
   promptUsageTimestamps: Record<string, number>;
   promptSortStrategy: string;
+  chatHistorySortStrategy: SortStrategy;
+  projectListSortStrategy: SortStrategy;
   embeddingRequestsPerMin: number;
   embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
@@ -433,6 +436,22 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
   sanitizedSettings.customPromptsFolder =
     promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+
+  // Ensure chatHistorySortStrategy has a valid value (exclude "manual" which is only for custom commands)
+  if (
+    !isSortStrategy(sanitizedSettings.chatHistorySortStrategy) ||
+    sanitizedSettings.chatHistorySortStrategy === "manual"
+  ) {
+    sanitizedSettings.chatHistorySortStrategy = DEFAULT_SETTINGS.chatHistorySortStrategy;
+  }
+
+  // Ensure projectListSortStrategy has a valid value (exclude "manual" which is only for custom commands)
+  if (
+    !isSortStrategy(sanitizedSettings.projectListSortStrategy) ||
+    sanitizedSettings.projectListSortStrategy === "manual"
+  ) {
+    sanitizedSettings.projectListSortStrategy = DEFAULT_SETTINGS.projectListSortStrategy;
+  }
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
 

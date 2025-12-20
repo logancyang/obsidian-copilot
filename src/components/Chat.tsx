@@ -847,6 +847,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                 projects={settings.projectList || []}
                 defaultOpen={true}
                 app={app}
+                plugin={plugin}
                 hasMessages={false}
                 onProjectAdded={handleAddProject}
                 onEditProject={handleEditProject}

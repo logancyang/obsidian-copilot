@@ -820,6 +820,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   lexicalSearchRamLimit: 100, // Default 100 MB
   promptUsageTimestamps: {},
   promptSortStrategy: PromptSortStrategy.TIMESTAMP,
+  chatHistorySortStrategy: "recent",
+  projectListSortStrategy: "recent",
   defaultConversationNoteName: "{$topic}@{$date}_{$time}",
   /** @deprecated */
   inlineEditCommands: [],

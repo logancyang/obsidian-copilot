@@ -27,6 +27,7 @@ import {
   getNotesFromTags,
   processVariableNameForNotePath,
 } from "@/utils";
+import { sortByStrategy } from "@/utils/recentUsageManager";
 import {
   NOTE_CONTEXT_PROMPT_TAG,
   SELECTED_TEXT_TAG,
@@ -145,25 +146,28 @@ export async function loadAllCustomCommands(): Promise<CustomCommand[]> {
 }
 
 export function sortCommandsByOrder(commands: CustomCommand[]): CustomCommand[] {
-  return [...commands].sort((a, b) => {
-    if (a.order === b.order) {
-      return a.title.localeCompare(b.title);
-    }
-    return a.order - b.order;
+  return sortByStrategy(commands, "manual", {
+    getName: (command) => command.title,
+    getCreatedAtMs: () => 0,
+    getLastUsedAtMs: () => 0,
+    getManualOrder: (command) => command.order,
   });
 }
 
 export function sortCommandsByRecency(commands: CustomCommand[]): CustomCommand[] {
-  return [...commands].sort((a, b) => {
-    if (a.lastUsedMs === b.lastUsedMs) {
-      return a.title.localeCompare(b.title);
-    }
-    return b.lastUsedMs - a.lastUsedMs;
+  return sortByStrategy(commands, "recent", {
+    getName: (command) => command.title,
+    getCreatedAtMs: () => 0,
+    getLastUsedAtMs: (command) => command.lastUsedMs,
   });
 }
 
 export function sortCommandsByAlphabetical(commands: CustomCommand[]): CustomCommand[] {
-  return [...commands].sort((a, b) => a.title.localeCompare(b.title));
+  return sortByStrategy(commands, "name", {
+    getName: (command) => command.title,
+    getCreatedAtMs: () => 0,
+    getLastUsedAtMs: () => 0,
+  });
 }
 
 /**
