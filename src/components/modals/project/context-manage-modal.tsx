@@ -1,8 +1,10 @@
-import { ProjectConfig } from "@/aiParams";
+import { FailedItem, ProjectConfig, useProjectContextLoad, getCurrentProject } from "@/aiParams";
+import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
 import { TruncatedText } from "@/components/TruncatedText";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -19,11 +21,14 @@ import {
 } from "@/search/searchUtils";
 import { getTagsFromNote } from "@/utils";
 import {
+  AlertCircle,
+  CheckCircle,
   FileAudio,
   FileImage,
   FileText,
   FileVideo,
   FolderIcon,
+  Loader2,
   Plus,
   PlusCircle,
   TagIcon,
@@ -177,13 +182,81 @@ const SectionList: React.FC<SectionListProps> = ({
   );
 };
 
+// ============================================================================
+// Project Context Load Status Types and Utilities
+// ============================================================================
+
+type ProjectContextItemStatus = "success" | "failed" | "processing" | "notStarted";
+
+interface ProjectContextItemStatusInfo {
+  status: ProjectContextItemStatus;
+  failedItem?: FailedItem;
+}
+
+interface ProjectContextLoadLookup {
+  success: ReadonlySet<string>;
+  failedByPath: ReadonlyMap<string, FailedItem>;
+  processingFiles: ReadonlySet<string>;
+  total: ReadonlySet<string>;
+  /** Files that have been cached (from ProjectContextCache) */
+  cachedFiles: ReadonlySet<string>;
+  /** Whether we're viewing the currently loaded project */
+  isCurrentProject: boolean;
+}
+
+/**
+ * Derives a display status for the given project context item key.
+ * - For current project: uses real-time load state (processing > failed > success > notStarted)
+ * - For other projects: uses cache state (success if cached, notStarted otherwise)
+ */
+function getProjectContextItemStatus(
+  key: string,
+  lookup: ProjectContextLoadLookup
+): ProjectContextItemStatusInfo {
+  // For the currently loaded project, use real-time status
+  if (lookup.isCurrentProject) {
+    if (lookup.processingFiles.has(key)) {
+      return { status: "processing" };
+    }
+
+    const failedItem = lookup.failedByPath.get(key);
+    if (failedItem) {
+      return { status: "failed", failedItem };
+    }
+
+    if (lookup.success.has(key)) {
+      return { status: "success" };
+    }
+  }
+
+  // For non-current projects or files not in real-time status,
+  // check if they're cached
+  if (lookup.cachedFiles.has(key)) {
+    return { status: "success" };
+  }
+
+  return { status: "notStarted" };
+}
+
+const STATUS_LABELS: Record<ProjectContextItemStatus, string> = {
+  success: "Processed",
+  failed: "Failed",
+  processing: "Processing",
+  notStarted: "Not started",
+};
+
+// ============================================================================
+// ItemCard Component
+// ============================================================================
+
 interface ItemCardProps {
   item: GroupItem;
   viewMode: "list";
+  loadStatus?: ProjectContextItemStatusInfo;
   onDelete: (e: React.MouseEvent, item: GroupItem) => void;
 }
 
-function ItemCard({ item, viewMode, onDelete }: ItemCardProps) {
+function ItemCard({ item, viewMode, loadStatus, onDelete }: ItemCardProps) {
   const extension = item.id.split(".").pop() || "";
 
   // add or remove
@@ -205,6 +278,34 @@ function ItemCard({ item, viewMode, onDelete }: ItemCardProps) {
       </div>
 
       <div className="tw-ml-auto tw-flex tw-min-w-[24px] tw-items-center tw-justify-end tw-gap-2">
+        {loadStatus && (
+          <Badge
+            variant="outline"
+            className={cn(
+              "tw-flex tw-items-center tw-gap-1 tw-whitespace-nowrap",
+              loadStatus.status === "success" && "tw-text-success",
+              loadStatus.status === "failed" && "tw-text-error",
+              loadStatus.status === "processing" && "tw-text-accent",
+              loadStatus.status === "notStarted" && "tw-text-muted"
+            )}
+            title={
+              loadStatus.status === "failed" && loadStatus.failedItem?.error
+                ? `Failed: ${loadStatus.failedItem.error}`
+                : STATUS_LABELS[loadStatus.status]
+            }
+          >
+            {loadStatus.status === "processing" ? (
+              <Loader2 className="tw-size-3 tw-animate-spin" />
+            ) : loadStatus.status === "success" ? (
+              <CheckCircle className="tw-size-3" />
+            ) : loadStatus.status === "failed" ? (
+              <AlertCircle className="tw-size-3" />
+            ) : (
+              <div className="tw-size-2 tw-rounded-full tw-border tw-border-solid tw-border-border" />
+            )}
+            <span className="tw-hidden md:tw-inline">{STATUS_LABELS[loadStatus.status]}</span>
+          </Badge>
+        )}
         <IconComponent
           className="tw-hidden tw-size-4 tw-shrink-0 tw-text-muted hover:tw-text-warning group-hover:tw-block group-hover:tw-flex-none"
           onClick={(e) => onDelete(e, item)}
@@ -304,6 +405,62 @@ function isCategoryItem(item: DisplayItem): item is CategoryItem {
 
 function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageProps) {
   const isMobile = Platform.isMobile;
+  const [contextLoadState] = useProjectContextLoad();
+  const [projectCache, setProjectCache] = useState<ContextCache | null>(null);
+
+  // Load project cache on mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadCache = async () => {
+      const cache = await ProjectContextCache.getInstance().get(initialProject);
+      if (isMounted) {
+        setProjectCache(cache);
+      }
+    };
+    loadCache();
+    return () => {
+      isMounted = false;
+    };
+  }, [initialProject]);
+
+  // Check if viewing the currently loaded project
+  const isCurrentProject = useMemo(() => {
+    const currentProject = getCurrentProject();
+    return currentProject?.id === initialProject.id;
+  }, [initialProject.id]);
+
+  // Build set of cached files from project cache
+  const cachedFiles = useMemo(() => {
+    if (!projectCache?.fileContexts) {
+      return new Set<string>();
+    }
+    // Files with valid cacheKey are considered cached/processed
+    return new Set(
+      Object.entries(projectCache.fileContexts)
+        .filter(([, entry]) => entry?.cacheKey)
+        .map(([filePath]) => filePath)
+    );
+  }, [projectCache]);
+
+  // Memoize lookup structures for O(1) status queries
+  const contextLoadLookup = useMemo<ProjectContextLoadLookup>(() => {
+    return {
+      success: new Set(contextLoadState.success),
+      failedByPath: new Map(contextLoadState.failed.map((item) => [item.path, item])),
+      processingFiles: new Set(contextLoadState.processingFiles),
+      total: new Set(contextLoadState.total),
+      cachedFiles,
+      isCurrentProject,
+    };
+  }, [
+    contextLoadState.success,
+    contextLoadState.failed,
+    contextLoadState.processingFiles,
+    contextLoadState.total,
+    cachedFiles,
+    isCurrentProject,
+  ]);
+
   const { inclusions: inclusionPatterns, exclusions: exclusionPatterns } = useMemo(() => {
     return getMatchingPatterns({
       inclusions: initialProject?.contextSource.inclusions,
@@ -1140,6 +1297,11 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                               key={item.id}
                               item={item}
                               viewMode="list"
+                              loadStatus={
+                                activeSection === "ignoreFiles" || item.isIgnored
+                                  ? undefined
+                                  : getProjectContextItemStatus(item.id, contextLoadLookup)
+                              }
                               onDelete={
                                 activeSection === "ignoreFiles" || item.isIgnored
                                   ? handleDeleteIgnoreItem
