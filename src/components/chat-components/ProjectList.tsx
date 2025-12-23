@@ -16,7 +16,7 @@ import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { isSortStrategy, RecentUsageManager, sortByStrategy } from "@/utils/recentUsageManager";
+import { RecentUsageManager, sortByStrategy } from "@/utils/recentUsageManager";
 import {
   ChevronDown,
   ChevronUp,
@@ -417,33 +417,11 @@ export const ProjectList = memo(
                     {/* Search input box */}
                     {projects.length > 0 && (
                       <div className="tw-px-4 tw-pb-2 tw-pt-3">
-                        <div className="tw-flex tw-items-center tw-gap-2">
-                          <div className="tw-flex-1">
-                            <SearchBar
-                              value={searchQuery}
-                              onChange={setSearchQuery}
-                              placeholder="Search projects..."
-                            />
-                          </div>
-                          <Select
-                            value={settings.projectListSortStrategy}
-                            onValueChange={(value) => {
-                              if (!isSortStrategy(value)) {
-                                return;
-                              }
-                              updateSetting("projectListSortStrategy", value);
-                            }}
-                          >
-                            <SelectTrigger className="tw-h-8 tw-w-24">
-                              <SelectValue placeholder="Sort" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="recent">Recent</SelectItem>
-                              <SelectItem value="created">Created</SelectItem>
-                              <SelectItem value="name">Name</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
+                        <SearchBar
+                          value={searchQuery}
+                          onChange={setSearchQuery}
+                          placeholder="Search projects..."
+                        />
                       </div>
                     )}
                     <div className="tw-max-h-[calc(3*5.7rem)] tw-overflow-y-auto tw-px-4 tw-pb-6 tw-pt-3">

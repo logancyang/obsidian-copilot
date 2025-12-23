@@ -5,17 +5,10 @@ import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { updateSetting, useSettingsValue } from "@/settings/model";
-import { isSortStrategy, sortByStrategy } from "@/utils/recentUsageManager";
+import { useSettingsValue } from "@/settings/model";
+import { sortByStrategy } from "@/utils/recentUsageManager";
 import { Platform } from "obsidian";
 
 export interface ChatHistoryItem {
@@ -199,29 +192,7 @@ export function ChatHistoryPopover({
       <PopoverContent className="tw-w-80 tw-p-0" align="end" side="top">
         <div className="tw-flex tw-max-h-[400px] tw-flex-col">
           <div className="tw-shrink-0 tw-border-b tw-p-1">
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <div className="tw-flex-1">
-                <SearchBar value={searchQuery} onChange={setSearchQuery} />
-              </div>
-              <Select
-                value={settings.chatHistorySortStrategy}
-                onValueChange={(value) => {
-                  if (!isSortStrategy(value)) {
-                    return;
-                  }
-                  updateSetting("chatHistorySortStrategy", value);
-                }}
-              >
-                <SelectTrigger className="tw-h-8 tw-w-24">
-                  <SelectValue placeholder="Sort" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="recent">Recent</SelectItem>
-                  <SelectItem value="created">Created</SelectItem>
-                  <SelectItem value="name">Name</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            <SearchBar value={searchQuery} onChange={setSearchQuery} />
           </div>
 
           <ScrollArea className="tw-min-h-[150px] tw-flex-1 tw-overflow-y-auto">
