@@ -3,6 +3,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { isSortStrategy } from "@/utils/recentUsageManager";
 import React from "react";
 
 export const AdvancedSettings: React.FC = () => {
@@ -10,6 +11,50 @@ export const AdvancedSettings: React.FC = () => {
 
   return (
     <div className="tw-space-y-4">
+      {/* Sorting Settings Section */}
+      <section>
+        <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
+          <div className="tw-text-xl tw-font-bold">Sorting</div>
+          <div className="tw-text-sm tw-text-muted">
+            Configure default sort order for various lists.
+          </div>
+        </div>
+
+        <SettingItem
+          type="select"
+          title="Chat History Sort Strategy"
+          description="Sort order for the chat history list"
+          value={settings.chatHistorySortStrategy}
+          onChange={(value) => {
+            if (isSortStrategy(value)) {
+              updateSetting("chatHistorySortStrategy", value);
+            }
+          }}
+          options={[
+            { label: "Recency", value: "recent" },
+            { label: "Created", value: "created" },
+            { label: "Alphabetical", value: "name" },
+          ]}
+        />
+
+        <SettingItem
+          type="select"
+          title="Project List Sort Strategy"
+          description="Sort order for the project list"
+          value={settings.projectListSortStrategy}
+          onChange={(value) => {
+            if (isSortStrategy(value)) {
+              updateSetting("projectListSortStrategy", value);
+            }
+          }}
+          options={[
+            { label: "Recency", value: "recent" },
+            { label: "Created", value: "created" },
+            { label: "Alphabetical", value: "name" },
+          ]}
+        />
+      </section>
+
       {/* Privacy Settings Section */}
       <section>
         <SettingItem
