@@ -556,7 +556,12 @@ export default class CopilotPlugin extends Plugin {
       new Notice("No chat history found.");
       return;
     }
-    new LoadChatHistoryModal(this.app, chatFiles, this.loadChatHistory.bind(this)).open();
+    new LoadChatHistoryModal(
+      this.app,
+      chatFiles,
+      this.chatHistoryLastAccessedAtManager,
+      this.loadChatHistory.bind(this)
+    ).open();
   }
 
   async getChatHistoryFiles(): Promise<TFile[]> {
