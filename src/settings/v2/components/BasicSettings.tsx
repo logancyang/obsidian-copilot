@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
+import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
@@ -24,6 +25,7 @@ const ChainType2Label: Record<ChainType, string> = {
 
 export const BasicSettings: React.FC = () => {
   const settings = useSettingsValue();
+  const { setSelectedTab } = useTab();
   const [isChecking, setIsChecking] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
@@ -122,7 +124,7 @@ export const BasicSettings: React.FC = () => {
             >
               <Button
                 onClick={() => {
-                  new ApiKeyDialog(app).open();
+                  new ApiKeyDialog(app, () => setSelectedTab("model")).open();
                 }}
                 variant="secondary"
                 className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 sm:tw-w-auto sm:tw-justify-start"

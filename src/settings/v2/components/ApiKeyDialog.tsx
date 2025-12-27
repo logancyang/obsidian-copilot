@@ -10,6 +10,7 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
+import { LocalServicesSection } from "@/settings/v2/components/LocalServicesSection";
 import {
   err2String,
   getNeedSetKeyProvider,
@@ -17,13 +18,14 @@ import {
   getProviderLabel,
   safeFetch,
 } from "@/utils";
-import { ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, ChevronUp, Info, Loader2 } from "lucide-react";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 
 interface ApiKeyModalContentProps {
   onClose: () => void;
+  onGoToModelTab?: () => void;
 }
 
 interface ProviderKeyItem {
@@ -37,7 +39,7 @@ interface SelectedModelInfo {
   provider: SettingKeyProviders;
 }
 
-function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
+function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps) {
   const settings = useSettingsValue();
 
   const [expandedProvider, setExpandedProvider] = useState<SettingKeyProviders | null>(null);
@@ -414,6 +416,41 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
             );
           })}
         </div>
+
+        {/* Local Services Section */}
+        <LocalServicesSection />
+
+        {/* 高级配置引导区域 */}
+        {onGoToModelTab && (
+          <div className="tw-mt-4 tw-border-t tw-border-border tw-pt-4">
+            <div className="tw-rounded-lg tw-border tw-p-4 tw-bg-secondary/30 tw-border-border/60">
+              <div className="tw-flex tw-gap-3">
+                <div className="tw-mt-0.5 tw-shrink-0">
+                  <Info className="tw-size-5 tw-text-accent" />
+                </div>
+                <div className="tw-flex-1">
+                  <h4 className="tw-mb-1 tw-text-sm tw-font-semibold">
+                    Looking for Azure OpenAI or Custom Providers?
+                  </h4>
+                  <p className="tw-mb-3 tw-text-xs tw-leading-relaxed tw-text-muted">
+                    Providers like Azure OpenAI, OpenAI Format, or Local LLMs require additional
+                    configuration (Base URL, Deployment Name, etc.).
+                  </p>
+                  <button
+                    onClick={() => {
+                      onGoToModelTab();
+                      onClose();
+                    }}
+                    className="tw-group tw-flex tw-items-center tw-gap-1 tw-text-sm tw-font-medium tw-text-accent hover:tw-text-accent-hover"
+                  >
+                    Go to Model Settings
+                    <ChevronRight className="tw-size-4 tw-transition-transform group-hover:tw-translate-x-0.5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="tw-mt-4 tw-flex tw-justify-end">
@@ -425,16 +462,20 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
 
 export class ApiKeyDialog extends Modal {
   private root: Root;
+  private onGoToModelTab?: () => void;
 
-  constructor(app: App) {
+  constructor(app: App, onGoToModelTab?: () => void) {
     super(app);
+    this.onGoToModelTab = onGoToModelTab;
   }
 
   onOpen() {
     const { contentEl } = this;
     this.root = createRoot(contentEl);
 
-    this.root.render(<ApiKeyModalContent onClose={() => this.close()} />);
+    this.root.render(
+      <ApiKeyModalContent onClose={() => this.close()} onGoToModelTab={this.onGoToModelTab} />
+    );
   }
 
   onClose() {
