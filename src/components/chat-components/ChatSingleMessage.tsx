@@ -7,6 +7,7 @@ import {
   ContextSelectedTextBadge,
   ContextTagBadge,
   ContextUrlBadge,
+  ContextWebTabBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
 import { TokenLimitWarning } from "@/components/chat-components/TokenLimitWarning";
@@ -78,6 +79,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
     !context ||
     (!context.notes?.length &&
       !context.urls?.length &&
+      !context.webTabs?.length &&
       !context.tags?.length &&
       !context.folders?.length &&
       !context.selectedTextContexts?.length)
@@ -105,6 +107,25 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{url}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.webTabs?.map((webTab, index) => (
+        <Tooltip key={`webTab-${index}-${webTab.url}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextWebTabBadge webTab={webTab} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">
+            {webTab.title ? (
+              <div className="tw-text-left">
+                <div className="tw-font-medium">{webTab.title}</div>
+                <div>{webTab.url}</div>
+              </div>
+            ) : (
+              webTab.url
+            )}
+          </TooltipContent>
         </Tooltip>
       ))}
       {context.tags?.map((tag, index) => (
@@ -135,7 +156,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">
-            {selectedText.notePath}
+            {selectedText.sourceType === "web" ? selectedText.url : selectedText.notePath}
           </TooltipContent>
         </Tooltip>
       ))}

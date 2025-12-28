@@ -11,6 +11,7 @@ import {
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
+import type { WebTabContext } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -46,6 +47,7 @@ import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 
 type ChatMode = "default" | "project";
 
@@ -101,6 +103,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
+  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
@@ -128,8 +131,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
 
   const [selectedTextContexts] = useSelectedTextContexts();
-  const hasSelectedTextContext = selectedTextContexts.length > 0;
-  const effectiveIncludeActiveNote = includeActiveNote && !hasSelectedTextContext;
+
+  // Source-aware visibility: note selection only hides active note, web selection hides active web tab
+  const hasNoteSelection = selectedTextContexts.some((ctx) => ctx.sourceType === "note");
+  const hasWebSelection = selectedTextContexts.some((ctx) => ctx.sourceType === "web");
+  const effectiveIncludeActiveNote = includeActiveNote && !hasNoteSelection;
+  const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasWebSelection;
+
+  const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
   const projectContextStatus = useProjectContextStatus();
 
   // Calculate whether to show ProgressCard based on status and user preference
@@ -180,12 +189,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     contextNotes: passedContextNotes,
     contextTags,
     contextFolders,
+    webTabs,
   }: {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
     contextTags?: string[];
     contextFolders?: string[];
+    webTabs?: WebTabContext[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
@@ -242,6 +253,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         tags: contextTags || [],
         folders: contextFolders || [],
         selectedTextContexts,
+        webTabs: webTabs || [],
       };
 
       // Clear input and images
@@ -256,6 +268,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         context,
         currentChain,
         effectiveIncludeActiveNote,
+        effectiveIncludeActiveWebTab,
         content.length > 0 ? content : undefined
       );
 
@@ -607,8 +620,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Respect the includeActiveNote setting for all non-project chains
     if (selectedChain === ChainType.PROJECT_CHAIN) {
       setIncludeActiveNote(false);
+      setIncludeActiveWebTab(false);
     } else {
       setIncludeActiveNote(settings.includeActiveNoteAsContext);
+      setIncludeActiveWebTab(settings.includeActiveWebTabAsContext ?? false);
     }
   }, [
     handleStopGenerating,
@@ -617,6 +632,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     settings.autosaveChat,
     settings.enableRecentConversations,
     settings.includeActiveNoteAsContext,
+    settings.includeActiveWebTabAsContext,
     selectedChain,
     handleSaveAsNote,
     safeSet,
@@ -712,6 +728,18 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     }
   }, [settings.includeActiveNoteAsContext, selectedChain]);
 
+  // Use the includeActiveWebTabAsContext setting
+  useEffect(() => {
+    if (settings.includeActiveWebTabAsContext !== undefined) {
+      // Only apply the setting if not in Project mode
+      if (selectedChain === ChainType.PROJECT_CHAIN) {
+        setIncludeActiveWebTab(false);
+      } else {
+        setIncludeActiveWebTab(settings.includeActiveWebTabAsContext);
+      }
+    }
+  }, [settings.includeActiveWebTabAsContext, selectedChain]);
+
   // Note: pendingMessages loading has been removed as ChatManager now handles
   // message persistence and loading automatically based on project context
 
@@ -784,6 +812,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               setContextNotes={setContextNotes}
               includeActiveNote={includeActiveNote}
               setIncludeActiveNote={setIncludeActiveNote}
+              includeActiveWebTab={includeActiveWebTab}
+              setIncludeActiveWebTab={setIncludeActiveWebTab}
+              activeWebTab={currentActiveWebTab}
               selectedImages={selectedImages}
               onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
               setSelectedImages={setSelectedImages}

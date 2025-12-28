@@ -88,6 +88,7 @@ export interface CopilotSettings {
    */
   generateAIChatTitleOnSave: boolean;
   includeActiveNoteAsContext: boolean;
+  includeActiveWebTabAsContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
@@ -153,6 +154,8 @@ export interface CopilotSettings {
   quickCommandIncludeNoteContext: boolean;
   /** Automatically add text selections to chat context */
   autoIncludeTextSelection: boolean;
+  /** Automatically add web tab selections to chat context (Desktop only) */
+  autoIncludeWebSelection: boolean;
 }
 
 export const settingsStore = createStore();
@@ -320,6 +323,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.includeActiveNoteAsContext = DEFAULT_SETTINGS.includeActiveNoteAsContext;
   }
 
+  // Ensure includeActiveWebTabAsContext has a default value
+  if (typeof sanitizedSettings.includeActiveWebTabAsContext !== "boolean") {
+    sanitizedSettings.includeActiveWebTabAsContext = DEFAULT_SETTINGS.includeActiveWebTabAsContext;
+  }
+
   // Ensure generateAIChatTitleOnSave has a default value
   if (typeof sanitizedSettings.generateAIChatTitleOnSave !== "boolean") {
     sanitizedSettings.generateAIChatTitleOnSave = DEFAULT_SETTINGS.generateAIChatTitleOnSave;
@@ -406,6 +414,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure autoIncludeTextSelection has a default value
   if (typeof sanitizedSettings.autoIncludeTextSelection !== "boolean") {
     sanitizedSettings.autoIncludeTextSelection = DEFAULT_SETTINGS.autoIncludeTextSelection;
+  }
+
+  // Ensure autoIncludeWebSelection has a default value
+  if (typeof sanitizedSettings.autoIncludeWebSelection !== "boolean") {
+    sanitizedSettings.autoIncludeWebSelection = DEFAULT_SETTINGS.autoIncludeWebSelection;
   }
 
   // Ensure defaultSendShortcut has a valid value

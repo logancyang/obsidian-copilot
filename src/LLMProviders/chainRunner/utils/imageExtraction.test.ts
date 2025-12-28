@@ -19,8 +19,12 @@ describe("Image extraction from content", () => {
   async function extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
     // Match both wiki-style ![[image.ext]] and standard markdown ![alt](image.ext)
     const wikiImageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
-    // Updated regex to handle URLs with or without file extensions
-    const markdownImageRegex = /!\[.*?\]\(([^)]+)\)/g;
+    // Enhanced regex to handle markdown image syntax:
+    // 1. Angle brackets: ![alt](<url with spaces or ()>) - captures in group 1
+    // 2. Standard: ![alt](url) - captures in group 2
+    // 3. Both support optional title: "title", 'title', or (title)
+    const markdownImageRegex =
+      /!\[.*?\]\((?:<([^>]+)>|([^\s)"'(<>]+))(?:\s+["'(][^"')]*["')])?\)/g;
 
     const resolvedImages: string[] = [];
 
@@ -49,7 +53,8 @@ describe("Image extraction from content", () => {
     // Process standard markdown images
     const mdMatches = [...content.matchAll(markdownImageRegex)];
     for (const match of mdMatches) {
-      const imagePath = match[1].trim();
+      // Group 1 is for angle bracket syntax, group 2 is for standard syntax
+      const imagePath = (match[1] || match[2] || "").trim();
 
       // Skip empty paths
       if (!imagePath) continue;
@@ -337,6 +342,121 @@ describe("Image extraction from content", () => {
       const result = await extractEmbeddedImages(content, sourcePath);
 
       expect(result).toEqual(["attachments/image (1).png", "attachments/file-name_2.jpg"]);
+    });
+  });
+
+  describe("Angle bracket syntax ![alt](<url>)", () => {
+    it("should extract URL with parentheses using angle brackets", async () => {
+      const content = "Wikipedia link ![Mars](<https://en.wikipedia.org/wiki/Mars_(planet).jpg>)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://en.wikipedia.org/wiki/Mars_(planet).jpg"]);
+    });
+
+    it("should extract URL with spaces using angle brackets", async () => {
+      const content = "Spaced path ![alt](<path/my image file.png>)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["path/my image file.png"]);
+    });
+
+    it("should extract multiple angle bracket URLs", async () => {
+      const content = `
+        First ![img1](<https://example.com/image(1).png>)
+        Second ![img2](<https://example.com/image (2).jpg>)
+      `;
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual([
+        "https://example.com/image(1).png",
+        "https://example.com/image (2).jpg",
+      ]);
+    });
+  });
+
+  describe("Image with title syntax ![alt](url \"title\")", () => {
+    it("should extract URL with double-quoted title", async () => {
+      const content = 'Image with title ![alt](https://example.com/img.png "This is the title")';
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/img.png"]);
+    });
+
+    it("should extract URL with single-quoted title", async () => {
+      const content = "Image with title ![alt](https://example.com/img.png 'Single quoted title')";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/img.png"]);
+    });
+
+    it("should extract URL with parentheses title", async () => {
+      const content = "Image with title ![alt](https://example.com/img.png (Parentheses title))";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/img.png"]);
+    });
+
+    it("should extract angle bracket URL with title", async () => {
+      const content =
+        'Angle bracket with title ![alt](<https://example.com/image(1).png> "Title here")';
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/image(1).png"]);
+    });
+
+    it("should handle local path with title", async () => {
+      const content = 'Local image ![alt](images/photo.jpg "My photo")';
+      const sourcePath = "notes/test.md";
+
+      mockApp.metadataCache.getFirstLinkpathDest.mockReturnValueOnce({
+        path: "images/photo.jpg",
+      });
+
+      const result = await extractEmbeddedImages(content, sourcePath);
+
+      expect(result).toEqual(["images/photo.jpg"]);
+    });
+  });
+
+  describe("Mixed enhanced syntaxes", () => {
+    it("should handle all syntax variations together", async () => {
+      const content = `
+        Standard: ![](https://example.com/standard.png)
+        With title: ![alt](https://example.com/titled.png "Title")
+        Angle bracket: ![alt](<https://example.com/path (special).png>)
+        Angle with title: ![alt](<https://example.com/both(1).png> "Both features")
+        Wiki style: ![[local.png]]
+      `;
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual([
+        "local.png",
+        "https://example.com/standard.png",
+        "https://example.com/titled.png",
+        "https://example.com/path (special).png",
+        "https://example.com/both(1).png",
+      ]);
+    });
+
+    it("should not be confused by malformed syntax", async () => {
+      const content = `
+        Valid: ![](https://example.com/valid.png)
+        Missing close bracket: ![alt](https://example.com/missing.png
+        Empty angle brackets: ![alt](<>)
+      `;
+
+      const result = await extractEmbeddedImages(content);
+
+      // Only the valid one should be extracted
+      expect(result).toEqual(["https://example.com/valid.png"]);
     });
   });
 });

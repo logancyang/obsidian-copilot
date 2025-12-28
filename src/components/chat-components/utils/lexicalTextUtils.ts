@@ -10,17 +10,20 @@ import {
   LexicalCommand,
 } from "lexical";
 import { TFile, TFolder, App } from "obsidian";
+import type { WebTabContext } from "@/types/message";
 import { $createNotePillNode } from "../pills/NotePillNode";
 import { $createActiveNotePillNode } from "../pills/ActiveNotePillNode";
 import { $createURLPillNode } from "../pills/URLPillNode";
 import { $createToolPillNode } from "../pills/ToolPillNode";
 import { $createFolderPillNode } from "../pills/FolderPillNode";
+import { $createWebTabPillNode } from "../pills/WebTabPillNode";
+import { $createActiveWebTabPillNode } from "../pills/ActiveWebTabPillNode";
 import { logInfo } from "@/logger";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 
 declare const app: App;
 
-export type PillType = "notes" | "tools" | "folders" | "active-note";
+export type PillType = "notes" | "tools" | "folders" | "active-note" | "webTabs" | "activeWebTab";
 
 // Type representing different kinds of parsed content segments
 export type ParsedContentType =
@@ -35,7 +38,7 @@ export type ParsedContentType =
 export type PatternType = "notes" | "urls" | "tools" | "customTemplates";
 
 // Type representing the data associated with a pill
-export type PillDataValue = TFile | TFolder | string;
+export type PillDataValue = TFile | TFolder | string | WebTabContext;
 
 export interface PillData {
   type: PillType;
@@ -68,6 +71,15 @@ export function $createPillNode(pillData: PillData) {
         return $createFolderPillNode(data.path);
       }
       break;
+    case "webTabs":
+      // WebTabContext has url, title, faviconUrl
+      if (data && typeof data === "object" && "url" in data) {
+        const webTab = data as WebTabContext;
+        return $createWebTabPillNode(webTab.url, webTab.title, webTab.faviconUrl);
+      }
+      break;
+    case "activeWebTab":
+      return $createActiveWebTabPillNode();
   }
 
   throw new Error(`Invalid pill data: ${JSON.stringify(pillData)}`);

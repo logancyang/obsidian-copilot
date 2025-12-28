@@ -1,8 +1,8 @@
 import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
 import { ChainType } from "@/chainFactory";
 import { getCurrentProject } from "@/aiParams";
-import { logInfo } from "@/logger";
-import { ChatMessage, MessageContext } from "@/types/message";
+import { logInfo, logWarn } from "@/logger";
+import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
 import ProjectManager from "@/LLMProviders/projectManager";
@@ -11,8 +11,13 @@ import CopilotPlugin from "@/main";
 import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
-import { USER_SENDER } from "@/constants";
+import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
 import { TFile } from "obsidian";
+import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
+import {
+  normalizeUrlString,
+  sanitizeWebTabContexts,
+} from "@/utils/urlNormalization";
 
 /**
  * ChatManager - Central business logic coordinator
@@ -113,6 +118,94 @@ export class ChatManager {
   }
 
   /**
+   * Build webTabs array with Active Web Tab snapshot injected.
+   *
+   * This implements snapshot semantics:
+   * - Active Web Tab URL is resolved at message creation time
+   * - The URL is stored in message.context.webTabs with isActive: true
+   * - Edit/reprocess will use the stored URL, not the current active tab
+   *
+   * @param displayText - The message text (checked for ACTIVE_WEB_TAB_MARKER fallback)
+   * @param existingWebTabs - Existing webTabs from context
+   * @param includeActiveWebTab - Whether to include active web tab
+   * @returns Updated webTabs array with active tab snapshot
+   */
+  private buildWebTabsWithActiveSnapshot(
+    displayText: string,
+    existingWebTabs: WebTabContext[],
+    includeActiveWebTab: boolean
+  ): WebTabContext[] {
+    // Determine if we should include active web tab
+    // Either explicitly requested or via marker in text
+    const shouldInclude = includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER);
+
+    // Always sanitize existing webTabs (normalize URLs, dedupe, ensure single isActive)
+    const sanitizedTabs = sanitizeWebTabContexts(existingWebTabs);
+
+    if (!shouldInclude) {
+      return sanitizedTabs;
+    }
+
+    try {
+      // Get active web tab from WebViewerService
+      // Use activeWebTabForMentions to match UI behavior:
+      // - Preserved only when switching directly to chat panel
+      // - Cleared when switching to other views (e.g., note tab)
+      const service = getWebViewerService(this.plugin.app);
+      const state = service.getActiveWebTabState();
+      const activeTab = state.activeWebTabForMentions;
+
+      const activeUrl = normalizeUrlString(activeTab?.url);
+      if (!activeUrl) {
+        // No active web tab available, return sanitized tabs unchanged
+        return sanitizedTabs;
+      }
+
+      // Clear any existing isActive flags to ensure only one active tab
+      const clearedTabs: WebTabContext[] = sanitizedTabs.map((tab) => {
+        if (tab.isActive) {
+          // eslint-disable-next-line @typescript-eslint/no-unused-vars
+          const { isActive: _unused, ...rest } = tab;
+          return rest;
+        }
+        return tab;
+      });
+
+      // Check if active URL already exists in the list
+      const existingIndex = clearedTabs.findIndex(
+        (tab) => normalizeUrlString(tab.url) === activeUrl
+      );
+
+      if (existingIndex >= 0) {
+        // Merge metadata and mark as active
+        const existing = clearedTabs[existingIndex];
+        clearedTabs[existingIndex] = {
+          ...existing,
+          title: activeTab?.title ?? existing.title,
+          faviconUrl: activeTab?.faviconUrl ?? existing.faviconUrl,
+          isActive: true,
+        };
+        return clearedTabs;
+      }
+
+      // Add new active tab entry
+      return [
+        ...clearedTabs,
+        {
+          url: activeUrl,
+          title: activeTab?.title,
+          faviconUrl: activeTab?.faviconUrl,
+          isActive: true,
+        },
+      ];
+    } catch (error) {
+      // Web Viewer not available (e.g., mobile platform) - don't fail the message
+      logWarn("[ChatManager] Failed to resolve active web tab:", error);
+      return sanitizedTabs;
+    }
+  }
+
+  /**
    * Send a new message with context processing
    */
   async sendMessage(
@@ -120,6 +213,7 @@ export class ChatManager {
     context: MessageContext,
     chainType: ChainType,
     includeActiveNote: boolean = false,
+    includeActiveWebTab: boolean = false,
     content?: any[]
   ): Promise<string> {
     try {
@@ -136,6 +230,14 @@ export class ChatManager {
         const hasActiveNote = existingNotes.some((note) => note.path === activeNote.path);
         updatedContext.notes = hasActiveNote ? existingNotes : [...existingNotes, activeNote];
       }
+
+      // Inject Active Web Tab snapshot if requested (快照语义)
+      // This resolves the active web tab URL at message creation time
+      updatedContext.webTabs = this.buildWebTabsWithActiveSnapshot(
+        displayText,
+        updatedContext.webTabs || [],
+        includeActiveWebTab
+      );
 
       // Create the message with initial content
       const currentRepo = this.getCurrentMessageRepo();
@@ -186,6 +288,13 @@ export class ChatManager {
 
   /**
    * Edit an existing message
+   *
+   * Design note: This method only updates the message text, not the context (notes/urls/webTabs/etc).
+   * The original context is preserved because:
+   * 1. Context represents the state at message creation time (which files/URLs were referenced)
+   * 2. Allowing context modification would require complex UI for editing pills/references
+   * 3. The reprocessMessageContext() call below re-fetches content using the ORIGINAL context,
+   *    ensuring the LLM sees fresh content from the same sources
    */
   async editMessage(
     messageId: string,
@@ -196,7 +305,7 @@ export class ChatManager {
     try {
       logInfo(`[ChatManager] Editing message ${messageId}: "${newText}"`);
 
-      // Edit the message (this marks it for context reprocessing)
+      // Edit the message text only - context remains unchanged (see design note above)
       const currentRepo = this.getCurrentMessageRepo();
       const editSuccess = currentRepo.editMessage(messageId, newText);
       if (!editSuccess) {
@@ -464,12 +573,22 @@ export class ChatManager {
 
   /**
    * Load chat history from a file
+   *
+   * Design note: This method does NOT reprocess context (URLs/webTabs content fetching) for loaded messages.
+   * This is intentional because:
+   * 1. Historical messages represent a past conversation state - refetching would alter the original context
+   * 2. URL content may have changed since the original conversation
+   * 3. WebTabs are ephemeral - the tabs referenced in history are likely closed
+   * 4. Performance - loading history should be fast, not trigger network requests
+   *
+   * The persisted chat only stores references (file paths, URLs) not the fetched content.
+   * If the user wants fresh content, they should start a new conversation or regenerate specific messages.
    */
   async loadChatHistory(file: TFile): Promise<void> {
     // Clear current messages first
     this.clearMessages();
 
-    // Load messages using ChatPersistenceManager
+    // Load messages from file - only restores message text and context references (not fetched content)
     const messages = await this.persistenceManager.loadChat(file);
 
     // Add messages to the current repository
