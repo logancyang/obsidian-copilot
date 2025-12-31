@@ -467,8 +467,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
 
     /**
-     * Captures the user's intended next state early (pointerdown), so it survives rapid DOM rebuilds
-     * where a full click sequence might never occur.
+     * Handles user click on collapsible summary during streaming.
+     * Directly sets details.open to avoid race conditions where DOM rebuilds
+     * between pointerdown and click, causing double toggle that cancels user intent.
      */
     const handleSummaryPointerDown = (event: Event): void => {
       // Only handle primary button (left click)
@@ -480,7 +481,23 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       if (!details || !isEventWithinDetailsSummary(event, details)) {
         return;
       }
-      collapsibleOpenStateMap.set(details.id, !details.open);
+
+      // Calculate and apply the next state immediately
+      const nextOpen = !details.open;
+      details.open = nextOpen;
+      collapsibleOpenStateMap.set(details.id, nextOpen);
+    };
+
+    /**
+     * Prevents native click from triggering another toggle on <details>.
+     * Since we already handled the state change in pointerdown, block the default behavior.
+     */
+    const handleSummaryClick = (event: Event): void => {
+      const details = getCopilotCollapsibleDetailsFromEvent(event, root);
+      if (!details || !isEventWithinDetailsSummary(event, details)) {
+        return;
+      }
+      event.preventDefault();
     };
 
     /**
@@ -496,9 +513,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     // Use capture phase and listen on root (not document) to minimize scope
     root.addEventListener("pointerdown", handleSummaryPointerDown, true);
+    root.addEventListener("click", handleSummaryClick, true);
     root.addEventListener("toggle", handleDetailsToggle, true);
     return () => {
       root.removeEventListener("pointerdown", handleSummaryPointerDown, true);
+      root.removeEventListener("click", handleSummaryClick, true);
       root.removeEventListener("toggle", handleDetailsToggle, true);
     };
   }, [isStreaming, message.sender, collapsibleOpenStateMap]);
@@ -709,8 +728,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           currentComponentRef.current = null;
         }
 
-        // Only clean up roots if this is a temporary message (streaming message)
-        // Permanent messages keep their roots to preserve tool call banners and error blocks
+        // Only clean up roots if this is a temporary message (streaming message with temp- prefix).
+        // For shared messageId (msg-xxx), container changes are handled by ensureToolCallRoot/ensureErrorBlockRoot
+        // which detect container mismatch and recreate roots as needed.
         if (currentMessageId.startsWith("temp-")) {
           cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
           cleanupMessageErrorBlockRoots(currentMessageId, errorRootsSnapshot, "component cleanup");
