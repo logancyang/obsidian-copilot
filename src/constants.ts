@@ -16,6 +16,8 @@ export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conve
 export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
 export const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
+export const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
+export const PROJECTS_PLUS_VIEWTYPE = "copilot-projects-plus-view";
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
   2. Always answer to the best of your knowledge. If you are unsure about something, say so and ask the user to provide more context.
@@ -684,6 +686,7 @@ export const COMMAND_IDS = {
   ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
   ADD_CUSTOM_COMMAND: "add-custom-command",
   APPLY_CUSTOM_COMMAND: "apply-custom-command",
+  OPEN_PROJECTS_PLUS_PANEL: "open-projects-plus-panel",
   OPEN_LOG_FILE: "open-log-file",
   CLEAR_LOG_FILE: "clear-log-file",
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
@@ -711,6 +714,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "Add new custom command",
   [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "Apply custom command",
+  [COMMAND_IDS.OPEN_PROJECTS_PLUS_PANEL]: "Open Projects+",
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
@@ -820,6 +824,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
   autoIncludeTextSelection: false,
+  projectsPlusEnabled: false,
+  projectsPlusFolder: DEFAULT_PROJECTS_FOLDER,
 };
 
 export const EVENT_NAMES = {

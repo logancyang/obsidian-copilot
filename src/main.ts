@@ -5,6 +5,8 @@ import { SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
+import ProjectsView from "@/components/projects-plus/ProjectsView";
+import { GoalManager } from "@/core/projects-plus/GoalManager";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
@@ -12,7 +14,15 @@ import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { createQuickCommandContainer } from "@/components/QuickCommand";
-import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import {
+  ABORT_REASON,
+  CHAT_VIEWTYPE,
+  COMMAND_IDS,
+  COMMAND_NAMES,
+  DEFAULT_OPEN_AREA,
+  EVENT_NAMES,
+  PROJECTS_PLUS_VIEWTYPE,
+} from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
@@ -61,6 +71,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
+  goalManager: GoalManager;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
 
@@ -109,8 +120,25 @@ export default class CopilotPlugin extends Plugin {
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
 
+    // Initialize GoalManager for Projects+
+    this.goalManager = new GoalManager(this.app);
+    if (getSettings().projectsPlusEnabled) {
+      await this.goalManager.initialize();
+    }
+
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
+    this.registerView(
+      PROJECTS_PLUS_VIEWTYPE,
+      (leaf: WorkspaceLeaf) => new ProjectsView(leaf, this)
+    );
+
+    // Add command to open Projects+ panel
+    this.addCommand({
+      id: COMMAND_IDS.OPEN_PROJECTS_PLUS_PANEL,
+      name: COMMAND_NAMES[COMMAND_IDS.OPEN_PROJECTS_PLUS_PANEL],
+      callback: () => this.activateProjectsView(),
+    });
 
     this.initActiveLeafChangeHandler();
 
@@ -410,6 +438,27 @@ export default class CopilotPlugin extends Plugin {
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
+  }
+
+  /**
+   * Open the Projects+ panel
+   */
+  async activateProjectsView(): Promise<void> {
+    // Initialize GoalManager if not already done
+    if (!this.goalManager) {
+      this.goalManager = new GoalManager(this.app);
+    }
+    await this.goalManager.initialize();
+
+    const leaves = this.app.workspace.getLeavesOfType(PROJECTS_PLUS_VIEWTYPE);
+    if (leaves.length === 0) {
+      await this.app.workspace.getRightLeaf(false).setViewState({
+        type: PROJECTS_PLUS_VIEWTYPE,
+        active: true,
+      });
+    } else {
+      this.app.workspace.revealLeaf(leaves[0]);
+    }
   }
 
   async loadSettings() {
