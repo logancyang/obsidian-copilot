@@ -11,7 +11,7 @@ import { createRoot, Root } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
   private get chainManager(): ChainManager {
-    return this.plugin.projectManager.getCurrentChainManager();
+    return this.plugin.projectModeManager.getCurrentChainManager();
   }
 
   private fileParserManager: FileParserManager;

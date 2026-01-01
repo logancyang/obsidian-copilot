@@ -94,11 +94,11 @@ export async function reloadCurrentProject() {
     // getProjectContext will call loadProjectContext if markdownNeedsReload is true (which it is now).
     // loadProjectContext will handle markdown, web, youtube, and other file types (including API calls for new ones).
     const plugin = (app as any).plugins.getPlugin("copilot");
-    if (plugin && plugin.projectManager) {
-      await plugin.projectManager.getProjectContext(currentProject.id);
+    if (plugin && plugin.projectModeManager) {
+      await plugin.projectModeManager.getProjectContext(currentProject.id);
       new Notice(`Project context for "${currentProject.name}" reloaded successfully.`);
     } else {
-      throw new Error("Copilot plugin or ProjectManager not available.");
+      throw new Error("Copilot plugin or ProjectModeManager not available.");
     }
   } catch (error) {
     logError("Error reloading project context:", error);
@@ -141,13 +141,13 @@ export async function forceRebuildCurrentProjectContext() {
         // getProjectContext will call loadProjectContext as the cache is now empty.
         // loadProjectContext will handle markdown, web, youtube, and all other file types.
         const plugin = (app as any).plugins.getPlugin("copilot");
-        if (plugin && plugin.projectManager) {
-          await plugin.projectManager.getProjectContext(currentProject.id);
+        if (plugin && plugin.projectModeManager) {
+          await plugin.projectModeManager.getProjectContext(currentProject.id);
           new Notice(
             `Project context for "${currentProject.name}" rebuilt successfully from scratch.`
           );
         } else {
-          throw new Error("Copilot plugin or ProjectManager not available for rebuild.");
+          throw new Error("Copilot plugin or ProjectModeManager not available for rebuild.");
         }
       } catch (error) {
         logError("Error force rebuilding project context:", error);

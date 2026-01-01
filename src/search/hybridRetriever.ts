@@ -2,7 +2,7 @@
 import { LLM_TIMEOUT_MS } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ProjectModeManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
@@ -145,7 +145,7 @@ export class HybridRetriever extends BaseRetriever {
         // Execute model invocation with warnings suppressed
         const rewrittenQueryObject = await withSuppressedTokenWarnings(async () => {
           // Use temperature=0 for deterministic HyDE query rewriting
-          const chatModel = await ProjectManager.instance
+          const chatModel = await ProjectModeManager.instance
             .getCurrentChainManager()
             .chatModelManager.getChatModelWithTemperature(0);
 

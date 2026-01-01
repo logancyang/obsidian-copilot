@@ -2,7 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { SettingItem } from "@/components/ui/setting-item";
 import { BUILTIN_CHAT_MODELS, BUILTIN_EMBEDDING_MODELS } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ProjectModeManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
 import { CopilotSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { ModelAddDialog } from "@/settings/v2/components/ModelAddDialog";
@@ -164,7 +164,7 @@ export const ModelSettings: React.FC = () => {
             updateSetting("activeModels", updatedModels);
           }}
           ping={(model) =>
-            ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(model)
+            ProjectModeManager.instance.getCurrentChainManager().chatModelManager.ping(model)
           }
         />
 

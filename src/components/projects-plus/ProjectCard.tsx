@@ -1,19 +1,19 @@
-import { Goal, GoalStatus } from "@/types/projects-plus";
+import { Project, ProjectStatus } from "@/types/projects-plus";
 import { Check, Edit, FileText, MessageSquare, MoreVertical, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
 
-interface GoalCardProps {
-  goal: Goal;
+interface ProjectCardProps {
+  project: Project;
   onEdit: () => void;
   onComplete: () => void;
   onDelete: () => void;
 }
 
 /**
- * Get badge styling based on goal status
+ * Get badge styling based on project status
  */
-function getStatusBadgeStyles(status: GoalStatus): string {
+function getStatusBadgeStyles(status: ProjectStatus): string {
   switch (status) {
     case "active":
       return "tw-bg-interactive-accent-hsl/20 tw-text-accent";
@@ -50,9 +50,9 @@ function formatRelativeTime(timestamp: number): string {
 }
 
 /**
- * GoalCard - Individual goal card with actions
+ * ProjectCard - Individual project card with actions
  */
-export default function GoalCard({ goal, onEdit, onComplete, onDelete }: GoalCardProps) {
+export default function ProjectCard({ project, onEdit, onComplete, onDelete }: ProjectCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   const handleMenuClick = (e: React.MouseEvent) => {
@@ -75,12 +75,14 @@ export default function GoalCard({ goal, onEdit, onComplete, onDelete }: GoalCar
     >
       {/* Header with title and status */}
       <div className="tw-mb-2 tw-flex tw-items-start tw-justify-between tw-gap-2">
-        <h3 className="tw-line-clamp-1 tw-text-base tw-font-medium tw-text-normal">{goal.name}</h3>
+        <h3 className="tw-line-clamp-1 tw-text-base tw-font-medium tw-text-normal">
+          {project.name}
+        </h3>
         <div className="tw-flex tw-items-center tw-gap-2">
           <span
-            className={`tw-rounded-sm tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-capitalize ${getStatusBadgeStyles(goal.status)}`}
+            className={`tw-rounded-sm tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-capitalize ${getStatusBadgeStyles(project.status)}`}
           >
-            {goal.status}
+            {project.status}
           </span>
 
           {/* Menu button */}
@@ -107,7 +109,7 @@ export default function GoalCard({ goal, onEdit, onComplete, onDelete }: GoalCar
                     <Edit className="tw-size-4" />
                     Edit
                   </button>
-                  {goal.status === "active" && (
+                  {project.status === "active" && (
                     <button
                       onClick={handleAction(onComplete)}
                       className="tw-flex tw-w-full tw-items-center tw-gap-2 tw-px-3 tw-py-1.5 tw-text-sm tw-text-normal hover:tw-bg-modifier-hover"
@@ -131,8 +133,8 @@ export default function GoalCard({ goal, onEdit, onComplete, onDelete }: GoalCar
       </div>
 
       {/* Description preview */}
-      {goal.description && (
-        <p className="tw-mb-3 tw-line-clamp-2 tw-text-sm tw-text-muted">{goal.description}</p>
+      {project.description && (
+        <p className="tw-mb-3 tw-line-clamp-2 tw-text-sm tw-text-muted">{project.description}</p>
       )}
 
       {/* Stats and timestamp */}
@@ -140,14 +142,14 @@ export default function GoalCard({ goal, onEdit, onComplete, onDelete }: GoalCar
         <div className="tw-flex tw-items-center tw-gap-3">
           <span className="tw-flex tw-items-center tw-gap-1">
             <FileText className="tw-size-3" />
-            {goal.notes.length} notes
+            {project.notes.length} notes
           </span>
           <span className="tw-flex tw-items-center tw-gap-1">
             <MessageSquare className="tw-size-3" />
-            {goal.conversations.length} conversations
+            {project.conversations.length} conversations
           </span>
         </div>
-        <span>{formatRelativeTime(goal.updatedAt)}</span>
+        <span>{formatRelativeTime(project.updatedAt)}</span>
       </div>
     </div>
   );

@@ -1,5 +1,5 @@
-import { GoalCreationMessage } from "@/types/projects-plus";
-import { stripExtractionBlock } from "@/core/projects-plus/GoalCreationState";
+import { ProjectCreationMessage } from "@/types/projects-plus";
+import { stripExtractionBlock } from "@/core/projects-plus/ProjectCreationState";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -8,9 +8,9 @@ import { Bot, Send, User } from "lucide-react";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-interface GoalCreationChatProps {
+interface ProjectCreationChatProps {
   /** Conversation messages */
-  messages: GoalCreationMessage[];
+  messages: ProjectCreationMessage[];
   /** Whether AI is currently streaming */
   isStreaming: boolean;
   /** Current streaming content (partial response) */
@@ -28,15 +28,15 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 /**
- * GoalCreationChat - Chat interface for goal creation conversation
+ * ProjectCreationChat - Chat interface for project creation conversation
  */
-export default function GoalCreationChat({
+export default function ProjectCreationChat({
   messages,
   isStreaming,
   currentStreamingContent,
   onSendMessage,
   error,
-}: GoalCreationChatProps) {
+}: ProjectCreationChatProps) {
   const [inputValue, setInputValue] = useState("");
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -153,7 +153,7 @@ export default function GoalCreationChat({
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Describe your goal..."
+            placeholder="Describe your project..."
             disabled={isStreaming}
             rows={1}
             className="tw-max-h-32 tw-min-h-10 tw-resize-none"
@@ -175,7 +175,7 @@ export default function GoalCreationChat({
 /**
  * Individual chat message component
  */
-function ChatMessage({ message }: { message: GoalCreationMessage }) {
+function ChatMessage({ message }: { message: ProjectCreationMessage }) {
   const isUser = message.role === "user";
   const displayContent = stripExtractionBlock(message.content);
 

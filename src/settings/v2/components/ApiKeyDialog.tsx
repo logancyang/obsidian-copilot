@@ -6,7 +6,7 @@ import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { PasswordInput } from "@/components/ui/password-input";
 import { ChatModelProviders, ProviderSettingsKeyMap, SettingKeyProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ProjectModeManager from "@/LLMProviders/projectManager";
 import { logError } from "@/logger";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
@@ -182,7 +182,9 @@ function ApiKeyModalContent({ onClose }: ApiKeyModalContentProps) {
 
       // Try to verify the model, but don't block on failure
       try {
-        await ProjectManager.instance.getCurrentChainManager().chatModelManager.ping(customModel);
+        await ProjectModeManager.instance
+          .getCurrentChainManager()
+          .chatModelManager.ping(customModel);
       } catch (error) {
         verificationFailed = true;
         verificationError = err2String(error);

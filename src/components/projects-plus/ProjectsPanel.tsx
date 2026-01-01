@@ -1,128 +1,133 @@
 import CopilotPlugin from "@/main";
-import { Goal, GoalStatus, GoalExtraction, UpdateGoalInput } from "@/types/projects-plus";
+import {
+  Project,
+  ProjectStatus,
+  ProjectExtraction,
+  UpdateProjectInput,
+} from "@/types/projects-plus";
 import { Plus, Search } from "lucide-react";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import GoalList from "./GoalList";
-import GoalDialog from "./GoalDialog";
-import GoalCreation from "./GoalCreation";
+import ProjectList from "./ProjectList";
+import ProjectDialog from "./ProjectDialog";
+import ProjectCreation from "./ProjectCreation";
 
 interface ProjectsPanelProps {
   plugin: CopilotPlugin;
 }
 
-type FilterStatus = GoalStatus | "all";
+type FilterStatus = ProjectStatus | "all";
 type ViewType = "list" | "create";
 
 /**
  * ProjectsPanel - Main container for the Projects+ interface
  *
- * Displays goal list with search/filter capabilities and
- * provides goal creation functionality via AI-assisted flow.
+ * Displays project list with search/filter capabilities and
+ * provides project creation functionality via AI-assisted flow.
  */
 export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
   const [view, setView] = useState<ViewType>("list");
-  const [goals, setGoals] = useState<Goal[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
 
-  // Subscribe to GoalManager changes
+  // Subscribe to ProjectManager changes
   useEffect(() => {
-    const unsubscribe = plugin.goalManager.subscribe(() => {
-      setGoals(plugin.goalManager.getAllGoals());
+    const unsubscribe = plugin.projectsPlusManager.subscribe(() => {
+      setProjects(plugin.projectsPlusManager.getAllProjects());
     });
 
     // Initial load
-    setGoals(plugin.goalManager.getAllGoals());
+    setProjects(plugin.projectsPlusManager.getAllProjects());
 
     return unsubscribe;
-  }, [plugin.goalManager]);
+  }, [plugin.projectsPlusManager]);
 
   // Filter and search logic
-  const filteredGoals = useMemo(() => {
-    let result = goals;
+  const filteredProjects = useMemo(() => {
+    let result = projects;
 
     // Filter by status
     if (filter !== "all") {
-      result = result.filter((g) => g.status === filter);
+      result = result.filter((p) => p.status === filter);
     }
 
     // Filter by search query
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
-        (g) => g.name.toLowerCase().includes(query) || g.description.toLowerCase().includes(query)
+        (p) => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query)
       );
     }
 
     // Sort by most recently updated
     return result.sort((a, b) => b.updatedAt - a.updatedAt);
-  }, [goals, filter, searchQuery]);
+  }, [projects, filter, searchQuery]);
 
   /**
-   * Handle goal creation completion from AI-assisted flow
+   * Handle project creation completion from AI-assisted flow
    */
-  const handleGoalCreationComplete = useCallback(
-    async (extraction: GoalExtraction) => {
-      await plugin.goalManager.createGoal({
+  const handleProjectCreationComplete = useCallback(
+    async (extraction: ProjectExtraction) => {
+      await plugin.projectsPlusManager.createProject({
         name: extraction.name,
         description: extraction.description,
       });
       setView("list");
     },
-    [plugin.goalManager]
+    [plugin.projectsPlusManager]
   );
 
   /**
-   * Handle goal creation cancellation
+   * Handle project creation cancellation
    */
-  const handleGoalCreationCancel = useCallback(() => {
+  const handleProjectCreationCancel = useCallback(() => {
     setView("list");
   }, []);
 
-  const handleUpdateGoal = useCallback(
-    async (input: UpdateGoalInput) => {
-      if (editingGoal) {
-        await plugin.goalManager.updateGoal(editingGoal.id, input);
-        setEditingGoal(null);
+  const handleUpdateProject = useCallback(
+    async (input: UpdateProjectInput) => {
+      if (editingProject) {
+        await plugin.projectsPlusManager.updateProject(editingProject.id, input);
+        setEditingProject(null);
       }
     },
-    [plugin.goalManager, editingGoal]
+    [plugin.projectsPlusManager, editingProject]
   );
 
-  const handleCompleteGoal = useCallback(
-    async (goalId: string) => {
-      await plugin.goalManager.completeGoal(goalId);
+  const handleCompleteProject = useCallback(
+    async (projectId: string) => {
+      await plugin.projectsPlusManager.completeProject(projectId);
     },
-    [plugin.goalManager]
+    [plugin.projectsPlusManager]
   );
 
-  const handleDeleteGoal = useCallback(
-    async (goalId: string) => {
-      await plugin.goalManager.deleteGoal(goalId);
+  const handleDeleteProject = useCallback(
+    async (projectId: string) => {
+      await plugin.projectsPlusManager.deleteProject(projectId);
     },
-    [plugin.goalManager]
+    [plugin.projectsPlusManager]
   );
 
-  const handleEditGoal = useCallback((goal: Goal) => {
-    setEditingGoal(goal);
+  const handleEditProject = useCallback((project: Project) => {
+    setEditingProject(project);
   }, []);
 
-  // Render goal creation view
+  // Render project creation view
   if (view === "create") {
     return (
-      <GoalCreation
-        onCancel={handleGoalCreationCancel}
-        onComplete={handleGoalCreationComplete}
-        goalManager={plugin.goalManager}
+      <ProjectCreation
+        onCancel={handleProjectCreationCancel}
+        onComplete={handleProjectCreationComplete}
+        projectManager={plugin.projectsPlusManager}
       />
     );
   }
 
-  // Render goal list view
+  // Render project list view
   return (
     <div className="tw-flex tw-h-full tw-flex-col tw-p-4">
       {/* Header */}
@@ -134,7 +139,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
           className="tw-flex tw-items-center tw-gap-1"
         >
           <Plus className="tw-size-4" />
-          New Goal
+          New Project
         </Button>
       </div>
 
@@ -143,7 +148,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
         <div className="tw-relative tw-flex-1">
           <Search className="tw-absolute tw-left-2 tw-top-1/2 tw-size-4 tw--translate-y-1/2 tw-text-muted" />
           <Input
-            placeholder="Search goals..."
+            placeholder="Search projects..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="tw-pl-8"
@@ -161,23 +166,23 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
         </select>
       </div>
 
-      {/* Goal list */}
+      {/* Project list */}
       <div className="tw-flex-1 tw-overflow-y-auto">
-        <GoalList
-          goals={filteredGoals}
-          onEditGoal={handleEditGoal}
-          onCompleteGoal={handleCompleteGoal}
-          onDeleteGoal={handleDeleteGoal}
+        <ProjectList
+          projects={filteredProjects}
+          onEditProject={handleEditProject}
+          onCompleteProject={handleCompleteProject}
+          onDeleteProject={handleDeleteProject}
         />
       </div>
 
       {/* Edit dialog */}
-      <GoalDialog
-        open={!!editingGoal}
-        onOpenChange={(open) => !open && setEditingGoal(null)}
-        goal={editingGoal ?? undefined}
-        onSave={handleUpdateGoal}
-        title="Edit Goal"
+      <ProjectDialog
+        open={!!editingProject}
+        onOpenChange={(open) => !open && setEditingProject(null)}
+        project={editingProject ?? undefined}
+        onSave={handleUpdateProject}
+        title="Edit Project"
       />
     </div>
   );

@@ -49,13 +49,13 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
   };*/
 
   const handleRetryFailedItem = async (item: FailedItem) => {
-    if (!plugin?.projectManager) {
-      logError("ProjectManager not available");
+    if (!plugin?.projectModeManager) {
+      logError("ProjectModeManager not available");
       return;
     }
 
     try {
-      await plugin.projectManager.retryFailedItem(item);
+      await plugin.projectModeManager.retryFailedItem(item);
     } catch (error) {
       logError(`Error retrying failed item: ${error}`);
     }

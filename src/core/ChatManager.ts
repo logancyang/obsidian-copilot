@@ -5,7 +5,7 @@ import { logInfo } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ProjectModeManager from "@/LLMProviders/projectManager";
 import { updateChatMemory } from "@/chatUtils";
 import CopilotPlugin from "@/main";
 import { ContextManager } from "./ContextManager";
@@ -47,7 +47,7 @@ export class ChatManager {
    * Automatically detects project changes and handles repository switching
    */
   private getCurrentMessageRepo(): MessageRepository {
-    const currentProjectId = this.plugin.projectManager.getCurrentProjectId();
+    const currentProjectId = this.plugin.projectModeManager.getCurrentProjectId();
     const projectKey = currentProjectId ?? this.defaultProjectKey;
 
     // Detect if project has changed
@@ -97,7 +97,7 @@ export class ChatManager {
     if (chainType === ChainType.PROJECT_CHAIN) {
       const project = getCurrentProject();
       if (project) {
-        const context = await ProjectManager.instance.getProjectContext(project.id);
+        const context = await ProjectModeManager.instance.getProjectContext(project.id);
         let result = `${basePrompt}\n\n<project_system_prompt>\n${project.systemPrompt}\n</project_system_prompt>`;
 
         // Only add project_context block if context exists
@@ -437,7 +437,7 @@ export class ChatManager {
     const currentRepo = this.getCurrentMessageRepo();
     return {
       ...currentRepo.getDebugInfo(),
-      currentProject: this.plugin.projectManager.getCurrentProjectId(),
+      currentProject: this.plugin.projectModeManager.getCurrentProjectId(),
       totalProjects: this.projectMessageRepos.size,
     };
   }
@@ -447,7 +447,7 @@ export class ChatManager {
    * This ensures the UI gets the correct messages when switching projects
    */
   async handleProjectSwitch(): Promise<void> {
-    const currentProjectId = this.plugin.projectManager.getCurrentProjectId();
+    const currentProjectId = this.plugin.projectModeManager.getCurrentProjectId();
     logInfo(`[ChatManager] Handling project switch to: ${currentProjectId}`);
 
     // Force detection of project change

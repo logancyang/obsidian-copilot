@@ -1,12 +1,12 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ProjectModeManager from "@/LLMProviders/projectManager";
 import { CustomModel, getCurrentProject, setSelectedTextContexts } from "@/aiParams";
 import { SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import ProjectsView from "@/components/projects-plus/ProjectsView";
-import { GoalManager } from "@/core/projects-plus/GoalManager";
+import { ProjectManager } from "@/core/projects-plus/ProjectManager";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
 import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
@@ -62,7 +62,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export default class CopilotPlugin extends Plugin {
   // Plugin components
-  projectManager: ProjectManager;
+  projectModeManager: ProjectModeManager;
   brevilabsClient: BrevilabsClient;
   userMessageHistory: string[] = [];
   vectorStoreManager: VectorStoreManager;
@@ -71,7 +71,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
-  goalManager: GoalManager;
+  projectsPlusManager: ProjectManager;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
 
@@ -97,8 +97,8 @@ export default class CopilotPlugin extends Plugin {
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
 
-    // Initialize ProjectManager
-    this.projectManager = ProjectManager.getInstance(this.app, this);
+    // Initialize ProjectModeManager (for context-switching mode)
+    this.projectModeManager = ProjectModeManager.getInstance(this.app, this);
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
@@ -113,17 +113,17 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize ChatUIState with new architecture
     const messageRepo = new MessageRepository();
-    const chainManager = this.projectManager.getCurrentChainManager();
+    const chainManager = this.projectModeManager.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
     this.chatUIState = new ChatUIState(chatManager);
 
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
 
-    // Initialize GoalManager for Projects+
-    this.goalManager = new GoalManager(this.app);
+    // Initialize ProjectManager for Projects+
+    this.projectsPlusManager = new ProjectManager(this.app);
     if (getSettings().projectsPlusEnabled) {
-      await this.goalManager.initialize();
+      await this.projectsPlusManager.initialize();
     }
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
@@ -198,8 +198,8 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
-    if (this.projectManager) {
-      this.projectManager.onunload();
+    if (this.projectModeManager) {
+      this.projectModeManager.onunload();
     }
 
     // Cleanup VaultDataManager event listeners
@@ -444,11 +444,11 @@ export default class CopilotPlugin extends Plugin {
    * Open the Projects+ panel
    */
   async activateProjectsView(): Promise<void> {
-    // Initialize GoalManager if not already done
-    if (!this.goalManager) {
-      this.goalManager = new GoalManager(this.app);
+    // Initialize ProjectManager if not already done
+    if (!this.projectsPlusManager) {
+      this.projectsPlusManager = new ProjectManager(this.app);
     }
-    await this.goalManager.initialize();
+    await this.projectsPlusManager.initialize();
 
     const leaves = this.app.workspace.getLeavesOfType(PROJECTS_PLUS_VIEWTYPE);
     if (leaves.length === 0) {
@@ -631,7 +631,7 @@ export default class CopilotPlugin extends Plugin {
     if (getSettings().enableRecentConversations) {
       try {
         // Get the current chat model from the chain manager
-        const chainManager = this.projectManager.getCurrentChainManager();
+        const chainManager = this.projectModeManager.getCurrentChainManager();
         const chatModel = chainManager.chatModelManager.getChatModel();
         this.userMemoryManager.addRecentConversation(this.chatUIState.getMessages(), chatModel);
       } catch (error) {

@@ -25,8 +25,8 @@ import { BrevilabsClient } from "./brevilabsClient";
 import ChainManager from "./chainManager";
 import { ProjectLoadTracker } from "./projectLoadTracker";
 
-export default class ProjectManager {
-  public static instance: ProjectManager;
+export default class ProjectModeManager {
+  public static instance: ProjectModeManager;
   private currentProjectId: string | null;
   private app: App;
   private plugin: CopilotPlugin;
@@ -36,6 +36,7 @@ export default class ProjectManager {
   private loadTracker: ProjectLoadTracker;
 
   private constructor(app: App, plugin: CopilotPlugin) {
+    // Note: This is ProjectModeManager (formerly ProjectManager) for context-switching
     this.app = app;
     this.plugin = plugin;
     this.currentProjectId = null;
@@ -109,11 +110,11 @@ export default class ProjectManager {
     });
   }
 
-  public static getInstance(app: App, plugin: CopilotPlugin): ProjectManager {
-    if (!ProjectManager.instance) {
-      ProjectManager.instance = new ProjectManager(app, plugin);
+  public static getInstance(app: App, plugin: CopilotPlugin): ProjectModeManager {
+    if (!ProjectModeManager.instance) {
+      ProjectModeManager.instance = new ProjectModeManager(app, plugin);
     }
-    return ProjectManager.instance;
+    return ProjectModeManager.instance;
   }
 
   public getCurrentChainManager(): ChainManager {

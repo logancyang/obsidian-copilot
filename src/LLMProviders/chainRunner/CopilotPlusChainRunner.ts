@@ -54,7 +54,7 @@ import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ModelAdapterFactory, joinPromptSections } from "./utils/modelAdapter";
 import { parseXMLToolCalls } from "./utils/xmlParsing";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
-import ProjectManager from "@/LLMProviders/projectManager";
+import ProjectModeManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
 
 type ToolCallWithExecutor = {
@@ -265,7 +265,9 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     if (message.includes("@websearch") || message.includes("@web")) {
       const hasWebSearch = toolCalls.some((tc) => tc.tool.name === "webSearch");
       if (!hasWebSearch) {
-        const memory = ProjectManager.instance.getCurrentChainManager().memoryManager.getMemory();
+        const memory = ProjectModeManager.instance
+          .getCurrentChainManager()
+          .memoryManager.getMemory();
         const memoryVariables = await memory.loadMemoryVariables({});
         const chatHistory = extractChatHistory(memoryVariables);
 

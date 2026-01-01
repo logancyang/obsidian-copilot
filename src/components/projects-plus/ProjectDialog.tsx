@@ -1,4 +1,4 @@
-import { Goal, CreateGoalInput, UpdateGoalInput } from "@/types/projects-plus";
+import { Project, CreateProjectInput, UpdateProjectInput } from "@/types/projects-plus";
 import * as React from "react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -12,29 +12,35 @@ import {
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 
-interface GoalDialogProps {
+interface ProjectDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  goal?: Goal;
-  onSave: (input: CreateGoalInput | UpdateGoalInput) => Promise<void>;
+  project?: Project;
+  onSave: (input: CreateProjectInput | UpdateProjectInput) => Promise<void>;
   title: string;
 }
 
 /**
- * GoalDialog - Modal for creating or editing a goal
+ * ProjectDialog - Modal for creating or editing a project
  */
-export default function GoalDialog({ open, onOpenChange, goal, onSave, title }: GoalDialogProps) {
+export default function ProjectDialog({
+  open,
+  onOpenChange,
+  project,
+  onSave,
+  title,
+}: ProjectDialogProps) {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Reset form when dialog opens/closes or goal changes
+  // Reset form when dialog opens/closes or project changes
   useEffect(() => {
     if (open) {
-      setName(goal?.name ?? "");
-      setDescription(goal?.description ?? "");
+      setName(project?.name ?? "");
+      setDescription(project?.description ?? "");
     }
-  }, [open, goal]);
+  }, [open, project]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -65,11 +71,11 @@ export default function GoalDialog({ open, onOpenChange, goal, onSave, title }: 
 
           <div className="tw-flex tw-flex-col tw-gap-4 tw-py-4">
             <div className="tw-flex tw-flex-col tw-gap-2">
-              <label htmlFor="goal-name" className="tw-text-sm tw-font-medium tw-text-normal">
+              <label htmlFor="project-name" className="tw-text-sm tw-font-medium tw-text-normal">
                 Name
               </label>
               <Input
-                id="goal-name"
+                id="project-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="e.g., Learn TypeScript"
@@ -79,13 +85,13 @@ export default function GoalDialog({ open, onOpenChange, goal, onSave, title }: 
 
             <div className="tw-flex tw-flex-col tw-gap-2">
               <label
-                htmlFor="goal-description"
+                htmlFor="project-description"
                 className="tw-text-sm tw-font-medium tw-text-normal"
               >
                 Description
               </label>
               <Textarea
-                id="goal-description"
+                id="project-description"
                 value={description}
                 onChange={(e) => setDescription(e.target.value)}
                 placeholder="What do you want to achieve?"
@@ -99,7 +105,7 @@ export default function GoalDialog({ open, onOpenChange, goal, onSave, title }: 
               Cancel
             </Button>
             <Button type="submit" disabled={!isValid || isSubmitting}>
-              {isSubmitting ? "Saving..." : goal ? "Save Changes" : "Create Goal"}
+              {isSubmitting ? "Saving..." : project ? "Save Changes" : "Create Project"}
             </Button>
           </DialogFooter>
         </form>

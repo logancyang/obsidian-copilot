@@ -8,7 +8,7 @@
 
 ### Product Context
 
-Projects+ is a goal-oriented workspace within Copilot for Obsidian. Users create goals, AI matches relevant notes from their vault, and they engage with knowledge through focused discussions. MVP focuses on the Discuss action only.
+Projects+ is a project-oriented workspace within Copilot for Obsidian. Users create projects, AI matches relevant notes from their vault, and they engage with knowledge through focused discussions. MVP focuses on the Discuss action only.
 
 ### Interaction Model
 
@@ -41,34 +41,34 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ### From Copilot (Reuse Directly)
 
-| Component                     | Location                            | Usage               |
-| ----------------------------- | ----------------------------------- | ------------------- |
-| Card, CardHeader, CardContent | `src/components/ui/card.tsx`        | Goal cards          |
-| Button (all variants)         | `src/components/ui/button.tsx`      | Actions             |
-| Badge                         | `src/components/ui/badge.tsx`       | Status indicators   |
-| ScrollArea                    | `src/components/ui/scroll-area.tsx` | Scrollable lists    |
-| Dialog                        | `src/components/ui/dialog.tsx`      | Goal creation modal |
-| Input, Textarea               | `src/components/ui/input.tsx`       | Form fields         |
-| Checkbox                      | `src/components/ui/checkbox.tsx`    | Note selection      |
-| Collapsible                   | `src/components/ui/collapsible.tsx` | Expandable sections |
-| ChatMessages                  | `src/components/chat-components/`   | Discuss UI          |
-| ChatInput                     | `src/components/chat-components/`   | Discuss input       |
-| ChatSingleMessage             | `src/components/chat-components/`   | Message rendering   |
-| SearchBar                     | `src/components/ui/SearchBar.tsx`   | Note filtering      |
+| Component                     | Location                            | Usage                  |
+| ----------------------------- | ----------------------------------- | ---------------------- |
+| Card, CardHeader, CardContent | `src/components/ui/card.tsx`        | Project cards          |
+| Button (all variants)         | `src/components/ui/button.tsx`      | Actions                |
+| Badge                         | `src/components/ui/badge.tsx`       | Status indicators      |
+| ScrollArea                    | `src/components/ui/scroll-area.tsx` | Scrollable lists       |
+| Dialog                        | `src/components/ui/dialog.tsx`      | Project creation modal |
+| Input, Textarea               | `src/components/ui/input.tsx`       | Form fields            |
+| Checkbox                      | `src/components/ui/checkbox.tsx`    | Note selection         |
+| Collapsible                   | `src/components/ui/collapsible.tsx` | Expandable sections    |
+| ChatMessages                  | `src/components/chat-components/`   | Discuss UI             |
+| ChatInput                     | `src/components/chat-components/`   | Discuss input          |
+| ChatSingleMessage             | `src/components/chat-components/`   | Message rendering      |
+| SearchBar                     | `src/components/ui/SearchBar.tsx`   | Note filtering         |
 
 ### New Components (Build for Projects+)
 
-| Component        | Purpose                                        |
-| ---------------- | ---------------------------------------------- |
-| ProjectsView     | Obsidian ItemView for separate panel           |
-| GoalCard         | Goal preview with note count, activity         |
-| GoalList         | Home screen goal listing with search           |
-| GoalDetail       | Goal detail with notes, actions, conversations |
-| GoalCreationFlow | Hybrid chat + live form                        |
-| NoteAssignment   | AI suggestions + manual note selection         |
-| NoteCard         | Note display with checkbox, excerpt            |
-| ConversationList | Resumable conversation threads                 |
-| ConversationItem | Single conversation with topic, date           |
+| Component             | Purpose                                           |
+| --------------------- | ------------------------------------------------- |
+| ProjectsView          | Obsidian ItemView for separate panel              |
+| ProjectCard           | Project preview with note count, activity         |
+| ProjectList           | Home screen project listing with search           |
+| ProjectDetail         | Project detail with notes, actions, conversations |
+| ProjectCreationDialog | Dialog with left-right layout: form + chat        |
+| NoteAssignment        | AI suggestions + manual note selection            |
+| NoteCard              | Note display with checkbox, excerpt               |
+| ConversationList      | Resumable conversation threads                    |
+| ConversationItem      | Single conversation with topic, date              |
 
 ---
 
@@ -80,7 +80,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ### Screen 1.1: Welcome
 
-**Purpose**: Introduce the goal-oriented philosophy
+**Purpose**: Introduce the project-oriented philosophy
 
 ```
 ┌─────────────────────────────────────┐
@@ -94,7 +94,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │       for a purpose."               │
 │                                     │
 │   ┌─────────────────────────────┐   │
-│   │    Create your first goal   │   │
+│   │    Create your first project│   │
 │   └─────────────────────────────┘   │
 │                                     │
 │        Skip for now (ghost link)    │
@@ -104,16 +104,16 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 **Interactions**:
 
-- "Create your first goal" → Opens Goal Creation flow
+- "Create your first project" → Opens Project Creation flow
 - "Skip for now" → Shows empty Home screen with CTA
 
 ---
 
-## 2. Home Screen (Goal List)
+## 2. Home Screen (Project List)
 
 ### Screen 2.1: Empty State
 
-**Purpose**: Encourage first goal creation
+**Purpose**: Encourage first project creation
 
 ```
 ┌─────────────────────────────────────┐
@@ -124,31 +124,31 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │      ┌───────────────────────┐      │
 │      │   📋 (illustration)   │      │
 │      │                       │      │
-│      │   No active goals     │      │
+│      │   No active projects  │      │
 │      │                       │      │
 │      │   What are you trying │      │
 │      │   to accomplish?      │      │
 │      └───────────────────────┘      │
 │                                     │
 │   ┌─────────────────────────────┐   │
-│   │    + Create a goal          │   │
+│   │    + Create a project       │   │
 │   └─────────────────────────────┘   │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-### Screen 2.2: With Goals
+### Screen 2.2: With Projects
 
-**Purpose**: Quick overview and navigation to goals
+**Purpose**: Quick overview and navigation to projects
 
 ```
 ┌─────────────────────────────────────┐
 │  🎯 Projects+                  ⚙️   │
 ├─────────────────────────────────────┤
 │                                     │
-│  🔍 Search goals...                 │
+│  🔍 Search projects...              │
 │                                     │
-│  Active Goals (2)                   │
+│  Active Projects (2)                │
 │                                     │
 │  ┌─────────────────────────────────┐│
 │  │ Build portfolio website         ││
@@ -172,168 +172,157 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │  └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘│
 │                                     │
 │         ┌─────────────────┐         │
-│         │  + New Goal     │         │
+│         │  + New Project  │         │
 │         └─────────────────┘         │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-**Goal Card States**:
+**Project Card States**:
 
 - Active: Normal opacity, full interaction
 - Completed: Dashed border, muted colors, checkmark
 
 **Interactions**:
 
-- Click goal card → Navigate to Goal Detail
-- Click "+ New Goal" → Open Goal Creation flow
+- Click project card → Navigate to Project Detail
+- Click "+ New Project" → Open Project Creation flow
 - Click ⚙️ → Open Settings (Projects+ tab)
-- "Show ▼" → Expand/collapse completed goals section
-- Search → Filter goals by name
+- "Show ▼" → Expand/collapse completed projects section
+- Search → Filter projects by name
 
 ---
 
-## 3. Goal Creation (Hybrid Flow)
+## 3. Project Creation (Dialog Flow)
 
-### Screen 3.1: Chat + Form Layout
+Project creation uses a centered dialog modal (~800px wide) with a left-right layout for a spacious, focused experience.
 
-**Purpose**: Conversational goal refinement with real-time form population
+### Screen 3.1: Project Creation Dialog
+
+**Purpose**: Conversational project refinement with real-time form population in a dialog
 
 ```
-┌─────────────────────────────────────┐
-│  ← Back          Creating Goal      │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────────────────────────────────┐│
-│  │ GOAL PREVIEW              Live ││
-│  │ ─────────────────────────────  ││
-│  │ Name: Build portfolio website  ││
-│  │ Description: Create a personal ││
-│  │ site to showcase my React...   ││
-│  │ Deadline: (optional)           ││
-│  │                                ││
-│  │ [Edit manually]                ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  ───────── Chat ─────────────────── │
-│                                     │
-│  🤖 What are you trying to          │
-│     accomplish? Tell me about       │
-│     your goal in your own words.    │
-│                                     │
-│     ┌─────────────────────────────┐ │
-│     │ I want to build a portfolio │ │
-│     │ website to land a frontend  │ │
-│     │ dev job                     │ │
-│     └─────────────────────────────┘ │
-│                                 You │
-│                                     │
-│  🤖 Great! A portfolio site for     │
-│     job hunting. What technologies  │
-│     are you planning to use?        │
-│                                     │
-│     I have the form updating as we  │
-│     chat ↑                          │
-│                                     │
-├─────────────────────────────────────┤
-│  ┌─────────────────────────────┐    │
-│  │ Type your response...       │ ➤  │
-│  └─────────────────────────────┘    │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ✕                         Create New Project                            │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  ┌───────────────────────────────┐ │ ┌─────────────────────────────────┐│
+│  │ PROJECT DETAILS               │ │ │                                 ││
+│  │ ───────────────────────────── │ │ │ 🤖 Let's define your project.   ││
+│  │                               │ │ │    Tell me what you're trying   ││
+│  │ Title                         │ │ │    to accomplish in your own    ││
+│  │ ┌───────────────────────────┐ │ │ │    words.                       ││
+│  │ │ Build portfolio website   │ │ │ │                                 ││
+│  │ └───────────────────────────┘ │ │ │ ┌─────────────────────────────┐ ││
+│  │                               │ │ │ │ I want to build a portfolio │ ││
+│  │ Description                   │ │ │ │ website to land a frontend  │ ││
+│  │ ┌───────────────────────────┐ │ │ │ │ dev job                     │ ││
+│  │ │ Create a modern React-    │ │ │ │ └─────────────────────────────┘ ││
+│  │ │ based portfolio site to   │ │ │ │                             You ││
+│  │ │ showcase projects...      │ │ │ │                                 ││
+│  │ │                           │ │ │ │ 🤖 Great! What will success     ││
+│  │ └───────────────────────────┘ │ │ │    look like for this project?  ││
+│  │                               │ │ │                                 ││
+│  │ Success Criteria              │ │ │ ┌─────────────────────────────┐ ││
+│  │ ┌───────────────────────────┐ │ │ │ │ Having a live site with 3-4 │ ││
+│  │ │ • Live site deployed      │ │ │ │ │ projects that's responsive  │ ││
+│  │ │ • 3-4 projects showcased  │ │ │ │ └─────────────────────────────┘ ││
+│  │ │ • Mobile responsive       │ │ │ │                             You ││
+│  │ └───────────────────────────┘ │ │ │                                 ││
+│  │                               │ │ │ 🤖 Perfect! I've updated the    ││
+│  │ Deadline (optional)           │ │ │    form. Ready to find relevant ││
+│  │ ┌───────────────────────────┐ │ │ │    notes in your vault?         ││
+│  │ │ 📅 Jan 15, 2026           │ │ │ │                                 ││
+│  │ └───────────────────────────┘ │ │ ├─────────────────────────────────┤│
+│  │                               │ │ │ ┌─────────────────────────┐  ➤  ││
+│  └───────────────────────────────┘ │ │ │ Type response...        │     ││
+│                                    │ │ └─────────────────────────┘     ││
+│                                    │ └─────────────────────────────────┘│
+├─────────────────────────────────────────────────────────────────────────┤
+│                           Cancel              Find Relevant Notes →     │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-**Form Fields** (in Goal Preview):
+**Layout**:
 
-- Name (required): Auto-populated from chat, editable
-- Description (required): AI-generated summary, editable
-- Deadline (optional): Date picker
+- Left panel (~40%): Form with project details
+- Right panel (~60%): Chat interface for conversational refinement
+- Footer: Action buttons
+
+**Form Fields** (left panel):
+
+| Field            | Type          | Required | Notes                            |
+| ---------------- | ------------- | -------- | -------------------------------- |
+| Title            | Text input    | Yes      | Auto-populated from chat         |
+| Description      | Textarea      | Yes      | AI-generated summary, editable   |
+| Success Criteria | Textarea/List | Yes      | Bulleted list of success markers |
+| Deadline         | Date picker   | No       | Optional target date             |
 
 **AI Conversation Flow**:
 
-1. "What are you trying to accomplish?" → Extracts goal name
-2. "What will success look like?" → Builds description
-3. "When do you want to finish this?" (optional) → Sets deadline
+1. "What are you trying to accomplish?" → Extracts title
+2. "What will success look like for this project?" → Populates success criteria
+3. "Can you describe this project in more detail?" → Builds description
 4. "Let me suggest some notes..." → Transitions to note assignment
 
 **Interactions**:
 
-- Type message + Enter/click ➤ → Send message
-- Click "Edit manually" → Expand form for direct editing
-- Click "← Back" → Confirm discard, return to Home
-- AI detects completeness → Shows "Find Notes" button
+- Type message + Enter/click ➤ → Send message, form updates in real-time
+- Edit form fields directly → Changes reflected immediately
+- Click ✕ or "Cancel" → Confirm discard (if form has content), close dialog
+- Click "Find Relevant Notes →" → Transition to Note Assignment (stays in dialog)
 
-### Screen 3.2: Goal Ready State
+### Screen 3.2: Project Ready State
 
-**Purpose**: Confirm goal details before proceeding to note assignment
+**Purpose**: Confirm project details before proceeding to note assignment
 
-```
-┌─────────────────────────────────────┐
-│  ← Back          Creating Goal      │
-├─────────────────────────────────────┤
-│                                     │
-│  ┌─────────────────────────────────┐│
-│  │ ✨ GOAL READY                  ││
-│  │ ─────────────────────────────  ││
-│  │ Name: Build portfolio website  ││
-│  │                                ││
-│  │ Description: Create a modern   ││
-│  │ React-based portfolio site     ││
-│  │ showcasing 3-4 projects to     ││
-│  │ support job applications.      ││
-│  │                                ││
-│  │ Deadline: Jan 15, 2026         ││
-│  │            (14 days from now)  ││
-│  │                                ││
-│  │ [Edit]                         ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  🤖 Looks good! Ready to find       │
-│     relevant notes in your vault?   │
-│                                     │
-│  ┌─────────────────────────────────┐│
-│  │  🔍 Find Relevant Notes         ││
-│  └─────────────────────────────────┘│
-│                                     │
-│  Or skip and add notes manually     │
-│                                     │
-└─────────────────────────────────────┘
-```
+When AI detects the project is complete, the chat shows a ready message and the primary action becomes prominent.
+
+**Visual Changes**:
+
+- Left form shows ✓ checkmarks next to completed fields
+- Right chat shows: "Looks good! Ready to find relevant notes in your vault?"
+- Footer shows prominent "Find Relevant Notes →" button
+- Secondary link: "Skip and add notes manually"
 
 **Interactions**:
 
-- "Find Relevant Notes" → Proceed to AI Note Assignment
-- "skip and add notes manually" → Create goal, go to Goal Detail
+- "Find Relevant Notes →" → Transition to Note Assignment within dialog
+- "Skip and add notes manually" → Create project, close dialog, show in side panel
 
 ---
 
-## 4. AI Note Assignment
+## 4. AI Note Assignment (Inside Dialog)
+
+Note assignment occurs within the same Project Creation dialog, maintaining context and flow.
 
 ### Screen 4.1: Scanning State
 
 **Purpose**: Show progress while AI analyzes vault
 
 ```
-┌─────────────────────────────────────┐
-│  ← Back       Assigning Notes       │
-├─────────────────────────────────────┤
-│                                     │
-│                                     │
-│                                     │
-│         ┌───────────────────┐       │
-│         │                   │       │
-│         │   🔍 (animated)   │       │
-│         │                   │       │
-│         │  Scanning vault   │       │
-│         │                   │       │
-│         │  Finding notes    │       │
-│         │  relevant to your │       │
-│         │  goal...          │       │
-│         │                   │       │
-│         └───────────────────┘       │
-│                                     │
-│                                     │
-│                                     │
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back                      Assign Notes                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│                                                                         │
+│                                                                         │
+│                     ┌───────────────────────────────┐                   │
+│                     │                               │                   │
+│                     │        🔍 (animated)          │                   │
+│                     │                               │                   │
+│                     │       Scanning vault          │                   │
+│                     │                               │                   │
+│                     │    Finding notes relevant     │                   │
+│                     │    to your project...         │                   │
+│                     │                               │                   │
+│                     └───────────────────────────────┘                   │
+│                                                                         │
+│                                                                         │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                             Cancel      │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 ### Screen 4.2: Note Suggestions
@@ -341,45 +330,38 @@ All Tailwind classes use `tw-` prefix per project configuration.
 **Purpose**: Review and confirm AI-suggested notes
 
 ```
-┌─────────────────────────────────────┐
-│  ← Back       Assigning Notes       │
-├─────────────────────────────────────┤
-│                                     │
-│  For: Build portfolio website       │
-│                                     │
-│  AI found 12 relevant notes         │
-│                                     │
-│  ┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┐ │
-│  │ 🤖 These notes contain info    │ │
-│  │ about React, portfolios, and   │ │
-│  │ web development that could     │ │
-│  │ help with your goal.           │ │
-│  └─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─┘ │
-│                                     │
-│  ☑️ All  │  🔍 Search notes         │
-│  ─────────────────────────────────  │
-│                                     │
-│  [✓] React Best Practices      98%  │
-│      "Component composition..."     │
-│                                     │
-│  [✓] Portfolio Inspiration     94%  │
-│      "Minimalist layouts..."        │
-│                                     │
-│  [✓] CSS Grid Guide            91%  │
-│      "Grid template areas..."       │
-│                                     │
-│  [ ] Webpack Deep Dive         67%  │
-│      "Code splitting..."            │
-│                                     │
-│  ─────────────────────────────────  │
-│  + Browse vault for more notes      │
-│                                     │
-├─────────────────────────────────────┤
-│  8 notes selected                   │
-│  ┌─────────────────────────────────┐│
-│  │      Confirm & Create Goal      ││
-│  └─────────────────────────────────┘│
-└─────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────┐
+│  ← Back                      Assign Notes                               │
+├─────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│  For: Build portfolio website                                           │
+│                                                                         │
+│  ┌─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐ │
+│  │ 🤖 I found 12 notes about React, portfolios, and web dev that    │ │
+│  │    could help with your project.                                 │ │
+│  └─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘ │
+│                                                                         │
+│  ☑️ All  │  🔍 Search notes...                                          │
+│  ───────────────────────────────────────────────────────────────────    │
+│                                                                         │
+│  [✓] React Best Practices                                         98%  │
+│      "Component composition patterns for reusable UI..."               │
+│                                                                         │
+│  [✓] Portfolio Inspiration                                        94%  │
+│      "Minimalist layouts and case study formats..."                    │
+│                                                                         │
+│  [✓] CSS Grid Guide                                               91%  │
+│      "Grid template areas for responsive layouts..."                   │
+│                                                                         │
+│  [ ] Webpack Deep Dive                                            67%  │
+│      "Code splitting and bundle optimization..."                       │
+│                                                                         │
+│  ───────────────────────────────────────────────────────────────────    │
+│  + Browse vault for more notes                                          │
+│                                                                         │
+├─────────────────────────────────────────────────────────────────────────┤
+│  8 notes selected                  Cancel         Confirm & Create →   │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
 **Note Card Details**:
@@ -391,24 +373,25 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 **Interactions**:
 
+- Click ← Back → Return to Project Creation form
 - Click checkbox → Toggle note selection
 - Click "All" checkbox → Select/deselect all
 - Click note row (not checkbox) → Expand to show full excerpt
 - Search → Filter notes by title
-- "+ Browse vault" → Open file picker modal
-- "Confirm & Create Goal" → Create goal, navigate to Goal Detail
+- "+ Browse vault" → Open file picker within dialog
+- "Confirm & Create →" → Create project, close dialog, show Project Detail in side panel
 
 ---
 
-## 5. Goal Detail Screen
+## 5. Project Detail Screen
 
-### Screen 5.1: Active Goal
+### Screen 5.1: Active Project
 
-**Purpose**: Central hub for goal engagement
+**Purpose**: Central hub for project engagement
 
 ```
 ┌─────────────────────────────────────┐
-│  ← Goals    Build portfolio website │
+│  ← Projects  Build portfolio website│
 ├─────────────────────────────────────┤
 │                                     │
 │  ┌─────────────────────────────────┐│
@@ -425,7 +408,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │                                     │
 │  ┌─────────────────────────────────┐│
 │  │  💬 Discuss                     ││
-│  │  Chat about your goal with AI   ││
+│  │  Chat about your project with AI││
 │  │                        Start →  ││
 │  └─────────────────────────────────┘│
 │                                     │
@@ -460,7 +443,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 **Sections**:
 
 1. **Header Stats**: Note count, conversation count
-2. **Description**: Goal description (collapsible if long)
+2. **Description**: Project description (collapsible if long)
 3. **Action**: Discuss action card
 4. **Conversations**: Resumable conversation threads
 5. **Notes**: Assigned notes with add option
@@ -472,11 +455,11 @@ All Tailwind classes use `tw-` prefix per project configuration.
 - Click note → Open in Obsidian
 - "+ Add" on Notes → Open note picker modal
 - "✓ Complete" → Open completion confirmation
-- "⋯ More" → Menu: Edit goal, Delete goal
+- "⋯ More" → Menu: Edit project, Delete project
 
 ### Screen 5.2: Note Management
 
-**Purpose**: Add/remove notes from goal
+**Purpose**: Add/remove notes from project
 
 ```
 ┌─────────────────────────────────────┐
@@ -525,7 +508,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ```
 ┌─────────────────────────────────────┐
-│  ← Goal           Discuss           │
+│  ← Project        Discuss           │
 ├─────────────────────────────────────┤
 │                                     │
 │  ┌─────────────────────────────────┐│
@@ -550,7 +533,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │                                     │
 ├─────────────────────────────────────┤
 │  ┌─────────────────────────────┐    │
-│  │ Ask about your goal...      │ ➤  │
+│  │ Ask about your project...   │ ➤  │
 │  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 ```
@@ -561,7 +544,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ```
 ┌─────────────────────────────────────┐
-│  ← Goal      Discuss                │
+│  ← Project   Discuss                │
 ├─────────────────────────────────────┤
 │                                     │
 │  ┌─────────────────────────────────┐│
@@ -600,11 +583,11 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ### Screen 6.3: Off-Topic Redirect
 
-**Purpose**: Keep conversation focused on goal (gentle redirect)
+**Purpose**: Keep conversation focused on project (gentle redirect)
 
 ```
 ┌─────────────────────────────────────┐
-│  ← Goal      Discuss                │
+│  ← Project   Discuss                │
 ├─────────────────────────────────────┤
 │                                     │
 │  ... (previous messages)            │
@@ -617,7 +600,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │                                     │
 │  🤖 That's a fun question, but      │
 │     let me keep us focused on your  │
-│     portfolio website goal!         │
+│     portfolio website project!      │
 │                                     │
 │     Some things I can help with:    │
 │     • React implementation advice   │
@@ -629,7 +612,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │                                     │
 ├─────────────────────────────────────┤
 │  ┌─────────────────────────────┐    │
-│  │ Ask about your goal...      │ ➤  │
+│  │ Ask about your project...   │ ➤  │
 │  └─────────────────────────────┘    │
 └─────────────────────────────────────┘
 ```
@@ -640,7 +623,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ```
 ┌─────────────────────────────────────┐
-│  ← Goal      React patterns         │
+│  ← Project   React patterns         │
 ├─────────────────────────────────────┤
 │                                     │
 │  Dec 28                             │
@@ -680,30 +663,30 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 - **Source Attribution**: Expandable "Sources" section shows which notes informed the answer
 - **Note Links**: Click to open referenced note in Obsidian
-- **Suggested Questions**: AI-generated prompts based on goal and notes
-- **Off-Topic Handling**: Friendly redirect keeping focus on goal
+- **Suggested Questions**: AI-generated prompts based on project and notes
+- **Off-Topic Handling**: Friendly redirect keeping focus on project
 - **Combined Knowledge**: AI uses notes + its own training for comprehensive answers
 - **Auto-Save**: Conversations automatically save when navigating away
-- **Resume Conversations**: Previous conversations accessible from Goal Detail
+- **Resume Conversations**: Previous conversations accessible from Project Detail
 
 **Auto-Save Behavior**:
 
-- Conversations auto-save to `copilot/projects/[goal]/conversations/[topic].md`
+- Conversations auto-save to `copilot/projects/[project]/conversations/[topic].md`
 - AI auto-generates topic name from conversation content (e.g., "React patterns", "CSS approaches")
 - Topic name generated after first meaningful exchange
 - No user action required to save
 
 ---
 
-## 7. Goal Completion
+## 7. Project Completion
 
 ### Screen 7.1: Completion Confirmation
 
-**Purpose**: Mark goal as done with optional reflection
+**Purpose**: Mark project as done with optional reflection
 
 ```
 ┌─────────────────────────────────────┐
-│  ✕ Cancel      Complete Goal        │
+│  ✕ Cancel      Complete Project     │
 ├─────────────────────────────────────┤
 │                                     │
 │         🎯 (target icon)            │
@@ -730,20 +713,20 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │  │     ✓ Mark as Complete          ││
 │  └─────────────────────────────────┘│
 │                                     │
-│  This goal will become read-only    │
+│  This project will become read-only │
 │  but you can still view its         │
 │  history anytime.                   │
 │                                     │
 └─────────────────────────────────────┘
 ```
 
-### Screen 7.2: Archived Goal View
+### Screen 7.2: Archived Project View
 
 **Purpose**: Read-only historical record
 
 ```
 ┌─────────────────────────────────────┐
-│  ← Goals    Build portfolio website │
+│  ← Projects  Build portfolio website│
 ├─────────────────────────────────────┤
 │                                     │
 │  ┌─────────────────────────────────┐│
@@ -801,7 +784,7 @@ All Tailwind classes use `tw-` prefix per project configuration.
 │  │  ┌─────────────────────────────┐  │    │
 │  │  │ copilot/projects           │  │    │
 │  │  └─────────────────────────────┘  │    │
-│  │  Where goal folders are created   │    │
+│  │  Where project folders are created│    │
 │  │                                   │    │
 │  │  Auto-save conversations          │    │
 │  │  ┌──────┐                         │    │
@@ -830,29 +813,29 @@ All Tailwind classes use `tw-` prefix per project configuration.
 
 ## Interaction Summary
 
-| Screen          | Entry Point                           | Exit Points                                |
-| --------------- | ------------------------------------- | ------------------------------------------ |
-| Welcome         | Panel first open                      | Home, Goal Creation                        |
-| Home            | Panel open, Back from Goal            | Goal Detail, Goal Creation, Settings       |
-| Goal Creation   | "+ New Goal"                          | Home (cancel), Note Assignment             |
-| Note Assignment | Goal creation complete                | Goal Detail                                |
-| Goal Detail     | Click goal card                       | Home, Discuss, Note Management, Completion |
-| Discuss         | "Start" from Goal, Click conversation | Goal Detail (auto-saved)                   |
-| Note Management | "+ Add" from Goal                     | Goal Detail                                |
-| Completion      | "Complete" from Goal                  | Home                                       |
-| Settings        | ⚙️ icon                               | Close to previous                          |
+| Screen                 | Entry Point                               | Exit Points                                       |
+| ---------------------- | ----------------------------------------- | ------------------------------------------------- |
+| Welcome                | Panel first open                          | Home, Project Creation Dialog                     |
+| Home                   | Panel open, Back from Project             | Project Detail, Project Creation Dialog, Settings |
+| Project Creation (dlg) | "+ New Project", Command palette          | Cancel (close), Note Assignment (in dialog)       |
+| Note Assignment        | "Find Relevant Notes" in dialog           | Back to form, Confirm & Create (close dlg)        |
+| Project Detail         | Click project card, After project created | Home, Discuss, Note Management, Completion        |
+| Discuss                | "Start" from Project, Click conversation  | Project Detail (auto-saved)                       |
+| Note Management        | "+ Add" from Project                      | Project Detail                                    |
+| Completion             | "Complete" from Project                   | Home                                              |
+| Settings               | ⚙️ icon                                   | Close to previous                                 |
 
 ---
 
-## Goal Folder Structure
+## Project Folder Structure
 
-| Path                | Content                           | Created By            |
-| ------------------- | --------------------------------- | --------------------- |
-| `copilot/projects/` | Projects+ root                    | First goal creation   |
-| `[goal-name]/`      | Goal workspace                    | Goal creation         |
-| `goal.md`           | Metadata, description, reflection | Goal creation         |
-| `conversations/`    | Auto-saved discussion threads     | First conversation    |
-| `[topic].md`        | Individual conversation           | Discuss action (auto) |
+| Path                | Content                           | Created By             |
+| ------------------- | --------------------------------- | ---------------------- |
+| `copilot/projects/` | Projects+ root                    | First project creation |
+| `[project-name]/`   | Project workspace                 | Project creation       |
+| `project.md`        | Metadata, description, reflection | Project creation       |
+| `conversations/`    | Auto-saved discussion threads     | First conversation     |
+| `[topic].md`        | Individual conversation           | Discuss action (auto)  |
 
 ---
 
@@ -884,11 +867,11 @@ class ProjectsView extends ItemView {
 ### Key Components to Build
 
 1. `ProjectsView` - Obsidian ItemView wrapper
-2. `GoalCard` - Goal preview with stats
-3. `GoalList` - Home screen with search
-4. `GoalDetail` - Goal hub with sections
-5. `GoalCreationFlow` - Hybrid chat + form
-6. `NoteAssignment` - AI suggestions + selection
+2. `ProjectCard` - Project preview with stats
+3. `ProjectList` - Home screen with search
+4. `ProjectDetail` - Project hub with sections
+5. `ProjectCreationDialog` - Dialog with left-right layout (form + chat)
+6. `NoteAssignment` - AI suggestions + selection (inside dialog)
 7. `ConversationList` - Resumable threads
 8. `ConversationItem` - Single conversation row
 9. `ProjectsSettingsTab` - Settings UI component
@@ -896,10 +879,10 @@ class ProjectsView extends ItemView {
 ### Suggested Build Order
 
 1. ProjectsView (panel shell)
-2. GoalList + GoalCard (Home screen)
-3. GoalCreationFlow (hybrid flow)
-4. NoteAssignment (AI suggestions)
-5. GoalDetail + ConversationList
+2. ProjectList + ProjectCard (Home screen)
+3. ProjectCreationDialog (dialog with form + chat layout)
+4. NoteAssignment (AI suggestions, integrated in dialog)
+5. ProjectDetail + ConversationList
 6. Discuss flow (reuse ChatMessages/ChatInput)
-7. Goal completion flow
+7. Project completion flow
 8. ProjectsSettingsTab

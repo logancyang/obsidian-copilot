@@ -1,6 +1,6 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { Goal, GoalFrontmatter, GoalNote, ConversationRef } from "@/types/projects-plus";
+import { Project, ProjectFrontmatter, ProjectNote, ConversationRef } from "@/types/projects-plus";
 import { ensureFolderExists } from "@/utils";
 import { App, TFile, TFolder } from "obsidian";
 
@@ -12,7 +12,7 @@ function escapeYamlString(str: string): string {
 }
 
 /**
- * Slugify a goal name for use in folder names
+ * Slugify a project name for use in folder names
  */
 function slugify(name: string): string {
   return name
@@ -23,19 +23,19 @@ function slugify(name: string): string {
 }
 
 /**
- * GoalPersistence - Handles saving and loading goal data to/from disk
+ * ProjectPersistence - Handles saving and loading project data to/from disk
  *
- * Manages the goal.md file format:
+ * Manages the project.md file format:
  * - YAML frontmatter for metadata
  * - Markdown body for description
  *
  * Folder structure:
  * copilot/projects/
- * └── [goal-id]__[goal-name-slug]/
- *     ├── goal.md
+ * └── [project-id]__[project-name-slug]/
+ *     ├── project.md
  *     └── conversations/
  */
-export class GoalPersistence {
+export class ProjectPersistence {
   constructor(private app: App) {}
 
   /**
@@ -46,134 +46,158 @@ export class GoalPersistence {
   }
 
   /**
-   * Get the folder path for a specific goal
+   * Get the folder path for a specific project
    */
-  getGoalFolderPath(goalId: string, goalName: string): string {
-    const slug = slugify(goalName);
-    return `${this.getProjectsFolder()}/${goalId}__${slug}`;
+  getProjectFolderPath(projectId: string, projectName: string): string {
+    const slug = slugify(projectName);
+    return `${this.getProjectsFolder()}/${projectId}__${slug}`;
   }
 
   /**
-   * Get the goal.md file path for a specific goal
+   * Get the project.md file path for a specific project
    */
-  getGoalFilePath(goalId: string, goalName: string): string {
-    return `${this.getGoalFolderPath(goalId, goalName)}/goal.md`;
+  getProjectFilePath(projectId: string, projectName: string): string {
+    return `${this.getProjectFolderPath(projectId, projectName)}/project.md`;
   }
 
   /**
-   * Save a goal to disk
+   * Migrate existing goal.md files to project.md
+   * Called once during initialization
    */
-  async saveGoal(goal: Goal): Promise<void> {
+  async migrateStorage(): Promise<void> {
+    const projectsFolder = this.getProjectsFolder();
+    const folder = this.app.vault.getAbstractFileByPath(projectsFolder);
+
+    if (!(folder instanceof TFolder)) return;
+
+    for (const child of folder.children) {
+      if (!(child instanceof TFolder)) continue;
+
+      const oldPath = `${child.path}/goal.md`;
+      const newPath = `${child.path}/project.md`;
+
+      const oldFile = this.app.vault.getAbstractFileByPath(oldPath);
+      if (oldFile instanceof TFile) {
+        await this.app.fileManager.renameFile(oldFile, newPath);
+        logInfo(`[ProjectPersistence] Migrated ${oldPath} to ${newPath}`);
+      }
+    }
+  }
+
+  /**
+   * Save a project to disk
+   */
+  async saveProject(project: Project): Promise<void> {
     try {
-      const folderPath = this.getGoalFolderPath(goal.id, goal.name);
-      const filePath = `${folderPath}/goal.md`;
+      const folderPath = this.getProjectFolderPath(project.id, project.name);
+      const filePath = `${folderPath}/project.md`;
 
-      // Ensure goal folder exists
+      // Ensure project folder exists
       await ensureFolderExists(folderPath);
 
       // Ensure conversations subfolder exists
       await ensureFolderExists(`${folderPath}/conversations`);
 
       // Generate content
-      const content = this.generateGoalContent(goal);
+      const content = this.generateProjectContent(project);
 
       // Check if file exists
       const existingFile = this.app.vault.getAbstractFileByPath(filePath);
       if (existingFile instanceof TFile) {
         await this.app.vault.modify(existingFile, content);
-        logInfo(`[GoalPersistence] Updated goal file: ${filePath}`);
+        logInfo(`[ProjectPersistence] Updated project file: ${filePath}`);
       } else {
         await this.app.vault.create(filePath, content);
-        logInfo(`[GoalPersistence] Created goal file: ${filePath}`);
+        logInfo(`[ProjectPersistence] Created project file: ${filePath}`);
       }
     } catch (error) {
-      logError("[GoalPersistence] Error saving goal:", error);
+      logError("[ProjectPersistence] Error saving project:", error);
       throw error;
     }
   }
 
   /**
-   * Load a goal from a goal.md file path
+   * Load a project from a project.md file path
    */
-  async loadGoal(goalFilePath: string): Promise<Goal | null> {
+  async loadProject(projectFilePath: string): Promise<Project | null> {
     try {
-      const file = this.app.vault.getAbstractFileByPath(goalFilePath);
+      const file = this.app.vault.getAbstractFileByPath(projectFilePath);
       if (!(file instanceof TFile)) {
-        logWarn(`[GoalPersistence] Goal file not found: ${goalFilePath}`);
+        logWarn(`[ProjectPersistence] Project file not found: ${projectFilePath}`);
         return null;
       }
 
       const content = await this.app.vault.read(file);
-      return this.parseGoalContent(content);
+      return this.parseProjectContent(content);
     } catch (error) {
-      logError(`[GoalPersistence] Error loading goal from ${goalFilePath}:`, error);
+      logError(`[ProjectPersistence] Error loading project from ${projectFilePath}:`, error);
       return null;
     }
   }
 
   /**
-   * Load all goals from the projects folder
+   * Load all projects from the projects folder
    */
-  async loadAllGoals(): Promise<Goal[]> {
-    const goals: Goal[] = [];
+  async loadAllProjects(): Promise<Project[]> {
+    const projects: Project[] = [];
     const projectsFolder = this.getProjectsFolder();
 
     try {
       const folder = this.app.vault.getAbstractFileByPath(projectsFolder);
       if (!(folder instanceof TFolder)) {
         // Projects folder doesn't exist yet
-        logInfo(`[GoalPersistence] Projects folder not found: ${projectsFolder}`);
-        return goals;
+        logInfo(`[ProjectPersistence] Projects folder not found: ${projectsFolder}`);
+        return projects;
       }
 
       // Iterate through subfolders
       for (const child of folder.children) {
         if (!(child instanceof TFolder)) continue;
 
-        // Look for goal.md in each subfolder
-        const goalFilePath = `${child.path}/goal.md`;
-        const goal = await this.loadGoal(goalFilePath);
-        if (goal) {
-          goals.push(goal);
+        // Look for project.md in each subfolder
+        const projectFilePath = `${child.path}/project.md`;
+        const project = await this.loadProject(projectFilePath);
+        if (project) {
+          projects.push(project);
         }
       }
 
-      logInfo(`[GoalPersistence] Loaded ${goals.length} goals`);
-      return goals;
+      logInfo(`[ProjectPersistence] Loaded ${projects.length} projects`);
+      return projects;
     } catch (error) {
-      logError("[GoalPersistence] Error loading all goals:", error);
-      return goals;
+      logError("[ProjectPersistence] Error loading all projects:", error);
+      return projects;
     }
   }
 
   /**
-   * Delete a goal and its folder
+   * Delete a project and its folder
    */
-  async deleteGoal(goal: Goal): Promise<void> {
+  async deleteProject(project: Project): Promise<void> {
     try {
-      const folderPath = this.getGoalFolderPath(goal.id, goal.name);
+      const folderPath = this.getProjectFolderPath(project.id, project.name);
       const folder = this.app.vault.getAbstractFileByPath(folderPath);
 
       if (folder instanceof TFolder) {
         // Delete the entire folder recursively
         await this.app.vault.delete(folder, true);
-        logInfo(`[GoalPersistence] Deleted goal folder: ${folderPath}`);
+        logInfo(`[ProjectPersistence] Deleted project folder: ${folderPath}`);
       } else {
-        logWarn(`[GoalPersistence] Goal folder not found for deletion: ${folderPath}`);
+        logWarn(`[ProjectPersistence] Project folder not found for deletion: ${folderPath}`);
       }
     } catch (error) {
-      logError("[GoalPersistence] Error deleting goal:", error);
+      logError("[ProjectPersistence] Error deleting project:", error);
       throw error;
     }
   }
 
   /**
-   * Rename a goal folder when goal name changes
+   * Rename a project folder when project name changes
    */
-  async renameGoalFolder(goal: Goal, oldName: string): Promise<void> {
+  async renameProjectFolder(project: Project, oldName: string): Promise<void> {
     try {
-      const oldFolderPath = this.getGoalFolderPath(goal.id, oldName);
-      const newFolderPath = this.getGoalFolderPath(goal.id, goal.name);
+      const oldFolderPath = this.getProjectFolderPath(project.id, oldName);
+      const newFolderPath = this.getProjectFolderPath(project.id, project.name);
 
       if (oldFolderPath === newFolderPath) {
         // No rename needed
@@ -183,23 +207,25 @@ export class GoalPersistence {
       const oldFolder = this.app.vault.getAbstractFileByPath(oldFolderPath);
       if (oldFolder instanceof TFolder) {
         await this.app.fileManager.renameFile(oldFolder, newFolderPath);
-        logInfo(`[GoalPersistence] Renamed goal folder: ${oldFolderPath} -> ${newFolderPath}`);
+        logInfo(
+          `[ProjectPersistence] Renamed project folder: ${oldFolderPath} -> ${newFolderPath}`
+        );
       }
     } catch (error) {
-      logError("[GoalPersistence] Error renaming goal folder:", error);
+      logError("[ProjectPersistence] Error renaming project folder:", error);
       throw error;
     }
   }
 
   /**
-   * Parse goal.md content into a Goal object
+   * Parse project.md content into a Project object
    */
-  private parseGoalContent(content: string): Goal | null {
+  private parseProjectContent(content: string): Project | null {
     try {
       // Extract YAML frontmatter
       const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
       if (!frontmatterMatch) {
-        logWarn("[GoalPersistence] No frontmatter found in goal file");
+        logWarn("[ProjectPersistence] No frontmatter found in project file");
         return null;
       }
 
@@ -213,7 +239,7 @@ export class GoalPersistence {
       const bodyContent = content.slice(frontmatterMatch[0].length).trim();
       const lines = bodyContent.split("\n");
 
-      // Skip the title line (# Goal Name)
+      // Skip the title line (# Project Name)
       const descriptionLines = lines.filter((line) => !line.startsWith("# "));
       const description = descriptionLines.join("\n").trim();
 
@@ -230,17 +256,17 @@ export class GoalPersistence {
         reflection: frontmatter.reflection,
       };
     } catch (error) {
-      logError("[GoalPersistence] Error parsing goal content:", error);
+      logError("[ProjectPersistence] Error parsing project content:", error);
       return null;
     }
   }
 
   /**
-   * Parse YAML frontmatter string into GoalFrontmatter object
+   * Parse YAML frontmatter string into ProjectFrontmatter object
    */
-  private parseYamlFrontmatter(yamlStr: string): GoalFrontmatter | null {
+  private parseYamlFrontmatter(yamlStr: string): ProjectFrontmatter | null {
     try {
-      const result: Partial<GoalFrontmatter> = {};
+      const result: Partial<ProjectFrontmatter> = {};
 
       // Parse simple key-value pairs
       const lines = yamlStr.split("\n");
@@ -299,13 +325,13 @@ export class GoalPersistence {
 
       // Validate required fields
       if (!result.id || !result.name || !result.status || !result.createdAt || !result.updatedAt) {
-        logWarn("[GoalPersistence] Missing required fields in frontmatter");
+        logWarn("[ProjectPersistence] Missing required fields in frontmatter");
         return null;
       }
 
-      return result as GoalFrontmatter;
+      return result as ProjectFrontmatter;
     } catch (error) {
-      logError("[GoalPersistence] Error parsing YAML frontmatter:", error);
+      logError("[ProjectPersistence] Error parsing YAML frontmatter:", error);
       return null;
     }
   }
@@ -331,8 +357,8 @@ export class GoalPersistence {
   private parseNoteEntry(
     lines: string[],
     startIndex: number
-  ): { item: GoalNote | null; nextIndex: number } {
-    const note: Partial<GoalNote> = {};
+  ): { item: ProjectNote | null; nextIndex: number } {
+    const note: Partial<ProjectNote> = {};
     let i = startIndex;
 
     // First line starts with "  - "
@@ -361,7 +387,7 @@ export class GoalPersistence {
     }
 
     if (note.path && note.assignedAt !== undefined && note.manuallyAdded !== undefined) {
-      return { item: note as GoalNote, nextIndex: i };
+      return { item: note as ProjectNote, nextIndex: i };
     }
 
     return { item: null, nextIndex: i };
@@ -415,25 +441,25 @@ export class GoalPersistence {
   }
 
   /**
-   * Generate goal.md content with YAML frontmatter
+   * Generate project.md content with YAML frontmatter
    */
-  private generateGoalContent(goal: Goal): string {
-    const notesYaml = this.generateNotesYaml(goal.notes);
-    const conversationsYaml = this.generateConversationsYaml(goal.conversations);
+  private generateProjectContent(project: Project): string {
+    const notesYaml = this.generateNotesYaml(project.notes);
+    const conversationsYaml = this.generateConversationsYaml(project.conversations);
 
     let frontmatter = `---
-id: "${escapeYamlString(goal.id)}"
-name: "${escapeYamlString(goal.name)}"
-status: "${goal.status}"
-createdAt: ${goal.createdAt}
-updatedAt: ${goal.updatedAt}`;
+id: "${escapeYamlString(project.id)}"
+name: "${escapeYamlString(project.name)}"
+status: "${project.status}"
+createdAt: ${project.createdAt}
+updatedAt: ${project.updatedAt}`;
 
-    if (goal.completedAt) {
-      frontmatter += `\ncompletedAt: ${goal.completedAt}`;
+    if (project.completedAt) {
+      frontmatter += `\ncompletedAt: ${project.completedAt}`;
     }
 
-    if (goal.reflection) {
-      frontmatter += `\nreflection: "${escapeYamlString(goal.reflection)}"`;
+    if (project.reflection) {
+      frontmatter += `\nreflection: "${escapeYamlString(project.reflection)}"`;
     }
 
     frontmatter += `\n${notesYaml}`;
@@ -442,9 +468,9 @@ updatedAt: ${goal.updatedAt}`;
 
     const content = `${frontmatter}
 
-# ${goal.name}
+# ${project.name}
 
-${goal.description}`;
+${project.description}`;
 
     return content;
   }
@@ -452,7 +478,7 @@ ${goal.description}`;
   /**
    * Generate YAML for notes array
    */
-  private generateNotesYaml(notes: GoalNote[]): string {
+  private generateNotesYaml(notes: ProjectNote[]): string {
     if (notes.length === 0) {
       return "notes: []";
     }

@@ -1,17 +1,17 @@
-import { GoalExtraction, GoalCreationState } from "@/types/projects-plus";
-import { GoalManager } from "@/core/projects-plus/GoalManager";
+import { ProjectExtraction, ProjectCreationState } from "@/types/projects-plus";
+import { ProjectManager } from "@/core/projects-plus/ProjectManager";
 import {
   createInitialState,
   createMessage,
-  parseGoalExtraction,
+  parseProjectExtraction,
   getEffectiveExtraction,
   checkIsReady,
-} from "@/core/projects-plus/GoalCreationState";
+} from "@/core/projects-plus/ProjectCreationState";
 import {
-  GOAL_EXTRACTION_SYSTEM_PROMPT,
+  PROJECT_EXTRACTION_SYSTEM_PROMPT,
   getInitialGreeting,
   buildFormEditContext,
-} from "@/prompts/goal-extraction";
+} from "@/prompts/project-extraction";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { logError, logWarn } from "@/logger";
 import { Button } from "@/components/ui/button";
@@ -26,39 +26,42 @@ import { ChevronLeft, Search } from "lucide-react";
 import { HumanMessage, SystemMessage, AIMessage } from "@langchain/core/messages";
 import * as React from "react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import GoalCreationForm from "./GoalCreationForm";
-import GoalCreationChat from "./GoalCreationChat";
+import ProjectCreationForm from "./ProjectCreationForm";
+import ProjectCreationChat from "./ProjectCreationChat";
 
-interface GoalCreationProps {
-  /** Callback when user cancels goal creation */
+interface ProjectCreationProps {
+  /** Callback when user cancels project creation */
   onCancel: () => void;
-  /** Callback when goal is ready and user wants to proceed */
-  onComplete: (extraction: GoalExtraction) => void;
-  /** GoalManager instance for creating goals */
-  goalManager: GoalManager;
+  /** Callback when project is ready and user wants to proceed */
+  onComplete: (extraction: ProjectExtraction) => void;
+  /** ProjectManager instance for creating projects */
+  projectManager: ProjectManager;
 }
 
 /**
- * Custom hook for managing goal creation chat state and streaming
+ * Custom hook for managing project creation chat state and streaming
  */
-function useGoalCreationChat() {
-  const [state, setState] = useState<GoalCreationState>(createInitialState());
+function useProjectCreationChat() {
+  const [state, setState] = useState<ProjectCreationState>(createInitialState());
   const [currentStreamingContent, setCurrentStreamingContent] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
   const isMountedRef = useRef(true);
 
   // Safe state setter to prevent updates after unmount
-  const safeSetState = useCallback((updater: (prev: GoalCreationState) => GoalCreationState) => {
-    if (isMountedRef.current) {
-      setState(updater);
-    }
-  }, []);
+  const safeSetState = useCallback(
+    (updater: (prev: ProjectCreationState) => ProjectCreationState) => {
+      if (isMountedRef.current) {
+        setState(updater);
+      }
+    },
+    []
+  );
 
   // Initialize with AI greeting on mount
   useEffect(() => {
     const greeting = getInitialGreeting();
     const greetingMessage = createMessage("assistant", greeting);
-    const extraction = parseGoalExtraction(greeting);
+    const extraction = parseProjectExtraction(greeting);
 
     safeSetState((prev) => ({
       ...prev,
@@ -92,7 +95,7 @@ function useGoalCreationChat() {
       // Build LLM messages
       const currentMessages = [...state.messages, userMessage];
       const llmMessages = [
-        new SystemMessage(GOAL_EXTRACTION_SYSTEM_PROMPT),
+        new SystemMessage(PROJECT_EXTRACTION_SYSTEM_PROMPT),
         ...currentMessages.map((m) =>
           m.role === "user" ? new HumanMessage(m.content) : new AIMessage(m.content)
         ),
@@ -128,9 +131,9 @@ function useGoalCreationChat() {
         }
 
         // Stream complete - parse extraction and add message
-        const extraction = parseGoalExtraction(fullContent);
+        const extraction = parseProjectExtraction(fullContent);
         if (!extraction) {
-          logWarn("[GoalCreation] Failed to parse extraction from response");
+          logWarn("[ProjectCreation] Failed to parse extraction from response");
         }
 
         const assistantMessage = createMessage("assistant", fullContent);
@@ -155,7 +158,7 @@ function useGoalCreationChat() {
           // User cancelled - not an error
           safeSetState((prev) => ({ ...prev, isStreaming: false }));
         } else {
-          logError("[GoalCreation] Error streaming response:", error);
+          logError("[ProjectCreation] Error streaming response:", error);
           safeSetState((prev) => ({
             ...prev,
             isStreaming: false,
@@ -213,10 +216,10 @@ function useGoalCreationChat() {
 }
 
 /**
- * GoalCreation - Container component for hybrid AI conversation + live form goal creation
+ * ProjectCreation - Container component for hybrid AI conversation + live form project creation
  */
-export default function GoalCreation({ onCancel, onComplete }: GoalCreationProps) {
-  const { state, currentStreamingContent, sendMessage, setManualEdit } = useGoalCreationChat();
+export default function ProjectCreation({ onCancel, onComplete }: ProjectCreationProps) {
+  const { state, currentStreamingContent, sendMessage, setManualEdit } = useProjectCreationChat();
 
   const [pendingFormEdit, setPendingFormEdit] = useState<{
     field: "name" | "description";
@@ -288,11 +291,11 @@ export default function GoalCreation({ onCancel, onComplete }: GoalCreationProps
           <ChevronLeft className="tw-size-4" />
           <span className="tw-ml-1">Back</span>
         </Button>
-        <span className="tw-font-medium tw-text-normal">Creating Goal</span>
+        <span className="tw-font-medium tw-text-normal">Creating Project</span>
       </div>
 
       {/* Form preview */}
-      <GoalCreationForm
+      <ProjectCreationForm
         extraction={effectiveExtraction}
         manualEdits={state.manualEdits}
         onManualEdit={handleManualEdit}
@@ -300,7 +303,7 @@ export default function GoalCreation({ onCancel, onComplete }: GoalCreationProps
       />
 
       {/* Chat area */}
-      <GoalCreationChat
+      <ProjectCreationChat
         messages={state.messages}
         isStreaming={state.isStreaming}
         currentStreamingContent={currentStreamingContent}
@@ -322,7 +325,7 @@ export default function GoalCreation({ onCancel, onComplete }: GoalCreationProps
       <Dialog open={showDiscardConfirm} onOpenChange={setShowDiscardConfirm}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Discard goal?</DialogTitle>
+            <DialogTitle>Discard project?</DialogTitle>
           </DialogHeader>
           <p className="tw-text-sm tw-text-muted">You&apos;ll lose your conversation progress.</p>
           <DialogFooter>

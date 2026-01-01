@@ -10,7 +10,7 @@ import ProjectsPanel from "./ProjectsPanel";
  * ProjectsView - ItemView wrapper for the Projects+ panel
  *
  * Extends Obsidian's ItemView to integrate React components
- * for the Projects+ goal management interface.
+ * for the Projects+ project management interface.
  */
 export default class ProjectsView extends ItemView {
   private root: Root | null = null;
