@@ -347,17 +347,17 @@ export class DBOperations {
 
   createDynamicSchema(vectorLength: number) {
     return {
-      id: "string",
-      title: "string", // basename of the TFile
-      path: "string", // path of the TFile
-      content: "string",
-      embedding: `vector[${vectorLength}]`,
-      embeddingModel: "string",
-      created_at: "number",
-      ctime: "number",
-      mtime: "number",
-      tags: "string[]",
-      extension: "string",
+      id: "string" as const,
+      title: "string" as const, // basename of the TFile
+      path: "string" as const, // path of the TFile
+      content: "string" as const,
+      embedding: `vector[${vectorLength}]` as const,
+      embeddingModel: "string" as const,
+      created_at: "number" as const,
+      ctime: "number" as const,
+      mtime: "number" as const,
+      tags: "string[]" as const,
+      extension: "string" as const,
     };
   }
 

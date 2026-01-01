@@ -1,12 +1,12 @@
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
+import { MessageList, MessageRenderProps, StreamingMessageProps } from "@/components/shared";
 import { USER_SENDER } from "@/constants";
-import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
-import React, { memo, useEffect, useState } from "react";
+import React, { memo, useCallback, useEffect, useState } from "react";
 
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
@@ -20,6 +20,11 @@ interface ChatMessagesProps {
   onReplaceChat: (prompt: string) => void;
   showHelperComponents: boolean;
 }
+
+/**
+ * Extend ChatMessage to satisfy BaseMessage interface for MessageList
+ */
+type ChatMessageWithBase = ChatMessage & { sender: string; isVisible: boolean };
 
 const ChatMessages = memo(
   ({
@@ -38,11 +43,6 @@ const ChatMessages = memo(
 
     const settings = useSettingsValue();
 
-    // Chat scrolling behavior
-    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
-      chatHistory,
-    });
-
     useEffect(() => {
       let intervalId: NodeJS.Timeout;
       if (loading) {
@@ -55,83 +55,94 @@ const ChatMessages = memo(
       return () => clearInterval(intervalId);
     }, [loading]);
 
-    if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
+    const getLoadingMessage = useCallback(() => {
+      return loadingMessage ? `${loadingMessage} ${loadingDots}` : loadingDots;
+    }, [loadingMessage, loadingDots]);
+
+    /**
+     * Render function for individual messages
+     */
+    const renderMessage = useCallback(
+      ({ message, index }: MessageRenderProps<ChatMessageWithBase>) => {
+        return (
+          <ChatSingleMessage
+            message={message}
+            app={app}
+            isStreaming={false}
+            onRegenerate={() => onRegenerate(index)}
+            onEdit={(newMessage) => onEdit(index, newMessage)}
+            onDelete={() => onDelete(index)}
+          />
+        );
+      },
+      [app, onRegenerate, onEdit, onDelete]
+    );
+
+    /**
+     * Render function for the streaming message
+     */
+    const renderStreamingMessage = useCallback(
+      ({ content }: StreamingMessageProps) => {
+        return (
+          <ChatSingleMessage
+            key="ai_message_streaming"
+            message={{
+              sender: "AI",
+              message: content || getLoadingMessage(),
+              isVisible: true,
+              timestamp: null,
+            }}
+            app={app}
+            isStreaming={true}
+            onDelete={() => {}}
+          />
+        );
+      },
+      [app, getLoadingMessage]
+    );
+
+    /**
+     * Empty state component with helper components
+     */
+    const emptyState = (
+      <>
+        {showHelperComponents && settings.showRelevantNotes && (
+          <RelevantNotes defaultOpen={true} key="relevant-notes-before-chat" />
+        )}
+        {showHelperComponents && settings.showSuggestedPrompts && (
+          <SuggestedPrompts onClick={onReplaceChat} />
+        )}
+      </>
+    );
+
+    // Show empty state directly if no messages and no streaming content
+    if (
+      !chatHistory.filter((message) => message.isVisible).length &&
+      !currentAiMessage &&
+      !loading
+    ) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
-          {showHelperComponents && settings.showRelevantNotes && (
-            <RelevantNotes defaultOpen={true} key="relevant-notes-before-chat" />
-          )}
-          {showHelperComponents && settings.showSuggestedPrompts && (
-            <SuggestedPrompts onClick={onReplaceChat} />
-          )}
+          {emptyState}
         </div>
       );
     }
-
-    const getLoadingMessage = () => {
-      return loadingMessage ? `${loadingMessage} ${loadingDots}` : loadingDots;
-    };
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
         {showHelperComponents && settings.showRelevantNotes && (
           <RelevantNotes className="tw-mb-4" defaultOpen={false} key="relevant-notes-in-chat" />
         )}
-        <div
-          ref={scrollContainerCallbackRef}
-          data-testid="chat-messages"
-          className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
-        >
-          {chatHistory.map((message, index) => {
-            const visibleMessages = chatHistory.filter((m) => m.isVisible);
-            const isLastMessage = index === visibleMessages.length - 1;
-            // Only apply min-height to AI messages that are last
-            const shouldApplyMinHeight = isLastMessage && message.sender !== USER_SENDER;
-
-            return (
-              message.isVisible && (
-                <div
-                  key={getMessageKey(message, index)}
-                  data-message-key={getMessageKey(message, index)}
-                  className="tw-w-full"
-                  style={{
-                    minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
-                  }}
-                >
-                  <ChatSingleMessage
-                    message={message}
-                    app={app}
-                    isStreaming={false}
-                    onRegenerate={() => onRegenerate(index)}
-                    onEdit={(newMessage) => onEdit(index, newMessage)}
-                    onDelete={() => onDelete(index)}
-                  />
-                </div>
-              )
-            );
-          })}
-          {(currentAiMessage || loading) && (
-            <div
-              className="tw-w-full"
-              style={{
-                minHeight: `${containerMinHeight}px`,
-              }}
-            >
-              <ChatSingleMessage
-                key="ai_message_streaming"
-                message={{
-                  sender: "AI",
-                  message: currentAiMessage || getLoadingMessage(),
-                  isVisible: true,
-                  timestamp: null,
-                }}
-                app={app}
-                isStreaming={true}
-                onDelete={() => {}}
-              />
-            </div>
-          )}
-        </div>
+        <MessageList<ChatMessageWithBase>
+          messages={chatHistory}
+          renderMessage={renderMessage}
+          streamingContent={currentAiMessage}
+          renderStreamingMessage={renderStreamingMessage}
+          loading={loading}
+          loadingMessage={loadingMessage}
+          userSender={USER_SENDER}
+          testId="chat-messages"
+        />
       </div>
     );
   }
