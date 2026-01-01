@@ -1,5 +1,5 @@
 import CopilotPlugin from "@/main";
-import { Goal, GoalStatus, CreateGoalInput, UpdateGoalInput } from "@/types/projects-plus";
+import { Goal, GoalStatus, GoalExtraction, UpdateGoalInput } from "@/types/projects-plus";
 import { Plus, Search } from "lucide-react";
 import * as React from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -7,24 +7,26 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import GoalList from "./GoalList";
 import GoalDialog from "./GoalDialog";
+import GoalCreation from "./GoalCreation";
 
 interface ProjectsPanelProps {
   plugin: CopilotPlugin;
 }
 
 type FilterStatus = GoalStatus | "all";
+type ViewType = "list" | "create";
 
 /**
  * ProjectsPanel - Main container for the Projects+ interface
  *
  * Displays goal list with search/filter capabilities and
- * provides goal creation functionality.
+ * provides goal creation functionality via AI-assisted flow.
  */
 export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
+  const [view, setView] = useState<ViewType>("list");
   const [goals, setGoals] = useState<Goal[]>([]);
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false);
   const [editingGoal, setEditingGoal] = useState<Goal | null>(null);
 
   // Subscribe to GoalManager changes
@@ -60,13 +62,26 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
     return result.sort((a, b) => b.updatedAt - a.updatedAt);
   }, [goals, filter, searchQuery]);
 
-  const handleCreateGoal = useCallback(
-    async (input: CreateGoalInput) => {
-      await plugin.goalManager.createGoal(input);
-      setIsCreateDialogOpen(false);
+  /**
+   * Handle goal creation completion from AI-assisted flow
+   */
+  const handleGoalCreationComplete = useCallback(
+    async (extraction: GoalExtraction) => {
+      await plugin.goalManager.createGoal({
+        name: extraction.name,
+        description: extraction.description,
+      });
+      setView("list");
     },
     [plugin.goalManager]
   );
+
+  /**
+   * Handle goal creation cancellation
+   */
+  const handleGoalCreationCancel = useCallback(() => {
+    setView("list");
+  }, []);
 
   const handleUpdateGoal = useCallback(
     async (input: UpdateGoalInput) => {
@@ -96,6 +111,18 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
     setEditingGoal(goal);
   }, []);
 
+  // Render goal creation view
+  if (view === "create") {
+    return (
+      <GoalCreation
+        onCancel={handleGoalCreationCancel}
+        onComplete={handleGoalCreationComplete}
+        goalManager={plugin.goalManager}
+      />
+    );
+  }
+
+  // Render goal list view
   return (
     <div className="tw-flex tw-h-full tw-flex-col tw-p-4">
       {/* Header */}
@@ -103,7 +130,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
         <h2 className="tw-text-lg tw-font-semibold tw-text-normal">Projects+</h2>
         <Button
           size="sm"
-          onClick={() => setIsCreateDialogOpen(true)}
+          onClick={() => setView("create")}
           className="tw-flex tw-items-center tw-gap-1"
         >
           <Plus className="tw-size-4" />
@@ -143,14 +170,6 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
           onDeleteGoal={handleDeleteGoal}
         />
       </div>
-
-      {/* Create dialog */}
-      <GoalDialog
-        open={isCreateDialogOpen}
-        onOpenChange={setIsCreateDialogOpen}
-        onSave={handleCreateGoal}
-        title="Create New Goal"
-      />
 
       {/* Edit dialog */}
       <GoalDialog

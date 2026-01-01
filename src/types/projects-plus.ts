@@ -89,3 +89,47 @@ export interface GoalFrontmatter {
   notes: GoalNote[];
   conversations: ConversationRef[];
 }
+
+/**
+ * Extracted goal data from AI conversation
+ */
+export interface GoalExtraction {
+  /** Extracted goal name (2-8 words, action-oriented) */
+  name: string;
+  /** Extracted description (what the goal entails) */
+  description: string;
+  /** AI confidence in extraction (0.0-1.0) */
+  confidence: number;
+}
+
+/**
+ * Message in goal creation conversation
+ */
+export interface GoalCreationMessage {
+  /** Unique message ID */
+  id: string;
+  /** Message role */
+  role: "user" | "assistant";
+  /** Message content */
+  content: string;
+  /** Message timestamp (epoch ms) */
+  timestamp: number;
+}
+
+/**
+ * State for goal creation flow
+ */
+export interface GoalCreationState {
+  /** Current conversation messages */
+  messages: GoalCreationMessage[];
+  /** Latest extraction from AI */
+  extraction: GoalExtraction | null;
+  /** User's manual edits (override AI extraction) */
+  manualEdits: Partial<GoalExtraction>;
+  /** Whether goal is ready to create (name + description filled) */
+  isReady: boolean;
+  /** Whether currently streaming AI response */
+  isStreaming: boolean;
+  /** Any error message */
+  error: string | null;
+}
