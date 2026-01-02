@@ -3,6 +3,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
+import { ProjectsPlusSettings } from "./ProjectsPlusSettings";
 
 export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -79,6 +80,8 @@ export const CopilotPlusSettings: React.FC = () => {
               updateSetting("enableSavedMemory", checked);
             }}
           />
+
+          <ProjectsPlusSettings />
         </div>
       </section>
     </div>

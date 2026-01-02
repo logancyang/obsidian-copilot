@@ -1,7 +1,9 @@
-import { Project, ProjectStatus } from "@/types/projects-plus";
+import { Project } from "@/types/projects-plus";
 import { Check, Edit, FileText, MessageSquare, MoreVertical, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useState } from "react";
+import { ProjectStatusBadge } from "./ProjectStatusBadge";
+import { formatRelativeTime } from "./utils";
 
 interface ProjectCardProps {
   project: Project;
@@ -9,45 +11,6 @@ interface ProjectCardProps {
   onEdit: () => void;
   onComplete: () => void;
   onDelete: () => void;
-}
-
-/**
- * Get badge styling based on project status
- */
-function getStatusBadgeStyles(status: ProjectStatus): string {
-  switch (status) {
-    case "active":
-      return "tw-bg-interactive-accent-hsl/20 tw-text-accent";
-    case "completed":
-      return "tw-bg-success tw-text-success";
-    case "archived":
-      return "tw-bg-secondary tw-text-muted";
-    default:
-      return "tw-bg-secondary tw-text-muted";
-  }
-}
-
-/**
- * Format a timestamp to relative time
- */
-function formatRelativeTime(timestamp: number): string {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const seconds = Math.floor(diff / 1000);
-  const minutes = Math.floor(seconds / 60);
-  const hours = Math.floor(minutes / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) {
-    return days === 1 ? "1 day ago" : `${days} days ago`;
-  }
-  if (hours > 0) {
-    return hours === 1 ? "1 hour ago" : `${hours} hours ago`;
-  }
-  if (minutes > 0) {
-    return minutes === 1 ? "1 minute ago" : `${minutes} minutes ago`;
-  }
-  return "just now";
 }
 
 /**
@@ -86,11 +49,7 @@ export default function ProjectCard({
           {project.title}
         </h3>
         <div className="tw-flex tw-items-center tw-gap-2">
-          <span
-            className={`tw-rounded-sm tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-capitalize ${getStatusBadgeStyles(project.status)}`}
-          >
-            {project.status}
-          </span>
+          <ProjectStatusBadge status={project.status} />
 
           {/* Menu button */}
           <div className="tw-relative">

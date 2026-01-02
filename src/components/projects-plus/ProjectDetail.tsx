@@ -25,12 +25,8 @@ import { NoteSuggestionsDialog } from "./NoteSuggestionsDialog";
 import { ProjectStatusDialog, StatusAction } from "./ProjectStatusDialog";
 import { DiscussView } from "./discuss/DiscussView";
 import { ConversationPersistence } from "@/core/projects-plus/ConversationPersistence";
-import {
-  getStatusBadgeStyles,
-  formatRelativeTime,
-  formatDate,
-  calculateJourneySummary,
-} from "./utils";
+import { formatRelativeTime, formatDate, calculateJourneySummary } from "./utils";
+import { ProjectStatusBadge } from "./ProjectStatusBadge";
 
 interface ProjectDetailProps {
   projectId: string;
@@ -220,11 +216,7 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
         <h2 className="tw-flex-1 tw-truncate tw-text-lg tw-font-semibold tw-text-normal">
           {project.title}
         </h2>
-        <span
-          className={`tw-shrink-0 tw-rounded-sm tw-px-2 tw-py-0.5 tw-text-xs tw-font-medium tw-capitalize ${getStatusBadgeStyles(project.status)}`}
-        >
-          {project.status}
-        </span>
+        <ProjectStatusBadge status={project.status} className="tw-shrink-0" />
       </div>
 
       {/* Scrollable content */}

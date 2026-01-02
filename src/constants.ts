@@ -824,7 +824,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
   autoIncludeTextSelection: false,
-  projectsPlusEnabled: false,
   projectsPlusFolder: DEFAULT_PROJECTS_FOLDER,
 };
 

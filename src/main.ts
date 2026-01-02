@@ -123,11 +123,8 @@ export default class CopilotPlugin extends Plugin {
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
 
-    // Initialize ProjectManager for Projects+
+    // Initialize ProjectManager for Projects+ (full initialization happens when view opens)
     this.projectsPlusManager = new ProjectManager(this.app);
-    if (getSettings().projectsPlusEnabled) {
-      await this.projectsPlusManager.initialize();
-    }
 
     // Initialize NoteAssignmentService for Projects+
     this.noteAssignmentService = new NoteAssignmentService(this.app, () => {
@@ -456,10 +453,7 @@ export default class CopilotPlugin extends Plugin {
    * Open the Projects+ panel
    */
   async activateProjectsView(): Promise<void> {
-    // Initialize ProjectManager if not already done
-    if (!this.projectsPlusManager) {
-      this.projectsPlusManager = new ProjectManager(this.app);
-    }
+    // Initialize ProjectManager before opening the view
     await this.projectsPlusManager.initialize();
 
     const leaves = this.app.workspace.getLeavesOfType(PROJECTS_PLUS_VIEWTYPE);

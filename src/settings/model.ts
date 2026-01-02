@@ -153,8 +153,6 @@ export interface CopilotSettings {
   quickCommandIncludeNoteContext: boolean;
   /** Automatically add text selections to chat context */
   autoIncludeTextSelection: boolean;
-  /** Enable Projects+ feature */
-  projectsPlusEnabled: boolean;
   /** Folder path for Projects+ data */
   projectsPlusFolder: string;
 }
@@ -427,11 +425,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
-
-  // Ensure projectsPlusEnabled has a default value
-  if (typeof sanitizedSettings.projectsPlusEnabled !== "boolean") {
-    sanitizedSettings.projectsPlusEnabled = DEFAULT_SETTINGS.projectsPlusEnabled;
-  }
 
   // Ensure projectsPlusFolder has a valid value
   const projectsFolder = (settingsToSanitize.projectsPlusFolder || "").trim();
