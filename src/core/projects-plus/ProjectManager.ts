@@ -5,6 +5,7 @@ import {
   CreateProjectInput,
   UpdateProjectInput,
   ProjectNote,
+  ConversationRef,
 } from "@/types/projects-plus";
 import { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -387,5 +388,89 @@ export class ProjectManager {
         project.title.toLowerCase().includes(lowerQuery) ||
         project.description.toLowerCase().includes(lowerQuery)
     );
+  }
+
+  /**
+   * Update or create a conversation reference in a project
+   * Used by Discuss feature to track conversations
+   */
+  async updateConversationRef(
+    projectId: string,
+    conversationId: string,
+    title: string,
+    messageCount: number
+  ): Promise<Project | null> {
+    const project = this.projects.get(projectId);
+    if (!project) {
+      logError(`[ProjectManager] Project not found: ${projectId}`);
+      return null;
+    }
+
+    const now = Date.now();
+    const existingIndex = project.conversations.findIndex((c) => c.id === conversationId);
+
+    let updatedConversations: ConversationRef[];
+
+    if (existingIndex >= 0) {
+      // Update existing conversation reference
+      updatedConversations = project.conversations.map((conv, index) =>
+        index === existingIndex ? { ...conv, title, messageCount } : conv
+      );
+    } else {
+      // Create new conversation reference
+      const newConversation: ConversationRef = {
+        id: conversationId,
+        title,
+        path: `conversations/${conversationId}.md`,
+        createdAt: now,
+        messageCount,
+      };
+      updatedConversations = [...project.conversations, newConversation];
+    }
+
+    const updatedProject: Project = {
+      ...project,
+      conversations: updatedConversations,
+      updatedAt: now,
+    };
+
+    try {
+      await this.persistence.saveProject(updatedProject);
+      this.projects.set(projectId, updatedProject);
+      this.notifyListeners();
+      logInfo(`[ProjectManager] Updated conversation ref: ${conversationId}`);
+      return updatedProject;
+    } catch (error) {
+      logError("[ProjectManager] Error updating conversation ref:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a conversation reference from a project
+   */
+  async deleteConversationRef(projectId: string, conversationId: string): Promise<Project | null> {
+    const project = this.projects.get(projectId);
+    if (!project) {
+      logError(`[ProjectManager] Project not found: ${projectId}`);
+      return null;
+    }
+
+    const updatedProject: Project = {
+      ...project,
+      conversations: project.conversations.filter((c) => c.id !== conversationId),
+      updatedAt: Date.now(),
+    };
+
+    try {
+      await this.persistence.saveProject(updatedProject);
+      this.projects.set(projectId, updatedProject);
+      this.notifyListeners();
+      logInfo(`[ProjectManager] Deleted conversation ref: ${conversationId}`);
+      return updatedProject;
+    } catch (error) {
+      logError("[ProjectManager] Error deleting conversation ref:", error);
+      throw error;
+    }
   }
 }

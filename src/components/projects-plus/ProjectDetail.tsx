@@ -1,4 +1,5 @@
 import CopilotPlugin from "@/main";
+import { ConversationMetadata } from "@/types/discuss";
 import { NoteSuggestion, Project, UpdateProjectInput } from "@/types/projects-plus";
 import { TFile } from "obsidian";
 import {
@@ -22,6 +23,8 @@ import { AddNoteModal } from "@/components/modals/AddNoteModal";
 import { ProjectEditDialog } from "./ProjectEditDialog";
 import { NoteSuggestionsDialog } from "./NoteSuggestionsDialog";
 import { ProjectStatusDialog, StatusAction } from "./ProjectStatusDialog";
+import { DiscussView } from "./discuss/DiscussView";
+import { ConversationPersistence } from "@/core/projects-plus/ConversationPersistence";
 import {
   getStatusBadgeStyles,
   formatRelativeTime,
@@ -45,6 +48,11 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
   const [statusDialogOpen, setStatusDialogOpen] = useState(false);
   const [statusAction, setStatusAction] = useState<StatusAction>("complete");
 
+  // Discuss mode state
+  const [discussMode, setDiscussMode] = useState(false);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | undefined>();
+  const [conversations, setConversations] = useState<ConversationMetadata[]>([]);
+
   // Subscribe to ProjectManager for real-time updates
   useEffect(() => {
     const loadProject = () => {
@@ -64,6 +72,14 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
     const unsubscribe = plugin.projectsPlusManager.subscribe(loadProject);
     return unsubscribe;
   }, [plugin.projectsPlusManager, projectId, onBack]);
+
+  // Load conversations for the project
+  useEffect(() => {
+    if (project) {
+      const persistence = new ConversationPersistence(plugin.app);
+      persistence.listConversations(project).then(setConversations);
+    }
+  }, [project, plugin.app]);
 
   const handleSaveProject = useCallback(
     async (updates: UpdateProjectInput) => {
@@ -149,11 +165,46 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
     [plugin.app.vault]
   );
 
+  // Handler for exiting discuss mode
+  const handleDiscussBack = useCallback(() => {
+    setDiscussMode(false);
+    setSelectedConversationId(undefined);
+    // Reload conversations when returning from discuss
+    if (project) {
+      const persistence = new ConversationPersistence(plugin.app);
+      persistence.listConversations(project).then(setConversations);
+    }
+  }, [project, plugin.app]);
+
+  // Handler for starting a new discussion
+  const handleStartDiscuss = useCallback(() => {
+    setSelectedConversationId(undefined);
+    setDiscussMode(true);
+  }, []);
+
+  // Handler for opening an existing conversation
+  const handleOpenConversation = useCallback((conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    setDiscussMode(true);
+  }, []);
+
   if (!project) {
     return (
       <div className="tw-flex tw-h-full tw-items-center tw-justify-center">
         <p className="tw-text-muted">Loading...</p>
       </div>
+    );
+  }
+
+  // Render DiscussView when in discuss mode
+  if (discussMode) {
+    return (
+      <DiscussView
+        project={project}
+        plugin={plugin}
+        conversationId={selectedConversationId}
+        onBack={handleDiscussBack}
+      />
     );
   }
 
@@ -309,12 +360,42 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
           )}
         </div>
 
-        {/* Conversations section (Phase 5 placeholder) */}
+        {/* Conversations section */}
         <div className="tw-mb-4">
-          <h3 className="tw-mb-2 tw-text-sm tw-font-medium tw-text-normal">Conversations</h3>
-          <div className="tw-rounded tw-border tw-border-dashed tw-border-border tw-py-6 tw-text-center tw-text-sm tw-text-muted">
-            Coming in Phase 5...
+          <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between">
+            <h3 className="tw-text-sm tw-font-medium tw-text-normal">Conversations</h3>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleStartDiscuss}
+              className="tw-flex tw-items-center tw-gap-1"
+            >
+              <MessageSquare className="tw-size-3" />
+              Discuss
+            </Button>
           </div>
+
+          {conversations.length === 0 ? (
+            <div className="tw-rounded tw-border tw-border-dashed tw-border-border tw-py-6 tw-text-center tw-text-sm tw-text-muted">
+              No conversations yet
+            </div>
+          ) : (
+            <div className="tw-space-y-1">
+              {conversations.map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => handleOpenConversation(conv.id)}
+                  className="tw-w-full tw-rounded tw-border tw-border-solid tw-border-border tw-px-3 tw-py-2 tw-text-left hover:tw-bg-interactive-hover"
+                >
+                  <div className="tw-truncate tw-text-sm tw-text-normal">{conv.title}</div>
+                  <div className="tw-text-xs tw-text-muted">
+                    {conv.messageCount} {conv.messageCount === 1 ? "message" : "messages"} ·{" "}
+                    {formatRelativeTime(conv.updatedAt)}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Reflection (if completed) */}
