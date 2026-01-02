@@ -224,6 +224,65 @@ export class ChunkedStorage {
     }
   }
 
+  /**
+   * Recursively convert radix tree nodes from array format to object format.
+   * Orama's loadRadixNode expects node.c to be an object {key: childNode, ...}
+   * But serialized data may have c as array of tuples [["key", childNode], ...]
+   */
+  private convertRadixNode(node: any): any {
+    if (!node || typeof node !== "object") {
+      return node;
+    }
+
+    // Check if this looks like a radix node (has typical radix properties)
+    const isRadixNode = "e" in node || "s" in node || "k" in node || "c" in node;
+
+    if (isRadixNode) {
+      // Ensure c exists
+      if (node.c == null) {
+        node.c = {};
+      }
+
+      // Convert array format [["key", childNode], ...] to object format {key: childNode}
+      if (Array.isArray(node.c)) {
+        const converted: Record<string, any> = {};
+        for (const entry of node.c) {
+          if (Array.isArray(entry) && entry.length === 2) {
+            const [key, childNode] = entry;
+            converted[key] = this.convertRadixNode(childNode);
+          }
+        }
+        node.c = converted;
+      } else if (typeof node.c === "object") {
+        // Already object format, but still need to recursively convert children
+        for (const key of Object.keys(node.c)) {
+          node.c[key] = this.convertRadixNode(node.c[key]);
+        }
+      }
+    }
+
+    return node;
+  }
+
+  /**
+   * Convert the index structure from array format to object format for radix trees.
+   * Orama stores radix trees in index.indexes[fieldName].node for Radix type indexes.
+   */
+  private convertIndexData(data: any): void {
+    if (!data?.index?.indexes) {
+      return;
+    }
+
+    // Convert each radix tree index
+    for (const indexName of Object.keys(data.index.indexes)) {
+      const indexEntry = data.index.indexes[indexName];
+      // Only Radix type indexes have the node property with radix tree structure
+      if (indexEntry && indexEntry.type === "Radix" && indexEntry.node) {
+        indexEntry.node = this.convertRadixNode(indexEntry.node);
+      }
+    }
+  }
+
   async loadDatabase(): Promise<Orama<any>> {
     try {
       const legacyPath = this.getLegacyPath();
@@ -232,7 +291,14 @@ export class ChunkedStorage {
       if (await this.app.vault.adapter.exists(legacyPath)) {
         const legacyData = JSON.parse(await this.app.vault.adapter.read(legacyPath));
         if (!legacyData?.schema) {
-          throw new CustomError("Invalid legacy database format");
+          throw new CustomError("Invalid legacy database format: missing schema");
+        }
+        // Validate required data structures for legacy format
+        if (!legacyData.internalDocumentIDStore?.internalIdToId) {
+          throw new CustomError("Invalid legacy database format: missing internalDocumentIDStore");
+        }
+        if (!legacyData.docs?.docs) {
+          throw new CustomError("Invalid legacy database format: missing docs");
         }
         const newDb = await create({
           schema: legacyData.schema,
@@ -243,6 +309,7 @@ export class ChunkedStorage {
             },
           },
         });
+        this.convertIndexData(legacyData);
         await load(newDb, legacyData);
         return newDb;
       }
@@ -281,15 +348,34 @@ export class ChunkedStorage {
         throw new CustomError("No data found in chunks");
       }
 
+      // Validate required data structures exist
+      if (!mergedData.internalDocumentIDStore?.internalIdToId) {
+        throw new CustomError("Invalid database format: missing internalDocumentIDStore");
+      }
+      if (!mergedData.docs?.docs) {
+        throw new CustomError("Invalid database format: missing docs");
+      }
+      if (!mergedData.index?.vectorIndexes?.embedding) {
+        throw new CustomError("Invalid database format: missing vector indexes");
+      }
+
       // Create new docs object based on internalDocumentIDStore order
       const orderedDocs: Record<string, any> = {};
       let nextDocId = 1;
 
-      for (const internalId of mergedData.internalDocumentIDStore.internalIdToId) {
+      const internalIdToId = mergedData.internalDocumentIDStore.internalIdToId;
+      // Ensure internalIdToId is iterable (could be array or object)
+      const internalIds = Array.isArray(internalIdToId)
+        ? internalIdToId
+        : Object.values(internalIdToId || {});
+
+      for (const internalId of internalIds) {
+        if (!internalId) continue; // Skip undefined/null entries
+
         // Find document in any chunk
         const doc = allChunks
-          .flatMap((chunk) => Object.values(chunk.docs.docs))
-          .find((doc: any) => (doc as any).id === internalId);
+          .flatMap((chunk) => Object.values(chunk.docs?.docs || {}))
+          .find((doc: any) => (doc as any)?.id === internalId);
 
         if (doc) {
           orderedDocs[nextDocId.toString()] = doc;
@@ -310,6 +396,7 @@ export class ChunkedStorage {
       );
 
       // Load merged data into database
+      this.convertIndexData(mergedData);
       await load(newDb, mergedData);
       return newDb;
     } catch (error) {
