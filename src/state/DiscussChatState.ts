@@ -104,6 +104,16 @@ export class DiscussChatState {
     return this.project;
   }
 
+  /**
+   * Update project reference without resetting conversation
+   * Used when project data changes but ID stays the same
+   */
+  updateProject(project: Project): void {
+    if (project.id === this.project.id) {
+      this.project = project;
+    }
+  }
+
   // ================================
   // MESSAGE OPERATIONS
   // ================================

@@ -8,7 +8,7 @@ import { useDiscussChat } from "@/hooks/useDiscussChat";
 import { Project } from "@/types/projects-plus";
 import { MessageSquare } from "lucide-react";
 import * as React from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { DiscussHeader } from "./DiscussHeader";
 import { DiscussInput } from "./DiscussInput";
 import { DiscussMessage } from "./DiscussMessage";
@@ -25,12 +25,31 @@ interface DiscussViewProps {
  * Main Discuss view container
  */
 export function DiscussView({ project, plugin, conversationId, onBack }: DiscussViewProps) {
-  // Create state instance (memoized to prevent recreation)
   const chainManager = plugin.projectModeManager.getCurrentChainManager();
-  const state = useMemo(
-    () => new DiscussChatState(plugin.app, project, chainManager, plugin.projectsPlusManager),
-    [plugin.app, project, chainManager, plugin.projectsPlusManager]
-  );
+
+  // Use ref to store state - only recreate when project ID changes
+  // This prevents state recreation when project object reference changes (e.g., after saving)
+  const stateRef = useRef<DiscussChatState | null>(null);
+  const prevProjectIdRef = useRef<string | null>(null);
+
+  // Recreate state only when project ID changes (not when project object changes)
+  if (!stateRef.current || prevProjectIdRef.current !== project.id) {
+    stateRef.current = new DiscussChatState(
+      plugin.app,
+      project,
+      chainManager,
+      plugin.projectsPlusManager
+    );
+    prevProjectIdRef.current = project.id;
+  }
+  const state = stateRef.current;
+
+  // Sync project changes to existing state (same ID, updated data)
+  useEffect(() => {
+    if (stateRef.current && stateRef.current.getProject().id === project.id) {
+      stateRef.current.updateProject(project);
+    }
+  }, [project]);
 
   const {
     messages,
