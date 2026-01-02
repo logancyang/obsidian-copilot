@@ -12,10 +12,10 @@ function escapeYamlString(str: string): string {
 }
 
 /**
- * Slugify a project name for use in folder names
+ * Slugify a project title for use in folder names
  */
-function slugify(name: string): string {
-  return name
+function slugify(title: string): string {
+  return title
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
@@ -48,20 +48,20 @@ export class ProjectPersistence {
   /**
    * Get the folder path for a specific project
    */
-  getProjectFolderPath(projectId: string, projectName: string): string {
-    const slug = slugify(projectName);
+  getProjectFolderPath(projectId: string, projectTitle: string): string {
+    const slug = slugify(projectTitle);
     return `${this.getProjectsFolder()}/${projectId}__${slug}`;
   }
 
   /**
    * Get the project.md file path for a specific project
    */
-  getProjectFilePath(projectId: string, projectName: string): string {
-    return `${this.getProjectFolderPath(projectId, projectName)}/project.md`;
+  getProjectFilePath(projectId: string, projectTitle: string): string {
+    return `${this.getProjectFolderPath(projectId, projectTitle)}/project.md`;
   }
 
   /**
-   * Migrate existing goal.md files to project.md
+   * Migrate existing goal.md files to project.md and name→title
    * Called once during initialization
    */
   async migrateStorage(): Promise<void> {
@@ -73,6 +73,7 @@ export class ProjectPersistence {
     for (const child of folder.children) {
       if (!(child instanceof TFolder)) continue;
 
+      // Migrate goal.md → project.md
       const oldPath = `${child.path}/goal.md`;
       const newPath = `${child.path}/project.md`;
 
@@ -81,6 +82,45 @@ export class ProjectPersistence {
         await this.app.fileManager.renameFile(oldFile, newPath);
         logInfo(`[ProjectPersistence] Migrated ${oldPath} to ${newPath}`);
       }
+
+      // Migrate name → title in project.md content
+      const projectFile = this.app.vault.getAbstractFileByPath(`${child.path}/project.md`);
+      if (projectFile instanceof TFile) {
+        await this.migrateProjectFile(projectFile);
+      }
+    }
+  }
+
+  /**
+   * Migrate a single project file from name→title format
+   */
+  private async migrateProjectFile(file: TFile): Promise<void> {
+    try {
+      const content = await this.app.vault.read(file);
+
+      // Check if already migrated (has title: instead of name:)
+      if (content.includes("\ntitle:") || content.startsWith("title:")) {
+        return; // Already migrated
+      }
+
+      // Check if needs migration (has name: field)
+      if (!content.includes("\nname:") && !content.startsWith("name:")) {
+        return; // No name field to migrate
+      }
+
+      // Migrate name → title
+      let migratedContent = content.replace(/^name:/m, "title:");
+
+      // Add successCriteria if not present
+      if (!content.includes("successCriteria:")) {
+        // Insert after title line
+        migratedContent = migratedContent.replace(/^(title: "[^"]*")/m, "$1\nsuccessCriteria: []");
+      }
+
+      await this.app.vault.modify(file, migratedContent);
+      logInfo(`[ProjectPersistence] Migrated name→title in ${file.path}`);
+    } catch (error) {
+      logError(`[ProjectPersistence] Error migrating project file ${file.path}:`, error);
     }
   }
 
@@ -89,7 +129,7 @@ export class ProjectPersistence {
    */
   async saveProject(project: Project): Promise<void> {
     try {
-      const folderPath = this.getProjectFolderPath(project.id, project.name);
+      const folderPath = this.getProjectFolderPath(project.id, project.title);
       const filePath = `${folderPath}/project.md`;
 
       // Ensure project folder exists
@@ -175,7 +215,7 @@ export class ProjectPersistence {
    */
   async deleteProject(project: Project): Promise<void> {
     try {
-      const folderPath = this.getProjectFolderPath(project.id, project.name);
+      const folderPath = this.getProjectFolderPath(project.id, project.title);
       const folder = this.app.vault.getAbstractFileByPath(folderPath);
 
       if (folder instanceof TFolder) {
@@ -192,12 +232,12 @@ export class ProjectPersistence {
   }
 
   /**
-   * Rename a project folder when project name changes
+   * Rename a project folder when project title changes
    */
-  async renameProjectFolder(project: Project, oldName: string): Promise<void> {
+  async renameProjectFolder(project: Project, oldTitle: string): Promise<void> {
     try {
-      const oldFolderPath = this.getProjectFolderPath(project.id, oldName);
-      const newFolderPath = this.getProjectFolderPath(project.id, project.name);
+      const oldFolderPath = this.getProjectFolderPath(project.id, oldTitle);
+      const newFolderPath = this.getProjectFolderPath(project.id, project.title);
 
       if (oldFolderPath === newFolderPath) {
         // No rename needed
@@ -245,8 +285,10 @@ export class ProjectPersistence {
 
       return {
         id: frontmatter.id,
-        name: frontmatter.name,
+        title: frontmatter.title,
         description,
+        successCriteria: frontmatter.successCriteria || [],
+        deadline: frontmatter.deadline,
         status: frontmatter.status,
         notes: frontmatter.notes || [],
         conversations: frontmatter.conversations || [],
@@ -277,8 +319,32 @@ export class ProjectPersistence {
 
         if (line.startsWith("id:")) {
           result.id = this.parseYamlValue(line.slice(3));
-        } else if (line.startsWith("name:")) {
-          result.name = this.parseYamlValue(line.slice(5));
+        } else if (line.startsWith("title:")) {
+          result.title = this.parseYamlValue(line.slice(6));
+        } else if (line.startsWith("deadline:")) {
+          const val = this.parseYamlValue(line.slice(9));
+          if (val) {
+            result.deadline = parseInt(val, 10);
+          }
+        } else if (line === "successCriteria:") {
+          // Parse successCriteria array
+          result.successCriteria = [];
+          i++;
+          while (i < lines.length && lines[i].match(/^\s+-\s/)) {
+            const criterion = lines[i].replace(/^\s+-\s/, "").trim();
+            const parsedCriterion = this.parseYamlValue(criterion);
+            if (parsedCriterion) {
+              result.successCriteria.push(parsedCriterion);
+            }
+            i++;
+          }
+          continue;
+        } else if (line.startsWith("successCriteria:") && line.includes("[")) {
+          // Handle inline empty array: successCriteria: []
+          const val = line.slice(16).trim();
+          if (val === "[]") {
+            result.successCriteria = [];
+          }
         } else if (line.startsWith("status:")) {
           const status = this.parseYamlValue(line.slice(7));
           if (status === "active" || status === "completed" || status === "archived") {
@@ -324,9 +390,14 @@ export class ProjectPersistence {
       }
 
       // Validate required fields
-      if (!result.id || !result.name || !result.status || !result.createdAt || !result.updatedAt) {
+      if (!result.id || !result.title || !result.status || !result.createdAt || !result.updatedAt) {
         logWarn("[ProjectPersistence] Missing required fields in frontmatter");
         return null;
+      }
+
+      // Ensure successCriteria is always an array
+      if (!result.successCriteria) {
+        result.successCriteria = [];
       }
 
       return result as ProjectFrontmatter;
@@ -446,11 +517,19 @@ export class ProjectPersistence {
   private generateProjectContent(project: Project): string {
     const notesYaml = this.generateNotesYaml(project.notes);
     const conversationsYaml = this.generateConversationsYaml(project.conversations);
+    const successCriteriaYaml = this.generateSuccessCriteriaYaml(project.successCriteria);
 
     let frontmatter = `---
 id: "${escapeYamlString(project.id)}"
-name: "${escapeYamlString(project.name)}"
-status: "${project.status}"
+title: "${escapeYamlString(project.title)}"
+${successCriteriaYaml}
+`;
+
+    if (project.deadline) {
+      frontmatter += `deadline: ${project.deadline}\n`;
+    }
+
+    frontmatter += `status: "${project.status}"
 createdAt: ${project.createdAt}
 updatedAt: ${project.updatedAt}`;
 
@@ -468,11 +547,26 @@ updatedAt: ${project.updatedAt}`;
 
     const content = `${frontmatter}
 
-# ${project.name}
+# ${project.title}
 
 ${project.description}`;
 
     return content;
+  }
+
+  /**
+   * Generate YAML for successCriteria array
+   */
+  private generateSuccessCriteriaYaml(criteria: string[]): string {
+    if (criteria.length === 0) {
+      return "successCriteria: []";
+    }
+
+    let yaml = "successCriteria:";
+    for (const criterion of criteria) {
+      yaml += `\n  - "${escapeYamlString(criterion)}"`;
+    }
+    return yaml;
   }
 
   /**

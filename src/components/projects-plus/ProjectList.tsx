@@ -5,6 +5,7 @@ import ProjectCard from "./ProjectCard";
 
 interface ProjectListProps {
   projects: Project[];
+  onSelectProject: (projectId: string) => void;
   onEditProject: (project: Project) => void;
   onCompleteProject: (projectId: string) => void;
   onDeleteProject: (projectId: string) => void;
@@ -15,6 +16,7 @@ interface ProjectListProps {
  */
 export default function ProjectList({
   projects,
+  onSelectProject,
   onEditProject,
   onCompleteProject,
   onDeleteProject,
@@ -35,6 +37,7 @@ export default function ProjectList({
         <ProjectCard
           key={project.id}
           project={project}
+          onClick={() => onSelectProject(project.id)}
           onEdit={() => onEditProject(project)}
           onComplete={() => onCompleteProject(project.id)}
           onDelete={() => onDeleteProject(project.id)}

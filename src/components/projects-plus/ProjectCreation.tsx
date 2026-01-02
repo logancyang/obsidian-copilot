@@ -182,7 +182,7 @@ function useProjectCreationChat() {
    * Set a manual edit for a field
    */
   const setManualEdit = useCallback(
-    (field: "name" | "description", value: string) => {
+    (field: "title" | "description", value: string) => {
       safeSetState((prev) => {
         const newState = {
           ...prev,
@@ -222,7 +222,7 @@ export default function ProjectCreation({ onCancel, onComplete }: ProjectCreatio
   const { state, currentStreamingContent, sendMessage, setManualEdit } = useProjectCreationChat();
 
   const [pendingFormEdit, setPendingFormEdit] = useState<{
-    field: "name" | "description";
+    field: "title" | "description";
     value: string;
   } | null>(null);
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
@@ -234,7 +234,7 @@ export default function ProjectCreation({ onCancel, onComplete }: ProjectCreatio
    * Handle form field edit
    */
   const handleManualEdit = useCallback(
-    (field: "name" | "description", value: string) => {
+    (field: "title" | "description", value: string) => {
       setManualEdit(field, value);
       // Queue context for next AI message
       setPendingFormEdit({ field, value });
@@ -266,7 +266,7 @@ export default function ProjectCreation({ onCancel, onComplete }: ProjectCreatio
   const handleCancel = useCallback(() => {
     const hasData =
       state.messages.length > 1 || // More than just greeting
-      effectiveExtraction.name.trim() !== "" ||
+      effectiveExtraction.title.trim() !== "" ||
       effectiveExtraction.description.trim() !== "";
 
     if (hasData) {

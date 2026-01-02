@@ -1,4 +1,5 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import ChatModelManager from "@/LLMProviders/chatModelManager";
 import ProjectModeManager from "@/LLMProviders/projectManager";
 import { CustomModel, getCurrentProject, setSelectedTextContexts } from "@/aiParams";
 import { SelectedTextContext } from "@/types/message";
@@ -6,6 +7,7 @@ import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import ProjectsView from "@/components/projects-plus/ProjectsView";
+import { NoteAssignmentService } from "@/core/projects-plus/NoteAssignmentService";
 import { ProjectManager } from "@/core/projects-plus/ProjectManager";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
@@ -72,6 +74,7 @@ export default class CopilotPlugin extends Plugin {
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
   projectsPlusManager: ProjectManager;
+  noteAssignmentService: NoteAssignmentService;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
 
@@ -125,6 +128,15 @@ export default class CopilotPlugin extends Plugin {
     if (getSettings().projectsPlusEnabled) {
       await this.projectsPlusManager.initialize();
     }
+
+    // Initialize NoteAssignmentService for Projects+
+    this.noteAssignmentService = new NoteAssignmentService(this.app, () => {
+      try {
+        return ChatModelManager.getInstance().getChatModel();
+      } catch {
+        return null;
+      }
+    });
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));

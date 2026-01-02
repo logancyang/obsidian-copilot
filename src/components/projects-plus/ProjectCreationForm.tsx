@@ -11,8 +11,8 @@ interface ProjectCreationFormProps {
   /** User's manual edits */
   manualEdits: Partial<ProjectExtraction>;
   /** Callback when user manually edits a field */
-  onManualEdit: (field: "name" | "description", value: string) => void;
-  /** Whether the project is ready (name + description filled) */
+  onManualEdit: (field: "title" | "description", value: string) => void;
+  /** Whether the project is ready (title + description filled) */
   isReady: boolean;
 }
 
@@ -27,15 +27,15 @@ export default function ProjectCreationForm({
   onManualEdit,
   isReady,
 }: ProjectCreationFormProps) {
-  const [highlightedField, setHighlightedField] = useState<"name" | "description" | null>(null);
+  const [highlightedField, setHighlightedField] = useState<"title" | "description" | null>(null);
   const prevExtraction = useRef<ProjectExtraction | null>(null);
 
   // Track changes to trigger highlight animation
   useEffect(() => {
     if (prevExtraction.current) {
       // Only highlight if AI updated (not manual edit)
-      if (extraction.name !== prevExtraction.current.name && manualEdits.name === undefined) {
-        setHighlightedField("name");
+      if (extraction.title !== prevExtraction.current.title && manualEdits.title === undefined) {
+        setHighlightedField("title");
         setTimeout(() => setHighlightedField(null), 500);
       } else if (
         extraction.description !== prevExtraction.current.description &&
@@ -46,9 +46,9 @@ export default function ProjectCreationForm({
       }
     }
     prevExtraction.current = extraction;
-  }, [extraction, manualEdits.name, manualEdits.description]);
+  }, [extraction, manualEdits.title, manualEdits.description]);
 
-  const isNameEdited = manualEdits.name !== undefined;
+  const isTitleEdited = manualEdits.title !== undefined;
   const isDescriptionEdited = manualEdits.description !== undefined;
 
   return (
@@ -65,33 +65,33 @@ export default function ProjectCreationForm({
       </div>
 
       <div className="tw-flex tw-flex-col tw-gap-3">
-        {/* Name field */}
+        {/* Title field */}
         <div className="tw-flex tw-flex-col tw-gap-1">
           <div className="tw-flex tw-items-center tw-justify-between">
-            <label htmlFor="project-name" className="tw-text-xs tw-font-medium tw-text-muted">
-              Name
+            <label htmlFor="project-title" className="tw-text-xs tw-font-medium tw-text-muted">
+              Title
             </label>
-            {extraction.name && (
+            {extraction.title && (
               <span
                 className={cn(
                   "tw-rounded tw-px-1.5 tw-py-0.5 tw-text-xs",
-                  isNameEdited
+                  isTitleEdited
                     ? "tw-bg-yellow-rgb/20 tw-text-warning"
                     : "tw-bg-interactive-accent-hsl/20 tw-text-accent"
                 )}
               >
-                {isNameEdited ? "Edited" : "Live"}
+                {isTitleEdited ? "Edited" : "Live"}
               </span>
             )}
           </div>
           <Input
-            id="project-name"
-            value={extraction.name}
-            onChange={(e) => onManualEdit("name", e.target.value)}
-            placeholder="Project name will appear here..."
+            id="project-title"
+            value={extraction.title}
+            onChange={(e) => onManualEdit("title", e.target.value)}
+            placeholder="Project title will appear here..."
             className={cn(
               "tw-transition-colors",
-              highlightedField === "name" && "tw-ring-2 tw-ring-ring"
+              highlightedField === "title" && "tw-ring-2 tw-ring-ring"
             )}
           />
         </div>

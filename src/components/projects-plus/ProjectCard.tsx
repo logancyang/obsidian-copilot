@@ -5,6 +5,7 @@ import { useState } from "react";
 
 interface ProjectCardProps {
   project: Project;
+  onClick: () => void;
   onEdit: () => void;
   onComplete: () => void;
   onDelete: () => void;
@@ -52,7 +53,13 @@ function formatRelativeTime(timestamp: number): string {
 /**
  * ProjectCard - Individual project card with actions
  */
-export default function ProjectCard({ project, onEdit, onComplete, onDelete }: ProjectCardProps) {
+export default function ProjectCard({
+  project,
+  onClick,
+  onEdit,
+  onComplete,
+  onDelete,
+}: ProjectCardProps) {
   const [showMenu, setShowMenu] = useState(false);
 
   const handleMenuClick = (e: React.MouseEvent) => {
@@ -71,12 +78,12 @@ export default function ProjectCard({ project, onEdit, onComplete, onDelete }: P
   return (
     <div
       className="tw-cursor-pointer tw-rounded-md tw-border tw-border-border tw-bg-primary tw-p-3 tw-transition-colors hover:tw-bg-modifier-hover"
-      onClick={onEdit}
+      onClick={onClick}
     >
       {/* Header with title and status */}
       <div className="tw-mb-2 tw-flex tw-items-start tw-justify-between tw-gap-2">
         <h3 className="tw-line-clamp-1 tw-text-base tw-font-medium tw-text-normal">
-          {project.name}
+          {project.title}
         </h3>
         <div className="tw-flex tw-items-center tw-gap-2">
           <span

@@ -29,9 +29,15 @@ export function parseProjectExtraction(response: string): ProjectExtraction | nu
 
   try {
     const data = JSON.parse(match[1]);
+    // Support both old 'name' field and new 'title' field for backwards compatibility
+    const title =
+      typeof data.title === "string" ? data.title : typeof data.name === "string" ? data.name : "";
     return {
-      name: typeof data.name === "string" ? data.name : "",
+      title,
       description: typeof data.description === "string" ? data.description : "",
+      successCriteria: Array.isArray(data.successCriteria)
+        ? data.successCriteria.filter((c: unknown) => typeof c === "string")
+        : [],
       confidence: typeof data.confidence === "number" ? data.confidence : 0,
     };
   } catch {
@@ -51,20 +57,26 @@ export function stripExtractionBlock(response: string): string {
  * Get the effective extraction (manual edits override AI extraction)
  */
 export function getEffectiveExtraction(state: ProjectCreationState): ProjectExtraction {
-  const base = state.extraction || { name: "", description: "", confidence: 0 };
+  const base = state.extraction || {
+    title: "",
+    description: "",
+    successCriteria: [],
+    confidence: 0,
+  };
   return {
-    name: state.manualEdits.name ?? base.name,
+    title: state.manualEdits.title ?? base.title,
     description: state.manualEdits.description ?? base.description,
+    successCriteria: state.manualEdits.successCriteria ?? base.successCriteria,
     confidence: base.confidence,
   };
 }
 
 /**
- * Check if project is ready to create (has name and description)
+ * Check if project is ready to create (has title and description)
  */
 export function checkIsReady(state: ProjectCreationState): boolean {
   const effective = getEffectiveExtraction(state);
-  return effective.name.trim().length > 0 && effective.description.trim().length > 0;
+  return effective.title.trim().length > 0 && effective.description.trim().length > 0;
 }
 
 /**

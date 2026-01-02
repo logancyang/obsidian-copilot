@@ -2,8 +2,9 @@ import CopilotPlugin from "@/main";
 import {
   Project,
   ProjectStatus,
-  ProjectExtraction,
+  CreateProjectInput,
   UpdateProjectInput,
+  NoteSuggestion,
 } from "@/types/projects-plus";
 import { Plus, Search } from "lucide-react";
 import * as React from "react";
@@ -12,27 +13,28 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import ProjectList from "./ProjectList";
 import ProjectDialog from "./ProjectDialog";
-import ProjectCreation from "./ProjectCreation";
+import { ProjectCreationDialog } from "./ProjectCreationDialog";
+import { ProjectDetail } from "./ProjectDetail";
 
 interface ProjectsPanelProps {
   plugin: CopilotPlugin;
 }
 
 type FilterStatus = ProjectStatus | "all";
-type ViewType = "list" | "create";
 
 /**
  * ProjectsPanel - Main container for the Projects+ interface
  *
  * Displays project list with search/filter capabilities and
- * provides project creation functionality via AI-assisted flow.
+ * provides project creation functionality via AI-assisted dialog.
  */
 export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
-  const [view, setView] = useState<ViewType>("list");
   const [projects, setProjects] = useState<Project[]>([]);
   const [filter, setFilter] = useState<FilterStatus>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   // Subscribe to ProjectManager changes
   useEffect(() => {
@@ -59,7 +61,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(
-        (p) => p.name.toLowerCase().includes(query) || p.description.toLowerCase().includes(query)
+        (p) => p.title.toLowerCase().includes(query) || p.description.toLowerCase().includes(query)
       );
     }
 
@@ -68,25 +70,30 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
   }, [projects, filter, searchQuery]);
 
   /**
-   * Handle project creation completion from AI-assisted flow
+   * Handle project creation from dialog
+   * Returns the created project for note assignment step
    */
-  const handleProjectCreationComplete = useCallback(
-    async (extraction: ProjectExtraction) => {
-      await plugin.projectsPlusManager.createProject({
-        name: extraction.name,
-        description: extraction.description,
-      });
-      setView("list");
+  const handleProjectCreated = useCallback(
+    async (input: CreateProjectInput): Promise<Project> => {
+      return await plugin.projectsPlusManager.createProject(input);
     },
     [plugin.projectsPlusManager]
   );
 
   /**
-   * Handle project creation cancellation
+   * Handle adding notes to a project
    */
-  const handleProjectCreationCancel = useCallback(() => {
-    setView("list");
-  }, []);
+  const handleAddNotes = useCallback(
+    async (projectId: string, suggestions: NoteSuggestion[]) => {
+      const relevanceScores = new Map(suggestions.map((s) => [s.path, s.relevanceScore]));
+      await plugin.projectsPlusManager.addNotesToProject(
+        projectId,
+        suggestions.map((s) => s.path),
+        relevanceScores
+      );
+    },
+    [plugin.projectsPlusManager]
+  );
 
   const handleUpdateProject = useCallback(
     async (input: UpdateProjectInput) => {
@@ -116,18 +123,21 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
     setEditingProject(project);
   }, []);
 
-  // Render project creation view
-  if (view === "create") {
+  const handleSelectProject = useCallback((projectId: string) => {
+    setSelectedProjectId(projectId);
+  }, []);
+
+  const handleBackToList = useCallback(() => {
+    setSelectedProjectId(null);
+  }, []);
+
+  // Show project detail view when a project is selected
+  if (selectedProjectId !== null) {
     return (
-      <ProjectCreation
-        onCancel={handleProjectCreationCancel}
-        onComplete={handleProjectCreationComplete}
-        projectManager={plugin.projectsPlusManager}
-      />
+      <ProjectDetail projectId={selectedProjectId} plugin={plugin} onBack={handleBackToList} />
     );
   }
 
-  // Render project list view
   return (
     <div className="tw-flex tw-h-full tw-flex-col tw-p-4">
       {/* Header */}
@@ -135,7 +145,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
         <h2 className="tw-text-lg tw-font-semibold tw-text-normal">Projects+</h2>
         <Button
           size="sm"
-          onClick={() => setView("create")}
+          onClick={() => setCreateDialogOpen(true)}
           className="tw-flex tw-items-center tw-gap-1"
         >
           <Plus className="tw-size-4" />
@@ -170,6 +180,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
       <div className="tw-flex-1 tw-overflow-y-auto">
         <ProjectList
           projects={filteredProjects}
+          onSelectProject={handleSelectProject}
           onEditProject={handleEditProject}
           onCompleteProject={handleCompleteProject}
           onDeleteProject={handleDeleteProject}
@@ -183,6 +194,16 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
         project={editingProject ?? undefined}
         onSave={handleUpdateProject}
         title="Edit Project"
+      />
+
+      {/* Create dialog */}
+      <ProjectCreationDialog
+        open={createDialogOpen}
+        onOpenChange={setCreateDialogOpen}
+        onProjectCreated={handleProjectCreated}
+        onAddNotes={handleAddNotes}
+        noteAssignmentService={plugin.noteAssignmentService}
+        onOpenNote={(path) => plugin.app.workspace.openLinkText(path, "")}
       />
     </div>
   );

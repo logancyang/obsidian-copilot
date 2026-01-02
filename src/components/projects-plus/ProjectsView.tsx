@@ -39,6 +39,9 @@ export default class ProjectsView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
+    // Ensure ProjectManager is initialized before rendering
+    await this.plugin.projectsPlusManager.initialize();
+
     this.root = createRoot(this.containerEl.children[1]);
     this.renderView();
   }

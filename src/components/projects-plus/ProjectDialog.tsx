@@ -30,14 +30,14 @@ export default function ProjectDialog({
   onSave,
   title,
 }: ProjectDialogProps) {
-  const [name, setName] = useState("");
+  const [projectTitle, setProjectTitle] = useState("");
   const [description, setDescription] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Reset form when dialog opens/closes or project changes
   useEffect(() => {
     if (open) {
-      setName(project?.name ?? "");
+      setProjectTitle(project?.title ?? "");
       setDescription(project?.description ?? "");
     }
   }, [open, project]);
@@ -45,12 +45,12 @@ export default function ProjectDialog({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!name.trim()) return;
+    if (!projectTitle.trim()) return;
 
     setIsSubmitting(true);
     try {
       await onSave({
-        name: name.trim(),
+        title: projectTitle.trim(),
         description: description.trim(),
       });
       onOpenChange(false);
@@ -59,7 +59,7 @@ export default function ProjectDialog({
     }
   };
 
-  const isValid = name.trim().length > 0;
+  const isValid = projectTitle.trim().length > 0;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -71,13 +71,13 @@ export default function ProjectDialog({
 
           <div className="tw-flex tw-flex-col tw-gap-4 tw-py-4">
             <div className="tw-flex tw-flex-col tw-gap-2">
-              <label htmlFor="project-name" className="tw-text-sm tw-font-medium tw-text-normal">
-                Name
+              <label htmlFor="project-title" className="tw-text-sm tw-font-medium tw-text-normal">
+                Title
               </label>
               <Input
-                id="project-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                id="project-title"
+                value={projectTitle}
+                onChange={(e) => setProjectTitle(e.target.value)}
                 placeholder="e.g., Learn TypeScript"
                 autoFocus
               />

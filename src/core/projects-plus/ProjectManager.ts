@@ -83,8 +83,10 @@ export class ProjectManager {
     const now = Date.now();
     const project: Project = {
       id: uuidv4(),
-      name: input.name,
+      title: input.title,
       description: input.description,
+      successCriteria: input.successCriteria,
+      deadline: input.deadline,
       status: "active",
       notes: [],
       conversations: [],
@@ -96,7 +98,7 @@ export class ProjectManager {
       await this.persistence.saveProject(project);
       this.projects.set(project.id, project);
       this.notifyListeners();
-      logInfo(`[ProjectManager] Created project: ${project.name}`);
+      logInfo(`[ProjectManager] Created project: ${project.title}`);
       return project;
     } catch (error) {
       logError("[ProjectManager] Error creating project:", error);
@@ -114,7 +116,7 @@ export class ProjectManager {
       return null;
     }
 
-    const oldName = project.name;
+    const oldTitle = project.title;
     const updatedProject: Project = {
       ...project,
       ...updates,
@@ -122,15 +124,15 @@ export class ProjectManager {
     };
 
     try {
-      // If name changed, rename the folder first
-      if (updates.name && updates.name !== oldName) {
-        await this.persistence.renameProjectFolder(updatedProject, oldName);
+      // If title changed, rename the folder first
+      if (updates.title && updates.title !== oldTitle) {
+        await this.persistence.renameProjectFolder(updatedProject, oldTitle);
       }
 
       await this.persistence.saveProject(updatedProject);
       this.projects.set(id, updatedProject);
       this.notifyListeners();
-      logInfo(`[ProjectManager] Updated project: ${updatedProject.name}`);
+      logInfo(`[ProjectManager] Updated project: ${updatedProject.title}`);
       return updatedProject;
     } catch (error) {
       logError("[ProjectManager] Error updating project:", error);
@@ -152,7 +154,7 @@ export class ProjectManager {
       await this.persistence.deleteProject(project);
       this.projects.delete(id);
       this.notifyListeners();
-      logInfo(`[ProjectManager] Deleted project: ${project.name}`);
+      logInfo(`[ProjectManager] Deleted project: ${project.title}`);
       return true;
     } catch (error) {
       logError("[ProjectManager] Error deleting project:", error);
@@ -208,7 +210,7 @@ export class ProjectManager {
       await this.persistence.saveProject(updatedProject);
       this.projects.set(id, updatedProject);
       this.notifyListeners();
-      logInfo(`[ProjectManager] Completed project: ${updatedProject.name}`);
+      logInfo(`[ProjectManager] Completed project: ${updatedProject.title}`);
       return updatedProject;
     } catch (error) {
       logError("[ProjectManager] Error completing project:", error);
@@ -243,7 +245,7 @@ export class ProjectManager {
       await this.persistence.saveProject(updatedProject);
       this.projects.set(id, updatedProject);
       this.notifyListeners();
-      logInfo(`[ProjectManager] Reactivated project: ${updatedProject.name}`);
+      logInfo(`[ProjectManager] Reactivated project: ${updatedProject.title}`);
       return updatedProject;
     } catch (error) {
       logError("[ProjectManager] Error reactivating project:", error);
@@ -297,6 +299,58 @@ export class ProjectManager {
   }
 
   /**
+   * Add multiple notes to a project at once
+   * @param projectId - The project ID
+   * @param notePaths - Array of note paths to add
+   * @param relevanceScores - Optional map of path -> score for AI-suggested notes
+   * @returns Updated project or null if project not found
+   */
+  async addNotesToProject(
+    projectId: string,
+    notePaths: string[],
+    relevanceScores?: Map<string, number>
+  ): Promise<Project | null> {
+    const project = this.projects.get(projectId);
+    if (!project) {
+      return null;
+    }
+
+    // Filter out already-assigned notes
+    const existingPaths = new Set(project.notes.map((n) => n.path));
+    const newPaths = notePaths.filter((path) => !existingPaths.has(path));
+
+    if (newPaths.length === 0) {
+      logInfo("[ProjectManager] All notes already assigned");
+      return project;
+    }
+
+    const now = Date.now();
+    const newNotes: ProjectNote[] = newPaths.map((path) => ({
+      path,
+      assignedAt: now,
+      relevanceScore: relevanceScores?.get(path),
+      manuallyAdded: false, // AI-suggested notes
+    }));
+
+    const updatedProject: Project = {
+      ...project,
+      notes: [...project.notes, ...newNotes],
+      updatedAt: now,
+    };
+
+    try {
+      await this.persistence.saveProject(updatedProject);
+      this.projects.set(projectId, updatedProject);
+      this.notifyListeners();
+      logInfo(`[ProjectManager] Added ${newNotes.length} notes to project`);
+      return updatedProject;
+    } catch (error) {
+      logError("[ProjectManager] Error adding notes to project:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Remove a note from a project
    */
   async removeNoteFromProject(projectId: string, notePath: string): Promise<Project | null> {
@@ -324,13 +378,13 @@ export class ProjectManager {
   }
 
   /**
-   * Search projects by name or description
+   * Search projects by title or description
    */
   searchProjects(query: string): Project[] {
     const lowerQuery = query.toLowerCase();
     return this.getAllProjects().filter(
       (project) =>
-        project.name.toLowerCase().includes(lowerQuery) ||
+        project.title.toLowerCase().includes(lowerQuery) ||
         project.description.toLowerCase().includes(lowerQuery)
     );
   }

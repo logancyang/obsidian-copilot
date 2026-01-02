@@ -45,10 +45,14 @@ export interface ConversationRef {
 export interface Project {
   /** Unique identifier (UUID) */
   id: string;
-  /** Project name/title */
-  name: string;
+  /** Project title */
+  title: string;
   /** Detailed description (markdown supported) */
   description: string;
+  /** Success criteria - list of measurable outcomes */
+  successCriteria: string[];
+  /** Optional deadline (epoch ms) */
+  deadline?: number;
   /** Current status */
   status: ProjectStatus;
   /** Assigned notes */
@@ -68,13 +72,16 @@ export interface Project {
 /**
  * Project creation input (without system-generated fields)
  */
-export type CreateProjectInput = Pick<Project, "name" | "description">;
+export type CreateProjectInput = Pick<
+  Project,
+  "title" | "description" | "successCriteria" | "deadline"
+>;
 
 /**
  * Project update input
  */
 export type UpdateProjectInput = Partial<
-  Pick<Project, "name" | "description" | "status" | "reflection">
+  Pick<Project, "title" | "description" | "successCriteria" | "deadline" | "status" | "reflection">
 >;
 
 /**
@@ -82,7 +89,9 @@ export type UpdateProjectInput = Partial<
  */
 export interface ProjectFrontmatter {
   id: string;
-  name: string;
+  title: string;
+  successCriteria: string[];
+  deadline?: number;
   status: ProjectStatus;
   createdAt: number;
   updatedAt: number;
@@ -96,10 +105,12 @@ export interface ProjectFrontmatter {
  * Extracted project data from AI conversation
  */
 export interface ProjectExtraction {
-  /** Extracted project name (2-8 words, action-oriented) */
-  name: string;
+  /** Extracted project title (2-8 words, action-oriented) */
+  title: string;
   /** Extracted description (what the project entails) */
   description: string;
+  /** Success criteria extracted from conversation */
+  successCriteria: string[];
   /** AI confidence in extraction (0.0-1.0) */
   confidence: number;
 }
@@ -134,4 +145,61 @@ export interface ProjectCreationState {
   isStreaming: boolean;
   /** Any error message */
   error: string | null;
+}
+
+// ============================================================================
+// Note Assignment Types (Phase 3)
+// ============================================================================
+
+/**
+ * Source of the match for a note suggestion
+ */
+export type MatchSource = "semantic" | "lexical" | "hybrid";
+
+/**
+ * A suggested note from AI-powered search
+ */
+export interface NoteSuggestion {
+  /** Full path to the note in the vault */
+  path: string;
+  /** Note title (basename without extension) */
+  title: string;
+  /** Aggregated relevance score (0-1) */
+  relevanceScore: number;
+  /** Preview excerpt from the most relevant chunk */
+  excerpt: string;
+  /** Tags from the note */
+  tags: string[];
+  /** Last modified timestamp (epoch ms) */
+  mtime: number;
+  /** Source of the match (semantic, lexical, or both) */
+  matchSource: MatchSource;
+}
+
+/**
+ * Result from note assignment search
+ */
+export interface NoteAssignmentResult {
+  /** Suggested notes, ranked by relevance */
+  suggestions: NoteSuggestion[];
+  /** The search query that was generated from project context */
+  generatedQuery: string;
+  /** Total notes searched (for user feedback) */
+  totalSearched: number;
+  /** Whether the search completed successfully */
+  success: boolean;
+  /** Error message if search failed */
+  error?: string;
+}
+
+/**
+ * Options for note assignment search
+ */
+export interface NoteAssignmentOptions {
+  /** Minimum relevance score to include (default: 0.4) */
+  minScore?: number;
+  /** Maximum number of suggestions to return (default: 50, safety cap) */
+  maxSuggestions?: number;
+  /** Whether to skip global exclusions (default: false) */
+  ignoreExclusions?: boolean;
 }
