@@ -167,7 +167,7 @@ export default function ProjectsPanel({ plugin }: ProjectsPanelProps) {
         <select
           value={filter}
           onChange={(e) => setFilter(e.target.value as FilterStatus)}
-          className="tw-rounded-md tw-border tw-border-border tw-bg-primary tw-px-3 tw-py-1 tw-text-sm tw-text-normal"
+          className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-1 tw-text-sm tw-text-normal"
         >
           <option value="all">All</option>
           <option value="active">Active</option>

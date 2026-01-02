@@ -201,6 +201,17 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 - **Custom CSS**: Add custom styles to `src/styles/tailwind.css` after the `@import` statements
 - After editing CSS, always run `npm run build` to regenerate `styles.css`
 
+### Border Styling (Important)
+
+Since `preflight: false` is set in `tailwind.config.js`, there's no CSS reset. Borders require explicit width, style, AND color to render:
+
+- **Full border**: `tw-border tw-border-solid tw-border-border`
+- **Directional border**: `tw-border tw-border-solid tw-border-transparent tw-border-{b|t|l|r}-border`
+  - Sets all borders solid+transparent, then overrides one direction's color
+- **Dashed border**: `tw-border tw-border-dashed tw-border-border`
+
+Common mistake: Using `tw-border-b tw-border-border` without `tw-border-solid` - the border won't render.
+
 ## Testing Guidelines
 
 - Unit tests use Jest with TypeScript support
@@ -282,10 +293,12 @@ The TODO.md should be:
 - **APAC**: `apac.anthropic.claude-sonnet-4-5-20250929-v1:0`
 
 ❌ **Avoid regional model IDs** (without prefix): `anthropic.claude-sonnet-4-5-20250929-v1:0`
+
 - These only work in specific regions and often fail
 - Not recommended for production use
 
 **References:**
+
 - [AWS Bedrock Cross-Region Inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)
 - [Supported Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html)
 

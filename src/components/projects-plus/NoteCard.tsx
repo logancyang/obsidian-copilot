@@ -73,7 +73,7 @@ export default function NoteCard({
   return (
     <div
       className={cn(
-        "tw-flex tw-cursor-pointer tw-gap-3 tw-rounded-md tw-border tw-p-3 tw-transition-colors",
+        "tw-flex tw-cursor-pointer tw-gap-3 tw-rounded-md tw-border tw-border-solid tw-p-3 tw-transition-colors",
         isSelected
           ? "tw-border-interactive-accent tw-bg-interactive-accent-hsl/10"
           : "tw-border-border tw-bg-primary hover:tw-bg-modifier-hover"

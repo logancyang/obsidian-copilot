@@ -77,7 +77,7 @@ export default function ProjectCard({
 
   return (
     <div
-      className="tw-cursor-pointer tw-rounded-md tw-border tw-border-border tw-bg-primary tw-p-3 tw-transition-colors hover:tw-bg-modifier-hover"
+      className="tw-cursor-pointer tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-3 tw-transition-colors hover:tw-bg-modifier-hover"
       onClick={onClick}
     >
       {/* Header with title and status */}
@@ -108,7 +108,7 @@ export default function ProjectCard({
                   className="tw-fixed tw-inset-0 tw-z-modal"
                   onClick={() => setShowMenu(false)}
                 />
-                <div className="tw-absolute tw-right-0 tw-top-full tw-z-menu tw-mt-1 tw-min-w-[140px] tw-rounded-md tw-border tw-border-border tw-bg-primary tw-py-1 tw-shadow-lg">
+                <div className="tw-absolute tw-right-0 tw-top-full tw-z-menu tw-mt-1 tw-min-w-[140px] tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-py-1 tw-shadow-lg">
                   <button
                     onClick={handleAction(onEdit)}
                     className="tw-flex tw-w-full tw-items-center tw-gap-2 tw-px-3 tw-py-1.5 tw-text-sm tw-text-normal hover:tw-bg-modifier-hover"

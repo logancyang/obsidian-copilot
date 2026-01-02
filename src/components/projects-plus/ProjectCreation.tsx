@@ -286,7 +286,7 @@ export default function ProjectCreation({ onCancel, onComplete }: ProjectCreatio
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       {/* Header */}
-      <div className="tw-flex tw-items-center tw-gap-2 tw-border-b tw-border-border tw-p-3">
+      <div className="tw-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-transparent tw-border-b-border tw-p-3">
         <Button variant="ghost" size="sm" onClick={handleCancel}>
           <ChevronLeft className="tw-size-4" />
           <span className="tw-ml-1">Back</span>
@@ -313,7 +313,7 @@ export default function ProjectCreation({ onCancel, onComplete }: ProjectCreatio
 
       {/* Action button - shows when ready */}
       {state.isReady && !state.isStreaming && (
-        <div className="tw-border-t tw-border-border tw-p-3">
+        <div className="tw-border tw-border-solid tw-border-transparent tw-border-t-border tw-p-3">
           <Button onClick={handleComplete} className="tw-w-full">
             <Search className="tw-mr-2 tw-size-4" />
             Find Relevant Notes

@@ -162,7 +162,7 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
   return (
     <div className="tw-flex tw-h-full tw-flex-col">
       {/* Header */}
-      <div className="tw-flex tw-items-center tw-gap-2 tw-border-b tw-border-border tw-p-4">
+      <div className="tw-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-transparent tw-border-b-border tw-p-4">
         <Button variant="ghost2" size="icon" onClick={onBack} className="tw-shrink-0">
           <ArrowLeft className="tw-size-4" />
         </Button>
@@ -270,7 +270,7 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
                 return (
                   <div
                     key={note.path}
-                    className="tw-group tw-flex tw-items-center tw-gap-2 tw-rounded tw-border tw-border-border tw-px-3 tw-py-2"
+                    className="tw-group tw-flex tw-items-center tw-gap-2 tw-rounded tw-border tw-border-solid tw-border-border tw-px-3 tw-py-2"
                   >
                     <FileText className="tw-size-4 tw-shrink-0 tw-text-muted" />
                     <button
@@ -334,7 +334,7 @@ export function ProjectDetail({ projectId, plugin, onBack }: ProjectDetailProps)
       </div>
 
       {/* Footer actions */}
-      <div className="tw-flex tw-items-center tw-justify-between tw-border-t tw-border-border tw-p-4">
+      <div className="tw-flex tw-items-center tw-justify-between tw-border tw-border-solid tw-border-transparent tw-border-t-border tw-p-4">
         <Button variant="secondary" onClick={() => setEditDialogOpen(true)}>
           <Edit className="tw-mr-2 tw-size-4" />
           Edit

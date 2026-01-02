@@ -129,14 +129,14 @@ export function ProjectChat({
 
       {/* Suggested questions */}
       {showSuggestions && !isStreaming && (
-        <div className="tw-border-t tw-border-border tw-p-3">
+        <div className="tw-border tw-border-solid tw-border-transparent tw-border-t-border tw-p-3">
           <p className="tw-mb-2 tw-text-xs tw-text-muted">Suggestions:</p>
           <div className="tw-flex tw-flex-wrap tw-gap-2">
             {SUGGESTED_QUESTIONS.map((question) => (
               <button
                 key={question}
                 onClick={() => handleSuggestedQuestion(question)}
-                className="tw-rounded-full tw-border tw-border-border tw-bg-primary tw-px-3 tw-py-1 tw-text-xs tw-text-normal tw-transition-colors hover:tw-bg-interactive-hover"
+                className="tw-rounded-full tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-1 tw-text-xs tw-text-normal tw-transition-colors hover:tw-bg-interactive-hover"
               >
                 {question}
               </button>
@@ -146,7 +146,7 @@ export function ProjectChat({
       )}
 
       {/* Input area */}
-      <div className="tw-border-t tw-border-border tw-p-3">
+      <div className="tw-border tw-border-solid tw-border-transparent tw-border-t-border tw-p-3">
         <div className="tw-flex tw-gap-2">
           <Textarea
             ref={textareaRef}

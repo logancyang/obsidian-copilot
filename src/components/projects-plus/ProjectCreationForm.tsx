@@ -52,7 +52,7 @@ export default function ProjectCreationForm({
   const isDescriptionEdited = manualEdits.description !== undefined;
 
   return (
-    <div className="tw-border-b tw-border-border tw-bg-secondary tw-p-3">
+    <div className="tw-border tw-border-solid tw-border-transparent tw-border-b-border tw-bg-secondary tw-p-3">
       <div className="tw-mb-2 tw-flex tw-items-center tw-justify-between">
         <span className="tw-text-xs tw-font-medium tw-uppercase tw-tracking-wide tw-text-muted">
           Project Preview

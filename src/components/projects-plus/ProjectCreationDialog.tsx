@@ -412,7 +412,7 @@ export function ProjectCreationDialog({
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
         <DialogContent className="tw-flex tw-h-[600px] tw-max-w-[800px] tw-flex-col tw-gap-0 tw-p-0">
-          <DialogHeader className="tw-shrink-0 tw-border-b tw-border-border tw-px-6 tw-py-4">
+          <DialogHeader className="tw-shrink-0 tw-border tw-border-solid tw-border-transparent tw-border-b-border tw-px-6 tw-py-4">
             <DialogTitle>
               {step === "create" ? "Create New Project" : "Find Relevant Notes"}
             </DialogTitle>
@@ -423,7 +423,7 @@ export function ProjectCreationDialog({
               {/* Main content: left-right split */}
               <div className="tw-flex tw-flex-1 tw-overflow-hidden">
                 {/* Left Panel: Form (40%) */}
-                <div className="tw-w-2/5 tw-shrink-0 tw-overflow-y-auto tw-border-r tw-border-border tw-p-4">
+                <div className="tw-w-2/5 tw-shrink-0 tw-overflow-y-auto tw-border tw-border-solid tw-border-transparent tw-border-r-border tw-p-4">
                   <ProjectForm
                     formData={formData}
                     manualEdits={formManualEdits}
@@ -445,7 +445,7 @@ export function ProjectCreationDialog({
               </div>
 
               {/* Footer */}
-              <DialogFooter className="tw-shrink-0 tw-border-t tw-border-border tw-px-6 tw-py-4">
+              <DialogFooter className="tw-shrink-0 tw-border tw-border-solid tw-border-transparent tw-border-t-border tw-px-6 tw-py-4">
                 <Button variant="ghost" onClick={() => handleOpenChange(false)}>
                   Cancel
                 </Button>
@@ -578,7 +578,7 @@ function NoteSuggestionsStep({
       </div>
 
       {/* Footer */}
-      <DialogFooter className="tw-shrink-0 tw-border-t tw-border-border tw-px-6 tw-py-4">
+      <DialogFooter className="tw-shrink-0 tw-border tw-border-solid tw-border-transparent tw-border-t-border tw-px-6 tw-py-4">
         <Button variant="ghost" onClick={onBack} disabled={isAdding}>
           <ArrowLeft className="tw-mr-2 tw-size-4" />
           Back
