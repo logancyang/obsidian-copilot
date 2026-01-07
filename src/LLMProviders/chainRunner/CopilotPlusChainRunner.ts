@@ -48,6 +48,7 @@ import {
   renderCiCMessage,
   wrapLocalSearchPayload,
 } from "./utils/cicPromptUtils";
+import { extractMarkdownImagePaths } from "./utils/imageExtraction";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
@@ -367,15 +368,8 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
   }
 
   private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
-    // Match both wiki-style ![[image.ext]] and standard markdown ![alt](image.ext)
+    // Match wiki-style ![[image.ext]]
     const wikiImageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
-    // Enhanced regex to handle markdown image syntax:
-    // 1. Angle brackets: ![alt](<url with spaces or ()>) - captures in group 1
-    // 2. Standard: ![alt](url) - captures in group 2
-    // 3. Both support optional title: "title", 'title', or (title)
-    // Reason: CommonMark spec allows <> to wrap URLs with special chars like () or spaces
-    const markdownImageRegex =
-      /!\[.*?\]\((?:<([^>]+)>|([^\s)"'(<>]+))(?:\s+["'(][^"')]*["')])?\)/g;
 
     const resolvedImages: string[] = [];
 
@@ -402,12 +396,9 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
       }
     }
 
-    // Process standard markdown images
-    const mdMatches = [...content.matchAll(markdownImageRegex)];
-    for (const match of mdMatches) {
-      // Group 1 is for angle bracket syntax, group 2 is for standard syntax
-      const imagePath = (match[1] || match[2] || "").trim();
-
+    // Process standard markdown images using robust character-scanning parser
+    const mdImagePaths = extractMarkdownImagePaths(content);
+    for (const imagePath of mdImagePaths) {
       // Skip empty paths
       if (!imagePath) continue;
 
