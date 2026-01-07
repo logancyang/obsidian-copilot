@@ -247,6 +247,12 @@ async function buildOpenAICompatibleRequestSpec(
     headers["OpenAI-Organization"] = model.openAIOrgId.trim();
   }
 
+  // Add OpenRouter-specific headers (see chatModelManager.ts:259-262)
+  if (provider === ChatModelProviders.OPENROUTERAI) {
+    headers["HTTP-Referer"] = "https://obsidiancopilot.com";
+    headers["X-Title"] = "Obsidian Copilot";
+  }
+
   if (isEmbeddingModel) {
     return {
       ok: true,
