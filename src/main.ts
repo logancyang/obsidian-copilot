@@ -429,6 +429,14 @@ export default class CopilotPlugin extends Plugin {
     this.webSelectionTracker = undefined;
   }
 
+  /**
+   * Suppress the current web selection so it won't be auto-captured again until it changes or is cleared.
+   * Called by UI when user removes web selection or starts a new chat.
+   */
+  suppressCurrentWebSelection(): void {
+    this.webSelectionTracker?.suppressCurrentSelection();
+  }
+
   private getCurrentEditorOrDummy(): Editor {
     const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
     return {

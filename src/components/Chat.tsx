@@ -551,9 +551,17 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     [settings.projectList]
   );
 
-  const handleRemoveSelectedText = useCallback((id: string) => {
-    removeSelectedTextContext(id);
-  }, []);
+  const handleRemoveSelectedText = useCallback(
+    (id: string) => {
+      const removed = selectedTextContexts.find((ctx) => ctx.id === id);
+      removeSelectedTextContext(id);
+      // Suppress web selection to prevent it from being auto-captured again
+      if (removed?.sourceType === "web") {
+        plugin.suppressCurrentWebSelection();
+      }
+    },
+    [plugin, selectedTextContexts]
+  );
 
   useEffect(() => {
     const handleChatVisibility = () => {
@@ -617,6 +625,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     setContextNotes([]);
     setLatestTokenCount(null); // Clear token count on new chat
     clearSelectedTextContexts();
+    // Suppress web selection to prevent it from reappearing in new chat
+    plugin.suppressCurrentWebSelection();
     // Respect the includeActiveNote setting for all non-project chains
     if (selectedChain === ChainType.PROJECT_CHAIN) {
       setIncludeActiveNote(false);
@@ -636,7 +646,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     selectedChain,
     handleSaveAsNote,
     safeSet,
-    plugin.userMemoryManager,
+    plugin,
   ]);
 
   const handleLoadChatHistory = useCallback(async () => {

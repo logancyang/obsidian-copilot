@@ -57,6 +57,8 @@ export class WebSelectionTracker {
   private timeoutId: ReturnType<typeof setTimeout> | null = null;
   private isRunning = false;
   private lastSelection: SelectionState | null = null;
+  private isSuppressionActive = false;
+  private suppressedSelection: SelectionState | null = null;
 
   constructor(options: WebSelectionTrackingOptions) {
     this.intervalMs = options.intervalMs ?? 500;
@@ -86,6 +88,8 @@ export class WebSelectionTracker {
       this.timeoutId = null;
     }
     this.lastSelection = null;
+    this.isSuppressionActive = false;
+    this.suppressedSelection = null;
   }
 
   /**
@@ -123,10 +127,34 @@ export class WebSelectionTracker {
       // Use lightweight getSelectedText first to check for changes
       const selectedText = await actions.getSelectedText(leaf);
 
-      // Skip if empty
+      // Skip if empty - also lifts suppression since selection changed
       if (!selectedText.trim()) {
         this.lastSelection = null;
+        this.isSuppressionActive = false;
+        this.suppressedSelection = null;
         return;
+      }
+
+      // Suppression: after user removes web selection (or starts a new chat),
+      // don't auto-capture the same selection until it changes or is cleared.
+      if (this.isSuppressionActive) {
+        // If we don't yet know what to suppress, pin the current observed selection
+        if (this.suppressedSelection === null) {
+          this.suppressedSelection = { url, text: selectedText };
+          return;
+        }
+
+        // Keep suppressing the same url+text pair
+        if (
+          this.suppressedSelection.url === url &&
+          this.suppressedSelection.text === selectedText
+        ) {
+          return;
+        }
+
+        // Selection changed -> lift suppression and proceed with normal capture
+        this.isSuppressionActive = false;
+        this.suppressedSelection = null;
       }
 
       // Deduplication: check if url + text combo has changed
@@ -145,6 +173,16 @@ export class WebSelectionTracker {
       // Get full markdown content (more expensive)
       const selectedMarkdown = await actions.getSelectedMarkdown(leaf);
       if (!selectedMarkdown.trim()) {
+        return;
+      }
+
+      // Race guard: user may click X / start a new chat while getSelectedMarkdown() is in progress.
+      // If suppression became active mid-flight, do not emit.
+      if (this.isSuppressionActive) {
+        // Best-effort: pin suppressedSelection if it wasn't set yet
+        if (this.suppressedSelection === null) {
+          this.suppressedSelection = { url, text: selectedText };
+        }
         return;
       }
 
@@ -170,5 +208,16 @@ export class WebSelectionTracker {
    */
   clearDeduplicationState(): void {
     this.lastSelection = null;
+  }
+
+  /**
+   * Suppress the current web selection from being auto-captured again until it changes or is cleared.
+   * Use this for:
+   * - User removes web selection context (badge X)
+   * - New chat (prevent previous web selection from reappearing)
+   */
+  suppressCurrentSelection(): void {
+    this.isSuppressionActive = true;
+    this.suppressedSelection = this.lastSelection ? { ...this.lastSelection } : null;
   }
 }
