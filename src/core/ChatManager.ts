@@ -125,24 +125,18 @@ export class ChatManager {
    * - The URL is stored in message.context.webTabs with isActive: true
    * - Edit/reprocess will use the stored URL, not the current active tab
    *
-   * @param displayText - The message text (checked for ACTIVE_WEB_TAB_MARKER fallback)
    * @param existingWebTabs - Existing webTabs from context
-   * @param includeActiveWebTab - Whether to include active web tab
+   * @param shouldIncludeActiveWebTab - Pre-computed flag for whether to include active web tab
    * @returns Updated webTabs array with active tab snapshot
    */
   private buildWebTabsWithActiveSnapshot(
-    displayText: string,
     existingWebTabs: WebTabContext[],
-    includeActiveWebTab: boolean
+    shouldIncludeActiveWebTab: boolean
   ): WebTabContext[] {
-    // Determine if we should include active web tab
-    // Either explicitly requested or via marker in text
-    const shouldInclude = includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER);
-
     // Always sanitize existing webTabs (normalize URLs, dedupe, ensure single isActive)
     const sanitizedTabs = sanitizeWebTabContexts(existingWebTabs);
 
-    if (!shouldInclude) {
+    if (!shouldIncludeActiveWebTab) {
       return sanitizedTabs;
     }
 
@@ -233,10 +227,17 @@ export class ChatManager {
 
       // Inject Active Web Tab snapshot if requested (快照语义)
       // This resolves the active web tab URL at message creation time
+      // Compute shouldIncludeActiveWebTab: either explicitly requested or via marker in text
+      // BUT: web selection takes priority and suppresses active tab to avoid double web context
+      const hasWebSelection = (updatedContext.selectedTextContexts || []).some(
+        (ctx) => ctx.sourceType === "web"
+      );
+      const shouldIncludeActiveWebTab =
+        !hasWebSelection &&
+        (includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER));
       updatedContext.webTabs = this.buildWebTabsWithActiveSnapshot(
-        displayText,
         updatedContext.webTabs || [],
-        includeActiveWebTab
+        shouldIncludeActiveWebTab
       );
 
       // Create the message with initial content

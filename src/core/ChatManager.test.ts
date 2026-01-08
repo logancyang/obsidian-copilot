@@ -898,5 +898,201 @@ describe("ChatManager", () => {
 
       expect(webTabs).toHaveLength(0);
     });
+
+    it("should suppress active web tab when web selection exists (even with marker)", async () => {
+      const mockMessage = createMockMessage("msg-1", "Check {activeWebTab}", USER_SENDER);
+      const context: MessageContext = {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "web-selection-1",
+            sourceType: "web",
+            title: "Selected Page",
+            url: "https://selected.example.com",
+            content: "Some selected text from web",
+          },
+        ],
+        webTabs: [],
+      };
+
+      mockGetWebViewerService.mockReturnValue({
+        getActiveWebTabState: () => ({
+          activeWebTabForMentions: {
+            url: "https://active.example.com",
+            title: "Active Page",
+          },
+        }),
+      });
+
+      mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
+      mockMessageRepo.getMessage.mockReturnValue(mockMessage);
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
+      mockMessageRepo.updateProcessedText.mockReturnValue(true);
+
+      // Even with marker in text and includeActiveWebTab=true, web selection should suppress
+      await chatManager.sendMessage(
+        "Check {activeWebTab}",
+        context,
+        ChainType.LLM_CHAIN,
+        false,
+        true // includeActiveWebTab=true
+      );
+
+      const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
+      const webTabs = addMessageCall[3]?.webTabs ?? [];
+
+      // Should NOT include active web tab because web selection exists
+      expect(webTabs).toHaveLength(0);
+      expect(webTabs.find((t: { isActive?: boolean }) => t.isActive)).toBeUndefined();
+    });
+
+    it("should include active web tab when note selection exists (not web selection)", async () => {
+      const mockMessage = createMockMessage("msg-1", "Check {activeWebTab}", USER_SENDER);
+      const context: MessageContext = {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "note-selection-1",
+            sourceType: "note",
+            noteTitle: "Test Note",
+            notePath: "test.md",
+            startLine: 1,
+            endLine: 5,
+            content: "Some selected text from note",
+          },
+        ],
+        webTabs: [],
+      };
+
+      mockGetWebViewerService.mockReturnValue({
+        getActiveWebTabState: () => ({
+          activeWebTabForMentions: {
+            url: "https://active.example.com",
+            title: "Active Page",
+          },
+        }),
+      });
+
+      mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
+      mockMessageRepo.getMessage.mockReturnValue(mockMessage);
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
+      mockMessageRepo.updateProcessedText.mockReturnValue(true);
+
+      // Note selection should NOT suppress active web tab
+      await chatManager.sendMessage("Check {activeWebTab}", context, ChainType.LLM_CHAIN);
+
+      const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
+      const webTabs = addMessageCall[3]?.webTabs ?? [];
+
+      // Should include active web tab because only note selection exists
+      expect(webTabs).toHaveLength(1);
+      expect(webTabs[0]).toEqual(
+        expect.objectContaining({
+          url: "https://active.example.com",
+          isActive: true,
+        })
+      );
+    });
+
+    it("should preserve existing webTabs but not inject active when web selection exists", async () => {
+      const mockMessage = createMockMessage("msg-1", "Check {activeWebTab}", USER_SENDER);
+      const context: MessageContext = {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "web-selection-1",
+            sourceType: "web",
+            title: "Selected Page",
+            url: "https://selected.example.com",
+            content: "Some selected text from web",
+          },
+        ],
+        webTabs: [
+          { url: "https://existing.example.com", title: "Existing Tab" },
+        ],
+      };
+
+      mockGetWebViewerService.mockReturnValue({
+        getActiveWebTabState: () => ({
+          activeWebTabForMentions: {
+            url: "https://active.example.com",
+            title: "Active Page",
+          },
+        }),
+      });
+
+      mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
+      mockMessageRepo.getMessage.mockReturnValue(mockMessage);
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
+      mockMessageRepo.updateProcessedText.mockReturnValue(true);
+
+      await chatManager.sendMessage(
+        "Check {activeWebTab}",
+        context,
+        ChainType.LLM_CHAIN,
+        false,
+        true
+      );
+
+      const addMessageCall = mockMessageRepo.addMessage.mock.calls[0];
+      const webTabs = addMessageCall[3]?.webTabs ?? [];
+
+      // Should preserve existing webTabs but NOT inject active tab
+      expect(webTabs).toHaveLength(1);
+      expect(webTabs[0]?.url).toBe("https://existing.example.com");
+      expect(webTabs.find((t: { isActive?: boolean }) => t.isActive)).toBeUndefined();
+    });
+
+    it("should not call getWebViewerService when web selection exists", async () => {
+      const mockMessage = createMockMessage("msg-1", "Check {activeWebTab}", USER_SENDER);
+      const context: MessageContext = {
+        notes: [],
+        urls: [],
+        selectedTextContexts: [
+          {
+            id: "web-selection-1",
+            sourceType: "web",
+            title: "Selected Page",
+            url: "https://selected.example.com",
+            content: "Some selected text from web",
+          },
+        ],
+        webTabs: [],
+      };
+
+      // Reset mock to track calls
+      mockGetWebViewerService.mockClear();
+      mockGetWebViewerService.mockReturnValue({
+        getActiveWebTabState: () => ({
+          activeWebTabForMentions: {
+            url: "https://active.example.com",
+            title: "Active Page",
+          },
+        }),
+      });
+
+      mockPlugin.app.workspace.getActiveFile.mockReturnValue(null);
+      mockMessageRepo.addMessage.mockReturnValue("msg-1");
+      mockMessageRepo.getMessage.mockReturnValue(mockMessage);
+      mockContextManager.processMessageContext.mockResolvedValue(createContextResult());
+      mockMessageRepo.updateProcessedText.mockReturnValue(true);
+
+      await chatManager.sendMessage(
+        "Check {activeWebTab}",
+        context,
+        ChainType.LLM_CHAIN,
+        false,
+        true
+      );
+
+      // getWebViewerService should NOT be called because web selection suppresses active tab
+      expect(mockGetWebViewerService).not.toHaveBeenCalled();
+    });
   });
 });
