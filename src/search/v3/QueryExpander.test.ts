@@ -101,6 +101,8 @@ describe("QueryExpander", () => {
 
       const result = await expander.expand("#project updates about project deadlines");
 
+      // In fallback mode (LLM error), terms are extracted from original query
+      // "about" is included because there's no stopword filtering in fallback
       expect(result.salientTerms).toEqual(
         expect.arrayContaining(["#project", "updates", "about", "project", "deadlines"])
       );
@@ -237,39 +239,48 @@ describe("QueryExpander", () => {
     });
 
     it("should parse different response formats", async () => {
-      // Test with XML format
+      // Test with new XML format (salient vs expanded separation)
       mockChatModel.invoke.mockResolvedValue({
-        content: `<queries>
+        content: `<salient>
+<term>test1</term>
+</salient>
+<queries>
 <query>xml variant</query>
 </queries>
-<terms>
+<expanded>
 <term>important</term>
 <term>keyword</term>
-</terms>`,
+</expanded>`,
       });
       let result = await expander.expand("test1");
       expect(result.queries).toContain("test1");
       expect(result.queries).toContain("xml variant");
-      expect(result.salientTerms).toContain("test1"); // Only from original query
-      expect(result.expandedTerms).toContain("important"); // LLM-generated terms
+      // salientTerms come from <salient> section (original query terms only)
+      expect(result.salientTerms).toContain("test1");
+      // expandedTerms come from <expanded> section (for recall)
+      expect(result.expandedTerms).toContain("important");
       expect(result.expandedTerms).toContain("keyword");
 
       // Clear cache for next test
       expander.clearCache();
 
-      // Test legacy format (backward compatibility)
+      // Test old <terms> format (backward compatibility - treats as expanded)
       mockChatModel.invoke.mockResolvedValue({
-        content: `QUERIES:
-- legacy variant
-TERMS:
-- legacy
-- term`,
+        content: `<queries>
+<query>old format variant</query>
+</queries>
+<terms>
+<term>related</term>
+<term>term</term>
+</terms>`,
       });
       result = await expander.expand("test2");
       expect(result.queries).toContain("test2");
-      expect(result.queries).toContain("legacy variant");
-      expect(result.salientTerms).toContain("test2"); // Only from original query
-      expect(result.expandedTerms).toContain("legacy"); // LLM-generated terms
+      expect(result.queries).toContain("old format variant");
+      // With old format, salientTerms fallback to extracting from original query
+      expect(result.salientTerms).toContain("test2");
+      // Old <terms> go to expandedTerms
+      expect(result.expandedTerms).toContain("related");
       expect(result.expandedTerms).toContain("term");
     });
 

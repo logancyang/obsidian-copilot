@@ -1,35 +1,31 @@
 import { logInfo, logWarn } from "@/logger";
 import { CHUNK_SIZE } from "@/constants";
-import FlexSearch from "flexsearch";
+import MiniSearch, { SearchResult } from "minisearch";
 import { App, TFile, getAllTags } from "obsidian";
 import { ChunkManager } from "../chunks";
-import { NoteDoc, NoteIdRank, SearchExplanation } from "../interfaces";
+import { NoteIdRank } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
 
-type ScoreAccumulator = {
-  score: number;
-  fieldMatches: Set<string>;
-  queriesMatched: Set<string>;
-  lexicalMatches: { field: string; query: string; weight: number }[];
-  tagQueryMatches: Set<string>;
-  tagFieldMatches: Set<string>;
-};
-
 /**
- * Full-text search engine using ephemeral FlexSearch index built per-query
+ * Full-text search engine using ephemeral MiniSearch index built per-query.
+ * Uses BM25+ scoring for proper multi-term relevance ranking.
  */
 export class FullTextEngine {
-  private index: any; // FlexSearch.Document
+  private index: MiniSearch | null = null;
   private memoryManager: MemoryManager;
   private indexedChunks = new Set<string>();
   private chunkManager: ChunkManager;
 
   // Configuration constants
-  private static readonly MAX_CONTENT_SIZE = 10 * 1024 * 1024; // 10MB security limit
   private static readonly BATCH_SIZE = 10; // Chunk indexing batch size for UI yielding
   private static readonly CHUNK_MEMORY_PERCENTAGE = 0.35; // 35% of memory budget for chunks
   private static readonly MAX_ARRAY_ITEMS = 10; // Max items to process from arrays
   private static readonly MAX_EXTRACTION_DEPTH = 2; // Max recursion depth for property extraction
+
+  // Weighted query expansion constants
+  // Salient terms (from original query) dominate ranking, expanded terms provide small boost
+  private static readonly SALIENT_WEIGHT = 0.9; // 90% weight for original query terms
+  private static readonly EXPANDED_WEIGHT = 0.1; // 10% weight for expanded terms
 
   // Field weights for search scoring
   private static readonly FIELD_WEIGHTS = {
@@ -43,44 +39,33 @@ export class FullTextEngine {
     body: 1,
   } as const;
 
-  private static readonly TAG_PRIMARY_FIELD_BOOST = 6;
-  private static readonly TAG_SECONDARY_FIELD_BOOST = 3;
-  private static readonly TAG_BASE_MATCH_BONUS = 2;
-  private static readonly TAG_METADATA_MATCH_BOOST = 2.5;
-  private static readonly TAG_DIVERSITY_BONUS = 0.4;
-  private static readonly TAG_METADATA_SCORE_BONUS = 5;
-
   constructor(
     private app: App,
     chunkManager?: ChunkManager
   ) {
     this.memoryManager = new MemoryManager();
     this.chunkManager = chunkManager || new ChunkManager(app);
-    // Defer index creation to avoid blocking UI on initialization
-    this.index = null as any;
   }
 
   /**
-   * Create a new FlexSearch index with multilingual tokenization
-   * Updated for chunk-based indexing
+   * Create a new MiniSearch index with multilingual tokenization and BM25 scoring
    */
-  private createIndex(): any {
-    const Document = (FlexSearch as any).Document;
-    const tokenizer = this.tokenizeMixed.bind(this);
-    return new Document({
-      encode: false,
-      tokenize: tokenizer,
-      cache: false,
-      document: {
-        id: "id",
-        index: [
-          { field: "title", tokenize: tokenizer, weight: 3 }, // Note title
-          { field: "heading", tokenize: tokenizer, weight: 2.5 }, // Section heading
-          { field: "path", tokenize: tokenizer, weight: 2 }, // Path components
-          { field: "tags", tokenize: tokenizer, weight: 4 }, // Note tags and hierarchies
-          { field: "body", tokenize: tokenizer, weight: 1 }, // Chunk content
-        ],
-        store: ["id", "notePath", "title", "heading", "chunkIndex"], // Store metadata only, not body
+  private createIndex(): MiniSearch {
+    return new MiniSearch({
+      fields: ["title", "heading", "path", "tags", "body"],
+      storeFields: ["id", "notePath", "title", "heading", "chunkIndex"],
+      tokenize: this.tokenizeMixed.bind(this),
+      searchOptions: {
+        boost: {
+          title: FullTextEngine.FIELD_WEIGHTS.title,
+          heading: FullTextEngine.FIELD_WEIGHTS.heading,
+          path: FullTextEngine.FIELD_WEIGHTS.path,
+          tags: FullTextEngine.FIELD_WEIGHTS.tags,
+          body: FullTextEngine.FIELD_WEIGHTS.body,
+        },
+        prefix: true,
+        fuzzy: false, // Disable fuzzy for CJK compatibility
+        combineWith: "OR",
       },
     });
   }
@@ -167,13 +152,11 @@ export class FullTextEngine {
     this.memoryManager.reset();
 
     // Create new index
-    if (!this.index) {
-      await new Promise((resolve) => setTimeout(resolve, 0));
-      const startTime = Date.now();
-      this.index = this.createIndex();
-      const createTime = Date.now() - startTime;
-      logInfo(`FullTextEngine: FlexSearch index created in ${createTime}ms`);
-    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const startTime = Date.now();
+    this.index = this.createIndex();
+    const createTime = Date.now() - startTime;
+    logInfo(`FullTextEngine: MiniSearch index created in ${createTime}ms`);
 
     // Convert note paths to chunks
     const chunkOptions = {
@@ -242,19 +225,18 @@ export class FullTextEngine {
         }
       }
 
-      // Add chunk to index (body indexed but not stored)
+      // Add chunk to index
       // Include frontmatter properties in body for searchability
       const bodyWithProps = [chunk.content, ...noteMetadata.props].join(" ");
 
+      // MiniSearch expects string fields, so join tags array
       this.index.add({
         id: chunk.id,
         title: chunk.title,
         heading: chunk.heading,
         path: pathComponents,
-        body: bodyWithProps, // Include frontmatter values in searchable content
-        tags: noteMetadata.tags,
-        links: noteMetadata.links,
-        props: noteMetadata.props.join(" "), // Keep props as string for potential future use
+        body: bodyWithProps,
+        tags: noteMetadata.tags.join(" "), // MiniSearch expects strings
         notePath: chunk.notePath,
         chunkIndex: chunk.chunkIndex,
       });
@@ -273,57 +255,6 @@ export class FullTextEngine {
       `FullTextEngine: [CHUNKS] Indexed ${indexed}/${chunks.length} chunks (${this.memoryManager.getUsagePercent()}% memory)`
     );
     return indexed;
-  }
-
-  /**
-   * Create NoteDoc from TFile using metadata cache
-   * @param file - Obsidian TFile
-   * @returns NoteDoc or null if file can't be processed
-   */
-  private async createNoteDoc(file: TFile): Promise<NoteDoc | null> {
-    try {
-      const cache = this.app.metadataCache.getFileCache(file);
-      let content = await this.app.vault.cachedRead(file);
-
-      // Security: Limit content size to prevent memory exhaustion
-      if (content.length > FullTextEngine.MAX_CONTENT_SIZE) {
-        logInfo(
-          `FullText: File ${file.path} exceeds size limit (${content.length} bytes), truncating`
-        );
-        content = content.substring(0, FullTextEngine.MAX_CONTENT_SIZE);
-      }
-
-      // Extract metadata
-      const allTags = cache ? (getAllTags(cache) ?? []) : [];
-      const headings = cache?.headings?.map((h) => h.heading) ?? [];
-      const props = cache?.frontmatter ?? {};
-
-      // Get links (using full paths for accuracy)
-      const outgoing = this.app.metadataCache.resolvedLinks[file.path] ?? {};
-      const backlinks = this.app.metadataCache.getBacklinksForFile(file)?.data ?? {};
-
-      // Store full paths for link information
-      const linksOut = Object.keys(outgoing);
-      const linksIn = Object.keys(backlinks);
-
-      // Get title from frontmatter or filename
-      const frontmatter = props as Record<string, any>;
-      const title = frontmatter?.title || frontmatter?.name || file.basename;
-
-      return {
-        id: file.path,
-        title,
-        headings,
-        tags: allTags,
-        props,
-        linksOut,
-        linksIn,
-        body: content,
-      };
-    } catch (error) {
-      logInfo(`FullText: Skipped ${file.path}: ${error}`);
-      return null;
-    }
   }
 
   /**
@@ -466,303 +397,187 @@ export class FullTextEngine {
   }
 
   /**
-   * Search the ephemeral index with multiple query variants
+   * Search the ephemeral index using MiniSearch's native BM25+ scoring with weighted query expansion.
    *
-   * IMPORTANT: Expanded queries are used ONLY for recall (finding documents).
-   * Only the original query AND salient terms contribute to ranking/scoring.
+   * Uses a two-phase scoring approach:
+   * 1. Primary score from salient terms (90% weight) - reflects original query intent
+   * 2. Secondary score from expanded terms (10% weight) - provides small recall boost
    *
-   * @param queries - Array of query strings (original + expanded for recall)
-   * @param limit - Maximum results per query
-   * @param salientTerms - Salient terms extracted from original query (used for scoring)
-   * @param originalQuery - The original user query (used for scoring)
-   * @returns Array of NoteIdRank results
+   * @param queries - Array of query strings [original, ...expanded] (expanded queries used for secondary scoring)
+   * @param limit - Maximum results to return
+   * @param salientTerms - Salient terms extracted from original query (primary scoring)
+   * @param originalQuery - The original user query (fallback for primary scoring)
+   * @param expandedTerms - LLM-generated related terms (secondary scoring for recall boost)
+   * @returns Array of NoteIdRank results sorted by weighted BM25 relevance
    */
   search(
     queries: string[],
     limit: number = 30,
     salientTerms: string[] = [],
-    originalQuery?: string
+    originalQuery?: string,
+    expandedTerms: string[] = []
   ): NoteIdRank[] {
     // Return empty results if index hasn't been created yet
     if (!this.index) {
       return [];
     }
 
-    // First, use ALL queries to find documents (recall phase)
-    const candidateDocs = new Set<string>();
+    // Build the primary scoring query from salient terms or original query
+    const primaryQuery =
+      salientTerms.length > 0 ? salientTerms.join(" ") : originalQuery || queries[0] || "";
 
-    for (const query of queries) {
-      const normalizedQuery = this.normalizeQueryTerm(query);
-      if (!normalizedQuery) {
-        continue;
-      }
-
-      try {
-        const results = this.index.search(normalizedQuery, { limit: limit * 3, enrich: true });
-        if (Array.isArray(results)) {
-          for (const fieldResult of results) {
-            if (!fieldResult?.result) continue;
-            for (const item of fieldResult.result) {
-              const id = typeof item === "string" ? item : item?.id;
-              if (id) candidateDocs.add(id);
-            }
-          }
-        }
-      } catch (error) {
-        logInfo(`FullText: Search failed for "${query}": ${error}`);
-      }
+    if (!primaryQuery.trim()) {
+      return [];
     }
 
-    logInfo(
-      `FullText: Found ${candidateDocs.size} unique documents from all queries (recall phase)`
-    );
+    // Build secondary scoring query from expanded terms and expanded queries
+    const expandedQueries = queries.slice(1); // Skip original query
+    const secondaryQueryParts = [...expandedTerms, ...expandedQueries];
+    const secondaryQuery = secondaryQueryParts.join(" ").trim();
 
-    // Now, score using ONLY original query AND salient terms (not expanded queries)
-    const scoreMap = new Map<string, ScoreAccumulator>();
-
-    // Build list of scoring queries: ONLY salient terms (original query contains stopwords)
-    // If no salient terms provided, fallback to original query for backward compatibility
-    const scoringQueries: string[] =
-      salientTerms.length > 0 ? [...salientTerms] : originalQuery ? [originalQuery] : [];
-
-    // Score documents that were found in recall phase
-    if (scoringQueries.length > 0 && candidateDocs.size > 0) {
-      for (const query of scoringQueries) {
-        this.scoreWithQuery(query, candidateDocs, scoreMap, limit);
-      }
-      logInfo(
-        `FullText: Scored with ${scoringQueries.length} terms (${salientTerms.length > 0 ? "salient terms" : "original query fallback"})`
-      );
-    }
-
-    // Convert score map to final results with bonuses applied
-    return this.buildFinalResults(scoreMap, limit);
-  }
-
-  /**
-   * Score documents using a salient term query
-   * This ensures expanded queries and stopwords don't affect ranking, only recall
-   */
-  private scoreWithQuery(
-    query: string,
-    candidateDocs: Set<string>,
-    scoreMap: Map<string, ScoreAccumulator>,
-    limit: number
-  ): void {
-    const normalizedQuery = this.normalizeQueryTerm(query);
-    if (!normalizedQuery) {
-      return;
-    }
+    const searchOptions = {
+      boost: {
+        title: FullTextEngine.FIELD_WEIGHTS.title,
+        heading: FullTextEngine.FIELD_WEIGHTS.heading,
+        path: FullTextEngine.FIELD_WEIGHTS.path,
+        tags: FullTextEngine.FIELD_WEIGHTS.tags,
+        body: FullTextEngine.FIELD_WEIGHTS.body,
+      },
+      prefix: true,
+      fuzzy: false,
+      combineWith: "OR" as const,
+    };
 
     try {
-      const results = this.index.search(normalizedQuery, { limit: limit * 3, enrich: true });
-      if (!Array.isArray(results)) {
-        return;
+      // Primary search with salient terms
+      const primaryResults = this.index.search(primaryQuery, searchOptions);
+
+      logInfo(
+        `FullText: Primary search found ${primaryResults.length} results for "${primaryQuery.substring(0, 50)}..."`
+      );
+
+      // If no secondary query, return primary results directly
+      if (!secondaryQuery) {
+        return primaryResults.slice(0, limit).map((result) => ({
+          id: result.id as string,
+          score: result.score,
+          engine: "fulltext",
+          explanation: {
+            lexicalMatches: this.extractLexicalMatches(result),
+            baseScore: result.score,
+            finalScore: result.score,
+          },
+        }));
       }
 
-      const trimmedQuery = normalizedQuery;
-      const isPhrase = trimmedQuery.includes(" ");
-      const isTagQuery = trimmedQuery.startsWith("#");
-      const normalizedTag = isTagQuery ? trimmedQuery : null;
-      const queryWeight = isPhrase ? 1.5 : 1.0;
+      // Secondary search with expanded terms for recall boost
+      const secondaryResults = this.index.search(secondaryQuery, searchOptions);
 
-      const docMatchesForQuery = new Set<string>();
-      for (const fieldResult of results) {
-        if (!fieldResult?.result || !fieldResult?.field) {
-          continue;
-        }
-        for (const item of fieldResult.result) {
-          const id = typeof item === "string" ? item : item?.id;
-          if (id && candidateDocs.has(id)) {
-            docMatchesForQuery.add(id);
-          }
-        }
-      }
+      logInfo(
+        `FullText: Secondary search found ${secondaryResults.length} results for expanded terms`
+      );
 
-      const docMatchRatio =
-        docMatchesForQuery.size === 0 || candidateDocs.size === 0
-          ? 0
-          : docMatchesForQuery.size / candidateDocs.size;
-      const rarityWeight = isTagQuery ? 1 : 1 - Math.min(0.6, docMatchRatio * 0.6);
-      const weightedQueryFactor = queryWeight * rarityWeight;
+      // Combine scores with weighted combination
+      const combined = this.combineWeightedScores(primaryResults, secondaryResults);
 
-      for (const fieldResult of results) {
-        if (!fieldResult?.result || !fieldResult?.field) {
-          continue;
-        }
-
-        const fieldName = fieldResult.field;
-        const fieldWeight = this.getFieldWeight(fieldName);
-
-        for (let idx = 0; idx < fieldResult.result.length; idx++) {
-          const item = fieldResult.result[idx];
-          const id = typeof item === "string" ? item : item?.id;
-
-          if (!id || !candidateDocs.has(id)) {
-            continue;
-          }
-
-          const positionScore = 1 / (idx + 1);
-          let adjustedScore = positionScore * fieldWeight * weightedQueryFactor;
-
-          const existing: ScoreAccumulator = scoreMap.get(id) ?? {
-            score: 0,
-            fieldMatches: new Set<string>(),
-            queriesMatched: new Set<string>(),
-            lexicalMatches: [],
-            tagQueryMatches: new Set<string>(),
-            tagFieldMatches: new Set<string>(),
-          };
-
-          const fieldMatches = new Set(existing.fieldMatches);
-          fieldMatches.add(fieldName);
-
-          const queriesMatched = new Set(existing.queriesMatched);
-          queriesMatched.add(trimmedQuery);
-
-          const explanationQuery =
-            fieldName === "tags" || !trimmedQuery.startsWith("#")
-              ? trimmedQuery
-              : trimmedQuery.replace(/^#/, "");
-
-          const lexicalMatches = [
-            ...existing.lexicalMatches,
-            {
-              field: fieldName,
-              query: explanationQuery,
-              weight: fieldWeight,
-            },
-          ];
-
-          const tagQueryMatches = new Set(existing.tagQueryMatches);
-          const tagFieldMatches = new Set(existing.tagFieldMatches);
-
-          if (isTagQuery && normalizedTag) {
-            tagQueryMatches.add(normalizedTag);
-            const matchedField = fieldName === "tags" ? "metadata" : fieldName;
-            tagFieldMatches.add(matchedField);
-            adjustedScore *=
-              fieldName === "tags"
-                ? FullTextEngine.TAG_PRIMARY_FIELD_BOOST
-                : FullTextEngine.TAG_SECONDARY_FIELD_BOOST;
-            if (fieldName === "tags") {
-              adjustedScore += FullTextEngine.TAG_METADATA_SCORE_BONUS;
-            }
-          }
-
-          const updated: ScoreAccumulator = {
-            score: existing.score + adjustedScore,
-            fieldMatches,
-            queriesMatched,
-            lexicalMatches,
-            tagQueryMatches,
-            tagFieldMatches,
-          };
-
-          scoreMap.set(id, updated);
-        }
-      }
+      return combined.slice(0, limit);
     } catch (error) {
-      logInfo(`FullText: Scoring failed for query "${query}": ${error}`);
+      logWarn(`FullText: Search failed for "${primaryQuery}": ${error}`);
+      return [];
     }
   }
 
   /**
-   * Build final results with bonuses applied
+   * Combine primary and secondary search results with weighted scoring.
+   * Primary results (salient terms) get 90% weight, secondary (expanded) get 10%.
+   *
+   * @param primaryResults - Results from salient term search
+   * @param secondaryResults - Results from expanded term search
+   * @returns Combined and sorted NoteIdRank results
    */
-  private buildFinalResults(scoreMap: Map<string, ScoreAccumulator>, limit: number): NoteIdRank[] {
-    const finalResults: NoteIdRank[] = [];
+  private combineWeightedScores(
+    primaryResults: SearchResult[],
+    secondaryResults: SearchResult[]
+  ): NoteIdRank[] {
+    // Build a map of secondary scores for quick lookup
+    const secondaryScoreMap = new Map<string, { score: number; result: SearchResult }>();
+    for (const result of secondaryResults) {
+      secondaryScoreMap.set(result.id as string, { score: result.score, result });
+    }
 
-    for (const [id, data] of scoreMap.entries()) {
-      // Calculate bonuses
-      const multiFieldBonus = 1 + (data.fieldMatches.size - 1) * 0.2;
-      const coverageBonus = 1 + Math.max(0, data.queriesMatched.size - 1) * 0.1;
-      const tagBonus = this.calculateTagBonus(data.tagQueryMatches, data.tagFieldMatches);
-      let finalScore = data.score * multiFieldBonus * coverageBonus * tagBonus;
+    // Track all seen IDs to include secondary-only results
+    const seenIds = new Set<string>();
+    const combined: NoteIdRank[] = [];
 
-      // Apply phrase-in-path bonus
-      finalScore = this.applyPhraseInPathBonus(id, data.queriesMatched, finalScore);
+    // Process primary results with weighted combination
+    for (const primary of primaryResults) {
+      const id = primary.id as string;
+      seenIds.add(id);
 
-      const explanation: SearchExplanation = {
-        lexicalMatches: data.lexicalMatches,
-        baseScore: data.score,
-        finalScore,
-      };
+      const secondary = secondaryScoreMap.get(id);
+      const primaryScore = primary.score * FullTextEngine.SALIENT_WEIGHT;
+      const secondaryScore = secondary ? secondary.score * FullTextEngine.EXPANDED_WEIGHT : 0;
+      const combinedScore = primaryScore + secondaryScore;
 
-      finalResults.push({
+      combined.push({
         id,
-        score: finalScore,
+        score: combinedScore,
         engine: "fulltext",
-        explanation,
+        explanation: {
+          lexicalMatches: this.extractLexicalMatches(primary),
+          baseScore: primary.score,
+          finalScore: combinedScore,
+          expandedBoost: secondaryScore > 0 ? secondaryScore : undefined,
+        },
       });
     }
 
-    // Sort and return top results
-    finalResults.sort((a, b) => b.score - a.score);
-    return finalResults.slice(0, limit);
+    // Add secondary-only results (found via expansion but not salient terms)
+    // These get only the 10% expanded weight
+    for (const [id, { score, result }] of secondaryScoreMap) {
+      if (!seenIds.has(id)) {
+        const secondaryScore = score * FullTextEngine.EXPANDED_WEIGHT;
+        combined.push({
+          id,
+          score: secondaryScore,
+          engine: "fulltext",
+          explanation: {
+            lexicalMatches: this.extractLexicalMatches(result),
+            baseScore: 0, // No primary match
+            finalScore: secondaryScore,
+            expandedBoost: secondaryScore,
+          },
+        });
+      }
+    }
+
+    // Sort by combined score descending
+    combined.sort((a, b) => b.score - a.score);
+
+    return combined;
   }
 
   /**
-   * Computes a final score multiplier when tag queries are matched.
-   * Rewards documents that satisfy multiple tag queries and surface metadata tag hits preferentially.
-   *
-   * @param tagQueryMatches - Set of matched tag queries (lowercase, hash-prefixed)
-   * @param tagFieldMatches - Fields that satisfied the tag query (metadata vs. content/path)
-   * @returns Multiplicative boost applied to the final score (>= 1)
+   * Extract lexical match information from MiniSearch result for explanation
    */
-  private calculateTagBonus(tagQueryMatches?: Set<string>, tagFieldMatches?: Set<string>): number {
-    if (!tagQueryMatches || tagQueryMatches.size === 0) {
-      return 1;
-    }
+  private extractLexicalMatches(
+    result: SearchResult
+  ): { field: string; query: string; weight: number }[] {
+    const matches: { field: string; query: string; weight: number }[] = [];
 
-    const baseBoost = 1 + tagQueryMatches.size * FullTextEngine.TAG_BASE_MATCH_BONUS;
-
-    const diversityCount = tagFieldMatches ? tagFieldMatches.size : 0;
-    const diversityBoost =
-      diversityCount > 1 ? 1 + (diversityCount - 1) * FullTextEngine.TAG_DIVERSITY_BONUS : 1;
-
-    const metadataBoost = tagFieldMatches?.has("metadata")
-      ? FullTextEngine.TAG_METADATA_MATCH_BOOST
-      : 1;
-
-    return baseBoost * diversityBoost * metadataBoost;
-  }
-
-  /**
-   * Normalizes a query term for case-insensitive matching.
-   * Trims whitespace and lowercases content to align with tokenizer behavior.
-   * @param query - Raw query string
-   * @returns Lowercase trimmed query or null when empty
-   */
-  private normalizeQueryTerm(query: string): string | null {
-    if (!query) {
-      return null;
-    }
-
-    const trimmed = query.trim();
-    if (trimmed.length === 0) {
-      return null;
-    }
-
-    return trimmed.toLowerCase();
-  }
-
-  /**
-   * Apply bonus if phrase query matches in path
-   */
-  private applyPhraseInPathBonus(id: string, queriesMatched: Set<string>, score: number): number {
-    const pathIndexString = id.replace(/\.md$/, "").split("/").join(" ").toLowerCase();
-
-    for (const q of queriesMatched) {
-      if (q.includes(" ")) {
-        const ql = q.toLowerCase();
-        if (pathIndexString.includes(ql)) {
-          return score * 1.5;
+    if (result.match) {
+      for (const [field, terms] of Object.entries(result.match)) {
+        for (const term of terms) {
+          matches.push({
+            field,
+            query: term,
+            weight: this.getFieldWeight(field),
+          });
         }
       }
     }
 
-    return score;
+    return matches;
   }
 
   /**
@@ -779,31 +594,9 @@ export class FullTextEngine {
    */
   clear(): void {
     try {
-      // Simple: destroy index if it exists
-      if (this.index) {
-        try {
-          // Ultra-defensive cleanup: handle all possible index states
-          const indexValue = this.index;
-
-          if (indexValue != null && typeof indexValue === "object") {
-            try {
-              // Check for methods in prototype chain (not just own properties)
-              if ("destroy" in indexValue && typeof indexValue.destroy === "function") {
-                indexValue.destroy();
-              } else if ("clear" in indexValue && typeof indexValue.clear === "function") {
-                indexValue.clear();
-              }
-            } catch (methodError) {
-              // Even method calls can fail, so handle that too
-              logWarn(`FullTextEngine: Index method call error: ${methodError}`);
-            }
-          }
-        } catch (error) {
-          // Log index cleanup error but continue with state reset
-          logWarn(`FullTextEngine: Index cleanup error (type: ${typeof this.index}): ${error}`);
-        }
-        this.index = null;
-      }
+      // MiniSearch doesn't have explicit cleanup methods
+      // Just nullify the reference and let GC handle it
+      this.index = null;
       // Clear collections
       this.indexedChunks.clear();
       this.memoryManager.reset();
