@@ -131,11 +131,23 @@ Output: ["projects/alpha/deploy.md#0", "projects/alpha/deploy.md#1", "projects/m
 
 ### 4. Full-Text Search Execution
 
-**MiniSearch with BM25+ scoring**:
+**MiniSearch with BM25+ scoring and weighted query expansion**:
 
-- **Recall**: All queries and terms used to find candidate chunks in the index
-- **Ranking**: Only salient terms (from original query) used for BM25+ scoring
+- **Primary scoring (90% weight)**: Salient terms from original query drive ranking
+- **Secondary scoring (10% weight)**: Expanded terms provide small recall boost
 - Field weights: Title (3x), Heading (2.5x), Path (1.5x), Tags (4x), Body (1x)
+
+**Weighted Query Expansion**: A safe, common IR strategy where expanded terms influence ranking by a small amount:
+
+```
+finalScore = 0.9 × salientScore + 0.1 × expandedScore
+```
+
+This approach:
+
+- Preserves original query intent (salient terms dominate)
+- Breaks ties between documents with equal salient matches
+- Gives secondary-only results (found via expansion) a small but non-zero score
 
 **Why BM25+?**: Documents matching more salient terms naturally score higher. A query "hk milk tea home recipe" will rank "HK Milk Tea - Home Recipe" highly because all 5 terms match in the title field (3x weight).
 
