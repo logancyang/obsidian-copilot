@@ -7,7 +7,7 @@
  */
 
 import { logInfo, logWarn } from "@/logger";
-import { SDKUserMessage, APIUserMessage } from "./types";
+import { SDKUserMessage, APIUserMessage, ContentBlock } from "./types";
 
 /**
  * Maximum number of messages that can be queued
@@ -88,12 +88,12 @@ export class MessageChannel implements AsyncIterable<SDKUserMessage> {
   }
 
   /**
-   * Create a user message from text content
+   * Create a user message from text or multimodal content
    *
-   * @param content - The message content
+   * @param content - The message content (string or ContentBlock[])
    * @returns SDKUserMessage
    */
-  private createUserMessage(content: string): SDKUserMessage {
+  private createUserMessage(content: string | ContentBlock[]): SDKUserMessage {
     this.messageCounter++;
     const apiMessage: APIUserMessage = {
       role: "user",
@@ -164,18 +164,20 @@ export class MessageChannel implements AsyncIterable<SDKUserMessage> {
    * If the queue is full, the oldest message will be dropped.
    * Consecutive text messages will be merged if possible.
    *
-   * @param content - The message content (string or SDKUserMessage)
+   * @param content - The message content (string, ContentBlock[], or SDKUserMessage)
    * @returns true if the message was queued, false if the channel is closed
    */
-  push(content: string | SDKUserMessage): boolean {
+  push(content: string | ContentBlock[] | SDKUserMessage): boolean {
     if (this.state.closed) {
       logWarn("[MessageChannel] Cannot push to closed channel");
       return false;
     }
 
-    // Convert string to SDKUserMessage
+    // Convert string or ContentBlock[] to SDKUserMessage
     const message: SDKUserMessage =
-      typeof content === "string" ? this.createUserMessage(content) : content;
+      typeof content === "string" || Array.isArray(content)
+        ? this.createUserMessage(content)
+        : content;
 
     // Try to merge with the last message first
     if (this.tryMergeMessage(message)) {
@@ -310,11 +312,14 @@ export class MessageChannel implements AsyncIterable<SDKUserMessage> {
  * This is a convenience function for when you just want to send
  * a single prompt and get a response.
  *
- * @param prompt - The prompt text
+ * @param prompt - The prompt text or multimodal content blocks
  * @param sessionId - Optional session ID
  * @returns A MessageChannel with the prompt already queued and closed
  */
-export function createPromptChannel(prompt: string, sessionId?: string): MessageChannel {
+export function createPromptChannel(
+  prompt: string | ContentBlock[],
+  sessionId?: string
+): MessageChannel {
   const channel = new MessageChannel(sessionId);
   channel.push(prompt);
   channel.close();

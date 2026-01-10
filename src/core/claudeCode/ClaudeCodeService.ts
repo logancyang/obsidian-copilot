@@ -10,7 +10,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { findClaudeCliPath, getEnhancedEnv } from "./cliDetection";
 import { MessageChannel, createPromptChannel } from "./MessageChannel";
 import { transformSDKMessagesAsync } from "./transformSDKMessage";
-import { SDKMessage, StreamChunk, ErrorChunk, PermissionMode } from "./types";
+import { SDKMessage, StreamChunk, ErrorChunk, PermissionMode, ContentBlock } from "./types";
 
 /**
  * Configuration options for ClaudeCodeService
@@ -150,11 +150,14 @@ export class ClaudeCodeService {
    * It creates a new session (or reuses existing), sends the prompt,
    * and yields StreamChunks for real-time UI updates.
    *
-   * @param prompt - The user's prompt text
+   * @param prompt - The user's prompt text or multimodal content blocks
    * @param abortSignal - Optional abort signal for cancellation
    * @yields StreamChunk for each piece of response content
    */
-  async *query(prompt: string, abortSignal?: AbortSignal): AsyncGenerator<StreamChunk> {
+  async *query(
+    prompt: string | ContentBlock[],
+    abortSignal?: AbortSignal
+  ): AsyncGenerator<StreamChunk> {
     if (!this.initialized) {
       await this.initialize();
     }

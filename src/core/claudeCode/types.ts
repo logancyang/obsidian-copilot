@@ -43,9 +43,21 @@ export interface ToolResultBlock {
 }
 
 /**
+ * Image content block for multimodal messages
+ */
+export interface ImageBlock {
+  type: "image";
+  source: {
+    type: "base64";
+    media_type: string;
+    data: string;
+  };
+}
+
+/**
  * Union of all content block types
  */
-export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock;
+export type ContentBlock = TextBlock | ThinkingBlock | ToolUseBlock | ToolResultBlock | ImageBlock;
 
 /**
  * API message types (from Anthropic SDK)
@@ -438,4 +450,11 @@ export function isToolUseBlock(block: ContentBlock): block is ToolUseBlock {
  */
 export function isToolResultBlock(block: ContentBlock): block is ToolResultBlock {
   return block.type === "tool_result";
+}
+
+/**
+ * Type guard for ImageBlock
+ */
+export function isImageBlock(block: ContentBlock): block is ImageBlock {
+  return block.type === "image";
 }

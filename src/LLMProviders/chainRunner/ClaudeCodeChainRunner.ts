@@ -21,6 +21,9 @@ import {
   SessionInitChunk,
   UsageChunk,
   ErrorChunk,
+  ContentBlock,
+  ImageBlock,
+  TextBlock,
 } from "@/core/claudeCode/types";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logError, logInfo, logWarn } from "@/logger";
@@ -85,6 +88,47 @@ function getClaudeCodeToolEmoji(toolName: string): string {
     TodoWrite: "checkbox",
   };
   return emojis[toolName] || "wrench";
+}
+
+/**
+ * Convert OpenAI-style image content to Anthropic format
+ *
+ * OpenAI format: { type: "image_url", image_url: { url: "data:image/jpeg;base64,..." } }
+ * Anthropic format: { type: "image", source: { type: "base64", media_type: "image/jpeg", data: "..." } }
+ *
+ * @param imageUrl - The data URL from OpenAI format
+ * @returns ImageBlock in Anthropic format or null if invalid
+ */
+function convertImageContent(imageUrl: string): ImageBlock | null {
+  try {
+    // Parse data URL format: data:image/jpeg;base64,<base64-string>
+    const dataUrlMatch = imageUrl.match(/^data:([^;]+);base64,(.+)$/);
+    if (!dataUrlMatch) {
+      return null;
+    }
+
+    const [, mediaType, base64Data] = dataUrlMatch;
+    if (!mediaType || !base64Data) {
+      return null;
+    }
+
+    // Validate it's an image media type
+    if (!mediaType.startsWith("image/")) {
+      return null;
+    }
+
+    return {
+      type: "image",
+      source: {
+        type: "base64",
+        media_type: mediaType,
+        data: base64Data,
+      },
+    };
+  } catch (error) {
+    logError("[ClaudeCodeChainRunner] Error converting image content:", error);
+    return null;
+  }
 }
 
 /**
@@ -191,8 +235,46 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
         logInfo("[ClaudeCodeChainRunner] Using legacy context format");
       }
 
+      // Build content blocks for multimodal support
+      const contentBlocks: ContentBlock[] = [];
+
+      // Extract images from userMessage.content (OpenAI format)
+      // Images should come before text per Anthropic best practices
+      if (userMessage.content && Array.isArray(userMessage.content)) {
+        for (const item of userMessage.content) {
+          if (
+            item &&
+            typeof item === "object" &&
+            item.type === "image_url" &&
+            item.image_url?.url
+          ) {
+            const imageBlock = convertImageContent(item.image_url.url);
+            if (imageBlock) {
+              contentBlocks.push(imageBlock);
+              logInfo("[ClaudeCodeChainRunner] Added image to content blocks");
+            }
+          }
+        }
+      }
+
+      // Add text content
+      if (promptText.trim()) {
+        contentBlocks.push({ type: "text", text: promptText } as TextBlock);
+      }
+
+      // Determine the prompt format: use ContentBlock[] if we have images, otherwise just string
+      const prompt: string | ContentBlock[] =
+        contentBlocks.length > 1 ||
+        (contentBlocks.length === 1 && contentBlocks[0].type === "image")
+          ? contentBlocks
+          : promptText;
+
+      if (Array.isArray(prompt)) {
+        logInfo("[ClaudeCodeChainRunner] Using multimodal content with images");
+      }
+
       // Stream chunks from the service
-      for await (const chunk of this.service.query(promptText, abortController.signal)) {
+      for await (const chunk of this.service.query(prompt, abortController.signal)) {
         // Check for abort
         if (abortController.signal.aborted) {
           logInfo("[ClaudeCodeChainRunner] Query aborted", {
