@@ -22,6 +22,7 @@ import {
   UsageChunk,
   ErrorChunk,
 } from "@/core/claudeCode/types";
+import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logError, logInfo, logWarn } from "@/logger";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { BaseChainRunner } from "./BaseChainRunner";
@@ -161,8 +162,34 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
 
       options.updateLoadingMessage?.("Processing with Claude Code...");
 
-      // Get the raw message text
-      const promptText = userMessage.originalMessage || userMessage.message;
+      // Build prompt with system context and user context from envelope
+      let promptText: string;
+      if (userMessage.contextEnvelope) {
+        const parts: string[] = [];
+
+        // Extract system prompt (L1) if present
+        const systemPrompt = LayerToMessagesConverter.extractSystemMessage(
+          userMessage.contextEnvelope
+        );
+        if (systemPrompt) {
+          parts.push(`<system_context>\n${systemPrompt}\n</system_context>`);
+        }
+
+        // Extract full user context (L2+L3+L5)
+        const userContext = LayerToMessagesConverter.extractFullContext(
+          userMessage.contextEnvelope
+        );
+        if (userContext) {
+          parts.push(userContext);
+        }
+
+        promptText = parts.join("\n\n");
+        logInfo("[ClaudeCodeChainRunner] Using envelope-based context");
+      } else {
+        // Fallback to processedText (legacy) or original message
+        promptText = userMessage.message || userMessage.originalMessage || "";
+        logInfo("[ClaudeCodeChainRunner] Using legacy context format");
+      }
 
       // Stream chunks from the service
       for await (const chunk of this.service.query(promptText, abortController.signal)) {
