@@ -438,7 +438,7 @@ export class FullTextEngine {
         `FullText: MiniSearch found ${results.length} results for "${scoringQuery.substring(0, 50)}..."`
       );
 
-      // Convert to NoteIdRank format
+      // Convert to NoteIdRank format - BM25 handles multi-term scoring natively
       return results.slice(0, limit).map((result) => ({
         id: result.id as string,
         score: result.score,
