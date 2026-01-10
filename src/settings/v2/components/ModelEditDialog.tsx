@@ -10,6 +10,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import {
   DEFAULT_MODEL_SETTING,
   ChatModelProviders,
+  EmbeddingModelProviders,
   MODEL_CAPABILITIES,
   ModelCapability,
   Provider,
@@ -121,7 +122,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   })) as Array<{ id: ModelCapability; label: string; description: string }>;
 
   const displayApiKey = localModel.apiKey || getDefaultApiKey(localModel.provider as Provider);
-  const showOtherParameters = !isEmbeddingModel && localModel.provider !== "copilot-plus-jina";
+  const showOtherParameters = !isEmbeddingModel && localModel.provider !== EmbeddingModelProviders.COPILOT_PLUS_JINA;
 
   return (
     <div className="tw-space-y-3 tw-p-4">
