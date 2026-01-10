@@ -45,6 +45,15 @@ interface ToolCallState {
 }
 
 /**
+ * Content segment for preserving interleaved text and tool call ordering
+ */
+interface ContentSegment {
+  type: "text" | "tool";
+  content: string;
+  toolId?: string; // For matching tool result updates
+}
+
+/**
  * Get display name for a Claude Code tool
  *
  * @param toolName - The internal tool name
@@ -147,9 +156,8 @@ function convertImageContent(imageUrl: string): ImageBlock | null {
 export class ClaudeCodeChainRunner extends BaseChainRunner {
   private service: ClaudeCodeService;
   private toolCallStates: Map<string, ToolCallState> = new Map();
-  private accumulatedContent = "";
   private accumulatedThinking = "";
-  private toolCallMarkers: string[] = [];
+  private contentSegments: ContentSegment[] = [];
   private sessionInfo: {
     sessionId?: string;
     model?: string;
@@ -306,7 +314,18 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
       } else {
         logError("[ClaudeCodeChainRunner] Query failed:", error);
         await this.handleError(error, (errorMsg) => {
-          this.accumulatedContent += `\n\n<errorChunk>${errorMsg}</errorChunk>`;
+          const errorContent = `\n\n<errorChunk>${errorMsg}</errorChunk>`;
+          const lastSegment = this.contentSegments[this.contentSegments.length - 1];
+
+          if (lastSegment && lastSegment.type === "text") {
+            lastSegment.content += errorContent;
+          } else {
+            this.contentSegments.push({
+              type: "text",
+              content: errorContent,
+            });
+          }
+
           this.updateDisplay(updateCurrentAiMessage);
         });
       }
@@ -341,9 +360,8 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
    */
   private resetState(): void {
     this.toolCallStates.clear();
-    this.accumulatedContent = "";
     this.accumulatedThinking = "";
-    this.toolCallMarkers = [];
+    this.contentSegments = [];
     this.sessionInfo = {};
   }
 
@@ -416,7 +434,18 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
     chunk: TextChunk,
     updateCurrentAiMessage: (message: string) => void
   ): void {
-    this.accumulatedContent += chunk.text;
+    const lastSegment = this.contentSegments[this.contentSegments.length - 1];
+
+    // If last segment is text, append to it; otherwise create new text segment
+    if (lastSegment && lastSegment.type === "text") {
+      lastSegment.content += chunk.text;
+    } else {
+      this.contentSegments.push({
+        type: "text",
+        content: chunk.text,
+      });
+    }
+
     this.updateDisplay(updateCurrentAiMessage);
   }
 
@@ -476,14 +505,18 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
       "" // result
     );
 
-    // Find existing marker or add new one
-    const existingIndex = this.toolCallMarkers.findIndex((m) =>
-      m.includes(`TOOL_CALL_START:${toolUseId}:`)
+    // Find existing segment with this toolId and update, or create new tool segment
+    const existingSegment = this.contentSegments.find(
+      (s) => s.type === "tool" && s.toolId === toolUseId
     );
-    if (existingIndex !== -1) {
-      this.toolCallMarkers[existingIndex] = marker;
+    if (existingSegment) {
+      existingSegment.content = marker;
     } else {
-      this.toolCallMarkers.push(marker);
+      this.contentSegments.push({
+        type: "tool",
+        content: marker,
+        toolId: toolUseId,
+      });
     }
 
     this.updateDisplay(updateCurrentAiMessage);
@@ -505,18 +538,14 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
       state.result = content || (isError ? "Error occurred" : "Completed");
     }
 
-    // Update the tool call marker with result
+    // Update the tool segment with result
     const resultText = content || "";
-    const markerIndex = this.toolCallMarkers.findIndex((m) =>
-      m.includes(`TOOL_CALL_START:${toolUseId}:`)
+    const toolSegment = this.contentSegments.find(
+      (s) => s.type === "tool" && s.toolId === toolUseId
     );
 
-    if (markerIndex !== -1) {
-      this.toolCallMarkers[markerIndex] = updateToolCallMarker(
-        this.toolCallMarkers[markerIndex],
-        toolUseId,
-        resultText
-      );
+    if (toolSegment) {
+      toolSegment.content = updateToolCallMarker(toolSegment.content, toolUseId, resultText);
     }
 
     this.updateDisplay(updateCurrentAiMessage);
@@ -551,7 +580,19 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
   ): void {
     logError("[ClaudeCodeChainRunner] Error chunk:", chunk.message);
 
-    this.accumulatedContent += `\n\n<errorChunk>${chunk.message}</errorChunk>`;
+    // Add error as a text segment
+    const lastSegment = this.contentSegments[this.contentSegments.length - 1];
+    const errorContent = `\n\n<errorChunk>${chunk.message}</errorChunk>`;
+
+    if (lastSegment && lastSegment.type === "text") {
+      lastSegment.content += errorContent;
+    } else {
+      this.contentSegments.push({
+        type: "text",
+        content: errorContent,
+      });
+    }
+
     this.updateDisplay(updateCurrentAiMessage);
   }
 
@@ -565,23 +606,21 @@ export class ClaudeCodeChainRunner extends BaseChainRunner {
 
   /**
    * Build the current display content combining text, thinking, and tool calls
+   * Preserves the temporal order of content segments as they arrived
    */
   private buildDisplayContent(): string {
     const parts: string[] = [];
 
-    // Add thinking blocks wrapped in <think> tags
+    // Add thinking blocks wrapped in <think> tags (always at the top)
     if (this.accumulatedThinking.trim()) {
       parts.push(`<think>\n${this.accumulatedThinking.trim()}\n</think>`);
     }
 
-    // Add text content
-    if (this.accumulatedContent.trim()) {
-      parts.push(this.accumulatedContent.trim());
-    }
-
-    // Add tool call markers
-    if (this.toolCallMarkers.length > 0) {
-      parts.push(this.toolCallMarkers.join("\n"));
+    // Add content segments in order (text and tools interleaved)
+    for (const segment of this.contentSegments) {
+      if (segment.content.trim()) {
+        parts.push(segment.content.trim());
+      }
     }
 
     return parts.join("\n\n");
