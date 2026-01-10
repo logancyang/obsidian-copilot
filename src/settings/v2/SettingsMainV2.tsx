@@ -6,15 +6,16 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
+import { Cog, Command, Cpu, Database, Sparkles, Terminal, Wrench } from "lucide-react";
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
 import { BasicSettings } from "./components/BasicSettings";
+import { ClaudeCodeSettings } from "./components/ClaudeCodeSettings";
 import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 
-const TAB_IDS = ["basic", "model", "QA", "command", "plus", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "QA", "command", "plus", "claudeCode", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
@@ -24,6 +25,7 @@ const icons: Record<TabId, JSX.Element> = {
   QA: <Database className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   plus: <Sparkles className="tw-size-5" />,
+  claudeCode: <Terminal className="tw-size-5" />,
   advanced: <Wrench className="tw-size-5" />,
 };
 
@@ -34,14 +36,26 @@ const components: Record<TabId, React.FC> = {
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
   plus: () => <CopilotPlusSettings />,
+  claudeCode: () => <ClaudeCodeSettings />,
   advanced: () => <AdvancedSettings />,
+};
+
+// Tab labels with special cases
+const tabLabels: Record<TabId, string> = {
+  basic: "Basic",
+  model: "Model",
+  QA: "QA",
+  command: "Command",
+  plus: "Plus",
+  claudeCode: "Claude Code",
+  advanced: "Advanced",
 };
 
 // tabs
 const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   id,
   icon: icons[id],
-  label: id.charAt(0).toUpperCase() + id.slice(1),
+  label: tabLabels[id],
 }));
 
 const SettingsContent: React.FC = () => {

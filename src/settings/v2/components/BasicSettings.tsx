@@ -20,6 +20,7 @@ const ChainType2Label: Record<ChainType, string> = {
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
   [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
+  [ChainType.CLAUDE_CODE_CHAIN]: "Claude Code (beta)",
 };
 
 export const BasicSettings: React.FC = () => {

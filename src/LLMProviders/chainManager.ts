@@ -10,11 +10,13 @@ import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   AutonomousAgentChainRunner,
   ChainRunner,
+  ClaudeCodeChainRunner,
   CopilotPlusChainRunner,
   LLMChainRunner,
   ProjectChainRunner,
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
+import { ClaudeCodeServiceOptions } from "@/core/claudeCode/ClaudeCodeService";
 import { logError, logInfo } from "@/logger";
 import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -301,6 +303,23 @@ export default class ChainManager {
         return new CopilotPlusChainRunner(this);
       case ChainType.PROJECT_CHAIN:
         return new ProjectChainRunner(this);
+      case ChainType.CLAUDE_CODE_CHAIN: {
+        // Map settings permission mode to SDK permission mode
+        // "yolo" -> "bypassPermissions" (auto-approve all)
+        // "approval" -> "default" (require confirmation)
+        const sdkPermissionMode =
+          settings.claudeCodePermissionMode === "yolo" ? "bypassPermissions" : "default";
+
+        const claudeCodeOptions: ClaudeCodeServiceOptions = {
+          cliPath: settings.claudeCodeCliPath || undefined,
+          model: settings.claudeCodeModel,
+          permissionMode: sdkPermissionMode,
+          maxThinkingTokens: settings.claudeCodeMaxThinkingTokens,
+          allowedPaths: settings.claudeCodeAllowedPaths,
+          blockedCommands: settings.claudeCodeBlockedCommands,
+        };
+        return new ClaudeCodeChainRunner(this, claudeCodeOptions);
+      }
       default:
         throw new Error(`Unsupported chain type: ${chainType}`);
     }
