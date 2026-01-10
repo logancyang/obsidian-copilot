@@ -343,6 +343,34 @@ export class WebViewerService {
   }
 
   // --------------------------------------------------------------------------
+  // YouTube Transcript Extraction (delegated to actions)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Extract YouTube video ID from various URL formats.
+   * @returns video ID or null if not a valid YouTube video URL
+   */
+  getYouTubeVideoId(url: string): string | null {
+    return actions.getYouTubeVideoId(url);
+  }
+
+  /** Check if URL is a YouTube video page */
+  isYouTubeVideoUrl(url: string): boolean {
+    return actions.isYouTubeVideoUrl(url);
+  }
+
+  /**
+   * Extract YouTube video transcript via DOM manipulation.
+   * Automatically clicks the transcript button if needed and closes the panel after extraction.
+   */
+  async getYouTubeTranscript(
+    leaf: WebViewerLeaf,
+    options?: { timeoutMs?: number }
+  ): Promise<actions.YouTubeTranscriptResult> {
+    return actions.getYouTubeTranscript(leaf, options);
+  }
+
+  // --------------------------------------------------------------------------
   // Save (delegated to actions)
   // --------------------------------------------------------------------------
 

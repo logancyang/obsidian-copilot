@@ -212,6 +212,269 @@ export async function getHtml(leaf: WebViewerLeaf, includeDocumentElement = true
 }
 
 // ============================================================================
+// YouTube Transcript Extraction
+// ============================================================================
+
+/**
+ * Extract YouTube video ID from various URL formats.
+ * Supports: youtube.com/watch, youtu.be, youtube.com/shorts, m.youtube.com, embed
+ * @returns video ID or null if not a valid YouTube video URL
+ */
+export function getYouTubeVideoId(url: string): string | null {
+  try {
+    const u = new URL(url);
+    const hostname = u.hostname.replace(/^www\./, "").replace(/^m\./, "");
+
+    // youtube.com/watch?v=xxx or youtube.com/watch?v=xxx&t=120
+    if (hostname === "youtube.com" && u.pathname === "/watch") {
+      return u.searchParams.get("v");
+    }
+
+    // youtu.be/xxx or youtu.be/xxx?t=120
+    if (hostname === "youtu.be" && u.pathname.length > 1) {
+      return u.pathname.slice(1).split("/")[0];
+    }
+
+    // youtube.com/shorts/xxx
+    if (hostname === "youtube.com" && u.pathname.startsWith("/shorts/")) {
+      return u.pathname.split("/")[2] || null;
+    }
+
+    // youtube.com/embed/xxx
+    if (hostname === "youtube.com" && u.pathname.startsWith("/embed/")) {
+      return u.pathname.split("/")[2] || null;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/** Check if URL is a YouTube video page */
+export function isYouTubeVideoUrl(url: string): boolean {
+  return getYouTubeVideoId(url) !== null;
+}
+
+/** YouTube transcript segment */
+export interface YouTubeTranscriptSegment {
+  timestamp: string;
+  text: string;
+}
+
+/** YouTube video metadata and transcript extraction result */
+export interface YouTubeTranscriptResult {
+  videoId: string;
+  title: string;
+  channel: string;
+  description?: string;
+  uploadDate?: string;
+  duration?: string;
+  genre?: string;
+  transcript: YouTubeTranscriptSegment[];
+}
+
+/** Runtime validation for transcript result */
+function isValidTranscriptResult(data: unknown): data is YouTubeTranscriptResult {
+  if (typeof data !== "object" || data === null) return false;
+  const d = data as Record<string, unknown>;
+  return (
+    typeof d.videoId === "string" &&
+    typeof d.title === "string" &&
+    typeof d.channel === "string" &&
+    (d.description === undefined || typeof d.description === "string") &&
+    (d.uploadDate === undefined || typeof d.uploadDate === "string") &&
+    (d.duration === undefined || typeof d.duration === "string") &&
+    (d.genre === undefined || typeof d.genre === "string") &&
+    Array.isArray(d.transcript) &&
+    d.transcript.every(
+      (seg: unknown) =>
+        typeof seg === "object" &&
+        seg !== null &&
+        typeof (seg as Record<string, unknown>).timestamp === "string" &&
+        typeof (seg as Record<string, unknown>).text === "string"
+    )
+  );
+}
+
+/**
+ * Extract YouTube video transcript via DOM manipulation.
+ * Automatically clicks the transcript button if needed and closes the panel after extraction.
+ * @param leaf - The Web Viewer leaf containing the YouTube page
+ * @param options.timeoutMs - Maximum time to wait for transcript to load (default: 10000ms)
+ */
+export async function getYouTubeTranscript(
+  leaf: WebViewerLeaf,
+  options: { timeoutMs?: number } = {}
+): Promise<YouTubeTranscriptResult> {
+  const webview = requireWebview(leaf);
+  const { timeoutMs = 10000 } = options;
+  const maxAttempts = Math.ceil(timeoutMs / 500);
+
+  // Get the actual page URL and extract videoId (handles redirects and all URL formats)
+  let pageUrl = "";
+  try {
+    pageUrl = typeof webview.getURL === "function" ? webview.getURL() : "";
+  } catch {
+    pageUrl = "";
+  }
+  if (!pageUrl) pageUrl = leaf.view?.url ?? "";
+
+  const videoId = getYouTubeVideoId(pageUrl);
+  if (!videoId) {
+    throw new Error("Not a YouTube video page");
+  }
+
+  // Pass videoId into the script to avoid re-parsing URL (fixes /shorts/, /embed/, youtu.be support)
+  const code = `(async () => {
+    const videoId = ${JSON.stringify(videoId)};
+
+    // =========================================================================
+    // Step 1: Extract video metadata from JSON-LD (structured data)
+    // JSON-LD is more reliable than DOM selectors as it's machine-readable
+    // =========================================================================
+    let title = '';
+    let channel = '';
+    let description = '';
+    let uploadDate = '';
+    let duration = '';
+    let genre = '';
+
+    // Helper to extract fields from a VideoObject schema
+    const extractVideoObject = (data) => {
+      if (!data || data['@type'] !== 'VideoObject') return;
+      if (!title && data.name && typeof data.name === 'string') {
+        title = data.name;
+      }
+      if (!description && data.description && typeof data.description === 'string') {
+        description = data.description;
+      }
+      if (!uploadDate && data.uploadDate && typeof data.uploadDate === 'string') {
+        uploadDate = data.uploadDate;
+      }
+      // JSON-LD duration is ISO 8601 format (e.g., "PT12M34S"), convert to readable format
+      if (!duration && data.duration && typeof data.duration === 'string') {
+        const match = data.duration.match(/PT(?:(\\d+)H)?(?:(\\d+)M)?(?:(\\d+)S)?/);
+        if (match) {
+          const h = match[1] ? match[1] + ':' : '';
+          const m = match[2] || '0';
+          const s = match[3] || '0';
+          duration = h + (h ? m.padStart(2, '0') : m) + ':' + s.padStart(2, '0');
+        }
+      }
+      if (!genre && data.genre) {
+        genre = Array.isArray(data.genre) ? data.genre.join(', ') : String(data.genre);
+      }
+      // author can be string, object {name}, or array [{name}]
+      if (!channel && data.author) {
+        const author = data.author;
+        if (typeof author === 'string') {
+          channel = author;
+        } else if (Array.isArray(author) && author[0]?.name) {
+          channel = String(author[0].name);
+        } else if (author?.name) {
+          channel = String(author.name);
+        }
+      }
+    };
+
+    // Parse all JSON-LD scripts, handling various formats (@graph, array, single object)
+    const ldJsonEls = document.querySelectorAll('script[type="application/ld+json"]');
+    for (const el of ldJsonEls) {
+      try {
+        const data = JSON.parse(el.textContent || '');
+        if (Array.isArray(data)) {
+          for (const item of data) {
+            extractVideoObject(item);
+          }
+        } else if (data['@graph'] && Array.isArray(data['@graph'])) {
+          for (const item of data['@graph']) {
+            extractVideoObject(item);
+          }
+        } else {
+          extractVideoObject(data);
+        }
+        // Stop if we have all essential fields
+        if (title && channel && description) break;
+      } catch {}
+    }
+
+    // =========================================================================
+    // Step 2: Fallback to DOM selectors for missing metadata
+    // =========================================================================
+    if (!title) {
+      title = document.querySelector('h1.ytd-watch-metadata yt-formatted-string')?.textContent?.trim()
+           || document.querySelector('#title h1')?.textContent?.trim() || '';
+    }
+    if (!channel) {
+      channel = document.querySelector('#owner #channel-name a')?.textContent?.trim()
+             || document.querySelector('#channel-name a')?.textContent?.trim()
+             || document.querySelector('#channel-name')?.textContent?.trim() || '';
+    }
+    if (!duration) {
+      duration = document.querySelector('#ytd-player .ytp-time-duration')?.textContent?.trim() || '';
+    }
+
+    // =========================================================================
+    // Step 3: Try to extract transcript
+    // Check if transcript panel is already open, otherwise click the button
+    // =========================================================================
+    let segments = document.querySelectorAll('ytd-transcript-segment-renderer');
+    let needClose = false;
+
+    if (segments.length === 0) {
+      const btn = document.querySelector('ytd-video-description-transcript-section-renderer button');
+
+      if (btn) {
+        btn.click();
+        needClose = true;
+
+        // Wait for transcript to load (poll every 500ms)
+        for (let i = 0; i < ${maxAttempts}; i++) {
+          await new Promise(r => setTimeout(r, 500));
+          segments = document.querySelectorAll('ytd-transcript-segment-renderer');
+          if (segments.length > 0) break;
+        }
+      }
+    }
+
+    // Helper to close the transcript panel (called in finally block)
+    const closePanel = () => {
+      if (needClose) {
+        const closeBtn = document.querySelector(
+          'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"] #visibility-button button'
+        );
+        if (closeBtn) closeBtn.click();
+      }
+    };
+
+    // =========================================================================
+    // Step 4: Extract transcript segments and return result
+    // =========================================================================
+    try {
+      const transcript = [...segments].map(seg => ({
+        timestamp: seg.querySelector('.segment-timestamp')?.textContent?.trim() || '',
+        text: seg.querySelector('yt-formatted-string.segment-text, .segment-text')?.textContent?.trim() || ''
+      })).filter(t => t.timestamp && t.text);
+
+      return { videoId, title, channel, description, uploadDate, duration, genre, transcript };
+    } finally {
+      // Step 5: Always close the transcript panel if we opened it
+      closePanel();
+    }
+  })()`;
+
+  const result = await webview.executeJavaScript(code);
+
+  // Validate result structure
+  if (!isValidTranscriptResult(result)) {
+    throw new Error("Invalid transcript data structure");
+  }
+
+  return result;
+}
+
+// ============================================================================
 // Save & Export
 // ============================================================================
 

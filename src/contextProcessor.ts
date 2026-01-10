@@ -5,6 +5,7 @@ import { logWarn, logInfo, logError } from "@/logger";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServiceTypes";
+import { getYouTubeVideoId } from "@/services/webViewerService/webViewerServiceActions";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain } from "@/utils";
 import { normalizeUrlString } from "@/utils/urlNormalization";
@@ -18,6 +19,7 @@ import {
   DATAVIEW_BLOCK_TAG,
   WEB_TAB_CONTEXT_TAG,
   ACTIVE_WEB_TAB_CONTEXT_TAG,
+  YOUTUBE_VIDEO_CONTEXT_TAG,
 } from "./constants";
 
 interface EmbeddedLinkTarget {
@@ -690,6 +692,8 @@ export class ContextProcessor {
     const WEBVIEW_READY_TIMEOUT_MS = 2_500;
     // Timeout for reader mode content extraction to avoid hanging the message send
     const READER_MODE_CONTENT_TIMEOUT_MS = 8_000;
+    // Timeout for YouTube transcript extraction (longer due to DOM manipulation)
+    const YOUTUBE_TRANSCRIPT_TIMEOUT_MS = 15_000;
     // Limit concurrent webview operations to avoid UI blocking and IPC congestion
     const MAX_CONCURRENCY = 2;
 
@@ -729,10 +733,89 @@ export class ContextProcessor {
       return parts.join("");
     };
 
-    // Separate active tab from normal tabs and deduplicate by URL
+    /**
+     * Build a YouTube video context XML block.
+     * All content is properly escaped to prevent XML/prompt injection.
+     */
+    const buildYouTubeBlock = (options: {
+      title: string;
+      url: string;
+      videoId: string;
+      channel?: string;
+      description?: string;
+      uploadDate?: string;
+      duration?: string;
+      genre?: string;
+      transcript?: string;
+      error?: string;
+      isActive?: boolean;
+    }): string => {
+      const parts = [
+        `\n\n<${YOUTUBE_VIDEO_CONTEXT_TAG}>`,
+        `\n<title>${escapeXml(options.title)}</title>`,
+        `\n<url>${escapeXml(options.url)}</url>`,
+        `\n<video_id>${escapeXml(options.videoId)}</video_id>`,
+      ];
+
+      if (options.isActive) {
+        parts.push(`\n<is_active>true</is_active>`);
+      }
+
+      if (options.channel) {
+        parts.push(`\n<channel>${escapeXml(options.channel)}</channel>`);
+      }
+
+      if (options.uploadDate) {
+        parts.push(`\n<upload_date>${escapeXml(options.uploadDate)}</upload_date>`);
+      }
+
+      if (options.duration) {
+        parts.push(`\n<duration>${escapeXml(options.duration)}</duration>`);
+      }
+
+      if (options.genre) {
+        parts.push(`\n<genre>${escapeXml(options.genre)}</genre>`);
+      }
+
+      if (options.description) {
+        parts.push(`\n<description>${escapeXml(options.description)}</description>`);
+      }
+
+      // Error for real failures (tab closed, extraction failed, etc.)
+      if (options.error) {
+        parts.push(`\n<error>${escapeXml(options.error)}</error>`);
+      }
+
+      // Content: transcript if available, otherwise a message
+      const content = options.transcript || "No transcript available for this video";
+      parts.push(`\n<content>\n${escapeXml(content)}\n</content>`);
+
+      parts.push(`\n</${YOUTUBE_VIDEO_CONTEXT_TAG}>`);
+      return parts.join("");
+    };
+
+    // Separate active tab from normal tabs and deduplicate by URL (and videoId for YouTube)
     let activeTab: { url: string; title?: string; faviconUrl?: string } | null = null;
     const normalTabs: Array<{ url: string; title?: string; faviconUrl?: string }> = [];
     const seenUrls = new Set<string>();
+    const seenVideoIds = new Set<string>(); // Deduplicate YouTube videos by videoId
+
+    /**
+     * Check if a tab should be skipped due to deduplication.
+     * For YouTube videos, deduplicate by videoId (handles youtu.be vs youtube.com/watch).
+     * For other URLs, deduplicate by normalized URL string.
+     */
+    const isDuplicate = (url: string): boolean => {
+      const videoId = getYouTubeVideoId(url);
+      if (videoId) {
+        if (seenVideoIds.has(videoId)) return true;
+        seenVideoIds.add(videoId);
+        return false;
+      }
+      if (seenUrls.has(url)) return true;
+      seenUrls.add(url);
+      return false;
+    };
 
     // First pass: find active tab
     for (const tab of webTabs) {
@@ -741,16 +824,15 @@ export class ContextProcessor {
 
       if (tab.isActive && !activeTab) {
         activeTab = { ...tab, url };
-        seenUrls.add(url);
+        isDuplicate(url); // Mark as seen
       }
     }
 
-    // Second pass: collect normal tabs (excluding active tab's URL)
+    // Second pass: collect normal tabs (excluding duplicates)
     for (const tab of webTabs) {
       const url = normalizeUrlString(tab.url);
-      if (!url || seenUrls.has(url)) continue;
+      if (!url || isDuplicate(url)) continue;
 
-      seenUrls.add(url);
       normalTabs.push({ ...tab, url });
     }
 
@@ -792,6 +874,7 @@ export class ContextProcessor {
 
     /**
      * Process a single tab and return its XML block.
+     * YouTube videos are handled specially to extract transcript.
      */
     const processTab = async (
       tab: { url: string; title?: string; faviconUrl?: string },
@@ -799,6 +882,13 @@ export class ContextProcessor {
     ): Promise<string> => {
       try {
         const url = tab.url;
+
+        // Check if this is a YouTube video - handle specially
+        const videoId = service.getYouTubeVideoId(url);
+        if (videoId) {
+          const isActive = tagName === ACTIVE_WEB_TAB_CONTEXT_TAG;
+          return await processYouTubeTab(tab, videoId, isActive);
+        }
 
         const leaf = service.findLeafByUrl(url, { title: tab.title });
         if (!leaf) {
@@ -865,6 +955,100 @@ export class ContextProcessor {
             error instanceof WebViewerTimeoutError
               ? "Web tab content extraction timed out"
               : "Could not process web tab",
+        });
+      }
+    };
+
+    /**
+     * Process a YouTube video tab and extract transcript.
+     * Automatically clicks the transcript button, extracts content, and closes the panel.
+     */
+    const processYouTubeTab = async (
+      tab: { url: string; title?: string; faviconUrl?: string },
+      videoId: string,
+      isActive: boolean
+    ): Promise<string> => {
+      try {
+        // Find leaf by videoId (handles all URL formats and redirects)
+        // This is more reliable than URL string matching because:
+        // - youtu.be/xxx redirects to youtube.com/watch?v=xxx
+        // - URL may have different query params (t=, list=, etc.)
+        // - www vs non-www differences
+        let leaf = null;
+        let actualUrl = tab.url;
+
+        for (const l of service.getLeaves()) {
+          const leafUrl = service.getPageInfo(l).url;
+          if (service.getYouTubeVideoId(leafUrl) === videoId) {
+            leaf = l;
+            actualUrl = leafUrl; // Use the actual URL from the leaf
+            break;
+          }
+        }
+
+        if (!leaf) {
+          return buildYouTubeBlock({
+            title: tab.title || "YouTube Video",
+            url: tab.url,
+            videoId,
+            isActive,
+            error: "Web tab not found or closed",
+          });
+        }
+
+        // Wait for webview to be ready
+        const view = leaf.view as { webviewMounted?: boolean; webviewFirstLoadFinished?: boolean };
+        const webviewReady =
+          view.webviewMounted === undefined || view.webviewFirstLoadFinished === undefined
+            ? true
+            : Boolean(view.webviewMounted && view.webviewFirstLoadFinished);
+        if (!webviewReady) {
+          try {
+            await service.waitForWebviewReady(leaf, WEBVIEW_READY_TIMEOUT_MS);
+          } catch (err) {
+            logWarn(`YouTube tab content not loaded yet for ${actualUrl}:`, err);
+            return buildYouTubeBlock({
+              title: tab.title || "YouTube Video",
+              url: actualUrl,
+              videoId,
+              isActive,
+              error: "Web tab content not loaded yet",
+            });
+          }
+        }
+
+        // Extract video metadata and transcript
+        const result = await service.getYouTubeTranscript(leaf, {
+          timeoutMs: YOUTUBE_TRANSCRIPT_TIMEOUT_MS,
+        });
+
+        // Format transcript (may be empty if no transcript available)
+        const transcriptText =
+          result.transcript.length > 0
+            ? result.transcript.map((seg) => `${seg.timestamp}: ${seg.text}`).join("\n")
+            : undefined;
+
+        return buildYouTubeBlock({
+          title: result.title || tab.title || "YouTube Video",
+          url: actualUrl,
+          videoId: result.videoId,
+          channel: result.channel,
+          description: result.description,
+          uploadDate: result.uploadDate,
+          duration: result.duration,
+          genre: result.genre,
+          transcript: transcriptText,
+          isActive,
+        });
+      } catch (err) {
+        logWarn(`YouTube transcript extraction failed for ${tab.url}:`, err);
+
+        return buildYouTubeBlock({
+          title: tab.title || "YouTube Video",
+          url: tab.url,
+          videoId,
+          isActive,
+          error: err instanceof Error ? err.message : "Failed to extract video info",
         });
       }
     };
