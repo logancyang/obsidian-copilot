@@ -95,14 +95,30 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
       switch (event.key) {
         case "ArrowDown": {
           event.preventDefault();
-          const nextIndex = Math.min(state.selectedIndex + 1, options.length - 1);
+          let nextIndex = state.selectedIndex + 1;
+          // Skip disabled options
+          while (nextIndex < options.length && options[nextIndex]?.disabled) {
+            nextIndex++;
+          }
+          // If no valid option found, stay at current position
+          if (nextIndex >= options.length) {
+            nextIndex = state.selectedIndex;
+          }
           handleHighlight(nextIndex);
           return true;
         }
 
         case "ArrowUp": {
           event.preventDefault();
-          const prevIndex = Math.max(state.selectedIndex - 1, 0);
+          let prevIndex = state.selectedIndex - 1;
+          // Skip disabled options
+          while (prevIndex >= 0 && options[prevIndex]?.disabled) {
+            prevIndex--;
+          }
+          // If no valid option found, stay at current position
+          if (prevIndex < 0) {
+            prevIndex = state.selectedIndex;
+          }
           handleHighlight(prevIndex);
           return true;
         }
@@ -113,6 +129,11 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
           if (options.length === 0) {
             closeMenu();
             return false; // Let the event propagate to submit the message
+          }
+
+          // If current option is disabled, don't select it
+          if (options[state.selectedIndex]?.disabled) {
+            return true; // Prevent default but don't select
           }
 
           event.preventDefault();

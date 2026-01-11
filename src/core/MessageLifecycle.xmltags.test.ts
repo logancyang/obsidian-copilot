@@ -1,5 +1,5 @@
 import { MessageRepository } from "./MessageRepository";
-import { USER_SENDER, SELECTED_TEXT_TAG } from "@/constants";
+import { USER_SENDER, SELECTED_TEXT_TAG, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 
@@ -127,6 +127,7 @@ The landscape of artificial intelligence continues to evolve rapidly. Here are t
       selectedTextContexts: [
         {
           id: "sel-1",
+          sourceType: "note",
           content: `function fibonacci(n) {
   if (n <= 1) return n;
   return fibonacci(n - 1) + fibonacci(n - 2);
@@ -189,6 +190,7 @@ function fibonacci(n) {
       selectedTextContexts: [
         {
           id: "sel-2",
+          sourceType: "note",
           content:
             "The Single Responsibility Principle states that a class should have only one reason to change.",
           noteTitle: "SOLID Principles",
@@ -294,5 +296,137 @@ The Single Responsibility Principle states that a class should have only one rea
     expect(fullMessage?.message).toContain("<path>corrupted-file.pdf</path>");
     expect(fullMessage?.message).toContain("<error>[Error: Could not process file]</error>");
     expect(fullMessage?.message).toContain("</note_context_error>");
+  });
+
+  it("should format web selected text with proper XML tags", () => {
+    const userMessage = "Summarize this web content";
+    const context: MessageContext = {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "web-sel-1",
+          sourceType: "web",
+          content: `# Getting Started with React
+
+React is a JavaScript library for building user interfaces.
+
+## Key Concepts
+- Components
+- Props
+- State`,
+          title: "React Documentation",
+          url: "https://react.dev/learn",
+        },
+      ],
+    };
+
+    const processedText = `Summarize this web content
+
+<web_selected_text>
+<title>React Documentation</title>
+<url>https://react.dev/learn</url>
+<content>
+# Getting Started with React
+
+React is a JavaScript library for building user interfaces.
+
+## Key Concepts
+- Components
+- Props
+- State
+</content>
+</web_selected_text>`;
+
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
+
+    // Get the full message with processed context
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    expect(fullMessage?.message).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
+    expect(fullMessage?.message).toContain("<title>React Documentation</title>");
+    expect(fullMessage?.message).toContain("<url>https://react.dev/learn</url>");
+    expect(fullMessage?.message).toContain("<content>");
+    expect(fullMessage?.message).toContain("Getting Started with React");
+    expect(fullMessage?.message).toContain("</content>");
+    expect(fullMessage?.message).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
+    // Should NOT contain note-specific tags
+    expect(fullMessage?.message).not.toContain("<path>");
+    expect(fullMessage?.message).not.toContain("<start_line>");
+    expect(fullMessage?.message).not.toContain("<end_line>");
+  });
+
+  it("should handle mixed note and web selected text contexts", () => {
+    const userMessage = "Compare these selections";
+    const context: MessageContext = {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "note-sel-1",
+          sourceType: "note",
+          content: "Local note content about React patterns",
+          noteTitle: "React Patterns",
+          notePath: "dev/react-patterns.md",
+          startLine: 15,
+          endLine: 20,
+        },
+        {
+          id: "web-sel-1",
+          sourceType: "web",
+          content: "Web content about React best practices",
+          title: "React Best Practices",
+          url: "https://react.dev/best-practices",
+        },
+      ],
+    };
+
+    const processedText = `Compare these selections
+
+<selected_text>
+<title>React Patterns</title>
+<path>dev/react-patterns.md</path>
+<start_line>15</start_line>
+<end_line>20</end_line>
+<content>
+Local note content about React patterns
+</content>
+</selected_text>
+
+<web_selected_text>
+<title>React Best Practices</title>
+<url>https://react.dev/best-practices</url>
+<content>
+Web content about React best practices
+</content>
+</web_selected_text>`;
+
+    const messageId = messageRepository.addMessage(
+      userMessage,
+      processedText,
+      USER_SENDER,
+      context
+    );
+
+    // Get the full message with processed context
+    const fullMessage = messageRepository.getLLMMessage(messageId);
+    const message = fullMessage!.message;
+
+    // Verify both context types are present with proper tags
+    expect(message).toContain(`<${SELECTED_TEXT_TAG}>`);
+    expect(message).toContain(`</${SELECTED_TEXT_TAG}>`);
+    expect(message).toContain(`<${WEB_SELECTED_TEXT_TAG}>`);
+    expect(message).toContain(`</${WEB_SELECTED_TEXT_TAG}>`);
+
+    // Verify note selection has path and line numbers
+    expect(message).toContain("<path>dev/react-patterns.md</path>");
+    expect(message).toContain("<start_line>15</start_line>");
+
+    // Verify web selection has url but no path/line numbers
+    expect(message).toContain("<url>https://react.dev/best-practices</url>");
   });
 });

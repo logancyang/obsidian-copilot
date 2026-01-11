@@ -2,6 +2,7 @@ import React, { useState, useCallback } from "react";
 import { TFile, App } from "obsidian";
 import ChatInput from "./ChatInput";
 import { ChatMessage } from "@/types/message";
+import { useActiveWebTabState } from "./hooks/useActiveWebTabState";
 
 interface InlineMessageEditorProps {
   /** The initial message text to edit */
@@ -34,7 +35,9 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
     initialContext?.notes?.map((note) => note as TFile) || []
   );
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
+  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
+  const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
 
   // Handle saving the edited message
   const handleEditSave = useCallback(
@@ -107,6 +110,9 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
       setContextNotes={setContextNotes}
       includeActiveNote={includeActiveNote}
       setIncludeActiveNote={setIncludeActiveNote}
+      includeActiveWebTab={includeActiveWebTab}
+      setIncludeActiveWebTab={setIncludeActiveWebTab}
+      activeWebTab={currentActiveWebTab}
       selectedImages={selectedImages}
       onAddImage={handleAddImage}
       setSelectedImages={setSelectedImages}

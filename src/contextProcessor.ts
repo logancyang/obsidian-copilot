@@ -2,15 +2,22 @@ import { getSelectedTextContexts } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { RESTRICTION_MESSAGES } from "@/constants";
 import { logWarn, logInfo, logError } from "@/logger";
+import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
+import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
+import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServiceTypes";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain } from "@/utils";
+import { normalizeUrlString } from "@/utils/urlNormalization";
 import { TFile, Vault, Notice } from "obsidian";
 import {
   NOTE_CONTEXT_PROMPT_TAG,
   EMBEDDED_PDF_TAG,
   EMBEDDED_NOTE_TAG,
   SELECTED_TEXT_TAG,
+  WEB_SELECTED_TEXT_TAG,
   DATAVIEW_BLOCK_TAG,
+  WEB_TAB_CONTEXT_TAG,
+  ACTIVE_WEB_TAB_CONTEXT_TAG,
 } from "./constants";
 
 interface EmbeddedLinkTarget {
@@ -643,9 +650,241 @@ export class ContextProcessor {
     let additionalContext = "";
 
     for (const selectedText of selectedTextContexts) {
-      additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${selectedText.noteTitle}</title>\n<path>${selectedText.notePath}</path>\n<start_line>${selectedText.startLine.toString()}</start_line>\n<end_line>${selectedText.endLine.toString()}</end_line>\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;
+      if (selectedText.sourceType === "web") {
+        // Web selected text context
+        additionalContext += `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.title)}</title>\n<url>${escapeXml(selectedText.url)}</url>\n<content>\n${selectedText.content}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`;
+      } else {
+        // Note selected text context (default for backward compatibility)
+        additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>\n<start_line>${selectedText.startLine.toString()}</start_line>\n<end_line>${selectedText.endLine.toString()}</end_line>\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;
+      }
     }
 
     return additionalContext;
+  }
+
+  /**
+   * Process web tab contexts and return formatted content for LLM.
+   * Uses WebViewerService to fetch reader mode markdown from each tab.
+   * Handles cases where webview content is not yet loaded (e.g., after Obsidian restart).
+   *
+   * Performance optimizations:
+   * - Deduplicates tabs by URL
+   * - Uses bounded concurrency to avoid UI blocking and resource exhaustion
+   *
+   * Design notes (potential future enhancements):
+   * - Tab count limit: Currently no limit on number of tabs. Could add MAX_WEB_TABS similar to
+   *   how activeNote is handled (single note vs multiple). For now, users self-limit by only
+   *   adding tabs they need.
+   * - Content length limit: Currently no truncation of long pages. Could add MAX_CHARS_PER_TAB
+   *   similar to how large notes are handled. For now, reader mode already strips most bloat.
+   * - Total context budget: Could implement a shared budget across all tabs. For now, the LLM's
+   *   context window and token costs naturally discourage excessive context.
+   */
+  async processContextWebTabs(
+    webTabs: Array<{ url: string; title?: string; faviconUrl?: string; isActive?: boolean }>
+  ): Promise<string> {
+    if (!webTabs || webTabs.length === 0) {
+      return "";
+    }
+
+    const WEBVIEW_READY_TIMEOUT_MS = 2_500;
+    // Timeout for reader mode content extraction to avoid hanging the message send
+    const READER_MODE_CONTENT_TIMEOUT_MS = 8_000;
+    // Limit concurrent webview operations to avoid UI blocking and IPC congestion
+    const MAX_CONCURRENCY = 2;
+
+    /**
+     * Build a web tab context XML block.
+     * Centralizes XML generation to avoid duplication and ensure consistent escaping.
+     * @param tagName - The XML tag name to use (active_web_tab or web_tab_context)
+     */
+    const buildWebTabBlock = (
+      tagName: string,
+      options: {
+        title: string;
+        url: string;
+        mode?: string;
+        content?: string;
+        error?: string;
+      }
+    ): string => {
+      const parts = [
+        `\n\n<${tagName}>`,
+        `\n<title>${escapeXml(options.title)}</title>`,
+        `\n<url>${escapeXml(options.url)}</url>`,
+      ];
+
+      if (options.mode) {
+        parts.push(`\n<mode>${escapeXml(options.mode)}</mode>`);
+      }
+
+      if (options.error) {
+        parts.push(`\n<error>${escapeXml(options.error)}</error>`);
+      } else if (options.content !== undefined) {
+        // Content is markdown, don't escape it
+        parts.push(`\n<content>\n${options.content}\n</content>`);
+      }
+
+      parts.push(`\n</${tagName}>`);
+      return parts.join("");
+    };
+
+    // Separate active tab from normal tabs and deduplicate by URL
+    let activeTab: { url: string; title?: string; faviconUrl?: string } | null = null;
+    const normalTabs: Array<{ url: string; title?: string; faviconUrl?: string }> = [];
+    const seenUrls = new Set<string>();
+
+    // First pass: find active tab
+    for (const tab of webTabs) {
+      const url = normalizeUrlString(tab.url);
+      if (!url) continue;
+
+      if (tab.isActive && !activeTab) {
+        activeTab = { ...tab, url };
+        seenUrls.add(url);
+      }
+    }
+
+    // Second pass: collect normal tabs (excluding active tab's URL)
+    for (const tab of webTabs) {
+      const url = normalizeUrlString(tab.url);
+      if (!url || seenUrls.has(url)) continue;
+
+      seenUrls.add(url);
+      normalTabs.push({ ...tab, url });
+    }
+
+    // Check if we have any tabs to process
+    if (!activeTab && normalTabs.length === 0) {
+      return "";
+    }
+
+    const service = getWebViewerService(app);
+
+    // Check Web Viewer availability first
+    const availability = service.getAvailability();
+    if (!availability.supported || !availability.available) {
+      const reason =
+        availability.reason ??
+        (availability.supported ? "Web Viewer is not available." : "Web Viewer is not supported on this platform.");
+
+      const blocks: string[] = [];
+      if (activeTab) {
+        blocks.push(
+          buildWebTabBlock(ACTIVE_WEB_TAB_CONTEXT_TAG, {
+            title: activeTab.title || "Unknown",
+            url: activeTab.url,
+            error: reason,
+          })
+        );
+      }
+      for (const tab of normalTabs) {
+        blocks.push(
+          buildWebTabBlock(WEB_TAB_CONTEXT_TAG, {
+            title: tab.title || "Unknown",
+            url: tab.url,
+            error: reason,
+          })
+        );
+      }
+      return blocks.join("");
+    }
+
+    /**
+     * Process a single tab and return its XML block.
+     */
+    const processTab = async (
+      tab: { url: string; title?: string; faviconUrl?: string },
+      tagName: string
+    ): Promise<string> => {
+      try {
+        const url = tab.url;
+
+        const leaf = service.findLeafByUrl(url, { title: tab.title });
+        if (!leaf) {
+          return buildWebTabBlock(tagName, {
+            title: tab.title || "Unknown",
+            url,
+            error: "Web tab not found or closed",
+          });
+        }
+
+        // Get initial page info (available even if webview not ready)
+        let pageInfo = service.getPageInfo(leaf);
+
+        // Check if webview is ready (content loaded)
+        // Note: webviewMounted/webviewFirstLoadFinished are internal Obsidian fields
+        // If they don't exist (undefined), assume ready (fallback for older versions)
+        const view = leaf.view as { webviewMounted?: boolean; webviewFirstLoadFinished?: boolean };
+        const webviewReady =
+          view.webviewMounted === undefined || view.webviewFirstLoadFinished === undefined
+            ? true
+            : Boolean(view.webviewMounted && view.webviewFirstLoadFinished);
+        if (!webviewReady) {
+          try {
+            await service.waitForWebviewReady(leaf, WEBVIEW_READY_TIMEOUT_MS);
+            pageInfo = service.getPageInfo(leaf);
+          } catch (err) {
+            logWarn(`Web tab content not loaded yet for ${url}:`, err);
+            return buildWebTabBlock(tagName, {
+              title: pageInfo.title || tab.title || "Untitled",
+              url: pageInfo.url || url,
+              mode: pageInfo.mode,
+              error: "Web tab content not loaded yet",
+            });
+          }
+        }
+
+        // Use AbortSignal for cancellable timeout
+        const abortController = new AbortController();
+        const timeoutId = setTimeout(() => {
+          abortController.abort();
+        }, READER_MODE_CONTENT_TIMEOUT_MS);
+
+        try {
+          const content = await service.getReaderModeMarkdown(leaf, {
+            signal: abortController.signal,
+          });
+          pageInfo = service.getPageInfo(leaf);
+
+          return buildWebTabBlock(tagName, {
+            title: pageInfo.title || tab.title || "Untitled",
+            url: pageInfo.url || url,
+            mode: pageInfo.mode,
+            content,
+          });
+        } finally {
+          clearTimeout(timeoutId);
+        }
+      } catch (error) {
+        logError(`Error processing web tab ${tab.url}:`, error);
+        return buildWebTabBlock(tagName, {
+          title: tab.title || "Unknown",
+          url: tab.url,
+          error:
+            error instanceof WebViewerTimeoutError
+              ? "Web tab content extraction timed out"
+              : "Could not process web tab",
+        });
+      }
+    };
+
+    // Process active tab first (if exists)
+    const blocks: string[] = [];
+    if (activeTab) {
+      const activeBlock = await processTab(activeTab, ACTIVE_WEB_TAB_CONTEXT_TAG);
+      blocks.push(activeBlock);
+    }
+
+    // Process normal tabs with bounded concurrency
+    for (let i = 0; i < normalTabs.length; i += MAX_CONCURRENCY) {
+      const chunk = normalTabs.slice(i, i + MAX_CONCURRENCY);
+      const chunkResults = await Promise.all(
+        chunk.map((tab) => processTab(tab, WEB_TAB_CONTEXT_TAG))
+      );
+      blocks.push(...chunkResults);
+    }
+
+    return blocks.join("");
   }
 }

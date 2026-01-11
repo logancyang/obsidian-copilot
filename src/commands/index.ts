@@ -19,7 +19,7 @@ import { checkIsPlusUser } from "@/plusUtils";
 import CopilotPlugin from "@/main";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings } from "@/settings/model";
-import { SelectedTextContext } from "@/types/message";
+import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -447,21 +447,76 @@ export function registerCommands(
     const endLine = selectionRange.head.line + 1;
 
     // Create selected text context
-    const selectedTextContext: SelectedTextContext = {
+    const selectedTextContext: NoteSelectedTextContext = {
       id: uuidv4(),
       content: selectedText,
+      sourceType: "note",
       noteTitle: activeFile.basename,
       notePath: activeFile.path,
       startLine: Math.min(startLine, endLine),
       endLine: Math.max(startLine, endLine),
     };
 
-    // Replace selected text contexts (consistent with auto mode behavior)
-    const { setSelectedTextContexts } = await import("@/aiParams");
-    setSelectedTextContexts([selectedTextContext]);
+    // Symmetric update: replace note selections, keep web selections
+    const { getSelectedTextContexts, setSelectedTextContexts } = await import("@/aiParams");
+    const current = getSelectedTextContexts();
+    const webContexts = current.filter((c) => c.sourceType === "web");
+    setSelectedTextContexts([...webContexts, selectedTextContext]);
 
     // Open chat window to show the context was added
     plugin.activateView();
+  });
+
+  // Add web selection to chat context command (manual)
+  addCommand(plugin, COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT, async () => {
+    const { Platform } = await import("obsidian");
+    if (!Platform.isDesktopApp) {
+      new Notice("Web selection is only available on desktop");
+      return;
+    }
+
+    const { getWebViewerService } = await import(
+      "@/services/webViewerService/webViewerServiceSingleton"
+    );
+
+    try {
+      const service = getWebViewerService(plugin.app);
+      const leaf = service.getActiveLeaf() ?? service.getLastActiveLeaf();
+
+      if (!leaf) {
+        new Notice("No active Web Tab found");
+        return;
+      }
+
+      const selectedMarkdown = await service.getSelectedMarkdown(leaf);
+      if (!selectedMarkdown.trim()) {
+        new Notice("No text selected in Web Tab");
+        return;
+      }
+
+      const pageInfo = service.getPageInfo(leaf);
+
+      // Create web selected text context
+      const webSelectedTextContext: WebSelectedTextContext = {
+        id: uuidv4(),
+        content: selectedMarkdown,
+        sourceType: "web",
+        title: pageInfo.title || "Untitled",
+        url: pageInfo.url,
+      };
+
+      // Replace web selection contexts only, keep note selections
+      const { getSelectedTextContexts, setSelectedTextContexts } = await import("@/aiParams");
+      const current = getSelectedTextContexts();
+      const noteContexts = current.filter((c) => c.sourceType === "note");
+      setSelectedTextContexts([...noteContexts, webSelectedTextContext]);
+
+      // Open chat window to show the context was added
+      plugin.activateView();
+    } catch (error) {
+      logError("Error adding web selection to context:", error);
+      new Notice("Failed to get web selection");
+    }
   });
 
   // Add command to create a new custom command

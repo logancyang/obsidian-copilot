@@ -276,11 +276,31 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="switch"
+            title="Include Active Web Tab in Context Menu"
+            description="Automatically include the active Web Viewer tab in the chat context menu by default. Desktop only."
+            checked={settings.includeActiveWebTabAsContext ?? true}
+            onCheckedChange={(checked) => {
+              updateSetting("includeActiveWebTabAsContext", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
             title="Auto-Add Text Selection to Context"
             description="Automatically add selected text to chat context when you make a text selection in markdown notes. Disable to use manual command instead."
             checked={settings.autoIncludeTextSelection}
             onCheckedChange={(checked) => {
               updateSetting("autoIncludeTextSelection", checked);
+            }}
+          />
+
+          <SettingItem
+            type="switch"
+            title="Auto-Add Web Selection to Context"
+            description="Automatically add selected text from Web Viewer tabs to chat context. Desktop only."
+            checked={settings.autoIncludeWebSelection}
+            onCheckedChange={(checked) => {
+              updateSetting("autoIncludeWebSelection", checked);
             }}
           />
 

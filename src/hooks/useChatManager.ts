@@ -37,9 +37,16 @@ export function useChatManager(chatUIState: ChatUIState) {
       displayText: string,
       context: MessageContext,
       chainType: ChainType,
-      includeActiveNote: boolean = false
+      includeActiveNote: boolean = false,
+      includeActiveWebTab: boolean = false
     ): Promise<string> => {
-      return await chatUIState.sendMessage(displayText, context, chainType, includeActiveNote);
+      return await chatUIState.sendMessage(
+        displayText,
+        context,
+        chainType,
+        includeActiveNote,
+        includeActiveWebTab
+      );
     },
     [chatUIState]
   );

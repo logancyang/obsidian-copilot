@@ -1,3 +1,5 @@
+import { extractMarkdownImagePaths } from "./imageExtraction";
+
 // Test for the image extraction logic
 describe("Image extraction from content", () => {
   // Mock the global app object
@@ -9,18 +11,14 @@ describe("Image extraction from content", () => {
 
   (global as any).app = mockApp;
 
-  // Mock logger (removed since we're no longer logging warnings)
-
   beforeEach(() => {
     jest.clearAllMocks();
   });
 
-  // Helper function that replicates the extractEmbeddedImages logic
+  // Helper function that replicates the extractEmbeddedImages logic from CopilotPlusChainRunner
   async function extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
-    // Match both wiki-style ![[image.ext]] and standard markdown ![alt](image.ext)
+    // Match wiki-style ![[image.ext]]
     const wikiImageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
-    // Updated regex to handle URLs with or without file extensions
-    const markdownImageRegex = /!\[.*?\]\(([^)]+)\)/g;
 
     const resolvedImages: string[] = [];
 
@@ -46,11 +44,9 @@ describe("Image extraction from content", () => {
       }
     }
 
-    // Process standard markdown images
-    const mdMatches = [...content.matchAll(markdownImageRegex)];
-    for (const match of mdMatches) {
-      const imagePath = match[1].trim();
-
+    // Process standard markdown images using robust character-scanning parser
+    const mdImagePaths = extractMarkdownImagePaths(content);
+    for (const imagePath of mdImagePaths) {
       // Skip empty paths
       if (!imagePath) continue;
 
@@ -338,5 +334,377 @@ describe("Image extraction from content", () => {
 
       expect(result).toEqual(["attachments/image (1).png", "attachments/file-name_2.jpg"]);
     });
+  });
+
+  describe("Angle bracket syntax ![alt](<url>)", () => {
+    it("should extract URL with parentheses using angle brackets", async () => {
+      const content = "Wikipedia link ![Mars](<https://en.wikipedia.org/wiki/Mars_(planet).jpg>)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://en.wikipedia.org/wiki/Mars_(planet).jpg"]);
+    });
+
+    it("should extract URL with spaces using angle brackets", async () => {
+      const content = "Spaced path ![alt](<path/my image file.png>)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["path/my image file.png"]);
+    });
+
+    it("should extract multiple angle bracket URLs", async () => {
+      const content = `
+        First ![img1](<https://example.com/image(1).png>)
+        Second ![img2](<https://example.com/image (2).jpg>)
+      `;
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual([
+        "https://example.com/image(1).png",
+        "https://example.com/image (2).jpg",
+      ]);
+    });
+  });
+
+  describe("Image with title syntax ![alt](url \"title\")", () => {
+    it("should extract URL with double-quoted title", async () => {
+      const content = 'Image with title ![alt](https://example.com/img.png "This is the title")';
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/img.png"]);
+    });
+
+    it("should extract URL with single-quoted title", async () => {
+      const content = "Image with title ![alt](https://example.com/img.png 'Single quoted title')";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/img.png"]);
+    });
+
+    it("should extract URL with parentheses title", async () => {
+      const content = "Image with title ![alt](https://example.com/img.png (Parentheses title))";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/img.png"]);
+    });
+
+    it("should extract angle bracket URL with title", async () => {
+      const content =
+        'Angle bracket with title ![alt](<https://example.com/image(1).png> "Title here")';
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://example.com/image(1).png"]);
+    });
+
+    it("should handle local path with title", async () => {
+      const content = 'Local image ![alt](images/photo.jpg "My photo")';
+      const sourcePath = "notes/test.md";
+
+      mockApp.metadataCache.getFirstLinkpathDest.mockReturnValueOnce({
+        path: "images/photo.jpg",
+      });
+
+      const result = await extractEmbeddedImages(content, sourcePath);
+
+      expect(result).toEqual(["images/photo.jpg"]);
+    });
+  });
+
+  describe("Mixed enhanced syntaxes", () => {
+    it("should handle all syntax variations together", async () => {
+      const content = `
+        Standard: ![](https://example.com/standard.png)
+        With title: ![alt](https://example.com/titled.png "Title")
+        Angle bracket: ![alt](<https://example.com/path (special).png>)
+        Angle with title: ![alt](<https://example.com/both(1).png> "Both features")
+        Wiki style: ![[local.png]]
+      `;
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual([
+        "local.png",
+        "https://example.com/standard.png",
+        "https://example.com/titled.png",
+        "https://example.com/path (special).png",
+        "https://example.com/both(1).png",
+      ]);
+    });
+
+    it("should not be confused by malformed syntax", async () => {
+      const content = `
+        Valid: ![](https://example.com/valid.png)
+        Missing close bracket: ![alt](https://example.com/missing.png
+        Empty angle brackets: ![alt](<>)
+      `;
+
+      const result = await extractEmbeddedImages(content);
+
+      // Only the valid one should be extracted
+      expect(result).toEqual(["https://example.com/valid.png"]);
+    });
+  });
+
+  // NEW TESTS: Paths with parentheses (without angle brackets)
+  describe("Paths with parentheses (balanced parentheses support)", () => {
+    it("should extract path with single pair of parentheses", async () => {
+      const content = "Image ![](foo(bar).png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["foo(bar).png"]);
+    });
+
+    it("should extract path with multiple pairs of parentheses", async () => {
+      const content = "Image ![](image(1)(2).png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["image(1)(2).png"]);
+    });
+
+    it("should extract Wikipedia-style URL with parentheses", async () => {
+      const content = "![Mars](https://en.wikipedia.org/wiki/Mars_(planet).jpg)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["https://en.wikipedia.org/wiki/Mars_(planet).jpg"]);
+    });
+
+    it("should extract local path with parentheses", async () => {
+      const content = "![](images/screenshot (1).png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["images/screenshot (1).png"]);
+    });
+  });
+
+  // NEW TESTS: Paths with spaces (without angle brackets)
+  describe("Paths with spaces (space support)", () => {
+    it("should extract path with spaces", async () => {
+      const content = "Image ![](foo bar.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["foo bar.png"]);
+    });
+
+    it("should extract path with multiple spaces", async () => {
+      const content = "Image ![](path/my image file.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["path/my image file.png"]);
+    });
+
+    it("should extract path with spaces and special chars", async () => {
+      const content = "Image ![](my folder/image - copy (1).png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["my folder/image - copy (1).png"]);
+    });
+  });
+
+  // NEW TESTS: Multiple images on same line
+  describe("Multiple images on same line", () => {
+    it("should extract multiple images on same line", async () => {
+      const content = "Images: ![](a.png) ![](b.png) ![](c.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["a.png", "b.png", "c.png"]);
+    });
+
+    it("should extract multiple images with text between", async () => {
+      const content = "First ![](a.png) then ![](b.png) and finally ![](c.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["a.png", "b.png", "c.png"]);
+    });
+
+    it("should handle image followed by parenthetical text", async () => {
+      const content = "Image ![](a.png) (this is a note) more text";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["a.png"]);
+    });
+  });
+
+  // NEW TESTS: Alt text with special characters
+  describe("Alt text with special characters", () => {
+    it("should handle alt text with parentheses", async () => {
+      const content = "![a (b)](img.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["img.png"]);
+    });
+
+    it("should handle alt text with brackets", async () => {
+      const content = "![alt [text]](img.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["img.png"]);
+    });
+
+    it("should handle complex alt text", async () => {
+      const content = "![Figure 1 (a): Test [ref]](diagram.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["diagram.png"]);
+    });
+  });
+
+  // NEW TESTS: Edge cases for the new parser
+  describe("Parser edge cases", () => {
+    it("should handle escaped characters in path", async () => {
+      const content = "![](path\\(1\\).png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      // The parser should handle escaped parens
+      expect(result.length).toBe(1);
+    });
+
+    it("should handle leading/trailing whitespace in path", async () => {
+      const content = "![](  image.png  )";
+
+      const result = await extractEmbeddedImages(content);
+
+      expect(result).toEqual(["image.png"]);
+    });
+
+    it("should handle newline between ] and (", async () => {
+      const content = "![alt]\n(image.png)";
+
+      const result = await extractEmbeddedImages(content);
+
+      // CommonMark allows whitespace between ] and (
+      expect(result).toEqual(["image.png"]);
+    });
+  });
+});
+
+// Direct tests for the extractMarkdownImagePaths function
+describe("extractMarkdownImagePaths", () => {
+  it("should extract simple paths", () => {
+    const result = extractMarkdownImagePaths("![](simple.png)");
+    expect(result).toEqual(["simple.png"]);
+  });
+
+  it("should extract paths with parentheses", () => {
+    const result = extractMarkdownImagePaths("![](foo(bar).png)");
+    expect(result).toEqual(["foo(bar).png"]);
+  });
+
+  it("should extract paths with spaces", () => {
+    const result = extractMarkdownImagePaths("![](foo bar.png)");
+    expect(result).toEqual(["foo bar.png"]);
+  });
+
+  it("should extract multiple images", () => {
+    const result = extractMarkdownImagePaths("![](a.png) ![](b.png)");
+    expect(result).toEqual(["a.png", "b.png"]);
+  });
+
+  it("should handle angle bracket syntax", () => {
+    const result = extractMarkdownImagePaths("![alt](<path with spaces.png>)");
+    expect(result).toEqual(["path with spaces.png"]);
+  });
+
+  it("should handle title syntax", () => {
+    const result = extractMarkdownImagePaths('![alt](image.png "title")');
+    expect(result).toEqual(["image.png"]);
+  });
+
+  it("should return empty array for no images", () => {
+    const result = extractMarkdownImagePaths("no images here");
+    expect(result).toEqual([]);
+  });
+
+  it("should skip empty paths", () => {
+    const result = extractMarkdownImagePaths("![]()");
+    expect(result).toEqual([]);
+  });
+
+  it("should trim inside angle destinations (bug fix)", () => {
+    const result = extractMarkdownImagePaths("![](< image.png >)");
+    expect(result).toEqual(["image.png"]);
+  });
+
+  // Combination edge cases: parentheses destination + title
+  it("should handle parentheses in path with double-quoted title", () => {
+    const result = extractMarkdownImagePaths('![](foo(bar).png "title")');
+    expect(result).toEqual(["foo(bar).png"]);
+  });
+
+  it("should handle parentheses in path with parentheses title", () => {
+    const result = extractMarkdownImagePaths("![](foo(bar).png (title))");
+    expect(result).toEqual(["foo(bar).png"]);
+  });
+
+  // Combination edge cases: spaces destination + title
+  it("should handle spaces in path with double-quoted title", () => {
+    const result = extractMarkdownImagePaths('![](foo bar.png "title")');
+    expect(result).toEqual(["foo bar.png"]);
+  });
+
+  it("should handle spaces in path with parentheses title", () => {
+    const result = extractMarkdownImagePaths("![](foo bar.png (title))");
+    expect(result).toEqual(["foo bar.png"]);
+  });
+
+  // Ambiguous case: path ending with parentheses preceded by space
+  // Current behavior: treats (1) as title, returns "image"
+  // This matches CommonMark behavior where space + (...) is a title
+  it("should treat space + parentheses at end as title (ambiguous case)", () => {
+    const result = extractMarkdownImagePaths("![](image (1))");
+    expect(result).toEqual(["image"]);
+  });
+
+  // To preserve parentheses in filename with spaces, use angle brackets
+  it("should preserve parentheses in filename when using angle brackets", () => {
+    const result = extractMarkdownImagePaths("![](<image (1).png>)");
+    expect(result).toEqual(["image (1).png"]);
+  });
+
+  // Edge cases: original regex would match but current implementation handles differently
+  // These tests lock down the improved behavior vs the old regex /!\[.*?\]\(([^)]+)\)/g
+
+  // Unclosed parenthesis in destination - old regex would capture "foo(bar", current skips
+  it("should skip unclosed parenthesis in destination", () => {
+    const result = extractMarkdownImagePaths("![](foo(bar)");
+    expect(result).toEqual([]);
+  });
+
+  // Missing closing angle bracket - old regex would capture "<foo bar.png", current skips
+  it("should skip angle destination without closing bracket", () => {
+    const result = extractMarkdownImagePaths("![](<foo bar.png)");
+    expect(result).toEqual([]);
+  });
+
+  // Nested link in alt text - old regex would incorrectly capture "inner.png"
+  // Current implementation correctly finds the outer destination
+  it("should handle nested link syntax in alt text (avoid old regex false positive)", () => {
+    const result = extractMarkdownImagePaths("![a [b](inner.png)](outer.png)");
+    expect(result).toEqual(["outer.png"]);
+  });
+
+  // Balanced parentheses - old regex would truncate at first ), current handles correctly
+  it("should handle balanced parentheses without truncation", () => {
+    const result = extractMarkdownImagePaths("![](foo(bar))");
+    expect(result).toEqual(["foo(bar)"]);
   });
 });
