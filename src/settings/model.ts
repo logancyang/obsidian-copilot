@@ -65,6 +65,10 @@ export interface CopilotSettings {
   amazonBedrockApiKey: string;
   amazonBedrockRegion: string;
   siliconflowApiKey: string;
+  // GitHub Copilot OAuth tokens
+  githubCopilotAccessToken: string;
+  githubCopilotToken: string;
+  githubCopilotTokenExpiresAt: number;
   defaultChainType: ChainType;
   defaultModelKey: string;
   embeddingModelKey: string;

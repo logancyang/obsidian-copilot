@@ -1093,6 +1093,7 @@ export function getNeedSetKeyProvider(): Provider[] {
     ChatModelProviders.OLLAMA,
     ChatModelProviders.LM_STUDIO,
     ChatModelProviders.AZURE_OPENAI,
+    ChatModelProviders.GITHUB_COPILOT,
     EmbeddingModelProviders.COPILOT_PLUS,
     EmbeddingModelProviders.COPILOT_PLUS_JINA,
   ];
@@ -1118,6 +1119,21 @@ export function checkModelApiKey(
     }
 
     // Region defaults to us-east-1 if not specified, so API key is the only required check
+    return { hasApiKey: true };
+  }
+
+  // GitHub Copilot uses OAuth, not API key
+  if (model.provider === ChatModelProviders.GITHUB_COPILOT) {
+    const hasAuth = Boolean(
+      model.apiKey || settings.githubCopilotToken || settings.githubCopilotAccessToken
+    );
+    if (!hasAuth) {
+      return {
+        hasApiKey: false,
+        errorNotice:
+          "GitHub Copilot is not authenticated. Please connect it in Settings > Copilot > Basic Tab > Set Keys.",
+      };
+    }
     return { hasApiKey: true };
   }
 

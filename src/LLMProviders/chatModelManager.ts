@@ -37,6 +37,7 @@ import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
+import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 
 type ChatConstructorType = {
   new (config: any): any;
@@ -59,6 +60,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
   [ChatModelProviders.AMAZON_BEDROCK]: BedrockChatModel,
+  [ChatModelProviders.GITHUB_COPILOT]: GitHubCopilotChatModel,
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
@@ -94,6 +96,7 @@ export default class ChatModelManager {
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.AMAZON_BEDROCK]: () => getSettings().amazonBedrockApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
+    [ChatModelProviders.GITHUB_COPILOT]: () => getSettings().githubCopilotToken,
   } as const;
 
   private constructor() {
@@ -342,6 +345,9 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.AMAZON_BEDROCK]: {} as BedrockChatModelFields,
+      [ChatModelProviders.GITHUB_COPILOT]: {
+        modelName: modelName,
+      },
     };
 
     let selectedProviderConfig =
