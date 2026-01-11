@@ -122,6 +122,14 @@ export interface CopilotSettings {
   enableCustomPromptTemplating: boolean;
   /** Enable semantic search using Orama for meaning-based document retrieval */
   enableSemanticSearchV3: boolean;
+  /** Enable self-host mode (e.g., Miyo) - uses self-hosted services for search, LLMs, OCR, etc. */
+  enableSelfHostMode: boolean;
+  /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
+  selfHostModeValidatedAt: number | null;
+  /** URL endpoint for the self-host mode backend */
+  selfHostUrl: string;
+  /** API key for the self-host mode backend (if required) */
+  selfHostApiKey: string;
   /** Enable lexical boosts (folder and graph) in search - default: true */
   enableLexicalBoosts: boolean;
   /**
@@ -283,6 +291,21 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
+
+  // Migration: Rename self-hosted search settings to self-host mode (v3.2.0+)
+  const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
+  if (
+    rawSettings.enableSelfHostedSearch !== undefined &&
+    sanitizedSettings.enableSelfHostMode === undefined
+  ) {
+    sanitizedSettings.enableSelfHostMode = rawSettings.enableSelfHostedSearch as boolean;
+  }
+  if (rawSettings.selfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
+    sanitizedSettings.selfHostUrl = rawSettings.selfHostedSearchUrl as string;
+  }
+  if (rawSettings.selfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
+    sanitizedSettings.selfHostApiKey = rawSettings.selfHostedSearchApiKey as string;
+  }
 
   // Stuff in settings are string even when the interface has number type!
   const temperature = Number(settingsToSanitize.temperature);
