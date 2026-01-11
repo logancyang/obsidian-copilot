@@ -875,9 +875,16 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* use 'important' to prevent ob default css style from being third-party theme overridden */
+
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
   padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8)) !important;
 }
+
+/* open plugin in Editor mode for mobile */
+body.is-mobile .workspace-tab-container .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
+  padding-bottom: var(--size-4-1) !important;
+}
+
 
 /* Collapsible sources styling */
 .copilot-sources {
