@@ -158,22 +158,33 @@ export class RetrieverFactory {
             reason: "Self-host mode is enabled and backend is available",
           };
         }
-        logWarn("RetrieverFactory: Self-host mode backend unavailable, falling back to semantic");
+        logWarn("RetrieverFactory: Self-host mode backend unavailable, falling back");
       } else {
-        logInfo(
-          "RetrieverFactory: Self-host mode enabled but not fully configured, using semantic search"
-        );
+        logInfo("RetrieverFactory: Self-host mode enabled but not fully configured, falling back");
       }
 
-      // Self-host mode enabled → always fall back to semantic (MergedSemanticRetriever)
-      const retriever = new MergedSemanticRetriever(app, normalizedOptions);
+      // Self-host mode fallback: use semantic if enabled, otherwise lexical
+      if (currentSettings.enableSemanticSearchV3) {
+        const retriever = new MergedSemanticRetriever(app, normalizedOptions);
+        logInfo(
+          "RetrieverFactory: Using MergedSemanticRetriever (semantic search fallback for self-host mode)"
+        );
+        return {
+          retriever,
+          type: "semantic",
+          reason: "Self-host mode fallback to semantic search",
+        };
+      }
+
+      // Semantic search not enabled, fall back to lexical
+      const retriever = new TieredLexicalRetriever(app, normalizedOptions);
       logInfo(
-        "RetrieverFactory: Using MergedSemanticRetriever (semantic search fallback for self-host mode)"
+        "RetrieverFactory: Using TieredLexicalRetriever (lexical search fallback for self-host mode)"
       );
       return {
         retriever,
-        type: "semantic",
-        reason: "Self-host mode fallback to semantic search",
+        type: "lexical",
+        reason: "Self-host mode fallback to lexical search (semantic disabled)",
       };
     }
 
@@ -276,8 +287,11 @@ export class RetrieverFactory {
       ) {
         return "self_hosted";
       }
-      // Self-host mode enabled but not ready → semantic fallback
-      return "semantic";
+      // Self-host mode enabled but not ready → check semantic setting
+      if (currentSettings.enableSemanticSearchV3) {
+        return "semantic";
+      }
+      return "lexical";
     }
 
     // Standard mode
