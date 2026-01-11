@@ -771,8 +771,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultConversationTag: "copilot-conversation",
   autosaveChat: true,
   generateAIChatTitleOnSave: true,
-  includeActiveNoteAsContext: true,
-  includeActiveWebTabAsContext: true,
+  autoAddActiveContentToContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   defaultSendShortcut: SEND_SHORTCUT.ENTER,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
@@ -828,8 +827,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
-  autoIncludeTextSelection: false,
-  autoIncludeWebSelection: false,
+  autoAddSelectionToContext: false,
 };
 
 export const EVENT_NAMES = {

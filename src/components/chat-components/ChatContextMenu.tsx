@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle, CircleDashed, FileText, Globe, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle, CircleDashed, FileText, Loader2, X } from "lucide-react";
 import { Platform, TFile } from "obsidian";
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +10,7 @@ import {
   ContextWebTabBadge,
   ContextUrlBadge,
   ContextFolderBadge,
+  FaviconOrGlobe,
 } from "@/components/chat-components/ContextBadges";
 import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
 import { ChainType } from "@/chainFactory";
@@ -50,7 +51,7 @@ function ContextSelection({
     return (
       <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
         <div className="tw-flex tw-items-center tw-gap-1">
-          <Globe className="tw-size-3" />
+          <FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />
           <span className="tw-max-w-40 tw-truncate">{selectedText.title || domain}</span>
           <span className="tw-text-xs tw-text-faint">Selection</span>
         </div>
@@ -151,13 +152,12 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     [contextWebTabs]
   );
 
-  // Source-aware visibility: note selection only hides active note, web selection only hides active web tab
-  const hasNoteSelection = selectedTextContexts.some((ctx) => ctx.sourceType === "note");
-  const hasWebSelection = selectedTextContexts.some((ctx) => ctx.sourceType === "web");
+  // Any selection hides both active note and active web tab
+  const hasAnySelection = selectedTextContexts.length > 0;
 
-  const activeNoteVisible = includeActiveNote && !hasNoteSelection && Boolean(currentActiveFile);
+  const activeNoteVisible = includeActiveNote && !hasAnySelection && Boolean(currentActiveFile);
   const activeWebTabVisible =
-    includeActiveWebTab && !hasWebSelection && Boolean(activeWebTab) && Platform.isDesktopApp;
+    includeActiveWebTab && !hasAnySelection && Boolean(activeWebTab) && Platform.isDesktopApp;
 
   const hasContext =
     uniqueNotes.length > 0 ||

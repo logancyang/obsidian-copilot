@@ -18,6 +18,7 @@ import {
   type WebViewerLeaf,
   type WebViewerPageInfo,
 } from "@/services/webViewerService/webViewerServiceTypes";
+import { normalizeUrlForMatching } from "@/utils/urlNormalization";
 import type { WebTabContext } from "@/types/message";
 
 // ============================================================================
@@ -25,7 +26,11 @@ import type { WebTabContext } from "@/types/message";
 // ============================================================================
 
 /** Webview events that can trigger Web Viewer tab metadata refresh. */
-const WEBVIEW_METADATA_EVENTS = ["did-finish-load", "page-favicon-updated"] as const;
+const WEBVIEW_METADATA_EVENTS = [
+  "did-finish-load",
+  "page-favicon-updated",
+  "page-title-updated",
+] as const;
 
 /** Union type of supported webview metadata event names. */
 type WebviewMetadataEventName = (typeof WEBVIEW_METADATA_EVENTS)[number];
@@ -131,56 +136,6 @@ export class WebViewerStateManager {
   }
 
   /**
-   * Normalize a URL for resilient matching across minor variations.
-   *
-   * Normalizations:
-   * - Trims whitespace
-   * - Removes hash fragments
-   * - Removes default ports (:80 for http, :443 for https)
-   * - Normalizes trailing slashes (removes except for root)
-   * - Sorts query parameters for stable comparison
-   */
-  private normalizeUrlForMatching(url: string): string | null {
-    const trimmed = url.trim();
-    if (!trimmed) return null;
-
-    try {
-      const parsed = new URL(trimmed);
-      parsed.hash = "";
-
-      // Remove default ports
-      if (
-        (parsed.protocol === "http:" && parsed.port === "80") ||
-        (parsed.protocol === "https:" && parsed.port === "443")
-      ) {
-        parsed.port = "";
-      }
-
-      // Normalize trailing slashes (remove except for root path)
-      if (parsed.pathname !== "/") {
-        parsed.pathname = parsed.pathname.replace(/\/+$/, "");
-      }
-
-      // Sort query parameters for stable comparison
-      const entries = Array.from(parsed.searchParams.entries());
-      if (entries.length > 0) {
-        entries.sort(([aKey, aValue], [bKey, bValue]) => {
-          if (aKey !== bKey) return aKey.localeCompare(bKey);
-          return aValue.localeCompare(bValue);
-        });
-        parsed.search = `?${new URLSearchParams(entries).toString()}`;
-      } else {
-        parsed.search = "";
-      }
-
-      return parsed.toString();
-    } catch {
-      // If URL parsing fails, return trimmed string as fallback
-      return trimmed;
-    }
-  }
-
-  /**
    * Find a Web Viewer leaf by URL (best-effort normalized match).
    * @param url - The URL to search for
    * @param options - Optional disambiguation hints
@@ -198,7 +153,7 @@ export class WebViewerStateManager {
     }
 
     // Slow path: normalized match
-    const targetNormalized = this.normalizeUrlForMatching(targetRaw);
+    const targetNormalized = normalizeUrlForMatching(targetRaw);
     if (!targetNormalized) return null;
 
     // Collect all leaves that match after normalization
@@ -207,7 +162,7 @@ export class WebViewerStateManager {
       const leafUrl = leaf?.view?.url;
       if (!leafUrl) continue;
 
-      const leafNormalized = this.normalizeUrlForMatching(leafUrl);
+      const leafNormalized = normalizeUrlForMatching(leafUrl);
       if (leafNormalized === targetNormalized) {
         matchedLeaves.push(leaf);
       }

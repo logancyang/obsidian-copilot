@@ -132,11 +132,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const [selectedTextContexts] = useSelectedTextContexts();
 
-  // Source-aware visibility: note selection only hides active note, web selection hides active web tab
-  const hasNoteSelection = selectedTextContexts.some((ctx) => ctx.sourceType === "note");
-  const hasWebSelection = selectedTextContexts.some((ctx) => ctx.sourceType === "web");
-  const effectiveIncludeActiveNote = includeActiveNote && !hasNoteSelection;
-  const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasWebSelection;
+  // Any selection hides both active note and active web tab
+  const hasAnySelection = selectedTextContexts.length > 0;
+  const effectiveIncludeActiveNote = includeActiveNote && !hasAnySelection;
+  const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasAnySelection;
 
   const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
   const projectContextStatus = useProjectContextStatus();
@@ -557,7 +556,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       removeSelectedTextContext(id);
       // Suppress web selection to prevent it from being auto-captured again
       if (removed?.sourceType === "web") {
-        plugin.suppressCurrentWebSelection();
+        plugin.suppressCurrentWebSelection(removed.url);
       }
     },
     [plugin, selectedTextContexts]
@@ -624,16 +623,18 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
     setLatestTokenCount(null); // Clear token count on new chat
+    // Capture web selection URL before clearing for suppression
+    const webSelectionUrl = selectedTextContexts.find((ctx) => ctx.sourceType === "web")?.url;
     clearSelectedTextContexts();
     // Suppress web selection to prevent it from reappearing in new chat
-    plugin.suppressCurrentWebSelection();
-    // Respect the includeActiveNote setting for all non-project chains
+    plugin.suppressCurrentWebSelection(webSelectionUrl);
+    // Respect the autoAddActiveContentToContext setting for all non-project chains
     if (selectedChain === ChainType.PROJECT_CHAIN) {
       setIncludeActiveNote(false);
       setIncludeActiveWebTab(false);
     } else {
-      setIncludeActiveNote(settings.includeActiveNoteAsContext);
-      setIncludeActiveWebTab(settings.includeActiveWebTabAsContext ?? false);
+      setIncludeActiveNote(settings.autoAddActiveContentToContext);
+      setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
     }
   }, [
     handleStopGenerating,
@@ -641,12 +642,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     chatUIState,
     settings.autosaveChat,
     settings.enableRecentConversations,
-    settings.includeActiveNoteAsContext,
-    settings.includeActiveWebTabAsContext,
+    settings.autoAddActiveContentToContext,
     selectedChain,
     handleSaveAsNote,
     safeSet,
     plugin,
+    selectedTextContexts,
   ]);
 
   const handleLoadChatHistory = useCallback(async () => {
@@ -726,29 +727,19 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     };
   }, [eventTarget, handleStopGenerating]);
 
-  // Use the includeActiveNoteAsContext setting
+  // Use the autoAddActiveContentToContext setting
   useEffect(() => {
-    if (settings.includeActiveNoteAsContext !== undefined) {
+    if (settings.autoAddActiveContentToContext !== undefined) {
       // Only apply the setting if not in Project mode
       if (selectedChain === ChainType.PROJECT_CHAIN) {
         setIncludeActiveNote(false);
-      } else {
-        setIncludeActiveNote(settings.includeActiveNoteAsContext);
-      }
-    }
-  }, [settings.includeActiveNoteAsContext, selectedChain]);
-
-  // Use the includeActiveWebTabAsContext setting
-  useEffect(() => {
-    if (settings.includeActiveWebTabAsContext !== undefined) {
-      // Only apply the setting if not in Project mode
-      if (selectedChain === ChainType.PROJECT_CHAIN) {
         setIncludeActiveWebTab(false);
       } else {
-        setIncludeActiveWebTab(settings.includeActiveWebTabAsContext);
+        setIncludeActiveNote(settings.autoAddActiveContentToContext);
+        setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
       }
     }
-  }, [settings.includeActiveWebTabAsContext, selectedChain]);
+  }, [settings.autoAddActiveContentToContext, selectedChain]);
 
   // Note: pendingMessages loading has been removed as ChatManager now handles
   // message persistence and loading automatically based on project context

@@ -56,7 +56,7 @@ interface FaviconOrGlobeProps {
   className?: string;
 }
 
-function FaviconOrGlobe({ faviconUrl, isLoaded = true, className = "tw-size-3" }: FaviconOrGlobeProps) {
+export function FaviconOrGlobe({ faviconUrl, isLoaded = true, className = "tw-size-3" }: FaviconOrGlobeProps) {
   const [showFavicon, setShowFavicon] = React.useState<boolean>(Boolean(faviconUrl));
 
   React.useEffect(() => {
@@ -340,7 +340,7 @@ export function ContextSelectedTextBadge({
     return (
       <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
         <div className="tw-flex tw-items-center tw-gap-1">
-          <Globe className="tw-size-3" />
+          <FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />
           <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
             {selectedText.title || domain}
           </TruncatedText>

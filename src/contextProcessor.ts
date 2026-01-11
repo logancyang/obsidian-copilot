@@ -5,7 +5,6 @@ import { logWarn, logInfo, logError } from "@/logger";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServiceTypes";
-import { getYouTubeVideoId } from "@/services/webViewerService/webViewerServiceActions";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { isPlusChain } from "@/utils";
 import { normalizeUrlString } from "@/utils/urlNormalization";
@@ -654,7 +653,7 @@ export class ContextProcessor {
     for (const selectedText of selectedTextContexts) {
       if (selectedText.sourceType === "web") {
         // Web selected text context
-        additionalContext += `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.title)}</title>\n<url>${escapeXml(selectedText.url)}</url>\n<content>\n${selectedText.content}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`;
+        additionalContext += `\n\n<${WEB_SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.title)}</title>\n<url>${escapeXml(selectedText.url)}</url>\n<content>\n${escapeXml(selectedText.content)}\n</content>\n</${WEB_SELECTED_TEXT_TAG}>`;
       } else {
         // Note selected text context (default for backward compatibility)
         additionalContext += `\n\n<${SELECTED_TEXT_TAG}>\n<title>${escapeXml(selectedText.noteTitle)}</title>\n<path>${escapeXml(selectedText.notePath)}</path>\n<start_line>${selectedText.startLine.toString()}</start_line>\n<end_line>${selectedText.endLine.toString()}</end_line>\n<content>\n${selectedText.content}\n</content>\n</${SELECTED_TEXT_TAG}>`;
@@ -725,8 +724,8 @@ export class ContextProcessor {
       if (options.error) {
         parts.push(`\n<error>${escapeXml(options.error)}</error>`);
       } else if (options.content !== undefined) {
-        // Content is markdown, don't escape it
-        parts.push(`\n<content>\n${options.content}\n</content>`);
+        // Content is markdown; escape to prevent XML/prompt injection
+        parts.push(`\n<content>\n${escapeXml(options.content)}\n</content>`);
       }
 
       parts.push(`\n</${tagName}>`);
@@ -799,6 +798,7 @@ export class ContextProcessor {
     const normalTabs: Array<{ url: string; title?: string; faviconUrl?: string }> = [];
     const seenUrls = new Set<string>();
     const seenVideoIds = new Set<string>(); // Deduplicate YouTube videos by videoId
+    const service = getWebViewerService(app);
 
     /**
      * Check if a tab should be skipped due to deduplication.
@@ -806,7 +806,7 @@ export class ContextProcessor {
      * For other URLs, deduplicate by normalized URL string.
      */
     const isDuplicate = (url: string): boolean => {
-      const videoId = getYouTubeVideoId(url);
+      const videoId = service.getYouTubeVideoId(url);
       if (videoId) {
         if (seenVideoIds.has(videoId)) return true;
         seenVideoIds.add(videoId);
@@ -840,8 +840,6 @@ export class ContextProcessor {
     if (!activeTab && normalTabs.length === 0) {
       return "";
     }
-
-    const service = getWebViewerService(app);
 
     // Check Web Viewer availability first
     const availability = service.getAvailability();

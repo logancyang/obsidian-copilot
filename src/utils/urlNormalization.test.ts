@@ -6,6 +6,7 @@
 
 import {
   normalizeUrlString,
+  normalizeUrlForMatching,
   normalizeOptionalString,
   normalizeWebTabContext,
   mergeWebTabContexts,
@@ -36,6 +37,76 @@ describe("normalizeUrlString", () => {
 
   it("should return valid URL as-is", () => {
     expect(normalizeUrlString("https://example.com/path")).toBe("https://example.com/path");
+  });
+});
+
+describe("normalizeUrlForMatching", () => {
+  it("should return null for null input", () => {
+    expect(normalizeUrlForMatching(null)).toBeNull();
+  });
+
+  it("should return null for undefined input", () => {
+    expect(normalizeUrlForMatching(undefined)).toBeNull();
+  });
+
+  it("should return null for empty string", () => {
+    expect(normalizeUrlForMatching("")).toBeNull();
+  });
+
+  it("should remove hash fragments", () => {
+    expect(normalizeUrlForMatching("https://example.com/page#section1")).toBe(
+      "https://example.com/page"
+    );
+    expect(normalizeUrlForMatching("https://example.com/page#section2")).toBe(
+      "https://example.com/page"
+    );
+  });
+
+  it("should remove default ports", () => {
+    expect(normalizeUrlForMatching("https://example.com:443/path")).toBe(
+      "https://example.com/path"
+    );
+    expect(normalizeUrlForMatching("http://example.com:80/path")).toBe("http://example.com/path");
+  });
+
+  it("should preserve non-default ports", () => {
+    expect(normalizeUrlForMatching("https://example.com:8443/path")).toBe(
+      "https://example.com:8443/path"
+    );
+  });
+
+  it("should normalize trailing slashes", () => {
+    expect(normalizeUrlForMatching("https://example.com/path/")).toBe("https://example.com/path");
+    expect(normalizeUrlForMatching("https://example.com/path//")).toBe("https://example.com/path");
+  });
+
+  it("should preserve root path trailing slash", () => {
+    expect(normalizeUrlForMatching("https://example.com/")).toBe("https://example.com/");
+  });
+
+  it("should sort query parameters", () => {
+    expect(normalizeUrlForMatching("https://example.com?b=2&a=1")).toBe(
+      "https://example.com/?a=1&b=2"
+    );
+    expect(normalizeUrlForMatching("https://example.com?a=1&b=2")).toBe(
+      "https://example.com/?a=1&b=2"
+    );
+  });
+
+  it("should match same page with different hash fragments", () => {
+    const url1 = normalizeUrlForMatching("https://example.com/page#section1");
+    const url2 = normalizeUrlForMatching("https://example.com/page#section2");
+    expect(url1).toBe(url2);
+  });
+
+  it("should match same page with reordered query params", () => {
+    const url1 = normalizeUrlForMatching("https://example.com/page?a=1&b=2");
+    const url2 = normalizeUrlForMatching("https://example.com/page?b=2&a=1");
+    expect(url1).toBe(url2);
+  });
+
+  it("should return trimmed string for invalid URLs", () => {
+    expect(normalizeUrlForMatching("  not-a-url  ")).toBe("not-a-url");
   });
 });
 

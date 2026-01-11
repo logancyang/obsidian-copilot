@@ -186,7 +186,6 @@ channel: "<channel name>"
 url: "<video url>"
 duration: "<duration>"
 published: <upload date in YYYY-MM-DD format>
-created: <today's date in YYYY-MM-DD format>
 thumbnailUrl: "<YouTube thumbnail URL: i.ytimg.com/vi/VIDEO_ID/maxresdefault.jpg with https protocol>"
 genre:
   - "<genre>"
@@ -262,9 +261,6 @@ Generate the note with this exact structure:
 ---
 title: "<page title>"
 source: "<page url>"
-author: "<author if available>"
-published: <publish date in YYYY-MM-DD format if available>
-created: <today's date in YYYY-MM-DD format>
 description: "<brief description>"
 tags:
   - "clippings"
@@ -306,9 +302,6 @@ mindmap
 ## Notable Quotes
 
 <List 3-5 notable quotes from the content, if any>
-
-> [!content]- Original Content
-> <Include key excerpts or highlights from the original page>
 
 Return only the markdown content without any explanations or comments.`,
     showInContextMenu: false,

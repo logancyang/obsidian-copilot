@@ -36,6 +36,7 @@ export interface WebSelectedTextContext extends BaseSelectedTextContext {
   sourceType: "web";
   title: string;
   url: string;
+  faviconUrl?: string;
 }
 
 /**

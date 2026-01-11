@@ -331,15 +331,24 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
+   * Clears the auto-selected web text context for a specific URL.
+   * Preserves contexts from other sourceTypes and other URLs.
+   */
+  private clearWebSelectionContextForUrl(url: string): void {
+    const current = getSelectedTextContexts();
+    const next = current.filter((c) => c.sourceType !== "web" || c.url !== url);
+    if (next.length === current.length) {
+      return;
+    }
+    setSelectedTextContexts(next);
+  }
+
+  /**
    * Stores the provided selection as the active selected text context.
-   * Uses symmetric update strategy: replaces contexts of the same sourceType,
-   * preserves contexts of different sourceTypes.
+   * Only keeps the latest selection - note and web selections are mutually exclusive.
    */
   private setSelectionContext(context: SelectedTextContext) {
-    const current = getSelectedTextContexts();
-    // Keep contexts with different sourceType, replace contexts with same sourceType
-    const otherTypeContexts = current.filter((c) => c.sourceType !== context.sourceType);
-    setSelectedTextContexts([...otherTypeContexts, context]);
+    setSelectedTextContexts([context]);
   }
 
   /**
@@ -349,7 +358,7 @@ export default class CopilotPlugin extends Plugin {
   handleSelectionChange() {
     // Check if auto-inclusion is enabled
     const settings = getSettings();
-    if (!settings.autoIncludeTextSelection) {
+    if (!settings.autoAddSelectionToContext) {
       return;
     }
 
@@ -410,11 +419,16 @@ export default class CopilotPlugin extends Plugin {
 
     this.webSelectionTracker = new WebSelectionTracker({
       intervalMs: 500,
-      isEnabled: () => getSettings().autoIncludeWebSelection,
+      emptySelectionDebounceCount: 2,
+      isEnabled: () => getSettings().autoAddSelectionToContext,
       getLeaf: () => webViewerService.getActiveLeaf() ?? webViewerService.getLastActiveLeaf(),
+      getActiveLeaf: () => webViewerService.getActiveLeaf(),
       onSelectionChange: (context) => {
         // Use symmetric update strategy via setSelectionContext
         this.setSelectionContext(context);
+      },
+      onSelectionClear: ({ url }) => {
+        this.clearWebSelectionContextForUrl(url);
       },
     });
 
@@ -432,8 +446,14 @@ export default class CopilotPlugin extends Plugin {
   /**
    * Suppress the current web selection so it won't be auto-captured again until it changes or is cleared.
    * Called by UI when user removes web selection or starts a new chat.
+   * @param url - Optional URL to suppress (prevents leaf-binding issues when lastActiveLeaf has changed)
    */
-  suppressCurrentWebSelection(): void {
+  suppressCurrentWebSelection(url?: string): void {
+    if (url && url.trim()) {
+      this.webSelectionTracker?.suppressSelectionForUrl(url);
+      return;
+    }
+
     this.webSelectionTracker?.suppressCurrentSelection();
   }
 

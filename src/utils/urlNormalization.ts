@@ -9,6 +9,7 @@ import type { WebTabContext } from "@/types/message";
 
 /**
  * Normalize a URL string for use in context and deduplication.
+ * Only trims whitespace - preserves hash, query params, etc.
  *
  * @param url - URL string to normalize
  * @returns Trimmed URL, or null if empty after trimming
@@ -17,6 +18,62 @@ export function normalizeUrlString(url: string | null | undefined): string | nul
   if (typeof url !== "string") return null;
   const trimmed = url.trim();
   return trimmed ? trimmed : null;
+}
+
+/**
+ * Normalize a URL for matching/deduplication purposes.
+ * More aggressive normalization than normalizeUrlString:
+ * - Removes hash fragments
+ * - Removes default ports (:80 for http, :443 for https)
+ * - Normalizes trailing slashes (removes except for root)
+ * - Sorts query parameters for stable comparison
+ *
+ * Use this for URL comparison when determining if two URLs point to the same page.
+ *
+ * Note: For invalid URLs that cannot be parsed, returns the trimmed string as fallback.
+ *
+ * @param url - URL string to normalize
+ * @returns Normalized URL for matching, null if empty/null/undefined, or trimmed string if URL parsing fails
+ */
+export function normalizeUrlForMatching(url: string | null | undefined): string | null {
+  if (typeof url !== "string") return null;
+  const trimmed = url.trim();
+  if (!trimmed) return null;
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+
+    // Remove default ports
+    if (
+      (parsed.protocol === "http:" && parsed.port === "80") ||
+      (parsed.protocol === "https:" && parsed.port === "443")
+    ) {
+      parsed.port = "";
+    }
+
+    // Normalize trailing slashes (remove except for root path)
+    if (parsed.pathname !== "/") {
+      parsed.pathname = parsed.pathname.replace(/\/+$/, "");
+    }
+
+    // Sort query parameters for stable comparison
+    const entries = Array.from(parsed.searchParams.entries());
+    if (entries.length > 0) {
+      entries.sort(([aKey, aValue], [bKey, bValue]) => {
+        if (aKey !== bKey) return aKey.localeCompare(bKey);
+        return aValue.localeCompare(bValue);
+      });
+      parsed.search = `?${new URLSearchParams(entries).toString()}`;
+    } else {
+      parsed.search = "";
+    }
+
+    return parsed.toString();
+  } catch {
+    // If URL parsing fails, return trimmed string as fallback
+    return trimmed;
+  }
 }
 
 /**

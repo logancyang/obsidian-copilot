@@ -24,6 +24,7 @@ import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
+import { setSelectedTextContexts } from "@/aiParams";
 
 /**
  * Add a command to the plugin.
@@ -457,11 +458,8 @@ export function registerCommands(
       endLine: Math.max(startLine, endLine),
     };
 
-    // Symmetric update: replace note selections, keep web selections
-    const { getSelectedTextContexts, setSelectedTextContexts } = await import("@/aiParams");
-    const current = getSelectedTextContexts();
-    const webContexts = current.filter((c) => c.sourceType === "web");
-    setSelectedTextContexts([...webContexts, selectedTextContext]);
+    // Mutually exclusive: only keep the latest selection
+    setSelectedTextContexts([selectedTextContext]);
 
     // Open chat window to show the context was added
     plugin.activateView();
@@ -503,13 +501,11 @@ export function registerCommands(
         sourceType: "web",
         title: pageInfo.title || "Untitled",
         url: pageInfo.url,
+        faviconUrl: pageInfo.faviconUrl || undefined,
       };
 
-      // Replace web selection contexts only, keep note selections
-      const { getSelectedTextContexts, setSelectedTextContexts } = await import("@/aiParams");
-      const current = getSelectedTextContexts();
-      const noteContexts = current.filter((c) => c.sourceType === "note");
-      setSelectedTextContexts([...noteContexts, webSelectedTextContext]);
+      // Mutually exclusive: only keep the latest selection
+      setSelectedTextContexts([webSelectedTextContext]);
 
       // Open chat window to show the context was added
       plugin.activateView();

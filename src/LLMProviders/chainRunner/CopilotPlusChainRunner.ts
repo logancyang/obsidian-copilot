@@ -53,7 +53,7 @@ import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ModelAdapterFactory, joinPromptSections } from "./utils/modelAdapter";
-import { parseXMLToolCalls } from "./utils/xmlParsing";
+import { parseXMLToolCalls, unescapeXml } from "./utils/xmlParsing";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
@@ -346,10 +346,10 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
 
     const block = blockMatch[1];
 
-    // Extract content
+    // Extract content - unescape XML entities for correct URL parsing
     const contentRegex = /<content>([\s\S]*?)<\/content>/;
     const contentMatch = contentRegex.exec(block);
-    const content = contentMatch ? contentMatch[1] : "";
+    const content = contentMatch ? unescapeXml(contentMatch[1]) : "";
     if (!content) return [];
 
     // Extract identifier (path or url) for logging and optional resolution

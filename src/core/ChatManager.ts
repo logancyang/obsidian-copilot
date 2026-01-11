@@ -15,6 +15,7 @@ import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
 import { TFile } from "obsidian";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import {
+  normalizeUrlForMatching,
   normalizeUrlString,
   sanitizeWebTabContexts,
 } from "@/utils/urlNormalization";
@@ -149,7 +150,7 @@ export class ChatManager {
       const state = service.getActiveWebTabState();
       const activeTab = state.activeWebTabForMentions;
 
-      const activeUrl = normalizeUrlString(activeTab?.url);
+      const activeUrl = normalizeUrlForMatching(activeTab?.url);
       if (!activeUrl) {
         // No active web tab available, return sanitized tabs unchanged
         return sanitizedTabs;
@@ -165,16 +166,19 @@ export class ChatManager {
         return tab;
       });
 
-      // Check if active URL already exists in the list
+      // Check if active URL already exists in the list (using normalized matching)
       const existingIndex = clearedTabs.findIndex(
-        (tab) => normalizeUrlString(tab.url) === activeUrl
+        (tab) => normalizeUrlForMatching(tab.url) === activeUrl
       );
 
       if (existingIndex >= 0) {
         // Merge metadata and mark as active
+        // Prefer activeTab.url to preserve hash fragments for SPA routing
+        // Use normalizeUrlString to trim whitespace while keeping hash/query intact
         const existing = clearedTabs[existingIndex];
         clearedTabs[existingIndex] = {
           ...existing,
+          url: normalizeUrlString(activeTab?.url) ?? existing.url,
           title: activeTab?.title ?? existing.title,
           faviconUrl: activeTab?.faviconUrl ?? existing.faviconUrl,
           isActive: true,
@@ -183,10 +187,13 @@ export class ChatManager {
       }
 
       // Add new active tab entry
+      // Store the raw URL to preserve hash fragments and query params for SPA routing
+      // Use normalizeUrlString to trim whitespace while keeping hash/query intact
+      // (activeUrl is only used for comparison/deduplication above)
       return [
         ...clearedTabs,
         {
-          url: activeUrl,
+          url: normalizeUrlString(activeTab?.url) ?? activeUrl,
           title: activeTab?.title,
           faviconUrl: activeTab?.faviconUrl,
           isActive: true,
@@ -228,12 +235,10 @@ export class ChatManager {
       // Inject Active Web Tab snapshot if requested (快照语义)
       // This resolves the active web tab URL at message creation time
       // Compute shouldIncludeActiveWebTab: either explicitly requested or via marker in text
-      // BUT: web selection takes priority and suppresses active tab to avoid double web context
-      const hasWebSelection = (updatedContext.selectedTextContexts || []).some(
-        (ctx) => ctx.sourceType === "web"
-      );
+      // BUT: any selection takes priority and suppresses active tab to avoid redundant context
+      const hasAnySelection = (updatedContext.selectedTextContexts || []).length > 0;
       const shouldIncludeActiveWebTab =
-        !hasWebSelection &&
+        !hasAnySelection &&
         (includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER));
       updatedContext.webTabs = this.buildWebTabsWithActiveSnapshot(
         updatedContext.webTabs || [],
