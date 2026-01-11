@@ -1,4 +1,5 @@
 import { logInfo, logWarn } from "@/logger";
+import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings, CopilotSettings } from "@/settings/model";
 import { App } from "obsidian";
 import { SelfHostRetriever, VectorSearchBackend } from "./selfHostRetriever";
@@ -144,10 +145,10 @@ export class RetrieverFactory {
     // Normalize options with defaults
     const normalizedOptions = normalizeOptions(options);
 
-    // Self-host mode handling
-    if (currentSettings.enableSelfHostMode) {
-      // If fully configured, try to use self-host backend
-      if (currentSettings.selfHostUrl && currentSettings.selfHostApiKey) {
+    // Self-host mode handling - requires valid validation (within grace period)
+    if (isSelfHostModeValid()) {
+      // If URL is configured, try to use self-host backend (API key is optional)
+      if (currentSettings.selfHostUrl) {
         const backend = await RetrieverFactory.getSelfHostedBackend(currentSettings);
         if (backend) {
           const retriever = new SelfHostRetriever(app, backend, normalizedOptions);
@@ -160,7 +161,7 @@ export class RetrieverFactory {
         }
         logWarn("RetrieverFactory: Self-host mode backend unavailable, falling back");
       } else {
-        logInfo("RetrieverFactory: Self-host mode enabled but not fully configured, falling back");
+        logInfo("RetrieverFactory: Self-host mode enabled but URL not configured, falling back");
       }
 
       // Self-host mode fallback: use semantic if enabled, otherwise lexical
@@ -277,14 +278,10 @@ export class RetrieverFactory {
   ): "self_hosted" | "semantic" | "lexical" {
     const currentSettings = settings ? { ...getSettings(), ...settings } : getSettings();
 
-    // Self-host mode handling
-    if (currentSettings.enableSelfHostMode) {
-      // Fully configured with backend available → self_hosted
-      if (
-        currentSettings.selfHostUrl &&
-        currentSettings.selfHostApiKey &&
-        RetrieverFactory.selfHostedBackend
-      ) {
+    // Self-host mode handling - requires valid validation (within grace period)
+    if (isSelfHostModeValid()) {
+      // URL configured with backend available → self_hosted (API key is optional)
+      if (currentSettings.selfHostUrl && RetrieverFactory.selfHostedBackend) {
         return "self_hosted";
       }
       // Self-host mode enabled but not ready → check semantic setting
