@@ -8,6 +8,7 @@ import {
 } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
+import { isPlusEnabled } from "@/plusUtils";
 import {
   CopilotSettings,
   getModelKeyFromModel,
@@ -620,8 +621,8 @@ export default class ChatModelManager {
       return false;
     }
 
-    // Check Copilot Plus entitlement requirements
-    if (model.plusExclusive && !settings.isPlusUser) {
+    // Check Copilot Plus entitlement requirements (bypassed in self-host mode)
+    if (model.plusExclusive && !isPlusEnabled()) {
       return false;
     }
 

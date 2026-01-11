@@ -2,6 +2,7 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
+import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { getSettings } from "@/settings/model";
 import { z } from "zod";
 import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecution";
@@ -22,7 +23,7 @@ const localSearchSchema = z.object({
     .describe("Time range for search"),
 });
 
-// Local search tool using Search v3 (optionally merged with semantic retrieval)
+// Local search tool using RetrieverFactory (handles Self-hosted > Semantic > Lexical priority)
 const lexicalSearchTool = createTool({
   name: "lexicalSearch",
   description: "Search for notes using lexical/keyword-based search",
@@ -38,7 +39,8 @@ const lexicalSearchTool = createTool({
 
     logInfo(`lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags})`);
 
-    const retrieverOptions = {
+    // Use RetrieverFactory which handles priority: Self-hosted > Semantic > Lexical
+    const retrieverResult = await RetrieverFactory.createRetriever(app, {
       minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
@@ -53,19 +55,10 @@ const lexicalSearchTool = createTool({
       useRerankerThreshold: 0.5,
       returnAllTags,
       tagTerms,
-    };
+    });
 
-    const retriever = settings.enableSemanticSearchV3
-      ? new (await import("@/search/v3/MergedSemanticRetriever")).MergedSemanticRetriever(
-          app,
-          retrieverOptions
-        )
-      : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(
-          app,
-          retrieverOptions
-        );
-
-    const documents = await retriever.getRelevantDocuments(query);
+    logInfo(`lexicalSearch using ${retrieverResult.type} retriever`);
+    const documents = await retrieverResult.retriever.getRelevantDocuments(query);
 
     logInfo(`lexicalSearch found ${documents.length} documents for query: "${query}"`);
     if (timeRange) {
@@ -197,25 +190,28 @@ const semanticSearchTool = createTool({
   },
 });
 
-// Smart wrapper that delegates to either lexical or semantic search based on settings
+// Smart wrapper that uses RetrieverFactory for unified retriever selection
 const localSearchTool = createTool({
   name: "localSearch",
   description: "Search for notes based on the time range and query",
   schema: localSearchSchema,
   handler: async ({ timeRange, query, salientTerms }) => {
-    const settings = getSettings();
-
-    logInfo(
-      `localSearch delegating to ${settings.enableSemanticSearchV3 ? "semantic" : "lexical"} search`
-    );
-
     const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
     const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;
 
-    // Delegate to appropriate search tool based on settings
-    return shouldForceLexical || !settings.enableSemanticSearchV3
-      ? await lexicalSearchTool.call({ timeRange, query, salientTerms })
-      : await semanticSearchTool.call({ timeRange, query, salientTerms });
+    // For time-range and tag queries, force lexical search for better filtering
+    // Otherwise, let RetrieverFactory handle the priority
+    if (shouldForceLexical) {
+      logInfo("localSearch: Forcing lexical search (time range or tags present)");
+      return await lexicalSearchTool.call({ timeRange, query, salientTerms });
+    }
+
+    // Use RetrieverFactory which handles priority: Self-hosted > Semantic > Lexical
+    const retrieverType = RetrieverFactory.getRetrieverType();
+    logInfo(`localSearch: Using ${retrieverType} retriever via factory`);
+
+    // Delegate to lexicalSearchTool which now uses RetrieverFactory internally
+    return await lexicalSearchTool.call({ timeRange, query, salientTerms });
   },
 });
 
