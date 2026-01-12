@@ -4,7 +4,8 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
+import { Textarea } from "@/components/ui/textarea";
+import { DEFAULT_OPEN_AREA, DEFAULT_VIM_NAVIGATION, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
 import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
@@ -12,9 +13,10 @@ import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/setting
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
 import { isSortStrategy } from "@/utils/recentUsageManager";
+import { buildNavMappingText, parseNavMappings } from "@/utils/vimKeyboardNavigation";
 import { Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ApiKeyDialog } from "./ApiKeyDialog";
 
 const ChainType2Label: Record<ChainType, string> = {
@@ -22,6 +24,85 @@ const ChainType2Label: Record<ChainType, string> = {
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
   [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
+};
+
+/**
+ * Vim key mappings textarea component.
+ * Displays when Vim navigation is enabled.
+ */
+const VimKeyMappings: React.FC = () => {
+  const settings = useSettingsValue();
+  const [mappingText, setMappingText] = useState(() => buildNavMappingText(settings.vimNavigation));
+  const [error, setError] = useState<string | null>(null);
+
+  // Sync mappingText when settings change externally
+  const vimNavigation = settings.vimNavigation;
+  const { scrollUpKey, scrollDownKey, focusInputKey } = vimNavigation;
+  useEffect(() => {
+    setMappingText(buildNavMappingText(vimNavigation));
+  }, [vimNavigation, scrollUpKey, scrollDownKey, focusInputKey]);
+
+  const handleMappingChange = (value: string) => {
+    setMappingText(value);
+
+    const result = parseNavMappings(value);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+
+    setError(null);
+    if (result.settings) {
+      updateSetting("vimNavigation", {
+        ...settings.vimNavigation,
+        scrollUpKey: result.settings.scrollUp,
+        scrollDownKey: result.settings.scrollDown,
+        focusInputKey: result.settings.focusInput,
+      });
+    }
+  };
+
+  const handleReset = () => {
+    const defaultText = buildNavMappingText(DEFAULT_VIM_NAVIGATION);
+    setMappingText(defaultText);
+    setError(null);
+    updateSetting("vimNavigation", {
+      ...settings.vimNavigation,
+      scrollUpKey: DEFAULT_VIM_NAVIGATION.scrollUpKey,
+      scrollDownKey: DEFAULT_VIM_NAVIGATION.scrollDownKey,
+      focusInputKey: DEFAULT_VIM_NAVIGATION.focusInputKey,
+    });
+  };
+
+  return (
+    <div className="tw-ml-4 tw-border-l tw-border-border tw-pl-4">
+      <SettingItem
+        type="custom"
+        title="Key Mappings"
+        description={
+          <div className="tw-space-y-1">
+            <div>Format: map &lt;key&gt; &lt;action&gt; (one per line)</div>
+            <div className="tw-text-xs tw-text-muted">
+              Actions: scrollUp, scrollDown, focusInput
+            </div>
+          </div>
+        }
+      >
+        <div className="tw-flex tw-flex-col tw-gap-2">
+          <Textarea
+            value={mappingText}
+            onChange={(e) => handleMappingChange(e.target.value)}
+            className="tw-min-h-[80px] tw-w-full tw-font-mono tw-text-sm sm:tw-w-[240px]"
+            rows={3}
+          />
+          {error && <div className="tw-text-xs tw-text-error">{error}</div>}
+          <Button variant="ghost" size="sm" onClick={handleReset} className="tw-w-fit">
+            Reset to defaults
+          </Button>
+        </div>
+      </SettingItem>
+    </div>
+  );
 };
 
 export const BasicSettings: React.FC = () => {
@@ -266,6 +347,41 @@ export const BasicSettings: React.FC = () => {
               { label: "Shift + Enter", value: SEND_SHORTCUT.SHIFT_ENTER },
             ]}
           />
+
+          {/* Vim Navigation */}
+          <SettingItem
+            type="switch"
+            title="Vim-style Navigation"
+            description={
+              <div className="tw-flex tw-items-center tw-gap-1.5">
+                <span className="tw-leading-none">
+                  Navigate chat messages using keyboard shortcuts
+                </span>
+                <HelpTooltip
+                  content={
+                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                      <div className="tw-text-sm tw-font-medium tw-text-accent">
+                        Vim-style keyboard navigation
+                      </div>
+                      <div className="tw-text-xs tw-text-muted">
+                        When enabled, the messages area becomes focusable. Use configured keys to
+                        scroll messages, focus input, and Escape to return to messages from input.
+                      </div>
+                    </div>
+                  }
+                />
+              </div>
+            }
+            checked={settings.vimNavigation.enabled}
+            onCheckedChange={(checked) => {
+              updateSetting("vimNavigation", {
+                ...settings.vimNavigation,
+                enabled: checked,
+              });
+            }}
+          />
+
+          {settings.vimNavigation.enabled && <VimKeyMappings />}
 
           <SettingItem
             type="switch"

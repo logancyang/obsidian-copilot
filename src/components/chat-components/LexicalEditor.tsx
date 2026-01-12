@@ -21,6 +21,7 @@ import { WebTabPillNode } from "./pills/WebTabPillNode";
 import { ActiveWebTabPillNode } from "./pills/ActiveWebTabPillNode";
 import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
+import { VimEscapePlugin } from "./plugins/VimEscapePlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
 import { FocusPlugin } from "./plugins/FocusPlugin";
 import { NotePillSyncPlugin } from "./plugins/NotePillSyncPlugin";
@@ -65,6 +66,10 @@ interface LexicalEditorProps {
   isCopilotPlus?: boolean;
   currentActiveFile?: TFile | null;
   currentChain?: ChainType;
+  focusMessages?: () => void;
+  /** Whether Vim navigation is enabled (passed from parent to avoid redundant settings reads) */
+  vimNavigationEnabled?: boolean;
+  isStreaming?: boolean;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -94,6 +99,9 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   isCopilotPlus = false,
   currentActiveFile = null,
   currentChain,
+  focusMessages,
+  vimNavigationEnabled = false,
+  isStreaming,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -182,6 +190,13 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <OnChangePlugin onChange={handleEditorChange} />
           <HistoryPlugin />
           <KeyboardPlugin onSubmit={onSubmit} sendShortcut={settings.defaultSendShortcut} />
+          {focusMessages && (
+            <VimEscapePlugin
+              enabled={vimNavigationEnabled}
+              focusMessages={focusMessages}
+              isStreaming={isStreaming ?? false}
+            />
+          )}
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />

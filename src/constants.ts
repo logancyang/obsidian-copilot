@@ -4,6 +4,30 @@ import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainFactory";
 import { PromptSortStrategy } from "./types";
 
+/**
+ * Settings for Vim-style keyboard navigation in the chat UI.
+ */
+export interface VimNavigationSettings {
+  /** Enable/disable Vim navigation */
+  enabled: boolean;
+  /** Key used to scroll up in the messages area */
+  scrollUpKey: string;
+  /** Key used to scroll down in the messages area */
+  scrollDownKey: string;
+  /** Key used to focus the input from the messages area */
+  focusInputKey: string;
+}
+
+/**
+ * Default Vim navigation settings.
+ */
+export const DEFAULT_VIM_NAVIGATION: VimNavigationSettings = {
+  enabled: false,
+  scrollUpKey: "k",
+  scrollDownKey: "j",
+  focusInputKey: "i",
+};
+
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
@@ -894,6 +918,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   userSystemPromptsFolder: DEFAULT_SYSTEM_PROMPTS_FOLDER,
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
+  vimNavigation: DEFAULT_VIM_NAVIGATION,
 };
 
 export const EVENT_NAMES = {
