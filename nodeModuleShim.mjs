@@ -1,4 +1,4 @@
-// Plugin to provide a shim for node:module in browser/Electron renderer context
+// Plugin to provide shims for node modules in browser/Electron renderer context
 const nodeModuleShim = {
   name: "node-module-shim",
   setup(build) {
@@ -28,6 +28,23 @@ module.exports = {
   }
 };
 `,
+        loader: "js",
+      };
+    });
+
+    // Intercept 'process/' imports (npm polyfill package) and redirect to Node builtin
+    // This is needed because readable-stream uses require('process/') which is a polyfill
+    // In Electron, we have access to the real Node.js process object
+    build.onResolve({ filter: /^process\/$/ }, () => {
+      return {
+        path: "process/",
+        namespace: "process-shim",
+      };
+    });
+
+    build.onLoad({ filter: /.*/, namespace: "process-shim" }, () => {
+      return {
+        contents: `module.exports = require('process');`,
         loader: "js",
       };
     });

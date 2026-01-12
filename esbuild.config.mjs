@@ -1,6 +1,7 @@
 import esbuild from "esbuild";
 import svgPlugin from "esbuild-plugin-svg";
 import process from "process";
+import builtins from "builtin-modules";
 import wasmPlugin from "./wasmPlugin.mjs";
 import nodeModuleShim from "./nodeModuleShim.mjs";
 
@@ -39,7 +40,10 @@ const context = await esbuild.context({
     "@lezer/common",
     "@lezer/highlight",
     "@lezer/lr",
-    // Node.js built-in modules (available in Electron) - except node:module which we shim
+    // Node.js built-in modules (available in Electron)
+    // Using builtin-modules package for non-prefixed names (fs, path, etc.)
+    // Plus node: prefixed versions for explicit imports
+    ...builtins,
     "node:fs",
     "node:path",
     "node:url",
@@ -47,6 +51,8 @@ const context = await esbuild.context({
     "node:stream",
     "node:crypto",
     "node:async_hooks",
+    // Note: @anthropic-ai/claude-agent-sdk is intentionally NOT external
+    // It gets bundled into main.js and works in Electron's Node.js environment
   ],
   format: "cjs",
   target: "es2020",

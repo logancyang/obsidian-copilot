@@ -820,6 +820,23 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
   autoIncludeTextSelection: false,
+  // Claude Code settings
+  claudeCodeEnabled: false,
+  claudeCodeCliPath: "",
+  claudeCodeModel: "claude-sonnet-4-20250514",
+  claudeCodeAllowedPaths: [],
+  claudeCodeBlockedCommands: [
+    "rm -rf /",
+    "rm -rf ~",
+    "sudo rm",
+    "> /dev/sda",
+    "mkfs.",
+    "dd if=",
+    ":(){:|:&};:",
+  ],
+  claudeCodePermissionMode: "approval",
+  claudeCodeEnableDiffDisplay: true,
+  claudeCodeMaxThinkingTokens: 10000,
 };
 
 export const EVENT_NAMES = {

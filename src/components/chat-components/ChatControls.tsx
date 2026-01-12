@@ -25,6 +25,7 @@ import {
   RefreshCw,
   Sparkles,
   SquareArrowOutUpRight,
+  Terminal,
 } from "lucide-react";
 import { Notice } from "obsidian";
 import React from "react";
@@ -223,6 +224,12 @@ export function ChatControls({
                 </div>
               )}
               {selectedChain === ChainType.PROJECT_CHAIN && "projects (alpha)"}
+              {selectedChain === ChainType.CLAUDE_CODE_CHAIN && (
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <Terminal className="tw-size-4" />
+                  claude code (beta)
+                </div>
+              )}
               <ChevronDown className="tw-mt-0.5 tw-size-5" />
             </Button>
           </DropdownMenuTrigger>
@@ -283,6 +290,18 @@ export function ChatControls({
               >
                 copilot plus
                 <SquareArrowOutUpRight className="tw-size-3" />
+              </DropdownMenuItem>
+            )}
+
+            {settings.claudeCodeEnabled && (
+              <DropdownMenuItem
+                className="tw-flex tw-items-center tw-gap-1"
+                onSelect={() => {
+                  handleModeChange(ChainType.CLAUDE_CODE_CHAIN);
+                }}
+              >
+                <Terminal className="tw-size-4" />
+                claude code (beta)
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

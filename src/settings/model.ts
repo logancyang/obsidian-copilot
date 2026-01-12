@@ -153,6 +153,24 @@ export interface CopilotSettings {
   quickCommandIncludeNoteContext: boolean;
   /** Automatically add text selections to chat context */
   autoIncludeTextSelection: boolean;
+
+  // Claude Code settings
+  /** Enable Claude Code mode for agentic coding workflows */
+  claudeCodeEnabled: boolean;
+  /** Path to Claude CLI executable (auto-detect if empty) */
+  claudeCodeCliPath: string;
+  /** Model to use for Claude Code queries */
+  claudeCodeModel: "claude-sonnet-4-20250514" | "claude-opus-4-20250514";
+  /** Additional paths beyond vault that Claude Code can access */
+  claudeCodeAllowedPaths: string[];
+  /** Dangerous commands to block in Claude Code */
+  claudeCodeBlockedCommands: string[];
+  /** Tool approval mode: "yolo" auto-approves, "approval" requires confirmation */
+  claudeCodePermissionMode: "yolo" | "approval";
+  /** Show file diffs for Write/Edit operations */
+  claudeCodeEnableDiffDisplay: boolean;
+  /** Maximum thinking tokens budget for extended thinking */
+  claudeCodeMaxThinkingTokens: number;
 }
 
 export const settingsStore = createStore();
@@ -423,6 +441,53 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
+
+  // Ensure claudeCodeEnabled has a default value
+  if (typeof sanitizedSettings.claudeCodeEnabled !== "boolean") {
+    sanitizedSettings.claudeCodeEnabled = DEFAULT_SETTINGS.claudeCodeEnabled;
+  }
+
+  // Ensure claudeCodeCliPath has a default value
+  if (typeof sanitizedSettings.claudeCodeCliPath !== "string") {
+    sanitizedSettings.claudeCodeCliPath = DEFAULT_SETTINGS.claudeCodeCliPath;
+  }
+
+  // Ensure claudeCodeModel has a valid value
+  if (
+    !["claude-sonnet-4-20250514", "claude-opus-4-20250514"].includes(
+      sanitizedSettings.claudeCodeModel
+    )
+  ) {
+    sanitizedSettings.claudeCodeModel = DEFAULT_SETTINGS.claudeCodeModel;
+  }
+
+  // Ensure claudeCodeAllowedPaths is an array
+  if (!Array.isArray(sanitizedSettings.claudeCodeAllowedPaths)) {
+    sanitizedSettings.claudeCodeAllowedPaths = DEFAULT_SETTINGS.claudeCodeAllowedPaths;
+  }
+
+  // Ensure claudeCodeBlockedCommands is an array
+  if (!Array.isArray(sanitizedSettings.claudeCodeBlockedCommands)) {
+    sanitizedSettings.claudeCodeBlockedCommands = DEFAULT_SETTINGS.claudeCodeBlockedCommands;
+  }
+
+  // Ensure claudeCodePermissionMode has a valid value
+  if (!["yolo", "approval"].includes(sanitizedSettings.claudeCodePermissionMode)) {
+    sanitizedSettings.claudeCodePermissionMode = DEFAULT_SETTINGS.claudeCodePermissionMode;
+  }
+
+  // Ensure claudeCodeEnableDiffDisplay has a default value
+  if (typeof sanitizedSettings.claudeCodeEnableDiffDisplay !== "boolean") {
+    sanitizedSettings.claudeCodeEnableDiffDisplay = DEFAULT_SETTINGS.claudeCodeEnableDiffDisplay;
+  }
+
+  // Ensure claudeCodeMaxThinkingTokens has a valid value
+  const maxThinkingTokens = Number(settingsToSanitize.claudeCodeMaxThinkingTokens);
+  if (isNaN(maxThinkingTokens) || maxThinkingTokens < 1000) {
+    sanitizedSettings.claudeCodeMaxThinkingTokens = DEFAULT_SETTINGS.claudeCodeMaxThinkingTokens;
+  } else {
+    sanitizedSettings.claudeCodeMaxThinkingTokens = maxThinkingTokens;
+  }
 
   return sanitizedSettings;
 }
