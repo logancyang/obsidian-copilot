@@ -155,7 +155,10 @@ export interface CopilotSettings {
   /** Last checkbox state for including note context in quick command */
   quickCommandIncludeNoteContext: boolean;
   /** Automatically add text selections to chat context */
+  autoIncludeTextSelection: boolean;
   autoAddSelectionToContext: boolean;
+  /** Automatically accept file edits without showing preview confirmation */
+  autoAcceptEdits: boolean;
 }
 
 export const settingsStore = createStore();
@@ -421,6 +424,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     } else {
       sanitizedSettings.autoAddSelectionToContext = DEFAULT_SETTINGS.autoAddSelectionToContext;
     }
+  }
+
+  // Ensure autoAcceptEdits has a default value
+  if (typeof sanitizedSettings.autoAcceptEdits !== "boolean") {
+    sanitizedSettings.autoAcceptEdits = DEFAULT_SETTINGS.autoAcceptEdits;
   }
 
   // Ensure defaultSendShortcut has a valid value

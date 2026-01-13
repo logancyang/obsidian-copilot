@@ -852,7 +852,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
+  autoIncludeTextSelection: false,
   autoAddSelectionToContext: false,
+  autoAcceptEdits: false,
 };
 
 export const EVENT_NAMES = {
