@@ -159,8 +159,8 @@ export interface CopilotSettings {
   autoAddSelectionToContext: boolean;
   /** Automatically accept file edits without showing preview confirmation */
   autoAcceptEdits: boolean;
-  /** Preferred diff view mode: inline or side-by-side */
-  diffViewMode: "inline" | "side-by-side";
+  /** Preferred diff view mode: side-by-side or split */
+  diffViewMode: "side-by-side" | "split";
 }
 
 export const settingsStore = createStore();

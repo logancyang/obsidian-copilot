@@ -855,7 +855,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autoIncludeTextSelection: false,
   autoAddSelectionToContext: false,
   autoAcceptEdits: false,
-  diffViewMode: "inline",
+  diffViewMode: "split",
 };
 
 export const EVENT_NAMES = {

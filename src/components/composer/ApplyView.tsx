@@ -1,13 +1,52 @@
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
-import { Change, diffWords } from "diff";
+import { Change, diffArrays } from "diff";
+
+// Word-level diff that ensures only complete words are matched
+function wordLevelDiff(
+  original: string,
+  modified: string
+): { value: string; added?: boolean; removed?: boolean }[] {
+  // Split into words while preserving whitespace as separate tokens
+  const tokenize = (str: string): string[] => {
+    const tokens: string[] = [];
+    let current = "";
+    for (const char of str) {
+      if (/\s/.test(char)) {
+        if (current) {
+          tokens.push(current);
+          current = "";
+        }
+        tokens.push(char);
+      } else {
+        current += char;
+      }
+    }
+    if (current) {
+      tokens.push(current);
+    }
+    return tokens;
+  };
+
+  const originalTokens = tokenize(original);
+  const modifiedTokens = tokenize(modified);
+
+  const diff = diffArrays(originalTokens, modifiedTokens);
+
+  // Convert back to string-based diff result
+  return diff.map((part) => ({
+    value: part.value.join(""),
+    added: part.added,
+    removed: part.removed,
+  }));
+}
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { useRef, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
-import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
+import { SettingSwitch } from "../ui/setting-switch";
 import { useState } from "react";
 import { getChangeBlocks } from "@/composerUtils";
 import { ApplyViewResult } from "@/types";
@@ -94,67 +133,68 @@ interface ApplyViewRootProps {
   close: (result: ApplyViewResult) => void;
 }
 
-// Convert renderWordDiff to a React component
-const WordDiff = memo(({ oldLine, newLine }: { oldLine: string; newLine: string }) => {
-  const wordDiff = diffWords(oldLine, newLine);
-  return (
-    <>
-      {wordDiff.map((part, idx) => {
-        if (part.added) {
-          return (
-            <span key={idx} className="tw-text-success">
-              {part.value}
-            </span>
-          );
-        }
-        if (part.removed) {
-          return (
-            <span key={idx} className="tw-text-error tw-line-through">
-              {part.value}
-            </span>
-          );
-        }
-        return <span key={idx}>{part.value}</span>;
-      })}
-    </>
-  );
-});
-
-WordDiff.displayName = "WordDiff";
-
 // Side-by-side block component for comparing original and modified content
 interface SideBySideBlockProps {
   block: Change[];
 }
 
 const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
-  // Build rows preserving original sequence from the diff
-  // Only pair removed+added when they are adjacent (indicating a replacement)
-  const rows: { original: Change | null; modified: Change | null }[] = [];
+  // Split multi-line chunks into individual lines and pair them for line-by-line comparison
+  // This enables proper word-level diffing within each line
+  const rows: { original: string | null; modified: string | null; isUnchanged: boolean }[] = [];
 
   let i = 0;
   while (i < block.length) {
     const current = block[i];
 
     if (!current.added && !current.removed) {
-      // Unchanged line - show on both sides
-      rows.push({ original: current, modified: current });
+      // Unchanged chunk - split into lines and show on both sides
+      const lines = current.value
+        .split("\n")
+        .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+      lines.forEach((line) => {
+        rows.push({ original: line, modified: line, isUnchanged: true });
+      });
       i++;
     } else if (current.removed) {
-      // Check if next item is an added line (replacement pair)
+      // Check if next item is an added chunk (replacement pair)
       const next = block[i + 1];
       if (next?.added) {
-        // Pair them as a replacement
-        rows.push({ original: current, modified: next });
+        // Split both chunks into lines and pair by index
+        const originalLines = current.value
+          .split("\n")
+          .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+        const modifiedLines = next.value
+          .split("\n")
+          .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+        const maxLines = Math.max(originalLines.length, modifiedLines.length);
+
+        for (let j = 0; j < maxLines; j++) {
+          rows.push({
+            original: j < originalLines.length ? originalLines[j] : null,
+            modified: j < modifiedLines.length ? modifiedLines[j] : null,
+            isUnchanged: false,
+          });
+        }
         i += 2;
       } else {
-        // Standalone removal - show with empty right side
-        rows.push({ original: current, modified: null });
+        // Standalone removal - split into lines
+        const lines = current.value
+          .split("\n")
+          .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+        lines.forEach((line) => {
+          rows.push({ original: line, modified: null, isUnchanged: false });
+        });
         i++;
       }
     } else if (current.added) {
-      // Standalone addition - show with empty left side
-      rows.push({ original: null, modified: current });
+      // Standalone addition - split into lines
+      const lines = current.value
+        .split("\n")
+        .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+      lines.forEach((line) => {
+        rows.push({ original: null, modified: line, isUnchanged: false });
+      });
       i++;
     } else {
       i++;
@@ -167,17 +207,17 @@ const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
       <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
         {rows.map((row, idx) => (
           <div key={idx} className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">
-            {row.original ? (
-              row.original === row.modified ? (
+            {row.original !== null ? (
+              row.isUnchanged ? (
                 // Unchanged line
-                <span className="tw-text-normal">{row.original.value}</span>
-              ) : row.modified ? (
-                // Show word-level diff with removed styling
-                <span className="tw-text-error">
-                  {diffWords(row.original.value, row.modified.value).map((part, partIdx) => {
+                <span className="tw-text-normal">{row.original || "\u00A0"}</span>
+              ) : row.modified !== null ? (
+                // Show word-level diff - only changed words are highlighted
+                <span>
+                  {wordLevelDiff(row.original, row.modified).map((part, partIdx) => {
                     if (part.removed) {
                       return (
-                        <span key={partIdx} className="tw-bg-error tw-line-through">
+                        <span key={partIdx} className="tw-bg-error tw-text-error">
                           {part.value}
                         </span>
                       );
@@ -189,8 +229,8 @@ const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
                   })}
                 </span>
               ) : (
-                // Only removed, no pair
-                <span className="tw-text-error tw-line-through">{row.original.value}</span>
+                // Only removed, no pair - highlight entire line
+                <span className="tw-bg-error tw-text-error">{row.original || "\u00A0"}</span>
               )
             ) : (
               // Empty placeholder for alignment
@@ -204,17 +244,17 @@ const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
       <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
         {rows.map((row, idx) => (
           <div key={idx} className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">
-            {row.modified ? (
-              row.original === row.modified ? (
+            {row.modified !== null ? (
+              row.isUnchanged ? (
                 // Unchanged line
-                <span className="tw-text-normal">{row.modified.value}</span>
-              ) : row.original ? (
-                // Show word-level diff with added styling
-                <span className="tw-text-success">
-                  {diffWords(row.original.value, row.modified.value).map((part, partIdx) => {
+                <span className="tw-text-normal">{row.modified || "\u00A0"}</span>
+              ) : row.original !== null ? (
+                // Show word-level diff - only changed words are highlighted
+                <span>
+                  {wordLevelDiff(row.original, row.modified).map((part, partIdx) => {
                     if (part.added) {
                       return (
-                        <span key={partIdx} className="tw-bg-success">
+                        <span key={partIdx} className="tw-bg-success tw-text-success">
                           {part.value}
                         </span>
                       );
@@ -226,8 +266,8 @@ const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
                   })}
                 </span>
               ) : (
-                // Only added, no pair
-                <span className="tw-text-success">{row.modified.value}</span>
+                // Only added, no pair - highlight entire line
+                <span className="tw-bg-success tw-text-success">{row.modified || "\u00A0"}</span>
               )
             ) : (
               // Empty placeholder for alignment
@@ -242,6 +282,189 @@ const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
 
 SideBySideBlock.displayName = "SideBySideBlock";
 
+// Split block component - shows old and new content separately with highlighting
+interface SplitBlockProps {
+  block: Change[];
+}
+
+const SplitBlock = memo(({ block }: SplitBlockProps) => {
+  // Check if there are any changes
+  const hasChanges = block.some((c) => c.added || c.removed);
+
+  if (!hasChanges) {
+    // No changes - just show the content once
+    return (
+      <div className="tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm tw-text-normal">
+        {block.map((change, idx) => (
+          <span key={idx}>{change.value}</span>
+        ))}
+      </div>
+    );
+  }
+
+  // Split multi-line chunks into individual lines and pair them for line-by-line comparison
+  const rows: { original: string | null; modified: string | null; isUnchanged: boolean }[] = [];
+  let i = 0;
+  while (i < block.length) {
+    const current = block[i];
+    if (!current.added && !current.removed) {
+      // Unchanged chunk - split into lines
+      const lines = current.value
+        .split("\n")
+        .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+      lines.forEach((line) => {
+        rows.push({ original: line, modified: line, isUnchanged: true });
+      });
+      i++;
+    } else if (current.removed) {
+      const next = block[i + 1];
+      if (next?.added) {
+        // Split both chunks into lines and pair by index
+        const originalLines = current.value
+          .split("\n")
+          .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+        const modifiedLines = next.value
+          .split("\n")
+          .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+        const maxLines = Math.max(originalLines.length, modifiedLines.length);
+
+        for (let j = 0; j < maxLines; j++) {
+          rows.push({
+            original: j < originalLines.length ? originalLines[j] : null,
+            modified: j < modifiedLines.length ? modifiedLines[j] : null,
+            isUnchanged: false,
+          });
+        }
+        i += 2;
+      } else {
+        // Standalone removal - split into lines
+        const lines = current.value
+          .split("\n")
+          .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+        lines.forEach((line) => {
+          rows.push({ original: line, modified: null, isUnchanged: false });
+        });
+        i++;
+      }
+    } else if (current.added) {
+      // Standalone addition - split into lines
+      const lines = current.value
+        .split("\n")
+        .filter((_, idx, arr) => idx < arr.length - 1 || _ !== "");
+      lines.forEach((line) => {
+        rows.push({ original: null, modified: line, isUnchanged: false });
+      });
+      i++;
+    } else {
+      i++;
+    }
+  }
+
+  // Render original section with word-level highlighting
+  const renderOriginal = () => {
+    return rows.map((row, idx) => {
+      if (row.original === null) return null; // Skip if no original (pure addition)
+
+      // Unchanged line
+      if (row.isUnchanged) {
+        return (
+          <div key={idx} className="tw-text-normal">
+            {row.original || "\u00A0"}
+          </div>
+        );
+      }
+
+      // Paired with modified - do word-level diff
+      if (row.modified !== null) {
+        const wordDiff = wordLevelDiff(row.original, row.modified);
+        return (
+          <div key={idx}>
+            {wordDiff.map((part, partIdx) => {
+              if (part.added) return null; // Skip added parts in original
+              if (part.removed) {
+                return (
+                  <span key={partIdx} className="tw-bg-error tw-text-error">
+                    {part.value}
+                  </span>
+                );
+              }
+              return <span key={partIdx}>{part.value}</span>;
+            })}
+          </div>
+        );
+      }
+
+      // Standalone removal - highlight entire line
+      return (
+        <div key={idx} className="tw-bg-error tw-text-error">
+          {row.original || "\u00A0"}
+        </div>
+      );
+    });
+  };
+
+  // Render modified section with word-level highlighting
+  const renderModified = () => {
+    return rows.map((row, idx) => {
+      if (row.modified === null) return null; // Skip if no modified (pure removal)
+
+      // Unchanged line
+      if (row.isUnchanged) {
+        return (
+          <div key={idx} className="tw-text-normal">
+            {row.modified || "\u00A0"}
+          </div>
+        );
+      }
+
+      // Paired with original - do word-level diff
+      if (row.original !== null) {
+        const wordDiff = wordLevelDiff(row.original, row.modified);
+        return (
+          <div key={idx}>
+            {wordDiff.map((part, partIdx) => {
+              if (part.removed) return null; // Skip removed parts in modified
+              if (part.added) {
+                return (
+                  <span key={partIdx} className="tw-bg-success tw-text-success">
+                    {part.value}
+                  </span>
+                );
+              }
+              return <span key={partIdx}>{part.value}</span>;
+            })}
+          </div>
+        );
+      }
+
+      // Standalone addition - highlight entire line
+      return (
+        <div key={idx} className="tw-bg-success tw-text-success">
+          {row.modified || "\u00A0"}
+        </div>
+      );
+    });
+  };
+
+  return (
+    <div className="tw-flex tw-flex-col tw-gap-2">
+      {/* Original version with word-level removed parts highlighted */}
+      <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
+        <div className="tw-mb-1 tw-text-xs tw-font-medium tw-text-muted">Original</div>
+        <div className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">{renderOriginal()}</div>
+      </div>
+
+      {/* Modified version with word-level added parts highlighted */}
+      <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
+        <div className="tw-mb-1 tw-text-xs tw-font-medium tw-text-muted">Modified</div>
+        <div className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">{renderModified()}</div>
+      </div>
+    </div>
+  );
+});
+
+SplitBlock.displayName = "SplitBlock";
+
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
     return state.changes.map((change) => ({
@@ -251,11 +474,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   });
 
   // View mode state with settings persistence
-  const [viewMode, setViewMode] = useState<"inline" | "side-by-side">(
-    () => getSettings().diffViewMode ?? "inline"
+  const [viewMode, setViewMode] = useState<"side-by-side" | "split">(
+    () => getSettings().diffViewMode
   );
 
-  const handleViewModeChange = (mode: "inline" | "side-by-side") => {
+  const handleViewModeChange = (mode: "side-by-side" | "split") => {
     setViewMode(mode);
     updateSetting("diffViewMode", mode);
   };
@@ -441,15 +664,28 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       </div>
       <div className="tw-flex tw-items-center tw-justify-between tw-border-b tw-border-solid tw-border-border tw-p-2">
         <div className="tw-text-sm tw-font-medium">{state.path}</div>
-        <Tabs
-          value={viewMode}
-          onValueChange={(v) => handleViewModeChange(v as "inline" | "side-by-side")}
-        >
-          <TabsList className="tw-bg-secondary">
-            <TabsTrigger value="inline">Inline</TabsTrigger>
-            <TabsTrigger value="side-by-side">Side-by-side</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        <div className="tw-flex tw-items-center tw-gap-2">
+          <span
+            className={cn(
+              "tw-text-xs",
+              viewMode === "split" ? "tw-font-medium tw-text-normal" : "tw-text-muted"
+            )}
+          >
+            Split
+          </span>
+          <SettingSwitch
+            checked={viewMode === "side-by-side"}
+            onCheckedChange={(checked) => handleViewModeChange(checked ? "side-by-side" : "split")}
+          />
+          <span
+            className={cn(
+              "tw-text-xs",
+              viewMode === "side-by-side" ? "tw-font-medium tw-text-normal" : "tw-text-muted"
+            )}
+          >
+            Side-by-side
+          </span>
+        </div>
       </div>
 
       <div className="tw-flex-1 tw-overflow-auto tw-p-2">
@@ -501,49 +737,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                 // Side-by-side view
                 <SideBySideBlock block={block} />
               ) : (
-                // Inline view (default)
-                block.map((change, changeIndex) => {
-                  // Try to find a corresponding added/removed pair for word-level diff
-                  if (change.added) {
-                    const removedIdx = block.findIndex((c, i) => c.removed && i !== changeIndex);
-                    if (removedIdx !== -1) {
-                      const removedLine = block[removedIdx].value;
-                      return (
-                        <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
-                          <div className="tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm">
-                            <WordDiff oldLine={removedLine} newLine={change.value} />
-                          </div>
-                        </div>
-                      );
-                    }
-                  }
-                  // Skip rendering removed line if it is already paired with an added line.
-                  if (change.removed) {
-                    const addedIdx = block.findIndex((c, i) => c.added && i !== changeIndex);
-                    if (addedIdx !== -1) {
-                      // Skip rendering removed line, since it's shown in the added line
-                      return null;
-                    }
-                  }
-                  // No pair found, render the line as is.
-                  return (
-                    <div key={`${blockIndex}-${changeIndex}`} className="tw-relative">
-                      <div
-                        className={cn(
-                          "tw-flex-1 tw-whitespace-pre-wrap tw-px-2 tw-py-1 tw-font-mono tw-text-sm",
-                          {
-                            "tw-text-success": change.added,
-                            "tw-text-error": change.removed,
-                            "tw-text-normal": !change.added && !change.removed,
-                            "tw-line-through": change.removed,
-                          }
-                        )}
-                      >
-                        {change.value}
-                      </div>
-                    </div>
-                  );
-                })
+                // Split view (default) - old and new shown separately
+                <SplitBlock block={block} />
               )}
 
               {/* Only show accept/reject buttons for blocks with changes that are undecided */}
