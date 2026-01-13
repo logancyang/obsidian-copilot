@@ -231,7 +231,7 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
   };
 
   return (
-    <div className="tw-max-h-[600px] tw-overflow-y-auto tw-p-4 sm:tw-max-w-[500px]">
+    <div className="tw-p-4 sm:tw-max-w-[500px]">
       <div className="tw-mb-4">
         <h2 className="tw-text-xl tw-font-bold">AI Provider Settings</h2>
         <p className="tw-text-sm tw-text-muted">
