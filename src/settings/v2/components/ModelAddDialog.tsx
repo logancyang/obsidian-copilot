@@ -36,7 +36,8 @@ import { useTab } from "@/contexts/TabContext";
 import { logError } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { err2String, getProviderInfo, getProviderLabel, omit } from "@/utils";
-import { ChevronDown, Loader2 } from "lucide-react";
+import { buildCurlCommandForModel } from "@/utils/curlCommand";
+import { CheckCircle2, ChevronDown, Loader2, XCircle } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
 
@@ -71,9 +72,15 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     ? EmbeddingModelProviders.OPENAI
     : ChatModelProviders.OPENROUTERAI;
 
+  // 判断 Provider 是否有必填的额外设置
+  const hasRequiredExtraSettings = (provider: string) => {
+    return provider === ChatModelProviders.AZURE_OPENAI;
+  };
+
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
-  const [isOpen, setIsOpen] = useState(false);
+  const [isOpen, setIsOpen] = useState(hasRequiredExtraSettings(defaultProvider));
   const [isVerifying, setIsVerifying] = useState(false);
+  const [verifyStatus, setVerifyStatus] = useState<"idle" | "success" | "failed">("idle");
   const [errors, setErrors] = useState<FormErrors>({
     name: false,
     instanceName: false,
@@ -173,6 +180,15 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
   const [model, setModel] = useState<CustomModel>(getInitialModel());
 
+  /**
+   * Updates model state and resets verify status when connection-related fields change.
+   * Use this for fields that affect API connectivity (name, apiKey, baseUrl, etc.)
+   */
+  const updateModelWithReset = (updates: Partial<CustomModel>) => {
+    setModel((prev) => ({ ...prev, ...updates }));
+    setVerifyStatus("idle");
+  };
+
   // Clean up model data by trimming whitespace
   const getCleanedModel = (modelData: CustomModel): CustomModel => {
     return {
@@ -215,10 +231,13 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     onOpenChange(false);
     setModel(getInitialModel());
     clearErrors();
+    setVerifyStatus("idle");
+    setIsOpen(false);
   };
 
   const handleProviderChange = (provider: ChatModelProviders) => {
     setProviderInfo(getProviderInfo(provider));
+    setVerifyStatus("idle");
     setModel({
       ...model,
       provider,
@@ -240,11 +259,14 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             bedrockRegion: undefined,
           }),
     });
+    // 当 Provider 有必填额外设置时自动展开
+    setIsOpen(hasRequiredExtraSettings(provider));
   };
   const handleOpenChange = (open: boolean) => {
     if (!open) {
       setModel(getInitialModel());
       clearErrors();
+      setVerifyStatus("idle");
       setIsOpen(false);
     }
     onOpenChange(open);
@@ -257,16 +279,45 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     }
 
     setIsVerifying(true);
+    setVerifyStatus("idle");
     try {
       const cleanedModel = getCleanedModel(model);
       await ping(cleanedModel);
+      setVerifyStatus("success");
       new Notice("Model verification successful!");
     } catch (err) {
       logError(err);
       const errStr = err2String(err);
+      setVerifyStatus("failed");
       new Notice("Model verification failed: " + errStr);
     } finally {
       setIsVerifying(false);
+    }
+  };
+
+  /** Copies curl command to clipboard for testing */
+  const handleCopyCurlCommand = async () => {
+    try {
+      const cleanedModel = getCleanedModel(model);
+      const result = await buildCurlCommandForModel(cleanedModel);
+
+      if (!result.ok) {
+        new Notice(result.error);
+        return;
+      }
+
+      await navigator.clipboard.writeText(result.command);
+
+      // Check if real API key was included (no placeholder warning)
+      const hasRealKey = !result.warnings.some((w) => w.includes("placeholder"));
+      const keyWarning = hasRealKey ? " Warning: contains real API key!" : "";
+      const otherWarnings = result.warnings.filter((w) => !w.includes("placeholder"));
+      const suffix = otherWarnings.length > 0 ? ` (${otherWarnings[0]})` : "";
+
+      new Notice(`Copied curl command.${keyWarning}${suffix}`);
+    } catch (err) {
+      logError(err);
+      new Notice("Failed to copy curl command: " + err2String(err));
     }
   };
 
@@ -283,7 +334,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 type="text"
                 placeholder="Enter OpenAI Organization ID if applicable"
                 value={model.openAIOrgId || ""}
-                onChange={(e) => setModel({ ...model, openAIOrgId: e.target.value })}
+                onChange={(e) => updateModelWithReset({ openAIOrgId: e.target.value })}
               />
             </FormField>
           );
@@ -301,7 +352,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                   placeholder="Enter Azure OpenAI API Instance Name"
                   value={model.azureOpenAIApiInstanceName || ""}
                   onChange={(e) => {
-                    setModel({ ...model, azureOpenAIApiInstanceName: e.target.value });
+                    updateModelWithReset({ azureOpenAIApiInstanceName: e.target.value });
                     setError("instanceName", false);
                   }}
                 />
@@ -320,7 +371,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                     placeholder="Enter Azure OpenAI API Deployment Name"
                     value={model.azureOpenAIApiDeploymentName || ""}
                     onChange={(e) => {
-                      setModel({ ...model, azureOpenAIApiDeploymentName: e.target.value });
+                      updateModelWithReset({ azureOpenAIApiDeploymentName: e.target.value });
                       setError("deploymentName", false);
                     }}
                   />
@@ -337,7 +388,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                     placeholder="Enter Azure OpenAI API Embedding Deployment Name"
                     value={model.azureOpenAIApiEmbeddingDeploymentName || ""}
                     onChange={(e) => {
-                      setModel({ ...model, azureOpenAIApiEmbeddingDeploymentName: e.target.value });
+                      updateModelWithReset({ azureOpenAIApiEmbeddingDeploymentName: e.target.value });
                       setError("embeddingDeploymentName", false);
                     }}
                   />
@@ -355,7 +406,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                   placeholder="Enter Azure OpenAI API Version"
                   value={model.azureOpenAIApiVersion || ""}
                   onChange={(e) => {
-                    setModel({ ...model, azureOpenAIApiVersion: e.target.value });
+                    updateModelWithReset({ azureOpenAIApiVersion: e.target.value });
                     setError("apiVersion", false);
                   }}
                 />
@@ -368,15 +419,37 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               label="Region (optional)"
               description="Defaults to us-east-1 when left blank. With inference profiles (global., us., eu., apac.), region is auto-managed."
             >
-              <Input
-                type="text"
-                placeholder="Enter AWS region (e.g. us-east-1)"
-                value={model.bedrockRegion || ""}
-                onChange={(e) => {
-                  setModel({ ...model, bedrockRegion: e.target.value });
-                  setError("bedrockRegion", false);
-                }}
-              />
+              <div className="tw-flex tw-gap-2">
+                <Input
+                  className="tw-flex-1"
+                  type="text"
+                  placeholder="Enter AWS region (e.g. us-east-1)"
+                  value={model.bedrockRegion || ""}
+                  onChange={(e) => {
+                    updateModelWithReset({ bedrockRegion: e.target.value });
+                    setError("bedrockRegion", false);
+                  }}
+                />
+                <Select
+                  onValueChange={(value) => {
+                    updateModelWithReset({ bedrockRegion: value });
+                    setError("bedrockRegion", false);
+                  }}
+                >
+                  <SelectTrigger className="tw-w-[140px]">
+                    <SelectValue placeholder="Presets" />
+                  </SelectTrigger>
+                  <SelectContent container={dialogElement}>
+                    {["us-east-1", "us-west-2", "eu-west-1", "ap-northeast-1", "ap-southeast-1"].map(
+                      (region) => (
+                        <SelectItem key={region} value={region}>
+                          {region}
+                        </SelectItem>
+                      )
+                    )}
+                  </SelectContent>
+                </Select>
+              </div>
             </FormField>
           );
         default:
@@ -391,18 +464,22 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       <Collapsible
         open={isOpen}
         onOpenChange={setIsOpen}
-        className="tw-space-y-2 tw-rounded-lg tw-border tw-pt-4"
+        className="tw-rounded-lg tw-border tw-bg-secondary/30 tw-border-border/60"
       >
-        <div className="tw-flex tw-items-center tw-justify-between">
-          <Label>Additional {getProviderLabel(model.provider)} Settings</Label>
-          <CollapsibleTrigger asChild>
-            <Button variant="ghost" size="sm" className="tw-w-9 tw-p-0">
-              <ChevronDown className="tw-size-4" />
-              <span className="tw-sr-only">Toggle</span>
-            </Button>
-          </CollapsibleTrigger>
-        </div>
-        <CollapsibleContent className="tw-max-h-[200px] tw-space-y-4 tw-overflow-y-auto tw-pb-0.5 tw-pl-0.5 tw-pr-2">
+        <CollapsibleTrigger asChild>
+          <button
+            type="button"
+            className="tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-lg tw-p-3 tw-text-left hover:tw-bg-modifier-hover"
+          >
+            <span className="tw-text-sm tw-font-medium">
+              Additional {getProviderLabel(model.provider)} Settings
+            </span>
+            <ChevronDown
+              className={`tw-size-4 tw-text-muted tw-transition-transform tw-duration-200 ${isOpen ? "tw-rotate-180" : ""}`}
+            />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="tw-space-y-4 tw-px-3 tw-pb-3">
           {content}
         </CollapsibleContent>
       </Collapsible>
@@ -433,7 +510,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
-        className="sm:tw-max-w-[425px]"
+        className="tw-max-h-[80vh] tw-overflow-y-auto sm:tw-max-w-[425px]"
         container={modalContainer}
         ref={(el) => setDialogElement(el)}
       >
@@ -465,7 +542,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               })`}
               value={model.name}
               onChange={(e) => {
-                setModel({ ...model, name: e.target.value });
+                updateModelWithReset({ name: e.target.value });
                 setError("name", false);
               }}
             />
@@ -527,7 +604,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               type="text"
               placeholder={getPlaceholderUrl() || "https://api.example.com/v1"}
               value={model.baseUrl || ""}
-              onChange={(e) => setModel({ ...model, baseUrl: e.target.value })}
+              onChange={(e) => updateModelWithReset({ baseUrl: e.target.value })}
             />
           </FormField>
 
@@ -535,7 +612,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             <PasswordInput
               placeholder={`Enter ${providerInfo.label} API Key`}
               value={model.apiKey || ""}
-              onChange={(value) => setModel({ ...model, apiKey: value })}
+              onChange={(value) => updateModelWithReset({ apiKey: value })}
             />
             {providerInfo.keyManagementURL && (
               <p className="tw-text-xs tw-text-muted">
@@ -561,7 +638,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               </div>
             }
           >
-            <div className="tw-flex tw-items-center tw-gap-4">
+            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-6 tw-gap-y-2">
               {capabilityOptions.map(({ id, label, description }) => (
                 <div key={id} className="tw-flex tw-items-center tw-gap-2">
                   <Checkbox
@@ -590,35 +667,68 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           {renderProviderSpecificFields()}
         </div>
 
-        <div className="tw-flex tw-items-center  tw-justify-between tw-gap-4">
-          <div className="tw-flex tw-items-center tw-gap-2">
-            <Checkbox
-              id="enable-cors"
-              checked={model.enableCors || false}
-              onCheckedChange={(checked: boolean) => setModel({ ...model, enableCors: checked })}
-            />
-            <Label htmlFor="enable-cors">
-              <div className="tw-flex tw-items-center tw-gap-0.5">
-                <span className="tw-text-xs md:tw-text-sm">CORS</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-text-sm tw-text-muted">
-                      Only check this option when prompted that CORS is needed
-                    </div>
-                  }
-                  contentClassName="tw-max-w-96"
-                />
-              </div>
-            </Label>
-          </div>
-          <TooltipProvider>
-            <div className="tw-flex tw-gap-2 tw-text-xs md:tw-text-sm">
+        <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+          {/* CORS 和 CURL */}
+          <div className="tw-flex tw-items-center tw-gap-3">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <Checkbox
+                id="enable-cors"
+                checked={model.enableCors || false}
+                onCheckedChange={(checked: boolean) => setModel({ ...model, enableCors: checked })}
+              />
+              <Label htmlFor="enable-cors" className="tw-cursor-pointer">
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <span className="tw-text-sm">CORS</span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Only check this option when prompted that CORS is needed
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
+                  />
+                </div>
+              </Label>
+            </div>
+            <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost" onClick={handleVerify} disabled={isButtonDisabled()}>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleCopyCurlCommand}
+                    disabled={!model.name}
+                    className="tw-text-muted hover:tw-text-normal"
+                  >
+                    CURL
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Copy curl command for testing</p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+
+          {/* 主要操作区：Test 和 Add Model */}
+          <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+            {verifyStatus === "success" && (
+              <CheckCircle2 className="tw-size-5 tw-text-success" />
+            )}
+            {verifyStatus === "failed" && <XCircle className="tw-size-5 tw-text-error" />}
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleVerify}
+                    disabled={isButtonDisabled()}
+                    className="tw-min-w-[72px]"
+                  >
                     {isVerifying ? (
                       <>
-                        <Loader2 className="tw-mr-2 tw-size-2 tw-animate-spin md:tw-size-4 " />
+                        <Loader2 className="tw-mr-1.5 tw-size-3.5 tw-animate-spin" />
                         Test
                       </>
                     ) : (
@@ -630,11 +740,11 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                   <p>Optional: test API call</p>
                 </TooltipContent>
               </Tooltip>
-              <Button variant="default" onClick={handleAdd} disabled={isButtonDisabled()}>
-                Add Model
-              </Button>
-            </div>
-          </TooltipProvider>
+            </TooltipProvider>
+            <Button variant="default" size="sm" onClick={handleAdd} disabled={isButtonDisabled()}>
+              Add Model
+            </Button>
+          </div>
         </div>
       </DialogContent>
     </Dialog>
