@@ -11,6 +11,8 @@ import React, { memo, useEffect, useState } from "react";
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
   currentAiMessage: string;
+  /** Stable ID for streaming message, shared with final persisted message */
+  streamingMessageId?: string | null;
   loading?: boolean;
   loadingMessage?: string;
   app: App;
@@ -25,6 +27,7 @@ const ChatMessages = memo(
   ({
     chatHistory,
     currentAiMessage,
+    streamingMessageId,
     loading,
     loadingMessage,
     app,
@@ -118,8 +121,9 @@ const ChatMessages = memo(
               }}
             >
               <ChatSingleMessage
-                key="ai_message_streaming"
+                key={streamingMessageId ?? "ai_message_streaming"}
                 message={{
+                  id: streamingMessageId ?? undefined,
                   sender: "AI",
                   message: currentAiMessage || getLoadingMessage(),
                   isVisible: true,

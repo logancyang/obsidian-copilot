@@ -46,6 +46,7 @@ import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 
@@ -81,14 +82,22 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [inputMessage, setInputMessage] = useState("");
   const [latestTokenCount, setLatestTokenCount] = useState<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Stable ID for streaming message, shared with final persisted message
+  // This allows collapsible UI state (think blocks) to persist across streaming -> history
+  const streamingMessageIdRef = useRef<string | null>(null);
 
-  // Wrapper for addMessage that tracks token usage from AI responses
+  // Wrapper for addMessage that attaches streaming ID and tracks token usage
   const addMessage = useCallback(
     (message: ChatMessage) => {
-      rawAddMessage(message);
-      // Track token usage from AI messages
-      if (message.sender === AI_SENDER && message.responseMetadata?.tokenUsage?.totalTokens) {
-        setLatestTokenCount(message.responseMetadata.tokenUsage.totalTokens);
+      // Attach streaming ID to final AI message so it shares the same ID as streaming placeholder
+      const streamingId = streamingMessageIdRef.current;
+      const shouldAttachId =
+        streamingId && message.sender === AI_SENDER && !message.isErrorMessage && !message.id;
+      const messageToAdd = shouldAttachId ? { ...message, id: streamingId } : message;
+
+      rawAddMessage(messageToAdd);
+      if (messageToAdd.sender === AI_SENDER && messageToAdd.responseMetadata?.tokenUsage?.totalTokens) {
+        setLatestTokenCount(messageToAdd.responseMetadata.tokenUsage.totalTokens);
       }
     },
     [rawAddMessage]
@@ -258,6 +267,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       // Clear input and images
       setInputMessage("");
       setSelectedImages([]);
+      streamingMessageIdRef.current = `msg-${uuidv4()}`;
       safeSet.setLoading(true);
       safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
@@ -304,6 +314,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     } finally {
       safeSet.setLoading(false);
       safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
+      streamingMessageIdRef.current = null;
     }
   };
 
@@ -363,6 +374,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
       // Clear current AI message and set loading state
       safeSet.setCurrentAiMessage("");
+      streamingMessageIdRef.current = `msg-${uuidv4()}`;
       safeSet.setLoading(true);
       try {
         const success = await chatUIState.regenerateMessage(
@@ -386,6 +398,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         new Notice("Failed to regenerate message. Please try again.");
       } finally {
         safeSet.setLoading(false);
+        streamingMessageIdRef.current = null;
       }
     },
     [
@@ -429,6 +442,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
           // If there were AI responses, generate new ones
           if (hadAIResponses) {
+            streamingMessageIdRef.current = `msg-${uuidv4()}`;
             safeSet.setLoading(true);
             try {
               const llmMessage = chatUIState.getLLMMessage(messageToEdit.id!);
@@ -447,6 +461,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               new Notice("Failed to regenerate AI response. Please try again.");
             } finally {
               safeSet.setLoading(false);
+              streamingMessageIdRef.current = null;
             }
           }
         }
@@ -751,6 +766,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         <ChatMessages
           chatHistory={chatHistory}
           currentAiMessage={currentAiMessage}
+          streamingMessageId={streamingMessageIdRef.current}
           loading={loading}
           loadingMessage={loadingMessage}
           app={app}

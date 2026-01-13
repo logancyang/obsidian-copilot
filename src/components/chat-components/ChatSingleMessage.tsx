@@ -35,6 +35,13 @@ import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
+import {
+  buildCopilotCollapsibleDomId,
+  captureCopilotCollapsibleOpenStates,
+  getCopilotCollapsibleDetailsFromEvent,
+  getMessageCollapsibleStates,
+  isEventWithinDetailsSummary,
+} from "@/components/chat-components/collapsibleStateUtils";
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
 
@@ -204,6 +211,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     getMessageErrorBlockRoots(messageId.current)
   );
 
+  // Get the global collapsible state map for this message
+  // This persists across component lifecycles (streaming -> final message)
+  // Use ref to avoid triggering re-renders when map contents change
+  const collapsibleOpenStateMapRef = useRef(getMessageCollapsibleStates(messageId.current));
+  const collapsibleOpenStateMap = collapsibleOpenStateMapRef.current;
+
+  // Check if current model has reasoning capability
   const settings = useSettingsValue();
 
   const copyToClipboard = () => {
@@ -262,13 +276,20 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         const contentStyle = `margin-top: 0.75rem; padding: 0.75rem; border-radius: 4px; background-color: var(--background-primary)`;
 
         const openTag = `<${tagName}>`;
+        let sectionIndex = 0;
 
         // During streaming, if we find any tag that's either unclosed or being processed
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
           content = content.replace(completeRegex, (_match, sectionContent) => {
-            return `<details style="${detailsStyle}">
+            const sectionKey = `${tagName}-${sectionIndex}`;
+            sectionIndex += 1;
+            const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
+            // Check if user has explicitly set a state; if not, default to collapsed (original behavior)
+            const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
+
+            return `<details id="${domId}"${openAttribute} style="${detailsStyle}">
               <summary style="${summaryStyle}">${summaryText}</summary>
               <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
             </details>\n\n`;
@@ -289,7 +310,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
         return content.replace(regex, (_match, sectionContent) => {
-          return `<details style="${detailsStyle}">
+          const sectionKey = `${tagName}-${sectionIndex}`;
+          sectionIndex += 1;
+          const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
+          // Restore open state from previous render
+          const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
+
+          return `<details id="${domId}"${openAttribute} style="${detailsStyle}">
             <summary style="${summaryStyle}">${summaryText}</summary>
             <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
           </details>\n\n`;
@@ -428,8 +455,72 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       return processYouTubeEmbed(noteLinksProcessed);
     },
-    [app, isStreaming, settings.enableInlineCitations]
+    [app, isStreaming, settings.enableInlineCitations, collapsibleOpenStateMap]
   );
+
+  // Persist collapsible open/closed state during streaming in real time.
+  // Streaming updates can rebuild the markdown DOM between pointer down/up, preventing a click.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (!root || message.sender === USER_SENDER || !isStreaming) {
+      return;
+    }
+
+    /**
+     * Handles user click on collapsible summary during streaming.
+     * Directly sets details.open to avoid race conditions where DOM rebuilds
+     * between pointerdown and click, causing double toggle that cancels user intent.
+     */
+    const handleSummaryPointerDown = (event: Event): void => {
+      // Only handle primary button (left click)
+      if (event instanceof PointerEvent && (event.button !== 0 || !event.isPrimary)) {
+        return;
+      }
+
+      const details = getCopilotCollapsibleDetailsFromEvent(event, root);
+      if (!details || !isEventWithinDetailsSummary(event, details)) {
+        return;
+      }
+
+      // Calculate and apply the next state immediately
+      const nextOpen = !details.open;
+      details.open = nextOpen;
+      collapsibleOpenStateMap.set(details.id, nextOpen);
+    };
+
+    /**
+     * Prevents native click from triggering another toggle on <details>.
+     * Since we already handled the state change in pointerdown, block the default behavior.
+     */
+    const handleSummaryClick = (event: Event): void => {
+      const details = getCopilotCollapsibleDetailsFromEvent(event, root);
+      if (!details || !isEventWithinDetailsSummary(event, details)) {
+        return;
+      }
+      event.preventDefault();
+    };
+
+    /**
+     * Captures actual open/closed state changes from native <details> interactions.
+     */
+    const handleDetailsToggle = (event: Event): void => {
+      const details = getCopilotCollapsibleDetailsFromEvent(event, root);
+      if (!details) {
+        return;
+      }
+      collapsibleOpenStateMap.set(details.id, details.open);
+    };
+
+    // Use capture phase and listen on root (not document) to minimize scope
+    root.addEventListener("pointerdown", handleSummaryPointerDown, true);
+    root.addEventListener("click", handleSummaryClick, true);
+    root.addEventListener("toggle", handleDetailsToggle, true);
+    return () => {
+      root.removeEventListener("pointerdown", handleSummaryPointerDown, true);
+      root.removeEventListener("click", handleSummaryClick, true);
+      root.removeEventListener("toggle", handleDetailsToggle, true);
+    };
+  }, [isStreaming, message.sender, collapsibleOpenStateMap]);
 
   useEffect(() => {
     // Reset unmounting flag when effect runs
@@ -440,6 +531,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       if (!componentRef.current) {
         componentRef.current = new Component();
       }
+
+      // Capture open states of collapsible sections before re-rendering
+      // During streaming, don't overwrite user's explicit state changes from pointerdown
+      captureCopilotCollapsibleOpenStates(
+        contentRef.current,
+        collapsibleOpenStateMap,
+        { overwriteExisting: !isStreaming }
+      );
 
       const originMessage = message.message;
       const processedMessage = preprocess(originMessage);
@@ -599,7 +698,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     return () => {
       isUnmountingRef.current = true;
     };
-  }, [message, app, componentRef, isStreaming, preprocess]);
+  }, [message, app, componentRef, isStreaming, preprocess, collapsibleOpenStateMap]);
 
   // Cleanup effect that only runs on component unmount
   useEffect(() => {
@@ -629,8 +728,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           currentComponentRef.current = null;
         }
 
-        // Only clean up roots if this is a temporary message (streaming message)
-        // Permanent messages keep their roots to preserve tool call banners and error blocks
+        // Only clean up roots if this is a temporary message (streaming message with temp- prefix).
+        // For shared messageId (msg-xxx), container changes are handled by ensureToolCallRoot/ensureErrorBlockRoot
+        // which detect container mismatch and recreate roots as needed.
         if (currentMessageId.startsWith("temp-")) {
           cleanupMessageToolCallRoots(currentMessageId, messageRootsSnapshot, "component cleanup");
           cleanupMessageErrorBlockRoots(currentMessageId, errorRootsSnapshot, "component cleanup");
