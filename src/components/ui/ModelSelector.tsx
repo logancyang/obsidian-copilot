@@ -7,10 +7,15 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ModelDisplay } from "@/components/ui/model-display";
-import { useSettingsValue, getModelKeyFromModel } from "@/settings/model";
+import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String } from "@/utils";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getApiKeyForProvider,
+  isRequiredChatModel,
+  providerRequiresApiKey,
+} from "@/utils/modelUtils";
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -37,6 +42,22 @@ export function ModelSelector({
     (model) => model.enabled && getModelKeyFromModel(model) === value
   );
 
+  // Filter models: show required models, local models, or models with valid API keys
+  const showModels = settings.activeModels.filter((model) => {
+    const isRequired = isRequiredChatModel(model);
+    if (isRequired) {
+      return true;
+    }
+
+    // Local providers don't require API keys
+    if (!providerRequiresApiKey(model.provider)) {
+      return true;
+    }
+
+    // Cloud providers need API keys
+    const hasApiKey = !!getApiKeyForProvider(model.provider, model);
+    return hasApiKey;
+  });
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -60,7 +81,7 @@ export function ModelSelector({
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
-        {settings.activeModels
+        {showModels
           .filter((model) => model.enabled)
           .map((model) => {
             const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
@@ -79,7 +100,7 @@ export function ModelSelector({
                     const msg = `Model switch failed: ` + err2String(error);
                     setModelError(msg);
                     // Restore to the last valid model
-                    const lastValidModel = settings.activeModels.find(
+                    const lastValidModel = showModels.find(
                       (m) => m.enabled && getModelKeyFromModel(m) === value
                     );
                     if (lastValidModel) {

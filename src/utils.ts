@@ -6,7 +6,6 @@ import {
   Provider,
   ProviderInfo,
   ProviderMetadata,
-  ProviderSettingsKeyMap,
   SettingKeyProviders,
   USER_SENDER,
 } from "@/constants";
@@ -20,6 +19,7 @@ import { BaseChain, RetrievalQAChain } from "@langchain/classic/chains";
 import moment from "moment";
 import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
+import { getApiKeyForProvider } from "@/utils/modelUtils";
 export { err2String } from "@/errorFormat";
 
 /**
@@ -1040,7 +1040,7 @@ export function getMessageRole(
   return isOSeriesModel(model) ? "human" : defaultRole;
 }
 
-export function getNeedSetKeyProvider() {
+export function getNeedSetKeyProvider(): Provider[] {
   // List of providers to exclude
   const excludeProviders: Provider[] = [
     ChatModelProviders.OPENAI_FORMAT,
@@ -1051,9 +1051,7 @@ export function getNeedSetKeyProvider() {
     EmbeddingModelProviders.COPILOT_PLUS_JINA,
   ];
 
-  return Object.entries(ProviderInfo)
-    .filter(([key]) => !excludeProviders.includes(key as Provider))
-    .map(([key]) => key as Provider);
+  return (Object.keys(ProviderInfo) as Provider[]).filter((key) => !excludeProviders.includes(key));
 }
 
 export function checkModelApiKey(
@@ -1078,9 +1076,9 @@ export function checkModelApiKey(
   }
 
   const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
-  const providerKeyName = ProviderSettingsKeyMap[model.provider as SettingKeyProviders];
-  const hasNoApiKey = !model.apiKey && !settings[providerKeyName];
+  const hasNoApiKey = !getApiKeyForProvider(model.provider as SettingKeyProviders, model);
 
+  // For Providers that require setting a key in the dialog, an inspection is necessary.
   if (needSetKeyPath && hasNoApiKey) {
     const notice =
       `Please configure API Key for ${model.name} in settings first.` +

@@ -19,6 +19,7 @@ import {
   safeFetch,
 } from "@/utils";
 import { ChevronDown, ChevronRight, ChevronUp, Info, Loader2 } from "lucide-react";
+import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { App, Modal, Notice } from "obsidian";
 import React, { useEffect, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -57,15 +58,10 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
     setSelectedModel(null);
   }, []); // Empty dependency array ensures this runs on mount
 
-  // Get API key by provider
-  const getApiKeyByProvider = (provider: SettingKeyProviders): string => {
-    const settingKey = ProviderSettingsKeyMap[provider];
-    return (settings[settingKey] ?? "") as string;
-  };
-
-  const providers: ProviderKeyItem[] = getNeedSetKeyProvider().map((provider) => {
-    const providerKey = provider as SettingKeyProviders;
-    const apiKey = getApiKeyByProvider(providerKey);
+  const providers: ProviderKeyItem[] = getNeedSetKeyProvider()
+    .map((provider) => {
+      const providerKey = provider as SettingKeyProviders;
+      const apiKey = getApiKeyForProvider(providerKey);
 
     return {
       provider: providerKey,
@@ -74,7 +70,7 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
   });
 
   const handleApiKeyChange = (provider: SettingKeyProviders, value: string) => {
-    const currentKey = getApiKeyByProvider(provider);
+    const currentKey = getApiKeyForProvider(provider);
     if (currentKey !== value) {
       updateSetting(ProviderSettingsKeyMap[provider], value);
       // Mark models as needing refresh for this provider
@@ -174,7 +170,7 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
     let verificationError = "";
 
     try {
-      const apiKey = getApiKeyByProvider(selectedModel.provider);
+      const apiKey = getApiKeyForProvider(selectedModel.provider);
       const customModel: CustomModel = {
         name: selectedModel.name,
         provider: selectedModel.provider,
