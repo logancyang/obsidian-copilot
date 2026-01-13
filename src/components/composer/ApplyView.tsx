@@ -128,58 +128,50 @@ interface SideBySideBlockProps {
 }
 
 const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
-  // Collect removed and added lines for pairing
-  const removedLines = block.filter((c) => c.removed);
-  const addedLines = block.filter((c) => c.added);
-  const unchangedLines = block.filter((c) => !c.added && !c.removed);
+  // Build rows preserving original sequence from the diff
+  // Only pair removed+added when they are adjacent (indicating a replacement)
+  const rows: { original: Change | null; modified: Change | null }[] = [];
 
-  // If there are no changes, just show the unchanged content on both sides
-  if (removedLines.length === 0 && addedLines.length === 0) {
-    return (
-      <div className="tw-grid tw-grid-cols-2 tw-gap-2">
-        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
-          {unchangedLines.map((change, idx) => (
-            <div
-              key={idx}
-              className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm tw-text-normal"
-            >
-              {change.value}
-            </div>
-          ))}
-        </div>
-        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
-          {unchangedLines.map((change, idx) => (
-            <div
-              key={idx}
-              className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm tw-text-normal"
-            >
-              {change.value}
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
+  let i = 0;
+  while (i < block.length) {
+    const current = block[i];
 
-  // Build paired lines for side-by-side comparison
-  const maxPairs = Math.max(removedLines.length, addedLines.length);
-  const pairedRows: { original: Change | null; modified: Change | null }[] = [];
-
-  for (let i = 0; i < maxPairs; i++) {
-    pairedRows.push({
-      original: removedLines[i] || null,
-      modified: addedLines[i] || null,
-    });
+    if (!current.added && !current.removed) {
+      // Unchanged line - show on both sides
+      rows.push({ original: current, modified: current });
+      i++;
+    } else if (current.removed) {
+      // Check if next item is an added line (replacement pair)
+      const next = block[i + 1];
+      if (next?.added) {
+        // Pair them as a replacement
+        rows.push({ original: current, modified: next });
+        i += 2;
+      } else {
+        // Standalone removal - show with empty right side
+        rows.push({ original: current, modified: null });
+        i++;
+      }
+    } else if (current.added) {
+      // Standalone addition - show with empty left side
+      rows.push({ original: null, modified: current });
+      i++;
+    } else {
+      i++;
+    }
   }
 
   return (
     <div className="tw-grid tw-grid-cols-2 tw-gap-2">
       {/* Original (left) column */}
       <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
-        {pairedRows.map((row, idx) => (
+        {rows.map((row, idx) => (
           <div key={idx} className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">
             {row.original ? (
-              row.modified ? (
+              row.original === row.modified ? (
+                // Unchanged line
+                <span className="tw-text-normal">{row.original.value}</span>
+              ) : row.modified ? (
                 // Show word-level diff with removed styling
                 <span className="tw-text-error">
                   {diffWords(row.original.value, row.modified.value).map((part, partIdx) => {
@@ -210,10 +202,13 @@ const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
 
       {/* Modified (right) column */}
       <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
-        {pairedRows.map((row, idx) => (
+        {rows.map((row, idx) => (
           <div key={idx} className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">
             {row.modified ? (
-              row.original ? (
+              row.original === row.modified ? (
+                // Unchanged line
+                <span className="tw-text-normal">{row.modified.value}</span>
+              ) : row.original ? (
                 // Show word-level diff with added styling
                 <span className="tw-text-success">
                   {diffWords(row.original.value, row.modified.value).map((part, partIdx) => {
