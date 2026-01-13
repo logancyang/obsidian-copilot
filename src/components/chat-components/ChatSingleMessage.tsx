@@ -26,15 +26,14 @@ import {
   renderToolCallBanner,
   type ToolCallRootRecord,
 } from "@/components/chat-components/toolCallRootManager";
-import { ModelCapability, USER_SENDER } from "@/constants";
+import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { ChatMessage } from "@/types/message";
-import { cleanMessageForCopy, extractYoutubeVideoId, findCustomModel, insertIntoEditor } from "@/utils";
+import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useModelKey } from "@/aiParams";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 
 const FOOTNOTE_SUFFIX_PATTERN = /^\d+-\d+$/;
@@ -205,18 +204,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     getMessageErrorBlockRoots(messageId.current)
   );
 
-  // Check if current model has reasoning capability
   const settings = useSettingsValue();
-  const [modelKey] = useModelKey();
-  const shouldProcessThinkBlocks = useMemo(() => {
-    try {
-      const currentModel = findCustomModel(modelKey, settings.activeModels);
-      return currentModel.capabilities?.includes(ModelCapability.REASONING) ?? false;
-    } catch {
-      // If we can't find the model, default to processing thinking blocks
-      return true;
-    }
-  }, [modelKey, settings.activeModels]);
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -391,10 +379,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         (file) => `![](${app.vault.getResourcePath(file)})`
       );
 
-      // Process think sections only if model has reasoning capability
-      const thinkSectionProcessed = shouldProcessThinkBlocks
-        ? processThinkSection(noteImageProcessed)
-        : noteImageProcessed;
+      // Process think sections (no-op if none); do not depend on current model selection
+      const thinkSectionProcessed = processThinkSection(noteImageProcessed);
 
       // Process writeToFile sections
       const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
@@ -442,7 +428,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       return processYouTubeEmbed(noteLinksProcessed);
     },
-    [app, isStreaming, shouldProcessThinkBlocks, settings.enableInlineCitations]
+    [app, isStreaming, settings.enableInlineCitations]
   );
 
   useEffect(() => {
