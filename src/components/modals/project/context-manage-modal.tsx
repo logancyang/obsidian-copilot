@@ -227,10 +227,11 @@ function getProjectContextItemStatus(
     if (lookup.success.has(key)) {
       return { status: "success" };
     }
+    // Current project: if not in any real-time status, it hasn't been processed yet
+    return { status: "notStarted" };
   }
 
-  // For non-current projects or files not in real-time status,
-  // check if they're cached
+  // For non-current projects, check if they're cached
   if (lookup.cachedFiles.has(key)) {
     return { status: "success" };
   }
