@@ -159,6 +159,8 @@ export interface CopilotSettings {
   autoAddSelectionToContext: boolean;
   /** Automatically accept file edits without showing preview confirmation */
   autoAcceptEdits: boolean;
+  /** Preferred diff view mode: inline or side-by-side */
+  diffViewMode: "inline" | "side-by-side";
 }
 
 export const settingsStore = createStore();
@@ -324,11 +326,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure autoAddActiveContentToContext has a default value (migrate from old settings)
   if (typeof sanitizedSettings.autoAddActiveContentToContext !== "boolean") {
     // Migration: check old setting first (includeActiveNoteAsContext)
-    const oldNoteContext = (settingsToSanitize as unknown as Record<string, unknown>).includeActiveNoteAsContext;
+    const oldNoteContext = (settingsToSanitize as unknown as Record<string, unknown>)
+      .includeActiveNoteAsContext;
     if (typeof oldNoteContext === "boolean") {
       sanitizedSettings.autoAddActiveContentToContext = oldNoteContext;
     } else {
-      sanitizedSettings.autoAddActiveContentToContext = DEFAULT_SETTINGS.autoAddActiveContentToContext;
+      sanitizedSettings.autoAddActiveContentToContext =
+        DEFAULT_SETTINGS.autoAddActiveContentToContext;
     }
   }
 
@@ -418,7 +422,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure autoAddSelectionToContext has a default value (migrate from old settings)
   if (typeof sanitizedSettings.autoAddSelectionToContext !== "boolean") {
     // Migration: check old setting first (autoIncludeTextSelection)
-    const oldTextSelection = (settingsToSanitize as unknown as Record<string, unknown>).autoIncludeTextSelection;
+    const oldTextSelection = (settingsToSanitize as unknown as Record<string, unknown>)
+      .autoIncludeTextSelection;
     if (typeof oldTextSelection === "boolean") {
       sanitizedSettings.autoAddSelectionToContext = oldTextSelection;
     } else {

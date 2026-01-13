@@ -1,11 +1,13 @@
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
+import { getSettings, updateSetting } from "@/settings/model";
 import { Change, diffWords } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { useRef, memo } from "react";
 import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
+import { Tabs, TabsList, TabsTrigger } from "../ui/tabs";
 import { useState } from "react";
 import { getChangeBlocks } from "@/composerUtils";
 import { ApplyViewResult } from "@/types";
@@ -120,6 +122,131 @@ const WordDiff = memo(({ oldLine, newLine }: { oldLine: string; newLine: string 
 
 WordDiff.displayName = "WordDiff";
 
+// Side-by-side block component for comparing original and modified content
+interface SideBySideBlockProps {
+  block: Change[];
+}
+
+const SideBySideBlock = memo(({ block }: SideBySideBlockProps) => {
+  // Collect removed and added lines for pairing
+  const removedLines = block.filter((c) => c.removed);
+  const addedLines = block.filter((c) => c.added);
+  const unchangedLines = block.filter((c) => !c.added && !c.removed);
+
+  // If there are no changes, just show the unchanged content on both sides
+  if (removedLines.length === 0 && addedLines.length === 0) {
+    return (
+      <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
+          {unchangedLines.map((change, idx) => (
+            <div
+              key={idx}
+              className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm tw-text-normal"
+            >
+              {change.value}
+            </div>
+          ))}
+        </div>
+        <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
+          {unchangedLines.map((change, idx) => (
+            <div
+              key={idx}
+              className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm tw-text-normal"
+            >
+              {change.value}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Build paired lines for side-by-side comparison
+  const maxPairs = Math.max(removedLines.length, addedLines.length);
+  const pairedRows: { original: Change | null; modified: Change | null }[] = [];
+
+  for (let i = 0; i < maxPairs; i++) {
+    pairedRows.push({
+      original: removedLines[i] || null,
+      modified: addedLines[i] || null,
+    });
+  }
+
+  return (
+    <div className="tw-grid tw-grid-cols-2 tw-gap-2">
+      {/* Original (left) column */}
+      <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
+        {pairedRows.map((row, idx) => (
+          <div key={idx} className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">
+            {row.original ? (
+              row.modified ? (
+                // Show word-level diff with removed styling
+                <span className="tw-text-error">
+                  {diffWords(row.original.value, row.modified.value).map((part, partIdx) => {
+                    if (part.removed) {
+                      return (
+                        <span key={partIdx} className="tw-bg-error tw-line-through">
+                          {part.value}
+                        </span>
+                      );
+                    }
+                    if (part.added) {
+                      return null; // Don't show added parts in original column
+                    }
+                    return <span key={partIdx}>{part.value}</span>;
+                  })}
+                </span>
+              ) : (
+                // Only removed, no pair
+                <span className="tw-text-error tw-line-through">{row.original.value}</span>
+              )
+            ) : (
+              // Empty placeholder for alignment
+              <span className="tw-text-muted">&nbsp;</span>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* Modified (right) column */}
+      <div className="tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-p-2">
+        {pairedRows.map((row, idx) => (
+          <div key={idx} className="tw-whitespace-pre-wrap tw-font-mono tw-text-sm">
+            {row.modified ? (
+              row.original ? (
+                // Show word-level diff with added styling
+                <span className="tw-text-success">
+                  {diffWords(row.original.value, row.modified.value).map((part, partIdx) => {
+                    if (part.added) {
+                      return (
+                        <span key={partIdx} className="tw-bg-success">
+                          {part.value}
+                        </span>
+                      );
+                    }
+                    if (part.removed) {
+                      return null; // Don't show removed parts in modified column
+                    }
+                    return <span key={partIdx}>{part.value}</span>;
+                  })}
+                </span>
+              ) : (
+                // Only added, no pair
+                <span className="tw-text-success">{row.modified.value}</span>
+              )
+            ) : (
+              // Empty placeholder for alignment
+              <span className="tw-text-muted">&nbsp;</span>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+});
+
+SideBySideBlock.displayName = "SideBySideBlock";
+
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
     return state.changes.map((change) => ({
@@ -127,6 +254,16 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       accepted: null, // Start with null (undecided)
     }));
   });
+
+  // View mode state with settings persistence
+  const [viewMode, setViewMode] = useState<"inline" | "side-by-side">(
+    () => getSettings().diffViewMode ?? "inline"
+  );
+
+  const handleViewModeChange = (mode: "inline" | "side-by-side") => {
+    setViewMode(mode);
+    updateSetting("diffViewMode", mode);
+  };
 
   // Group changes into blocks for better UI presentation
   const changeBlocks = getChangeBlocks(diff);
@@ -307,8 +444,17 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
           Accept
         </Button>
       </div>
-      <div className="tw-flex tw-items-center tw-border-b tw-border-solid tw-border-border tw-p-2 tw-text-sm tw-font-medium">
-        {state.path}
+      <div className="tw-flex tw-items-center tw-justify-between tw-border-b tw-border-solid tw-border-border tw-p-2">
+        <div className="tw-text-sm tw-font-medium">{state.path}</div>
+        <Tabs
+          value={viewMode}
+          onValueChange={(v) => handleViewModeChange(v as "inline" | "side-by-side")}
+        >
+          <TabsList className="tw-bg-secondary">
+            <TabsTrigger value="inline">Inline</TabsTrigger>
+            <TabsTrigger value="side-by-side">Side-by-side</TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
 
       <div className="tw-flex-1 tw-overflow-auto tw-p-2">
@@ -356,8 +502,11 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
                       <div key={idx}>{change.value}</div>
                     ))}
                 </div>
+              ) : viewMode === "side-by-side" ? (
+                // Side-by-side view
+                <SideBySideBlock block={block} />
               ) : (
-                // Render the block
+                // Inline view (default)
                 block.map((change, changeIndex) => {
                   // Try to find a corresponding added/removed pair for word-level diff
                   if (change.added) {
