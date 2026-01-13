@@ -87,7 +87,7 @@ export interface CopilotSettings {
    * When disabled (default), use the first 10 words of the first user message.
    */
   generateAIChatTitleOnSave: boolean;
-  includeActiveNoteAsContext: boolean;
+  autoAddActiveContentToContext: boolean;
   customPromptsFolder: string;
   indexVaultToVectorStore: string;
   chatNoteContextPath: string;
@@ -153,6 +153,7 @@ export interface CopilotSettings {
   quickCommandIncludeNoteContext: boolean;
   /** Automatically add text selections to chat context */
   autoIncludeTextSelection: boolean;
+  autoAddSelectionToContext: boolean;
   /** Automatically accept file edits without showing preview confirmation */
   autoAcceptEdits: boolean;
 }
@@ -317,9 +318,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.lexicalSearchRamLimit = Math.min(1000, Math.max(20, lexicalSearchRamLimit));
   }
 
-  // Ensure includeActiveNoteAsContext has a default value
-  if (typeof sanitizedSettings.includeActiveNoteAsContext !== "boolean") {
-    sanitizedSettings.includeActiveNoteAsContext = DEFAULT_SETTINGS.includeActiveNoteAsContext;
+  // Ensure autoAddActiveContentToContext has a default value (migrate from old settings)
+  if (typeof sanitizedSettings.autoAddActiveContentToContext !== "boolean") {
+    // Migration: check old setting first (includeActiveNoteAsContext)
+    const oldNoteContext = (settingsToSanitize as unknown as Record<string, unknown>).includeActiveNoteAsContext;
+    if (typeof oldNoteContext === "boolean") {
+      sanitizedSettings.autoAddActiveContentToContext = oldNoteContext;
+    } else {
+      sanitizedSettings.autoAddActiveContentToContext = DEFAULT_SETTINGS.autoAddActiveContentToContext;
+    }
   }
 
   // Ensure generateAIChatTitleOnSave has a default value
@@ -405,9 +412,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.quickCommandModelKey = DEFAULT_SETTINGS.quickCommandModelKey;
   }
 
-  // Ensure autoIncludeTextSelection has a default value
-  if (typeof sanitizedSettings.autoIncludeTextSelection !== "boolean") {
-    sanitizedSettings.autoIncludeTextSelection = DEFAULT_SETTINGS.autoIncludeTextSelection;
+  // Ensure autoAddSelectionToContext has a default value (migrate from old settings)
+  if (typeof sanitizedSettings.autoAddSelectionToContext !== "boolean") {
+    // Migration: check old setting first (autoIncludeTextSelection)
+    const oldTextSelection = (settingsToSanitize as unknown as Record<string, unknown>).autoIncludeTextSelection;
+    if (typeof oldTextSelection === "boolean") {
+      sanitizedSettings.autoAddSelectionToContext = oldTextSelection;
+    } else {
+      sanitizedSettings.autoAddSelectionToContext = DEFAULT_SETTINGS.autoAddSelectionToContext;
+    }
   }
 
   // Ensure autoAcceptEdits has a default value

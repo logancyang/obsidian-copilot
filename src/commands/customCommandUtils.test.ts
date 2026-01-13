@@ -13,12 +13,20 @@ import * as settingsModelModule from "@/settings/model";
 import { PromptSortStrategy } from "@/types";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
 import { DEFAULT_SETTINGS } from "@/constants";
+import { logWarn } from "@/logger";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({
   Notice: jest.fn(),
   TFile: jest.fn(),
   Vault: jest.fn(),
+}));
+
+// Mock logger
+jest.mock("@/logger", () => ({
+  logWarn: jest.fn(),
+  logInfo: jest.fn(),
+  logError: jest.fn(),
 }));
 
 // Mock the utility functions
@@ -34,14 +42,8 @@ jest.mock("@/utils", () => ({
 describe("processedPrompt()", () => {
   let mockVault: Vault;
   let mockActiveNote: TFile;
-  let originalConsoleWarn: typeof console.warn;
 
   beforeEach(() => {
-    // Save original console.warn
-    originalConsoleWarn = console.warn;
-    // Mock console.warn
-    console.warn = jest.fn();
-
     // Reset mocks before each test
     jest.clearAllMocks();
     jest.resetAllMocks();
@@ -62,11 +64,6 @@ describe("processedPrompt()", () => {
       path: "path/to/active/note.md",
       basename: "Active Note",
     } as TFile;
-  });
-
-  afterEach(() => {
-    // Restore original console.warn
-    console.warn = originalConsoleWarn;
   });
 
   it("should add 1 context and selectedText", async () => {
@@ -569,7 +566,7 @@ describe("processedPrompt()", () => {
     );
     expect(result.includedFiles).toContain(mockActiveNote);
     // Expect the warning for the invalid variable
-    expect(console.warn).toHaveBeenCalledWith("No notes found for variable: invalidVariable");
+    expect(logWarn).toHaveBeenCalledWith("No notes found for variable: invalidVariable");
   });
 });
 

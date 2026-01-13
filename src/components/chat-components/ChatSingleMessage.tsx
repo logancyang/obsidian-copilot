@@ -7,6 +7,7 @@ import {
   ContextSelectedTextBadge,
   ContextTagBadge,
   ContextUrlBadge,
+  ContextWebTabBadge,
 } from "@/components/chat-components/ContextBadges";
 import { InlineMessageEditor } from "@/components/chat-components/InlineMessageEditor";
 import { TokenLimitWarning } from "@/components/chat-components/TokenLimitWarning";
@@ -30,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { ChatMessage } from "@/types/message";
-import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
+import { cleanMessageForCopy, extractYoutubeVideoId, findCustomModel, insertIntoEditor } from "@/utils";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useModelKey } from "@/aiParams";
@@ -78,6 +79,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
     !context ||
     (!context.notes?.length &&
       !context.urls?.length &&
+      !context.webTabs?.length &&
       !context.tags?.length &&
       !context.folders?.length &&
       !context.selectedTextContexts?.length)
@@ -105,6 +107,25 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">{url}</TooltipContent>
+        </Tooltip>
+      ))}
+      {context.webTabs?.map((webTab, index) => (
+        <Tooltip key={`webTab-${index}-${webTab.url}`}>
+          <TooltipTrigger asChild>
+            <div>
+              <ContextWebTabBadge webTab={webTab} />
+            </div>
+          </TooltipTrigger>
+          <TooltipContent className="tw-max-w-sm tw-break-words">
+            {webTab.title ? (
+              <div className="tw-text-left">
+                <div className="tw-font-medium">{webTab.title}</div>
+                <div>{webTab.url}</div>
+              </div>
+            ) : (
+              webTab.url
+            )}
+          </TooltipContent>
         </Tooltip>
       ))}
       {context.tags?.map((tag, index) => (
@@ -135,7 +156,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
             </div>
           </TooltipTrigger>
           <TooltipContent className="tw-max-w-sm tw-break-words">
-            {selectedText.notePath}
+            {selectedText.sourceType === "web" ? selectedText.url : selectedText.notePath}
           </TooltipContent>
         </Tooltip>
       ))}
@@ -392,7 +413,34 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`
       );
 
-      return noteLinksProcessed;
+      /**
+       * Converts YouTube video embeds to static thumbnails during streaming.
+       * This prevents iframe flickering caused by repeated DOM recreation.
+       * After streaming ends, the original embed syntax is preserved for full video display.
+       */
+      const processYouTubeEmbed = (content: string): string => {
+        if (!isStreaming) {
+          // After streaming: keep original syntax for full video embed
+          return content;
+        }
+
+        // Match ![title](url) format and check if URL is YouTube
+        const imageEmbedRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+
+        return content.replace(imageEmbedRegex, (match, title, url) => {
+          const videoId = extractYoutubeVideoId(url);
+          if (!videoId) {
+            // Not a YouTube URL, keep original
+            return match;
+          }
+          // During streaming: convert to clickable thumbnail to avoid iframe reload flicker
+          const displayTitle = title || "YouTube Video";
+          const thumbnail = `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`;
+          return `[![${displayTitle}](${thumbnail})](${url})`;
+        });
+      };
+
+      return processYouTubeEmbed(noteLinksProcessed);
     },
     [app, isStreaming, shouldProcessThinkBlocks, settings.enableInlineCitations]
   );

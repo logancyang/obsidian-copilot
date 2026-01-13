@@ -9,6 +9,7 @@ import {
   QUICK_COMMAND_CODE_BLOCK,
 } from "@/commands/constants";
 import { CustomCommand } from "@/commands/type";
+import { logWarn } from "@/logger";
 import { normalizePath, Notice, TAbstractFile, TFile, Vault, Editor } from "obsidian";
 import { getSettings } from "@/settings/model";
 import {
@@ -270,7 +271,9 @@ async function extractVariablesFromPrompt(
     const variableName = match[1].trim();
     const variableResult: VariableProcessingResult = { content: "", files: [] };
 
-    if (variableName.toLowerCase() === "activenote") {
+    const variableNameLower = variableName.toLowerCase();
+
+    if (variableNameLower === "activenote") {
       if (activeNote) {
         const content = await getFileContent(activeNote, vault);
         if (content) {
@@ -280,6 +283,9 @@ async function extractVariablesFromPrompt(
       } else {
         new Notice("No active note found.");
       }
+    } else if (variableNameLower === "activewebtab") {
+      // Reserved variable: handled by webTabs context pipeline, skip here
+      continue;
     } else if (variableName.startsWith("#")) {
       // Handle tag-based variable for multiple tags
       const tagNames = variableName
@@ -317,11 +323,11 @@ async function extractVariablesFromPrompt(
     if (variableResult.content) {
       variablesMap.set(variableName, variableResult.content);
       variableResult.files.forEach((file) => includedFiles.add(file));
-    } else if (variableName.toLowerCase() !== "activenote") {
+    } else if (variableNameLower !== "activenote" && variableNameLower !== "activewebtab") {
       if (variableName.startsWith('"')) {
         // DO NOTHING as the user probably wants to write a JSON object
       } else {
-        console.warn(`No notes found for variable: ${variableName}`);
+        logWarn(`No notes found for variable: ${variableName}`);
       }
     }
   }

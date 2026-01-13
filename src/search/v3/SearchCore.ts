@@ -150,7 +150,8 @@ export class SearchCore {
         salientTerms,
         maxResults,
         expanded.originalQuery,
-        returnAll
+        returnAll,
+        expanded.expandedTerms
       );
 
       // 6. Apply boosts to lexical results (if enabled)
@@ -291,6 +292,8 @@ export class SearchCore {
    * @param salientTerms - Salient terms for scoring (extracted from original query)
    * @param maxResults - Maximum number of results
    * @param originalQuery - The original user query for scoring
+   * @param returnAll - Whether to return all results up to RETURN_ALL_LIMIT
+   * @param expandedTerms - LLM-generated related terms (secondary scoring for recall boost)
    * @returns Ranked list of documents from lexical search
    */
   private async executeLexicalSearch(
@@ -299,7 +302,8 @@ export class SearchCore {
     salientTerms: string[],
     maxResults: number,
     originalQuery?: string,
-    returnAll: boolean = false
+    returnAll: boolean = false,
+    expandedTerms: string[] = []
   ): Promise<NoteIdRank[]> {
     try {
       // Build ephemeral full-text index
@@ -321,7 +325,8 @@ export class SearchCore {
         recallQueries,
         searchLimit,
         salientTerms,
-        originalQuery
+        originalQuery,
+        expandedTerms
       );
       const searchTime = Date.now() - searchStartTime;
 

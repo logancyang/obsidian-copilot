@@ -22,6 +22,21 @@ import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "o
 import { CustomModel } from "./aiParams";
 export { err2String } from "@/errorFormat";
 
+/**
+ * Extract domain from URL, removing 'www.' prefix.
+ * Returns the original URL string if parsing fails.
+ * @param url - The URL to extract domain from
+ * @returns Domain without 'www.' prefix, or original string on parse failure
+ */
+export function getDomainFromUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    return urlObj.hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 // Add custom error type at the top of the file
 interface APIError extends Error {
   json?: any;

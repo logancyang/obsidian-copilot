@@ -1,7 +1,10 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { CustomModel, getCurrentProject, setSelectedTextContexts } from "@/aiParams";
-import { SelectedTextContext } from "@/types/message";
+import { CustomModel, getCurrentProject, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
+import {
+  NoteSelectedTextContext,
+  SelectedTextContext,
+} from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -21,6 +24,11 @@ import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { checkIsPlusUser } from "@/plusUtils";
+import {
+  getWebViewerService,
+  startActiveWebTabTracking,
+} from "@/services/webViewerService/webViewerServiceSingleton";
+import { WebSelectionTracker } from "@/services/webViewerService/webViewerServiceSelection";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
@@ -39,6 +47,7 @@ import {
   MarkdownView,
   Menu,
   Notice,
+  Platform,
   Plugin,
   TFile,
   TFolder,
@@ -63,6 +72,7 @@ export default class CopilotPlugin extends Plugin {
   userMemoryManager: UserMemoryManager;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
+  private webSelectionTracker?: WebSelectionTracker;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -108,6 +118,17 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
+
+    // Single source of truth for Active Web Tab ({activeWebTab}) state
+    // Preserves activeWebTab when switching to Chat view
+    // Only run on desktop - Web Viewer is not available on mobile
+    if (Platform.isDesktopApp) {
+      const { activeLeafRef, layoutRef } = startActiveWebTabTracking(this.app, {
+        preserveOnViewTypes: [CHAT_VIEWTYPE],
+      });
+      this.registerEvent(activeLeafRef);
+      this.registerEvent(layoutRef);
+    }
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
@@ -167,6 +188,9 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize automatic selection handler
     this.initSelectionHandler();
+
+    // Initialize web selection watcher (Desktop only)
+    this.initWebSelectionWatcher();
   }
 
   async onunload() {
@@ -183,7 +207,16 @@ export default class CopilotPlugin extends Plugin {
 
     // Cleanup selection handler
     this.cleanupSelectionHandler();
+    this.cleanupWebSelectionWatcher();
     this.clearSelectionContext();
+
+    // Cleanup Web Viewer state tracking (webview event listeners)
+    try {
+      const webViewerService = getWebViewerService(this.app);
+      webViewerService.stopActiveWebTabTracking();
+    } catch {
+      // Ignore errors if service not available
+    }
 
     // Best-effort flush of log file
     await logFileManager.flush();
@@ -298,7 +331,21 @@ export default class CopilotPlugin extends Plugin {
   }
 
   /**
-   * Stores the provided selection as the active selected text context
+   * Clears the auto-selected web text context for a specific URL.
+   * Preserves contexts from other sourceTypes and other URLs.
+   */
+  private clearWebSelectionContextForUrl(url: string): void {
+    const current = getSelectedTextContexts();
+    const next = current.filter((c) => c.sourceType !== "web" || c.url !== url);
+    if (next.length === current.length) {
+      return;
+    }
+    setSelectedTextContexts(next);
+  }
+
+  /**
+   * Stores the provided selection as the active selected text context.
+   * Only keeps the latest selection - note and web selections are mutually exclusive.
    */
   private setSelectionContext(context: SelectedTextContext) {
     setSelectedTextContexts([context]);
@@ -311,7 +358,7 @@ export default class CopilotPlugin extends Plugin {
   handleSelectionChange() {
     // Check if auto-inclusion is enabled
     const settings = getSettings();
-    if (!settings.autoIncludeTextSelection) {
+    if (!settings.autoAddSelectionToContext) {
       return;
     }
 
@@ -345,9 +392,10 @@ export default class CopilotPlugin extends Plugin {
     const endLine = Math.max(anchorLine, headLine);
 
     // Create selected text context
-    const selectedTextContext: SelectedTextContext = {
+    const selectedTextContext: NoteSelectedTextContext = {
       id: uuidv4(),
       content: selectedText,
+      sourceType: "note",
       noteTitle: activeFile.basename,
       notePath: activeFile.path,
       startLine,
@@ -355,6 +403,58 @@ export default class CopilotPlugin extends Plugin {
     };
 
     this.setSelectionContext(selectedTextContext);
+  }
+
+  /**
+   * Initialize web selection watcher for auto-adding web tab selections.
+   * Desktop only - uses WebSelectionTracker with self-scheduling pattern.
+   */
+  initWebSelectionWatcher() {
+    // Only run on desktop
+    if (!Platform.isDesktopApp) {
+      return;
+    }
+
+    const webViewerService = getWebViewerService(this.app);
+
+    this.webSelectionTracker = new WebSelectionTracker({
+      intervalMs: 500,
+      emptySelectionDebounceCount: 2,
+      isEnabled: () => getSettings().autoAddSelectionToContext,
+      getLeaf: () => webViewerService.getActiveLeaf() ?? webViewerService.getLastActiveLeaf(),
+      getActiveLeaf: () => webViewerService.getActiveLeaf(),
+      onSelectionChange: (context) => {
+        // Use symmetric update strategy via setSelectionContext
+        this.setSelectionContext(context);
+      },
+      onSelectionClear: ({ url }) => {
+        this.clearWebSelectionContextForUrl(url);
+      },
+    });
+
+    this.webSelectionTracker.start();
+  }
+
+  /**
+   * Clean up web selection watcher
+   */
+  cleanupWebSelectionWatcher() {
+    this.webSelectionTracker?.stop();
+    this.webSelectionTracker = undefined;
+  }
+
+  /**
+   * Suppress the current web selection so it won't be auto-captured again until it changes or is cleared.
+   * Called by UI when user removes web selection or starts a new chat.
+   * @param url - Optional URL to suppress (prevents leaf-binding issues when lastActiveLeaf has changed)
+   */
+  suppressCurrentWebSelection(url?: string): void {
+    if (url && url.trim()) {
+      this.webSelectionTracker?.suppressSelectionForUrl(url);
+      return;
+    }
+
+    this.webSelectionTracker?.suppressCurrentSelection();
   }
 
   private getCurrentEditorOrDummy(): Editor {

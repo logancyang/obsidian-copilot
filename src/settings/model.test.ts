@@ -79,3 +79,77 @@ describe("sanitizeSettings - defaultSendShortcut migration", () => {
     expect(sanitized.defaultSendShortcut).toBe(SEND_SHORTCUT.SHIFT_ENTER);
   });
 });
+
+describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
+  it("should migrate from old includeActiveNoteAsContext=true", () => {
+    const oldSettings = {
+      ...DEFAULT_SETTINGS,
+      autoAddActiveContentToContext: undefined as any,
+      includeActiveNoteAsContext: true,
+    };
+
+    const sanitized = sanitizeSettings(oldSettings);
+
+    expect(sanitized.autoAddActiveContentToContext).toBe(true);
+  });
+
+  it("should migrate from old includeActiveNoteAsContext=false", () => {
+    const oldSettings = {
+      ...DEFAULT_SETTINGS,
+      autoAddActiveContentToContext: undefined as any,
+      includeActiveNoteAsContext: false,
+    };
+
+    const sanitized = sanitizeSettings(oldSettings);
+
+    expect(sanitized.autoAddActiveContentToContext).toBe(false);
+  });
+
+  it("should use default when no old setting exists", () => {
+    const newSettings = {
+      ...DEFAULT_SETTINGS,
+      autoAddActiveContentToContext: undefined as any,
+    };
+
+    const sanitized = sanitizeSettings(newSettings);
+
+    expect(sanitized.autoAddActiveContentToContext).toBe(DEFAULT_SETTINGS.autoAddActiveContentToContext);
+  });
+});
+
+describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
+  it("should migrate from old autoIncludeTextSelection=true", () => {
+    const oldSettings = {
+      ...DEFAULT_SETTINGS,
+      autoAddSelectionToContext: undefined as any,
+      autoIncludeTextSelection: true,
+    };
+
+    const sanitized = sanitizeSettings(oldSettings);
+
+    expect(sanitized.autoAddSelectionToContext).toBe(true);
+  });
+
+  it("should migrate from old autoIncludeTextSelection=false", () => {
+    const oldSettings = {
+      ...DEFAULT_SETTINGS,
+      autoAddSelectionToContext: undefined as any,
+      autoIncludeTextSelection: false,
+    };
+
+    const sanitized = sanitizeSettings(oldSettings);
+
+    expect(sanitized.autoAddSelectionToContext).toBe(false);
+  });
+
+  it("should use default when no old setting exists", () => {
+    const newSettings = {
+      ...DEFAULT_SETTINGS,
+      autoAddSelectionToContext: undefined as any,
+    };
+
+    const sanitized = sanitizeSettings(newSettings);
+
+    expect(sanitized.autoAddSelectionToContext).toBe(DEFAULT_SETTINGS.autoAddSelectionToContext);
+  });
+});

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
+import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
@@ -24,6 +25,7 @@ const ChainType2Label: Record<ChainType, string> = {
 
 export const BasicSettings: React.FC = () => {
   const settings = useSettingsValue();
+  const { setSelectedTab } = useTab();
   const [isChecking, setIsChecking] = useState(false);
   const [conversationNoteName, setConversationNoteName] = useState(
     settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}"
@@ -122,7 +124,7 @@ export const BasicSettings: React.FC = () => {
             >
               <Button
                 onClick={() => {
-                  new ApiKeyDialog(app).open();
+                  new ApiKeyDialog(app, () => setSelectedTab("model")).open();
                 }}
                 variant="secondary"
                 className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 sm:tw-w-auto sm:tw-justify-start"
@@ -266,21 +268,21 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="switch"
-            title="Include Current Note in Context Menu"
-            description="Automatically include the current note in the chat context menu by default when sending messages to the AI."
-            checked={settings.includeActiveNoteAsContext}
+            title="Auto-Add Active Content to Context"
+            description="Automatically add the active note or Web Viewer tab (Desktop only) to chat context when sending messages."
+            checked={settings.autoAddActiveContentToContext}
             onCheckedChange={(checked) => {
-              updateSetting("includeActiveNoteAsContext", checked);
+              updateSetting("autoAddActiveContentToContext", checked);
             }}
           />
 
           <SettingItem
             type="switch"
-            title="Auto-Add Text Selection to Context"
-            description="Automatically add selected text to chat context when you make a text selection in markdown notes. Disable to use manual command instead."
-            checked={settings.autoIncludeTextSelection}
+            title="Auto-Add Selection to Context"
+            description="Automatically add selected text from notes or Web Viewer (Desktop only) to chat context. Disable to use manual command instead."
+            checked={settings.autoAddSelectionToContext}
             onCheckedChange={(checked) => {
-              updateSetting("autoIncludeTextSelection", checked);
+              updateSetting("autoAddSelectionToContext", checked);
             }}
           />
 
