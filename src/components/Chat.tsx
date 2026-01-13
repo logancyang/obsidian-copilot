@@ -11,6 +11,7 @@ import {
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
+import type { WebTabContext } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -46,6 +47,7 @@ import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 
 type ChatMode = "default" | "project";
 
@@ -101,6 +103,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
+  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
@@ -128,8 +131,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
 
   const [selectedTextContexts] = useSelectedTextContexts();
-  const hasSelectedTextContext = selectedTextContexts.length > 0;
-  const effectiveIncludeActiveNote = includeActiveNote && !hasSelectedTextContext;
+
+  // Any selection hides both active note and active web tab
+  const hasAnySelection = selectedTextContexts.length > 0;
+  const effectiveIncludeActiveNote = includeActiveNote && !hasAnySelection;
+  const effectiveIncludeActiveWebTab = includeActiveWebTab && !hasAnySelection;
+
+  const { activeWebTabForMentions: currentActiveWebTab } = useActiveWebTabState();
   const projectContextStatus = useProjectContextStatus();
 
   // Calculate whether to show ProgressCard based on status and user preference
@@ -180,12 +188,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     contextNotes: passedContextNotes,
     contextTags,
     contextFolders,
+    webTabs,
   }: {
     toolCalls?: string[];
     urls?: string[];
     contextNotes?: TFile[];
     contextTags?: string[];
     contextFolders?: string[];
+    webTabs?: WebTabContext[];
   } = {}) => {
     if (!inputMessage && selectedImages.length === 0) return;
 
@@ -242,6 +252,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         tags: contextTags || [],
         folders: contextFolders || [],
         selectedTextContexts,
+        webTabs: webTabs || [],
       };
 
       // Clear input and images
@@ -256,6 +267,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         context,
         currentChain,
         effectiveIncludeActiveNote,
+        effectiveIncludeActiveWebTab,
         content.length > 0 ? content : undefined
       );
 
@@ -538,9 +550,17 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     [settings.projectList]
   );
 
-  const handleRemoveSelectedText = useCallback((id: string) => {
-    removeSelectedTextContext(id);
-  }, []);
+  const handleRemoveSelectedText = useCallback(
+    (id: string) => {
+      const removed = selectedTextContexts.find((ctx) => ctx.id === id);
+      removeSelectedTextContext(id);
+      // Suppress web selection to prevent it from being auto-captured again
+      if (removed?.sourceType === "web") {
+        plugin.suppressCurrentWebSelection(removed.url);
+      }
+    },
+    [plugin, selectedTextContexts]
+  );
 
   useEffect(() => {
     const handleChatVisibility = () => {
@@ -603,12 +623,18 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
     setLatestTokenCount(null); // Clear token count on new chat
+    // Capture web selection URL before clearing for suppression
+    const webSelectionUrl = selectedTextContexts.find((ctx) => ctx.sourceType === "web")?.url;
     clearSelectedTextContexts();
-    // Respect the includeActiveNote setting for all non-project chains
+    // Suppress web selection to prevent it from reappearing in new chat
+    plugin.suppressCurrentWebSelection(webSelectionUrl);
+    // Respect the autoAddActiveContentToContext setting for all non-project chains
     if (selectedChain === ChainType.PROJECT_CHAIN) {
       setIncludeActiveNote(false);
+      setIncludeActiveWebTab(false);
     } else {
-      setIncludeActiveNote(settings.includeActiveNoteAsContext);
+      setIncludeActiveNote(settings.autoAddActiveContentToContext);
+      setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
     }
   }, [
     handleStopGenerating,
@@ -616,11 +642,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     chatUIState,
     settings.autosaveChat,
     settings.enableRecentConversations,
-    settings.includeActiveNoteAsContext,
+    settings.autoAddActiveContentToContext,
     selectedChain,
     handleSaveAsNote,
     safeSet,
-    plugin.userMemoryManager,
+    plugin,
+    selectedTextContexts,
   ]);
 
   const handleLoadChatHistory = useCallback(async () => {
@@ -700,17 +727,19 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     };
   }, [eventTarget, handleStopGenerating]);
 
-  // Use the includeActiveNoteAsContext setting
+  // Use the autoAddActiveContentToContext setting
   useEffect(() => {
-    if (settings.includeActiveNoteAsContext !== undefined) {
+    if (settings.autoAddActiveContentToContext !== undefined) {
       // Only apply the setting if not in Project mode
       if (selectedChain === ChainType.PROJECT_CHAIN) {
         setIncludeActiveNote(false);
+        setIncludeActiveWebTab(false);
       } else {
-        setIncludeActiveNote(settings.includeActiveNoteAsContext);
+        setIncludeActiveNote(settings.autoAddActiveContentToContext);
+        setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
       }
     }
-  }, [settings.includeActiveNoteAsContext, selectedChain]);
+  }, [settings.autoAddActiveContentToContext, selectedChain]);
 
   // Note: pendingMessages loading has been removed as ChatManager now handles
   // message persistence and loading automatically based on project context
@@ -784,6 +813,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               setContextNotes={setContextNotes}
               includeActiveNote={includeActiveNote}
               setIncludeActiveNote={setIncludeActiveNote}
+              includeActiveWebTab={includeActiveWebTab}
+              setIncludeActiveWebTab={setIncludeActiveWebTab}
+              activeWebTab={currentActiveWebTab}
               selectedImages={selectedImages}
               onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
               setSelectedImages={setSelectedImages}

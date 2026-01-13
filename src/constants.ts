@@ -101,6 +101,7 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
 
 export const NOTE_CONTEXT_PROMPT_TAG = "note_context";
 export const SELECTED_TEXT_TAG = "selected_text";
+export const WEB_SELECTED_TEXT_TAG = "web_selected_text";
 export const VARIABLE_TAG = "variable";
 export const VARIABLE_NOTE_TAG = "variable_note";
 export const EMBEDDED_PDF_TAG = "embedded_pdf";
@@ -108,6 +109,11 @@ export const EMBEDDED_NOTE_TAG = "embedded_note";
 export const DATAVIEW_BLOCK_TAG = "dataview_block";
 export const VAULT_NOTE_TAG = "vault_note";
 export const RETRIEVED_DOCUMENT_TAG = "retrieved_document";
+export const WEB_TAB_CONTEXT_TAG = "web_tab_context";
+export const ACTIVE_WEB_TAB_CONTEXT_TAG = "active_web_tab";
+export const YOUTUBE_VIDEO_CONTEXT_TAG = "youtube_video_context";
+/** Marker text used as placeholder for active web tab in serialized content */
+export const ACTIVE_WEB_TAB_MARKER = "{activeWebTab}";
 export const EMPTY_INDEX_ERROR_MESSAGE =
   "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
@@ -682,6 +688,7 @@ export const COMMAND_IDS = {
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
   ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
+  ADD_WEB_SELECTION_TO_CHAT_CONTEXT: "add-web-selection-to-chat-context",
   ADD_CUSTOM_COMMAND: "add-custom-command",
   APPLY_CUSTOM_COMMAND: "apply-custom-command",
   OPEN_LOG_FILE: "open-log-file",
@@ -709,6 +716,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search semantic index (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
+  [COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT]: "Add web selection to chat context",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "Add new custom command",
   [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "Apply custom command",
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
@@ -763,7 +771,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultConversationTag: "copilot-conversation",
   autosaveChat: true,
   generateAIChatTitleOnSave: true,
-  includeActiveNoteAsContext: true,
+  autoAddActiveContentToContext: true,
   defaultOpenArea: DEFAULT_OPEN_AREA.VIEW,
   defaultSendShortcut: SEND_SHORTCUT.ENTER,
   customPromptsFolder: DEFAULT_CUSTOM_PROMPTS_FOLDER,
@@ -819,7 +827,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSavedMemory: true,
   quickCommandModelKey: undefined,
   quickCommandIncludeNoteContext: true,
-  autoIncludeTextSelection: false,
+  autoAddSelectionToContext: false,
 };
 
 export const EVENT_NAMES = {

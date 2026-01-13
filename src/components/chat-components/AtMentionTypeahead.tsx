@@ -57,6 +57,9 @@ export function AtMentionTypeahead({
   // Handle selection
   const handleSelect = useCallback(
     (option: any) => {
+      // Guard: never select disabled options (defensive check for click events)
+      if (option?.disabled) return;
+
       if (extendedState.mode === "category" && isCategoryOption(option) && !searchQuery) {
         // Category was selected - switch to search mode for that category
         setExtendedState((prev) => ({
@@ -92,14 +95,30 @@ export function AtMentionTypeahead({
       switch (event.key) {
         case "ArrowDown": {
           event.preventDefault();
-          const nextIndex = Math.min(selectedIndex + 1, searchResults.length - 1);
+          let nextIndex = selectedIndex + 1;
+          // Skip disabled options
+          while (nextIndex < searchResults.length && searchResults[nextIndex]?.disabled) {
+            nextIndex++;
+          }
+          // If no valid option found, stay at current position
+          if (nextIndex >= searchResults.length) {
+            nextIndex = selectedIndex;
+          }
           setSelectedIndex(nextIndex);
           break;
         }
 
         case "ArrowUp": {
           event.preventDefault();
-          const prevIndex = Math.max(selectedIndex - 1, 0);
+          let prevIndex = selectedIndex - 1;
+          // Skip disabled options
+          while (prevIndex >= 0 && searchResults[prevIndex]?.disabled) {
+            prevIndex--;
+          }
+          // If no valid option found, stay at current position
+          if (prevIndex < 0) {
+            prevIndex = selectedIndex;
+          }
           setSelectedIndex(prevIndex);
           break;
         }
@@ -107,8 +126,13 @@ export function AtMentionTypeahead({
         case "Enter":
         case "Tab": {
           event.preventDefault();
-          if (searchResults[selectedIndex]) {
-            handleSelect(searchResults[selectedIndex]);
+          const currentOption = searchResults[selectedIndex];
+          // Don't select disabled options
+          if (currentOption?.disabled) {
+            break;
+          }
+          if (currentOption) {
+            handleSelect(currentOption);
           }
           break;
         }

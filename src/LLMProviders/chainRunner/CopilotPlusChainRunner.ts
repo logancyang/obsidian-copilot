@@ -48,11 +48,12 @@ import {
   renderCiCMessage,
   wrapLocalSearchPayload,
 } from "./utils/cicPromptUtils";
+import { extractMarkdownImagePaths } from "./utils/imageExtraction";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ModelAdapterFactory, joinPromptSections } from "./utils/modelAdapter";
-import { parseXMLToolCalls } from "./utils/xmlParsing";
+import { parseXMLToolCalls, unescapeXml } from "./utils/xmlParsing";
 import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
@@ -328,11 +329,47 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     return processedImages;
   }
 
+  /**
+   * Extracts images from a context block (active_note or active_web_tab) in L3 content.
+   * @param l3Text - The full L3_TURN layer text
+   * @param source - Configuration for the context source type
+   * @returns Array of image URLs/paths found in the block
+   */
+  private async extractImagesFromContextBlock(
+    l3Text: string,
+    source: { tagName: string; identifierTag: string; displayName: string; useForResolution: boolean }
+  ): Promise<string[]> {
+    // Match the context block
+    const blockRegex = new RegExp(`<${source.tagName}>([\\s\\S]*?)<\\/${source.tagName}>`);
+    const blockMatch = blockRegex.exec(l3Text);
+    if (!blockMatch) return [];
+
+    const block = blockMatch[1];
+
+    // Extract content - unescape XML entities for correct URL parsing
+    const contentRegex = /<content>([\s\S]*?)<\/content>/;
+    const contentMatch = contentRegex.exec(block);
+    const content = contentMatch ? unescapeXml(contentMatch[1]) : "";
+    if (!content) return [];
+
+    // Extract identifier (path or url) for logging and optional resolution
+    const identifierRegex = new RegExp(`<${source.identifierTag}>(.*?)<\\/${source.identifierTag}>`);
+    const identifierMatch = identifierRegex.exec(block);
+    const identifier = identifierMatch ? identifierMatch[1] : undefined;
+
+    logInfo(
+      `[CopilotPlus] Extracting images from ${source.displayName}:`,
+      identifier || `no ${source.identifierTag}`
+    );
+
+    // Use identifier for vault path resolution only if configured
+    const sourcePath = source.useForResolution ? identifier : undefined;
+    return this.extractEmbeddedImages(content, sourcePath);
+  }
+
   private async extractEmbeddedImages(content: string, sourcePath?: string): Promise<string[]> {
-    // Match both wiki-style ![[image.ext]] and standard markdown ![alt](image.ext)
+    // Match wiki-style ![[image.ext]]
     const wikiImageRegex = /!\[\[(.*?\.(png|jpg|jpeg|gif|webp|bmp|svg))\]\]/g;
-    // Updated regex to handle URLs with or without file extensions
-    const markdownImageRegex = /!\[.*?\]\(([^)]+)\)/g;
 
     const resolvedImages: string[] = [];
 
@@ -359,11 +396,9 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
       }
     }
 
-    // Process standard markdown images
-    const mdMatches = [...content.matchAll(markdownImageRegex)];
-    for (const match of mdMatches) {
-      const imagePath = match[1].trim();
-
+    // Process standard markdown images using robust character-scanning parser
+    const mdImagePaths = extractMarkdownImagePaths(content);
+    for (const imagePath of mdImagePaths) {
       // Skip empty paths
       if (!imagePath) continue;
 
@@ -417,7 +452,7 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
 
     // Process embedded images only if setting is enabled
     if (settings.passMarkdownImages) {
-      // IMPORTANT: Only extract images from the active note
+      // IMPORTANT: Only extract images from the active context (note or web tab)
       // Never from L2 (promoted notes) or attached context notes
       const envelope = userMessage.contextEnvelope;
 
@@ -427,35 +462,23 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
         );
       }
 
-      // Extract ONLY from <active_note> block in L3
+      // Extract from active context blocks in L3 (active_note or active_web_tab)
       const l3Turn = envelope.layers.find((l) => l.id === "L3_TURN");
       if (l3Turn) {
-        // Find <active_note> block
-        const activeNoteRegex = /<active_note>([\s\S]*?)<\/active_note>/;
-        const activeNoteMatch = activeNoteRegex.exec(l3Turn.text);
+        // Define context sources to extract images from
+        // - tagName: XML tag name in L3 content
+        // - identifierTag: tag containing source identifier (path/url) for logging
+        // - displayName: human-readable name for logs
+        // - useForResolution: whether to use identifier for vault path resolution
+        const contextSources = [
+          { tagName: "active_note", identifierTag: "path", displayName: "active note", useForResolution: true },
+          { tagName: "active_web_tab", identifierTag: "url", displayName: "active web tab", useForResolution: false },
+        ];
 
-        if (activeNoteMatch) {
-          const activeNoteBlock = activeNoteMatch[1];
-
-          // Extract path from <path> tag
-          const pathRegex = /<path>(.*?)<\/path>/;
-          const pathMatch = pathRegex.exec(activeNoteBlock);
-          const sourcePath = pathMatch ? pathMatch[1] : undefined;
-
-          // Extract content from <content> tag
-          const contentRegex = /<content>([\s\S]*?)<\/content>/;
-          const contentMatch = contentRegex.exec(activeNoteBlock);
-          const activeNoteContent = contentMatch ? contentMatch[1] : "";
-
-          if (activeNoteContent) {
-            logInfo(
-              "[CopilotPlus] Extracting images from active note only:",
-              sourcePath || "no source path"
-            );
-            const embeddedImages = await this.extractEmbeddedImages(activeNoteContent, sourcePath);
-            if (embeddedImages.length > 0) {
-              imageSources.push({ urls: embeddedImages, type: "embedded" });
-            }
+        for (const source of contextSources) {
+          const images = await this.extractImagesFromContextBlock(l3Turn.text, source);
+          if (images.length > 0) {
+            imageSources.push({ urls: images, type: "embedded" });
           }
         }
       }

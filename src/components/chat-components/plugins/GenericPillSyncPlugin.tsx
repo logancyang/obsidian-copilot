@@ -10,8 +10,14 @@ export interface PillSyncConfig<T> {
   isPillNode: (node: any) => boolean;
   /** Function to extract data from the pill node */
   extractData: (node: any) => T;
-  /** Function to create a unique key for comparison (optional, defaults to value as-is) */
+  /** Function to create a unique identity key for deduplication and removal detection */
   getKey?: (item: T) => string;
+  /**
+   * Function to create a stable key representing the full pill state for change detection.
+   * Use this when pill metadata (e.g., title, favicon) can change without identity changing.
+   * Defaults to `getKey(item)` if not provided.
+   */
+  getChangeKey?: (item: T) => string;
 }
 
 /**
@@ -43,7 +49,12 @@ export function GenericPillSyncPlugin<T>({
   const prevItemsRef = React.useRef<T[]>([]);
 
   // Default configuration values
-  const { isPillNode, extractData, getKey = (item: T) => String(item) } = config;
+  const { isPillNode, extractData, getKey = (item: T) => String(item), getChangeKey } = config;
+  // Use getChangeKey for state comparison, fallback to getKey if not provided
+  const getComparisonKey = React.useMemo(
+    () => getChangeKey ?? getKey,
+    [getChangeKey, getKey]
+  );
 
   React.useEffect(() => {
     if (!onChange && !onRemoved) return;
@@ -87,19 +98,29 @@ export function GenericPillSyncPlugin<T>({
         // Sort items by their key
         const processedItems = deduplicatedItems.sort((a, b) => getKey(a).localeCompare(getKey(b)));
 
-        // Check for changes by comparing keys
+        // Check for changes using both identity keys (for add/remove) and change keys (for metadata updates)
         const prevItems = prevItemsRef.current;
-        const currentKeys = processedItems.map(getKey);
-        const prevKeys = prevItems.map(getKey);
+        const currentIdentityKeys = processedItems.map(getKey);
+        const prevIdentityKeys = prevItems.map(getKey);
+        const currentChangeKeys = processedItems.map(getComparisonKey);
+        const prevChangeKeys = prevItems.map(getComparisonKey);
 
-        const hasChanges =
-          currentKeys.length !== prevKeys.length ||
-          currentKeys.some((key, index) => key !== prevKeys[index]);
+        // Identity changes: items added or removed
+        const hasIdentityChanges =
+          currentIdentityKeys.length !== prevIdentityKeys.length ||
+          currentIdentityKeys.some((key, index) => key !== prevIdentityKeys[index]);
+
+        // State changes: metadata updated (e.g., title/favicon changed while URL stayed same)
+        const hasStateChanges =
+          currentChangeKeys.length !== prevChangeKeys.length ||
+          currentChangeKeys.some((key, index) => key !== prevChangeKeys[index]);
+
+        const hasChanges = hasIdentityChanges || hasStateChanges;
 
         if (hasChanges) {
-          // Detect removed items
+          // Detect removed items (identity-based)
           if (onRemoved) {
-            const currentKeySet = new Set(currentKeys);
+            const currentKeySet = new Set(currentIdentityKeys);
             const removedItems = prevItems.filter((item) => !currentKeySet.has(getKey(item)));
 
             if (removedItems.length > 0) {
@@ -115,7 +136,7 @@ export function GenericPillSyncPlugin<T>({
         }
       });
     });
-  }, [editor, onChange, onRemoved, isPillNode, extractData, getKey]);
+  }, [editor, onChange, onRemoved, isPillNode, extractData, getKey, getComparisonKey]);
 
   return null;
 }

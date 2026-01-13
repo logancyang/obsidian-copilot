@@ -19,6 +19,26 @@ export function escapeXml(str: string): string {
 }
 
 /**
+ * Unescapes XML entities back to their original characters.
+ * Used when extracting content that was previously escaped (e.g., image URLs).
+ * @param str - The XML-escaped string to unescape
+ * @returns The unescaped string with original characters restored
+ */
+export function unescapeXml(str: string): string {
+  if (typeof str !== "string") {
+    return "";
+  }
+
+  // Reason: &amp; must be unescaped last to prevent double-unescaping
+  return str
+    .replace(/&apos;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&gt;/g, ">")
+    .replace(/&lt;/g, "<")
+    .replace(/&amp;/g, "&");
+}
+
+/**
  * Escapes special XML characters for use in XML attributes
  * @param str - The string to escape for attribute use
  * @returns The escaped string safe for XML attributes

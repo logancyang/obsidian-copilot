@@ -212,6 +212,10 @@ export class ChatPersistenceManager {
             contextParts.push(`URLs: ${message.context.urls.join(", ")}`);
           }
 
+          if (message.context.webTabs?.length) {
+            contextParts.push(`Web Tabs: ${message.context.webTabs.map((tab) => tab.url).join(", ")}`);
+          }
+
           if (message.context.tags?.length) {
             contextParts.push(`Tags: ${message.context.tags.join(", ")}`);
           }
@@ -321,6 +325,7 @@ export class ChatPersistenceManager {
       urls: [],
       tags: [],
       folders: [],
+      webTabs: [],
     };
 
     // Split by | to get different context types
@@ -375,6 +380,17 @@ export class ChatPersistenceManager {
         if (urlsStr) {
           context.urls = urlsStr.split(", ").map((url) => url.trim());
         }
+      } else if (trimmed.startsWith("Web Tabs: ") || trimmed.startsWith("WebTabs: ")) {
+        const webTabsStr = trimmed.startsWith("Web Tabs: ")
+          ? trimmed.substring(10) // Remove "Web Tabs: "
+          : trimmed.substring(9); // Remove "WebTabs: "
+        if (webTabsStr) {
+          context.webTabs = webTabsStr
+            .split(", ")
+            .map((url) => url.trim())
+            .filter((url) => url.length > 0)
+            .map((url) => ({ url }));
+        }
       } else if (trimmed.startsWith("Tags: ")) {
         const tagsStr = trimmed.substring(6); // Remove "Tags: "
         if (tagsStr) {
@@ -393,7 +409,8 @@ export class ChatPersistenceManager {
       context.notes.length > 0 ||
       context.urls.length > 0 ||
       context.tags.length > 0 ||
-      context.folders.length > 0
+      context.folders.length > 0 ||
+      context.webTabs.length > 0
     ) {
       return context;
     }

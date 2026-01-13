@@ -182,7 +182,11 @@ export class ContextManager {
       // 7. Process selected text contexts
       const selectedTextContextAddition = this.contextProcessor.processSelectedTextContexts();
 
-      // 8. Combine everything (L2 previous context, then L3 current turn context)
+      // 8. Process web tab contexts (L3 - current turn only)
+      const webTabs = message.context?.webTabs || [];
+      const webTabContextAddition = await this.contextProcessor.processContextWebTabs(webTabs);
+
+      // 9. Combine everything (L2 previous context, then L3 current turn context)
       const finalProcessedMessage =
         processedUserMessage +
         l2Context +
@@ -190,7 +194,8 @@ export class ContextManager {
         tagContextAddition +
         folderContextAddition +
         urlContextAddition.urlContext +
-        selectedTextContextAddition;
+        selectedTextContextAddition +
+        webTabContextAddition;
 
       logInfo(`[ContextManager] Successfully processed context for message ${message.id}`);
       const contextEnvelope = this.buildPromptContextEnvelope({
@@ -204,6 +209,7 @@ export class ContextManager {
         folderContextAddition,
         urlContext: urlContextAddition.urlContext,
         selectedText: selectedTextContextAddition,
+        webTabContext: webTabContextAddition,
       });
 
       return {
@@ -418,6 +424,9 @@ export class ContextManager {
     this.appendTurnContextSegment(turnSegments, "selected_text", params.selectedText, {
       source: "selected_text",
     });
+    this.appendTurnContextSegment(turnSegments, "web_tabs", params.webTabContext, {
+      source: "web_tabs",
+    });
 
     if (turnSegments.length > 0) {
       layerSegments.L3_TURN = turnSegments;
@@ -570,4 +579,5 @@ interface BuildPromptContextEnvelopeParams {
   folderContextAddition: string;
   urlContext: string;
   selectedText: string;
+  webTabContext: string;
 }

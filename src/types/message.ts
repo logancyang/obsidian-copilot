@@ -11,15 +11,68 @@ export interface FormattedDateTime {
 }
 
 /**
+ * Base interface for selected text context
+ */
+interface BaseSelectedTextContext {
+  id: string;
+  content: string;
+}
+
+/**
  * Context for selected text from notes
  */
-export interface SelectedTextContext {
-  content: string;
+export interface NoteSelectedTextContext extends BaseSelectedTextContext {
+  sourceType: "note";
   noteTitle: string;
   notePath: string;
   startLine: number;
   endLine: number;
-  id: string;
+}
+
+/**
+ * Context for selected text from web tabs
+ */
+export interface WebSelectedTextContext extends BaseSelectedTextContext {
+  sourceType: "web";
+  title: string;
+  url: string;
+  faviconUrl?: string;
+}
+
+/**
+ * Union type for selected text context (note or web)
+ */
+export type SelectedTextContext = NoteSelectedTextContext | WebSelectedTextContext;
+
+/**
+ * Type guard for note selected text context
+ */
+export function isNoteSelectedTextContext(
+  ctx: SelectedTextContext
+): ctx is NoteSelectedTextContext {
+  return ctx.sourceType === "note";
+}
+
+/**
+ * Type guard for web selected text context
+ */
+export function isWebSelectedTextContext(
+  ctx: SelectedTextContext
+): ctx is WebSelectedTextContext {
+  return ctx.sourceType === "web";
+}
+
+/**
+ * Context for web tabs from Web Viewer
+ */
+export interface WebTabContext {
+  url: string;
+  title?: string;
+  faviconUrl?: string;
+  /** Whether the tab content is loaded (webview mounted and first load finished) */
+  isLoaded?: boolean;
+  /** True when this tab should serialize as <active_web_tab> (prompt-only marker) */
+  isActive?: boolean;
 }
 
 /**
@@ -31,6 +84,7 @@ export interface MessageContext {
   tags?: string[];
   folders?: string[];
   selectedTextContexts?: SelectedTextContext[];
+  webTabs?: WebTabContext[];
 }
 
 /**

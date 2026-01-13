@@ -13,13 +13,18 @@ import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
 import { isPlusChain } from "@/utils";
+import {
+  mergeWebTabContexts,
+  normalizeUrlString,
+  normalizeWebTabContext,
+} from "@/utils/urlNormalization";
 
 import { useSettingsValue } from "@/settings/model";
-import { SelectedTextContext } from "@/types/message";
+import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { isAllowedFileForNoteContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { $getSelection, $isRangeSelection } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
@@ -27,6 +32,8 @@ import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
 import { $removePillsByURL } from "./pills/URLPillNode";
 import { $removePillsByFolder } from "./pills/FolderPillNode";
 import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNode";
+import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
+import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
 
 interface ChatInputProps {
@@ -37,6 +44,7 @@ interface ChatInputProps {
     urls?: string[];
     contextNotes?: TFile[];
     contextFolders?: string[];
+    webTabs?: WebTabContext[];
   }) => void;
   isGenerating: boolean;
   onStopGenerating: () => void;
@@ -45,6 +53,9 @@ interface ChatInputProps {
   setContextNotes: React.Dispatch<React.SetStateAction<TFile[]>>;
   includeActiveNote: boolean;
   setIncludeActiveNote: (include: boolean) => void;
+  includeActiveWebTab: boolean;
+  setIncludeActiveWebTab: (include: boolean) => void;
+  activeWebTab: WebTabContext | null;
   selectedImages: File[];
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
@@ -82,6 +93,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   setContextNotes,
   includeActiveNote,
   setIncludeActiveNote,
+  includeActiveWebTab,
+  setIncludeActiveWebTab,
+  activeWebTab,
   selectedImages,
   onAddImage,
   setSelectedImages,
@@ -96,6 +110,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
 }) => {
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
   const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
+  const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
   const lexicalEditorRef = useRef<any>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
@@ -111,7 +126,34 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
   const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
+  const [webTabsFromPills, setWebTabsFromPills] = useState<WebTabContext[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
+
+  // Merge badge-only contextWebTabs with pills-derived webTabsFromPills for display
+  // Uses shared normalization policy from urlNormalization.ts
+  const mergedContextWebTabs = useMemo(() => {
+    return mergeWebTabContexts([...contextWebTabs, ...webTabsFromPills]);
+  }, [contextWebTabs, webTabsFromPills]);
+
+  /**
+   * Extract WebTabPillNode data directly from the Lexical editor at send time.
+   * This avoids React state synchronization races (webTabsFromPills) when the user sends quickly.
+   */
+  const getWebTabsFromEditorSnapshot = (): WebTabContext[] => {
+    const editor = lexicalEditorRef.current;
+    if (!editor) {
+      return webTabsFromPills;
+    }
+
+    return editor.read(() => {
+      const pills = $findWebTabPills();
+      return pills.map((pill) => ({
+        url: pill.getURL(),
+        title: pill.getTitle(),
+        faviconUrl: pill.getFaviconUrl(),
+      }));
+    });
+  };
 
   // Toggle states for vault, web search, composer, and autonomous agent
   const [vaultToggle, setVaultToggle] = useState(false);
@@ -186,8 +228,20 @@ const ChatInput: React.FC<ChatInputProps> = ({
       return;
     }
 
+    // Combine badge-only web tabs with the send-time Lexical snapshot of WebTab pills.
+    // This avoids React state synchronization races when the user sends quickly.
+    // Active Web Tab is handled by ChatManager.
+    const webTabsFromEditor = getWebTabsFromEditorSnapshot();
+    const allWebTabs = mergeWebTabContexts([...contextWebTabs, ...webTabsFromEditor]);
+
     if (!isCopilotPlus) {
-      handleSendMessage();
+      // Non-Plus chains: only webTabs needs explicit passing
+      // - contextNotes: Chat.tsx has state, closure can access
+      // - contextFolders: {folderPath} in text gets expanded by processPrompt()
+      // - webTabs: passed here, Active Web Tab injected by ChatManager
+      handleSendMessage({
+        webTabs: allWebTabs,
+      });
       return;
     }
 
@@ -215,6 +269,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       contextNotes,
       urls: contextUrls,
       contextFolders,
+      webTabs: allWebTabs,
     });
   };
 
@@ -370,6 +425,38 @@ const ChatInput: React.FC<ChatInputProps> = ({
           });
         }
         break;
+      case "webTabs":
+        // Badge-only behavior (like notes): add to contextWebTabs state, no pill insertion
+        if (data && typeof data.url === "string") {
+          const normalized = normalizeWebTabContext(data as WebTabContext);
+          if (!normalized) break;
+
+          // If selecting the active web tab, toggle the active badge instead
+          const activeUrl = normalizeUrlString(activeWebTab?.url);
+          if (activeUrl && normalized.url === activeUrl) {
+            setIncludeActiveWebTab(true);
+            setContextWebTabs((prev) =>
+              prev.filter((t) => normalizeUrlString(t.url) !== activeUrl)
+            );
+            break;
+          }
+
+          setContextWebTabs((prev) => mergeWebTabContexts([...prev, normalized]));
+        }
+        break;
+      case "activeWebTab":
+        // Badge-only behavior (like activeNote): toggle include flag, no pill insertion
+        setIncludeActiveWebTab(true);
+        // Remove from contextWebTabs if it was added as a regular tab
+        {
+          const activeUrl = normalizeUrlString(activeWebTab?.url);
+          if (activeUrl) {
+            setContextWebTabs((prev) =>
+              prev.filter((t) => normalizeUrlString(t.url) !== activeUrl)
+            );
+          }
+        }
+        break;
     }
   };
 
@@ -416,6 +503,32 @@ const ChatInput: React.FC<ChatInputProps> = ({
         if (typeof data === "string") {
           // data is the id
           onRemoveSelectedText?.(data);
+        }
+        break;
+      case "activeWebTab":
+        // Remove active web tab pill from editor and turn off flag
+        setIncludeActiveWebTab(false);
+        if (lexicalEditorRef.current) {
+          lexicalEditorRef.current.update(() => {
+            $removeActiveWebTabPills();
+          });
+        }
+        break;
+      case "webTabs":
+        // Remove web tab from contextWebTabs state
+        if (typeof data === "string") {
+          const url = normalizeUrlString(data);
+          if (!url) break;
+
+          setContextWebTabs((prev) => prev.filter((t) => normalizeUrlString(t.url) !== url));
+          // Also immediately update pills-derived state to avoid UI re-adding during sync lag
+          setWebTabsFromPills((prev) => prev.filter((t) => normalizeUrlString(t.url) !== url));
+          // Also remove any corresponding pills from editor (if any exist)
+          if (lexicalEditorRef.current) {
+            lexicalEditorRef.current.update(() => {
+              $removeWebTabPillsByUrl(url);
+            });
+          }
         }
         break;
     }
@@ -578,6 +691,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setIncludeActiveNote(false);
   }, [setIncludeActiveNote]);
 
+  // Active web tab pill sync callbacks (mirror activeNote behavior)
+  // Active Web Tab URL resolution is now handled by ChatManager at send time
+  const handleActiveWebTabAdded = useCallback(() => {
+    setIncludeActiveWebTab(true);
+  }, [setIncludeActiveWebTab]);
+
+  const handleActiveWebTabRemoved = useCallback(() => {
+    setIncludeActiveWebTab(false);
+  }, [setIncludeActiveWebTab]);
+
   // Handle tag selection from typeahead - auto-enable vault search
   const handleTagSelected = useCallback(() => {
     if (isCopilotPlus && !autonomousAgentToggle && !vaultToggle) {
@@ -591,18 +714,24 @@ const ChatInput: React.FC<ChatInputProps> = ({
       className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
       ref={containerRef}
     >
-      <ContextControl
-        contextNotes={contextNotes}
-        includeActiveNote={includeActiveNote}
-        activeNote={currentActiveNote}
-        contextUrls={contextUrls}
-        contextFolders={contextFolders}
-        selectedTextContexts={selectedTextContexts}
-        showProgressCard={showProgressCard}
-        lexicalEditorRef={lexicalEditorRef}
-        onAddToContext={handleAddToContext}
-        onRemoveFromContext={handleRemoveFromContext}
-      />
+      {/* Hide context controls in edit mode - editing only changes text, not context */}
+      {!editMode && (
+        <ContextControl
+          contextNotes={contextNotes}
+          includeActiveNote={includeActiveNote}
+          activeNote={currentActiveNote}
+          includeActiveWebTab={includeActiveWebTab}
+          activeWebTab={activeWebTab}
+          contextUrls={contextUrls}
+          contextFolders={contextFolders}
+          contextWebTabs={mergedContextWebTabs}
+          selectedTextContexts={selectedTextContexts}
+          showProgressCard={showProgressCard}
+          lexicalEditorRef={lexicalEditorRef}
+          onAddToContext={handleAddToContext}
+          onRemoveFromContext={handleRemoveFromContext}
+        />
+      )}
 
       {selectedImages.length > 0 && (
         <div className="selected-images">
@@ -648,6 +777,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onToolsRemoved={isCopilotPlus ? handleToolPillsRemoved : undefined}
           onFoldersChange={setFoldersFromPills}
           onFoldersRemoved={handleFolderPillsRemoved}
+          onWebTabsChange={setWebTabsFromPills}
+          onActiveWebTabAdded={handleActiveWebTabAdded}
+          onActiveWebTabRemoved={handleActiveWebTabRemoved}
           onEditorReady={onEditorReady}
           onImagePaste={onAddImage}
           onTagSelected={handleTagSelected}

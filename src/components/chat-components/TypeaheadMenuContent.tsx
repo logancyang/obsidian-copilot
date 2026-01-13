@@ -9,6 +9,10 @@ export interface TypeaheadOption {
   content?: string;
   category?: string;
   icon?: React.ReactNode;
+  /** Whether this option is disabled and cannot be selected */
+  disabled?: boolean;
+  /** Tooltip text explaining why this option is disabled */
+  disabledReason?: string;
 }
 
 interface TypeaheadMenuContentProps {
@@ -129,7 +133,8 @@ export function TypeaheadMenuContent({
             {options.map((option, index) => {
               const isSelected = index === selectedIndex;
               const isHovered = index === hoveredIndex;
-              const shouldHighlight = isSelected || isHovered;
+              const isDisabled = option.disabled ?? false;
+              const shouldHighlight = (isSelected || isHovered) && !isDisabled;
               const isCategory =
                 mode === "category" && !query && option.icon && !("data" in option);
 
@@ -138,16 +143,22 @@ export function TypeaheadMenuContent({
                   key={option.key}
                   ref={isSelected ? selectedItemRef : undefined}
                   className={cn(
-                    "tw-flex tw-cursor-pointer tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm tw-text-normal",
+                    "tw-flex tw-items-center tw-rounded-md tw-px-3 tw-py-2 tw-text-sm",
+                    isDisabled
+                      ? "tw-cursor-not-allowed tw-text-muted tw-opacity-50"
+                      : "tw-cursor-pointer tw-text-normal",
                     shouldHighlight && "tw-bg-modifier-hover"
                   )}
+                  title={isDisabled ? option.disabledReason : undefined}
                   // Use onMouseDown instead of onClick to prevent triggering
                   // onblur events of the typeahead menu
                   onMouseDown={(e) => {
-                    e.preventDefault();
+                    e.preventDefault(); // Always prevent default to avoid losing focus
+                    if (isDisabled) return;
                     onSelect(option);
                   }}
                   onMouseEnter={() => {
+                    if (isDisabled) return;
                     setHoveredIndex(index);
                     onHighlight(index);
                   }}

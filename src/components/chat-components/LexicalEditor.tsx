@@ -7,6 +7,7 @@ import { HistoryPlugin } from "@lexical/react/LexicalHistoryPlugin";
 import { OnChangePlugin } from "@lexical/react/LexicalOnChangePlugin";
 import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { TFile } from "obsidian";
+import type { WebTabContext } from "@/types/message";
 import { SlashCommandPlugin } from "./plugins/SlashCommandPlugin";
 import { NoteCommandPlugin } from "./plugins/NoteCommandPlugin";
 import { TagCommandPlugin } from "./plugins/TagCommandPlugin";
@@ -16,6 +17,8 @@ import { URLPillNode } from "./pills/URLPillNode";
 import { ToolPillNode } from "./pills/ToolPillNode";
 import { FolderPillNode } from "./pills/FolderPillNode";
 import { ActiveNotePillNode } from "./pills/ActiveNotePillNode";
+import { WebTabPillNode } from "./pills/WebTabPillNode";
+import { ActiveWebTabPillNode } from "./pills/ActiveWebTabPillNode";
 import { PillDeletionPlugin } from "./plugins/PillDeletionPlugin";
 import { KeyboardPlugin } from "./plugins/KeyboardPlugin";
 import { ValueSyncPlugin } from "./plugins/ValueSyncPlugin";
@@ -25,10 +28,12 @@ import { URLPillSyncPlugin } from "./plugins/URLPillSyncPlugin";
 import { ToolPillSyncPlugin } from "./plugins/ToolPillSyncPlugin";
 import { FolderPillSyncPlugin } from "./plugins/FolderPillSyncPlugin";
 import { ActiveNotePillSyncPlugin } from "./plugins/ActiveNotePillSyncPlugin";
+import { WebTabPillSyncPlugin } from "./plugins/WebTabPillSyncPlugin";
 import { PastePlugin } from "./plugins/PastePlugin";
 import { TextInsertionPlugin } from "./plugins/TextInsertionPlugin";
 import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
+import { logError } from "@/logger";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
 import { ChainType } from "@/chainFactory";
 import { useSettingsValue } from "@/settings/model";
@@ -50,6 +55,10 @@ interface LexicalEditorProps {
   onFoldersRemoved?: (removedFolders: string[]) => void;
   onActiveNoteAdded?: () => void;
   onActiveNoteRemoved?: () => void;
+  onWebTabsChange?: (webTabs: WebTabContext[]) => void;
+  onWebTabsRemoved?: (removedWebTabs: WebTabContext[]) => void;
+  onActiveWebTabAdded?: () => void;
+  onActiveWebTabRemoved?: () => void;
   onEditorReady?: (editor: any) => void;
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
@@ -75,6 +84,10 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onFoldersRemoved,
   onActiveNoteAdded,
   onActiveNoteRemoved,
+  onWebTabsChange,
+  onWebTabsRemoved,
+  onActiveWebTabAdded,
+  onActiveWebTabRemoved,
   onEditorReady,
   onImagePaste,
   onTagSelected,
@@ -117,10 +130,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
         ActiveNotePillNode,
         ToolPillNode,
         FolderPillNode,
+        WebTabPillNode,
+        ActiveWebTabPillNode,
         ...(onURLsChange ? [URLPillNode] : []),
       ],
       onError: (error: Error) => {
-        console.error("Lexical error:", error);
+        logError("Lexical error:", error);
       },
       editable: !disabled,
     }),
@@ -181,6 +196,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <ActiveNotePillSyncPlugin
             onActiveNoteAdded={onActiveNoteAdded}
             onActiveNoteRemoved={onActiveNoteRemoved}
+          />
+          <WebTabPillSyncPlugin
+            onWebTabsChange={onWebTabsChange}
+            onWebTabsRemoved={onWebTabsRemoved}
+            onActiveWebTabAdded={onActiveWebTabAdded}
+            onActiveWebTabRemoved={onActiveWebTabRemoved}
           />
           <PillDeletionPlugin />
           <PastePlugin enableURLPills={!!onURLsChange} onImagePaste={onImagePaste} />
