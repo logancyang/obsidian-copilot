@@ -15,7 +15,8 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
-import { updateSetting } from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
+import { RecentUsageManager, sortByStrategy } from "@/utils/recentUsageManager";
 import {
   ChevronDown,
   ChevronUp,
@@ -31,6 +32,32 @@ import { App, Notice } from "obsidian";
 import React, { memo, useEffect, useMemo, useState } from "react";
 import { filterProjects } from "@/utils/projectUtils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+
+/**
+ * Subscribe to a {@link RecentUsageManager} revision so in-memory touches can trigger
+ * re-sorting even when the backing list reference stays unchanged (e.g. when persistence
+ * is throttled).
+ */
+function useRecentUsageManagerRevision<Key extends string>(
+  manager: RecentUsageManager<Key> | null | undefined
+): number {
+  const [revision, setRevision] = useState(() => manager?.getRevision() ?? 0);
+
+  useEffect(() => {
+    if (!manager) {
+      setRevision(0);
+      return;
+    }
+
+    setRevision(manager.getRevision());
+
+    return manager.subscribe(() => {
+      setRevision(manager.getRevision());
+    });
+  }, [manager]);
+
+  return revision;
+}
 
 function ProjectItem({
   project,
@@ -126,6 +153,7 @@ export const ProjectList = memo(
     projects,
     defaultOpen = false,
     app,
+    plugin,
     onProjectAdded,
     onEditProject,
     hasMessages = false,
@@ -137,6 +165,7 @@ export const ProjectList = memo(
     projects: ProjectConfig[];
     defaultOpen?: boolean;
     app: App;
+    plugin?: any; // CopilotPlugin, optional for backwards compatibility
     onProjectAdded: (project: ProjectConfig) => void;
     onEditProject: (originP: ProjectConfig, updateP: ProjectConfig) => void;
     hasMessages?: boolean;
@@ -149,6 +178,14 @@ export const ProjectList = memo(
     const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
     const [searchQuery, setSearchQuery] = useState("");
     const chatInput = useChatInput();
+    const settings = useSettingsValue();
+
+    // Get the project usage manager for subscription
+    const projectUsageTimestampsManager =
+      plugin?.projectManager?.getProjectUsageTimestampsManager?.() as
+        | RecentUsageManager<string>
+        | undefined;
+    const projectUsageRevision = useRecentUsageManagerRevision(projectUsageTimestampsManager);
 
     // Auto collapse when messages appear
     useEffect(() => {
@@ -157,10 +194,38 @@ export const ProjectList = memo(
       }
     }, [hasMessages]);
 
+    // Sort projects based on sort strategy
+    // Note: projectUsageRevision triggers re-sort when in-memory timestamps change,
+    // even though it's not directly referenced in the callback
+    const sortedProjects = useMemo(
+      () =>
+        sortByStrategy(projects, settings.projectListSortStrategy, {
+          getName: (project) => project.name,
+          getCreatedAtMs: (project) => project.created,
+          getLastUsedAtMs: (project) => {
+            // Use effective last used time (prefers in-memory value for immediate UI updates)
+            if (projectUsageTimestampsManager) {
+              return projectUsageTimestampsManager.getEffectiveLastUsedAt(
+                project.id,
+                project.UsageTimestamps
+              );
+            }
+            return project.UsageTimestamps;
+          },
+        }),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- projectUsageRevision triggers re-sort when manager's in-memory state changes
+      [
+        projects,
+        settings.projectListSortStrategy,
+        projectUsageTimestampsManager,
+        projectUsageRevision,
+      ]
+    );
+
     // Filter projects based on search query
     const filteredProjects = useMemo(() => {
-      return filterProjects(projects, searchQuery);
-    }, [projects, searchQuery]);
+      return filterProjects(sortedProjects, searchQuery);
+    }, [sortedProjects, searchQuery]);
 
     const handleAddProject = () => {
       const modal = new AddProjectModal(app, async (project: ProjectConfig) => {
@@ -239,7 +304,7 @@ export const ProjectList = memo(
                   <Select
                     value={selectedProject.name}
                     onValueChange={(value) => {
-                      const project = projects.find((p) => p.name === value);
+                      const project = sortedProjects.find((p) => p.name === value);
                       if (project) {
                         handleLoadContext(project);
                       }
@@ -254,7 +319,7 @@ export const ProjectList = memo(
                       </SelectValue>
                     </SelectTrigger>
                     <SelectContent className="tw-truncate">
-                      {projects.map((project) => (
+                      {sortedProjects.map((project) => (
                         <SelectItem
                           key={project.name}
                           value={project.name}
@@ -352,13 +417,11 @@ export const ProjectList = memo(
                     {/* Search input box */}
                     {projects.length > 0 && (
                       <div className="tw-px-4 tw-pb-2 tw-pt-3">
-                        <div className="tw-relative">
-                          <SearchBar
-                            value={searchQuery}
-                            onChange={setSearchQuery}
-                            placeholder="Search projects..."
-                          />
-                        </div>
+                        <SearchBar
+                          value={searchQuery}
+                          onChange={setSearchQuery}
+                          placeholder="Search projects..."
+                        />
                       </div>
                     )}
                     <div className="tw-max-h-[calc(3*5.7rem)] tw-overflow-y-auto tw-px-4 tw-pb-6 tw-pt-3">

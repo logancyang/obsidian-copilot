@@ -45,6 +45,42 @@ export function extractChatDate(file: TFile): Date {
 }
 
 /**
+ * Extract chat last accessed time (epoch ms) from a file.
+ * Uses frontmatter.lastAccessedAt if available, returns null otherwise.
+ */
+export function extractChatLastAccessedAtMs(file: TFile): number | null {
+  const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
+  const rawValue = frontmatter?.lastAccessedAt;
+
+  if (typeof rawValue === "number" && Number.isFinite(rawValue) && rawValue > 0) {
+    return rawValue;
+  }
+
+  if (typeof rawValue === "string") {
+    const numeric = Number(rawValue);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+
+    const parsedDate = Date.parse(rawValue);
+    if (Number.isFinite(parsedDate)) {
+      return parsedDate;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Extract chat last accessed date from a file.
+ * Uses extractChatLastAccessedAtMs and returns a Date when available, null otherwise.
+ */
+export function extractChatLastAccessedAt(file: TFile): Date | null {
+  const lastAccessedAtMs = extractChatLastAccessedAtMs(file);
+  return lastAccessedAtMs ? new Date(lastAccessedAtMs) : null;
+}
+
+/**
  * Get formatted display text for a chat file (title + formatted date).
  * Used in chat history modals and similar UI components.
  */

@@ -1465,4 +1465,129 @@ tags:
       expect(modelKeyLine).toBe('modelKey: "model\\\\with\\\\backslash|provider"');
     });
   });
+
+  describe("lastAccessedAt preservation", () => {
+    it("should preserve lastAccessedAt when updating existing file", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = {
+        path: "test-folder/Hello@20240923_221800.md",
+      } as unknown as TFile;
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([existingFile]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: {
+          epoch: 1695513480000,
+          topic: "Existing Topic",
+          lastAccessedAt: 1700000000000, // Existing lastAccessedAt
+        },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Verify that modify was called with content containing lastAccessedAt
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("lastAccessedAt: 1700000000000")
+      );
+
+      getFilesSpy.mockRestore();
+    });
+
+    it("should not include lastAccessedAt when it does not exist", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "New chat",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
+      mockApp.vault.create.mockResolvedValue({
+        path: "test-folder/New_chat@20240923_221800.md",
+      } as TFile);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Verify that create was called with content NOT containing lastAccessedAt
+      const createCall = mockApp.vault.create.mock.calls[0];
+      const content = createCall[1] as string;
+      expect(content).not.toContain("lastAccessedAt:");
+    });
+
+    it("should preserve lastAccessedAt during conflict resolution", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Conflict test",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const existingFile = Object.create(TFile.prototype);
+      Object.assign(existingFile, {
+        path: "test-folder/Conflict_test@20240923_221800.md",
+        basename: "Conflict_test@20240923_221800",
+      });
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+      mockApp.vault.create.mockRejectedValue(new Error("File already exists"));
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "test-folder/Conflict_test@20240923_221800.md") {
+          return existingFile;
+        }
+        return null;
+      });
+      mockApp.metadataCache.getFileCache.mockReturnValue({
+        frontmatter: {
+          topic: "Conflict Topic",
+          lastAccessedAt: 1700000000000,
+        },
+      });
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Verify that modify was called with content containing lastAccessedAt
+      expect(mockApp.vault.modify).toHaveBeenCalledWith(
+        existingFile,
+        expect.stringContaining("lastAccessedAt: 1700000000000")
+      );
+
+      getFilesSpy.mockRestore();
+    });
+  });
 });
