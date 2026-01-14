@@ -231,14 +231,6 @@ mindmap
 <List 5-10 notable quotes from the transcript. Format each as:>
 - [<timestamp>: <quote text>](<video_url>&t=<seconds>s)
 
-> [!transcript]- Transcript (YouTube)
-> <Format the full transcript with timestamps, each segment on new line:>
-> <timestamp>
-> <text>
->
-> <timestamp>
-> <text>
-
 Return only the markdown content without any explanations or comments.`,
     showInContextMenu: false,
     showInSlashMenu: true,
@@ -270,17 +262,9 @@ tags:
 
 <Brief 2-3 paragraph summary of the page content>
 
-## 摘要
-
-<用中文写的 2-3 段摘要>
-
 ## Key Takeaways
 
 <List 5-8 key takeaways as bullet points>
-
-## 要点
-
-<用中文列出 5-8 个要点>
 
 ## Mindmap
 
