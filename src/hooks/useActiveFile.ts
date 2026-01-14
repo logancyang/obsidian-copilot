@@ -9,9 +9,13 @@ export function useActiveFile() {
 
   useEffect(() => {
     const handleActiveLeafChange = () => {
-      const activeFile = app.workspace.getActiveFile();
-      setActiveFile(activeFile);
+      const currentFile = app.workspace.getActiveFile();
+      setActiveFile(currentFile);
     };
+
+    // Initialize immediately on mount so we have the current active file
+    handleActiveLeafChange();
+
     eventTarget?.addEventListener(EVENT_NAMES.ACTIVE_LEAF_CHANGE, handleActiveLeafChange);
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.ACTIVE_LEAF_CHANGE, handleActiveLeafChange);
