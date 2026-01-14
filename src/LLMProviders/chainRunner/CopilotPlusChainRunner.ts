@@ -15,7 +15,8 @@ import {
 } from "@/imageProcessing/imageProcessor";
 import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
-import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
+import { getSettings } from "@/settings/model";
+import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
 import { writeToFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";

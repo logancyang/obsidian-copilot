@@ -30,14 +30,18 @@ jest.mock("@/logger", () => ({
 }));
 
 // Mock the utility functions
-jest.mock("@/utils", () => ({
-  extractTemplateNoteFiles: jest.fn().mockReturnValue([]),
-  getFileContent: jest.fn(),
-  getFileName: jest.fn(),
-  getNotesFromPath: jest.fn(),
-  getNotesFromTags: jest.fn(),
-  processVariableNameForNotePath: jest.fn(),
-}));
+jest.mock("@/utils", () => {
+  const actual = jest.requireActual("@/utils");
+  return {
+    extractTemplateNoteFiles: jest.fn().mockReturnValue([]),
+    getFileContent: jest.fn(),
+    getFileName: jest.fn(),
+    getNotesFromPath: jest.fn(),
+    getNotesFromTags: jest.fn(),
+    processVariableNameForNotePath: jest.fn(),
+    stripFrontmatter: actual.stripFrontmatter,
+  };
+});
 
 describe("processedPrompt()", () => {
   let mockVault: Vault;
@@ -142,6 +146,19 @@ describe("processedPrompt()", () => {
       "Rewrite the following text {selected_text}\n\n<selected_text>\nhere is some selected text 12345\n</selected_text>"
     );
     expect(result.includedFiles).toEqual([]);
+  });
+
+  it("should treat {} as literal when skipEmptyBraces is true", async () => {
+    const customPrompt = "Rewrite the following text {}";
+    const selectedText = "here is some selected text 12345";
+
+    const result = await processPrompt(customPrompt, selectedText, mockVault, mockActiveNote, true);
+
+    // {} should be preserved as literal, not replaced
+    expect(result.processedPrompt).toBe("Rewrite the following text {}\n\n");
+    expect(result.includedFiles).toEqual([]);
+    expect(result.processedPrompt).not.toContain("<selected_text>");
+    expect(result.processedPrompt).not.toContain("{selected_text}");
   });
 
   it("should process {activeNote} correctly", async () => {
@@ -785,6 +802,17 @@ describe("validateCommandName", () => {
 
   it("returns null if unchanged currentCommandName", () => {
     expect(validateCommandName("Command One", baseCommands, "Command One")).toBeNull();
-    expect(validateCommandName("  Command One  ", baseCommands, "Command One")).toBeNull();
+  });
+
+  it("returns error for names with leading or trailing whitespace", () => {
+    expect(validateCommandName("  Command One  ", baseCommands)).toBe(
+      "Command name cannot have leading or trailing spaces"
+    );
+    expect(validateCommandName(" Leading", baseCommands)).toBe(
+      "Command name cannot have leading or trailing spaces"
+    );
+    expect(validateCommandName("Trailing ", baseCommands)).toBe(
+      "Command name cannot have leading or trailing spaces"
+    );
   });
 });

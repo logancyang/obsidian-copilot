@@ -1,5 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import { getSystemPromptWithMemory } from "@/settings/model";
+import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
 import { ToolMetadata, ToolRegistry } from "@/tools/ToolRegistry";
 import { ChatMessage } from "@/types/message";
 import { messageRequiresTools, ModelAdapter } from "./modelAdapter";

@@ -14,6 +14,8 @@ import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
+import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
+import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import { createQuickCommandContainer } from "@/components/QuickCommand";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
@@ -72,6 +74,7 @@ export default class CopilotPlugin extends Plugin {
   vectorStoreManager: VectorStoreManager;
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
+  systemPromptRegister: SystemPromptRegister;
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
@@ -188,8 +191,16 @@ export default class CopilotPlugin extends Plugin {
     );
 
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
+    this.systemPromptRegister = new SystemPromptRegister(this, this.app.vault);
+
     this.app.workspace.onLayoutReady(() => {
+      // Initialize custom commands
       this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
+
+      // Initialize system prompts (independent from custom commands)
+      this.systemPromptRegister
+        .initialize()
+        .then(() => migrateSystemPromptsFromSettings(this.app.vault));
     });
 
     // Initialize automatic selection handler
@@ -209,6 +220,7 @@ export default class CopilotPlugin extends Plugin {
     vaultDataManager.cleanup();
 
     this.customCommandRegister.cleanup();
+    this.systemPromptRegister.cleanup();
     this.settingsUnsubscriber?.();
 
     // Cleanup selection handler

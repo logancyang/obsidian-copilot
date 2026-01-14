@@ -1,7 +1,6 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
-import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 import { type ChainType } from "@/chainFactory";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
@@ -12,11 +11,9 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
-  DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
-import { logInfo } from "@/logger";
 
 /**
  * We used to store commands in the settings file with the following interface.
@@ -75,7 +72,7 @@ export interface CopilotSettings {
   maxTokens: number;
   contextTurns: number;
   lastDismissedVersion: string | null;
-  // Do not use this directly, use getSystemPrompt() instead
+  // DEPRECATED: Do not use this directly, migrated to file-based system prompts
   userSystemPrompt: string;
   openAIProxyBaseUrl: string;
   openAIEmbeddingProxyBaseUrl: string;
@@ -159,6 +156,14 @@ export interface CopilotSettings {
   autoAddSelectionToContext: boolean;
   /** Automatically accept file edits without showing preview confirmation */
   autoAcceptEdits: boolean;
+  /** Folder where user system prompts are stored */
+  userSystemPromptsFolder: string;
+  /**
+   * Global default system prompt title
+   * Used as the default for all new chat sessions
+   * Empty string means no custom system prompt (use builtin)
+   */
+  defaultSystemPromptTitle: string;
 }
 
 export const settingsStore = createStore();
@@ -461,41 +466,15 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.projectListSortStrategy = DEFAULT_SETTINGS.projectListSortStrategy;
   }
 
+  const userSystemPromptsFolder = (settingsToSanitize.userSystemPromptsFolder || "").trim();
+  sanitizedSettings.userSystemPromptsFolder =
+    userSystemPromptsFolder.length > 0
+      ? userSystemPromptsFolder
+      : DEFAULT_SETTINGS.userSystemPromptsFolder;
+
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
 
   return sanitizedSettings;
-}
-
-export function getSystemPrompt(): string {
-  const userPrompt = getSettings().userSystemPrompt;
-  const basePrompt = DEFAULT_SYSTEM_PROMPT;
-
-  if (userPrompt) {
-    return `${basePrompt}
-<user_custom_instructions>
-${userPrompt}
-</user_custom_instructions>`;
-  }
-  return basePrompt;
-}
-
-export async function getSystemPromptWithMemory(
-  userMemoryManager: UserMemoryManager | undefined
-): Promise<string> {
-  const systemPrompt = getSystemPrompt();
-
-  if (!userMemoryManager) {
-    logInfo("No UserMemoryManager provided to getSystemPromptWithMemory");
-    return systemPrompt;
-  }
-  const memoryPrompt = await userMemoryManager.getUserMemoryPrompt();
-
-  // Only include user_memory section if there's actual memory content
-  if (!memoryPrompt) {
-    return systemPrompt;
-  }
-
-  return `${memoryPrompt}\n${systemPrompt}`;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

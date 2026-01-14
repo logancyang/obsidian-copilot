@@ -1,8 +1,14 @@
-import { getSettings, getSystemPromptWithMemory } from "@/settings/model";
+import { getSettings } from "@/settings/model";
+import {
+  getEffectiveUserPrompt,
+  getSystemPrompt,
+  getSystemPromptWithMemory,
+} from "@/system-prompts/systemPromptBuilder";
 import { ChainType } from "@/chainFactory";
 import { getCurrentProject } from "@/aiParams";
 import { logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";
+import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
 import { FileParserManager } from "@/tools/FileParserManager";
 import ChainManager from "@/LLMProviders/chainManager";
 import ProjectManager from "@/LLMProviders/projectManager";
@@ -12,7 +18,7 @@ import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
-import { TFile } from "obsidian";
+import { TFile, Vault } from "obsidian";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import {
   normalizeUrlForMatching,
@@ -91,31 +97,212 @@ export class ChatManager {
   }
 
   /**
+   * Process system prompt template variables using the same engine as custom commands.
+   * Supports: {activeNote}, {[[Note Title]]}, {#tag1, #tag2}, {folder/path}
+   *
+   * Note: JSON-like content (e.g., {"foo": "bar"}) is handled by processPrompt internally,
+   * which checks if the variable name starts with '"' and skips processing.
+   * Empty braces `{}` are treated as literals in system prompts.
+   *
+   * @param prompt - Raw system prompt text
+   * @param vault - Vault used to resolve note/tag templates
+   * @param activeNote - Active note used for {activeNote} resolution
+   * @returns Processed prompt and included files discovered during processing
+   */
+  private async processSystemPromptTemplates(
+    prompt: string,
+    vault: Vault,
+    activeNote: TFile | null
+  ): Promise<ProcessedPromptResult> {
+    // Quick skip if no curly braces present
+    if (!prompt.includes("{") || !prompt.includes("}")) {
+      return { processedPrompt: prompt, includedFiles: [] };
+    }
+
+    // Respect enableCustomPromptTemplating setting
+    const settings = getSettings();
+    if (!settings.enableCustomPromptTemplating) {
+      return { processedPrompt: prompt, includedFiles: [] };
+    }
+
+    try {
+      // Reason: selectedText is empty because system prompts don't use selection context
+      // skipEmptyBraces is true to treat {} as literal in system prompts
+      const result = await processPrompt(prompt, "", vault, activeNote, true);
+
+      // Only trim when the template engine actually ran to avoid mutating user-provided whitespace
+      return {
+        processedPrompt: result.processedPrompt.trimEnd(),
+        includedFiles: result.includedFiles,
+      };
+    } catch (error) {
+      logWarn("[ChatManager] Error processing system prompt templates:", error);
+      // Return original prompt on error to avoid breaking the chat
+      return { processedPrompt: prompt, includedFiles: [] };
+    }
+  }
+
+  /**
+   * Inject a processed user custom prompt into the system prompt returned by `getSystemPrompt()`.
+   *
+   * - If `<user_custom_instructions>` block exists, replaces its inner content.
+   * - If builtin system prompt is disabled (i.e., system prompt equals `userCustomPrompt`),
+   *   replaces the entire system prompt with the processed user prompt.
+   * - Otherwise, returns the original system prompt unchanged.
+   *
+   * This ensures DEFAULT_SYSTEM_PROMPT is never template-processed.
+   */
+  private injectProcessedUserCustomPromptIntoSystemPrompt(params: {
+    systemPromptWithoutMemory: string;
+    userCustomPrompt: string;
+    processedUserCustomPrompt: string;
+  }): string {
+    const { systemPromptWithoutMemory, userCustomPrompt, processedUserCustomPrompt } = params;
+
+    // Note: trimEnd() is now done in processSystemPromptTemplates only when templates are processed
+    const userInstructionsBlockRegex =
+      /<user_custom_instructions>\n[\s\S]*?\n<\/user_custom_instructions>/;
+
+    if (userInstructionsBlockRegex.test(systemPromptWithoutMemory)) {
+      // Use function replacement to avoid $ being interpreted as special replacement patterns
+      return systemPromptWithoutMemory.replace(userInstructionsBlockRegex, () =>
+        `<user_custom_instructions>\n${processedUserCustomPrompt}\n</user_custom_instructions>`
+      );
+    }
+
+    // disableBuiltin === true -> getSystemPrompt() returns userCustomPrompt as-is
+    if (systemPromptWithoutMemory === userCustomPrompt) {
+      return processedUserCustomPrompt;
+    }
+
+    logInfo(
+      "[ChatManager] Could not locate <user_custom_instructions> block for injection; returning original system prompt."
+    );
+    return systemPromptWithoutMemory;
+  }
+
+  /**
+   * Replace the trailing `getSystemPrompt()` portion inside a `getSystemPromptWithMemory()` result.
+   * This preserves the memory prompt prefix exactly and ensures memory content is not template-processed.
+   */
+  private replaceSystemPromptWithoutMemoryInBasePrompt(params: {
+    basePromptWithMemory: string;
+    systemPromptWithoutMemory: string;
+    processedSystemPromptWithoutMemory: string;
+  }): string {
+    const { basePromptWithMemory, systemPromptWithoutMemory, processedSystemPromptWithoutMemory } =
+      params;
+
+    if (!basePromptWithMemory.endsWith(systemPromptWithoutMemory)) {
+      logInfo(
+        "[ChatManager] basePromptWithMemory does not end with systemPromptWithoutMemory; returning original base prompt."
+      );
+      return basePromptWithMemory;
+    }
+
+    const prefix = basePromptWithMemory.slice(
+      0,
+      basePromptWithMemory.length - systemPromptWithoutMemory.length
+    );
+    return `${prefix}${processedSystemPromptWithoutMemory}`;
+  }
+
+  /**
    * Build system prompt for the current message, including project context if in project mode.
+   * Also expands template variables (e.g., {activeNote}, {[[Note Title]]}, {#tag}) using the
+   * same behavior as custom commands.
+   *
+   * IMPORTANT: Only the user-defined custom prompt portion (from `getEffectiveSystemPromptContent()`)
+   * is processed for template variables. DEFAULT_SYSTEM_PROMPT and memory prompts are never processed.
+   *
+   * This method preserves the behavior of `getSystemPromptWithMemory()` by:
+   * 1) Calling it to obtain the canonical base prompt (memory + system prompt)
+   * 2) Replacing only the user custom prompt content within the trailing `getSystemPrompt()` portion
    *
    * @param chainType - The chain type being used
-   * @returns System prompt with project context appended if applicable
+   * @param vault - Vault used to resolve note/tag templates
+   * @param activeNote - Active note used for {activeNote} resolution
+   * @returns Processed system prompt and included files (for deduplication)
    */
-  private async getSystemPromptForMessage(chainType: ChainType): Promise<string> {
-    const basePrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
+  private async getSystemPromptForMessage(
+    chainType: ChainType,
+    vault: Vault,
+    activeNote: TFile | null
+  ): Promise<ProcessedPromptResult> {
+    // Use getEffectiveUserPrompt to ensure consistency with getSystemPrompt (includes legacy fallback)
+    const userCustomPrompt = getEffectiveUserPrompt();
+    const allIncludedFiles: TFile[] = [];
+
+    // Preserve original behavior (memory + system prompt) via settings/model helpers
+    const basePromptWithMemory = await getSystemPromptWithMemory(
+      this.chainManager.userMemoryManager
+    );
+    const systemPromptWithoutMemory = getSystemPrompt();
+
+    let processedBasePromptWithMemory = basePromptWithMemory;
+
+    // Process templates only on user-defined custom prompt content
+    if (userCustomPrompt) {
+      const userPromptResult = await this.processSystemPromptTemplates(
+        userCustomPrompt,
+        vault,
+        activeNote
+      );
+
+      const processedSystemPromptWithoutMemory =
+        this.injectProcessedUserCustomPromptIntoSystemPrompt({
+          systemPromptWithoutMemory,
+          userCustomPrompt,
+          processedUserCustomPrompt: userPromptResult.processedPrompt,
+        });
+
+      const nextProcessedBasePromptWithMemory = this.replaceSystemPromptWithoutMemoryInBasePrompt({
+        basePromptWithMemory,
+        systemPromptWithoutMemory,
+        processedSystemPromptWithoutMemory,
+      });
+
+      // Only add includedFiles if the processed prompt was actually injected
+      // This prevents context deduplication from skipping files that weren't actually included
+      if (nextProcessedBasePromptWithMemory !== basePromptWithMemory) {
+        allIncludedFiles.push(...userPromptResult.includedFiles);
+      }
+
+      processedBasePromptWithMemory = nextProcessedBasePromptWithMemory;
+    }
 
     // Special case: Add project context for project chain
     if (chainType === ChainType.PROJECT_CHAIN) {
       const project = getCurrentProject();
       if (project) {
         const context = await ProjectManager.instance.getProjectContext(project.id);
-        let result = `${basePrompt}\n\n<project_system_prompt>\n${project.systemPrompt}\n</project_system_prompt>`;
+
+        // Process project system prompt templates too
+        const projectPromptResult = await this.processSystemPromptTemplates(
+          project.systemPrompt,
+          vault,
+          activeNote
+        );
+        allIncludedFiles.push(...projectPromptResult.includedFiles);
+
+        let result = `${processedBasePromptWithMemory}\n\n<project_system_prompt>\n${projectPromptResult.processedPrompt}\n</project_system_prompt>`;
 
         // Only add project_context block if context exists
         if (context) {
           result += `\n\n<project_context>\n${context}\n</project_context>`;
         }
 
-        return result;
+        return {
+          processedPrompt: result,
+          includedFiles: allIncludedFiles,
+        };
       }
     }
 
-    return basePrompt;
+    return {
+      processedPrompt: processedBasePromptWithMemory,
+      includedFiles: allIncludedFiles,
+    };
   }
 
   /**
@@ -267,7 +454,8 @@ export class ChatManager {
       }
 
       // Get system prompt for L1 layer (includes project context if in project mode)
-      const systemPrompt = await this.getSystemPromptForMessage(chainType);
+      const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
+        await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
 
       // Process context to generate LLM content
       const { processedContent, contextEnvelope } = await this.contextManager.processMessageContext(
@@ -278,7 +466,8 @@ export class ChatManager {
         includeActiveNote,
         activeNote,
         currentRepo, // Pass MessageRepository for L2 building
-        systemPrompt
+        systemPrompt,
+        systemPromptIncludedFiles
       );
 
       // Update the processed content
@@ -320,7 +509,8 @@ export class ChatManager {
 
       // Reprocess context for the edited message
       const activeNote = this.plugin.app.workspace.getActiveFile();
-      const systemPrompt = await this.getSystemPromptForMessage(chainType);
+      const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
+        await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
       await this.contextManager.reprocessMessageContext(
         messageId,
         currentRepo,
@@ -329,7 +519,8 @@ export class ChatManager {
         chainType,
         includeActiveNote,
         activeNote,
-        systemPrompt
+        systemPrompt,
+        systemPromptIncludedFiles
       );
 
       // Update chain memory with fresh LLM messages

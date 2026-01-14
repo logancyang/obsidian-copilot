@@ -9,6 +9,7 @@ import {
   isFolderMatch,
   processVariableNameForNotePath,
   removeThinkTags,
+  stripFrontmatter,
   truncateToByteLimit,
   withTimeout,
 } from "./utils";
@@ -707,5 +708,93 @@ describe("truncateToByteLimit", () => {
     // Binary search may find a partial character, but we can't include it
     // The function should return an empty string or the longest valid prefix
     expect(getUtf8ByteLength(result)).toBeLessThanOrEqual(3);
+  });
+});
+
+describe("stripFrontmatter", () => {
+  it("should strip YAML frontmatter from content", () => {
+    const content = `---
+title: Test
+date: 2024-01-01
+---
+This is the actual content.`;
+    const result = stripFrontmatter(content);
+    expect(result).toBe("This is the actual content.");
+  });
+
+  it("should return content unchanged if no frontmatter", () => {
+    const content = "This is content without frontmatter.";
+    const result = stripFrontmatter(content);
+    expect(result).toBe("This is content without frontmatter.");
+  });
+
+  it("should handle content that starts with --- but has no closing ---", () => {
+    const content = "---\nThis is not valid frontmatter";
+    const result = stripFrontmatter(content);
+    expect(result).toBe("---\nThis is not valid frontmatter");
+  });
+
+  it("should handle empty content", () => {
+    const result = stripFrontmatter("");
+    expect(result).toBe("");
+  });
+
+  it("should handle content with --- in the middle", () => {
+    const content = `---
+title: Test
+---
+Content with --- separator in the middle.`;
+    const result = stripFrontmatter(content);
+    expect(result).toBe("Content with --- separator in the middle.");
+  });
+
+  it("should trim leading whitespace after frontmatter", () => {
+    const content = `---
+title: Test
+---
+
+  Content with leading whitespace after frontmatter.`;
+    const result = stripFrontmatter(content);
+    // trimStart removes the newlines and spaces
+    expect(result).toBe("Content with leading whitespace after frontmatter.");
+  });
+
+  it("should handle frontmatter with various field types", () => {
+    const content = `---
+title: "Quoted String"
+count: 42
+enabled: true
+tags:
+  - tag1
+  - tag2
+---
+Body content here.`;
+    const result = stripFrontmatter(content);
+    expect(result).toBe("Body content here.");
+  });
+
+  it("should preserve leading whitespace after frontmatter when trimStart is false", () => {
+    const content = `---
+title: Test
+---
+  Content with leading whitespace after frontmatter.`;
+    const result = stripFrontmatter(content, { trimStart: false });
+    expect(result).toBe("  Content with leading whitespace after frontmatter.");
+  });
+
+  it("should preserve multiple leading newlines when trimStart is false", () => {
+    const content = `---
+title: Test
+---
+
+  Content after empty line.`;
+    const result = stripFrontmatter(content, { trimStart: false });
+    expect(result).toBe("\n  Content after empty line.");
+  });
+
+  it("should handle CRLF line endings when trimStart is false", () => {
+    const content = "---\r\ntitle: Test\r\n---\r\n  Content here.";
+    const result = stripFrontmatter(content, { trimStart: false });
+    expect(result).toBe("  Content here.");
   });
 });
