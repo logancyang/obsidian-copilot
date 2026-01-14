@@ -44,6 +44,7 @@ import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
+import { QuickAskController } from "@/features/quick-ask";
 import {
   Editor,
   MarkdownView,
@@ -78,6 +79,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
+  quickAskController: QuickAskController;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
   private webSelectionTracker?: WebSelectionTracker;
@@ -127,6 +129,10 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
+
+    // Initialize QuickAskController and register CM6 extension
+    this.quickAskController = new QuickAskController(this);
+    this.registerEditorExtension(this.quickAskController.createExtension());
 
     // Single source of truth for Active Web Tab ({activeWebTab}) state
     // Preserves activeWebTab when switching to Chat view

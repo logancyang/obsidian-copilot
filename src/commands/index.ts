@@ -547,4 +547,37 @@ export function registerCommands(
     const modal = new YoutubeTranscriptModal(plugin.app);
     modal.open();
   });
+
+  // Add Quick Ask command (cmd+k)
+  addCheckCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_ASK, (checking: boolean) => {
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+
+    if (checking) {
+      // Return true only if we're not in source mode and have an active editor
+      return !!(!isSourceModeOn() && activeView && activeView.editor);
+    }
+
+    // Need to check this again because it can still be triggered via shortcut
+    if (isSourceModeOn()) {
+      new Notice("Quick Ask is not available in source mode.");
+      return false;
+    }
+
+    if (!activeView || !activeView.editor) {
+      new Notice("No active editor found.");
+      return false;
+    }
+
+    // Get the CM6 EditorView from the Obsidian editor
+    // @ts-expect-error - Obsidian's editor has cm property for CodeMirror 6
+    const view = activeView.editor.cm;
+    if (!view) {
+      new Notice("Could not access CodeMirror editor.");
+      return false;
+    }
+
+    // Show the Quick Ask panel
+    plugin.quickAskController.show(activeView.editor, view);
+    return true;
+  });
 }
