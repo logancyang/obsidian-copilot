@@ -126,6 +126,7 @@ export const LOADING_MESSAGES = {
   READING_FILES: "Reading files",
   SEARCHING_WEB: "Searching the web",
   READING_FILE_TREE: "Reading file tree",
+  COMPACTING: "Compacting",
 };
 export const PLUS_UTM_MEDIUMS = {
   SETTINGS: "settings",
@@ -877,6 +878,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autoAcceptEdits: false,
   userSystemPromptsFolder: DEFAULT_SYSTEM_PROMPTS_FOLDER,
   defaultSystemPromptTitle: "",
+  autoCompactThreshold: 128000,
 };
 
 export const EVENT_NAMES = {

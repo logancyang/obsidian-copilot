@@ -1,5 +1,7 @@
 // Mock dependencies first to avoid circular dependencies
 jest.mock("./MessageRepository");
+jest.mock("@/LLMProviders/chatModelManager");
+jest.mock("./ContextCompactor");
 jest.mock("./ContextManager");
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -189,7 +191,8 @@ describe("ChatManager", () => {
         mockActiveFile,
         expect.anything(), // messageRepo
         expect.any(String), // systemPrompt
-        expect.any(Array) // systemPromptIncludedFiles
+        expect.any(Array), // systemPromptIncludedFiles
+        undefined // updateLoadingMessage
       );
       expect(mockMessageRepo.updateProcessedText).toHaveBeenCalledWith(
         "msg-1",
@@ -1080,9 +1083,7 @@ describe("ChatManager", () => {
             content: "Some selected text from web",
           },
         ],
-        webTabs: [
-          { url: "https://existing.example.com", title: "Existing Tab" },
-        ],
+        webTabs: [{ url: "https://existing.example.com", title: "Existing Tab" }],
       };
 
       mockGetWebViewerService.mockReturnValue({
@@ -1449,7 +1450,8 @@ describe("ChatManager", () => {
           mockActiveFile,
           expect.anything(),
           expect.any(String),
-          expect.arrayContaining([mockIncludedFile]) // Should contain the included file
+          expect.arrayContaining([mockIncludedFile]), // Should contain the included file
+          undefined // updateLoadingMessage
         );
       });
     });
@@ -1529,10 +1531,12 @@ describe("ChatManager", () => {
 
         // CRITICAL: Structural assertion to catch $& expansion bug
         // If $& were interpreted, it would inject the entire matched block, causing nested tags
-        const openTagCount = ((systemPromptArg as string).match(/<user_custom_instructions>/g) || [])
-          .length;
-        const closeTagCount = ((systemPromptArg as string).match(/<\/user_custom_instructions>/g) ||
-          []).length;
+        const openTagCount = (
+          (systemPromptArg as string).match(/<user_custom_instructions>/g) || []
+        ).length;
+        const closeTagCount = (
+          (systemPromptArg as string).match(/<\/user_custom_instructions>/g) || []
+        ).length;
         expect(openTagCount).toBe(1);
         expect(closeTagCount).toBe(1);
       });
@@ -1578,10 +1582,12 @@ describe("ChatManager", () => {
 
         // CRITICAL: Structural assertion to catch $& expansion bug
         // If $& were interpreted, it would inject the entire matched block, causing nested tags
-        const openTagCount = ((systemPromptArg as string).match(/<user_custom_instructions>/g) || [])
-          .length;
-        const closeTagCount = ((systemPromptArg as string).match(/<\/user_custom_instructions>/g) ||
-          []).length;
+        const openTagCount = (
+          (systemPromptArg as string).match(/<user_custom_instructions>/g) || []
+        ).length;
+        const closeTagCount = (
+          (systemPromptArg as string).match(/<\/user_custom_instructions>/g) || []
+        ).length;
         expect(openTagCount).toBe(1);
         expect(closeTagCount).toBe(1);
       });

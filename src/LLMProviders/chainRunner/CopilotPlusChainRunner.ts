@@ -30,7 +30,7 @@ import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from 
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseChainRunner } from "./BaseChainRunner";
 import { ActionBlockStreamer } from "./utils/ActionBlockStreamer";
-import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
+import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import {
   addFallbackSources,
   formatSourceCatalog,
@@ -338,7 +338,12 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
    */
   private async extractImagesFromContextBlock(
     l3Text: string,
-    source: { tagName: string; identifierTag: string; displayName: string; useForResolution: boolean }
+    source: {
+      tagName: string;
+      identifierTag: string;
+      displayName: string;
+      useForResolution: boolean;
+    }
   ): Promise<string[]> {
     // Match the context block
     const blockRegex = new RegExp(`<${source.tagName}>([\\s\\S]*?)<\\/${source.tagName}>`);
@@ -354,7 +359,9 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     if (!content) return [];
 
     // Extract identifier (path or url) for logging and optional resolution
-    const identifierRegex = new RegExp(`<${source.identifierTag}>(.*?)<\\/${source.identifierTag}>`);
+    const identifierRegex = new RegExp(
+      `<${source.identifierTag}>(.*?)<\\/${source.identifierTag}>`
+    );
     const identifierMatch = identifierRegex.exec(block);
     const identifier = identifierMatch ? identifierMatch[1] : undefined;
 
@@ -472,8 +479,18 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
         // - displayName: human-readable name for logs
         // - useForResolution: whether to use identifier for vault path resolution
         const contextSources = [
-          { tagName: "active_note", identifierTag: "path", displayName: "active note", useForResolution: true },
-          { tagName: "active_web_tab", identifierTag: "url", displayName: "active web tab", useForResolution: false },
+          {
+            tagName: "active_note",
+            identifierTag: "path",
+            displayName: "active note",
+            useForResolution: true,
+          },
+          {
+            tagName: "active_web_tab",
+            identifierTag: "url",
+            displayName: "active web tab",
+            useForResolution: false,
+          },
         ];
 
         for (const source of contextSources) {
@@ -549,12 +566,11 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     allToolOutputs: any[],
     abortController: AbortController,
     thinkStreamer: ThinkBlockStreamer,
-    originalUserQuestion: string
+    originalUserQuestion: string,
+    updateLoadingMessage?: (message: string) => void
   ): Promise<void> {
-    // Get chat history
+    // Get memory for chat history loading
     const memory = this.chainManager.memoryManager.getMemory();
-    const memoryVariables = await memory.loadMemoryVariables({});
-    const rawHistory = memoryVariables.history || [];
 
     // Get chat model
     const chatModel = this.chainManager.chatModelManager.getChatModel();
@@ -590,9 +606,9 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     }
 
     // Insert L4 (chat history) between system and user
-    addChatHistoryToMessages(rawHistory, messages);
+    await loadAndAddChatHistory(memory, messages);
 
-    // Find user message (L3 smart references + L5)
+    // Process user message (L3 smart references + L5)
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
       let finalUserContent;
@@ -827,7 +843,8 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
         allToolOutputs,
         abortController,
         thinkStreamer,
-        cleanedUserMessage
+        cleanedUserMessage,
+        updateLoadingMessage
       );
     } catch (error: any) {
       // Reset loading message to default

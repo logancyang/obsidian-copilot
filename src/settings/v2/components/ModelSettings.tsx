@@ -179,6 +179,16 @@ export const ModelSettings: React.FC = () => {
             max={50}
             step={1}
           />
+          <SettingItem
+            type="slider"
+            title="Auto-compact threshold"
+            description="Automatically summarize context using map-reduce when it exceeds this token count. Default is 128k."
+            min={64000}
+            max={1000000}
+            step={64000}
+            value={settings.autoCompactThreshold}
+            onChange={(value) => updateSetting("autoCompactThreshold", value)}
+          />
         </div>
       </section>
 

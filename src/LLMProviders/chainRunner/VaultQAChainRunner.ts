@@ -15,6 +15,7 @@ import {
   withSuppressedTokenWarnings,
 } from "@/utils";
 import { BaseChainRunner } from "./BaseChainRunner";
+import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import {
   formatSourceCatalog,
   getQACitationInstructions,
@@ -175,9 +176,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       }
 
       // Insert L4 (chat history) between system and user
-      for (const entry of chatHistory) {
-        messages.push({ role: entry.role, content: entry.content });
-      }
+      await loadAndAddChatHistory(memory, messages);
 
       // Add user message with RAG prepended
       // User message now contains: RAG results + citations + L3 smart references + L5

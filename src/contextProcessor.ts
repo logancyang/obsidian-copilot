@@ -547,10 +547,6 @@ export class ContextProcessor {
           return;
         }
 
-        logInfo(
-          `Processing note: ${note.path}, extension: ${note.extension}, chain: ${currentChain}`
-        );
-
         // 1. Check if the file extension is supported by any parser
         if (!fileParserManager.supportsExtension(note.extension)) {
           logWarn(`Unsupported file type: ${note.extension}`);
@@ -846,7 +842,9 @@ export class ContextProcessor {
     if (!availability.supported || !availability.available) {
       const reason =
         availability.reason ??
-        (availability.supported ? "Web Viewer is not available." : "Web Viewer is not supported on this platform.");
+        (availability.supported
+          ? "Web Viewer is not available."
+          : "Web Viewer is not supported on this platform.");
 
       const blocks: string[] = [];
       if (activeTab) {
