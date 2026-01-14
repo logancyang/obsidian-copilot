@@ -51,10 +51,6 @@ jest.mock("@/system-prompts/systemPromptBuilder", () => ({
   getEffectiveUserPrompt: jest.fn().mockReturnValue(""),
 }));
 
-jest.mock("@/system-prompts/state", () => ({
-  getEffectiveSystemPromptContent: jest.fn().mockReturnValue(""),
-}));
-
 jest.mock("@/commands/customCommandUtils", () => ({
   processPrompt: jest.fn().mockResolvedValue({
     processedPrompt: "",
@@ -1504,7 +1500,6 @@ describe("ChatManager", () => {
 
         // User prompt containing $ patterns that would be misinterpreted by string replacement
         const userCustomPrompt = "Cost is $100. Use $& and $1 patterns. Double $$ too.";
-        const processedContent = userCustomPrompt; // No template processing needed
 
         getEffectiveUserPrompt.mockReturnValue(userCustomPrompt);
         getSystemPrompt.mockReturnValue(

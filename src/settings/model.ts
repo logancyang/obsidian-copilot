@@ -11,11 +11,9 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
-  DEFAULT_SYSTEM_PROMPT,
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
-import { logInfo } from "@/logger";
 
 /**
  * We used to store commands in the settings file with the following interface.

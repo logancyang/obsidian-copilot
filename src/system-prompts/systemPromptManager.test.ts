@@ -40,6 +40,8 @@ jest.mock("@/system-prompts/state", () => ({
   deleteCachedSystemPrompt: jest.fn(),
   addPendingFileWrite: jest.fn(),
   removePendingFileWrite: jest.fn(),
+  getSelectedPromptTitle: jest.fn(() => ""),
+  setSelectedPromptTitle: jest.fn(),
 }));
 
 describe("SystemPromptManager", () => {

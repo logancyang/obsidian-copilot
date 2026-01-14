@@ -15,6 +15,8 @@ import {
   deleteCachedSystemPrompt,
   addPendingFileWrite,
   removePendingFileWrite,
+  getSelectedPromptTitle,
+  setSelectedPromptTitle,
 } from "@/system-prompts/state";
 import {
   COPILOT_SYSTEM_PROMPT_CREATED,
@@ -187,16 +189,22 @@ export class SystemPromptManager {
     try {
       addPendingFileWrite(filePath);
 
-      // Clear defaultSystemPromptTitle if it points to the deleted prompt
+      // Delete the file first
+      const file = this.vault.getAbstractFileByPath(filePath);
+      if (file instanceof TFile) {
+        await this.vault.delete(file);
+      }
+
+      // Clear state only after successful deletion to maintain consistency
       const settings = getSettings();
       if (settings.defaultSystemPromptTitle === title) {
         updateSetting("defaultSystemPromptTitle", "");
         logInfo(`Cleared defaultSystemPromptTitle (deleted: ${title})`);
       }
 
-      const file = this.vault.getAbstractFileByPath(filePath);
-      if (file instanceof TFile) {
-        await this.vault.delete(file);
+      if (getSelectedPromptTitle() === title) {
+        setSelectedPromptTitle("");
+        logInfo(`Cleared session selectedPromptTitle (deleted: ${title})`);
       }
 
       // Update cache directly instead of reloading all files
