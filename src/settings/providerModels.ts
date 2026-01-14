@@ -344,6 +344,41 @@ export interface SiliconFlowModel {
   owned_by: string;
 }
 
+// GitHub Copilot response model definition
+export interface GitHubCopilotModelResponse {
+  object: string;
+  data: GitHubCopilotModel[];
+}
+
+/**
+ {
+ "id": "gpt-4o",
+ "name": "GPT-4o",
+ "version": "gpt-4o-2024-11-20",
+ "object": "model",
+ "vendor": "Azure OpenAI",
+ "model_picker_enabled": true,
+ "capabilities": {
+   "family": "gpt-4o",
+   "type": "chat"
+ }
+ }
+ */
+export interface GitHubCopilotModel {
+  id: string;
+  name: string;
+  version: string;
+  object: string;
+  vendor?: string;
+  model_picker_enabled?: boolean;
+  model_picker_category?: string;
+  preview?: boolean;
+  capabilities?: {
+    family?: string;
+    type?: string;
+  };
+}
+
 // Response type mapping
 export interface ProviderResponseMap {
   [ChatModelProviders.OPENAI]: OpenAIModelResponse;
@@ -359,6 +394,7 @@ export interface ProviderResponseMap {
   [ChatModelProviders.COPILOT_PLUS]: null;
   [ChatModelProviders.AZURE_OPENAI]: null;
   [ChatModelProviders.AMAZON_BEDROCK]: unknown;
+  [ChatModelProviders.GITHUB_COPILOT]: GitHubCopilotModelResponse;
 }
 
 // Adapter type definition - converts provider-specific models to standard format
@@ -449,6 +485,13 @@ export const providerAdapters: ProviderModelAdapters = {
       id: model.id,
       name: model.id,
       provider: ChatModelProviders.SILICONFLOW,
+    })) || [],
+
+  [ChatModelProviders.GITHUB_COPILOT]: (data): StandardModel[] =>
+    data.data?.map((model) => ({
+      id: model.id,
+      name: model.id,
+      provider: ChatModelProviders.GITHUB_COPILOT,
     })) || [],
 };
 
