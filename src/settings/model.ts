@@ -164,6 +164,8 @@ export interface CopilotSettings {
    * Empty string means no custom system prompt (use builtin)
    */
   defaultSystemPromptTitle: string;
+  /** Token threshold for auto-compacting large context (range: 64k-1M tokens, default: 128000) */
+  autoCompactThreshold: number;
 }
 
 export const settingsStore = createStore();
@@ -329,11 +331,13 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure autoAddActiveContentToContext has a default value (migrate from old settings)
   if (typeof sanitizedSettings.autoAddActiveContentToContext !== "boolean") {
     // Migration: check old setting first (includeActiveNoteAsContext)
-    const oldNoteContext = (settingsToSanitize as unknown as Record<string, unknown>).includeActiveNoteAsContext;
+    const oldNoteContext = (settingsToSanitize as unknown as Record<string, unknown>)
+      .includeActiveNoteAsContext;
     if (typeof oldNoteContext === "boolean") {
       sanitizedSettings.autoAddActiveContentToContext = oldNoteContext;
     } else {
-      sanitizedSettings.autoAddActiveContentToContext = DEFAULT_SETTINGS.autoAddActiveContentToContext;
+      sanitizedSettings.autoAddActiveContentToContext =
+        DEFAULT_SETTINGS.autoAddActiveContentToContext;
     }
   }
 
@@ -406,6 +410,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.autosaveChat = DEFAULT_SETTINGS.autosaveChat;
   }
 
+  // Ensure autoCompactThreshold has a valid value (64k-1M tokens range)
+  const autoCompactThreshold = Number(settingsToSanitize.autoCompactThreshold);
+  if (isNaN(autoCompactThreshold)) {
+    sanitizedSettings.autoCompactThreshold = DEFAULT_SETTINGS.autoCompactThreshold;
+  } else {
+    // Clamp to valid range
+    sanitizedSettings.autoCompactThreshold = Math.min(
+      1000000,
+      Math.max(64000, autoCompactThreshold)
+    );
+  }
+
   // Ensure quickCommandIncludeNoteContext has a default value
   if (typeof sanitizedSettings.quickCommandIncludeNoteContext !== "boolean") {
     sanitizedSettings.quickCommandIncludeNoteContext =
@@ -423,7 +439,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure autoAddSelectionToContext has a default value (migrate from old settings)
   if (typeof sanitizedSettings.autoAddSelectionToContext !== "boolean") {
     // Migration: check old setting first (autoIncludeTextSelection)
-    const oldTextSelection = (settingsToSanitize as unknown as Record<string, unknown>).autoIncludeTextSelection;
+    const oldTextSelection = (settingsToSanitize as unknown as Record<string, unknown>)
+      .autoIncludeTextSelection;
     if (typeof oldTextSelection === "boolean") {
       sanitizedSettings.autoAddSelectionToContext = oldTextSelection;
     } else {

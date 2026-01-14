@@ -402,7 +402,8 @@ export class ChatManager {
     chainType: ChainType,
     includeActiveNote: boolean = false,
     includeActiveWebTab: boolean = false,
-    content?: any[]
+    content?: any[],
+    updateLoadingMessage?: (message: string) => void
   ): Promise<string> {
     try {
       logInfo(`[ChatManager] Sending message: "${displayText}"`);
@@ -425,8 +426,7 @@ export class ChatManager {
       // BUT: any selection takes priority and suppresses active tab to avoid redundant context
       const hasAnySelection = (updatedContext.selectedTextContexts || []).length > 0;
       const shouldIncludeActiveWebTab =
-        !hasAnySelection &&
-        (includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER));
+        !hasAnySelection && (includeActiveWebTab || displayText.includes(ACTIVE_WEB_TAB_MARKER));
       updatedContext.webTabs = this.buildWebTabsWithActiveSnapshot(
         updatedContext.webTabs || [],
         shouldIncludeActiveWebTab
@@ -467,7 +467,8 @@ export class ChatManager {
         activeNote,
         currentRepo, // Pass MessageRepository for L2 building
         systemPrompt,
-        systemPromptIncludedFiles
+        systemPromptIncludedFiles,
+        updateLoadingMessage
       );
 
       // Update the processed content

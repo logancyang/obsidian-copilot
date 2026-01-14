@@ -14,7 +14,7 @@ import { err2String, getMessageRole, withSuppressedTokenWarnings } from "@/utils
 import { formatErrorChunk, processToolResults } from "@/utils/toolResultUtils";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
-import { addChatHistoryToMessages } from "./utils/chatHistoryUtils";
+import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import {
   joinPromptSections,
   messageRequiresTools,
@@ -281,7 +281,11 @@ ${params}
 
     logInfo("[Agent] Using envelope-based context construction");
 
-    const context = await this.prepareAgentConversation(userMessage, chatModel);
+    const context = await this.prepareAgentConversation(
+      userMessage,
+      chatModel,
+      options.updateLoadingMessage
+    );
 
     try {
       const loopResult = await this.executeAgentLoop({
@@ -365,11 +369,13 @@ ${params}
    *
    * @param userMessage - The initiating user message from the UI.
    * @param chatModel - The active chat model instance.
+   * @param updateLoadingMessage - Optional callback to show loading status.
    * @returns Aggregated context required for the autonomous agent loop.
    */
   private async prepareAgentConversation(
     userMessage: ChatMessage,
-    chatModel: any
+    chatModel: any,
+    updateLoadingMessage?: (message: string) => void
   ): Promise<AgentRunContext> {
     const conversationMessages: ConversationMessage[] = [];
     const iterationHistory: string[] = [];
@@ -392,10 +398,8 @@ ${params}
       debug: false,
     });
 
-    // Get memory for chat history
+    // Get memory for chat history loading
     const memory = this.chainManager.memoryManager.getMemory();
-    const memoryVariables = await memory.loadMemoryVariables({});
-    const rawHistory = memoryVariables.history || [];
 
     // Build system message: L1+L2 from envelope + tool-only sections
     const systemMessage = baseMessages.find((m) => m.role === "system");
@@ -433,13 +437,13 @@ ${params}
       });
     }
 
-    // Insert L4 (chat history) between system and user
-    addChatHistoryToMessages(rawHistory, conversationMessages);
-
     // Extract L5 for original prompt and adapter enhancement
     const l5User = envelope.layers.find((l) => l.id === "L5_USER");
     const l5Text = l5User?.text || "";
     const originalUserPrompt = l5Text || userMessage.originalMessage || userMessage.message;
+
+    // Insert L4 (chat history) between system and user
+    await loadAndAddChatHistory(memory, conversationMessages);
 
     // Extract user content (L3 smart references + L5) from base messages
     const userMessageContent = baseMessages.find((m) => m.role === "user");

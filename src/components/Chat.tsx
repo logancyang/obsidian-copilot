@@ -97,7 +97,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       const messageToAdd = shouldAttachId ? { ...message, id: streamingId } : message;
 
       rawAddMessage(messageToAdd);
-      if (messageToAdd.sender === AI_SENDER && messageToAdd.responseMetadata?.tokenUsage?.totalTokens) {
+      if (
+        messageToAdd.sender === AI_SENDER &&
+        messageToAdd.responseMetadata?.tokenUsage?.totalTokens
+      ) {
         setLatestTokenCount(messageToAdd.responseMetadata.tokenUsage.totalTokens);
       }
     },
@@ -279,7 +282,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         currentChain,
         effectiveIncludeActiveNote,
         effectiveIncludeActiveWebTab,
-        content.length > 0 ? content : undefined
+        content.length > 0 ? content : undefined,
+        safeSet.setLoadingMessage
       );
 
       // Add to user message history
