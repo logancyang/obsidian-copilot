@@ -1,4 +1,5 @@
-import { getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
+import { subscribeToSettingsChange } from "@/settings/model";
+import { getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,

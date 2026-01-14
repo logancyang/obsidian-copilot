@@ -11,6 +11,7 @@ import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
+import { isSortStrategy } from "@/utils/recentUsageManager";
 import { Key, Loader2 } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useState } from "react";
@@ -429,6 +430,46 @@ export const BasicSettings: React.FC = () => {
               </Button>
             </div>
           </SettingItem>
+        </div>
+      </section>
+
+      {/* Sorting Section */}
+      <section>
+        <div className="tw-mb-3 tw-text-xl tw-font-bold">Sorting</div>
+        <div className="tw-space-y-4">
+          <SettingItem
+            type="select"
+            title="Chat History Sort Strategy"
+            description="Sort order for the chat history list"
+            value={settings.chatHistorySortStrategy}
+            onChange={(value) => {
+              if (isSortStrategy(value)) {
+                updateSetting("chatHistorySortStrategy", value);
+              }
+            }}
+            options={[
+              { label: "Recency", value: "recent" },
+              { label: "Created", value: "created" },
+              { label: "Alphabetical", value: "name" },
+            ]}
+          />
+
+          <SettingItem
+            type="select"
+            title="Project List Sort Strategy"
+            description="Sort order for the project list"
+            value={settings.projectListSortStrategy}
+            onChange={(value) => {
+              if (isSortStrategy(value)) {
+                updateSetting("projectListSortStrategy", value);
+              }
+            }}
+            options={[
+              { label: "Recency", value: "recent" },
+              { label: "Created", value: "created" },
+              { label: "Alphabetical", value: "name" },
+            ]}
+          />
         </div>
       </section>
     </div>

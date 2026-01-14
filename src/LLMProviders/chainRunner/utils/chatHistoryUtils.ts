@@ -82,6 +82,24 @@ export interface ChatHistoryEntry {
 }
 
 /**
+ * Extract text content from potentially multimodal message content.
+ * Replaces non-text content (images) with placeholder.
+ */
+function extractTextContent(content: any): string {
+  if (typeof content === "string") {
+    return content;
+  } else if (Array.isArray(content)) {
+    // Extract text from multimodal content, skip image_url payloads
+    const textParts = content
+      .filter((item: any) => item.type === "text")
+      .map((item: any) => item.text || "")
+      .join(" ");
+    return textParts || "[Image content]";
+  }
+  return String(content || "");
+}
+
+/**
  * Convert processed messages to text-only format for question condensing
  * This extracts just the text content from potentially multimodal messages
  *
@@ -91,25 +109,149 @@ export interface ChatHistoryEntry {
 export function processedMessagesToTextOnly(
   processedMessages: ProcessedMessage[]
 ): ChatHistoryEntry[] {
-  return processedMessages.map((msg) => {
-    let textContent: string;
+  return processedMessages.map((msg) => ({
+    role: msg.role,
+    content: extractTextContent(msg.content),
+  }));
+}
 
-    if (typeof msg.content === "string") {
-      textContent = msg.content;
-    } else if (Array.isArray(msg.content)) {
-      // Extract text from multimodal content
-      const textParts = msg.content
-        .filter((item: any) => item.type === "text")
-        .map((item: any) => item.text || "")
-        .join(" ");
-      textContent = textParts || "[Image content]";
-    } else {
-      textContent = String(msg.content || "");
+/**
+ * Tool output structure for size estimation
+ */
+export interface ToolOutput {
+  tool: string;
+  output: string | object;
+}
+
+/**
+ * Estimates the size of formatted tool outputs without actually formatting them.
+ * Used to include tool output size in compaction threshold calculations.
+ *
+ * Tool outputs are formatted as:
+ * ```
+ * # Additional context:
+ *
+ * <toolName>
+ * {content}
+ * </toolName>
+ * ```
+ *
+ * @param toolOutputs - Array of tool outputs with tool name and output content
+ * @returns Estimated character count of formatted tool outputs
+ */
+export function estimateToolOutputSize(toolOutputs: ToolOutput[]): number {
+  if (toolOutputs.length === 0) return 0;
+
+  // Estimate: "# Additional context:\n\n" prefix
+  let size = "# Additional context:\n\n".length;
+
+  for (let i = 0; i < toolOutputs.length; i++) {
+    const output = toolOutputs[i];
+    const content =
+      typeof output.output === "string" ? output.output : JSON.stringify(output.output);
+    // Format: <tool>\n{content}\n</tool>
+    size += `<${output.tool}>\n`.length + content.length + `\n</${output.tool}>`.length;
+    // Join separator: \n\n between outputs
+    if (i < toolOutputs.length - 1) {
+      size += 2;
     }
+  }
 
-    return {
-      role: msg.role,
-      content: textContent,
-    };
-  });
+  return size;
+}
+
+/**
+ * Result of extracting conversation turns from processed history.
+ */
+export interface ExtractedTurns {
+  /** Complete user-assistant turn pairs */
+  turns: Array<{ user: string; assistant: string }>;
+  /** Trailing user message without assistant response (e.g., after aborted generation) */
+  trailingUserMessage: string | null;
+}
+
+/**
+ * Extract conversation turns from processed chat history.
+ * Handles both complete turn pairs and trailing unpaired user messages.
+ * Scans sequentially for user→assistant pairs to handle histories that may
+ * start with an assistant message (e.g., when BufferWindowMemory slices mid-conversation).
+ *
+ * @param processedHistory - Processed chat history messages
+ * @returns Object with turns array and optional trailing user message
+ */
+export function extractConversationTurns(processedHistory: ProcessedMessage[]): ExtractedTurns {
+  const turns: Array<{ user: string; assistant: string }> = [];
+  let trailingUserMessage: string | null = null;
+
+  // Scan sequentially for user→assistant pairs
+  let i = 0;
+  while (i < processedHistory.length) {
+    const msg = processedHistory[i];
+
+    if (msg?.role === "user") {
+      // Found a user message, look for the following assistant message
+      const nextMsg = processedHistory[i + 1];
+      if (nextMsg?.role === "assistant") {
+        turns.push({
+          user: extractTextContent(msg.content),
+          assistant: extractTextContent(nextMsg.content),
+        });
+        i += 2; // Skip both messages
+      } else {
+        // User message without following assistant (trailing or orphaned)
+        // If this is the last message, it's a trailing user message
+        if (i === processedHistory.length - 1) {
+          trailingUserMessage = extractTextContent(msg.content);
+        }
+        i += 1;
+      }
+    } else {
+      // Skip assistant messages that aren't paired with a preceding user message
+      // (e.g., at the start of a window slice)
+      i += 1;
+    }
+  }
+
+  return { turns, trailingUserMessage };
+}
+
+/**
+ * Load chat history from memory and add to messages array.
+ * This is the single entry point for all chain runners to use.
+ *
+ * NOTE: Chat history compaction was intentionally removed for simplicity.
+ * A previous implementation would summarize older conversation turns when
+ * total context exceeded a threshold. This was removed because:
+ * 1. It added complexity (LLM calls for summarization)
+ * 2. Context compaction in ContextManager already handles large context
+ * 3. BufferWindowMemory already limits conversation history length
+ *
+ * If chat history compaction is needed in the future, consider:
+ * - Extracting conversation turns with extractConversationTurns()
+ * - Summarizing older turns while keeping recent ones intact
+ * - Using the same autoCompactThreshold setting for consistency
+ *
+ * @param memory - LangChain memory instance
+ * @param messages - Target messages array (system message should already be added)
+ * @returns The processed history that was added
+ */
+export async function loadAndAddChatHistory(
+  memory: any,
+  messages: Array<{ role: string; content: any }>
+): Promise<ProcessedMessage[]> {
+  const memoryVariables = await memory.loadMemoryVariables({});
+  const rawHistory = memoryVariables.history || [];
+
+  if (!rawHistory.length) {
+    return [];
+  }
+
+  const processedHistory = processRawChatHistory(rawHistory);
+
+  // Add history messages directly
+  for (const msg of processedHistory) {
+    messages.push({ role: msg.role, content: msg.content });
+  }
+
+  return processedHistory;
 }

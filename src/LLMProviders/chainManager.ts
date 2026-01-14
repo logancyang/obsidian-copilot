@@ -16,7 +16,8 @@ import {
   VaultQAChainRunner,
 } from "@/LLMProviders/chainRunner/index";
 import { logError, logInfo } from "@/logger";
-import { getSettings, getSystemPrompt, subscribeToSettingsChange } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { ChatMessage } from "@/types/message";
 import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
 import { MissingModelKeyError } from "@/error";

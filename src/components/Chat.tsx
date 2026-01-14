@@ -8,6 +8,7 @@ import {
   useModelKey,
   useSelectedTextContexts,
 } from "@/aiParams";
+import { resetSessionSystemPromptSettings } from "@/system-prompts";
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
@@ -96,7 +97,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       const messageToAdd = shouldAttachId ? { ...message, id: streamingId } : message;
 
       rawAddMessage(messageToAdd);
-      if (messageToAdd.sender === AI_SENDER && messageToAdd.responseMetadata?.tokenUsage?.totalTokens) {
+      if (
+        messageToAdd.sender === AI_SENDER &&
+        messageToAdd.responseMetadata?.tokenUsage?.totalTokens
+      ) {
         setLatestTokenCount(messageToAdd.responseMetadata.tokenUsage.totalTokens);
       }
     },
@@ -278,7 +282,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         currentChain,
         effectiveIncludeActiveNote,
         effectiveIncludeActiveWebTab,
-        content.length > 0 ? content : undefined
+        content.length > 0 ? content : undefined,
+        safeSet.setLoadingMessage
       );
 
       // Add to user message history
@@ -634,6 +639,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Clear messages through the new architecture
     chatUIState.clearMessages();
 
+    // Reset all session-level system prompt settings to global defaults
+    resetSessionSystemPromptSettings();
+
     // Additional UI state reset specific to this component
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
@@ -707,6 +715,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     async (id: string) => {
       try {
         await plugin.loadChatById(id);
+        // Reset all session-level system prompt settings to global defaults when loading a chat
+        resetSessionSystemPromptSettings();
       } catch (error) {
         logError("Error loading chat:", error);
         new Notice("Failed to load chat.");

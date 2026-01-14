@@ -141,6 +141,52 @@ export function stripHash(tag: string): string {
 }
 
 /**
+ * Options for {@link stripFrontmatter}.
+ */
+export interface StripFrontmatterOptions {
+  /**
+   * When true (default), trims leading whitespace after the frontmatter block.
+   * When false, preserves leading whitespace from the body, but still removes
+   * the single newline that immediately follows the closing frontmatter marker.
+   */
+  trimStart?: boolean;
+}
+
+/**
+ * Strip YAML frontmatter from markdown content.
+ * @param content - The markdown content to strip frontmatter from.
+ * @param options - Options controlling how leading whitespace is handled.
+ * @returns The content without the frontmatter block.
+ */
+export function stripFrontmatter(
+  content: string,
+  options: StripFrontmatterOptions = {}
+): string {
+  const { trimStart = true } = options;
+
+  if (content.startsWith("---")) {
+    const end = content.indexOf("---", 3);
+    if (end !== -1) {
+      const body = content.slice(end + 3);
+
+      if (trimStart) {
+        return body.trimStart();
+      }
+
+      // Preserve body whitespace, but remove the frontmatter/body separator newline.
+      if (body.startsWith("\r\n")) {
+        return body.slice(2);
+      }
+      if (body.startsWith("\n") || body.startsWith("\r")) {
+        return body.slice(1);
+      }
+      return body;
+    }
+  }
+  return content;
+}
+
+/**
  * @param file - The note file to get tags from.
  * @param frontmatterOnly - Whether to only get tags from frontmatter.
  * @returns An array of lowercase tags without the hash symbol.

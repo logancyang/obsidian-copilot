@@ -34,6 +34,7 @@ import {
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { TokenCounter } from "./TokenCounter";
+import { ChatSettingsPopover } from "@/components/chat-components/ChatSettingsPopover";
 
 export async function refreshVaultIndex() {
   try {
@@ -301,6 +302,7 @@ export function ChatControls({
           </TooltipTrigger>
           <TooltipContent>New Chat</TooltipContent>
         </Tooltip>
+        {selectedChain !== ChainType.PROJECT_CHAIN && <ChatSettingsPopover />}
         {!settings.autosaveChat && (
           <Tooltip>
             <TooltipTrigger asChild>

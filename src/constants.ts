@@ -15,6 +15,7 @@ export const COPILOT_FOLDER_ROOT = "copilot";
 export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
 export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
 export const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
+export const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
@@ -125,6 +126,7 @@ export const LOADING_MESSAGES = {
   READING_FILES: "Reading files",
   SEARCHING_WEB: "Searching the web",
   READING_FILE_TREE: "Reading file tree",
+  COMPACTING: "Compacting",
 };
 export const PLUS_UTM_MEDIUMS = {
   SETTINGS: "settings",
@@ -134,11 +136,30 @@ export const PLUS_UTM_MEDIUMS = {
 };
 export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
+/**
+ * OpenAI reasoning models 的推理强度级别
+ */
+export enum ReasoningEffort {
+  MINIMAL = "minimal",
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+}
+
+/**
+ * GPT-5 模型的输出详细程度
+ */
+export enum Verbosity {
+  LOW = "low",
+  MEDIUM = "medium",
+  HIGH = "high",
+}
+
 export const DEFAULT_MODEL_SETTING = {
   MAX_TOKENS: 6000,
   TEMPERATURE: 0.1,
-  REASONING_EFFORT: "low",
-  VERBOSITY: "medium",
+  REASONING_EFFORT: ReasoningEffort.LOW,
+  VERBOSITY: Verbosity.MEDIUM,
 } as const;
 
 export enum ChatModels {
@@ -856,6 +877,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autoAddSelectionToContext: false,
   autoAcceptEdits: false,
   diffViewMode: "split",
+  userSystemPromptsFolder: DEFAULT_SYSTEM_PROMPTS_FOLDER,
+  defaultSystemPromptTitle: "",
+  autoCompactThreshold: 128000,
 };
 
 export const EVENT_NAMES = {
