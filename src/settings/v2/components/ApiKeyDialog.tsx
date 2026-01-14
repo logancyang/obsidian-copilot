@@ -116,6 +116,7 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
                         provider={item.provider}
                         isReady={Boolean(item.apiKey)}
                         expanded={isExpanded}
+                        credentialVersion={item.apiKey}
                       />
                     </CollapsibleContent>
                   </Collapsible>

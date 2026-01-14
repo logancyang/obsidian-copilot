@@ -294,6 +294,7 @@ export function GitHubCopilotAuth() {
                 provider={ChatModelProviders.GITHUB_COPILOT}
                 isReady={isAuthenticated}
                 expanded={expanded}
+                credentialVersion={settings.githubCopilotToken}
               />
             )}
 

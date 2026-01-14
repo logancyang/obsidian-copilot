@@ -23,6 +23,12 @@ interface ModelImporterProps {
   expanded?: boolean;
   /** Optional: skip verification when adding model */
   skipVerification?: boolean;
+  /**
+   * Optional: credential version/fingerprint to detect key changes.
+   * When this value changes, the cached model list will be cleared.
+   * Can be the API key itself, a hash, or any value that changes with credentials.
+   */
+  credentialVersion?: string;
 }
 
 /**
@@ -33,6 +39,7 @@ export function ModelImporter({
   isReady,
   expanded = false,
   skipVerification = false,
+  credentialVersion,
 }: ModelImporterProps) {
   const settings = useSettingsValue();
   const [models, setModels] = useState<StandardModel[] | null>(null);
@@ -69,6 +76,14 @@ export function ModelImporter({
       loadingRef.current = false;
     }
   }, [provider, isReady]);
+
+  // Reset cached models when provider or credentials change
+  // This ensures the model list is refreshed after re-authentication or API key rotation
+  useEffect(() => {
+    setModels(null);
+    setSelectedModel(null);
+    setError(null);
+  }, [provider, credentialVersion]);
 
   // Auto-load models when expanded and ready
   useEffect(() => {
