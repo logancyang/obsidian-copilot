@@ -231,14 +231,6 @@ mindmap
 <List 5-10 notable quotes from the transcript. Format each as:>
 - [<timestamp>: <quote text>](<video_url>&t=<seconds>s)
 
-> [!transcript]- Transcript (YouTube)
-> <Format the full transcript with timestamps, each segment on new line:>
-> <timestamp>
-> <text>
->
-> <timestamp>
-> <text>
-
 Return only the markdown content without any explanations or comments.`,
     showInContextMenu: false,
     showInSlashMenu: true,
