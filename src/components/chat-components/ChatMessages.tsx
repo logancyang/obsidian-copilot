@@ -35,6 +35,7 @@ const ChatMessages = memo(
     showHelperComponents = true,
   }: ChatMessagesProps) => {
     const [loadingDots, setLoadingDots] = useState("");
+    const [isBuildingKvCache, setIsBuildingKvCache] = useState(false);
 
     const settings = useSettingsValue();
 
@@ -59,7 +60,12 @@ const ChatMessages = memo(
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
           {showHelperComponents && settings.showRelevantNotes && (
-            <RelevantNotes defaultOpen={true} key="relevant-notes-before-chat" />
+            <RelevantNotes
+              defaultOpen={true}
+              key="relevant-notes-before-chat"
+              isBuildingKvCache={isBuildingKvCache}
+              onBuildingKvCacheChange={setIsBuildingKvCache}
+            />
           )}
           {showHelperComponents && settings.showSuggestedPrompts && (
             <SuggestedPrompts onClick={onReplaceChat} />
@@ -75,7 +81,13 @@ const ChatMessages = memo(
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
         {showHelperComponents && settings.showRelevantNotes && (
-          <RelevantNotes className="tw-mb-4" defaultOpen={false} key="relevant-notes-in-chat" />
+          <RelevantNotes
+            className="tw-mb-4"
+            defaultOpen={false}
+            key="relevant-notes-in-chat"
+            isBuildingKvCache={isBuildingKvCache}
+            onBuildingKvCacheChange={setIsBuildingKvCache}
+          />
         )}
         <div
           ref={scrollContainerCallbackRef}

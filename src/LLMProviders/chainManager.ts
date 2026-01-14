@@ -343,6 +343,7 @@ export default class ChainManager {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      maxTokens?: number;
     } = {}
   ) {
     const { ignoreSystemMessage = false } = options;

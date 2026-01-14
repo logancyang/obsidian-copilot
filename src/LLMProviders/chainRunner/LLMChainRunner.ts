@@ -81,6 +81,7 @@ export class LLMChainRunner extends BaseChainRunner {
       debug?: boolean;
       ignoreSystemMessage?: boolean;
       updateLoading?: (loading: boolean) => void;
+      maxTokens?: number;
     }
   ): Promise<string> {
     // Check if the current model has reasoning capability
@@ -117,19 +118,50 @@ export class LLMChainRunner extends BaseChainRunner {
 
       logInfo("Final Request to AI:\n", messages);
 
-      // Stream with abort signal
+      // Stream with abort signal and optional maxTokens override
+      const streamOptions: any = {
+        signal: abortController.signal,
+      };
+      if (options.maxTokens !== undefined) {
+        streamOptions.maxTokens = options.maxTokens;
+      }
+
       const chatStream = await withSuppressedTokenWarnings(() =>
-        this.chainManager.chatModelManager.getChatModel().stream(messages, {
-          signal: abortController.signal,
-        })
+        this.chainManager.chatModelManager.getChatModel().stream(messages, streamOptions)
       );
+
+      // If maxTokens is set (e.g., for KV cache building), stop after receiving enough content
+      const maxTokensLimit = options.maxTokens;
+      const shouldLimitTokens = maxTokensLimit !== undefined && maxTokensLimit > 0;
+      let receivedContent = "";
 
       for await (const chunk of chatStream) {
         if (abortController.signal.aborted) {
           logInfo("Stream iteration aborted", { reason: abortController.signal.reason });
           break;
         }
+
+        const chunkText = chunk.content?.toString() || "";
+        receivedContent += chunkText;
         streamer.processChunk(chunk);
+
+        // For KV cache building with very small maxTokens (like 1-5), stop immediately after first chunk
+        // This ensures KV cache is built but minimizes response length
+        if (shouldLimitTokens) {
+          // For very small limits (1-5 tokens), stop after first non-empty chunk
+          // For larger limits, stop after receiving approximately maxTokens worth of content
+          // Rough estimate: 1 token ≈ 4 characters
+          const shouldStopEarly = maxTokensLimit <= 5 && receivedContent.length > 0;
+          const shouldStopByLength = receivedContent.length >= maxTokensLimit * 4;
+
+          if (shouldStopEarly || shouldStopByLength) {
+            logInfo(
+              `Reached maxTokens limit (${maxTokensLimit} tokens), aborting stream after ${receivedContent.length} chars`
+            );
+            abortController.abort();
+            break;
+          }
+        }
       }
     } catch (error: any) {
       // Check if the error is due to abort signal

@@ -19,6 +19,7 @@ export const getAIResponse = async (
     ignoreSystemMessage?: boolean;
     updateLoading?: (loading: boolean) => void;
     updateLoadingMessage?: (message: string) => void;
+    maxTokens?: number;
   } = {}
 ) => {
   const abortController = new AbortController();

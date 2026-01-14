@@ -19,12 +19,16 @@ import {
   ChevronUp,
   FileInput,
   FileOutput,
+  Loader2,
   PlusCircle,
-  RefreshCcw,
   TriangleAlert,
+  Zap,
 } from "lucide-react";
 import { Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
+import { getAIResponse } from "@/langchainStream";
+import { useChainType } from "@/aiParams";
+import { logError } from "@/logger";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -81,6 +85,13 @@ function SimilarityBadge({ score }: { score: number }) {
   if (category === 2) text = "🟠";
   if (category === 3) text = "🟢";
   return <span className="tw-text-sm">{text}</span>;
+}
+
+interface RelevantNotesProps {
+  className?: string;
+  defaultOpen?: boolean;
+  isBuildingKvCache?: boolean;
+  onBuildingKvCacheChange?: (value: boolean) => void;
 }
 
 function RelevantNote({
@@ -249,13 +260,36 @@ function RelevantNotePopover({
 }
 
 export const RelevantNotes = memo(
-  ({ className, defaultOpen = false }: { className?: string; defaultOpen?: boolean }) => {
-    const [refresher, setRefresher] = useState(0);
+  ({
+    className,
+    defaultOpen = false,
+    isBuildingKvCache: controlledIsBuildingKvCache,
+    onBuildingKvCacheChange,
+  }: RelevantNotesProps) => {
+    const [refresher] = useState(0);
     const [isOpen, setIsOpen] = useState(defaultOpen);
+
+    const isControlled =
+      typeof controlledIsBuildingKvCache === "boolean" && !!onBuildingKvCacheChange;
+    const [uncontrolledIsBuildingKvCache, setUncontrolledIsBuildingKvCache] = useState(false);
+
+    const isBuildingKvCache = isControlled
+      ? (controlledIsBuildingKvCache as boolean)
+      : uncontrolledIsBuildingKvCache;
+
+    const setIsBuildingKvCache = (value: boolean) => {
+      if (isControlled) {
+        onBuildingKvCacheChange?.(value);
+      } else {
+        setUncontrolledIsBuildingKvCache(value);
+      }
+    };
     const relevantNotes = useRelevantNotes(refresher);
     const activeFile = useActiveFile();
     const chatInput = useChatInput();
     const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
+    const [currentChain] = useChainType();
+
     const navigateToNote = (notePath: string, openInNewLeaf = false) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
@@ -266,12 +300,117 @@ export const RelevantNotes = memo(
     const addToChat = (prompt: string) => {
       chatInput.insertTextWithPills(`[[${prompt}]]`, true);
     };
-    const refreshIndex = async () => {
-      if (activeFile) {
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().reindexFile(activeFile);
-        new Notice(`Refreshed index for ${activeFile.basename}`);
-        setRefresher(refresher + 1);
+
+    /**
+     * Build KV cache for the active note in the background.
+     * Shows a simple loading UI with a minimum visible duration to avoid flicker.
+     */
+    const buildKvCache = async () => {
+      if (!activeFile) {
+        new Notice("No active file");
+        return;
+      }
+
+      if (isBuildingKvCache) {
+        return; // Prevent multiple simultaneous builds
+      }
+      setIsBuildingKvCache(true);
+      const startTime = Date.now();
+
+      try {
+        // Get plugin instance
+        const plugin = (app as any).plugins.getPlugin("aiDAPTIV-Integration-Obsidian");
+        if (!plugin) {
+          new Notice("aiDAPTIV plugin not found");
+          logError("aiDAPTIV plugin not found in app.plugins");
+          return;
+        }
+
+        // Send message in background through ChatUIState
+        const chatUIState = plugin.chatUIState;
+        const chainManager = plugin.projectManager.getCurrentChainManager();
+
+        if (!chatUIState) {
+          new Notice("ChatUIState not available");
+          logError("ChatUIState is undefined");
+          return;
+        }
+
+        if (!chainManager) {
+          new Notice("ChainManager not available");
+          logError("ChainManager is undefined");
+          return;
+        }
+
+        // Create context without explicit notes; rely on includeActiveNote
+        // Use same structure as normal chat to ensure identical context processing
+        const context = {
+          notes: [],
+          urls: [],
+          tags: [],
+          folders: [],
+          selectedTextContexts: [],
+        };
+
+        // Send a silent message to build KV cache
+        // Use a single space as placeholder so that:
+        // - Context prefix (system + note context) stays identical to real chat
+        // - User content contributes a minimal, almost empty token
+        const placeholderMessage = " ";
+        const content = [
+          {
+            type: "text",
+            text: placeholderMessage,
+          },
+        ];
+
+        const messageId = await chatUIState.sendMessage(
+          placeholderMessage, // Keep placeholder to go through the normal chat pipeline
+          context,
+          currentChain,
+          true, // Include active note so it is formatted as <active_note> like normal chat
+          content // Pass content array to match normal chat structure
+        );
+
+        if (!messageId) {
+          new Notice("Failed to send message");
+          logError("sendMessage returned no messageId");
+          return;
+        }
+
+        // Get LLM message and trigger AI response in background
+        // Don't modify llmMessage.content - it's already processed by ChatManager
+        const llmMessage = chatUIState.getLLMMessage(messageId);
+        if (llmMessage) {
+          // Trigger AI response without updating UI
+          // Use maxTokens: 1 to minimize response length (we only need KV cache, not the response)
+          // The stream will be aborted after receiving ~1 token worth of content
+          await getAIResponse(
+            llmMessage,
+            chainManager,
+            () => {}, // No-op for addMessage (don't show in UI)
+            () => {}, // No-op for setCurrentAiMessage
+            () => {}, // No-op for setAbortController
+            { debug: false, updateLoadingMessage: () => {}, maxTokens: 1 }
+          );
+        } else {
+          logError("getLLMMessage returned null for messageId:", messageId);
+        }
+
+        // Clean up the message from chat history (silent operation)
+        await chatUIState.deleteMessage(messageId);
+
+        new Notice(`KV cache built for ${activeFile.basename}`);
+      } catch (error) {
+        logError("Error building KV cache:", error);
+        new Notice(`Failed to build KV cache: ${error.message || error}`);
+      } finally {
+        const MIN_SPINNER_MS = 800;
+        const elapsed = Date.now() - startTime;
+        if (elapsed < MIN_SPINNER_MS) {
+          await new Promise((resolve) => setTimeout(resolve, MIN_SPINNER_MS - elapsed));
+        }
+        setIsBuildingKvCache(false);
       }
     };
     // Show the UI even without an index so users can build/refresh it
@@ -299,14 +438,29 @@ export const RelevantNotes = memo(
                 </HelpTooltip>
               )}
             </div>
-            <div className="tw-flex tw-items-center">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              {isBuildingKvCache && (
+                <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
+                  <Loader2 className="tw-size-4 tw-animate-spin" />
+                  <span>Building KV cache...</span>
+                </div>
+              )}
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <Button variant="ghost2" size="icon" onClick={refreshIndex}>
-                    <RefreshCcw className="tw-size-4" />
+                  <Button
+                    variant="ghost2"
+                    size="icon"
+                    onClick={buildKvCache}
+                    disabled={isBuildingKvCache}
+                  >
+                    {isBuildingKvCache ? (
+                      <Loader2 className="tw-size-4 tw-animate-spin" />
+                    ) : (
+                      <Zap className="tw-size-4" />
+                    )}
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
+                <TooltipContent side="bottom">Build Knowledge for Current Note</TooltipContent>
               </Tooltip>
               {relevantNotes.length > 0 && (
                 <CollapsibleTrigger asChild>
