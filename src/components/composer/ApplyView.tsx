@@ -3,7 +3,14 @@ import { logError } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { Change, diffArrays } from "diff";
 
-// Word-level diff that ensures only complete words are matched
+/**
+ * Performs word-level diff between two strings, ensuring only complete words are matched.
+ * Tokenizes input strings by splitting on whitespace while preserving whitespace as separate tokens,
+ * then uses diffArrays to compare the token arrays.
+ * @param original - The original string to compare
+ * @param modified - The modified string to compare against
+ * @returns Array of diff parts with value, added, and removed flags
+ */
 function wordLevelDiff(
   original: string,
   modified: string
@@ -473,9 +480,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     }));
   });
 
-  // View mode state with settings persistence
+  // View mode state with settings persistence (fallback to "split" for users with old settings)
   const [viewMode, setViewMode] = useState<"side-by-side" | "split">(
-    () => getSettings().diffViewMode
+    () => getSettings().diffViewMode ?? "split"
   );
 
   const handleViewModeChange = (mode: "side-by-side" | "split") => {
