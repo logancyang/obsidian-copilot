@@ -889,6 +889,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autoIncludeTextSelection: false,
   autoAddSelectionToContext: false,
   autoAcceptEdits: false,
+  diffViewMode: "split",
   userSystemPromptsFolder: DEFAULT_SYSTEM_PROMPTS_FOLDER,
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,

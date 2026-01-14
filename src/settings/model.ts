@@ -160,6 +160,8 @@ export interface CopilotSettings {
   autoAddSelectionToContext: boolean;
   /** Automatically accept file edits without showing preview confirmation */
   autoAcceptEdits: boolean;
+  /** Preferred diff view mode: side-by-side or split */
+  diffViewMode: "side-by-side" | "split";
   /** Folder where user system prompts are stored */
   userSystemPromptsFolder: string;
   /**
