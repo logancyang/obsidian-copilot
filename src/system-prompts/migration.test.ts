@@ -629,19 +629,18 @@ describe("migrateSystemPromptsFromSettings", () => {
 
       // Simulate Obsidian adding double newline after frontmatter
       // stripFrontmatter({ trimStart: false }) only removes one newline,
-      // so the content will have a leading newline which won't match
+      // but we now strip leading newlines before comparison
       (mockVault.read as jest.Mock).mockResolvedValueOnce(
         `---\ntest: true\n---\n\n${legacyPrompt}`
       );
 
       await migrateSystemPromptsFromSettings(mockVault);
 
-      // Should fail verification because of extra newline mismatch
-      // This documents the current behavior - if Obsidian adds double newline,
-      // verification will fail and content goes to unsupported folder
-      expect(mockVault.create).toHaveBeenCalledWith(
-        expect.stringContaining("unsupported/"),
-        expect.stringContaining("Migration failed: content verification mismatch")
+      // Should succeed - leading newlines are now stripped before comparison
+      expect(settingsModel.updateSetting).toHaveBeenCalledWith("userSystemPrompt", "");
+      expect(settingsModel.updateSetting).toHaveBeenCalledWith(
+        "defaultSystemPromptTitle",
+        "Migrated Custom System Prompt"
       );
     });
   });

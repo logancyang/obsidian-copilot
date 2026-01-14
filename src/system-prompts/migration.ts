@@ -101,10 +101,11 @@ async function verifyMigratedContent(
     const rawContent = await vault.read(file);
     const savedContent = stripFrontmatter(rawContent, { trimStart: false });
 
-    // Normalize line endings to handle CRLF/LF differences
-    // Note: Do NOT trim - preserve user's intentional whitespace
-    const savedNormalized = normalizeLineEndings(savedContent);
-    const originalNormalized = normalizeLineEndings(originalContent);
+    // Normalize line endings and strip leading newlines for comparison
+    // Reason: Obsidian may insert extra blank line after frontmatter (---\n\n),
+    // but stripFrontmatter only removes one, causing false verification failures
+    const savedNormalized = normalizeLineEndings(savedContent).replace(/^\n+/, "");
+    const originalNormalized = normalizeLineEndings(originalContent).replace(/^\n+/, "");
 
     if (savedNormalized !== originalNormalized) {
       logWarn(
