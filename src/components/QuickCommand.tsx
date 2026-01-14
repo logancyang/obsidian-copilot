@@ -11,6 +11,10 @@ import { CustomCommand } from "@/commands/type";
 import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 import CopilotPlugin from "@/main";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  QUICK_COMMAND_SYSTEM_PROMPT,
+  appendIncludeNoteContextPlaceholders,
+} from "@/commands/quickCommandPrompts";
 
 interface QuickCommandProps {
   plugin: CopilotPlugin;
@@ -49,44 +53,11 @@ export function QuickCommand({ plugin, onRemove }: QuickCommandProps) {
       return;
     }
 
-    const systemPrompt = `
-You are an AI assistant designed to execute user instructions with precision. Your responses should be:
+    // Use shared system prompt from quickCommandPrompts module
+    const systemPrompt = QUICK_COMMAND_SYSTEM_PROMPT;
 
-- Direct and focused: Address only what is explicitly requested
-- Concise: Avoid unnecessary elaboration unless the user asks for details
-- Context-aware: When text is selected or highlighted, treat it as the primary target for any requested action
-- Action-oriented: Prioritize completing the task over explaining the process
-
-Key principles:
-
-- Follow instructions literally and completely
-- Assume selected/highlighted text is the focus unless told otherwise
-- Use all provided context: Consider any additional information, examples, or constraints the user provides to better complete the task
-- Add explanations only when explicitly requested or when clarification is essential
-- Maintain the user's preferred format and style
-
-Response format: Match the format implied by the user's request (e.g., if they ask for a list, provide a list; if they ask for a rewrite, provide only the rewritten text).
-    `;
-
-    let userContent = prompt;
-    if (includeActiveNote) {
-      // Check if placeholders already exist to avoid duplication
-      const hasSelectedTextPlaceholder = userContent.includes("{}");
-      const hasActiveNotePlaceholder = /\{activenote\}/i.test(userContent);
-
-      // Only append placeholders that don't already exist
-      const placeholdersToAdd = [];
-      if (!hasSelectedTextPlaceholder) {
-        placeholdersToAdd.push("{}");
-      }
-      if (!hasActiveNotePlaceholder) {
-        placeholdersToAdd.push("{activeNote}");
-      }
-
-      if (placeholdersToAdd.length > 0) {
-        userContent += `\n\n${placeholdersToAdd.join("\n\n")}`;
-      }
-    }
+    // Use shared function to append placeholders
+    const userContent = appendIncludeNoteContextPlaceholders(prompt, includeActiveNote);
 
     const quickCommand: CustomCommand = {
       title: "Quick Command",

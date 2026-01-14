@@ -11,30 +11,33 @@ import { useSettingsValue, updateSetting } from "@/settings/model";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Textarea } from "@/components/ui/textarea";
 import { useQuickAskSession } from "./useQuickAskSession";
 import { QuickAskMessageComponent } from "./QuickAskMessage";
-import type { QuickAskPanelProps } from "./types";
+import { QuickAskInput } from "./QuickAskInput";
+import { ModeSelector } from "./ModeSelector";
+import { modeRegistry } from "./modeRegistry";
+import type { QuickAskPanelProps, QuickAskMode } from "./types";
 
 /**
  * QuickAskPanel - Floating panel for Quick Ask interactions.
  */
 export function QuickAskPanel({
   plugin,
-  editor,
   view,
   selectedText,
   selectionFrom,
   selectionTo,
   onClose,
   onDragOffset,
-  onResize,
 }: QuickAskPanelProps) {
   // UI state
   const [inputText, setInputText] = useState("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [mode, setMode] = useState<QuickAskMode>("ask");
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // Get current active file for @ mention context
+  const currentActiveFile = plugin.app.workspace.getActiveFile();
 
   // Settings
   const settings = useSettingsValue();
@@ -53,6 +56,15 @@ export function QuickAskPanel({
   // Derived state
   const hasMessages = messages.length > 0;
   const hasSelection = selectionFrom !== selectionTo;
+  const availableModes = modeRegistry.getAvailable(hasSelection);
+
+  // Keep mode valid when selection state changes
+  useEffect(() => {
+    const modes = modeRegistry.getAvailable(hasSelection);
+    if (!modes.some((m) => m.id === mode)) {
+      setMode(modes[0]?.id ?? "ask");
+    }
+  }, [hasSelection, mode]);
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
@@ -88,24 +100,17 @@ export function QuickAskPanel({
     setInputText("");
   }, [inputText, isStreaming, sendMessage]);
 
-  // Keyboard handler
+  // Keyboard handler - only handle Escape (Enter is handled by QuickAskInput)
+  // Allow Lexical typeahead (e.g. @ menu) to consume Escape first
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      // IME composition - ignore
-      if (e.nativeEvent.isComposing || e.keyCode === 229) return;
-
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        handleSubmit();
-      }
-
-      if (e.key === "Escape") {
+      if (e.key === "Escape" && !e.defaultPrevented) {
         e.preventDefault();
         e.stopPropagation();
         onClose();
       }
     },
-    [handleSubmit, onClose]
+    [onClose]
   );
 
   // Stop event propagation to prevent CM6 from handling
@@ -128,14 +133,6 @@ export function QuickAskPanel({
       el.removeEventListener("beforeinput", stopPropagation);
       el.removeEventListener("input", stopPropagation);
     };
-  }, []);
-
-  // Auto-focus on mount
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      textareaRef.current?.focus();
-    }, 50);
-    return () => clearTimeout(timer);
   }, []);
 
   // Auto-scroll to bottom
@@ -244,6 +241,9 @@ export function QuickAskPanel({
     };
   }, [isDragging, onDragOffset]);
 
+  // Pre-compute selection validity to avoid repeated calls in render
+  const selectionValid = hasSelection ? isSelectionValid() : false;
+
   return (
     <div
       ref={containerRef}
@@ -260,14 +260,14 @@ export function QuickAskPanel({
 
       {/* Input area */}
       <div className="tw-relative tw-p-3">
-        <Textarea
-          ref={textareaRef}
+        <QuickAskInput
           value={inputText}
-          onChange={(e) => setInputText(e.target.value)}
-          placeholder="Ask a question..."
-          className="tw-min-h-16 tw-resize-none tw-pr-8"
-          rows={2}
+          onChange={setInputText}
+          onSubmit={handleSubmit}
+          sendShortcut={settings.defaultSendShortcut}
+          placeholder="Ask a question... (@ to mention)"
           disabled={isStreaming}
+          currentActiveFile={currentActiveFile}
         />
         <button
           className="tw-absolute tw-right-4 tw-top-4 tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
@@ -293,7 +293,7 @@ export function QuickAskPanel({
               onInsert={handleInsert}
               onReplace={handleReplace}
               hasSelection={hasSelection}
-              isReplaceValid={isSelectionValid()}
+              isReplaceValid={selectionValid}
               plugin={plugin}
             />
           ))}
@@ -303,6 +303,13 @@ export function QuickAskPanel({
       {/* Toolbar */}
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
         <div className="tw-flex tw-items-center tw-gap-3">
+          <ModeSelector
+            modes={availableModes}
+            value={mode}
+            onChange={setMode}
+            disabled={isStreaming}
+          />
+
           <ModelSelector
             size="sm"
             variant="ghost"

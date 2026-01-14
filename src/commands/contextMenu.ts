@@ -23,8 +23,8 @@ export function registerContextMenu(menu: Menu) {
     });
 
     submenu.addItem((subItem: any) => {
-      subItem.setTitle("Trigger quick command").onClick(() => {
-        (app as any).commands.executeCommandById(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);
+      subItem.setTitle("Quick Ask").onClick(() => {
+        (app as any).commands.executeCommandById(`copilot:${COMMAND_IDS.TRIGGER_QUICK_ASK}`);
       });
     });
 

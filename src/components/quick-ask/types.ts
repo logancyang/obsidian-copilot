@@ -70,4 +70,8 @@ export interface QuickAskModeConfig {
   icon: string;
   description: string;
   requiresSelection: boolean;
+  /** System prompt for this mode */
+  systemPrompt?: string;
+  /** Whether this mode is implemented */
+  implemented: boolean;
 }
