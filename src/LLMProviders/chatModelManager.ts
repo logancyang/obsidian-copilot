@@ -96,7 +96,8 @@ export default class ChatModelManager {
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.AMAZON_BEDROCK]: () => getSettings().amazonBedrockApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
-    [ChatModelProviders.GITHUB_COPILOT]: () => getSettings().githubCopilotToken,
+    [ChatModelProviders.GITHUB_COPILOT]: () =>
+      getSettings().githubCopilotToken || getSettings().githubCopilotAccessToken,
   } as const;
 
   private constructor() {
