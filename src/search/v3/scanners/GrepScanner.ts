@@ -14,7 +14,14 @@ export class GrepScanner {
   constructor(private app: App) {}
 
   /**
-   * Batch search for queries across vault files using cachedRead
+   * Batch search for queries across vault files using cachedRead.
+   * Uses a two-pass approach to prioritize path/filename matches:
+   * - Pass 1: Collect ALL files where query terms appear in path (fast, no I/O)
+   * - Pass 2: Fill remaining slots with content-only matches (requires file read)
+   *
+   * This ensures files like "HK Milk Tea - Home Recipe.md" are always candidates
+   * when searching for "hk milk tea recipe", even in large vaults.
+   *
    * @param queries - Array of search queries (will be searched as substrings)
    * @param limit - Maximum number of matching files to return
    * @returns Array of file paths that contain any of the query strings
@@ -26,62 +33,80 @@ export class GrepScanner {
     // Filter files based on inclusion/exclusion patterns
     const allFiles = this.app.vault.getMarkdownFiles();
     const files = allFiles.filter((file) => shouldIndexFile(file, inclusions, exclusions));
-    const matches = new Set<string>();
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
     // Normalize queries for case-insensitive search
     const normalizedQueries = queries.map((q) => q.toLowerCase());
 
-    for (let i = 0; i < files.length && matches.size < limit; i += batchSize) {
-      const batch = files.slice(i, i + batchSize);
+    // PASS 1: Collect ALL path matches (fast - no file I/O)
+    // Sort by match count to prioritize files matching more query terms
+    const pathMatchesWithScore: Array<{ path: string; matchCount: number }> = [];
 
-      await Promise.all(
-        batch.map(async (file) => {
-          if (matches.size >= limit) return;
+    for (const file of files) {
+      const pathLower = file.path.toLowerCase();
+      let matchCount = 0;
 
-          try {
-            // Check path FIRST - this is much faster than reading content
-            const pathLower = file.path.toLowerCase();
-            let isMatch = false;
+      for (const query of normalizedQueries) {
+        if (pathLower.includes(query)) {
+          matchCount++;
+        }
+      }
 
-            // Check if path contains any query term
-            for (const query of normalizedQueries) {
-              if (pathLower.includes(query)) {
-                matches.add(file.path);
-                isMatch = true;
-                break;
-              }
-            }
+      if (matchCount > 0) {
+        pathMatchesWithScore.push({ path: file.path, matchCount });
+      }
+    }
 
-            // If not matched by path, check content
-            if (!isMatch) {
+    // Sort path matches by match count (descending) to prioritize multi-term matches
+    pathMatchesWithScore.sort((a, b) => b.matchCount - a.matchCount);
+    const pathMatches = new Set(pathMatchesWithScore.map((m) => m.path));
+
+    // PASS 2: Fill remaining slots with content-only matches
+    const contentLimit = Math.max(0, limit - pathMatches.size);
+    const contentMatches = new Set<string>();
+
+    if (contentLimit > 0) {
+      for (let i = 0; i < files.length && contentMatches.size < contentLimit; i += batchSize) {
+        const batch = files.slice(i, i + batchSize);
+
+        await Promise.all(
+          batch.map(async (file) => {
+            if (contentMatches.size >= contentLimit) return;
+            // Skip files already matched by path
+            if (pathMatches.has(file.path)) return;
+
+            try {
               const content = await this.app.vault.cachedRead(file);
               const lower = content.toLowerCase();
 
               for (const query of normalizedQueries) {
                 if (lower.includes(query)) {
-                  matches.add(file.path);
+                  contentMatches.add(file.path);
                   break;
                 }
               }
+            } catch (error) {
+              // Skip files that can't be read
+              logInfo(`GrepScanner: Skipping file ${file.path}: ${error}`);
             }
-          } catch (error) {
-            // Skip files that can't be read
-            logInfo(`GrepScanner: Skipping file ${file.path}: ${error}`);
-          }
-        })
-      );
+          })
+        );
 
-      // Yield periodically to prevent blocking
-      if (i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
-        await new Promise((r) => setTimeout(r, 0));
+        // Yield periodically to prevent blocking
+        if (i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
+          await new Promise((r) => setTimeout(r, 0));
+        }
       }
     }
 
-    const results = Array.from(matches).slice(0, limit);
+    // Combine: path matches first (sorted by match count), then content matches
+    const results = [...pathMatches, ...contentMatches].slice(0, limit);
     if (results.length > 0) {
+      // Report actual returned counts, not raw collection sizes
+      const pathCount = Math.min(pathMatches.size, limit);
+      const contentCount = results.length - pathCount;
       logInfo(
-        `  Grep: ${results.length} files match [${queries.slice(0, 3).join(", ")}${queries.length > 3 ? "..." : ""}]`
+        `  Grep: ${results.length} files match (${pathCount} path, ${contentCount} content) [${queries.slice(0, 3).join(", ")}${queries.length > 3 ? "..." : ""}]`
       );
     }
 

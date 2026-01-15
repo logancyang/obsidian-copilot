@@ -134,7 +134,8 @@ export class SearchCore {
       }
 
       // 2. GREP for initial candidates (use all terms for maximum recall)
-      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 200;
+      // Use higher limit for large vaults - path matches are prioritized anyway
+      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 500;
       const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, grepLimit);
 
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
