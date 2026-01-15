@@ -100,10 +100,16 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
       const prompt = await processCommandPrompt(processedInput, selectedText, isFollowUp);
 
       // 3. Add user message
+      // For first message with selected text, show the selected_text tag in display
+      const displayContent =
+        !isFollowUp && selectedText.trim()
+          ? `<selected_text>\n${selectedText}\n</selected_text>\n\n${input}`
+          : input;
+
       const userMessage: QuickAskMessage = {
         id: crypto.randomUUID(),
         role: "user",
-        content: input,
+        content: displayContent,
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, userMessage]);

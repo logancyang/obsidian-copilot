@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Notice } from "obsidian";
-import { Send, Square, RotateCcw, X } from "lucide-react";
+import { Send, Square, RotateCcw, X, Trash2, MessageSquareX } from "lucide-react";
 import { useModelKey } from "@/aiParams";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
@@ -29,6 +29,7 @@ export function QuickAskPanel({
   selectedText,
   selectionFrom,
   selectionTo,
+  getSelectionRange,
   onClose,
   onDragOffset,
   onResize,
@@ -98,14 +99,10 @@ export function QuickAskPanel({
   const isSelectionValid = useCallback(() => {
     if (!view) return false;
     try {
+      const { from, to } = getSelectionRange();
       const docLength = view.state.doc.length;
-      if (
-        selectionFrom < 0 ||
-        selectionTo > docLength ||
-        selectionFrom >= selectionTo
-      )
-        return false;
-      const current = view.state.doc.sliceString(selectionFrom, selectionTo);
+      if (from < 0 || to > docLength || from >= to) return false;
+      const current = view.state.doc.sliceString(from, to);
       // Normalize line endings for comparison
       const normalize = (text: string) => text.replace(/\r\n/g, "\n");
       return normalize(current) === normalize(selectedText);
@@ -113,7 +110,7 @@ export function QuickAskPanel({
       // View might be destroyed or in invalid state
       return false;
     }
-  }, [view, selectionFrom, selectionTo, selectedText]);
+  }, [view, getSelectionRange, selectedText]);
 
   // Submit handler
   const handleSubmit = useCallback(async () => {
@@ -199,14 +196,15 @@ export function QuickAskPanel({
         return;
       }
 
+      const { from, to } = getSelectionRange();
       const cleaned = cleanMessageForCopy(message.content);
       view.dispatch({
-        changes: { from: selectionFrom, to: selectionTo, insert: cleaned },
+        changes: { from, to, insert: cleaned },
       });
       new Notice("Replaced");
       onClose();
     },
-    [messages, isSelectionValid, view, selectionFrom, selectionTo, onClose]
+    [messages, isSelectionValid, getSelectionRange, view, onClose]
   );
 
   const handleModelChange = useCallback((modelKey: string) => {
@@ -389,19 +387,27 @@ export function QuickAskPanel({
           className="tw-flex tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-3 tw-py-2"
           style={{ maxHeight: panelSize?.height ? "none" : "300px" }}
         >
-          {messages.map((msg, idx) => (
-            <QuickAskMessageComponent
-              key={msg.id}
-              message={msg}
-              isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
-              onCopy={handleCopy}
-              onInsert={handleInsert}
-              onReplace={handleReplace}
-              hasSelection={hasSelection}
-              isReplaceValid={selectionValid}
-              plugin={plugin}
-            />
-          ))}
+          {(() => {
+            // Find the last assistant message index (computed once)
+            const lastAssistantIdx = messages.reduce(
+              (lastIdx, m, i) => (m.role === "assistant" ? i : lastIdx),
+              -1
+            );
+            return messages.map((msg, idx) => (
+              <QuickAskMessageComponent
+                key={msg.id}
+                message={msg}
+                isStreaming={isStreaming && idx === messages.length - 1 && msg.role === "assistant"}
+                isLastAssistantMessage={msg.role === "assistant" && idx === lastAssistantIdx}
+                onCopy={handleCopy}
+                onInsert={handleInsert}
+                onReplace={handleReplace}
+                hasSelection={hasSelection}
+                isReplaceValid={selectionValid}
+                plugin={plugin}
+              />
+            ));
+          })()}
         </div>
       )}
 
@@ -467,30 +473,30 @@ export function QuickAskPanel({
         <div className="tw-flex tw-items-center tw-gap-1">
           {hasMessages && (
             <button
-              className="tw-rounded tw-p-1.5 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+              className="tw-flex tw-size-7 tw-items-center tw-justify-center tw-rounded tw-p-0 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
               onClick={clear}
               title="Clear conversation"
             >
-              <RotateCcw className="tw-size-3.5" />
+              <MessageSquareX className="tw-size-4" />
             </button>
           )}
 
           {isStreaming ? (
             <button
-              className="tw-rounded tw-bg-modifier-error tw-p-1.5 tw-text-on-accent hover:tw-bg-modifier-error-hover"
+              className="tw-flex tw-size-7 tw-items-center tw-justify-center tw-rounded tw-bg-modifier-error tw-p-0 tw-text-on-accent hover:tw-bg-modifier-error-hover"
               onClick={stop}
-              title="Stop"
+              title="Stop generating"
             >
-              <Square className="tw-size-3.5" />
+              <Square className="tw-size-4" />
             </button>
           ) : (
             <button
-              className="tw-rounded tw-bg-interactive-accent tw-p-1.5 tw-text-on-accent hover:tw-bg-interactive-accent-hover disabled:tw-opacity-50"
+              className="tw-flex tw-size-7 tw-items-center tw-justify-center tw-rounded tw-bg-interactive-accent tw-p-0 tw-text-on-accent hover:tw-bg-interactive-accent-hover disabled:tw-opacity-50"
               onClick={handleSubmit}
               disabled={!inputText.trim()}
-              title="Send"
+              title="Send message"
             >
-              <Send className="tw-size-3.5" />
+              <Send className="tw-size-4" />
             </button>
           )}
         </div>
@@ -510,7 +516,7 @@ export function QuickAskPanel({
         onMouseDown={handleResizeStart("bottom-left")}
       />
       <div
-        className="quick-ask-resize-indicator-right tw-z-10 tw-absolute tw-bottom-0 tw-right-0 tw-size-3 tw-cursor-nwse-resize"
+        className="quick-ask-resize-indicator-right tw-absolute tw-bottom-0 tw-right-0 tw-z-[10] tw-size-3 tw-cursor-nwse-resize"
         onMouseDown={handleResizeStart("bottom-right")}
       />
     </div>

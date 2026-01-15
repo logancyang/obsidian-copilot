@@ -22,6 +22,8 @@ interface ModelSelectorProps {
   size?: "sm" | "fit" | "default" | "lg" | "icon";
   variant?: "default" | "destructive" | "secondary" | "ghost" | "ghost2" | "link" | "success";
   className?: string;
+  /** Maximum width for the selector (e.g., "120px", "8rem") */
+  maxWidth?: string;
   // Always controlled
   value: string;
   onChange: (modelKey: string) => void;
@@ -32,6 +34,7 @@ export function ModelSelector({
   size = "fit",
   variant = "ghost2",
   className,
+  maxWidth,
   value,
   onChange,
 }: ModelSelectorProps) {

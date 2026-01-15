@@ -136,6 +136,16 @@ export class QuickAskOverlay {
   }
 
   /**
+   * Gets the current selection range (for Replace functionality).
+   */
+  private getSelectionRange = (): { from: number; to: number } => {
+    return {
+      from: this.currentSelectionFrom,
+      to: this.currentSelectionTo,
+    };
+  };
+
+  /**
    * Triggers close animation from outside.
    */
   static closeCurrentWithAnimation(): boolean {
@@ -200,6 +210,7 @@ export class QuickAskOverlay {
         selectedText={this.options.selectedText}
         selectionFrom={this.currentSelectionFrom}
         selectionTo={this.currentSelectionTo}
+        getSelectionRange={this.getSelectionRange}
         onClose={this.closeWithAnimation}
         onDragOffset={this.handleDragOffset}
         onResize={this.handleResize}

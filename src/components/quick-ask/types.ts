@@ -33,10 +33,12 @@ export interface QuickAskPanelProps {
   view: EditorView;
   /** Selected text captured when panel opened (content snapshot) */
   selectedText: string;
-  /** Initial selection start position (updated via mapPos on doc changes) */
+  /** Initial selection start position */
   selectionFrom: number;
-  /** Initial selection end position (updated via mapPos on doc changes) */
+  /** Initial selection end position */
   selectionTo: number;
+  /** Getter for current selection range (updated via mapPos on doc changes) */
+  getSelectionRange: () => { from: number; to: number };
   /** Callback to close the panel */
   onClose: () => void;
   /** Callback when panel is dragged */

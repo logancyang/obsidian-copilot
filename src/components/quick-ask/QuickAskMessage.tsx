@@ -5,13 +5,14 @@
 
 import React, { useEffect, useRef } from "react";
 import { MarkdownRenderer } from "obsidian";
-import { Copy, CornerDownLeft, Replace } from "lucide-react";
+import { Copy, ClipboardPaste, Replace } from "lucide-react";
 import type CopilotPlugin from "@/main";
 import type { QuickAskMessage } from "./types";
 
 interface QuickAskMessageProps {
   message: QuickAskMessage;
   isStreaming: boolean;
+  isLastAssistantMessage: boolean;
   onCopy: (messageId: string) => void;
   onInsert: (messageId: string) => void;
   onReplace: (messageId: string) => void;
@@ -26,6 +27,7 @@ interface QuickAskMessageProps {
 export const QuickAskMessageComponent = React.memo(function QuickAskMessageComponent({
   message,
   isStreaming,
+  isLastAssistantMessage,
   onCopy,
   onInsert,
   onReplace,
@@ -68,36 +70,45 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
   }
 
   // Assistant message - completed with markdown + action buttons (left aligned)
+  // Last assistant message shows action buttons by default, others show on hover
+  const actionBarVisibility = isLastAssistantMessage
+    ? "tw-opacity-100"
+    : "tw-opacity-0 group-hover/message:tw-opacity-100";
+
   return (
-    <div className="tw-group tw-relative tw-max-w-[95%] tw-self-start tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
-      <div
-        ref={contentRef}
-        className="tw-text-sm [&_.markdown-rendered]:tw-text-sm [&_code]:tw-text-xs [&_p]:tw-my-1 [&_pre]:tw-my-2"
-      />
+    <div className="tw-group/message tw-max-w-[95%] tw-self-start">
+      <div className="tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
+        <div
+          ref={contentRef}
+          className="tw-text-sm [&_.markdown-rendered]:tw-text-sm [&_code]:tw-text-xs [&_p]:tw-my-1 [&_pre]:tw-my-2"
+        />
+      </div>
       {message.content && (
-        <div className="tw-absolute tw-bottom-1 tw-right-1 tw-flex tw-items-center tw-gap-0.5 tw-rounded tw-bg-secondary tw-opacity-0 tw-shadow-sm tw-transition-opacity group-hover:tw-opacity-100">
+        <div
+          className={`tw-mt-1 tw-flex tw-items-center tw-gap-0.5 tw-transition-opacity ${actionBarVisibility}`}
+        >
           <button
-            className="tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+            className="tw-flex tw-size-5 tw-items-center tw-justify-center tw-rounded tw-p-0 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
             onClick={() => onCopy(message.id)}
             title="Copy to clipboard"
           >
-            <Copy className="tw-size-3.5" />
+            <Copy className="tw-size-3" />
           </button>
           <button
-            className="tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+            className="tw-flex tw-size-5 tw-items-center tw-justify-center tw-rounded tw-p-0 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
             onClick={() => onInsert(message.id)}
             title="Insert at cursor"
           >
-            <CornerDownLeft className="tw-size-3.5" />
+            <ClipboardPaste className="tw-size-3" />
           </button>
           {hasSelection && (
             <button
-              className="tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal disabled:tw-cursor-not-allowed disabled:tw-opacity-50"
+              className="tw-flex tw-size-5 tw-items-center tw-justify-center tw-rounded tw-p-0 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal disabled:tw-cursor-not-allowed disabled:tw-opacity-50"
               onClick={() => onReplace(message.id)}
               disabled={!isReplaceValid}
               title={!isReplaceValid ? "Selection has changed" : "Replace selection"}
             >
-              <Replace className="tw-size-3.5" />
+              <Replace className="tw-size-3" />
             </button>
           )}
         </div>
