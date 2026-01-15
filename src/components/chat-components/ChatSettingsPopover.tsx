@@ -255,7 +255,7 @@ export function ChatSettingsPopover() {
                       options={prompts.map((prompt) => ({
                         label:
                           prompt.title === globalDefault
-                            ? `${prompt.title} (Global)`
+                            ? `${prompt.title} (Default)`
                             : prompt.title,
                         value: prompt.title,
                       }))}

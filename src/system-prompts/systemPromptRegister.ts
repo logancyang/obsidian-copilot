@@ -4,6 +4,7 @@ import {
   getSystemPromptsFolder,
   parseSystemPromptFile,
   ensurePromptFrontmatter,
+  updatePromptDefaultFlag,
 } from "@/system-prompts/systemPromptUtils";
 import {
   isPendingFileWrite,
@@ -80,7 +81,21 @@ export class SystemPromptRegister {
     prev: ReturnType<typeof getSettings>,
     next: ReturnType<typeof getSettings>
   ): void => {
-    if (prev.userSystemPromptsFolder !== next.userSystemPromptsFolder) {
+    const folderChanged = prev.userSystemPromptsFolder !== next.userSystemPromptsFolder;
+    const defaultChanged = prev.defaultSystemPromptTitle !== next.defaultSystemPromptTitle;
+
+    // Handle default change first, using the old folder path if folder also changed
+    // This ensures we can find the old default file before the folder changes
+    if (defaultChanged) {
+      const oldFolder = folderChanged ? prev.userSystemPromptsFolder : undefined;
+      void this.handleDefaultPromptChange(
+        prev.defaultSystemPromptTitle,
+        next.defaultSystemPromptTitle,
+        oldFolder
+      );
+    }
+
+    if (folderChanged) {
       this.debouncedFolderChange(next.userSystemPromptsFolder);
     }
   };
@@ -96,6 +111,29 @@ export class SystemPromptRegister {
     300,
     { leading: false, trailing: true }
   );
+
+  /**
+   * Handle default system prompt change by updating frontmatter
+   * Removes default flag from old prompt and adds it to new prompt
+   * @param oldFolder - Optional folder path for the old prompt (used when folder changes simultaneously)
+   */
+  private async handleDefaultPromptChange(
+    oldTitle: string,
+    newTitle: string,
+    oldFolder?: string
+  ): Promise<void> {
+    try {
+      if (oldTitle) {
+        await updatePromptDefaultFlag(oldTitle, false, oldFolder);
+      }
+      if (newTitle) {
+        await updatePromptDefaultFlag(newTitle, true);
+      }
+      logInfo(`Default system prompt changed: "${oldTitle}" -> "${newTitle}"`);
+    } catch (error) {
+      logError(`Error updating default system prompt frontmatter`, error);
+    }
+  }
 
   /**
    * Reload prompts from the new folder using "success-then-replace" strategy
