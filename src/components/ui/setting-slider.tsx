@@ -44,7 +44,9 @@ export function SettingSlider({
         className="tw-flex-1"
       />
       <div className="tw-min-w-[60px] tw-text-right tw-text-sm tw-tabular-nums">
-        {localValue >= 1000 ? `${Math.round(localValue / 1000)}k` : localValue}
+        {localValue >= 1000
+          ? `${localValue % 1000 === 0 ? localValue / 1000 : (localValue / 1000).toFixed(1)}k`
+          : localValue}
         {suffix}
       </div>
     </div>
