@@ -10,11 +10,20 @@ import {
   shouldIndexFile,
 } from "./searchUtils";
 
-// Mock Obsidian's TFile class
+// Mock Obsidian's TFile and Modal classes
 jest.mock("obsidian", () => ({
   TFile: class TFile {
     path: string;
   },
+  Modal: class Modal {
+    app: any;
+    constructor(app: any) {
+      this.app = app;
+    }
+    open() {}
+    close() {}
+  },
+  Notice: jest.fn(),
 }));
 
 jest.mock("@/LLMProviders/brevilabsClient", () => ({
