@@ -272,28 +272,26 @@ export class QuickAskOverlay {
     const sizer = scrollDom?.querySelector(".cm-sizer");
     const sizerRect = sizer?.getBoundingClientRect();
 
-    const fallbackWidth = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue("--file-line-width") || "720",
-      10
-    );
-
-    const editorContentWidth = sizerRect?.width ?? scrollRect?.width ?? fallbackWidth;
-    const maxPanelWidth = Math.max(120, Math.min(editorContentWidth, viewportWidth - margin * 2));
+    // YOLO default: min(420px, 83vw), max: min(560px, 90vw)
+    const defaultWidth = Math.min(420, viewportWidth * 0.83);
+    const maxWidth = Math.min(560, viewportWidth * 0.9);
+    const panelWidth = Math.max(300, Math.min(defaultWidth, maxWidth));
 
     const contentLeft =
       (sizerRect?.left ?? scrollRect?.left ?? hostRect.left + margin) - hostRect.left;
+    const editorContentWidth = sizerRect?.width ?? scrollRect?.width ?? viewportWidth - margin * 2;
     const contentRight = contentLeft + editorContentWidth;
 
     let left = anchorRect.left - hostRect.left;
-    left = Math.min(left, contentRight - maxPanelWidth);
+    left = Math.min(left, contentRight - panelWidth);
     left = Math.max(left, contentLeft);
-    left = Math.min(left, viewportWidth - margin - maxPanelWidth);
+    left = Math.min(left, viewportWidth - margin - panelWidth);
     left = Math.max(left, margin);
 
     const top = anchorRect.bottom - hostRect.top + offsetY;
 
     updateDynamicStyleClass(this.overlayContainer, "copilot-quick-ask-overlay-pos", {
-      width: maxPanelWidth,
+      width: panelWidth,
       left: Math.round(left),
       top: Math.round(top),
     });
@@ -315,26 +313,14 @@ export class QuickAskOverlay {
     const hostRect =
       this.overlayHost?.getBoundingClientRect() ?? document.body.getBoundingClientRect();
 
-    const scrollDom = this.options.view.scrollDOM;
-    const scrollRect = scrollDom?.getBoundingClientRect();
-    const sizer = scrollDom?.querySelector(".cm-sizer");
-    const sizerRect = sizer?.getBoundingClientRect();
-
-    const fallbackWidth = parseInt(
-      getComputedStyle(document.documentElement).getPropertyValue("--file-line-width") || "720",
-      10
-    );
-
     const viewportWidth = hostRect.width;
-    const margin = 12;
 
-    const editorContentWidth = sizerRect?.width ?? scrollRect?.width ?? fallbackWidth;
+    // YOLO default: min(420px, 83vw), max: min(560px, 90vw)
+    const defaultWidth = Math.min(420, viewportWidth * 0.83);
+    const maxWidth = Math.min(560, viewportWidth * 0.9);
 
-    // Use resized width if available
-    const panelWidth =
-      this.resizeSize?.width ??
-      Math.max(120, Math.min(editorContentWidth, viewportWidth - margin * 2));
-
+    // Use resized width if available, otherwise use YOLO default
+    const panelWidth = this.resizeSize?.width ?? Math.max(300, Math.min(defaultWidth, maxWidth));
     const panelHeight = this.resizeSize?.height;
 
     updateDynamicStyleClass(this.overlayContainer, "copilot-quick-ask-overlay-pos", {

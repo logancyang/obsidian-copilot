@@ -5,7 +5,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { Notice } from "obsidian";
-import { Send, Square, RotateCcw, X, GripHorizontal } from "lucide-react";
+import { Send, Square, RotateCcw, X } from "lucide-react";
 import { useModelKey } from "@/aiParams";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import { cleanMessageForCopy, insertIntoEditor } from "@/utils";
@@ -14,9 +14,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useQuickAskSession } from "./useQuickAskSession";
 import { QuickAskMessageComponent } from "./QuickAskMessage";
 import { QuickAskInput } from "./QuickAskInput";
-import { ModeSelector } from "./ModeSelector";
-import { modeRegistry } from "./modeRegistry";
-import type { QuickAskPanelProps, QuickAskMode } from "./types";
+// TODO: Uncomment when Edit/Edit-Direct modes are implemented
+// import { ModeSelector } from "./ModeSelector";
+// import { modeRegistry } from "./modeRegistry";
+import type { QuickAskPanelProps } from "./types";
+import { Button } from "@/components/ui/button";
 
 /**
  * QuickAskPanel - Floating panel for Quick Ask interactions.
@@ -29,10 +31,12 @@ export function QuickAskPanel({
   selectionTo,
   onClose,
   onDragOffset,
+  onResize,
 }: QuickAskPanelProps) {
   // UI state
   const [inputText, setInputText] = useState("");
-  const [mode, setMode] = useState<QuickAskMode>("ask");
+  // TODO: Uncomment when Edit/Edit-Direct modes are implemented
+  // const [mode, setMode] = useState<QuickAskMode>("ask");
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +47,10 @@ export function QuickAskPanel({
   const settings = useSettingsValue();
   const [globalModelKey] = useModelKey();
   const selectedModelKey = settings.quickCommandModelKey ?? globalModelKey;
-  const includeNoteContext = settings.quickCommandIncludeNoteContext;
+  // Use local state for includeNoteContext to ensure immediate UI updates
+  const [includeNoteContext, setIncludeNoteContext] = useState(
+    () => settings.quickCommandIncludeNoteContext
+  );
 
   // Session hook
   const { messages, isStreaming, sendMessage, stop, clear } = useQuickAskSession({
@@ -56,21 +63,36 @@ export function QuickAskPanel({
   // Derived state
   const hasMessages = messages.length > 0;
   const hasSelection = selectionFrom !== selectionTo;
-  const availableModes = modeRegistry.getAvailable(hasSelection);
+  // TODO: Uncomment when Edit/Edit-Direct modes are implemented
+  // const availableModes = modeRegistry.getAvailable(hasSelection);
 
   // Keep mode valid when selection state changes
-  useEffect(() => {
-    const modes = modeRegistry.getAvailable(hasSelection);
-    if (!modes.some((m) => m.id === mode)) {
-      setMode(modes[0]?.id ?? "ask");
-    }
-  }, [hasSelection, mode]);
+  // TODO: Uncomment when Edit/Edit-Direct modes are implemented
+  // useEffect(() => {
+  //   const modes = modeRegistry.getAvailable(hasSelection);
+  //   if (!modes.some((m) => m.id === mode)) {
+  //     setMode(modes[0]?.id ?? "ask");
+  //   }
+  // }, [hasSelection, mode]);
 
   // Drag state
   const [isDragging, setIsDragging] = useState(false);
   const dragStartRef = useRef<{ x: number; y: number; panelX: number; panelY: number } | null>(
     null
   );
+
+  // Resize state
+  const [isResizing, setIsResizing] = useState(false);
+  const resizeStartRef = useRef<{
+    direction: "right" | "bottom" | "bottom-right" | "bottom-left";
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    panelX: number;
+    panelY: number;
+  } | null>(null);
+  const [panelSize, setPanelSize] = useState<{ width: number; height: number } | null>(null);
 
   // Check if selection is still valid for Replace
   const isSelectionValid = useCallback(() => {
@@ -96,8 +118,9 @@ export function QuickAskPanel({
   // Submit handler
   const handleSubmit = useCallback(async () => {
     if (!inputText.trim() || isStreaming) return;
-    await sendMessage(inputText);
-    setInputText("");
+    const text = inputText;
+    setInputText("");  // Clear input immediately before sending
+    await sendMessage(text);
   }, [inputText, isStreaming, sendMessage]);
 
   // Keyboard handler - only handle Escape (Enter is handled by QuickAskInput)
@@ -191,6 +214,7 @@ export function QuickAskPanel({
   }, []);
 
   const handleIncludeNoteContextChange = useCallback((checked: boolean) => {
+    setIncludeNoteContext(checked);
     updateSetting("quickCommandIncludeNoteContext", checked);
   }, []);
 
@@ -241,48 +265,129 @@ export function QuickAskPanel({
     };
   }, [isDragging, onDragOffset]);
 
+  // Resize handling
+  const handleResizeStart = useCallback(
+    (direction: "right" | "bottom" | "bottom-right" | "bottom-left") =>
+      (e: React.MouseEvent) => {
+        if (!containerRef.current) return;
+        const rect = containerRef.current.getBoundingClientRect();
+        resizeStartRef.current = {
+          direction,
+          x: e.clientX,
+          y: e.clientY,
+          width: rect.width,
+          height: rect.height,
+          panelX: rect.left,
+          panelY: rect.top,
+        };
+        setIsResizing(true);
+        e.preventDefault();
+        e.stopPropagation();
+      },
+    []
+  );
+
+  useEffect(() => {
+    if (!isResizing) return;
+
+    const direction = resizeStartRef.current?.direction;
+    const cursor =
+      direction === "right"
+        ? "ew-resize"
+        : direction === "bottom"
+          ? "ns-resize"
+          : direction === "bottom-left"
+            ? "nesw-resize"
+            : "nwse-resize";
+
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!resizeStartRef.current || !containerRef.current) return;
+
+      const deltaX = e.clientX - resizeStartRef.current.x;
+      const deltaY = e.clientY - resizeStartRef.current.y;
+
+      let newWidth = resizeStartRef.current.width;
+      let newHeight = resizeStartRef.current.height;
+      let newX = resizeStartRef.current.panelX;
+
+      if (
+        resizeStartRef.current.direction === "right" ||
+        resizeStartRef.current.direction === "bottom-right"
+      ) {
+        newWidth = Math.max(300, resizeStartRef.current.width + deltaX);
+      }
+      if (resizeStartRef.current.direction === "bottom-left") {
+        const proposedWidth = resizeStartRef.current.width - deltaX;
+        newWidth = Math.max(300, proposedWidth);
+        newX = resizeStartRef.current.panelX + (resizeStartRef.current.width - newWidth);
+      }
+      if (
+        resizeStartRef.current.direction === "bottom" ||
+        resizeStartRef.current.direction === "bottom-right" ||
+        resizeStartRef.current.direction === "bottom-left"
+      ) {
+        newHeight = Math.max(200, resizeStartRef.current.height + deltaY);
+      }
+
+      setPanelSize({ width: newWidth, height: newHeight });
+      onResize?.({ width: newWidth, height: newHeight });
+      if (newX !== resizeStartRef.current.panelX) {
+        onDragOffset?.({ x: newX, y: resizeStartRef.current.panelY });
+      }
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+      resizeStartRef.current = null;
+    };
+
+    document.addEventListener("mousemove", handleMouseMove);
+    document.addEventListener("mouseup", handleMouseUp);
+    document.body.style.cursor = cursor;
+    document.body.style.userSelect = "none";
+
+    return () => {
+      document.removeEventListener("mousemove", handleMouseMove);
+      document.removeEventListener("mouseup", handleMouseUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+    };
+  }, [isResizing, onResize, onDragOffset]);
+
   // Pre-compute selection validity to avoid repeated calls in render
   const selectionValid = hasSelection ? isSelectionValid() : false;
 
   return (
     <div
       ref={containerRef}
-      className="tw-flex tw-flex-col tw-rounded-lg tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-lg"
+      className="tw-group tw-relative tw-flex tw-flex-col tw-rounded-lg tw-rounded-b-none tw-border tw-border-solid tw-border-border tw-bg-primary tw-shadow-lg"
+      style={
+        panelSize
+          ? {
+              width: panelSize.width,
+              maxWidth: panelSize.width,
+              ...(panelSize.height
+                ? { height: panelSize.height, maxHeight: panelSize.height }
+                : {}),
+            }
+          : undefined
+      }
       onKeyDown={handleKeyDown}
     >
       {/* Drag handle */}
       <div
-        className="tw-flex tw-cursor-grab tw-items-center tw-justify-center tw-border-b tw-border-solid tw-border-border tw-py-1 active:tw-cursor-grabbing"
+        className="tw-flex tw-h-4 tw-cursor-grab tw-items-center tw-justify-center hover:tw-bg-[color-mix(in_srgb,var(--background-modifier-hover)_20%,transparent)] active:tw-cursor-grabbing"
         onMouseDown={handleDragStart}
       >
-        <GripHorizontal className="tw-size-4 tw-text-faint" />
+        <div className="tw-h-[5px] tw-w-16 tw-rounded-sm tw-bg-[color-mix(in_srgb,var(--text-muted)_40%,transparent)] hover:tw-bg-[color-mix(in_srgb,var(--text-muted)_65%,transparent)]" />
       </div>
 
-      {/* Input area */}
-      <div className="tw-relative tw-p-3">
-        <QuickAskInput
-          value={inputText}
-          onChange={setInputText}
-          onSubmit={handleSubmit}
-          sendShortcut={settings.defaultSendShortcut}
-          placeholder="Ask a question... (@ to mention)"
-          disabled={isStreaming}
-          currentActiveFile={currentActiveFile}
-        />
-        <button
-          className="tw-absolute tw-right-4 tw-top-4 tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
-          onClick={onClose}
-          title="Close"
-        >
-          <X className="tw-size-4" />
-        </button>
-      </div>
-
-      {/* Chat area - only shown when there are messages */}
+      {/* Chat area - shown above input when there are messages (like YOLO) */}
       {hasMessages && (
         <div
           ref={chatAreaRef}
-          className="tw-max-h-64 tw-overflow-y-auto tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2"
+          className="tw-flex tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-3 tw-py-2"
+          style={{ maxHeight: panelSize?.height ? "none" : "300px" }}
         >
           {messages.map((msg, idx) => (
             <QuickAskMessageComponent
@@ -300,15 +405,41 @@ export function QuickAskPanel({
         </div>
       )}
 
-      {/* Toolbar */}
-      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-2">
-        <div className="tw-flex tw-items-center tw-gap-3">
+      {/* Spacer to push toolbar to bottom when panel is resized but no messages */}
+      {!hasMessages && panelSize?.height && <div className="tw-flex-1" />}
+
+      {/* Input area - below chat area when there are messages */}
+      <div className="tw-relative tw-px-3 tw-pb-1 tw-pt-2">
+        <QuickAskInput
+          value={inputText}
+          onChange={setInputText}
+          onSubmit={handleSubmit}
+          sendShortcut={settings.defaultSendShortcut}
+          placeholder="Ask a question... "
+          disabled={isStreaming}
+          currentActiveFile={currentActiveFile}
+        />
+        <Button
+          className="tw-absolute tw-right-4 tw-top-3 tw-rounded tw-bg-opacity-100 tw-p-1 tw-text-normal"
+          variant={'ghost2'}
+          onClick={onClose}
+          title="Close"
+        >
+          <X className="tw-size-4" />
+        </Button>
+      </div>
+
+      {/* Toolbar - always at bottom */}
+      <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
+        <div className="tw-flex tw-items-center tw-gap-1">
+          {/* TODO: Uncomment when Edit/Edit-Direct modes are implemented
           <ModeSelector
             modes={availableModes}
             value={mode}
             onChange={setMode}
             disabled={isStreaming}
           />
+          */}
 
           <ModelSelector
             size="sm"
@@ -317,17 +448,18 @@ export function QuickAskPanel({
             onChange={handleModelChange}
           />
 
-          <div className="tw-flex tw-items-center tw-gap-2">
+          <div className="tw-flex tw-items-center tw-gap-1.5">
             <Checkbox
               id="quickAskIncludeContext"
               checked={includeNoteContext}
               onCheckedChange={(checked) => handleIncludeNoteContextChange(!!checked)}
+              className="tw-size-3.5"
             />
             <label
               htmlFor="quickAskIncludeContext"
               className="tw-cursor-pointer tw-text-xs tw-text-muted"
             >
-              Include context
+              Note
             </label>
           </div>
         </div>
@@ -339,7 +471,7 @@ export function QuickAskPanel({
               onClick={clear}
               title="Clear conversation"
             >
-              <RotateCcw className="tw-size-4" />
+              <RotateCcw className="tw-size-3.5" />
             </button>
           )}
 
@@ -349,7 +481,7 @@ export function QuickAskPanel({
               onClick={stop}
               title="Stop"
             >
-              <Square className="tw-size-4" />
+              <Square className="tw-size-3.5" />
             </button>
           ) : (
             <button
@@ -358,11 +490,29 @@ export function QuickAskPanel({
               disabled={!inputText.trim()}
               title="Send"
             >
-              <Send className="tw-size-4" />
+              <Send className="tw-size-3.5" />
             </button>
           )}
         </div>
       </div>
+
+      {/* Resize handles */}
+      <div
+        className="tw-absolute tw-right-0 tw-top-4 tw-h-[calc(100%-16px)] tw-w-1 tw-cursor-ew-resize"
+        onMouseDown={handleResizeStart("right")}
+      />
+      <div
+        className="tw-absolute tw-bottom-0 tw-left-0 tw-h-1 tw-w-full tw-cursor-ns-resize"
+        onMouseDown={handleResizeStart("bottom")}
+      />
+      <div
+        className="quick-ask-resize-indicator-left tw-absolute tw-bottom-0 tw-left-0 tw-size-3 tw-cursor-nesw-resize"
+        onMouseDown={handleResizeStart("bottom-left")}
+      />
+      <div
+        className="quick-ask-resize-indicator-right tw-z-10 tw-absolute tw-bottom-0 tw-right-0 tw-size-3 tw-cursor-nwse-resize"
+        onMouseDown={handleResizeStart("bottom-right")}
+      />
     </div>
   );
 }

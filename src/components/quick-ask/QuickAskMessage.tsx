@@ -44,21 +44,21 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
     }
   }, [message.content, message.role, isStreaming, plugin]);
 
-  // User message
+  // User message - right aligned with accent background (like YOLO)
   if (message.role === "user") {
     return (
-      <div className="tw-my-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-modifier-hover tw-p-2">
-        <div className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-normal">
+      <div className="tw-max-w-[85%] tw-self-end tw-rounded-lg tw-rounded-br-sm tw-bg-interactive-accent tw-px-3 tw-py-2 tw-text-on-accent">
+        <div className="tw-whitespace-pre-wrap tw-break-words tw-text-sm">
           {message.content}
         </div>
       </div>
     );
   }
 
-  // Assistant message - streaming
+  // Assistant message - streaming (left aligned)
   if (isStreaming) {
     return (
-      <div className="tw-my-2">
+      <div className="tw-max-w-[95%] tw-self-start tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
         <div className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-normal">
           {message.content}
           <span className="tw-animate-pulse tw-text-accent">▊</span>
@@ -67,46 +67,39 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
     );
   }
 
-  // Assistant message - completed with markdown + action buttons
+  // Assistant message - completed with markdown + action buttons (left aligned)
   return (
-    <div className="tw-my-2">
+    <div className="tw-group tw-relative tw-max-w-[95%] tw-self-start tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
       <div
         ref={contentRef}
         className="tw-text-sm [&_.markdown-rendered]:tw-text-sm [&_code]:tw-text-xs [&_p]:tw-my-1 [&_pre]:tw-my-2"
       />
       {message.content && (
-        <div className="tw-mt-2 tw-flex tw-items-center tw-gap-1 tw-border-t tw-border-solid tw-border-border tw-pt-2">
+        <div className="tw-absolute tw-bottom-1 tw-right-1 tw-flex tw-items-center tw-gap-0.5 tw-rounded tw-bg-secondary tw-opacity-0 tw-shadow-sm tw-transition-opacity group-hover:tw-opacity-100">
           <button
-            className="tw-flex tw-items-center tw-gap-1 tw-rounded tw-px-2 tw-py-1 tw-text-xs tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+            className="tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
             onClick={() => onCopy(message.id)}
             title="Copy to clipboard"
           >
-            <Copy className="tw-size-3" />
-            <span>Copy</span>
+            <Copy className="tw-size-3.5" />
           </button>
           <button
-            className="tw-flex tw-items-center tw-gap-1 tw-rounded tw-px-2 tw-py-1 tw-text-xs tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
+            className="tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal"
             onClick={() => onInsert(message.id)}
             title="Insert at cursor"
           >
-            <CornerDownLeft className="tw-size-3" />
-            <span>Insert</span>
+            <CornerDownLeft className="tw-size-3.5" />
           </button>
-          <button
-            className="tw-flex tw-items-center tw-gap-1 tw-rounded tw-px-2 tw-py-1 tw-text-xs tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal disabled:tw-cursor-not-allowed disabled:tw-opacity-50"
-            onClick={() => onReplace(message.id)}
-            disabled={!hasSelection || !isReplaceValid}
-            title={
-              !hasSelection
-                ? "No text selected"
-                : !isReplaceValid
-                  ? "Selection has changed"
-                  : "Replace selection"
-            }
-          >
-            <Replace className="tw-size-3" />
-            <span>Replace</span>
-          </button>
+          {hasSelection && (
+            <button
+              className="tw-rounded tw-p-1 tw-text-muted hover:tw-bg-modifier-hover hover:tw-text-normal disabled:tw-cursor-not-allowed disabled:tw-opacity-50"
+              onClick={() => onReplace(message.id)}
+              disabled={!isReplaceValid}
+              title={!isReplaceValid ? "Selection has changed" : "Replace selection"}
+            >
+              <Replace className="tw-size-3.5" />
+            </button>
+          )}
         </div>
       )}
     </div>

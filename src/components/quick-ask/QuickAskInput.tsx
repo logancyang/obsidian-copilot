@@ -141,12 +141,12 @@ export const QuickAskInput = React.memo(function QuickAskInput({
           <PlainTextPlugin
             contentEditable={
               <ContentEditable
-                className="tw-min-h-16 tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border tw-border-solid tw-border-border tw-bg-primary tw-px-3 tw-py-2 tw-pr-8 tw-text-sm tw-text-normal tw-outline-none focus:tw-border-interactive-accent"
+                className="tw-min-h-12 tw-max-h-48 tw-w-full tw-resize-none tw-overflow-y-auto tw-border-0 tw-bg-transparent tw-px-1 tw-py-2 tw-pr-8 tw-text-sm tw-text-normal tw-outline-none"
                 aria-label="Quick Ask input"
               />
             }
             placeholder={
-              <div className="tw-pointer-events-none tw-absolute tw-left-3 tw-top-2 tw-select-none tw-text-sm tw-text-muted/60">
+              <div className="tw-pointer-events-none tw-absolute tw-left-1 tw-top-2 tw-select-none tw-text-sm tw-text-muted/60">
                 {placeholder}
               </div>
             }

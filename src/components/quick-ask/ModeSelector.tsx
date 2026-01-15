@@ -1,9 +1,17 @@
 /**
  * ModeSelector - Dropdown for selecting Quick Ask mode.
+ * Uses DropdownMenu for consistent styling with ModelSelector.
  */
 
 import React from "react";
-import { MessageCircle, Pencil, Zap } from "lucide-react";
+import { MessageCircle, Pencil, Zap, ChevronDown } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { QuickAskMode, QuickAskModeConfig } from "./types";
 
 interface ModeSelectorProps {
@@ -24,28 +32,44 @@ const iconMap: Record<string, React.ComponentType<{ className?: string }>> = {
  */
 export function ModeSelector({ modes, value, onChange, disabled }: ModeSelectorProps) {
   const currentMode = modes.find((m) => m.id === value);
-  // Avoid runtime crash if a mode registers an unknown icon key
   const IconComponent = iconMap[currentMode?.icon ?? ""] ?? MessageCircle;
 
   return (
-    <div className="tw-relative tw-inline-block">
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value as QuickAskMode)}
-        disabled={disabled}
-        className="tw-appearance-none tw-rounded tw-border tw-border-solid tw-border-border tw-bg-primary tw-py-1 tw-pl-7 tw-pr-6 tw-text-xs tw-text-normal hover:tw-bg-modifier-hover focus:tw-outline-none disabled:tw-opacity-50"
-        title={currentMode?.description}
-      >
-        {modes.map((mode) => (
-          <option key={mode.id} value={mode.id} disabled={!mode.implemented}>
-            {mode.label}
-            {!mode.implemented ? " (Coming soon)" : ""}
-          </option>
-        ))}
-      </select>
-      <div className="tw-pointer-events-none tw-absolute tw-left-2 tw-top-1/2 tw--translate-y-1/2">
-        <IconComponent className="tw-size-3 tw-text-muted" />
-      </div>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          className="tw-min-w-0 tw-gap-1 tw-px-1.5 tw-text-muted"
+        >
+          <IconComponent className="tw-size-3.5" />
+          <span className="tw-text-xs">{currentMode?.label ?? "Ask"}</span>
+          {!disabled && <ChevronDown className="tw-size-3.5" />}
+        </Button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent align="start">
+        {modes.map((mode) => {
+          const ModeIcon = iconMap[mode.icon] ?? MessageCircle;
+          return (
+            <DropdownMenuItem
+              key={mode.id}
+              onSelect={() => onChange(mode.id)}
+              disabled={!mode.implemented}
+              className="tw-gap-2"
+            >
+              <ModeIcon className="tw-size-4" />
+              <div className="tw-flex tw-flex-col">
+                <span>{mode.label}</span>
+                {!mode.implemented && (
+                  <span className="tw-text-xs tw-text-muted">Coming soon</span>
+                )}
+              </div>
+            </DropdownMenuItem>
+          );
+        })}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

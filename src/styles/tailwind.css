@@ -979,6 +979,13 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
   position: relative;
 }
 
+/* Override Obsidian's default contenteditable border */
+.copilot-quick-ask-overlay [contenteditable] {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
 .copilot-quick-ask-overlay-root {
   position: absolute;
   top: 0;
@@ -1020,4 +1027,38 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
     opacity: 0;
     transform: translateY(-8px);
   }
+}
+
+/* Quick Ask Resize Indicators */
+.quick-ask-resize-indicator-right::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.quick-ask-resize-indicator-left::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: -1px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.tw-group:hover .quick-ask-resize-indicator-right::after,
+.tw-group:hover .quick-ask-resize-indicator-left::after {
+  opacity: 1;
 }

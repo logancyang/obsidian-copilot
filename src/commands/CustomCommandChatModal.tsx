@@ -1,19 +1,13 @@
 import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
+import { createChatMemory, createChatChain } from "@/commands/customCommandChatEngine";
 import { Button } from "@/components/ui/button";
 import { getModelDisplayText } from "@/components/ui/model-display";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
 import { ThinkBlockStreamer } from "@/LLMProviders/chainRunner/utils/ThinkBlockStreamer";
 import { logError } from "@/logger";
 import { findCustomModel, insertIntoEditor } from "@/utils";
-import {
-  ChatPromptTemplate,
-  HumanMessagePromptTemplate,
-  MessagesPlaceholder,
-  SystemMessagePromptTemplate,
-} from "@langchain/core/prompts";
 import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChatMemory, BufferMemory } from "@langchain/classic/memory";
+import { BaseChatMemory } from "@langchain/classic/memory";
 import { ArrowBigUp, Bot, Command, Copy, CornerDownLeft, PenLine } from "lucide-react";
 import { App, Modal, Notice, Platform } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -21,39 +15,15 @@ import { createRoot, Root } from "react-dom/client";
 import { CustomCommand } from "@/commands/type";
 import { useSettingsValue } from "@/settings/model";
 
-// Custom hook for managing chat chain
+// Custom hook for managing chat chain using shared engine
 function useChatChain(selectedModel: CustomModel, systemPrompt?: string) {
-  const [chatMemory] = useState<BaseChatMemory>(
-    new BufferMemory({ returnMessages: true, memoryKey: "history" })
-  );
+  const [chatMemory] = useState<BaseChatMemory>(() => createChatMemory());
   const [chatChain, setChatChain] = useState<RunnableSequence | null>(null);
 
-  // Initialize chat chain
+  // Initialize chat chain using shared createChatChain
   useEffect(() => {
     async function initChatChain() {
-      const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
-
-      const defaultSystemPrompt =
-        "You are a helpful assistant. You'll help the user with their content editing needs.";
-      const chatPrompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(systemPrompt || defaultSystemPrompt),
-        new MessagesPlaceholder("history"),
-        HumanMessagePromptTemplate.fromTemplate("{input}"),
-      ]);
-
-      const newChatChain = RunnableSequence.from([
-        {
-          input: (initialInput) => initialInput.input,
-          memory: () => chatMemory.loadMemoryVariables({}),
-        },
-        {
-          input: (previousOutput) => previousOutput.input,
-          history: (previousOutput) => previousOutput.memory.history,
-        },
-        chatPrompt,
-        chatModel,
-      ]);
-
+      const newChatChain = await createChatChain(selectedModel, systemPrompt || "", chatMemory);
       setChatChain(newChatChain);
     }
 
