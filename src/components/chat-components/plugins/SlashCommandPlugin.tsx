@@ -5,6 +5,7 @@ import fuzzysort from "fuzzysort";
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommand } from "@/commands/type";
 import { sortSlashCommands } from "@/commands/customCommandUtils";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
 import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import { $replaceTextRangeWithPills } from "@/components/chat-components/utils/lexicalTextUtils";
@@ -65,6 +66,9 @@ export function SlashCommandPlugin(): JSX.Element {
   // Shared selection handler
   const handleSelect = useCallback(
     (option: SlashCommandOption) => {
+      // Record usage to update lastUsedMs for recency sorting
+      CustomCommandManager.getInstance().recordUsage(option.command);
+
       editor.update(() => {
         const selection = $getSelection();
         if (!$isRangeSelection(selection)) return;
