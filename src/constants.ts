@@ -402,6 +402,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
 
 export enum EmbeddingModelProviders {
   OPENAI = "openai",
+  OPENROUTERAI = "openrouterai",
   COHEREAI = "cohereai",
   GOOGLE = "google",
   AZURE_OPENAI = "azure openai",

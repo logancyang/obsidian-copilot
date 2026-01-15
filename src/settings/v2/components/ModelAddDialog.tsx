@@ -383,7 +383,9 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                     placeholder="Enter Azure OpenAI API Embedding Deployment Name"
                     value={model.azureOpenAIApiEmbeddingDeploymentName || ""}
                     onChange={(e) => {
-                      updateModelWithReset({ azureOpenAIApiEmbeddingDeploymentName: e.target.value });
+                      updateModelWithReset({
+                        azureOpenAIApiEmbeddingDeploymentName: e.target.value,
+                      });
                       setError("embeddingDeploymentName", false);
                     }}
                   />
@@ -435,13 +437,17 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                     <SelectValue placeholder="Presets" />
                   </SelectTrigger>
                   <SelectContent container={dialogElement}>
-                    {["us-east-1", "us-west-2", "eu-west-1", "ap-northeast-1", "ap-southeast-1"].map(
-                      (region) => (
-                        <SelectItem key={region} value={region}>
-                          {region}
-                        </SelectItem>
-                      )
-                    )}
+                    {[
+                      "us-east-1",
+                      "us-west-2",
+                      "eu-west-1",
+                      "ap-northeast-1",
+                      "ap-southeast-1",
+                    ].map((region) => (
+                      <SelectItem key={region} value={region}>
+                        {region}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -474,9 +480,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             />
           </button>
         </CollapsibleTrigger>
-        <CollapsibleContent className="tw-space-y-4 tw-px-3 tw-pb-3">
-          {content}
-        </CollapsibleContent>
+        <CollapsibleContent className="tw-space-y-4 tw-px-3 tw-pb-3">{content}</CollapsibleContent>
       </Collapsible>
     );
   };
@@ -618,46 +622,48 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             )}
           </FormField>
 
-          <FormField
-            label={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">Model Capabilities</span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-text-sm tw-text-muted">
-                      Only used to display model capabilities, does not affect model functionality
-                    </div>
-                  }
-                  contentClassName="tw-max-w-96"
-                />
-              </div>
-            }
-          >
-            <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-6 tw-gap-y-2">
-              {capabilityOptions.map(({ id, label, description }) => (
-                <div key={id} className="tw-flex tw-items-center tw-gap-2">
-                  <Checkbox
-                    id={id}
-                    checked={model.capabilities?.includes(id)}
-                    onCheckedChange={(checked) => {
-                      const newCapabilities = model.capabilities || [];
-                      setModel({
-                        ...model,
-                        capabilities: checked
-                          ? [...newCapabilities, id]
-                          : newCapabilities.filter((cap) => cap !== id),
-                      });
-                    }}
+          {!isEmbeddingModel && (
+            <FormField
+              label={
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-leading-none">Model Capabilities</span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Only used to display model capabilities, does not affect model functionality
+                      </div>
+                    }
+                    contentClassName="tw-max-w-96"
                   />
-                  <HelpTooltip content={description}>
-                    <Label htmlFor={id} className="tw-text-sm">
-                      {label}
-                    </Label>
-                  </HelpTooltip>
                 </div>
-              ))}
-            </div>
-          </FormField>
+              }
+            >
+              <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-x-6 tw-gap-y-2">
+                {capabilityOptions.map(({ id, label, description }) => (
+                  <div key={id} className="tw-flex tw-items-center tw-gap-2">
+                    <Checkbox
+                      id={id}
+                      checked={model.capabilities?.includes(id)}
+                      onCheckedChange={(checked) => {
+                        const newCapabilities = model.capabilities || [];
+                        setModel({
+                          ...model,
+                          capabilities: checked
+                            ? [...newCapabilities, id]
+                            : newCapabilities.filter((cap) => cap !== id),
+                        });
+                      }}
+                    />
+                    <HelpTooltip content={description}>
+                      <Label htmlFor={id} className="tw-text-sm">
+                        {label}
+                      </Label>
+                    </HelpTooltip>
+                  </div>
+                ))}
+              </div>
+            </FormField>
+          )}
 
           {renderProviderSpecificFields()}
         </div>
@@ -707,9 +713,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
           {/* 主要操作区：Test 和 Add Model */}
           <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
-            {verifyStatus === "success" && (
-              <CheckCircle2 className="tw-size-5 tw-text-success" />
-            )}
+            {verifyStatus === "success" && <CheckCircle2 className="tw-size-5 tw-text-success" />}
             {verifyStatus === "failed" && <XCircle className="tw-size-5 tw-text-error" />}
             <TooltipProvider>
               <Tooltip>
