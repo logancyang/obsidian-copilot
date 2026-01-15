@@ -157,7 +157,12 @@ describe("ChunkManager", () => {
     });
 
     it("should create multiple chunks for long documents", async () => {
-      const chunks = await chunkManager.getChunks(["long.md"], defaultOptions);
+      // Use smaller maxChars to force chunking (content must exceed this to be split)
+      const smallerOptions: ChunkOptions = {
+        ...defaultOptions,
+        maxChars: 500, // Force splitting by keeping maxChars smaller than content
+      };
+      const chunks = await chunkManager.getChunks(["long.md"], smallerOptions);
 
       expect(chunks.length).toBeGreaterThan(1);
 
@@ -172,12 +177,18 @@ describe("ChunkManager", () => {
       // Verify all chunks have content
       chunks.forEach((chunk) => {
         expect(chunk.content.length).toBeGreaterThan(0);
-        expect(chunk.content.length).toBeLessThanOrEqual(defaultOptions.maxChars);
+        expect(chunk.content.length).toBeLessThanOrEqual(smallerOptions.maxChars);
       });
     });
 
     it("should preserve headings in chunks", async () => {
-      const chunks = await chunkManager.getChunks(["medium.md"], defaultOptions);
+      // Use smaller maxChars to force heading-based chunking
+      // medium.md is ~240 chars, plus header ~50 = ~290, so use maxChars < 290
+      const smallerOptions: ChunkOptions = {
+        ...defaultOptions,
+        maxChars: 200, // Force splitting by headings
+      };
+      const chunks = await chunkManager.getChunks(["medium.md"], smallerOptions);
 
       // Find chunk with "Section 1" content
       const section1Chunk = chunks.find((chunk) => chunk.content.includes("Section 1"));

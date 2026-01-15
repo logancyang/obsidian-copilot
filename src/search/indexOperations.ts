@@ -1,11 +1,10 @@
-import { CHUNK_SIZE } from "@/constants";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo } from "@/logger";
 import { RateLimiter } from "@/rateLimiter";
+import { ChunkManager } from "@/search/v3/chunks";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
 import { MD5 } from "crypto-js";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
 import { App, Notice, TFile } from "obsidian";
 import { DBOperations } from "./dbOperations";
 import {
@@ -29,6 +28,7 @@ export class IndexOperations {
   private rateLimiter: RateLimiter;
   private checkpointInterval: number;
   private embeddingBatchSize: number;
+  private chunkManager: ChunkManager;
   private state: IndexingState = {
     isIndexingPaused: false,
     isIndexingCancelled: false,
@@ -48,6 +48,7 @@ export class IndexOperations {
     this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
     this.embeddingBatchSize = settings.embeddingBatchSize;
     this.checkpointInterval = 8 * this.embeddingBatchSize;
+    this.chunkManager = new ChunkManager(app);
 
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
@@ -207,9 +208,14 @@ export class IndexOperations {
     }
   }
 
+  /**
+   * Prepares chunks for all files using the shared ChunkManager for consistent chunking.
+   * This ensures chunk IDs (note_path#chunk_index) are identical across semantic and lexical search.
+   */
   private async prepareAllChunks(files: TFile[]): Promise<
     Array<{
       content: string;
+      chunkId: string;
       fileInfo: any;
     }>
   > {
@@ -220,48 +226,51 @@ export class IndexOperations {
     }
     const embeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
 
-    const textSplitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
-      chunkSize: CHUNK_SIZE,
-    });
-    const allChunks: Array<{ content: string; fileInfo: any }> = [];
+    // Use ChunkManager for consistent chunking across search systems
+    const filePaths = files.map((f) => f.path);
+    const chunks = await this.chunkManager.getChunks(filePaths);
 
-    for (const file of files) {
-      const content = await this.app.vault.cachedRead(file);
-      if (!content?.trim()) continue;
+    const allChunks: Array<{ content: string; chunkId: string; fileInfo: any }> = [];
+
+    for (const chunk of chunks) {
+      const file = this.app.vault.getAbstractFileByPath(chunk.notePath);
+      if (!file || !(file instanceof TFile)) continue;
 
       const fileCache = this.app.metadataCache.getFileCache(file);
       const fileInfo = {
-        title: file.basename,
-        path: file.path,
+        title: chunk.title,
+        path: chunk.notePath,
         embeddingModel,
         ctime: file.stat.ctime,
-        mtime: file.stat.mtime,
+        mtime: chunk.mtime,
         tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
         extension: file.extension,
         metadata: {
           ...(fileCache?.frontmatter ?? {}),
           created: formatDateTime(new Date(file.stat.ctime)).display,
-          modified: formatDateTime(new Date(file.stat.mtime)).display,
+          modified: formatDateTime(new Date(chunk.mtime)).display,
+          chunkId: chunk.id, // Store chunkId in metadata for retrieval
+          heading: chunk.heading, // Store heading for context
         },
       };
 
-      // Add note title as contextual chunk headers
-      // https://js.langchain.com/docs/modules/data_connection/document_transformers/contextual_chunk_headers
-      const chunks = await textSplitter.createDocuments([content], [], {
-        chunkHeader: `\n\nNOTE TITLE: [[${fileInfo.title}]]\n\nMETADATA:${JSON.stringify(
-          fileInfo.metadata
-        )}\n\nNOTE BLOCK CONTENT:\n\n`,
-        appendChunkOverlapHeader: true,
-      });
+      if (chunk.content.trim()) {
+        // Inject metadata into chunk content for semantic search
+        // ChunkManager produces: "NOTE TITLE: [[title]]\n\nNOTE BLOCK CONTENT:\n\n[content]"
+        // We need to insert metadata between title and content for embeddings
+        const metadataStr = `METADATA:${JSON.stringify(fileInfo.metadata)}\n\n`;
+        const insertPoint = chunk.content.indexOf("NOTE BLOCK CONTENT:");
+        const contentWithMetadata =
+          insertPoint > 0
+            ? chunk.content.slice(0, insertPoint) + metadataStr + chunk.content.slice(insertPoint)
+            : chunk.content;
 
-      chunks.forEach((chunk) => {
-        if (chunk.pageContent.trim()) {
-          allChunks.push({
-            content: chunk.pageContent,
-            fileInfo,
-          });
-        }
-      });
+        allChunks.push({
+          content: contentWithMetadata,
+          chunkId: chunk.id,
+          fileInfo,
+        });
+      }
     }
 
     return allChunks;

@@ -265,10 +265,33 @@ export class ChunkManager {
       const chunks: Chunk[] = [];
       let chunkIndex = 0;
 
-      // If no headings, treat entire content as one chunk
+      // Calculate content after frontmatter
+      const frontmatterEnd = this.findFrontmatterEnd(content, cache?.frontmatter);
+      const contentAfterFrontmatter = content.substring(frontmatterEnd);
+
+      // Get first heading text for the chunk heading field (empty if no headings)
+      const firstHeading = headings.length > 0 ? headings[0].heading : "";
+
+      // If entire content fits in one chunk, keep it together (don't split by headings)
+      // This prevents small notes from being fragmented into tiny pieces
+      const header = `\n\nNOTE TITLE: [[${file.basename}]]\n\nNOTE BLOCK CONTENT:\n\n`;
+      if (header.length + contentAfterFrontmatter.length <= options.maxChars) {
+        const processedChunks = await this.processContentSection(
+          contentAfterFrontmatter,
+          firstHeading,
+          file,
+          chunkIndex,
+          options
+        );
+        chunks.push(...processedChunks);
+        return chunks;
+      }
+
+      // Content too large - need to split
+      // If no headings, use text splitter on entire content
       if (headings.length === 0) {
         const processedChunks = await this.processContentSection(
-          content,
+          contentAfterFrontmatter,
           "",
           file,
           chunkIndex,
@@ -278,13 +301,14 @@ export class ChunkManager {
         return chunks;
       }
 
-      // Process content by heading sections
+      // Split by heading sections
       for (let i = 0; i < headings.length; i++) {
         const heading = headings[i];
         const nextHeading = headings[i + 1];
 
         // Extract content for this section
-        const startPos = heading.position.start.offset;
+        // For the first section, include preamble content (after frontmatter, before first heading)
+        const startPos = i === 0 ? frontmatterEnd : heading.position.start.offset;
         const endPos = nextHeading?.position.start.offset || content.length;
         const sectionContent = content.substring(startPos, endPos);
 
@@ -434,5 +458,32 @@ export class ChunkManager {
   private formatMemoryUsage(): string {
     const mb = (this.memoryUsage / 1024 / 1024).toFixed(1);
     return `${mb}MB`;
+  }
+
+  /**
+   * Find the end position of YAML frontmatter in content
+   * Frontmatter starts with "---" on the first line and ends with "---" on its own line
+   * @returns Position after frontmatter (including trailing newline), or 0 if no frontmatter
+   */
+  private findFrontmatterEnd(content: string, frontmatter: unknown): number {
+    // No frontmatter parsed by Obsidian, start from beginning
+    if (!frontmatter) {
+      return 0;
+    }
+
+    // Frontmatter must start at the very beginning with "---"
+    if (!content.startsWith("---")) {
+      return 0;
+    }
+
+    // Find the closing "---" (must be on its own line)
+    const closingMatch = content.match(/\n---\r?\n/);
+    if (closingMatch && closingMatch.index !== undefined) {
+      // Return position after the closing "---\n"
+      return closingMatch.index + closingMatch[0].length;
+    }
+
+    // Fallback: no valid closing found, start from beginning
+    return 0;
   }
 }
