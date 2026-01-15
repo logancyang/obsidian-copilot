@@ -312,14 +312,6 @@ export const BasicSettings: React.FC = () => {
             checked={settings.showRelevantNotes}
             onCheckedChange={(checked) => updateSetting("showRelevantNotes", checked)}
           />
-
-          <SettingItem
-            type="switch"
-            title="Auto-accept Edits"
-            description="Automatically accept file edits without showing preview confirmation dialog"
-            checked={settings.autoAcceptEdits}
-            onCheckedChange={(checked) => updateSetting("autoAcceptEdits", checked)}
-          />
         </div>
       </section>
 
