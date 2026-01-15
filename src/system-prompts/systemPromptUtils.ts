@@ -2,6 +2,7 @@ import {
   COPILOT_SYSTEM_PROMPT_CREATED,
   COPILOT_SYSTEM_PROMPT_MODIFIED,
   COPILOT_SYSTEM_PROMPT_LAST_USED,
+  COPILOT_SYSTEM_PROMPT_DEFAULT,
   EMPTY_SYSTEM_PROMPT,
 } from "@/system-prompts/constants";
 import { UserSystemPrompt } from "@/system-prompts/type";
@@ -14,6 +15,7 @@ import {
   removePendingFileWrite,
   isPendingFileWrite,
 } from "./state";
+import { logWarn } from "@/logger";
 
 /**
  * Validate a system prompt name
@@ -61,7 +63,17 @@ export function getSystemPromptsFolder(): string {
  * Get the file path for a system prompt by title
  */
 export function getPromptFilePath(title: string): string {
-  return `${getSystemPromptsFolder()}/${title}.md`;
+  return normalizePath(`${getSystemPromptsFolder()}/${title}.md`);
+}
+
+/**
+ * Get the file path for a system prompt by title in a specific folder
+ * @param title - The title of the prompt
+ * @param folder - Optional folder path (defaults to current settings folder)
+ */
+export function getPromptFilePathInFolder(title: string, folder?: string): string {
+  const folderPath = folder ? normalizePath(folder) : getSystemPromptsFolder();
+  return normalizePath(`${folderPath}/${title}.md`);
 }
 
 /**
@@ -234,4 +246,42 @@ export function generateCopyPromptName(
   }
 
   return copyName;
+}
+
+/**
+ * Update the default flag in a prompt file's frontmatter
+ * @param title - The title of the prompt
+ * @param isDefault - Whether to set or remove the default flag
+ * @param folder - Optional folder path (defaults to current settings folder)
+ */
+export async function updatePromptDefaultFlag(
+  title: string,
+  isDefault: boolean,
+  folder?: string
+): Promise<void> {
+  const filePath = getPromptFilePathInFolder(title, folder);
+  const file = app.vault.getAbstractFileByPath(filePath);
+
+  if (!(file instanceof TFile)) {
+    logWarn(`System prompt file not found for default flag update: ${filePath}`);
+    return;
+  }
+
+  const alreadyPending = isPendingFileWrite(file.path);
+  try {
+    if (!alreadyPending) {
+      addPendingFileWrite(file.path);
+    }
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      if (isDefault) {
+        frontmatter[COPILOT_SYSTEM_PROMPT_DEFAULT] = true;
+      } else {
+        delete frontmatter[COPILOT_SYSTEM_PROMPT_DEFAULT];
+      }
+    });
+  } finally {
+    if (!alreadyPending) {
+      removePendingFileWrite(file.path);
+    }
+  }
 }

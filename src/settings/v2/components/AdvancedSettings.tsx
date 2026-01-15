@@ -55,7 +55,10 @@ export const AdvancedSettings: React.FC = () => {
               value={displayValue}
               onChange={(e) => handleSelectChange(e.target.value)}
               options={prompts.map((prompt) => ({
-                label: prompt.title,
+                label:
+                  prompt.title === settings.defaultSystemPromptTitle
+                    ? `${prompt.title} (Default)`
+                    : prompt.title,
                 value: prompt.title,
               }))}
               placeholder="Select system prompt"
