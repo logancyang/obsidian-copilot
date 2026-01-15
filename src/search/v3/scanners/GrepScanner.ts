@@ -41,8 +41,10 @@ export class GrepScanner {
     // PASS 1: Collect ALL path matches (fast - no file I/O)
     // Sort by match count to prioritize files matching more query terms
     const pathMatchesWithScore: Array<{ path: string; matchCount: number }> = [];
+    const yieldInterval = GrepScanner.CONFIG.YIELD_INTERVAL;
 
-    for (const file of files) {
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
       const pathLower = file.path.toLowerCase();
       let matchCount = 0;
 
@@ -54,6 +56,11 @@ export class GrepScanner {
 
       if (matchCount > 0) {
         pathMatchesWithScore.push({ path: file.path, matchCount });
+      }
+
+      // Yield periodically to prevent UI freezes in large vaults
+      if (i > 0 && i % yieldInterval === 0) {
+        await new Promise((r) => setTimeout(r, 0));
       }
     }
 
