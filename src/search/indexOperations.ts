@@ -211,6 +211,7 @@ export class IndexOperations {
   /**
    * Prepares chunks for all files using the shared ChunkManager for consistent chunking.
    * This ensures chunk IDs (note_path#chunk_index) are identical across semantic and lexical search.
+   * Processes files in batches to bypass ChunkManager's 1000-file limit for search queries.
    */
   private async prepareAllChunks(files: TFile[]): Promise<
     Array<{
@@ -226,50 +227,55 @@ export class IndexOperations {
     }
     const embeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
 
-    // Use ChunkManager for consistent chunking across search systems
-    const filePaths = files.map((f) => f.path);
-    const chunks = await this.chunkManager.getChunks(filePaths);
-
     const allChunks: Array<{ content: string; chunkId: string; fileInfo: any }> = [];
 
-    for (const chunk of chunks) {
-      const file = this.app.vault.getAbstractFileByPath(chunk.notePath);
-      if (!file || !(file instanceof TFile)) continue;
+    // Process files in batches to bypass ChunkManager's 1000-file limit
+    // The limit exists to protect memory during search queries, but indexing needs all files
+    const CHUNK_BATCH_SIZE = 1000;
+    for (let i = 0; i < files.length; i += CHUNK_BATCH_SIZE) {
+      const batch = files.slice(i, i + CHUNK_BATCH_SIZE);
+      const filePaths = batch.map((f) => f.path);
+      const chunks = await this.chunkManager.getChunks(filePaths);
 
-      const fileCache = this.app.metadataCache.getFileCache(file);
-      const fileInfo = {
-        title: chunk.title,
-        path: chunk.notePath,
-        embeddingModel,
-        ctime: file.stat.ctime,
-        mtime: chunk.mtime,
-        tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
-        extension: file.extension,
-        metadata: {
-          ...(fileCache?.frontmatter ?? {}),
-          created: formatDateTime(new Date(file.stat.ctime)).display,
-          modified: formatDateTime(new Date(chunk.mtime)).display,
-          chunkId: chunk.id, // Store chunkId in metadata for retrieval
-          heading: chunk.heading, // Store heading for context
-        },
-      };
+      for (const chunk of chunks) {
+        const file = this.app.vault.getAbstractFileByPath(chunk.notePath);
+        if (!file || !(file instanceof TFile)) continue;
 
-      if (chunk.content.trim()) {
-        // Inject metadata into chunk content for semantic search
-        // ChunkManager produces: "NOTE TITLE: [[title]]\n\nNOTE BLOCK CONTENT:\n\n[content]"
-        // We need to insert metadata between title and content for embeddings
-        const metadataStr = `METADATA:${JSON.stringify(fileInfo.metadata)}\n\n`;
-        const insertPoint = chunk.content.indexOf("NOTE BLOCK CONTENT:");
-        const contentWithMetadata =
-          insertPoint > 0
-            ? chunk.content.slice(0, insertPoint) + metadataStr + chunk.content.slice(insertPoint)
-            : chunk.content;
+        const fileCache = this.app.metadataCache.getFileCache(file);
+        const fileInfo = {
+          title: chunk.title,
+          path: chunk.notePath,
+          embeddingModel,
+          ctime: file.stat.ctime,
+          mtime: chunk.mtime,
+          tags: fileCache?.tags?.map((tag) => tag.tag) ?? [],
+          extension: file.extension,
+          metadata: {
+            ...(fileCache?.frontmatter ?? {}),
+            created: formatDateTime(new Date(file.stat.ctime)).display,
+            modified: formatDateTime(new Date(chunk.mtime)).display,
+            chunkId: chunk.id, // Store chunkId in metadata for retrieval
+            heading: chunk.heading, // Store heading for context
+          },
+        };
 
-        allChunks.push({
-          content: contentWithMetadata,
-          chunkId: chunk.id,
-          fileInfo,
-        });
+        if (chunk.content.trim()) {
+          // Inject metadata into chunk content for semantic search
+          // ChunkManager produces: "NOTE TITLE: [[title]]\n\nNOTE BLOCK CONTENT:\n\n[content]"
+          // We need to insert metadata between title and content for embeddings
+          const metadataStr = `METADATA:${JSON.stringify(fileInfo.metadata)}\n\n`;
+          const insertPoint = chunk.content.indexOf("NOTE BLOCK CONTENT:");
+          const contentWithMetadata =
+            insertPoint > 0
+              ? chunk.content.slice(0, insertPoint) + metadataStr + chunk.content.slice(insertPoint)
+              : chunk.content;
+
+          allChunks.push({
+            content: contentWithMetadata,
+            chunkId: chunk.id,
+            fileInfo,
+          });
+        }
       }
     }
 

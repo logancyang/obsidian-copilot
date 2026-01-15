@@ -42,14 +42,25 @@ export const DEFAULT_CHUNK_OPTIONS: ChunkOptions = {
 export class ChunkManager {
   private cache: Map<string, Chunk[]> = new Map();
   private memoryUsage: number = 0;
-  private splitter: RecursiveCharacterTextSplitter;
 
-  constructor(private app: App) {
-    // Create splitter for deterministic paragraph splitting
-    this.splitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
-      chunkSize: CHUNK_SIZE,
-      chunkOverlap: 0, // Explicit overlap for determinism
-      separators: ["\n\n", "\n", ". ", " ", ""], // Explicit separators
+  constructor(private app: App) {}
+
+  /**
+   * Generate a cache key that includes chunking options
+   * This ensures different option configurations don't return stale chunks
+   */
+  private getCacheKey(notePath: string, options: ChunkOptions): string {
+    return `${notePath}:${options.maxChars}:${options.overlap}`;
+  }
+
+  /**
+   * Create a text splitter configured for the given options
+   */
+  private createSplitter(options: ChunkOptions): RecursiveCharacterTextSplitter {
+    return RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+      chunkSize: options.maxChars,
+      chunkOverlap: options.overlap,
+      separators: ["\n\n", "\n", ". ", " ", ""], // Explicit separators for determinism
       keepSeparator: false, // Consistent separator handling
     });
   }
@@ -96,8 +107,21 @@ export class ChunkManager {
       const allChunks: Chunk[] = [];
 
       for (const notePath of validPaths) {
-        // Check cache first
-        let chunks = this.cache.get(notePath);
+        // Check cache first using composite key (includes options)
+        const cacheKey = this.getCacheKey(notePath, options);
+        let chunks = this.cache.get(cacheKey);
+
+        // Validate mtime if cached - regenerate if file was modified
+        if (chunks && chunks.length > 0) {
+          const file = this.app.vault.getAbstractFileByPath(notePath);
+          if (file && file instanceof TFile && file.stat.mtime > chunks[0].mtime) {
+            // File was modified since chunks were cached - invalidate cache
+            const oldBytes = this.calculateChunkBytes(chunks);
+            this.cache.delete(cacheKey);
+            this.memoryUsage -= oldBytes;
+            chunks = undefined;
+          }
+        }
 
         if (!chunks) {
           // Generate chunks for this note
@@ -107,7 +131,7 @@ export class ChunkManager {
           if (chunks.length > 0) {
             const chunkBytes = this.calculateChunkBytes(chunks);
             if (this.memoryUsage + chunkBytes <= options.maxBytesTotal) {
-              this.cache.set(notePath, chunks);
+              this.cache.set(cacheKey, chunks);
               this.memoryUsage += chunkBytes;
             } else {
               logWarn(`ChunkManager: Skipping cache for ${notePath}, would exceed memory budget`);
@@ -152,9 +176,11 @@ export class ChunkManager {
 
   /**
    * Get validated chunks for a note path with automatic cache validation and regeneration
+   * Uses DEFAULT_CHUNK_OPTIONS for cache key consistency with regenerateChunks
    */
   private async getValidatedChunks(notePath: string): Promise<Chunk[]> {
-    let chunks = this.cache.get(notePath);
+    const cacheKey = this.getCacheKey(notePath, DEFAULT_CHUNK_OPTIONS);
+    let chunks = this.cache.get(cacheKey);
 
     if (!chunks) {
       // FALLBACK: Regenerate chunks for this note
@@ -186,37 +212,44 @@ export class ChunkManager {
    */
   getChunkTextSync(id: string): string {
     const [notePath] = id.split("#");
-    const chunks = this.cache.get(notePath);
 
-    if (!chunks) {
-      logWarn(
-        `ChunkManager: Chunk not in cache: ${id} (use async getChunkText for auto-regeneration)`
-      );
-      return "";
+    // Search all cache entries for this notePath (regardless of options used)
+    // This maintains backward compatibility for the deprecated sync method
+    for (const [cacheKey, chunks] of this.cache.entries()) {
+      if (cacheKey.startsWith(notePath + ":")) {
+        const chunk = chunks.find((c) => c.id === id);
+        if (chunk) {
+          return chunk.content;
+        }
+      }
     }
 
-    const chunk = chunks.find((c) => c.id === id);
-    return chunk?.content || "";
+    logWarn(
+      `ChunkManager: Chunk not in cache: ${id} (use async getChunkText for auto-regeneration)`
+    );
+    return "";
   }
 
   /**
    * Regenerate chunks for a specific note (used for cache misses and file changes)
+   * Uses DEFAULT_CHUNK_OPTIONS for consistency with getValidatedChunks
    */
   private async regenerateChunks(notePath: string): Promise<Chunk[]> {
     try {
       const chunks = await this.generateChunksForNote(notePath, DEFAULT_CHUNK_OPTIONS);
+      const cacheKey = this.getCacheKey(notePath, DEFAULT_CHUNK_OPTIONS);
 
       if (chunks.length > 0) {
         // Update cache
         const chunkBytes = this.calculateChunkBytes(chunks);
         if (this.memoryUsage + chunkBytes <= DEFAULT_CHUNK_OPTIONS.maxBytesTotal) {
           // Remove old entry if it exists
-          const oldChunks = this.cache.get(notePath);
+          const oldChunks = this.cache.get(cacheKey);
           if (oldChunks) {
             this.memoryUsage -= this.calculateChunkBytes(oldChunks);
           }
 
-          this.cache.set(notePath, chunks);
+          this.cache.set(cacheKey, chunks);
           this.memoryUsage += chunkBytes;
         } else {
           logWarn(
@@ -366,9 +399,10 @@ export class ChunkManager {
         mtime: file.stat.mtime,
       });
     } else {
-      // Section too large, split by paragraphs using existing splitter
+      // Section too large, split by paragraphs using splitter configured for options
       try {
-        const docs = await this.splitter.createDocuments([content], [], {
+        const splitter = this.createSplitter(options);
+        const docs = await splitter.createDocuments([content], [], {
           chunkHeader: header,
           appendChunkOverlapHeader: options.overlap > 0,
         });
