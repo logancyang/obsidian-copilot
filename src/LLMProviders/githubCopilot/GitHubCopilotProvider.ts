@@ -1,7 +1,8 @@
-import { getSettings, updateSetting } from "@/settings/model";
+import { getSettings, setSettings } from "@/settings/model";
 import { getDecryptedKey } from "@/encryptionService";
 import { GitHubCopilotModelResponse } from "@/settings/providerModels";
-import { requestUrl } from "obsidian";
+import { requestUrl, type RequestUrlResponse } from "obsidian";
+import { createParser, type ParsedEvent, type ReconnectInterval } from "eventsource-parser";
 
 /**
  * GitHub Copilot OAuth Client ID (from VSCode).
@@ -24,6 +25,38 @@ const DEFAULT_TOKEN_EXPIRATION_MS = 60 * 60 * 1000;
 // Maximum refresh attempts before giving up
 const MAX_REFRESH_ATTEMPTS = 3;
 
+// Common HTTP status error messages for Copilot API
+const HTTP_STATUS_MESSAGES: Record<number, string> = {
+  401: "Authentication failed - token may be expired",
+  403: "Access denied - check your Copilot subscription",
+  429: "Rate limited - please wait before retrying",
+};
+
+interface GitHubDeviceCodeApiResponse {
+  device_code?: string;
+  user_code?: string;
+  verification_uri?: string;
+  verification_uri_complete?: string;
+  expires_in?: number;
+  interval?: number;
+  error?: string;
+  error_description?: string;
+}
+
+interface GitHubOAuthTokenResponse {
+  access_token?: string;
+  error?: string;
+  error_description?: string;
+}
+
+interface CopilotTokenApiResponse {
+  token?: string;
+  expires_at?: number | string;
+  expires_in?: number | string;
+  error?: string;
+  message?: string;
+}
+
 export interface DeviceCodeResponse {
   deviceCode: string;
   userCode: string;
@@ -35,6 +68,43 @@ export interface DeviceCodeResponse {
 export interface CopilotAuthState {
   status: "idle" | "pending" | "authenticated" | "error";
   error?: string;
+}
+
+export interface CopilotChatResponse {
+  choices: Array<{
+    message: { role: string; content: string };
+    finish_reason: string;
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+    prompt_tokens_details?: {
+      cached_tokens: number;
+    };
+  };
+  model?: string;
+  created?: number;
+  id?: string;
+}
+
+export interface CopilotStreamChunk {
+  choices: Array<{
+    index: number;
+    delta: {
+      content?: string | null;
+      role?: string;
+    };
+    finish_reason?: string | null;
+  }>;
+  usage?: {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+  };
+  model?: string;
+  created?: number;
+  id?: string;
 }
 
 /**
@@ -76,12 +146,20 @@ export class GitHubCopilotProvider {
     const settings = getSettings();
     const hasAccessToken = Boolean(settings.githubCopilotAccessToken);
     const hasCopilotToken = Boolean(settings.githubCopilotToken);
-    const tokenExpiresAt = settings.githubCopilotTokenExpiresAt || 0;
-    const isExpired = tokenExpiresAt > 0 && tokenExpiresAt < Date.now();
+    const tokenExpiresAt = settings.githubCopilotTokenExpiresAt;
+    // Use same expiry logic as getValidCopilotToken: treat missing/invalid expiresAt as expired
+    const hasKnownExpiry = typeof tokenExpiresAt === "number" && tokenExpiresAt > 0;
+    const isExpired = !hasKnownExpiry || tokenExpiresAt < Date.now();
 
-    // Authenticated if we have a valid copilot token OR we have access token to refresh
-    if ((hasCopilotToken && !isExpired) || hasAccessToken) {
+    // Authenticated if:
+    // - we have a valid copilot token, OR
+    // - we have a copilot token (even if expired/unknown expiry) AND we can refresh it via access token.
+    // Pending if we only have access token but haven't fetched copilot token yet.
+    if ((hasCopilotToken && !isExpired) || (hasCopilotToken && hasAccessToken)) {
       return { status: "authenticated" };
+    }
+    if (hasAccessToken) {
+      return { status: "pending" };
     }
     return { status: "idle" };
   }
@@ -112,19 +190,47 @@ export class GitHubCopilotProvider {
         Accept: "application/json",
       },
       body,
+      throw: false,
     });
 
+    const data = this.getRequestUrlJson(res) as Partial<GitHubDeviceCodeApiResponse>;
+
     if (res.status !== 200) {
-      throw new Error(`Failed to get device code: ${res.status}`);
+      const errorDetail =
+        typeof data.error_description === "string"
+          ? data.error_description
+          : typeof data.error === "string"
+            ? data.error
+            : "";
+      throw new Error(
+        errorDetail ? `Failed to get device code: ${errorDetail}` : `Failed to get device code: ${res.status}`
+      );
     }
 
-    const data = res.json;
+    if (
+      typeof data.device_code !== "string" ||
+      typeof data.user_code !== "string" ||
+      typeof data.expires_in !== "number"
+    ) {
+      throw new Error("Invalid device code response from GitHub");
+    }
+
+    const verificationUri =
+      typeof data.verification_uri === "string"
+        ? data.verification_uri
+        : typeof data.verification_uri_complete === "string"
+          ? data.verification_uri_complete
+          : null;
+    if (!verificationUri) {
+      throw new Error("Invalid device code response from GitHub: missing verification URI");
+    }
+
     return {
       deviceCode: data.device_code,
       userCode: data.user_code,
-      verificationUri: data.verification_uri || data.verification_uri_complete,
+      verificationUri,
       expiresIn: data.expires_in,
-      interval: data.interval || 5,
+      interval: typeof data.interval === "number" && data.interval > 0 ? data.interval : 5,
     };
   }
 
@@ -163,7 +269,7 @@ export class GitHubCopilotProvider {
         attempt++;
         onPoll?.(attempt);
 
-        await this.delay(interval * 1000);
+        await this.delay(interval * 1000, controller.signal);
 
         // Check again after delay
         if (controller.signal.aborted || this.authGeneration !== currentGeneration) {
@@ -185,6 +291,7 @@ export class GitHubCopilotProvider {
             Accept: "application/json",
           },
           body,
+          throw: false,
         });
 
         // Check abort after HTTP request completes
@@ -192,31 +299,26 @@ export class GitHubCopilotProvider {
           throw new Error("Authentication cancelled by user.");
         }
 
-        // Check HTTP status before parsing JSON
+        const data = this.getRequestUrlJson(res) as Partial<GitHubOAuthTokenResponse>;
+
+        // Check HTTP status before processing body
         if (res.status !== 200) {
-          let errorMessage = `HTTP ${res.status}`;
-          try {
-            const errorData = res.json;
-            if (errorData.error_description) {
-              errorMessage = errorData.error_description;
-            } else if (errorData.error) {
-              errorMessage = errorData.error;
-            }
-          } catch {
-            // Cannot parse JSON, use status code
-          }
+          const errorMessage =
+            typeof data.error_description === "string"
+              ? data.error_description
+              : typeof data.error === "string"
+                ? data.error
+                : `HTTP ${res.status}`;
           throw new Error(`Token request failed: ${errorMessage}`);
         }
 
-        const data = res.json;
-
-        if (data.access_token) {
+        if (typeof data.access_token === "string" && data.access_token) {
           // Final check before storing token
           if (controller.signal.aborted || this.authGeneration !== currentGeneration) {
             throw new Error("Authentication cancelled by user.");
           }
           // Store access token
-          updateSetting("githubCopilotAccessToken", data.access_token);
+          setSettings({ githubCopilotAccessToken: data.access_token });
           return data.access_token;
         }
 
@@ -239,8 +341,12 @@ export class GitHubCopilotProvider {
           throw new Error("Authorization denied by user.");
         }
 
-        if (data.error) {
-          throw new Error(data.error_description || data.error);
+        if (typeof data.error === "string" && data.error) {
+          throw new Error(
+            typeof data.error_description === "string" && data.error_description
+              ? data.error_description
+              : data.error
+          );
         }
       }
 
@@ -275,6 +381,7 @@ export class GitHubCopilotProvider {
         Authorization: `Bearer ${token}`,
         Accept: "application/json",
       },
+      throw: false,
     });
 
     // Check if auth was reset during the request (generation changed)
@@ -282,11 +389,22 @@ export class GitHubCopilotProvider {
       throw new Error("Authentication was reset during token refresh.");
     }
 
+    const data = this.getRequestUrlJson(res) as Partial<CopilotTokenApiResponse>;
+
     if (res.status !== 200) {
-      throw new Error(`Failed to get Copilot token: ${res.status}`);
+      const detail =
+        typeof data.message === "string"
+          ? data.message
+          : typeof data.error === "string"
+            ? data.error
+            : "";
+      throw new Error(
+        detail
+          ? `Failed to get Copilot token: ${res.status} (${detail})`
+          : `Failed to get Copilot token: ${res.status}`
+      );
     }
 
-    const data = res.json;
     const copilotToken = data.token;
 
     // Validate token response
@@ -294,16 +412,8 @@ export class GitHubCopilotProvider {
       throw new Error("Invalid response from Copilot API: missing or invalid token");
     }
 
-    // Handle expires_at: could be seconds, milliseconds, or string timestamp
-    const rawExpiresAt = Number(data.expires_at);
-    let expiresAt: number;
-    if (Number.isFinite(rawExpiresAt) && rawExpiresAt > 0) {
-      // Determine if it's seconds or milliseconds based on magnitude
-      expiresAt = rawExpiresAt > 1e12 ? rawExpiresAt : rawExpiresAt * 1000;
-    } else {
-      // Invalid or missing expires_at, use default
-      expiresAt = Date.now() + DEFAULT_TOKEN_EXPIRATION_MS;
-    }
+    // Handle expires_at: support numeric seconds/millis, ISO string, and expires_in fallback.
+    const expiresAt = this.parseCopilotTokenExpiresAt(data);
 
     // Final check before storing tokens (generation may have changed)
     if (this.authGeneration !== currentGeneration) {
@@ -311,8 +421,10 @@ export class GitHubCopilotProvider {
     }
 
     // Store copilot token and expiration
-    updateSetting("githubCopilotToken", copilotToken);
-    updateSetting("githubCopilotTokenExpiresAt", expiresAt);
+    setSettings({
+      githubCopilotToken: copilotToken,
+      githubCopilotTokenExpiresAt: expiresAt,
+    });
 
     return copilotToken;
   }
@@ -324,8 +436,10 @@ export class GitHubCopilotProvider {
    */
   async getValidCopilotToken(): Promise<string> {
     const settings = getSettings();
-    const tokenExpiresAt = settings.githubCopilotTokenExpiresAt || 0;
-    const isExpired = tokenExpiresAt > 0 && tokenExpiresAt < Date.now() + TOKEN_REFRESH_BUFFER_MS;
+    const tokenExpiresAt = settings.githubCopilotTokenExpiresAt;
+    // Treat missing/invalid expiresAt as expired to force refresh
+    const hasKnownExpiry = typeof tokenExpiresAt === "number" && tokenExpiresAt > 0;
+    const isExpired = !hasKnownExpiry || tokenExpiresAt < Date.now() + TOKEN_REFRESH_BUFFER_MS;
 
     if (settings.githubCopilotToken && !isExpired) {
       // Reset refresh attempts on successful token use
@@ -361,63 +475,219 @@ export class GitHubCopilotProvider {
   }
 
   /**
+   * Build common headers for Copilot API requests
+   */
+  private buildCopilotHeaders(token: string): Record<string, string> {
+    return {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+      "User-Agent": "GitHubCopilotChat/0.22.2024092501",
+      "Editor-Version": "vscode/1.95.1",
+      "Copilot-Integration-Id": "vscode-chat",
+      "Openai-Intent": "conversation-panel",
+    };
+  }
+
+  /**
    * Send chat message to Copilot API
    */
   async sendChatMessage(
     messages: Array<{ role: string; content: string }>,
     model: string = "gpt-4o"
-  ): Promise<{
-    choices: Array<{
-      message: { role: string; content: string };
-      finish_reason: string;
-    }>;
-    usage?: {
-      prompt_tokens: number;
-      completion_tokens: number;
-      total_tokens: number;
+  ): Promise<CopilotChatResponse> {
+    const doRequest = async (token: string): Promise<RequestUrlResponse> => {
+      return await requestUrl({
+        url: CHAT_COMPLETIONS_URL,
+        method: "POST",
+        headers: this.buildCopilotHeaders(token),
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: false,
+        }),
+        throw: false,
+      });
     };
-  }> {
-    const token = await this.getValidCopilotToken();
 
-    const res = await requestUrl({
-      url: CHAT_COMPLETIONS_URL,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${token}`,
-        "User-Agent": "GitHubCopilotChat/0.22.2024092501",
-        "Editor-Version": "vscode/1.95.1",
-        "Copilot-Integration-Id": "vscode-chat",
-        "Openai-Intent": "conversation-panel",
-      },
-      body: JSON.stringify({
-        model,
-        messages,
-        stream: false,
-      }),
-    });
+    let token = await this.getValidCopilotToken();
+    let res = await doRequest(token);
+
+    // 401: clear cached token and retry once
+    if (res.status === 401) {
+      this.clearCopilotToken();
+      token = await this.getValidCopilotToken();
+      res = await doRequest(token);
+    }
 
     if (res.status !== 200) {
+      const errorData = this.getRequestUrlJson(res);
       let errorDetail = "";
-      try {
-        const errorData = res.json;
-        errorDetail =
-          errorData.error?.message || errorData.message || JSON.stringify(errorData);
-      } catch {
-        // Cannot parse JSON
+      if (errorData && typeof errorData === "object") {
+        const record = errorData as Record<string, unknown>;
+        const nestedError = record.error;
+        if (nestedError && typeof nestedError === "object") {
+          const nestedRecord = nestedError as Record<string, unknown>;
+          if (typeof nestedRecord.message === "string") {
+            errorDetail = nestedRecord.message;
+          }
+        }
+        if (!errorDetail && typeof record.message === "string") {
+          errorDetail = record.message;
+        }
+        if (!errorDetail) {
+          try {
+            errorDetail = JSON.stringify(errorData);
+          } catch {
+            errorDetail = "";
+          }
+        }
+      } else if (typeof errorData === "string") {
+        errorDetail = errorData;
       }
 
-      const statusMessages: Record<number, string> = {
-        401: "Authentication failed - token may be expired",
-        403: "Access denied - check your Copilot subscription",
-        429: "Rate limited - please wait before retrying",
-      };
-
-      const baseMessage = statusMessages[res.status] || `Request failed: ${res.status}`;
+      const baseMessage = HTTP_STATUS_MESSAGES[res.status] || `Request failed: ${res.status}`;
       throw new Error(errorDetail ? `${baseMessage}: ${errorDetail}` : baseMessage);
     }
 
-    return res.json;
+    const data = this.getRequestUrlJson(res);
+
+    // Validate response structure
+    if (!data || typeof data !== "object" || !Array.isArray((data as Record<string, unknown>).choices)) {
+      throw new Error("Invalid response from Copilot API: missing choices array");
+    }
+
+    return data as CopilotChatResponse;
+  }
+
+  /**
+   * Send chat message to Copilot API with streaming response.
+   * Uses fetch API for true streaming support.
+   * @param messages - Chat messages
+   * @param model - Model name
+   * @param signal - Optional AbortSignal for cancellation
+   */
+  async *sendChatMessageStream(
+    messages: Array<{ role: string; content: string }>,
+    model: string = "gpt-4o",
+    signal?: AbortSignal
+  ): AsyncGenerator<CopilotStreamChunk> {
+    const doRequest = async (token: string): Promise<Response> => {
+      return await fetch(CHAT_COMPLETIONS_URL, {
+        method: "POST",
+        headers: {
+          ...this.buildCopilotHeaders(token),
+          Accept: "text/event-stream",
+        },
+        body: JSON.stringify({
+          model,
+          messages,
+          stream: true,
+        }),
+        signal,
+      });
+    };
+
+    let token = await this.getValidCopilotToken();
+    let response = await doRequest(token);
+
+    // 401: clear cached token and retry once
+    if (response.status === 401) {
+      try {
+        await response.body?.cancel();
+      } catch {
+        // Ignore cancellation errors - body may already be closed
+      }
+      this.clearCopilotToken();
+      token = await this.getValidCopilotToken();
+      response = await doRequest(token);
+    }
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      const baseMessage = HTTP_STATUS_MESSAGES[response.status] || `Request failed: ${response.status}`;
+      throw new Error(errorText ? `${baseMessage}: ${errorText}` : baseMessage);
+    }
+
+    // Verify response is SSE format
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("text/event-stream")) {
+      throw new Error(`Expected text/event-stream but received ${contentType || "unknown"}`);
+    }
+
+    if (!response.body) {
+      throw new Error("Response body is not available for streaming");
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+
+    // Declare chunkQueue before parser to avoid use-before-define issues
+    const chunkQueue: CopilotStreamChunk[] = [];
+    let receivedDone = false;
+
+    // Use eventsource-parser for robust SSE parsing
+    const parser = createParser((event: ParsedEvent | ReconnectInterval) => {
+      if (event.type !== "event") {
+        return;
+      }
+
+      const data = event.data;
+      if (data === "[DONE]") {
+        receivedDone = true;
+        return;
+      }
+
+      try {
+        const chunk = JSON.parse(data) as CopilotStreamChunk;
+        // Store chunk in a queue to be yielded
+        chunkQueue.push(chunk);
+      } catch {
+        // Skip invalid JSON
+      }
+    });
+
+    try {
+      while (true) {
+        // Exit early if we received [DONE]
+        if (receivedDone) break;
+
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        // Feed data to parser
+        const text = decoder.decode(value, { stream: true });
+        parser.feed(text);
+
+        // Yield all queued chunks
+        while (chunkQueue.length > 0) {
+          const chunk = chunkQueue.shift();
+          if (chunk) {
+            yield chunk;
+          }
+        }
+      }
+
+      // Flush decoder at the end
+      const finalText = decoder.decode();
+      if (finalText) {
+        parser.feed(finalText);
+        while (chunkQueue.length > 0) {
+          const chunk = chunkQueue.shift();
+          if (chunk) {
+            yield chunk;
+          }
+        }
+      }
+    } finally {
+      // Cancel the reader to abort any pending reads, then release the lock
+      // Wrap in try-catch to avoid overwriting the original error (e.g., AbortError)
+      try {
+        await reader.cancel();
+      } catch {
+        // Ignore cancellation errors - stream may already be closed
+      }
+      reader.releaseLock();
+    }
   }
 
   /**
@@ -439,35 +709,161 @@ export class GitHubCopilotProvider {
     this.abortPolling(); // This will abort any ongoing polling operations
     this.refreshPromise = null;
     this.refreshAttempts = 0;
-    updateSetting("githubCopilotAccessToken", "");
-    updateSetting("githubCopilotToken", "");
-    updateSetting("githubCopilotTokenExpiresAt", 0);
+    setSettings({
+      githubCopilotAccessToken: "",
+      githubCopilotToken: "",
+      githubCopilotTokenExpiresAt: 0,
+    });
   }
 
   /**
    * List available models from GitHub Copilot API
    */
   async listModels(): Promise<GitHubCopilotModelResponse> {
-    const token = await this.getValidCopilotToken();
+    const doRequest = async (token: string): Promise<RequestUrlResponse> => {
+      return await requestUrl({
+        url: MODELS_URL,
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Copilot-Integration-Id": "vscode-chat",
+        },
+        throw: false,
+      });
+    };
 
-    const res = await requestUrl({
-      url: MODELS_URL,
-      method: "GET",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-        "Copilot-Integration-Id": "vscode-chat",
-      },
-    });
+    let token = await this.getValidCopilotToken();
+    let res = await doRequest(token);
+
+    // 401: clear cached token and retry once
+    if (res.status === 401) {
+      this.clearCopilotToken();
+      token = await this.getValidCopilotToken();
+      res = await doRequest(token);
+    }
 
     if (res.status !== 200) {
       throw new Error(`Failed to list models: ${res.status}`);
     }
 
-    return res.json as GitHubCopilotModelResponse;
+    return this.getRequestUrlJson(res) as GitHubCopilotModelResponse;
   }
 
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
+  /**
+   * Clear stored Copilot token so the next request forces a refresh.
+   */
+  private clearCopilotToken(): void {
+    setSettings({
+      githubCopilotToken: "",
+      githubCopilotTokenExpiresAt: 0,
+    });
+  }
+
+  /**
+   * Best-effort JSON extraction from requestUrl responses, which may return an object or a JSON string.
+   * @param response - Obsidian requestUrl response.
+   * @returns Parsed JSON value, or the original `response.json` value if parsing is not possible.
+   */
+  private getRequestUrlJson(response: RequestUrlResponse): unknown {
+    if (typeof response.json === "string") {
+      try {
+        return JSON.parse(response.json);
+      } catch {
+        return response.json;
+      }
+    }
+    return response.json;
+  }
+
+  /**
+   * Parse the Copilot token expiry timestamp from the token endpoint response.
+   * Supports numeric seconds/milliseconds `expires_at`, ISO string `expires_at`, and `expires_in` seconds.
+   * @param data - Parsed JSON response from Copilot token endpoint.
+   */
+  private parseCopilotTokenExpiresAt(data: unknown): number {
+    if (!data || typeof data !== "object") {
+      return Date.now() + DEFAULT_TOKEN_EXPIRATION_MS;
+    }
+
+    const record = data as Record<string, unknown>;
+
+    const expiresAt = this.parseExpiresAtValue(record.expires_at);
+    if (expiresAt !== null) {
+      return expiresAt;
+    }
+
+    const expiresInRaw = record.expires_in;
+    const expiresInSeconds =
+      typeof expiresInRaw === "number"
+        ? expiresInRaw
+        : typeof expiresInRaw === "string"
+          ? Number(expiresInRaw)
+          : Number.NaN;
+    if (Number.isFinite(expiresInSeconds) && expiresInSeconds > 0) {
+      return Date.now() + expiresInSeconds * 1000;
+    }
+
+    return Date.now() + DEFAULT_TOKEN_EXPIRATION_MS;
+  }
+
+  /**
+   * Parse `expires_at` value which may be seconds, milliseconds, or an ISO string.
+   * @param expiresAt - Raw expires_at value.
+   * @returns Milliseconds since epoch, or null if parsing fails.
+   */
+  private parseExpiresAtValue(expiresAt: unknown): number | null {
+    if (typeof expiresAt === "number") {
+      if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
+        return null;
+      }
+      return expiresAt > 1e12 ? expiresAt : expiresAt * 1000;
+    }
+
+    if (typeof expiresAt === "string") {
+      const trimmed = expiresAt.trim();
+      if (!trimmed) return null;
+
+      const numeric = Number(trimmed);
+      if (Number.isFinite(numeric) && numeric > 0) {
+        return numeric > 1e12 ? numeric : numeric * 1000;
+      }
+
+      const parsed = Date.parse(trimmed);
+      if (!Number.isNaN(parsed) && parsed > 0) {
+        return parsed;
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Delay that can be cancelled via AbortSignal.
+   * @param ms - Duration in milliseconds.
+   * @param signal - Optional cancellation signal.
+   */
+  private delay(ms: number, signal?: AbortSignal): Promise<void> {
+    if (!signal) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    if (signal.aborted) {
+      return Promise.reject(new Error("Authentication cancelled by user."));
+    }
+
+    return new Promise((resolve, reject) => {
+      const onAbort = () => {
+        clearTimeout(timeoutId);
+        reject(new Error("Authentication cancelled by user."));
+      };
+
+      const timeoutId = setTimeout(() => {
+        signal.removeEventListener("abort", onAbort);
+        resolve();
+      }, ms);
+
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
   }
 }
