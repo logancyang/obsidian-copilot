@@ -510,10 +510,10 @@ export class ChunkManager {
       return 0;
     }
 
-    // Find the closing "---" (must be on its own line)
-    const closingMatch = content.match(/\n---\r?\n/);
+    // Find the closing "---" (must be on its own line, or at EOF)
+    const closingMatch = content.match(/\n---(\r?\n|$)/);
     if (closingMatch && closingMatch.index !== undefined) {
-      // Return position after the closing "---\n"
+      // Return position after the closing "---" (and newline if present)
       return closingMatch.index + closingMatch[0].length;
     }
 
