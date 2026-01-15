@@ -10,7 +10,7 @@ import { useSettingsValue } from "@/settings/model";
 import { ModelImporter } from "@/settings/v2/components/ModelImporter";
 import { ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import { Notice } from "obsidian";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 
 type AuthStep = "idle" | "pending" | "user" | "polling" | "done" | "error";
 
@@ -25,6 +25,19 @@ export function GitHubCopilotAuth() {
   const [deviceCode, setDeviceCode] = useState<DeviceCodeResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const authRequestIdRef = useRef(0);
+  const isMountedRef = useRef(true);
+
+  // Cleanup on unmount: abort polling and prevent setState
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+      authRequestIdRef.current += 1;
+      copilotProvider.abortPolling();
+    };
+  }, [copilotProvider]);
 
   // Check initial auth state
   useEffect(() => {
@@ -34,28 +47,54 @@ export function GitHubCopilotAuth() {
     }
   }, [copilotProvider]);
 
-  // Update auth step when settings change
+  // Update auth step when settings change - reuse getAuthState() for consistency
   useEffect(() => {
-    if (settings.githubCopilotToken || settings.githubCopilotAccessToken) {
-      setAuthStep("done");
+    const state = copilotProvider.getAuthState();
+    if (state.status === "authenticated") {
+      // Don't override in-flight auth UI; handleCompleteAuth() will set the final state.
+      if (authStep !== "pending" && authStep !== "user" && authStep !== "polling") {
+        setAuthStep("done");
+      }
+    } else if (authStep === "done") {
+      // Token expired or cleared, reset to idle
+      setAuthStep("idle");
     }
-  }, [settings.githubCopilotToken, settings.githubCopilotAccessToken]);
+  }, [
+    settings.githubCopilotToken,
+    settings.githubCopilotAccessToken,
+    settings.githubCopilotTokenExpiresAt,
+    copilotProvider,
+    authStep,
+  ]);
 
   /**
    * Initiates the GitHub OAuth device code flow.
    * Requests a device code and displays it to the user for authorization.
    */
   const handleStartAuth = async () => {
+    const requestId = ++authRequestIdRef.current;
+
     setAuthStep("pending");
     setError(null);
 
     try {
       const deviceCodeResponse = await copilotProvider.startDeviceCodeFlow();
+
+      // Check if request was cancelled or component unmounted
+      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+        return;
+      }
+
       setDeviceCode(deviceCodeResponse);
       setAuthStep("user");
       setExpanded(true);
       new Notice("Please authorize in your browser, then click 'Complete'");
     } catch (e: unknown) {
+      // Ignore errors if request was cancelled or component unmounted
+      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+        return;
+      }
+
       const errorMessage = e instanceof Error ? e.message : String(e);
       setError(errorMessage);
       setAuthStep("error");
@@ -73,6 +112,8 @@ export function GitHubCopilotAuth() {
       return;
     }
 
+    const requestId = ++authRequestIdRef.current;
+
     setAuthStep("polling");
     setError(null);
 
@@ -83,10 +124,21 @@ export function GitHubCopilotAuth() {
         deviceCode.expiresIn
       );
       await copilotProvider.fetchCopilotToken();
+
+      // Check if request was cancelled or component unmounted
+      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+        return;
+      }
+
       setAuthStep("done");
       setDeviceCode(null);
       new Notice("GitHub Copilot connected successfully!");
     } catch (e: unknown) {
+      // Ignore errors if request was cancelled or component unmounted
+      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+        return;
+      }
+
       const errorMessage = e instanceof Error ? e.message : String(e);
       setError(errorMessage);
       setAuthStep("error");
@@ -99,6 +151,8 @@ export function GitHubCopilotAuth() {
    * Disconnects the user from GitHub Copilot.
    */
   const handleReset = () => {
+    // Increment requestId to invalidate any in-flight async operations
+    authRequestIdRef.current += 1;
     copilotProvider.resetAuth();
     setAuthStep("idle");
     setDeviceCode(null);
