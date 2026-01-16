@@ -182,14 +182,21 @@ export class ChunkManager {
 
   /**
    * Get validated chunks for a note path with automatic cache validation and regeneration
-   * Uses DEFAULT_CHUNK_OPTIONS for cache key consistency with regenerateChunks
+   * Searches all cache entries for this notePath (regardless of options used) before regenerating
    */
   private async getValidatedChunks(notePath: string): Promise<Chunk[]> {
-    const cacheKey = this.getCacheKey(notePath, DEFAULT_CHUNK_OPTIONS);
-    let chunks = this.cache.get(cacheKey);
+    // Search all cache entries for this notePath (regardless of options used)
+    // This ensures chunks created with non-default options are still retrievable
+    let chunks: Chunk[] | undefined;
+    for (const [cacheKey, cachedChunks] of this.cache.entries()) {
+      if (cacheKey.startsWith(notePath + ":")) {
+        chunks = cachedChunks;
+        break;
+      }
+    }
 
     if (!chunks) {
-      // FALLBACK: Regenerate chunks for this note
+      // FALLBACK: Regenerate chunks for this note with default options
       logInfo(`ChunkManager: Cache miss for ${notePath}, regenerating...`);
       chunks = await this.regenerateChunks(notePath);
       if (!chunks || chunks.length === 0) {
