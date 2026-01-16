@@ -91,8 +91,14 @@ export class ChunkManager {
         if (!path || typeof path !== "string") {
           return false;
         }
-        // Basic security: prevent path traversal
-        if (path.includes("..") || path.startsWith("/")) {
+        // Security: prevent path traversal (but allow ".." in filenames like "v1..2.md")
+        // Block: "../foo", "foo/../bar", "foo/..", absolute paths
+        if (
+          path.startsWith("/") ||
+          path.startsWith("../") ||
+          path.includes("/../") ||
+          path.endsWith("/..")
+        ) {
           return false;
         }
         return true;

@@ -36,15 +36,23 @@ import { ChunkManager, ChunkOptions } from "./chunks";
 describe("ChunkManager", () => {
   let chunkManager: ChunkManager;
   let mockApp: any;
+  // Cache mock files to ensure consistent mtime across calls
+  let mockFileCache: Map<string, any>;
 
   beforeEach(() => {
+    mockFileCache = new Map();
     mockApp = {
       vault: {
         getAbstractFileByPath: jest.fn((path) => {
           if (!path || path.startsWith("missing")) return null;
+          // Return cached file to ensure consistent mtime
+          if (mockFileCache.has(path)) {
+            return mockFileCache.get(path);
+          }
           const file = new (TFile as any)(path);
           // Ensure the file passes instanceof TFile checks
           Object.setPrototypeOf(file, (TFile as any).prototype);
+          mockFileCache.set(path, file);
           return file;
         }),
         cachedRead: jest.fn((file) => {
