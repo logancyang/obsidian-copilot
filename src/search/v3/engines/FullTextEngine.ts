@@ -2,7 +2,7 @@ import { logInfo, logWarn } from "@/logger";
 import { CHUNK_SIZE } from "@/constants";
 import MiniSearch, { SearchResult } from "minisearch";
 import { App, TFile, getAllTags } from "obsidian";
-import { ChunkManager } from "../chunks";
+import { ChunkManager, getSharedChunkManager } from "../chunks";
 import { NoteIdRank } from "../interfaces";
 import { MemoryManager } from "../utils/MemoryManager";
 
@@ -44,7 +44,7 @@ export class FullTextEngine {
     chunkManager?: ChunkManager
   ) {
     this.memoryManager = new MemoryManager();
-    this.chunkManager = chunkManager || new ChunkManager(app);
+    this.chunkManager = chunkManager || getSharedChunkManager(app);
   }
 
   /**

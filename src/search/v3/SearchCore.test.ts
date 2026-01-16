@@ -59,11 +59,15 @@ jest.mock("./utils/ScoreNormalizer", () => ({
   })),
 }));
 
-jest.mock("./chunks", () => ({
-  ChunkManager: jest.fn().mockImplementation(() => ({
+jest.mock("./chunks", () => {
+  const mockChunkManager = {
     getChunks: jest.fn().mockResolvedValue([]),
-  })),
-}));
+  };
+  return {
+    ChunkManager: jest.fn().mockImplementation(() => mockChunkManager),
+    getSharedChunkManager: jest.fn().mockReturnValue(mockChunkManager),
+  };
+});
 
 import { SearchCore } from "./SearchCore";
 

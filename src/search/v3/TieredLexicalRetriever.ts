@@ -6,7 +6,7 @@ import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
-import { ChunkManager } from "./chunks";
+import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { RETURN_ALL_LIMIT, SearchCore } from "./SearchCore";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
@@ -56,13 +56,8 @@ export class TieredLexicalRetriever extends BaseRetriever {
     super();
     // Provide safe getter for chat model (returns null in tests if unavailable)
     this.searchCore = new SearchCore(app, safeGetChatModel);
-    // CRITICAL: Use the same ChunkManager instance as SearchCore to share cache
-    if (typeof this.searchCore.getChunkManager === "function") {
-      this.chunkManager = this.searchCore.getChunkManager();
-    } else {
-      // Fallback for tests where SearchCore is mocked
-      this.chunkManager = new ChunkManager(app);
-    }
+    // Use shared singleton to ensure all systems share the same cache
+    this.chunkManager = getSharedChunkManager(app);
   }
 
   /**

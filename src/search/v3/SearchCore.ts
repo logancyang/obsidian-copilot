@@ -2,7 +2,7 @@ import { LLM_TIMEOUT_MS } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
-import { ChunkManager } from "./chunks";
+import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { FullTextEngine } from "./engines/FullTextEngine";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { QueryExpander } from "./QueryExpander";
@@ -33,7 +33,7 @@ export class SearchCore {
     private getChatModel?: () => Promise<BaseChatModel | null>
   ) {
     this.grepScanner = new GrepScanner(app);
-    this.chunkManager = new ChunkManager(app);
+    this.chunkManager = getSharedChunkManager(app);
     this.fullTextEngine = new FullTextEngine(app, this.chunkManager);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,
@@ -134,7 +134,8 @@ export class SearchCore {
       }
 
       // 2. GREP for initial candidates (use all terms for maximum recall)
-      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 200;
+      // Use higher limit for large vaults - path matches are prioritized anyway
+      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 500;
       const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, grepLimit);
 
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
