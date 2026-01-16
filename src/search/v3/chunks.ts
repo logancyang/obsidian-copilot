@@ -527,3 +527,26 @@ export class ChunkManager {
     return 0;
   }
 }
+
+/**
+ * Singleton accessor for shared ChunkManager instance.
+ * Ensures all systems (semantic indexing, lexical search, etc.) share the same cache.
+ */
+let sharedInstance: ChunkManager | null = null;
+
+export function getSharedChunkManager(app: App): ChunkManager {
+  if (!sharedInstance) {
+    sharedInstance = new ChunkManager(app);
+  }
+  return sharedInstance;
+}
+
+/**
+ * Reset the shared instance (for testing or plugin reload)
+ */
+export function resetSharedChunkManager(): void {
+  if (sharedInstance) {
+    sharedInstance.clearCache();
+  }
+  sharedInstance = null;
+}

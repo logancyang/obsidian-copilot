@@ -2,7 +2,7 @@ import { LLM_TIMEOUT_MS } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { App } from "obsidian";
-import { ChunkManager } from "./chunks";
+import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { FullTextEngine } from "./engines/FullTextEngine";
 import { NoteIdRank, SearchOptions } from "./interfaces";
 import { QueryExpander } from "./QueryExpander";
@@ -33,7 +33,7 @@ export class SearchCore {
     private getChatModel?: () => Promise<BaseChatModel | null>
   ) {
     this.grepScanner = new GrepScanner(app);
-    this.chunkManager = new ChunkManager(app);
+    this.chunkManager = getSharedChunkManager(app);
     this.fullTextEngine = new FullTextEngine(app, this.chunkManager);
     this.queryExpander = new QueryExpander({
       getChatModel: this.getChatModel,

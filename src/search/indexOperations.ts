@@ -1,7 +1,7 @@
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo } from "@/logger";
 import { RateLimiter } from "@/rateLimiter";
-import { ChunkManager } from "@/search/v3/chunks";
+import { ChunkManager, getSharedChunkManager } from "@/search/v3/chunks";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
 import { MD5 } from "crypto-js";
@@ -48,7 +48,7 @@ export class IndexOperations {
     this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
     this.embeddingBatchSize = settings.embeddingBatchSize;
     this.checkpointInterval = 8 * this.embeddingBatchSize;
-    this.chunkManager = new ChunkManager(app);
+    this.chunkManager = getSharedChunkManager(app);
 
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
