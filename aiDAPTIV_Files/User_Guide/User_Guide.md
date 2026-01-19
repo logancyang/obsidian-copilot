@@ -48,12 +48,15 @@ If you already have a vault, simply open it through Obsidian.
 
 ### 1.3 Download Phison aiDAPTIV+ Installation Package
 
-Download the `aiDAPTIV_Files.zip` package which contains:
+**Download Link:** [aiDAPTIV_Files.zip](https://github.com/aiDAPTIV-Phison/aiDAPTIV-Integration-Obsidian/raw/master/aiDAPTIV_Files/Installer/aiDAPTIV_Files.zip)
 
-- **Installer** - Automated installation script
-- **Example** - Demo note files for testing
-- **User_Guide** - This documentation
-- **Demo_Video** - Video tutorials
+Download the `aiDAPTIV_Files.zip` package from the link above. The package contains:
+
+- **Install_Plugin.bat** - Automated installation script
+- **Installer/** - Plugin files
+- **Example/** - Demo note files for testing
+- **User_Guide/** - This documentation
+- **Demo_Video/** - Video tutorials
 
 ### 1.4 Install Phison aiDAPTIV Plugin (Automated)
 
