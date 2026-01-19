@@ -42,14 +42,25 @@ export const DEFAULT_CHUNK_OPTIONS: ChunkOptions = {
 export class ChunkManager {
   private cache: Map<string, Chunk[]> = new Map();
   private memoryUsage: number = 0;
-  private splitter: RecursiveCharacterTextSplitter;
 
-  constructor(private app: App) {
-    // Create splitter for deterministic paragraph splitting
-    this.splitter = RecursiveCharacterTextSplitter.fromLanguage("markdown", {
-      chunkSize: CHUNK_SIZE,
-      chunkOverlap: 0, // Explicit overlap for determinism
-      separators: ["\n\n", "\n", ". ", " ", ""], // Explicit separators
+  constructor(private app: App) {}
+
+  /**
+   * Generate a cache key that includes chunking options
+   * This ensures different option configurations don't return stale chunks
+   */
+  private getCacheKey(notePath: string, options: ChunkOptions): string {
+    return `${notePath}:${options.maxChars}:${options.overlap}`;
+  }
+
+  /**
+   * Create a text splitter configured for the given options
+   */
+  private createSplitter(options: ChunkOptions): RecursiveCharacterTextSplitter {
+    return RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+      chunkSize: options.maxChars,
+      chunkOverlap: options.overlap,
+      separators: ["\n\n", "\n", ". ", " ", ""], // Explicit separators for determinism
       keepSeparator: false, // Consistent separator handling
     });
   }
@@ -80,8 +91,14 @@ export class ChunkManager {
         if (!path || typeof path !== "string") {
           return false;
         }
-        // Basic security: prevent path traversal
-        if (path.includes("..") || path.startsWith("/")) {
+        // Security: prevent path traversal (but allow ".." in filenames like "v1..2.md")
+        // Block: "../foo", "foo/../bar", "foo/..", absolute paths
+        if (
+          path.startsWith("/") ||
+          path.startsWith("../") ||
+          path.includes("/../") ||
+          path.endsWith("/..")
+        ) {
           return false;
         }
         return true;
@@ -96,8 +113,21 @@ export class ChunkManager {
       const allChunks: Chunk[] = [];
 
       for (const notePath of validPaths) {
-        // Check cache first
-        let chunks = this.cache.get(notePath);
+        // Check cache first using composite key (includes options)
+        const cacheKey = this.getCacheKey(notePath, options);
+        let chunks = this.cache.get(cacheKey);
+
+        // Validate mtime if cached - regenerate if file was modified
+        if (chunks && chunks.length > 0) {
+          const file = this.app.vault.getAbstractFileByPath(notePath);
+          if (file && file instanceof TFile && file.stat.mtime > chunks[0].mtime) {
+            // File was modified since chunks were cached - invalidate cache
+            const oldBytes = this.calculateChunkBytes(chunks);
+            this.cache.delete(cacheKey);
+            this.memoryUsage -= oldBytes;
+            chunks = undefined;
+          }
+        }
 
         if (!chunks) {
           // Generate chunks for this note
@@ -107,7 +137,7 @@ export class ChunkManager {
           if (chunks.length > 0) {
             const chunkBytes = this.calculateChunkBytes(chunks);
             if (this.memoryUsage + chunkBytes <= options.maxBytesTotal) {
-              this.cache.set(notePath, chunks);
+              this.cache.set(cacheKey, chunks);
               this.memoryUsage += chunkBytes;
             } else {
               logWarn(`ChunkManager: Skipping cache for ${notePath}, would exceed memory budget`);
@@ -152,12 +182,21 @@ export class ChunkManager {
 
   /**
    * Get validated chunks for a note path with automatic cache validation and regeneration
+   * Searches all cache entries for this notePath (regardless of options used) before regenerating
    */
   private async getValidatedChunks(notePath: string): Promise<Chunk[]> {
-    let chunks = this.cache.get(notePath);
+    // Search all cache entries for this notePath (regardless of options used)
+    // This ensures chunks created with non-default options are still retrievable
+    let chunks: Chunk[] | undefined;
+    for (const [cacheKey, cachedChunks] of this.cache.entries()) {
+      if (cacheKey.startsWith(notePath + ":")) {
+        chunks = cachedChunks;
+        break;
+      }
+    }
 
     if (!chunks) {
-      // FALLBACK: Regenerate chunks for this note
+      // FALLBACK: Regenerate chunks for this note with default options
       logInfo(`ChunkManager: Cache miss for ${notePath}, regenerating...`);
       chunks = await this.regenerateChunks(notePath);
       if (!chunks || chunks.length === 0) {
@@ -186,37 +225,44 @@ export class ChunkManager {
    */
   getChunkTextSync(id: string): string {
     const [notePath] = id.split("#");
-    const chunks = this.cache.get(notePath);
 
-    if (!chunks) {
-      logWarn(
-        `ChunkManager: Chunk not in cache: ${id} (use async getChunkText for auto-regeneration)`
-      );
-      return "";
+    // Search all cache entries for this notePath (regardless of options used)
+    // This maintains backward compatibility for the deprecated sync method
+    for (const [cacheKey, chunks] of this.cache.entries()) {
+      if (cacheKey.startsWith(notePath + ":")) {
+        const chunk = chunks.find((c) => c.id === id);
+        if (chunk) {
+          return chunk.content;
+        }
+      }
     }
 
-    const chunk = chunks.find((c) => c.id === id);
-    return chunk?.content || "";
+    logWarn(
+      `ChunkManager: Chunk not in cache: ${id} (use async getChunkText for auto-regeneration)`
+    );
+    return "";
   }
 
   /**
    * Regenerate chunks for a specific note (used for cache misses and file changes)
+   * Uses DEFAULT_CHUNK_OPTIONS for consistency with getValidatedChunks
    */
   private async regenerateChunks(notePath: string): Promise<Chunk[]> {
     try {
       const chunks = await this.generateChunksForNote(notePath, DEFAULT_CHUNK_OPTIONS);
+      const cacheKey = this.getCacheKey(notePath, DEFAULT_CHUNK_OPTIONS);
 
       if (chunks.length > 0) {
         // Update cache
         const chunkBytes = this.calculateChunkBytes(chunks);
         if (this.memoryUsage + chunkBytes <= DEFAULT_CHUNK_OPTIONS.maxBytesTotal) {
           // Remove old entry if it exists
-          const oldChunks = this.cache.get(notePath);
+          const oldChunks = this.cache.get(cacheKey);
           if (oldChunks) {
             this.memoryUsage -= this.calculateChunkBytes(oldChunks);
           }
 
-          this.cache.set(notePath, chunks);
+          this.cache.set(cacheKey, chunks);
           this.memoryUsage += chunkBytes;
         } else {
           logWarn(
@@ -265,10 +311,33 @@ export class ChunkManager {
       const chunks: Chunk[] = [];
       let chunkIndex = 0;
 
-      // If no headings, treat entire content as one chunk
+      // Calculate content after frontmatter
+      const frontmatterEnd = this.findFrontmatterEnd(content, cache?.frontmatter);
+      const contentAfterFrontmatter = content.substring(frontmatterEnd);
+
+      // Get first heading text for the chunk heading field (empty if no headings)
+      const firstHeading = headings.length > 0 ? headings[0].heading : "";
+
+      // If entire content fits in one chunk, keep it together (don't split by headings)
+      // This prevents small notes from being fragmented into tiny pieces
+      const header = `\n\nNOTE TITLE: [[${file.basename}]]\n\nNOTE BLOCK CONTENT:\n\n`;
+      if (header.length + contentAfterFrontmatter.length <= options.maxChars) {
+        const processedChunks = await this.processContentSection(
+          contentAfterFrontmatter,
+          firstHeading,
+          file,
+          chunkIndex,
+          options
+        );
+        chunks.push(...processedChunks);
+        return chunks;
+      }
+
+      // Content too large - need to split
+      // If no headings, use text splitter on entire content
       if (headings.length === 0) {
         const processedChunks = await this.processContentSection(
-          content,
+          contentAfterFrontmatter,
           "",
           file,
           chunkIndex,
@@ -278,13 +347,14 @@ export class ChunkManager {
         return chunks;
       }
 
-      // Process content by heading sections
+      // Split by heading sections
       for (let i = 0; i < headings.length; i++) {
         const heading = headings[i];
         const nextHeading = headings[i + 1];
 
         // Extract content for this section
-        const startPos = heading.position.start.offset;
+        // For the first section, include preamble content (after frontmatter, before first heading)
+        const startPos = i === 0 ? frontmatterEnd : heading.position.start.offset;
         const endPos = nextHeading?.position.start.offset || content.length;
         const sectionContent = content.substring(startPos, endPos);
 
@@ -342,9 +412,10 @@ export class ChunkManager {
         mtime: file.stat.mtime,
       });
     } else {
-      // Section too large, split by paragraphs using existing splitter
+      // Section too large, split by paragraphs using splitter configured for options
       try {
-        const docs = await this.splitter.createDocuments([content], [], {
+        const splitter = this.createSplitter(options);
+        const docs = await splitter.createDocuments([content], [], {
           chunkHeader: header,
           appendChunkOverlapHeader: options.overlap > 0,
         });
@@ -435,4 +506,54 @@ export class ChunkManager {
     const mb = (this.memoryUsage / 1024 / 1024).toFixed(1);
     return `${mb}MB`;
   }
+
+  /**
+   * Find the end position of YAML frontmatter in content
+   * Frontmatter starts with "---" on the first line and ends with "---" on its own line
+   * @returns Position after frontmatter (including trailing newline), or 0 if no frontmatter
+   */
+  private findFrontmatterEnd(content: string, frontmatter: unknown): number {
+    // No frontmatter parsed by Obsidian, start from beginning
+    if (!frontmatter) {
+      return 0;
+    }
+
+    // Frontmatter must start at the very beginning with "---"
+    if (!content.startsWith("---")) {
+      return 0;
+    }
+
+    // Find the closing "---" (must be on its own line, or at EOF)
+    const closingMatch = content.match(/\n---(\r?\n|$)/);
+    if (closingMatch && closingMatch.index !== undefined) {
+      // Return position after the closing "---" (and newline if present)
+      return closingMatch.index + closingMatch[0].length;
+    }
+
+    // Fallback: no valid closing found, start from beginning
+    return 0;
+  }
+}
+
+/**
+ * Singleton accessor for shared ChunkManager instance.
+ * Ensures all systems (semantic indexing, lexical search, etc.) share the same cache.
+ */
+let sharedInstance: ChunkManager | null = null;
+
+export function getSharedChunkManager(app: App): ChunkManager {
+  if (!sharedInstance) {
+    sharedInstance = new ChunkManager(app);
+  }
+  return sharedInstance;
+}
+
+/**
+ * Reset the shared instance (for testing or plugin reload)
+ */
+export function resetSharedChunkManager(): void {
+  if (sharedInstance) {
+    sharedInstance.clearCache();
+  }
+  sharedInstance = null;
 }

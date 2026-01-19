@@ -190,6 +190,8 @@ export class HybridRetriever extends BaseRetriever {
                 extension: hit.document.extension,
                 created_at: hit.document.created_at,
                 nchars: hit.document.nchars,
+                // Expose chunkId explicitly for cross-engine deduplication
+                chunkId: hit.document.metadata?.chunkId,
               },
             })
         );
@@ -318,6 +320,8 @@ export class HybridRetriever extends BaseRetriever {
               extension: hit.document.extension,
               created_at: hit.document.created_at,
               nchars: hit.document.nchars,
+              // Expose chunkId explicitly for cross-engine deduplication
+              chunkId: hit.document.metadata?.chunkId,
             },
           })
       );
@@ -372,6 +376,8 @@ export class HybridRetriever extends BaseRetriever {
             extension: hit.document.extension,
             created_at: hit.document.created_at,
             nchars: hit.document.nchars,
+            // Expose chunkId explicitly for cross-engine deduplication
+            chunkId: hit.document.metadata?.chunkId,
           },
         });
       })

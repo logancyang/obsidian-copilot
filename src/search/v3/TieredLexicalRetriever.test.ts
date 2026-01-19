@@ -3,9 +3,6 @@ import { TFile } from "obsidian";
 import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
 
 const retrieveMock = jest.fn();
-const mockChunkManager: { getChunkTextSync: jest.Mock } = {
-  getChunkTextSync: jest.fn(),
-};
 
 // Mock modules
 jest.mock("obsidian");
@@ -13,23 +10,33 @@ jest.mock("@/logger");
 jest.mock("./SearchCore", () => ({
   SearchCore: jest.fn().mockImplementation(() => ({
     retrieve: retrieveMock,
-    getChunkManager: jest.fn(() => mockChunkManager),
   })),
 }));
 jest.mock("@/LLMProviders/chatModelManager");
 jest.mock("@/utils", () => ({
   extractNoteFiles: jest.fn().mockReturnValue([]),
 }));
-jest.mock("./chunks", () => ({
-  ChunkManager: jest.fn().mockImplementation(() => mockChunkManager),
-}));
+jest.mock("./chunks", () => {
+  const mockManager = {
+    getChunkTextSync: jest.fn(),
+    getChunkText: jest.fn(),
+  };
+  return {
+    ChunkManager: jest.fn().mockImplementation(() => mockManager),
+    getSharedChunkManager: jest.fn().mockReturnValue(mockManager),
+  };
+});
 
 describe("TieredLexicalRetriever", () => {
   let retriever: TieredLexicalRetriever;
   let mockApp: any;
-  // legacy var no longer used after refactor
+  let mockChunkManager: any;
 
   beforeEach(() => {
+    // Get reference to the mocked chunk manager
+    const chunksModule = jest.requireMock("./chunks");
+    mockChunkManager = chunksModule.getSharedChunkManager();
+
     retrieveMock.mockReset();
     retrieveMock.mockResolvedValue([
       { id: "note1.md#0", score: 0.8, engine: "fulltext" },
@@ -37,13 +44,19 @@ describe("TieredLexicalRetriever", () => {
       { id: "note2.md#0", score: 0.6, engine: "grep" },
     ]);
 
-    mockChunkManager.getChunkTextSync.mockReset();
-    mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+    // Configure both sync and async getChunkText methods
+    const getChunkContent = (id: string) => {
       if (id === "note1.md#0") return "First chunk content from note1";
       if (id === "note1.md#1") return "Second chunk content from note1";
       if (id === "note2.md#0") return "Content from note2 chunk";
       return "";
-    });
+    };
+    mockChunkManager.getChunkTextSync.mockReset();
+    mockChunkManager.getChunkTextSync.mockImplementation(getChunkContent);
+    mockChunkManager.getChunkText.mockReset();
+    mockChunkManager.getChunkText.mockImplementation((id: string) =>
+      Promise.resolve(getChunkContent(id))
+    );
 
     // Mock app
     mockApp = {
@@ -217,11 +230,15 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+      const getTagContent = (id: string) => {
         if (id === "tagNote.md#0") return "Tag chunk 0";
         if (id === "tagNote.md#1") return "Tag chunk 1";
         return "";
-      });
+      };
+      mockChunkManager.getChunkTextSync.mockImplementation(getTagContent);
+      mockChunkManager.getChunkText.mockImplementation((id: string) =>
+        Promise.resolve(getTagContent(id))
+      );
 
       const results = await tagRetriever.getRelevantDocuments("#project work log");
 
@@ -258,11 +275,15 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+      const getTagContent = (id: string) => {
         if (id === "tagNote.md#0") return "Tag chunk 0";
         if (id === "tagNote.md#1") return "Tag chunk 1";
         return "";
-      });
+      };
+      mockChunkManager.getChunkTextSync.mockImplementation(getTagContent);
+      mockChunkManager.getChunkText.mockImplementation((id: string) =>
+        Promise.resolve(getTagContent(id))
+      );
 
       const results = await derivedRetriever.getRelevantDocuments("#PROJECT planning");
 
@@ -329,11 +350,15 @@ describe("TieredLexicalRetriever", () => {
   describe("chunk Document handling", () => {
     it("should return chunk Documents with chunk content", async () => {
       // Update ChunkManager mock for these specific chunk IDs
-      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+      const getTestChunkContent = (id: string) => {
         if (id === "test.md#0") return "First chunk from test note";
         if (id === "test.md#1") return "Second chunk from test note";
         return "";
-      });
+      };
+      mockChunkManager.getChunkTextSync.mockImplementation(getTestChunkContent);
+      mockChunkManager.getChunkText.mockImplementation((id: string) =>
+        Promise.resolve(getTestChunkContent(id))
+      );
 
       // Mock SearchCore before creating retriever
       retrieveMock.mockResolvedValueOnce([
@@ -369,6 +394,7 @@ describe("TieredLexicalRetriever", () => {
     it("should handle missing chunk content gracefully", async () => {
       // Mock ChunkManager to return empty content
       mockChunkManager.getChunkTextSync.mockImplementation(() => "");
+      mockChunkManager.getChunkText.mockImplementation(() => Promise.resolve(""));
 
       retrieveMock.mockResolvedValueOnce([{ id: "test.md#0", score: 0.9, engine: "fulltext" }]);
 
@@ -404,12 +430,16 @@ describe("TieredLexicalRetriever", () => {
         { id: "other.md#0", score: 0.6, engine: "fulltext" },
       ]);
 
-      mockChunkManager.getChunkTextSync.mockImplementation((id: string) => {
+      const getMultiChunkContent = (id: string) => {
         if (id === "large.md#0") return "First chunk from large note";
         if (id === "large.md#1") return "Second chunk from large note";
         if (id === "other.md#0") return "Content from other note";
         return "";
-      });
+      };
+      mockChunkManager.getChunkTextSync.mockImplementation(getMultiChunkContent);
+      mockChunkManager.getChunkText.mockImplementation((id: string) =>
+        Promise.resolve(getMultiChunkContent(id))
+      );
 
       const multiChunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
