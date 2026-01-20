@@ -876,10 +876,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
 
-        // Check for MALFORMED_FUNCTION_CALL error
+        // Check for MALFORMED_FUNCTION_CALL error - throw to trigger fallback
         const finishReason = chunk.response_metadata?.finish_reason;
         if (finishReason === "MALFORMED_FUNCTION_CALL") {
-          logWarn("Backend returned MALFORMED_FUNCTION_CALL - native tool calling not supported");
+          logWarn("Backend returned MALFORMED_FUNCTION_CALL - falling back to non-agent mode");
+          throw new Error("MALFORMED_FUNCTION_CALL: Model does not support native tool calling");
         }
 
         // Extract tool_call_chunks FIRST (before content check)
