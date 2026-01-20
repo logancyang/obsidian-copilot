@@ -344,24 +344,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const messages: BaseMessage[] = [];
     const availableTools = this.getAvailableTools();
 
-    // DEBUG: Log tools being bound
-    logInfo(`[DEBUG] Tools to bind: ${availableTools.map((t) => t.name).join(", ")}`);
-    logInfo(`[DEBUG] Tool count: ${availableTools.length}`);
-
-    // DEBUG: Log tool schemas
-    for (const tool of availableTools) {
-      logInfo(
-        `[DEBUG] Tool "${tool.name}" schema: ${JSON.stringify(tool.schema).substring(0, 300)}`
-      );
-    }
-
-    // DEBUG: Log chat model info
-    const modelName = (chatModel as any).modelName || (chatModel as any).model || "unknown";
-    logInfo(`[DEBUG] Chat model: ${modelName}`);
-    logInfo(`[DEBUG] Chat model constructor: ${chatModel.constructor.name}`);
-
     // Bind tools to the model for native function calling
-    // Some custom models (like BedrockChatModel) may not support bindTools yet
+    const modelName = (chatModel as any).modelName || (chatModel as any).model || "unknown";
     if (typeof chatModel.bindTools !== "function") {
       throw new Error(
         `Model ${modelName} does not support native tool calling (bindTools not available). ` +
@@ -369,7 +353,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       );
     }
     const boundModel = chatModel.bindTools(availableTools);
-    logInfo(`[DEBUG] Model ready with bindTools`);
 
     const loopDeps: AgentLoopDeps = {
       availableTools,
@@ -454,8 +437,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   }
 
   /**
-   * BAREBONES ReAct loop with extensive debug logging.
-   * Simplified to focus on native tool calling functionality.
+   * ReAct loop for native tool calling.
+   * Follows the pattern: Reasoning → Acting → Observation → Iteration
    */
   private async runReActLoop(params: ReActLoopParams): Promise<ReActLoopResult> {
     const {
@@ -472,16 +455,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const maxIterations = getSettings().autonomousAgentMaxIterations;
     const collectedSources: AgentSource[] = [];
 
-    // DEBUG: Log bound tools
-    logInfo(`[DEBUG] Available tools: ${tools.map((t) => t.name).join(", ")}`);
-    logInfo(`[DEBUG] Initial messages count: ${messages.length}`);
-    messages.forEach((m, i) => {
-      const type = m.constructor.name;
-      const contentPreview =
-        typeof m.content === "string" ? m.content.substring(0, 200) : JSON.stringify(m.content);
-      logInfo(`[DEBUG] Message ${i} (${type}): ${contentPreview}...`);
-    });
-
     let iteration = 0;
     let responseMetadata: ResponseMetadata | undefined;
     let fullContent = "";
@@ -489,10 +462,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     while (iteration < maxIterations) {
       if (abortController.signal.aborted) break;
       iteration++;
-      logInfo(`\n=== Agent Iteration ${iteration} ===`);
 
       // Stream response from bound model
-      const { content, aiMessage, streamingResult } = await this.streamModelResponseDebug(
+      const { content, aiMessage, streamingResult } = await this.streamModelResponse(
         boundModel,
         messages,
         abortController,
@@ -504,13 +476,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         tokenUsage: streamingResult.tokenUsage ?? undefined,
       };
 
-      // DEBUG: Log full AI message
-      logInfo(`[DEBUG] AI content: "${content.substring(0, 500)}..."`);
-      logInfo(`[DEBUG] AI message tool_calls: ${JSON.stringify(aiMessage.tool_calls)}`);
-
       // Check for native tool calls
       const toolCalls = aiMessage.tool_calls || [];
-      logInfo(`[DEBUG] Iteration ${iteration}: ${toolCalls.length} tool calls detected`);
 
       // No tool calls = final response
       if (toolCalls.length === 0) {
@@ -537,13 +504,10 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           args: tc.args as Record<string, unknown>,
         };
 
-        logInfo(`[DEBUG] Executing tool: ${tc.name} with args: ${JSON.stringify(tc.args)}`);
         logToolCall(toolCall, iteration);
 
         // Execute the tool
         const result = await executeSequentialToolCall(toolCall, tools, originalPrompt);
-        logInfo(`[DEBUG] Tool result success: ${result.success}`);
-        logInfo(`[DEBUG] Tool result: ${result.result.substring(0, 500)}...`);
 
         // Special handling for localSearch
         if (tc.name === "localSearch" && result.success) {
@@ -564,14 +528,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           result.result
         );
         messages.push(toolMessage);
-        logInfo(`[DEBUG] Added ToolMessage for ${tc.name}`);
       }
-
-      logInfo(`[DEBUG] Messages count after tools: ${messages.length}`);
     }
 
     // Max iterations reached
-    logWarn(`[DEBUG] Reached max iterations (${maxIterations})`);
+    logWarn(`Agent reached max iterations (${maxIterations})`);
     return {
       finalResponse: fullContent + "\n\n(Reached max iterations)",
       sources: collectedSources,
@@ -580,21 +541,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   }
 
   /**
-   * BAREBONES stream response with extensive debug logging.
-   * Logs every chunk to understand what the model is returning.
+   * Stream response from the bound model and accumulate tool call chunks.
    */
-  private async streamModelResponseDebug(
+  private async streamModelResponse(
     boundModel: Runnable,
     messages: BaseMessage[],
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
-    logInfo(`[DEBUG] Starting stream from bound model...`);
-
     let fullContent = "";
     const toolCallChunks: Map<number, { id?: string; name: string; args: string }> = new Map();
-    let chunkCount = 0;
-    let malformedFunctionCall = false;
 
     try {
       const stream = await withSuppressedTokenWarnings(() =>
@@ -603,22 +559,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         })
       );
 
-      logInfo(`[DEBUG] Stream created, iterating chunks...`);
-
       for await (const chunk of stream) {
         if (abortController.signal.aborted) break;
-        chunkCount++;
-
-        // DEBUG: Log raw chunk
-        logInfo(`[DEBUG] Chunk ${chunkCount}: ${JSON.stringify(chunk).substring(0, 500)}`);
 
         // Check for MALFORMED_FUNCTION_CALL error
         const finishReason = chunk.response_metadata?.finish_reason;
         if (finishReason === "MALFORMED_FUNCTION_CALL") {
-          logWarn(
-            `[DEBUG] Backend returned MALFORMED_FUNCTION_CALL - native tool calling not supported`
-          );
-          malformedFunctionCall = true;
+          logWarn("Backend returned MALFORMED_FUNCTION_CALL - native tool calling not supported");
         }
 
         // Extract content
@@ -637,7 +584,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         // Extract tool_call_chunks (LangChain streaming format)
         const tcChunks = chunk.tool_call_chunks;
         if (tcChunks && Array.isArray(tcChunks)) {
-          logInfo(`[DEBUG] Found tool_call_chunks: ${JSON.stringify(tcChunks)}`);
           for (const tc of tcChunks) {
             const idx = tc.index ?? 0;
             const existing = toolCallChunks.get(idx) || { name: "", args: "" };
@@ -647,17 +593,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             toolCallChunks.set(idx, existing);
           }
         }
-
-        // Check for direct tool_calls on chunk (non-streaming format)
-        if (chunk.tool_calls && Array.isArray(chunk.tool_calls) && chunk.tool_calls.length > 0) {
-          logInfo(`[DEBUG] Found direct tool_calls: ${JSON.stringify(chunk.tool_calls)}`);
-        }
       }
-
-      logInfo(`[DEBUG] Stream complete. Total chunks: ${chunkCount}`);
-      logInfo(`[DEBUG] Full content length: ${fullContent.length}`);
-      logInfo(`[DEBUG] Tool call chunks accumulated: ${toolCallChunks.size}`);
-      logInfo(`[DEBUG] Malformed function call: ${malformedFunctionCall}`);
 
       // Build tool calls from accumulated chunks
       const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
@@ -668,7 +604,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           try {
             args = JSON.parse(chunk.args);
           } catch {
-            logWarn(`[DEBUG] Failed to parse tool args: ${chunk.args}`);
+            logWarn(`Failed to parse tool args: ${chunk.args}`);
           }
         }
         toolCalls.push({
@@ -677,8 +613,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           args,
         });
       }
-
-      logInfo(`[DEBUG] Final tool calls: ${JSON.stringify(toolCalls)}`);
 
       // Build AIMessage
       const aiMessage = new AIMessage({
@@ -701,7 +635,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         },
       };
     } catch (error: any) {
-      logError(`[DEBUG] Stream error: ${error.message}`);
+      logError(`Stream error: ${error.message}`);
       if (error.name === "AbortError" || abortController.signal.aborted) {
         return {
           content: fullContent,

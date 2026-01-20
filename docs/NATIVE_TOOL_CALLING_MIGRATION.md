@@ -12,17 +12,19 @@
 
 ### ✅ COMPLETED
 
-| Phase   | Description                                                      | Status  |
-| ------- | ---------------------------------------------------------------- | ------- |
-| Phase 1 | Tool definitions, registry, metadata, nativeToolCalling.ts       | ✅ Done |
-| Phase 2 | Simplified AutonomousAgentChainRunner with ReAct loop            | ✅ Done |
-| Bedrock | BedrockChatModel native tool calling (streaming + non-streaming) | ✅ Done |
+| Phase        | Description                                                      | Status  |
+| ------------ | ---------------------------------------------------------------- | ------- |
+| Phase 1      | Tool definitions, registry, metadata, nativeToolCalling.ts       | ✅ Done |
+| Phase 2      | Simplified AutonomousAgentChainRunner with ReAct loop            | ✅ Done |
+| Bedrock      | BedrockChatModel native tool calling (streaming + non-streaming) | ✅ Done |
+| Copilot Plus | copilot-plus-flash native tool calling (via ChatOpenRouter)      | ✅ Done |
 
 **Notes:**
 
 - `AutonomousAgentChainRunner` now uses `bindTools()` - no XML format instructions
 - `xmlParsing.ts` retained for `CopilotPlusChainRunner` (still uses XML)
 - Model adapters retained but XML instructions are dead code for agent mode
+- COPILOT_PLUS provider uses `ChatOpenRouter` for proper SSE tool_call parsing
 
 ### 🔲 REMAINING
 
@@ -81,7 +83,7 @@ Gemini only supports subset of JSON Schema. Avoid:
 ### Manual Tests
 
 - [ ] "Search my notes about X" → localSearch
-- [ ] "What did I do this month" → getTimeRangeMs + localSearch
+- [x] "What did I do this month" → getTimeRangeMs + localSearch
 - [ ] Multi-tool conversation
 - [ ] Streaming display
 - [ ] Abort mid-execution
@@ -93,6 +95,9 @@ Gemini only supports subset of JSON Schema. Avoid:
 - [ ] Google Gemini
 - [ ] OpenRouter models
 - [x] Amazon Bedrock
+- [x] Copilot Plus (copilot-plus-flash)
+- [x] LM Studio (gpt-oss-20b)
+- [ ] Ollama (tool-capable models)
 
 ### Edge Cases
 
@@ -150,23 +155,7 @@ Gemini only supports subset of JSON Schema. Avoid:
 | [ ] Add approval timeout handling  | Auto-reject after configurable timeout                    |
 | [ ] Settings for approval behavior | Per-tool approval toggles, "trust this session" option    |
 
-### Phase 8: Fix copilot-plus-flash Backend (brevilabs-models)
-
-**Prerequisite for CopilotPlusChainRunner migration.**
-
-See `brevilabs-models/docs/TOOL_CALLING_IMPLEMENTATION.md` for full plan.
-
-| Task                       | Description                                                                         |
-| -------------------------- | ----------------------------------------------------------------------------------- |
-| [ ] Schema sanitization    | Remove unsupported JSON Schema fields for Gemini (`exclusiveMinimum`, `$ref`, etc.) |
-| [ ] Tool format conversion | Convert OpenAI tool format → Gemini function declarations                           |
-| [ ] Message conversion     | Handle tool_calls in assistant messages, tool results in user messages              |
-| [ ] Response extraction    | Convert Gemini function_call → OpenAI tool_calls format                             |
-| [ ] Streaming support      | Emit tool_call chunks in OpenAI-compatible format                                   |
-
-**Key fix:** Schema sanitization is critical - Gemini rejects schemas with unsupported fields causing `MALFORMED_FUNCTION_CALL` errors.
-
-### Phase 9: Simplify Chat Persistence
+### Phase 8: Simplify Chat Persistence
 
 | Task                                             | Description                                               |
 | ------------------------------------------------ | --------------------------------------------------------- |
@@ -182,13 +171,30 @@ See `brevilabs-models/docs/TOOL_CALLING_IMPLEMENTATION.md` for full plan.
 
 This simplifies persistence and reduces chat file size significantly.
 
-### Phase 10: Final Cleanup
+### Phase 9: Final Cleanup
 
 | Task                                       | Description                      |
 | ------------------------------------------ | -------------------------------- |
 | [ ] Remove ThinkBlockStreamer XML handling | Remove tool call marker emission |
 | [ ] Audit for remaining XML refs           | Search for `<tool_call` patterns |
 | [ ] Update documentation                   | Remove XML references            |
+
+### Phase 10: Local Model Provider Tool Calling
+
+| Task                                  | Description                                                    | Status  |
+| ------------------------------------- | -------------------------------------------------------------- | ------- |
+| [x] LM Studio tool calling support    | gpt-oss-20b works via OpenAI-compatible API                    | ✅ Done |
+| [ ] Ollama tool calling support       | Test tool-capable Ollama models (llama3.1, mistral-nemo, etc.) |         |
+| [x] Verify OpenAI-compatible format   | LM Studio emits tool_calls in standard format                  | ✅ Done |
+| [ ] Handle model capability detection | Graceful fallback when model doesn't support tools             |         |
+| [ ] Document supported local models   | List tested models with tool calling capability                |         |
+
+**Notes:**
+
+- LM Studio exposes OpenAI-compatible API - works with existing ChatOpenAI
+- Ollama has native tool calling support since v0.3+ for supported models
+- **Tested models:** gpt-oss-20b (LM Studio)
+- May need model-specific schema adjustments (similar to Gemini restrictions)
 
 ---
 
@@ -197,10 +203,10 @@ This simplifies persistence and reduces chat file size significantly.
 1. **Testing** - Complete manual functional tests and provider validation
 2. **Agent Reasoning Block** - Implement new UI (see `docs/AGENT_REASONING_BLOCK.md`)
 3. **Human-in-the-Loop Approval** - Add approval UI for risky tools (Phase 7)
-4. **Fix copilot-plus-flash** - Backend tool calling support (Phase 8, prerequisite for #5)
-5. **CopilotPlusChainRunner** - Migrate to native tool calling (depends on #4)
-6. **Simplify Chat Persistence** - Only persist user messages + AI final responses (Phase 9)
-7. **XML Cleanup** - Delete utilities and clean up adapters (Phase 10)
+4. **CopilotPlusChainRunner** - Migrate to native tool calling (Phase 3)
+5. **Simplify Chat Persistence** - Only persist user messages + AI final responses (Phase 8)
+6. **XML Cleanup** - Delete utilities and clean up adapters (Phase 9)
+7. **Local Model Providers** - LM Studio and Ollama tool calling support (Phase 10)
 
 ### Estimated Additional Reduction
 
