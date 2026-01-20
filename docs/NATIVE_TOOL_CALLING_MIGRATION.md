@@ -246,6 +246,82 @@ This simplifies persistence and reduces chat file size significantly.
 | [ ] Add approval timeout handling  | Auto-reject after configurable timeout                    |
 | [ ] Settings for approval behavior | Per-tool approval toggles, "trust this session" option    |
 
+### Phase 11: Deep Search (Strategy TBD)
+
+Enable iterative search refinement for complex queries that require multiple rounds of searching.
+
+**Goal:** When initial search results are insufficient or too broad, automatically refine and re-search until satisfactory results are found.
+
+#### Option 1: SearchRefiner Tool
+
+Add a `SearchRefiner` tool that works in tandem with `localSearch`:
+
+| Task                               | Description                                                              |
+| ---------------------------------- | ------------------------------------------------------------------------ |
+| [ ] Create SearchRefiner tool      | Takes search terms + previous results as input                           |
+| [ ] Implement result pruning       | Remove irrelevant results based on metadata analysis                     |
+| [ ] Implement relevance evaluation | Determine if results are sufficient or need more searching               |
+| [ ] Implement term expansion       | Generate new search terms from relevant results (titles, path, metadata) |
+| [ ] Define termination criteria    | When to stop searching and trigger final response                        |
+
+**Flow:**
+
+```
+localSearch → SearchRefiner → (satisfied? → final response)
+                    ↓ (not satisfied)
+              expand terms from relevant results
+                    ↓
+              localSearch (with new terms) → SearchRefiner → ...
+```
+
+**SearchRefiner analyzes:**
+
+- Result titles and paths
+- Metadata (ctime, mtime, properties)
+- Content snippets
+- Coverage of original query intent
+
+#### Option 2: DeepAgentJS Subagent
+
+Use DeepAgentJS building blocks to create a dedicated deep search subagent:
+
+| Task                                 | Description                                                  |
+| ------------------------------------ | ------------------------------------------------------------ |
+| [ ] Evaluate DeepAgentJS integration | Assess compatibility with existing agent architecture        |
+| [ ] Design subagent interface        | Define input/output contract for deep search subagent        |
+| [ ] Implement search orchestration   | Subagent manages multiple search rounds internally           |
+| [ ] Handle context handoff           | Pass relevant context between main agent and search subagent |
+| [ ] Implement result aggregation     | Combine and deduplicate results across search rounds         |
+
+**Flow:**
+
+```
+Main Agent → Deep Search Subagent → (multiple internal search rounds) → aggregated results → Main Agent
+```
+
+**Pros:**
+
+- Cleaner separation of concerns
+- Subagent can have specialized prompting for search refinement
+- Easier to test and iterate independently
+
+**Cons:**
+
+- Additional complexity in agent coordination
+- Potential latency from subagent invocation
+
+#### Decision Criteria
+
+| Criteria              | Option 1 (SearchRefiner) | Option 2 (DeepAgentJS) |
+| --------------------- | ------------------------ | ---------------------- |
+| Implementation effort | Lower                    | Higher                 |
+| Flexibility           | Moderate                 | High                   |
+| Testability           | Good                     | Better                 |
+| Latency               | Lower                    | Higher                 |
+| Code complexity       | Inline in agent loop     | Separate module        |
+
+**Status:** TBD - Need to evaluate both approaches with real-world query patterns.
+
 ---
 
 ## 📋 Next Steps (Priority Order)
@@ -258,6 +334,7 @@ This simplifies persistence and reduces chat file size significantly.
 6. **Final Cleanup** - Audit remaining XML refs, update documentation (Phase 8)
 7. **Local Model Providers** - Ollama tool calling support (Phase 9)
 8. **Human-in-the-Loop Approval** - Add approval UI for risky tools (Phase 10)
+9. **Deep Search** - Iterative search refinement for complex queries (Phase 11, Strategy TBD)
 
 ### Code Reduction Summary (Phases 4 & 5 Complete)
 

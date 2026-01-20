@@ -9,6 +9,56 @@ import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecuti
 import { createLangChainTool } from "./createLangChainTool";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+
+/**
+ * Query expansion data returned with search results.
+ * Used to show what terms were actually searched in the reasoning block.
+ */
+export interface QueryExpansionInfo {
+  originalQuery: string;
+  salientTerms: string[]; // Terms from original query (used for ranking)
+  expandedQueries: string[]; // Alternative phrasings (used for recall)
+  expandedTerms: string[]; // LLM-generated related terms (used for recall)
+  recallTerms: string[]; // All terms combined that were used for recall
+}
+
+/**
+ * Compute all recall terms from expansion data.
+ * This mirrors the logic in SearchCore.retrieve() that builds recallQueries.
+ * Terms are deduplicated and ordered by priority: original query, salient terms, expanded queries, expanded terms.
+ */
+function computeRecallTerms(expansion: {
+  originalQuery: string;
+  salientTerms: string[];
+  expandedQueries: string[];
+  expandedTerms: string[];
+}): string[] {
+  const seen = new Set<string>();
+  const recallTerms: string[] = [];
+
+  const addTerm = (term: unknown) => {
+    // Defensive: only process string values
+    if (typeof term !== "string") {
+      return;
+    }
+    const normalized = term.toLowerCase().trim();
+    if (normalized && !seen.has(normalized)) {
+      seen.add(normalized);
+      recallTerms.push(term.trim());
+    }
+  };
+
+  // Add in priority order: original query, salient terms, expanded queries, expanded terms
+  if (expansion.originalQuery && typeof expansion.originalQuery === "string") {
+    addTerm(expansion.originalQuery);
+  }
+  (expansion.salientTerms || []).forEach(addTerm);
+  (expansion.expandedQueries || []).forEach(addTerm);
+  (expansion.expandedTerms || []).forEach(addTerm);
+
+  return recallTerms;
+}
 
 // Define Zod schema for localSearch
 const localSearchSchema = z.object({
@@ -25,6 +75,16 @@ const localSearchSchema = z.object({
     })
     .optional()
     .describe("Optional time range filter. Use epoch milliseconds from getTimeRangeMs result."),
+  _preExpandedQuery: z
+    .object({
+      originalQuery: z.string(),
+      salientTerms: z.array(z.string()),
+      expandedQueries: z.array(z.string()),
+      expandedTerms: z.array(z.string()),
+      recallTerms: z.array(z.string()),
+    })
+    .optional()
+    .describe("Internal: pre-expanded query data injected by the system to avoid double expansion"),
 });
 
 // Core lexical search function (shared by lexicalSearchTool and localSearchTool)
@@ -33,11 +93,13 @@ async function performLexicalSearch({
   query,
   salientTerms,
   forceLexical = false,
+  preExpandedQuery,
 }: {
   timeRange?: { startTime: number; endTime: number };
   query: string;
   salientTerms: string[];
   forceLexical?: boolean;
+  preExpandedQuery?: QueryExpansionInfo;
 }) {
   const settings = getSettings();
 
@@ -51,6 +113,18 @@ async function performLexicalSearch({
     `lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags}), forceLexical: ${forceLexical}`
   );
 
+  // Convert QueryExpansionInfo to ExpandedQuery format (adding queries field)
+  const convertedPreExpansion = preExpandedQuery
+    ? {
+        ...preExpandedQuery,
+        // Build queries array: original query + expanded queries
+        queries: [
+          preExpandedQuery.originalQuery,
+          ...(preExpandedQuery.expandedQueries || []),
+        ].filter(Boolean),
+      }
+    : undefined;
+
   const retrieverOptions = {
     minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
     maxK: effectiveMaxK,
@@ -61,6 +135,7 @@ async function performLexicalSearch({
     useRerankerThreshold: 0.5,
     returnAllTags,
     tagTerms,
+    preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
   };
 
   // If forceLexical is true, bypass the factory and use lexical retriever directly
@@ -78,6 +153,21 @@ async function performLexicalSearch({
 
   logInfo(`lexicalSearch using ${retrieverType} retriever`);
   const documents = await retriever.getRelevantDocuments(query);
+
+  // Extract query expansion from the lexical retriever if available
+  let queryExpansion: QueryExpansionInfo | undefined;
+  if (retriever instanceof TieredLexicalRetriever) {
+    const expansion = retriever.getLastQueryExpansion();
+    if (expansion) {
+      queryExpansion = {
+        originalQuery: expansion.originalQuery,
+        salientTerms: expansion.salientTerms,
+        expandedQueries: expansion.expandedQueries,
+        expandedTerms: expansion.expandedTerms,
+        recallTerms: computeRecallTerms(expansion),
+      };
+    }
+  }
 
   logInfo(`lexicalSearch found ${documents.length} documents for query: "${query}"`);
   if (timeRange) {
@@ -124,7 +214,7 @@ async function performLexicalSearch({
     .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
     .filter(Boolean);
 
-  return { type: "local_search", documents: dedupedDocs };
+  return { type: "local_search", documents: dedupedDocs, queryExpansion };
 }
 
 // Local search tool using RetrieverFactory (handles Self-hosted > Semantic > Lexical priority)
@@ -213,13 +303,43 @@ const semanticSearchTool = createLangChainTool({
   },
 });
 
+/**
+ * Validate and sanitize time range to prevent LLM hallucinations.
+ * Returns undefined if the time range is invalid or nonsensical.
+ */
+function validateTimeRange(timeRange?: {
+  startTime: number;
+  endTime: number;
+}): { startTime: number; endTime: number } | undefined {
+  if (!timeRange) return undefined;
+
+  const { startTime, endTime } = timeRange;
+
+  // Check for invalid values (0, negative, or non-numbers)
+  if (!startTime || !endTime || startTime <= 0 || endTime <= 0) {
+    logInfo("localSearch: Ignoring invalid time range (zero or negative values)");
+    return undefined;
+  }
+
+  // Check for inverted range
+  if (startTime > endTime) {
+    logInfo("localSearch: Ignoring inverted time range (start > end)");
+    return undefined;
+  }
+
+  return timeRange;
+}
+
 // Smart wrapper that uses RetrieverFactory for unified retriever selection
 const localSearchTool = createLangChainTool({
   name: "localSearch",
   description:
     "Search for notes in the vault based on query, salient terms, and optional time range",
   schema: localSearchSchema,
-  func: async ({ timeRange, query, salientTerms }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
+    // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
+    const timeRange = validateTimeRange(rawTimeRange);
+
     const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
     const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;
 
@@ -227,7 +347,13 @@ const localSearchTool = createLangChainTool({
     // Otherwise, let RetrieverFactory handle the priority (Self-hosted > Semantic > Lexical)
     if (shouldForceLexical) {
       logInfo("localSearch: Forcing lexical search (time range or tags present)");
-      return await performLexicalSearch({ timeRange, query, salientTerms, forceLexical: true });
+      return await performLexicalSearch({
+        timeRange,
+        query,
+        salientTerms,
+        forceLexical: true,
+        preExpandedQuery: _preExpandedQuery,
+      });
     }
 
     // Use RetrieverFactory which handles priority: Self-hosted > Semantic > Lexical
@@ -235,7 +361,12 @@ const localSearchTool = createLangChainTool({
     logInfo(`localSearch: Using ${retrieverType} retriever via factory`);
 
     // Delegate to shared function which uses RetrieverFactory internally
-    return await performLexicalSearch({ timeRange, query, salientTerms });
+    return await performLexicalSearch({
+      timeRange,
+      query,
+      salientTerms,
+      preExpandedQuery: _preExpandedQuery,
+    });
   },
 });
 

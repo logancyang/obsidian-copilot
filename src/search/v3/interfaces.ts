@@ -56,4 +56,12 @@ export interface SearchOptions {
   enableLexicalBoosts?: boolean;
   /** When true, bypasses max result ceilings and returns every matching chunk */
   returnAll?: boolean;
+  /** Pre-expanded query data to skip QueryExpander call (avoids double expansion) */
+  preExpandedQuery?: {
+    originalQuery: string;
+    queries: string[];
+    salientTerms: string[];
+    expandedQueries: string[];
+    expandedTerms: string[];
+  };
 }

@@ -43,11 +43,21 @@ describe("TieredLexicalRetriever", () => {
     mockChunkManager = chunksModule.getSharedChunkManager();
 
     retrieveMock.mockReset();
-    retrieveMock.mockResolvedValue([
-      { id: "note1.md#0", score: 0.8, engine: "fulltext" },
-      { id: "note1.md#1", score: 0.7, engine: "fulltext" },
-      { id: "note2.md#0", score: 0.6, engine: "grep" },
-    ]);
+    // Return RetrieveResult structure with results and queryExpansion
+    retrieveMock.mockResolvedValue({
+      results: [
+        { id: "note1.md#0", score: 0.8, engine: "fulltext" },
+        { id: "note1.md#1", score: 0.7, engine: "fulltext" },
+        { id: "note2.md#0", score: 0.6, engine: "grep" },
+      ],
+      queryExpansion: {
+        queries: [],
+        salientTerms: [],
+        originalQuery: "",
+        expandedQueries: [],
+        expandedTerms: [],
+      },
+    });
 
     // Configure both sync and async getChunkText methods
     const getChunkContent = (id: string) => {
@@ -170,10 +180,19 @@ describe("TieredLexicalRetriever", () => {
     });
 
     it("should integrate all components correctly and return chunk Documents", async () => {
-      retrieveMock.mockResolvedValueOnce([
-        { id: "note1.md#0", score: 0.8, engine: "fulltext" },
-        { id: "note2.md#0", score: 0.6, engine: "grep" },
-      ]);
+      retrieveMock.mockResolvedValueOnce({
+        results: [
+          { id: "note1.md#0", score: 0.8, engine: "fulltext" },
+          { id: "note2.md#0", score: 0.6, engine: "grep" },
+        ],
+        queryExpansion: {
+          queries: [],
+          salientTerms: [],
+          originalQuery: "test query",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       const chunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
@@ -199,7 +218,16 @@ describe("TieredLexicalRetriever", () => {
     });
 
     it("should handle empty search results", async () => {
-      retrieveMock.mockResolvedValue([]);
+      retrieveMock.mockResolvedValue({
+        results: [],
+        queryExpansion: {
+          queries: [],
+          salientTerms: [],
+          originalQuery: "",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
       const emptyRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
         maxK: 30,
@@ -210,10 +238,19 @@ describe("TieredLexicalRetriever", () => {
     });
 
     it("should retrieve all tag matches when returnAllTags is enabled", async () => {
-      retrieveMock.mockResolvedValue([
-        { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
-        { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
-      ]);
+      retrieveMock.mockResolvedValue({
+        results: [
+          { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
+          { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
+        ],
+        queryExpansion: {
+          queries: [],
+          salientTerms: ["#project"],
+          originalQuery: "#project",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       const tagRetrieverOptions: ConstructorParameters<typeof TieredLexicalRetriever>[1] = {
         minSimilarityScore: 0.1,
@@ -258,10 +295,19 @@ describe("TieredLexicalRetriever", () => {
     });
 
     it("should derive tag terms from query when returnAllTags is set without explicit tags", async () => {
-      retrieveMock.mockResolvedValue([
-        { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
-        { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
-      ]);
+      retrieveMock.mockResolvedValue({
+        results: [
+          { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
+          { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
+        ],
+        queryExpansion: {
+          queries: [],
+          salientTerms: ["#project"],
+          originalQuery: "#PROJECT planning",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       const derivedRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
@@ -335,7 +381,16 @@ describe("TieredLexicalRetriever", () => {
       (mockMentionedFile as any).stat = { mtime: 1000, ctime: 1000 };
       extractNoteFiles.mockReturnValueOnce([mockMentionedFile]);
 
-      retrieveMock.mockResolvedValueOnce([{ id: "other.md#0", score: 0.4, engine: "fulltext" }]);
+      retrieveMock.mockResolvedValueOnce({
+        results: [{ id: "other.md#0", score: 0.4, engine: "fulltext" }],
+        queryExpansion: {
+          queries: [],
+          salientTerms: [],
+          originalQuery: "search [[mentioned]] for something",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       const mentionRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
@@ -366,10 +421,19 @@ describe("TieredLexicalRetriever", () => {
       );
 
       // Mock SearchCore before creating retriever
-      retrieveMock.mockResolvedValueOnce([
-        { id: "test.md#0", score: 0.9, engine: "fulltext" },
-        { id: "test.md#1", score: 0.8, engine: "fulltext" },
-      ]);
+      retrieveMock.mockResolvedValueOnce({
+        results: [
+          { id: "test.md#0", score: 0.9, engine: "fulltext" },
+          { id: "test.md#1", score: 0.8, engine: "fulltext" },
+        ],
+        queryExpansion: {
+          queries: [],
+          salientTerms: [],
+          originalQuery: "test query",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test.md") {
@@ -401,7 +465,16 @@ describe("TieredLexicalRetriever", () => {
       mockChunkManager.getChunkTextSync.mockImplementation(() => "");
       mockChunkManager.getChunkText.mockImplementation(() => Promise.resolve(""));
 
-      retrieveMock.mockResolvedValueOnce([{ id: "test.md#0", score: 0.9, engine: "fulltext" }]);
+      retrieveMock.mockResolvedValueOnce({
+        results: [{ id: "test.md#0", score: 0.9, engine: "fulltext" }],
+        queryExpansion: {
+          queries: [],
+          salientTerms: [],
+          originalQuery: "test query",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       const emptyChunkRetriever = new TieredLexicalRetriever(mockApp, {
         minSimilarityScore: 0.1,
@@ -429,11 +502,20 @@ describe("TieredLexicalRetriever", () => {
         return null;
       });
 
-      retrieveMock.mockResolvedValueOnce([
-        { id: "large.md#0", score: 0.9, engine: "fulltext" },
-        { id: "large.md#1", score: 0.8, engine: "fulltext" },
-        { id: "other.md#0", score: 0.6, engine: "fulltext" },
-      ]);
+      retrieveMock.mockResolvedValueOnce({
+        results: [
+          { id: "large.md#0", score: 0.9, engine: "fulltext" },
+          { id: "large.md#1", score: 0.8, engine: "fulltext" },
+          { id: "other.md#0", score: 0.6, engine: "fulltext" },
+        ],
+        queryExpansion: {
+          queries: [],
+          salientTerms: [],
+          originalQuery: "test query",
+          expandedQueries: [],
+          expandedTerms: [],
+        },
+      });
 
       const getMultiChunkContent = (id: string) => {
         if (id === "large.md#0") return "First chunk from large note";

@@ -1,6 +1,76 @@
 import { logInfo, logWarn, logMarkdownBlock, logTable } from "@/logger";
 
 /**
+ * Quality summary for search results.
+ * Helps the LLM evaluate whether results are adequate or if re-search is needed.
+ */
+export interface QualitySummary {
+  high: number; // Count of results with score >= 0.7
+  medium: number; // Count of results with score >= 0.3 and < 0.7
+  low: number; // Count of results with score < 0.3
+  total: number;
+  averageScore: number;
+}
+
+/**
+ * Generate a quality summary for search results.
+ * This helps the LLM evaluate whether the results are relevant enough.
+ *
+ * @param searchResults - Array of search results with scores
+ * @returns Quality summary with counts by relevance tier
+ */
+export function generateQualitySummary(searchResults: any[]): QualitySummary {
+  if (!Array.isArray(searchResults) || searchResults.length === 0) {
+    return { high: 0, medium: 0, low: 0, total: 0, averageScore: 0 };
+  }
+
+  let high = 0;
+  let medium = 0;
+  let low = 0;
+  let totalScore = 0;
+
+  for (const doc of searchResults) {
+    const score = doc.rerank_score ?? doc.score ?? 0;
+    totalScore += score;
+
+    if (score >= 0.7) {
+      high++;
+    } else if (score >= 0.3) {
+      medium++;
+    } else {
+      low++;
+    }
+  }
+
+  return {
+    high,
+    medium,
+    low,
+    total: searchResults.length,
+    averageScore: totalScore / searchResults.length,
+  };
+}
+
+/**
+ * Format quality summary as a concise string for LLM context.
+ *
+ * @param summary - Quality summary from generateQualitySummary
+ * @returns Formatted string like "[Relevance: 3 high, 2 medium, 1 low]"
+ */
+export function formatQualitySummary(summary: QualitySummary): string {
+  const parts: string[] = [];
+  if (summary.high > 0) parts.push(`${summary.high} high`);
+  if (summary.medium > 0) parts.push(`${summary.medium} medium`);
+  if (summary.low > 0) parts.push(`${summary.low} low`);
+
+  if (parts.length === 0) {
+    return "[Relevance: no results]";
+  }
+
+  return `[Relevance: ${parts.join(", ")}]`;
+}
+
+/**
  * Formats localSearch results as structured text for LLM consumption
  * Includes essential metadata (title, path, mtime) while excluding unnecessary fields
  * @param searchResults - The raw search results from localSearch tool

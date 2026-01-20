@@ -36,7 +36,9 @@ import {
   serializeReasoningBlock,
   summarizeToolCall,
   summarizeToolResult,
+  QueryExpansionInfo,
 } from "./utils/AgentReasoningState";
+import { QueryExpander } from "@/search/v3/QueryExpander";
 
 type AgentSource = {
   title: string;
@@ -604,9 +606,56 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           args: tc.args as Record<string, unknown>,
         };
 
+        // Pre-expand query for localSearch to show expanded terms BEFORE search
+        let preExpandedTerms: QueryExpansionInfo | undefined;
+        if (tc.name === "localSearch") {
+          const query = toolCall.args.query as string | undefined;
+          if (query) {
+            try {
+              const expander = new QueryExpander({
+                getChatModel: async () => {
+                  return this.chainManager.chatModelManager.getChatModel();
+                },
+              });
+              const expansion = await expander.expand(query);
+              // Compute recall terms (all terms used for search)
+              const seen = new Set<string>();
+              const recallTerms: string[] = [];
+              const addTerm = (term: unknown) => {
+                if (typeof term !== "string") return;
+                const normalized = term.toLowerCase().trim();
+                if (normalized && !seen.has(normalized)) {
+                  seen.add(normalized);
+                  recallTerms.push(term.trim());
+                }
+              };
+              if (expansion.originalQuery) addTerm(expansion.originalQuery);
+              (expansion.salientTerms || []).forEach(addTerm);
+              (expansion.expandedQueries || []).forEach(addTerm);
+              (expansion.expandedTerms || []).forEach(addTerm);
+
+              preExpandedTerms = {
+                originalQuery: expansion.originalQuery,
+                salientTerms: expansion.salientTerms,
+                expandedQueries: expansion.expandedQueries,
+                expandedTerms: expansion.expandedTerms,
+                recallTerms,
+              };
+            } catch {
+              // Ignore expansion errors, fall back to basic summary
+            }
+          }
+        }
+
         // Add reasoning step for tool call (timer will display it)
-        const toolCallSummary = summarizeToolCall(tc.name, toolCall.args);
+        // For localSearch, include pre-expanded terms
+        const toolCallSummary = summarizeToolCall(tc.name, toolCall.args, preExpandedTerms);
         this.addReasoningStep(toolCallSummary, tc.name);
+
+        // Inject pre-expanded query data into args to avoid double expansion in search
+        if (preExpandedTerms) {
+          toolCall.args._preExpandedQuery = preExpandedTerms;
+        }
 
         logToolCall(toolCall, iteration);
 
@@ -621,7 +670,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           const processed = processLocalSearchResult(result);
           collectedSources.push(...processed.sources);
 
-          // Extract source info for reasoning summary
+          // Extract source info for reasoning summary (just count and titles, no terms needed)
           sourceInfo = {
             titles: processed.sources.map((s) => s.title),
             count: processed.sources.length,

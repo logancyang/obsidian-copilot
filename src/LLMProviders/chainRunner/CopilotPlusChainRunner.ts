@@ -42,6 +42,8 @@ import {
   extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
+  generateQualitySummary,
+  formatQualitySummary,
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
 import {
@@ -956,6 +958,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     // Use !== false to be consistent with formatSearchResultsForLLM and logSearchResultsDebugTable
     const includedDocs = documents.filter((doc) => doc.includeInContext !== false);
 
+    // Generate quality summary for the LLM to evaluate results
+    const qualitySummary = generateQualitySummary(includedDocs);
+    const qualityHeader = formatQualitySummary(qualitySummary);
+
     // Calculate total content length (only content, not metadata)
     const totalContentLength = includedDocs.reduce(
       (sum, doc) => sum + (doc.content?.length || 0),
@@ -1016,8 +1022,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const ragInstruction = "Answer the question based only on the following context:";
     const documentsSection = buildLocalSearchInnerContent(ragInstruction, formattedContent);
 
-    // Include guidance directly in the payload, making it self-contained
-    const fullInnerContent = guidance ? `${documentsSection}\n\n${guidance}` : documentsSection;
+    // Include quality header and guidance directly in the payload, making it self-contained
+    const fullInnerContent = guidance
+      ? `${qualityHeader}\n\n${documentsSection}\n\n${guidance}`
+      : `${qualityHeader}\n\n${documentsSection}`;
 
     // Wrap in XML-like tags for better LLM understanding
     return wrapLocalSearchPayload(fullInnerContent, timeExpression);

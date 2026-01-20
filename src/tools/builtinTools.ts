@@ -39,6 +39,14 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
 - Exclude time expressions like "last month", "yesterday", "last week"
 - Preserve the original language - do NOT translate terms to English
 
+Evaluating search results and re-searching:
+- Results include a relevance quality summary: high (score ≥0.7), medium (0.3-0.7), low (<0.3)
+- If most results are low relevance or miss key concepts from the user's question:
+  1. Try searching again with synonyms or related terms
+  2. Use more specific phrasing if query was too broad
+  3. Use more general phrasing if query was too narrow
+- Example: "machine learning algorithms" returned low results → try "ML models", "neural networks", or "AI techniques"
+
 Examples:
 - Query "piano learning practice" → query: "piano learning practice", salientTerms: ["piano", "learning", "practice"]
 - Query "#projectx status update" → query: "#projectx status update", salientTerms: ["#projectx", "status", "update"]

@@ -112,11 +112,24 @@ export function parseReasoningBlock(content: string): ParsedReasoningBlock | nul
 }
 
 /**
+ * Query expansion info for localSearch.
+ * Contains both the individual expansion components and a combined list of all recall terms.
+ */
+export interface QueryExpansionInfo {
+  originalQuery: string;
+  salientTerms: string[]; // Terms from original query (used for ranking)
+  expandedQueries: string[]; // Alternative phrasings (used for recall)
+  expandedTerms: string[]; // LLM-generated related terms (used for recall)
+  recallTerms: string[]; // All terms combined that were used for recall
+}
+
+/**
  * Source info for localSearch results
  */
 export interface LocalSearchSourceInfo {
   titles: string[];
   count: number;
+  queryExpansion?: QueryExpansionInfo;
 }
 
 /**
@@ -139,14 +152,14 @@ export function summarizeToolResult(
   switch (toolName) {
     case "localSearch": {
       if (sourceInfo && sourceInfo.count > 0) {
-        // Show count and first few note titles
+        // Show just the count and first few note titles (terms are shown in tool call summary)
         const titleList = sourceInfo.titles.slice(0, 3);
         const remaining = sourceInfo.count - titleList.length;
-        let summary = `Found ${sourceInfo.count} note${sourceInfo.count !== 1 ? "s" : ""}: ${titleList.join(", ")}`;
+        let result = `Found ${sourceInfo.count} note${sourceInfo.count !== 1 ? "s" : ""}: ${titleList.join(", ")}`;
         if (remaining > 0) {
-          summary += ` +${remaining} more`;
+          result += ` +${remaining} more`;
         }
-        return summary;
+        return result;
       }
       return "No matching notes found";
     }
@@ -178,14 +191,36 @@ export function summarizeToolResult(
  *
  * @param toolName - Name of the tool being called
  * @param args - Arguments being passed to the tool
+ * @param expansion - Optional pre-expanded query data for localSearch
  * @returns Human-readable summary string
  */
-export function summarizeToolCall(toolName: string, args?: Record<string, unknown>): string {
+export function summarizeToolCall(
+  toolName: string,
+  args?: Record<string, unknown>,
+  expansion?: QueryExpansionInfo
+): string {
   switch (toolName) {
     case "localSearch": {
+      // If we have pre-expanded terms, show all recall terms
+      if (expansion && expansion.recallTerms && expansion.recallTerms.length > 0) {
+        // Filter to valid strings only
+        const validTerms = expansion.recallTerms.filter(
+          (t): t is string => typeof t === "string" && t.trim().length > 0
+        );
+        if (validTerms.length > 0) {
+          const terms = validTerms
+            .slice(0, 6)
+            .map((t) => `"${t}"`)
+            .join(", ");
+          const moreCount = validTerms.length - 6;
+          const termsSuffix = moreCount > 0 ? ` +${moreCount} more` : "";
+          return `Searching notes for ${terms}${termsSuffix}`;
+        }
+      }
+      // Fallback to query if no expansion available
       const query = args?.query as string | undefined;
       if (query) {
-        const truncatedQuery = query.length > 30 ? query.slice(0, 30) + "..." : query;
+        const truncatedQuery = query.length > 50 ? query.slice(0, 50) + "..." : query;
         return `Searching notes for "${truncatedQuery}"`;
       }
       return "Searching notes";
