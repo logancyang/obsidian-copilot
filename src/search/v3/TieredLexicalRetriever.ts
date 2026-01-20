@@ -1,6 +1,6 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { isInternalExcludedFile } from "@/search/searchUtils";
+import { isInternalExcludedFile, shouldIndexFile, getMatchingPatterns } from "@/search/searchUtils";
 import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
@@ -155,10 +155,13 @@ export class TieredLexicalRetriever extends BaseRetriever {
       });
     }
 
+    // Get QA exclusion/inclusion patterns for filtering
+    const { inclusions, exclusions } = getMatchingPatterns();
+
     // Extract daily note files by exact title match
     const dailyNoteQuery = dailyNoteTitles.join(", ");
-    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter(
-      (f) => !isInternalExcludedFile(f)
+    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter((f) =>
+      shouldIndexFile(f, inclusions, exclusions)
     );
 
     // Get documents for daily notes
@@ -172,7 +175,10 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
     // For time-based queries, we DON'T run regular search
     // Instead, find all documents modified within the time range
-    const allFiles = this.app.vault.getMarkdownFiles().filter((f) => !isInternalExcludedFile(f));
+    // Apply QA exclusion filter to respect user settings
+    const allFiles = this.app.vault
+      .getMarkdownFiles()
+      .filter((f) => shouldIndexFile(f, inclusions, exclusions));
     const timeFilteredDocuments: Document[] = [];
 
     // Limit the number of time-filtered documents to avoid overwhelming results

@@ -16,6 +16,11 @@ jest.mock("@/LLMProviders/chatModelManager");
 jest.mock("@/utils", () => ({
   extractNoteFiles: jest.fn().mockReturnValue([]),
 }));
+jest.mock("@/search/searchUtils", () => ({
+  isInternalExcludedFile: jest.fn().mockReturnValue(false),
+  shouldIndexFile: jest.fn().mockReturnValue(true),
+  getMatchingPatterns: jest.fn().mockReturnValue({ inclusions: null, exclusions: null }),
+}));
 jest.mock("./chunks", () => {
   const mockManager = {
     getChunkTextSync: jest.fn(),
@@ -453,6 +458,74 @@ describe("TieredLexicalRetriever", () => {
       expect(results.length).toBe(3);
       const largeNoteChunks = results.filter((r) => r.metadata.path === "large.md");
       expect(largeNoteChunks.length).toBe(2);
+    });
+  });
+
+  describe("time range search with QA exclusions", () => {
+    it("should exclude files matching QA exclusion patterns in time-range searches", async () => {
+      const { shouldIndexFile } = jest.requireMock("@/search/searchUtils");
+
+      // Create mock files - some in excluded folder, some not
+      const now = Date.now();
+      const mockFiles = [
+        {
+          path: "notes/valid-note.md",
+          basename: "valid-note",
+          stat: { mtime: now - 1000, ctime: now - 2000 },
+        },
+        {
+          path: "copilot/custom-prompt.md",
+          basename: "custom-prompt",
+          stat: { mtime: now - 1000, ctime: now - 2000 },
+        },
+        {
+          path: "notes/another-note.md",
+          basename: "another-note",
+          stat: { mtime: now - 1000, ctime: now - 2000 },
+        },
+      ];
+
+      // Add TFile prototype to mock files
+      mockFiles.forEach((f) => {
+        Object.setPrototypeOf(f, (TFile as any).prototype);
+      });
+
+      // Mock shouldIndexFile to exclude files in copilot/ folder
+      shouldIndexFile.mockImplementation((file: any) => {
+        return !file.path.startsWith("copilot/");
+      });
+
+      // Mock vault.getMarkdownFiles to return all files
+      mockApp.vault.getMarkdownFiles = jest.fn().mockReturnValue(mockFiles);
+      mockApp.vault.cachedRead.mockResolvedValue("File content");
+      mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [] });
+
+      // Mock extractNoteFiles to return empty (no daily notes found)
+      const { extractNoteFiles } = jest.requireMock("@/utils");
+      extractNoteFiles.mockReturnValue([]);
+
+      // Create retriever with time range
+      const timeRangeRetriever = new TieredLexicalRetriever(mockApp, {
+        minSimilarityScore: 0.1,
+        maxK: 30,
+        salientTerms: [],
+        timeRange: {
+          startTime: now - 7 * 24 * 60 * 60 * 1000, // 7 days ago
+          endTime: now,
+        },
+        returnAll: true,
+      });
+
+      const results = await timeRangeRetriever.getRelevantDocuments("what did I do");
+
+      // Should only include files not in excluded folder
+      expect(results.length).toBe(2);
+      expect(results.every((r) => !r.metadata.path.startsWith("copilot/"))).toBe(true);
+      expect(results.some((r) => r.metadata.path === "notes/valid-note.md")).toBe(true);
+      expect(results.some((r) => r.metadata.path === "notes/another-note.md")).toBe(true);
+
+      // Verify shouldIndexFile was called for filtering
+      expect(shouldIndexFile).toHaveBeenCalled();
     });
   });
 });
