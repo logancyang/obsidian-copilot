@@ -91,7 +91,7 @@ const ChatMessages = memo(
     if (!hasVisibleMessages && !currentAiMessage) {
       return (
         <div
-          ref={combinedScrollContainerRef}
+          ref={messagesRef}
           tabIndex={vimNavigationEnabled ? 0 : undefined}
           onKeyDown={vimNavigationEnabled ? onKeyDown : undefined}
           onBlur={vimNavigationEnabled ? onBlur : undefined}
