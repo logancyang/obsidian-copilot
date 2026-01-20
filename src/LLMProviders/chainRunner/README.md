@@ -544,14 +544,10 @@ interface ModelAdapter {
   enhanceUserMessage(message: string, requiresTools: boolean): string;
   parseToolCalls?(response: string): any[]; // Future extension
   needsSpecialHandling(): boolean;
-  sanitizeResponse?(response: string, iteration: number): string;
-  shouldTruncateStreaming?(partialResponse: string): boolean;
-  detectPrematureResponse?(response: string): {
-    hasPremature: boolean;
-    type: "before" | "after" | null;
-  };
 }
 ```
+
+> **Note:** With native tool calling via `bindTools()`, methods like `sanitizeResponse`, `shouldTruncateStreaming`, and `detectPrematureResponse` are no longer needed. Tool calls are returned in structured `response.tool_calls` format, not embedded as XML in text.
 
 ### Current Adapters
 
@@ -591,44 +587,7 @@ The `ClaudeModelAdapter` includes specialized handling for Claude thinking model
 - **Think Block Preservation** - Maintains valuable reasoning context in responses
 - **Temperature Control** - Disables temperature for thinking models (as required by API)
 
-#### Claude 4 Hallucination Prevention
-
-Claude 4 has a tendency to write complete responses immediately after tool calls instead of waiting for results. The adapter addresses this with:
-
-```typescript
-// Enhanced prompting with explicit autonomous agent pattern
-enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
-  if (this.isClaudeSonnet4()) {
-    // Add specific instructions for Claude 4:
-    // - Brief sentence + tool calls + STOP pattern
-    // - Explicit warnings about premature responses
-    // - Clear autonomous agent iteration guidance
-  }
-}
-
-// Detection of premature responses
-detectPrematureResponse(response: string): {
-  hasPremature: boolean;
-  type: "before" | "after" | null;
-} {
-  // Allows brief sentences before tool calls (up to 2 sentences, 200 chars)
-  // Detects substantial content after tool calls (forbidden)
-  // Uses threshold-based detection for generalizability
-}
-
-// Response sanitization
-sanitizeResponse(response: string, iteration: number): string {
-  // Preserves ALL think blocks
-  // Removes substantial non-thinking content after tool calls
-  // Only applies to first iteration when hallucination occurs
-}
-
-// Streaming truncation
-shouldTruncateStreaming(partialResponse: string): boolean {
-  // Prevents streaming of hallucinated content to users
-  // Truncates at last complete tool call when threshold exceeded
-}
-```
+> **Note:** With native tool calling, Claude 4 hallucination prevention (detecting/sanitizing premature responses after XML tool calls) is no longer needed. Tool calls are now returned in structured `response.tool_calls` format, and intermediate responses are hidden from users. Only final responses are streamed to the UI.
 
 #### Flow Improvement
 

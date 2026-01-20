@@ -133,11 +133,11 @@ describe("ModelAdapter", () => {
         []
       );
 
-      // Check for composer-specific GPT instructions
+      // Check for composer-specific GPT instructions (simplified without XML examples)
       expect(enhancedPrompt).toContain("FILE EDITING WITH COMPOSER TOOLS");
-      expect(enhancedPrompt).toContain("fix the typo");
-      expect(enhancedPrompt).toContain("add item 4 to the list");
-      expect(enhancedPrompt).toContain("diff parameter MUST contain");
+      expect(enhancedPrompt).toContain("replaceInFile");
+      expect(enhancedPrompt).toContain("writeToFile");
+      expect(enhancedPrompt).toContain("SEARCH/REPLACE format");
     });
 
     it("should rebuild enhanceSystemPrompt output from section metadata", () => {

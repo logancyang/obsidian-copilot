@@ -56,7 +56,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       );
     }
 
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, undefined, excludeThinking);
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
 
     try {
       // Tiered lexical retriever doesn't need index check - it builds indexes on demand

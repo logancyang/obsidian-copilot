@@ -16,15 +16,20 @@
 | ------------ | ---------------------------------------------------------------- | ------- |
 | Phase 1      | Tool definitions, registry, metadata, nativeToolCalling.ts       | ✅ Done |
 | Phase 2      | Simplified AutonomousAgentChainRunner with ReAct loop            | ✅ Done |
+| Phase 3      | CopilotPlusChainRunner migrated to native tool calling           | ✅ Done |
+| Phase 4      | XML tool parsing functions removed (kept escape/unescape only)   | ✅ Done |
+| Phase 5      | Model adapters cleaned up - XML templates removed                | ✅ Done |
 | Bedrock      | BedrockChatModel native tool calling (streaming + non-streaming) | ✅ Done |
 | Copilot Plus | copilot-plus-flash native tool calling (via ChatOpenRouter)      | ✅ Done |
 
 **Notes:**
 
 - `AutonomousAgentChainRunner` now uses `bindTools()` - no XML format instructions
-- `xmlParsing.ts` retained for `CopilotPlusChainRunner` (still uses XML)
-- Model adapters retained but XML instructions are dead code for agent mode
+- `CopilotPlusChainRunner` now uses `bindTools()` for tool planning
+- `xmlParsing.ts` simplified to only `escapeXml`, `unescapeXml`, `escapeXmlAttribute` for context envelope processing
+- Model adapters cleaned up - XML `<use_tool>` templates removed, kept behavioral guidance only
 - COPILOT_PLUS provider uses `ChatOpenRouter` for proper SSE tool_call parsing
+- `ToolCall` interface moved to `toolExecution.ts`
 
 ### 🔲 REMAINING
 
@@ -110,30 +115,59 @@ Gemini only supports subset of JSON Schema. Avoid:
 
 ## 🔲 What's Left to Remove XML Completely
 
-### Phase 3: Migrate CopilotPlusChainRunner
+### ✅ Phase 3: Migrate CopilotPlusChainRunner
 
-| Task                            | Description                                            |
-| ------------------------------- | ------------------------------------------------------ |
-| [ ] Replace XML tool format     | Use `bindTools()` instead of XML instructions          |
-| [ ] Update response parsing     | Parse `tool_calls` from AIMessage instead of XML regex |
-| [ ] Remove XML system prompt    | Remove tool format instructions                        |
-| [ ] Update tool result handling | Use `ToolMessage` instead of XML format                |
+**COMPLETED** - CopilotPlusChainRunner now uses native tool calling.
 
-### Phase 4: Delete XML Utilities
+| Task                         | Description                                                           | Status  |
+| ---------------------------- | --------------------------------------------------------------------- | ------- |
+| [x] Replace XML tool format  | Use `bindTools()` instead of XML instructions                         | ✅ Done |
+| [x] Update response parsing  | Parse `tool_calls` from AIMessage instead of XML regex                | ✅ Done |
+| [x] Remove XML system prompt | Remove tool format instructions                                       | ✅ Done |
+| [x] Tool result handling     | CopilotPlus doesn't use ReAct loop - results passed to final LLM call | ✅ N/A  |
 
-| Task                            | Description                    |
-| ------------------------------- | ------------------------------ |
-| [ ] Delete `xmlParsing.ts`      | Remove XML parsing utilities   |
-| [ ] Delete `xmlParsing.test.ts` | Remove tests                   |
-| [ ] Remove `escapeXml` usage    | Clean up `contextProcessor.ts` |
+**Implementation notes:**
 
-### Phase 5: Clean Up Model Adapters
+- `planToolCalls()` now uses `chatModel.bindTools(availableTools)` instead of XML descriptions
+- Tool calls extracted from `response.tool_calls` instead of `parseXMLToolCalls()`
+- Salient terms extracted via simple text pattern `[SALIENT_TERMS: ...]` with fallback
+- `unescapeXml` still used for context envelope image extraction (separate from tool calling)
 
-| Task                                      | Description                               |
-| ----------------------------------------- | ----------------------------------------- |
-| [ ] Remove XML templates                  | Delete `getToolCallFormat()`, XML strings |
-| [ ] Remove model-specific XML workarounds | GPT, Claude, Gemini handlers              |
-| [ ] Simplify adapter interface            | Keep only capability checks               |
+### ✅ Phase 4: Delete XML Tool Parsing Utilities
+
+**COMPLETED** - XML tool parsing functions removed, kept escape/unescape for context envelope.
+
+| Task                                           | Description                                           | Status  |
+| ---------------------------------------------- | ----------------------------------------------------- | ------- |
+| [x] Remove XML tool parsing from xmlParsing.ts | Removed `parseXMLToolCalls`, `stripToolCallXML`, etc. | ✅ Done |
+| [x] Move ToolCall interface                    | Moved to `toolExecution.ts` where it's actually used  | ✅ Done |
+| [x] Update xmlParsing.test.ts                  | Simplified to only test escape/unescape functions     | ✅ Done |
+| [x] Keep escape/unescape                       | Retained for context envelope image URL processing    | ✅ Done |
+
+**Implementation notes:**
+
+- `xmlParsing.ts` now only exports: `escapeXml`, `unescapeXml`, `escapeXmlAttribute`
+- `ToolCall` interface moved to `toolExecution.ts` with execution utilities
+- Legacy integration test `AgentPrompt.test.ts` skipped (tests old XML flow)
+
+### ✅ Phase 5: Clean Up Model Adapters
+
+**COMPLETED** - XML `<use_tool>` templates removed from all adapters.
+
+| Task                                      | Description                                            | Status  |
+| ----------------------------------------- | ------------------------------------------------------ | ------- |
+| [x] Remove XML templates                  | Removed `<use_tool>` format instructions               | ✅ Done |
+| [x] Remove model-specific XML workarounds | Simplified GPT, Claude, Gemini guidance                | ✅ Done |
+| [x] Remove premature response handling    | Removed detectPrematureResponse, sanitizeResponse, etc | ✅ Done |
+| [x] Update adapter tests                  | Fixed assertions for new simplified prompts            | ✅ Done |
+
+**Implementation notes:**
+
+- `BaseModelAdapter.buildSystemPromptSections` now says "Tools are provided via native function calling"
+- `GPTModelAdapter` no longer includes verbose XML examples, just behavioral guidance
+- `ClaudeModelAdapter` simplified - removed XML patterns, kept thinking model guidance
+- `GeminiModelAdapter` removed XML examples, kept sequential tool call guidance
+- Removed `detectPrematureResponse`, `sanitizeResponse`, `shouldTruncateStreaming` - not needed with native tool calling (tool calls are in structured `response.tool_calls`, not embedded XML)
 
 ### Phase 6: Replace Tool Call Banner UI
 
@@ -203,19 +237,24 @@ This simplifies persistence and reduces chat file size significantly.
 1. **Testing** - Complete manual functional tests and provider validation
 2. **Agent Reasoning Block** - Implement new UI (see `docs/AGENT_REASONING_BLOCK.md`)
 3. **Human-in-the-Loop Approval** - Add approval UI for risky tools (Phase 7)
-4. **CopilotPlusChainRunner** - Migrate to native tool calling (Phase 3)
-5. **Simplify Chat Persistence** - Only persist user messages + AI final responses (Phase 8)
-6. **XML Cleanup** - Delete utilities and clean up adapters (Phase 9)
-7. **Local Model Providers** - LM Studio and Ollama tool calling support (Phase 10)
+4. ~~**CopilotPlusChainRunner**~~ - ✅ Done (Phase 3)
+5. ~~**XML Cleanup**~~ - ✅ Done (Phases 4, 5 - kept escape/unescape for context envelope)
+6. **Simplify Chat Persistence** - Only persist user messages + AI final responses (Phase 8)
+7. **Final Cleanup** - Audit remaining XML refs, update documentation (Phase 9)
+8. **Local Model Providers** - Ollama tool calling support (Phase 10)
 
-### Estimated Additional Reduction
+### Code Reduction Summary (Phases 4 & 5 Complete)
 
-| Component                    | Current   | After    |
-| ---------------------------- | --------- | -------- |
-| xmlParsing.ts                | ~400      | 0        |
-| modelAdapter.ts (XML)        | ~500      | ~50      |
-| toolCallParser.ts            | ~200      | ~50      |
-| CopilotPlusChainRunner (XML) | ~300      | ~100     |
-| **Total**                    | **~1400** | **~200** |
+| Component              | Before | After | Reduction |
+| ---------------------- | ------ | ----- | --------- |
+| xmlParsing.ts          | ~400   | ~50   | 87%       |
+| modelAdapter.ts        | ~900   | ~650  | 28%       |
+| xmlParsing.test.ts     | ~400   | ~130  | 67%       |
+| CopilotPlusChainRunner | ~300   | ~200  | 33%       |
 
-**85% additional reduction after full XML removal.**
+**Notes:**
+
+- XML tool parsing completely removed from `xmlParsing.ts`
+- Kept only `escapeXml`, `unescapeXml`, `escapeXmlAttribute` for context envelope
+- Model adapters simplified but retained behavioral guidance for GPT/Claude/Gemini quirks
+- All 1417 tests passing

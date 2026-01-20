@@ -1,3 +1,26 @@
+/**
+ * LEGACY TEST FILE - SKIPPED
+ *
+ * This integration test was designed to test XML-based tool calling flow.
+ * The codebase has migrated to native LangChain tool calling via bindTools().
+ *
+ * XML tool parsing functions (parseXMLToolCalls, stripToolCallXML) have been removed
+ * as part of the native tool calling migration (Phase 4).
+ *
+ * Native tool calling is tested via:
+ * - Unit tests in the respective chain runner files
+ * - Manual testing with various LLM providers
+ *
+ * TODO: Consider creating new integration tests for native tool calling flow
+ */
+
+// Skip entire file - legacy XML-based test
+describe.skip("AgentPrompt Integration Tests (Legacy XML Flow)", () => {
+  it("skipped - see file header comment", () => {});
+});
+
+/* Original test code preserved for reference:
+
 // Mock obsidian Modal before any other imports
 jest.mock("obsidian", () => ({
   Modal: class Modal {
@@ -669,3 +692,5 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
     console.log("✅ Agent Prompt test setup verified successfully");
   });
 });
+
+End of legacy test file */

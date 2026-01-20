@@ -53,11 +53,9 @@ import { extractMarkdownImagePaths } from "./utils/imageExtraction";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
 import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
-import { ModelAdapterFactory, joinPromptSections } from "./utils/modelAdapter";
-import { parseXMLToolCalls, unescapeXml } from "./utils/xmlParsing";
-import { extractParametersFromZod } from "@/tools/createLangChainTool";
+import { unescapeXml } from "./utils/xmlParsing";
 import { StructuredTool } from "@langchain/core/tools";
-import { z } from "zod";
+import { AIMessage } from "@langchain/core/messages";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
 
@@ -97,82 +95,41 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   }
 
   /**
-   * Generate tool descriptions in XML format for the model.
-   * Reuses the same format as autonomous agent.
-   */
-  public static generateToolDescriptions(availableTools: StructuredTool[]): string {
-    return availableTools
-      .map((tool) => {
-        let params = "";
-
-        // Extract parameters from Zod schema (cast needed as StructuredTool uses generic schema type)
-        const parameters = extractParametersFromZod(tool.schema as z.ZodType);
-        if (Object.keys(parameters).length > 0) {
-          params = Object.entries(parameters)
-            .map(([key, description]) => `<${key}>${description}</${key}>`)
-            .join("\n");
-        }
-
-        return `<${tool.name}>
-<description>${tool.description}</description>
-<parameters>
-${params}
-</parameters>
-</${tool.name}>`;
-      })
-      .join("\n\n");
-  }
-
-  /**
-   * Use model-based planning to determine which tools to call.
-   * Replaces the Broca API call with chat model tool planning.
+   * Use model-based planning with native tool calling to determine which tools to call.
+   * Uses bindTools() for native function calling instead of XML format.
    */
   private async planToolCalls(
     userMessage: string,
     chatModel: BaseChatModel
   ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[] }> {
     const availableTools = this.getAvailableToolsForPlanning();
-    const adapter = ModelAdapterFactory.createAdapter(chatModel);
-    const toolDescriptions = CopilotPlusChainRunner.generateToolDescriptions(availableTools);
 
-    // Build a lightweight planning prompt
-    const registry = ToolRegistry.getInstance();
-    const toolMetadata = availableTools
-      .map((tool) => registry.getToolMetadata(tool.name))
-      .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
+    // Check if model supports native tool calling
+    if (typeof (chatModel as any).bindTools !== "function") {
+      logWarn("[CopilotPlus] Model does not support native tool calling, skipping tool planning");
+      return { toolCalls: [], salientTerms: this.extractSalientTermsFromQuery(userMessage) };
+    }
 
-    const allSections = adapter.buildSystemPromptSections(
-      "You are a helpful AI assistant. Analyze the user's message and determine if any tools should be called.",
-      toolDescriptions,
-      availableTools.map((t) => t.name),
-      toolMetadata
-    );
+    // Bind tools to the model for native function calling
+    const boundModel = (chatModel as any).bindTools(availableTools);
 
-    let planningPrompt = joinPromptSections(allSections);
+    // Build a lightweight planning prompt (no XML format instructions needed)
+    const planningPrompt = `You are a helpful AI assistant. Analyze the user's message and determine if any tools should be called.
 
-    // Add salient term extraction instruction to the planning prompt
-    planningPrompt += `\n\nIMPORTANT: Respond ONLY with XML blocks. Do not include any natural language explanations, apologies, or commentary.
+Guidelines:
+- Use tools when the user's request requires external information or computation
+- For time-related queries, use getTimeRangeMs to convert time expressions to timestamps
+- For file structure queries, use getFileTree to explore the vault
+- If no tools are needed, respond with your analysis
 
-Your response must contain:
-1. Tool calls (if needed): <use_tool>...</use_tool>
-2. Salient terms (always): <salient_terms><term>keyword</term></salient_terms>
-
-Format for salient terms:
-<salient_terms>
-<term>first keyword</term>
-<term>second keyword</term>
-</salient_terms>
-
-Guidelines for salient terms:
+After analyzing, extract key search terms from the user's message that would be useful for searching notes:
 - Extract meaningful nouns, topics, and specific concepts
-- Exclude common words like "what", "how", "my", "the", "a", "an"
-- Exclude time expressions (those are handled separately)
-- If the message has no meaningful search terms, output empty <salient_terms></salient_terms>
-- Use the EXACT words from the user's message (preserve language/spelling)
+- Preserve the EXACT words and language from the user's message (works for any language)
+- Exclude time expressions (those are handled by tools)
 
-OUTPUT ONLY XML - NO OTHER TEXT.`;
+Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
-    // Create a simple planning request
+    // Create planning request
     const planningMessages = [
       {
         role: getMessageRole(chatModel),
@@ -184,28 +141,35 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
       },
     ];
 
-    logInfo("[CopilotPlus] Requesting tool planning from model...");
+    logInfo("[CopilotPlus] Requesting tool planning with native tool calling...");
 
-    // Get model response for planning
-    const response = await withSuppressedTokenWarnings(() => chatModel.invoke(planningMessages));
+    // Get model response for planning (cast to AIMessage for type safety)
+    const response = (await withSuppressedTokenWarnings(() =>
+      boundModel.invoke(planningMessages)
+    )) as AIMessage;
 
+    // Extract tool calls from native response
+    const nativeToolCalls = response.tool_calls || [];
     const responseText =
       typeof response.content === "string" ? response.content : String(response.content);
 
-    logInfo("[CopilotPlus] Model planning response:", responseText.substring(0, 500));
+    logInfo("[CopilotPlus] Native tool calls:", nativeToolCalls.length);
 
-    // Parse tool calls from response
-    const parsedCalls = parseXMLToolCalls(responseText);
+    // Extract salient terms from response text
+    const salientTerms = this.extractSalientTermsFromResponse(responseText, userMessage);
 
-    // Extract salient terms from <salient_terms> block
-    const salientTerms = this.extractSalientTerms(responseText);
-
-    // Convert parsed calls to executor format
+    // Convert native tool calls to executor format
     const toolCalls: ToolCallWithExecutor[] = [];
-    for (const parsedCall of parsedCalls) {
-      const tool = availableTools.find((t) => t.name === parsedCall.name);
+    for (const tc of nativeToolCalls) {
+      const tool = availableTools.find((t) => t.name === tc.name);
       if (tool) {
-        toolCalls.push({ tool, args: parsedCall.args });
+        toolCalls.push({
+          tool,
+          args: tc.args as Record<string, unknown>,
+        });
+        logInfo(`[CopilotPlus] Tool call: ${tc.name}`, tc.args);
+      } else {
+        logWarn(`[CopilotPlus] Tool '${tc.name}' not found in available tools`);
       }
     }
 
@@ -213,27 +177,36 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
   }
 
   /**
-   * Extract salient terms from model response.
-   * Looks for <salient_terms><term>...</term></salient_terms> format.
+   * Extract salient terms from model response or fallback to query extraction.
    */
-  private extractSalientTerms(responseText: string): string[] {
-    const salientTermsMatch = responseText.match(/<salient_terms>([\s\S]*?)<\/salient_terms>/);
-    if (!salientTermsMatch) {
-      return [];
-    }
-
-    const termsBlock = salientTermsMatch[1];
-    const termMatches = termsBlock.matchAll(/<term>(.*?)<\/term>/g);
-    const terms: string[] = [];
-
-    for (const match of termMatches) {
-      const term = match[1].trim();
-      if (term) {
-        terms.push(term);
+  private extractSalientTermsFromResponse(responseText: string, originalQuery: string): string[] {
+    // Try to extract from [SALIENT_TERMS: ...] format
+    const match = responseText.match(/\[SALIENT_TERMS:\s*([^\]]+)\]/i);
+    if (match) {
+      const terms = match[1]
+        .split(",")
+        .map((t) => t.trim())
+        .filter((t) => t.length > 0);
+      if (terms.length > 0) {
+        return terms;
       }
     }
 
-    return terms;
+    // Fallback to extracting from original query
+    return this.extractSalientTermsFromQuery(originalQuery);
+  }
+
+  /**
+   * Extract salient terms directly from query (fallback method).
+   * Uses language-agnostic heuristics: keeps words with 3+ characters.
+   */
+  private extractSalientTermsFromQuery(query: string): string[] {
+    // Language-agnostic extraction: split on whitespace and punctuation,
+    // keep words with sufficient length (filters out short function words in most languages)
+    return query
+      .split(/[\s\p{P}]+/u) // Split on whitespace and punctuation (Unicode-aware)
+      .filter((word) => word.length >= 3) // Keep words with 3+ characters
+      .slice(0, 10); // Limit to 10 terms
   }
 
   /**
@@ -730,11 +703,7 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
     const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
     const excludeThinking = !hasReasoning;
 
-    const thinkStreamer = new ThinkBlockStreamer(
-      updateCurrentAiMessage,
-      undefined,
-      excludeThinking
-    );
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
     let sources: { title: string; path: string; score: number; explanation?: any }[] = [];
 
     const isPlusUser = await checkIsPlusUser({

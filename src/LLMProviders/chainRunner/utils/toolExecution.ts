@@ -4,7 +4,15 @@ import { getSettings } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { err2String } from "@/utils";
-import { ToolCall } from "./xmlParsing";
+
+/**
+ * Represents a tool call with name and arguments.
+ * Used by native tool calling flow.
+ */
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
 
 export interface ToolExecutionResult {
   toolName: string;

@@ -1,6 +1,5 @@
 import { StreamingResult, TokenUsage } from "@/types/message";
 import { AIMessage } from "@langchain/core/messages";
-import { ModelAdapter } from "./modelAdapter";
 import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
 import { formatErrorChunk } from "@/utils/toolResultUtils";
 import {
@@ -20,7 +19,6 @@ export class ThinkBlockStreamer {
   private hasOpenThinkBlock = false;
   private fullResponse = "";
   private errorResponse = "";
-  private shouldTruncate = false;
   private wasTruncated = false;
   private tokenUsage: TokenUsage | null = null;
 
@@ -30,7 +28,6 @@ export class ThinkBlockStreamer {
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
-    private modelAdapter?: ModelAdapter,
     private excludeThinking: boolean = false
   ) {}
 
@@ -168,11 +165,6 @@ export class ThinkBlockStreamer {
   }
 
   processChunk(chunk: any) {
-    // If we've already decided to truncate, don't process more chunks
-    if (this.shouldTruncate) {
-      return;
-    }
-
     // Detect truncation using multi-provider detector
     const truncationResult = detectTruncation(chunk);
     if (truncationResult.wasTruncated) {
@@ -219,11 +211,6 @@ export class ThinkBlockStreamer {
     } else {
       // Default case: regular content or other formats
       this.handleDeepseekChunk(chunk);
-    }
-
-    // Check if we should truncate streaming based on model adapter
-    if (this.modelAdapter?.shouldTruncateStreaming?.(this.fullResponse)) {
-      this.shouldTruncate = true;
     }
 
     this.updateCurrentAiMessage(this.fullResponse);

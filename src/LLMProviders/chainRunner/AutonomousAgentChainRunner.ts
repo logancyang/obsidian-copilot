@@ -206,7 +206,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
     const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
     const excludeThinking = !hasReasoning;
-    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter, excludeThinking);
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
 
     if (!isPlusUser) {
       await this.handleError(

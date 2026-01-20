@@ -143,7 +143,6 @@ function CustomCommandChatModalContent({
           (message: string) => {
             setAiCurrentMessage(message);
           },
-          undefined, // no model adapter
           true // excludeThinking
         );
 
