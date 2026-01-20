@@ -8,17 +8,17 @@ The Copilot tool system uses a centralized registry pattern that makes it easy t
 
 ### How Tool Instructions Flow to the LLM
 
-The system uses a three-layer approach for providing tool instructions to LLMs:
+The system uses **native tool calling** via LangChain's `bindTools()` for tool invocation. Tool results are formatted as context in a layered approach:
 
-1. **Tool Schema Descriptions** (in tool implementations like `ComposerTools.ts`)
+1. **Tool Schema Descriptions** (Zod schemas in tool implementations)
 
    - Defines parameter formats, rules, and validation
-   - NO XML examples - focuses on data contract only
+   - Provided to LLM via `bindTools()` for native tool calling
 
 2. **Custom Prompt Instructions** (in `builtinTools.ts`)
 
-   - Contains XML `<use_tool>` invocation examples
-   - Shows when and how to call the tool
+   - Behavioral guidance for when and how to use tools
+   - Special requirements (e.g., "always provide salientTerms")
 
 3. **Model-Specific Adaptations** (in `modelAdapter.ts`)
    - Last resort for model-specific quirks
@@ -26,18 +26,18 @@ The system uses a three-layer approach for providing tool instructions to LLMs:
 ### Layered Prompt Integration
 
 - `ContextManager` promotes user-attached artifacts from earlier turns into **L2 (Context Library)**, so every chain runner starts with the same cacheable system prefix.
-- When a tool executes during the current turn, its XML payload is prepended to the **user message** (L3 + L5) using `renderCiCMessage(...)`. Nothing is injected into the system message, keeping L1/L2 stable.
-- `LayerToMessagesConverter.convert(envelope, { includeSystemMessage: true, mergeUserContent: true })` materializes the base messages; runners then append tool XML before sending to the model.
+- When a tool executes during the current turn, its result payload is prepended to the **user message** (L3 + L5) using `renderCiCMessage(...)`. Nothing is injected into the system message, keeping L1/L2 stable.
+- `LayerToMessagesConverter.convert(envelope, { includeSystemMessage: true, mergeUserContent: true })` materializes the base messages; runners then append tool results before sending to the model.
 - `promptPayloadRecorder` inspects the final payload and highlights tool blocks in its layered view, making it easy to debug the L1-L5 structure.
 
 ### Why Two Layers: Schema vs Custom Instructions
 
-**Key Difference**: Schema descriptions document parameters, while custom instructions provide XML invocation examples.
+**Key Difference**: Schema descriptions document parameters via Zod, while custom instructions provide behavioral guidance.
 
 1. **Clear Separation**
 
-   - **Schema**: Parameter documentation (types, formats, rules) - NO XML examples
-   - **Custom Instructions**: XML `<use_tool>` examples showing how to invoke
+   - **Schema**: Parameter documentation (types, formats, rules) via Zod - used by `bindTools()`
+   - **Custom Instructions**: Behavioral guidance on when and how to use the tool
 
 2. **MCP Compatibility**
 
@@ -47,32 +47,34 @@ The system uses a three-layer approach for providing tool instructions to LLMs:
 3. **Example**
 
    ```typescript
-   // Schema (parameter documentation only)
-   salientTerms: z.array(z.string()).describe("Keywords to find in notes");
+   // Schema (provided to LLM via bindTools())
+   const searchSchema = z.object({
+     query: z.string().min(1).describe("The search query"),
+     salientTerms: z.array(z.string()).describe("Keywords to find in notes"),
+   });
 
-   // Custom Instructions (XML invocation examples)
+   // Custom Instructions (behavioral guidance)
    customPromptInstructions: `
-   Example usage:
-   <use_tool>
-   <name>localSearch</name>
-   <query>piano learning</query>
-   <salientTerms>["piano", "learning"]</salientTerms>
-   </use_tool>`;
+   When searching notes:
+   - Always provide salientTerms extracted from the user's query
+   - Use getTimeRangeMs first for time-based queries
+   - Examine relevance scores before using results
+   `;
    ```
 
 ### Best Practices
 
 1. **Schema Descriptions: Parameter Documentation Only**
 
-   - Document parameter types, formats, and validation rules
-   - NO XML examples - those belong in custom instructions
+   - Document parameter types, formats, and validation rules via Zod
+   - Schemas are automatically provided to LLM via `bindTools()`
    - Focus on the data contract
 
-2. **Custom Instructions: XML Examples & Usage Patterns**
+2. **Custom Instructions: Behavioral Guidance**
 
-   - Provide XML `<use_tool>` invocation examples
-   - Show common usage patterns and edge cases
-   - Include behavioral guidance (when to use vs other tools)
+   - Explain when to use this tool vs alternatives
+   - Show common usage patterns and requirements
+   - Include tips for better results (e.g., "use getTimeRangeMs before localSearch")
 
 3. **Model Adapters: Model-Specific Fixes**
    - Only for persistent model-specific failures
