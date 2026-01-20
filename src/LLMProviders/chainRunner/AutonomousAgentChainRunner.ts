@@ -109,6 +109,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private reasoningState: AgentReasoningState = createInitialReasoningState();
   private reasoningTimerInterval: ReturnType<typeof setInterval> | null = null;
   private accumulatedContent = ""; // Track content to include in timer updates
+  private allReasoningSteps: Array<{ timestamp: number; summary: string; toolName?: string }> = []; // Full history of all steps
 
   private getAvailableTools(): StructuredTool[] {
     const settings = getSettings();
@@ -140,6 +141,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       steps: [],
     };
     this.accumulatedContent = "";
+    this.allReasoningSteps = []; // Reset full history
 
     // Update every 100ms for smooth timer - always includes accumulated content
     this.reasoningTimerInterval = setInterval(() => {
@@ -159,19 +161,24 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   /**
    * Add a reasoning step to the display.
-   * Keeps only the last 2 steps for concise display.
+   * During reasoning: shows rolling window of last 4 steps.
+   * After completion: full history is available for expanded view.
    *
    * @param summary - Human-readable summary of the step
    * @param toolName - Optional name of the tool associated with this step
    */
   private addReasoningStep(summary: string, toolName?: string): void {
-    this.reasoningState.steps.push({
+    const step = {
       timestamp: Date.now(),
       summary,
       toolName,
-    });
-    // Keep only last 2 steps for concise display
-    if (this.reasoningState.steps.length > 2) {
+    };
+    // Always add to full history
+    this.allReasoningSteps.push(step);
+    // Add to display state (rolling window)
+    this.reasoningState.steps.push(step);
+    // Keep only last 4 steps for rolling window display during reasoning
+    if (this.reasoningState.steps.length > 4) {
       this.reasoningState.steps.shift();
     }
   }
@@ -189,10 +196,21 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   /**
    * Build the reasoning block markup for embedding in the message.
+   * During reasoning: uses rolling window (last 4 steps).
+   * When complete: uses full history so expanded view shows all steps.
    *
    * @returns Markup string for the reasoning block
    */
   private buildReasoningBlockMarkup(): string {
+    // When complete, use full history for the expanded view
+    if (this.reasoningState.status === "complete" || this.reasoningState.status === "collapsed") {
+      const stateWithFullHistory: AgentReasoningState = {
+        ...this.reasoningState,
+        steps: this.allReasoningSteps,
+      };
+      return serializeReasoningBlock(stateWithFullHistory);
+    }
+    // During reasoning, use the rolling window
     return serializeReasoningBlock(this.reasoningState);
   }
 
@@ -548,7 +566,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     let iteration = 0;
     let responseMetadata: ResponseMetadata | undefined;
-    let fullContent = "";
 
     while (iteration < maxIterations) {
       if (abortController.signal.aborted) break;
@@ -579,11 +596,33 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         this.reasoningState.status = "complete";
 
         messages.push(aiMessage);
-        fullContent += content;
 
-        // Final update with collapsed reasoning block
+        // Final response is ONLY this iteration's content, not accumulated intermediate content
+        const finalContent = content;
         const reasoningBlock = this.buildReasoningBlockMarkup();
-        const finalResponse = reasoningBlock ? reasoningBlock + "\n\n" + fullContent : fullContent;
+
+        // Stream the final response progressively for better UX
+        // Since we already have the full content, we'll display it in chunks
+        const STREAM_CHUNK_SIZE = 20; // Characters per chunk
+        const STREAM_DELAY_MS = 5; // Milliseconds between chunks
+        let displayedContent = "";
+
+        for (let i = 0; i < finalContent.length; i += STREAM_CHUNK_SIZE) {
+          if (abortController.signal.aborted) break;
+          displayedContent += finalContent.slice(i, i + STREAM_CHUNK_SIZE);
+          const currentResponse = reasoningBlock
+            ? reasoningBlock + "\n\n" + displayedContent
+            : displayedContent;
+          updateCurrentAiMessage(currentResponse);
+          if (i + STREAM_CHUNK_SIZE < finalContent.length) {
+            await new Promise((resolve) => setTimeout(resolve, STREAM_DELAY_MS));
+          }
+        }
+
+        // Final update with complete content
+        const finalResponse = reasoningBlock
+          ? reasoningBlock + "\n\n" + finalContent
+          : finalContent;
         updateCurrentAiMessage(finalResponse);
 
         return {
@@ -593,9 +632,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         };
       }
 
-      // Add AI message with tool calls
+      // Add AI message with tool calls - but DON'T accumulate intermediate content
+      // Intermediate content (like "I'll search for..." ) should not appear in final response
       messages.push(aiMessage);
-      fullContent += content + "\n\n";
+      // NOTE: We intentionally do NOT add content to fullContent here
+      // The model's intermediate "thinking aloud" text is not shown to the user
 
       // Execute each tool
       for (const tc of toolCalls) {
@@ -685,7 +726,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         logToolResult(tc.name, result);
 
         // Add reasoning step for tool result (timer will display it)
-        const resultSummary = summarizeToolResult(tc.name, result, sourceInfo);
+        const resultSummary = summarizeToolResult(tc.name, result, sourceInfo, toolCall.args);
         this.addReasoningStep(resultSummary, tc.name);
 
         // Add ToolMessage to conversation
@@ -698,16 +739,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       }
     }
 
-    // Max iterations reached
+    // Max iterations reached - shouldn't normally get here since we return inside the loop
     logWarn(`Agent reached max iterations (${maxIterations})`);
 
     // Stop reasoning timer for max iterations case
     this.stopReasoningTimer();
     this.reasoningState.status = "complete";
     const reasoningBlock = this.buildReasoningBlockMarkup();
+    const maxIterMessage =
+      "I've reached the maximum number of tool calls. Here's what I found so far based on the search results.";
     const finalResponse = reasoningBlock
-      ? reasoningBlock + "\n\n" + fullContent + "\n\n(Reached max iterations)"
-      : fullContent + "\n\n(Reached max iterations)";
+      ? reasoningBlock + "\n\n" + maxIterMessage
+      : maxIterMessage;
 
     return {
       finalResponse,
@@ -718,44 +761,24 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   /**
    * Stream response from the bound model and accumulate tool call chunks.
-   * Updates this.accumulatedContent so the timer can display it.
-   * Detects final response (text without tool calls) and stops timer early.
+   * Does NOT stop the timer - that's handled by runReActLoop when it determines
+   * this is the final response (no tool calls).
    */
   private async streamModelResponse(
     boundModel: Runnable,
     messages: BaseMessage[],
     abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void
+    _updateCurrentAiMessage: (message: string) => void
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
-    // Minimum content length before we consider it a final response (not just whitespace/prefix)
-    const FINAL_RESPONSE_MIN_LENGTH = 10;
-
     let fullContent = "";
     const toolCallChunks: Map<number, { id?: string; name: string; args: string }> = new Map();
-    let hasDetectedFinalResponse = false;
 
-    // Helper to handle content updates and final response detection
+    // Helper to handle content updates - don't detect final response here,
+    // let runReActLoop decide based on whether there are tool calls
     const handleContentUpdate = (newContent: string) => {
       fullContent += newContent;
-      this.accumulatedContent = fullContent;
-
-      // If we have text content and no tool calls detected, this is likely final response
-      // Stop timer and collapse reasoning block for smooth streaming
-      if (
-        !hasDetectedFinalResponse &&
-        fullContent.trim().length > FINAL_RESPONSE_MIN_LENGTH &&
-        toolCallChunks.size === 0
-      ) {
-        hasDetectedFinalResponse = true;
-        this.stopReasoningTimer();
-        this.reasoningState.status = "complete";
-      }
-
-      // After timer stops, update UI directly with collapsed block + content
-      if (hasDetectedFinalResponse) {
-        const reasoningBlock = this.buildReasoningBlockMarkup();
-        updateCurrentAiMessage(reasoningBlock + "\n\n" + fullContent);
-      }
+      // Don't update accumulatedContent for intermediate responses -
+      // intermediate content should not be shown to the user
     };
 
     try {

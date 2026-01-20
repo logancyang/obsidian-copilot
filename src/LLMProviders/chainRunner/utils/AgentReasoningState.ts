@@ -138,12 +138,14 @@ export interface LocalSearchSourceInfo {
  * @param toolName - Name of the tool that was executed
  * @param result - Result from the tool execution
  * @param sourceInfo - Optional source info for localSearch results
+ * @param args - Optional original tool call arguments for context
  * @returns Human-readable summary string
  */
 export function summarizeToolResult(
   toolName: string,
   result: { success: boolean; result?: string },
-  sourceInfo?: LocalSearchSourceInfo
+  sourceInfo?: LocalSearchSourceInfo,
+  args?: Record<string, unknown>
 ): string {
   if (!result.success) {
     return `${toolName} failed`;
@@ -169,6 +171,14 @@ export function summarizeToolResult(
       return "Calculated time range";
     case "readFile":
       return "Read file content";
+    case "readNote": {
+      const notePath = args?.notePath as string | undefined;
+      if (notePath) {
+        const noteTitle = notePath.split("/").pop()?.replace(/\.md$/i, "") || notePath;
+        return `Read "${noteTitle}"`;
+      }
+      return "Read note content";
+    }
     case "createNote":
       return "Created new note";
     case "appendToNote":
@@ -242,6 +252,15 @@ export function summarizeToolCall(
         return `Reading "${fileName}"`;
       }
       return "Reading file";
+    }
+    case "readNote": {
+      const notePath = args?.notePath as string | undefined;
+      if (notePath) {
+        // Extract note title from path (remove .md extension and get last segment)
+        const noteTitle = notePath.split("/").pop()?.replace(/\.md$/i, "") || notePath;
+        return `Reading "${noteTitle}"`;
+      }
+      return "Reading note";
     }
     case "createNote":
       return "Creating new note";

@@ -30,13 +30,58 @@ const formatTime = (seconds: number): string => {
 };
 
 /**
- * Loading spinner component with pulsing animation
+ * Animated spinner using a 5-dot cross/plus pattern.
+ * Dots light up in sequence with gradient trail, then all dim briefly.
+ *
+ * Grid positions (cross pattern, no corners):
+ *   1
+ * 3 4 5
+ *   7
+ *
+ * Animation sequence: 5 → 1 → 3 → 7 → 4 → (all dim) → (all dim) → repeat
+ * (right → top → left → bottom → center)
  */
-const LoadingSpinner: React.FC = () => (
-  <span className="agent-reasoning-spinner">
-    <span className="spinner-dots">&#x283F;</span>
-  </span>
-);
+const CopilotSpinner: React.FC = () => {
+  // Cross pattern dots: [row, col, animation index]
+  // Sequence: right → top → left → bottom → center
+  // With positive delays, order is simply: 0 → 1 → 2 → 3 → 4
+  const crossDots: { row: number; col: number; animIndex: number }[] = [
+    { row: 0, col: 1, animIndex: 1 }, // top - 2nd
+    { row: 1, col: 0, animIndex: 2 }, // left - 3rd
+    { row: 1, col: 1, animIndex: 4 }, // center - 5th (last)
+    { row: 1, col: 2, animIndex: 0 }, // right - 1st (leads)
+    { row: 2, col: 1, animIndex: 3 }, // bottom - 4th
+  ];
+
+  const dotSize = 2.5;
+  const gap = 4;
+  const gridSize = dotSize * 3 + gap * 2;
+
+  return (
+    <svg
+      width={gridSize}
+      height={gridSize}
+      viewBox={`0 0 ${gridSize} ${gridSize}`}
+      className="copilot-spinner"
+    >
+      {crossDots.map((dot, index) => {
+        const cx = dot.col * (dotSize + gap) + dotSize / 2;
+        const cy = dot.row * (dotSize + gap) + dotSize / 2;
+
+        return (
+          <circle
+            key={index}
+            cx={cx}
+            cy={cy}
+            r={dotSize / 2}
+            // eslint-disable-next-line tailwindcss/no-custom-classname
+            className={`copilot-spinner-dot copilot-spinner-dot-${dot.animIndex}`}
+          />
+        );
+      })}
+    </svg>
+  );
+};
 
 /**
  * AgentReasoningBlock - Displays the agent's reasoning process
@@ -96,7 +141,7 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
           {/* Spinner or expand chevron */}
           <span className="agent-reasoning-icon">
             {isActive ? (
-              <LoadingSpinner />
+              <CopilotSpinner />
             ) : (
               <ChevronRight
                 className={cn(
