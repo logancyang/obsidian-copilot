@@ -213,9 +213,13 @@ export function summarizeToolCall(
     case "localSearch": {
       // If we have pre-expanded terms, show all recall terms
       if (expansion && expansion.recallTerms && expansion.recallTerms.length > 0) {
-        // Filter to valid strings only
+        // Filter to valid strings only, excluding "[object Object]" artifacts
         const validTerms = expansion.recallTerms.filter(
-          (t): t is string => typeof t === "string" && t.trim().length > 0
+          (t): t is string =>
+            typeof t === "string" &&
+            t.trim().length > 0 &&
+            !t.includes("[object ") &&
+            t !== "[object Object]"
         );
         if (validTerms.length > 0) {
           const terms = validTerms

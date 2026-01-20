@@ -110,6 +110,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private reasoningTimerInterval: ReturnType<typeof setInterval> | null = null;
   private accumulatedContent = ""; // Track content to include in timer updates
   private allReasoningSteps: Array<{ timestamp: number; summary: string; toolName?: string }> = []; // Full history of all steps
+  private abortHandledByTimer = false; // Flag to prevent duplicate interrupted messages
 
   private getAvailableTools(): StructuredTool[] {
     const settings = getSettings();
@@ -130,10 +131,15 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   /**
    * Start the reasoning timer and initialize reasoning state.
    * Timer runs independently and always includes accumulated content.
+   * Also monitors abort signal to show interrupted message immediately.
    *
    * @param updateFn - Function to call with updated message content
+   * @param abortController - AbortController to monitor for user interruption
    */
-  private startReasoningTimer(updateFn: (message: string) => void): void {
+  private startReasoningTimer(
+    updateFn: (message: string) => void,
+    abortController?: AbortController
+  ): void {
     this.reasoningState = {
       status: "reasoning",
       startTime: Date.now(),
@@ -142,9 +148,55 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     };
     this.accumulatedContent = "";
     this.allReasoningSteps = []; // Reset full history
+    this.abortHandledByTimer = false; // Reset abort flag
+
+    // Add initial step immediately for better UX (randomized for variety)
+    const initialSteps = [
+      "Understanding your question",
+      "Analyzing your request",
+      "Processing your query",
+      "Thinking about this",
+      "Considering your question",
+      "Working on this",
+      "Pondering the possibilities",
+      "Diving into your request",
+      "Let me think about this",
+      "Exploring your question",
+      "Getting my thoughts together",
+      "Examining the details",
+      "Looking into this",
+      "Mulling this over",
+      "On it",
+      "Firing up the neurons",
+      "Connecting the dots",
+      "Brewing some ideas",
+      "Spinning up the gears",
+      "Warming up the engines",
+      "Crunching the details",
+      "Putting on my thinking cap",
+      "Consulting my notes",
+      "Gathering my thoughts",
+      "Rolling up my sleeves",
+    ];
+    const randomStep = initialSteps[Math.floor(Math.random() * initialSteps.length)];
+    this.addReasoningStep(randomStep);
 
     // Update every 100ms for smooth timer - always includes accumulated content
     this.reasoningTimerInterval = setInterval(() => {
+      // Check for abort and show interrupted message immediately
+      if (abortController?.signal.aborted && this.reasoningState.status === "reasoning") {
+        this.stopReasoningTimer();
+        this.reasoningState.status = "complete";
+        this.abortHandledByTimer = true; // Mark that we've handled the abort
+        const reasoningBlock = this.buildReasoningBlockMarkup();
+        const interruptedMessage = "The response was interrupted.";
+        const finalResponse = reasoningBlock
+          ? reasoningBlock + "\n\n" + interruptedMessage
+          : interruptedMessage;
+        updateFn(finalResponse);
+        return;
+      }
+
       if (this.reasoningState.startTime && this.reasoningState.status === "reasoning") {
         this.reasoningState.elapsedSeconds = Math.floor(
           (Date.now() - this.reasoningState.startTime) / 1000
@@ -346,7 +398,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     try {
       // Start reasoning timer just before the ReAct loop (so timer starts at 0)
-      this.startReasoningTimer(updateCurrentAiMessage);
+      this.startReasoningTimer(updateCurrentAiMessage, abortController);
 
       // Run the simplified ReAct loop with native tool calling
       const loopResult = await this.runReActLoop({
@@ -360,6 +412,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         applyCiCOrderingToLocalSearchResult: context.loopDeps.applyCiCOrderingToLocalSearchResult,
         adapter,
       });
+
+      // If abort was already handled by timer, skip further processing
+      if (this.abortHandledByTimer) {
+        this.lastDisplayedContent = "";
+        return "";
+      }
 
       // Finalize and return
       const uniqueSources = deduplicateSources(loopResult.sources);
@@ -664,10 +722,14 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               const recallTerms: string[] = [];
               const addTerm = (term: unknown) => {
                 if (typeof term !== "string") return;
-                const normalized = term.toLowerCase().trim();
-                if (normalized && !seen.has(normalized)) {
+                const trimmed = term.trim();
+                // Filter out invalid terms like "[object Object]"
+                if (!trimmed || trimmed === "[object Object]" || trimmed.startsWith("[object "))
+                  return;
+                const normalized = trimmed.toLowerCase();
+                if (!seen.has(normalized)) {
                   seen.add(normalized);
-                  recallTerms.push(term.trim());
+                  recallTerms.push(trimmed);
                 }
               };
               if (expansion.originalQuery) addTerm(expansion.originalQuery);
@@ -739,13 +801,36 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       }
     }
 
-    // Max iterations reached - shouldn't normally get here since we return inside the loop
-    logWarn(`Agent reached max iterations (${maxIterations})`);
-
-    // Stop reasoning timer for max iterations case
+    // Stop reasoning timer
     this.stopReasoningTimer();
     this.reasoningState.status = "complete";
     const reasoningBlock = this.buildReasoningBlockMarkup();
+
+    // Check if interrupted by user vs max iterations reached
+    if (abortController.signal.aborted) {
+      logInfo("Agent reasoning interrupted by user");
+      // If timer already handled the abort and showed the message, return empty to avoid duplicate
+      if (this.abortHandledByTimer) {
+        return {
+          finalResponse: "",
+          sources: collectedSources,
+          responseMetadata,
+        };
+      }
+      const interruptedMessage = "The response was interrupted.";
+      const finalResponse = reasoningBlock
+        ? reasoningBlock + "\n\n" + interruptedMessage
+        : interruptedMessage;
+
+      return {
+        finalResponse,
+        sources: collectedSources,
+        responseMetadata,
+      };
+    }
+
+    // Max iterations reached - shouldn't normally get here since we return inside the loop
+    logWarn(`Agent reached max iterations (${maxIterations})`);
     const maxIterMessage =
       "I've reached the maximum number of tool calls. Here's what I found so far based on the search results.";
     const finalResponse = reasoningBlock
