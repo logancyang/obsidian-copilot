@@ -795,6 +795,16 @@ If your plugin does not need CSS, delete this file.
   .tool-call-container {
     margin: 0.5rem 0;
   }
+
+  /* Agent Reasoning Block responsive styles */
+  .agent-reasoning-block {
+    margin: 2px 0 6px;
+  }
+
+  .agent-reasoning-steps {
+    margin: 6px 0 0 16px;
+    gap: 4px;
+  }
 }
 
 .model-card {
