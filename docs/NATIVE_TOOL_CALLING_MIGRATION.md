@@ -19,6 +19,7 @@
 | Phase 3      | CopilotPlusChainRunner migrated to native tool calling           | ✅ Done |
 | Phase 4      | XML tool parsing functions removed (kept escape/unescape only)   | ✅ Done |
 | Phase 5      | Model adapters cleaned up - XML templates removed                | ✅ Done |
+| Phase 6      | Agent Reasoning Block UI replaces tool call banner               | ✅ Done |
 | Bedrock      | BedrockChatModel native tool calling (streaming + non-streaming) | ✅ Done |
 | Copilot Plus | copilot-plus-flash native tool calling (via ChatOpenRouter)      | ✅ Done |
 
@@ -30,6 +31,7 @@
 - Model adapters cleaned up - XML `<use_tool>` templates removed, kept behavioral guidance only
 - COPILOT_PLUS provider uses `ChatOpenRouter` for proper SSE tool_call parsing
 - `ToolCall` interface moved to `toolExecution.ts`
+- Agent Reasoning Block shows reasoning process with timer and step summaries
 
 ### 🔲 REMAINING
 
@@ -169,27 +171,30 @@ Gemini only supports subset of JSON Schema. Avoid:
 - `GeminiModelAdapter` removed XML examples, kept sequential tool call guidance
 - Removed `detectPrematureResponse`, `sanitizeResponse`, `shouldTruncateStreaming` - not needed with native tool calling (tool calls are in structured `response.tool_calls`, not embedded XML)
 
-### Phase 6: Replace Tool Call Banner UI
+### ✅ Phase 6: Replace Tool Call Banner UI
 
-| Task                                | Description                                               |
-| ----------------------------------- | --------------------------------------------------------- |
-| [ ] Implement Agent Reasoning Block | See `docs/AGENT_REASONING_BLOCK.md`                       |
-| [ ] Remove marker creation          | Delete `createToolCallMarker()`, `updateToolCallMarker()` |
-| [ ] Keep marker parsing             | Retain for old saved messages                             |
-| [ ] Deprecate ToolCallBanner        | Keep for backward compat                                  |
+**COMPLETED** - Agent Reasoning Block implemented, tool call markers deprecated.
 
-### Phase 7: Human-in-the-Loop Tool Approval
+| Task                                | Description                                             | Status  |
+| ----------------------------------- | ------------------------------------------------------- | ------- |
+| [x] Implement Agent Reasoning Block | See `docs/AGENT_REASONING_BLOCK.md`                     | ✅ Done |
+| [x] Deprecate marker creation       | Added deprecation warnings to marker creation functions | ✅ Done |
+| [x] Keep marker parsing             | Retained for old saved messages                         | ✅ Done |
+| [x] Keep ToolCallBanner             | Keep for backward compat with old messages              | ✅ Done |
 
-| Task                               | Description                                               |
-| ---------------------------------- | --------------------------------------------------------- |
-| [ ] Define risky tool categories   | Identify tools requiring approval (edit, delete, create)  |
-| [ ] Add tool metadata for approval | Extend `ToolMetadata` with `requiresApproval` flag        |
-| [ ] Create ApprovalModal component | Modal showing tool name, args, and approve/reject buttons |
-| [ ] Integrate into agent loop      | Pause execution, show modal, wait for user response       |
-| [ ] Add approval timeout handling  | Auto-reject after configurable timeout                    |
-| [ ] Settings for approval behavior | Per-tool approval toggles, "trust this session" option    |
+**Implementation notes:**
 
-### Phase 8: Simplify Chat Persistence
+- Created `AgentReasoningState.ts` with state management and serialization
+- Created `AgentReasoningBlock.tsx` React component with collapsible UI
+- Added CSS styles in `tailwind.css` for reasoning block styling
+- Updated `AutonomousAgentChainRunner.ts` with reasoning timer and step tracking
+- Updated `ChatSingleMessage.tsx` to parse and render reasoning blocks
+- Agent reasoning block replaces tool call banners for new agent sessions
+- `createToolCallMarker()` and `updateToolCallMarker()` marked as @deprecated
+- `parseToolCallMarkers()` retained for backward compatibility with saved chats
+- **Timer architecture:** Timer runs independently (100ms interval) and tracks `accumulatedContent`; early detection of final response (text without tool calls) stops timer and switches to direct UI updates for smooth streaming
+
+### Phase 7: Simplify Chat Persistence
 
 | Task                                             | Description                                               |
 | ------------------------------------------------ | --------------------------------------------------------- |
@@ -205,7 +210,7 @@ Gemini only supports subset of JSON Schema. Avoid:
 
 This simplifies persistence and reduces chat file size significantly.
 
-### Phase 9: Final Cleanup
+### Phase 8: Final Cleanup
 
 | Task                                       | Description                      |
 | ------------------------------------------ | -------------------------------- |
@@ -213,7 +218,7 @@ This simplifies persistence and reduces chat file size significantly.
 | [ ] Audit for remaining XML refs           | Search for `<tool_call` patterns |
 | [ ] Update documentation                   | Remove XML references            |
 
-### Phase 10: Local Model Provider Tool Calling
+### Phase 9: Local Model Provider Tool Calling
 
 | Task                                  | Description                                                    | Status  |
 | ------------------------------------- | -------------------------------------------------------------- | ------- |
@@ -230,18 +235,29 @@ This simplifies persistence and reduces chat file size significantly.
 - **Tested models:** gpt-oss-20b (LM Studio)
 - May need model-specific schema adjustments (similar to Gemini restrictions)
 
+### Phase 10: Human-in-the-Loop Tool Approval
+
+| Task                               | Description                                               |
+| ---------------------------------- | --------------------------------------------------------- |
+| [ ] Define risky tool categories   | Identify tools requiring approval (edit, delete, create)  |
+| [ ] Add tool metadata for approval | Extend `ToolMetadata` with `requiresApproval` flag        |
+| [ ] Create ApprovalModal component | Modal showing tool name, args, and approve/reject buttons |
+| [ ] Integrate into agent loop      | Pause execution, show modal, wait for user response       |
+| [ ] Add approval timeout handling  | Auto-reject after configurable timeout                    |
+| [ ] Settings for approval behavior | Per-tool approval toggles, "trust this session" option    |
+
 ---
 
 ## 📋 Next Steps (Priority Order)
 
 1. **Testing** - Complete manual functional tests and provider validation
-2. **Agent Reasoning Block** - Implement new UI (see `docs/AGENT_REASONING_BLOCK.md`)
-3. **Human-in-the-Loop Approval** - Add approval UI for risky tools (Phase 7)
-4. ~~**CopilotPlusChainRunner**~~ - ✅ Done (Phase 3)
-5. ~~**XML Cleanup**~~ - ✅ Done (Phases 4, 5 - kept escape/unescape for context envelope)
-6. **Simplify Chat Persistence** - Only persist user messages + AI final responses (Phase 8)
-7. **Final Cleanup** - Audit remaining XML refs, update documentation (Phase 9)
-8. **Local Model Providers** - Ollama tool calling support (Phase 10)
+2. ~~**Agent Reasoning Block**~~ - ✅ Done (Phase 6, see `docs/AGENT_REASONING_BLOCK.md`)
+3. ~~**CopilotPlusChainRunner**~~ - ✅ Done (Phase 3)
+4. ~~**XML Cleanup**~~ - ✅ Done (Phases 4, 5 - kept escape/unescape for context envelope)
+5. **Simplify Chat Persistence** - Only persist user messages + AI final responses (Phase 7)
+6. **Final Cleanup** - Audit remaining XML refs, update documentation (Phase 8)
+7. **Local Model Providers** - Ollama tool calling support (Phase 9)
+8. **Human-in-the-Loop Approval** - Add approval UI for risky tools (Phase 10)
 
 ### Code Reduction Summary (Phases 4 & 5 Complete)
 

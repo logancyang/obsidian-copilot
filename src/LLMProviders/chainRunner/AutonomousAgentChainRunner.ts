@@ -29,6 +29,14 @@ import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { PromptDebugReport } from "./utils/toolPromptDebugger";
+import {
+  AgentReasoningState,
+  createInitialReasoningState,
+  LocalSearchSourceInfo,
+  serializeReasoningBlock,
+  summarizeToolCall,
+  summarizeToolResult,
+} from "./utils/AgentReasoningState";
 
 type AgentSource = {
   title: string;
@@ -95,6 +103,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
   private lastDisplayedContent = ""; // Track the last content displayed to user for error recovery
 
+  // Agent Reasoning Block state
+  private reasoningState: AgentReasoningState = createInitialReasoningState();
+  private reasoningTimerInterval: ReturnType<typeof setInterval> | null = null;
+  private accumulatedContent = ""; // Track content to include in timer updates
+
   private getAvailableTools(): StructuredTool[] {
     const settings = getSettings();
     const registry = ToolRegistry.getInstance();
@@ -109,6 +122,76 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     // Get all enabled tools from registry
     return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
+  }
+
+  /**
+   * Start the reasoning timer and initialize reasoning state.
+   * Timer runs independently and always includes accumulated content.
+   *
+   * @param updateFn - Function to call with updated message content
+   */
+  private startReasoningTimer(updateFn: (message: string) => void): void {
+    this.reasoningState = {
+      status: "reasoning",
+      startTime: Date.now(),
+      elapsedSeconds: 0,
+      steps: [],
+    };
+    this.accumulatedContent = "";
+
+    // Update every 100ms for smooth timer - always includes accumulated content
+    this.reasoningTimerInterval = setInterval(() => {
+      if (this.reasoningState.startTime && this.reasoningState.status === "reasoning") {
+        this.reasoningState.elapsedSeconds = Math.floor(
+          (Date.now() - this.reasoningState.startTime) / 1000
+        );
+        // Always update with reasoning block + any accumulated content
+        const reasoningBlock = this.buildReasoningBlockMarkup();
+        const fullMessage = reasoningBlock
+          ? reasoningBlock + (this.accumulatedContent ? "\n\n" + this.accumulatedContent : "")
+          : this.accumulatedContent;
+        updateFn(fullMessage);
+      }
+    }, 100);
+  }
+
+  /**
+   * Add a reasoning step to the display.
+   * Keeps only the last 2 steps for concise display.
+   *
+   * @param summary - Human-readable summary of the step
+   * @param toolName - Optional name of the tool associated with this step
+   */
+  private addReasoningStep(summary: string, toolName?: string): void {
+    this.reasoningState.steps.push({
+      timestamp: Date.now(),
+      summary,
+      toolName,
+    });
+    // Keep only last 2 steps for concise display
+    if (this.reasoningState.steps.length > 2) {
+      this.reasoningState.steps.shift();
+    }
+  }
+
+  /**
+   * Stop the reasoning timer and mark reasoning as collapsed.
+   */
+  private stopReasoningTimer(): void {
+    if (this.reasoningTimerInterval) {
+      clearInterval(this.reasoningTimerInterval);
+      this.reasoningTimerInterval = null;
+    }
+    this.reasoningState.status = "collapsed";
+  }
+
+  /**
+   * Build the reasoning block markup for embedding in the message.
+   *
+   * @returns Markup string for the reasoning block
+   */
+  private buildReasoningBlockMarkup(): string {
+    return serializeReasoningBlock(this.reasoningState);
   }
 
   /**
@@ -242,6 +325,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     );
 
     try {
+      // Start reasoning timer just before the ReAct loop (so timer starts at 0)
+      this.startReasoningTimer(updateCurrentAiMessage);
+
       // Run the simplified ReAct loop with native tool calling
       const loopResult = await this.runReActLoop({
         boundModel: context.loopDeps.boundModel,
@@ -280,6 +366,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       this.lastDisplayedContent = "";
       return loopResult.finalResponse;
     } catch (error: any) {
+      // Always stop the reasoning timer on error
+      this.stopReasoningTimer();
+
       if (error.name === "AbortError" || abortController.signal.aborted) {
         logInfo("Autonomous agent stream aborted by user", {
           reason: abortController.signal.reason,
@@ -463,7 +552,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       if (abortController.signal.aborted) break;
       iteration++;
 
-      // Stream response from bound model
+      // Stream response - streamModelResponse updates this.accumulatedContent
+      // The timer will pick up content changes and display them with the reasoning block
+      // Once final response is detected, timer stops and direct updates take over
       const { content, aiMessage, streamingResult } = await this.streamModelResponse(
         boundModel,
         messages,
@@ -481,10 +572,20 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
       // No tool calls = final response
       if (toolCalls.length === 0) {
+        // Stop reasoning timer and finalize the reasoning block
+        this.stopReasoningTimer();
+        this.reasoningState.status = "complete";
+
         messages.push(aiMessage);
         fullContent += content;
+
+        // Final update with collapsed reasoning block
+        const reasoningBlock = this.buildReasoningBlockMarkup();
+        const finalResponse = reasoningBlock ? reasoningBlock + "\n\n" + fullContent : fullContent;
+        updateCurrentAiMessage(finalResponse);
+
         return {
-          finalResponse: fullContent,
+          finalResponse,
           sources: collectedSources,
           responseMetadata,
         };
@@ -493,7 +594,6 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       // Add AI message with tool calls
       messages.push(aiMessage);
       fullContent += content + "\n\n";
-      updateCurrentAiMessage(fullContent);
 
       // Execute each tool
       for (const tc of toolCalls) {
@@ -504,15 +604,29 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           args: tc.args as Record<string, unknown>,
         };
 
+        // Add reasoning step for tool call (timer will display it)
+        const toolCallSummary = summarizeToolCall(tc.name, toolCall.args);
+        this.addReasoningStep(toolCallSummary, tc.name);
+
         logToolCall(toolCall, iteration);
 
         // Execute the tool
         const result = await executeSequentialToolCall(toolCall, tools, originalPrompt);
 
+        // Track source info for reasoning summary
+        let sourceInfo: LocalSearchSourceInfo | undefined;
+
         // Special handling for localSearch
         if (tc.name === "localSearch" && result.success) {
           const processed = processLocalSearchResult(result);
           collectedSources.push(...processed.sources);
+
+          // Extract source info for reasoning summary
+          sourceInfo = {
+            titles: processed.sources.map((s) => s.title),
+            count: processed.sources.length,
+          };
+
           result.result = applyCiCOrderingToLocalSearchResult(
             processed.formattedForLLM,
             originalPrompt || ""
@@ -520,6 +634,10 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         }
 
         logToolResult(tc.name, result);
+
+        // Add reasoning step for tool result (timer will display it)
+        const resultSummary = summarizeToolResult(tc.name, result, sourceInfo);
+        this.addReasoningStep(resultSummary, tc.name);
 
         // Add ToolMessage to conversation
         const toolMessage = createToolResultMessage(
@@ -533,8 +651,17 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     // Max iterations reached
     logWarn(`Agent reached max iterations (${maxIterations})`);
+
+    // Stop reasoning timer for max iterations case
+    this.stopReasoningTimer();
+    this.reasoningState.status = "complete";
+    const reasoningBlock = this.buildReasoningBlockMarkup();
+    const finalResponse = reasoningBlock
+      ? reasoningBlock + "\n\n" + fullContent + "\n\n(Reached max iterations)"
+      : fullContent + "\n\n(Reached max iterations)";
+
     return {
-      finalResponse: fullContent + "\n\n(Reached max iterations)",
+      finalResponse,
       sources: collectedSources,
       responseMetadata,
     };
@@ -542,6 +669,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   /**
    * Stream response from the bound model and accumulate tool call chunks.
+   * Updates this.accumulatedContent so the timer can display it.
+   * Detects final response (text without tool calls) and stops timer early.
    */
   private async streamModelResponse(
     boundModel: Runnable,
@@ -549,8 +678,36 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     abortController: AbortController,
     updateCurrentAiMessage: (message: string) => void
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
+    // Minimum content length before we consider it a final response (not just whitespace/prefix)
+    const FINAL_RESPONSE_MIN_LENGTH = 10;
+
     let fullContent = "";
     const toolCallChunks: Map<number, { id?: string; name: string; args: string }> = new Map();
+    let hasDetectedFinalResponse = false;
+
+    // Helper to handle content updates and final response detection
+    const handleContentUpdate = (newContent: string) => {
+      fullContent += newContent;
+      this.accumulatedContent = fullContent;
+
+      // If we have text content and no tool calls detected, this is likely final response
+      // Stop timer and collapse reasoning block for smooth streaming
+      if (
+        !hasDetectedFinalResponse &&
+        fullContent.trim().length > FINAL_RESPONSE_MIN_LENGTH &&
+        toolCallChunks.size === 0
+      ) {
+        hasDetectedFinalResponse = true;
+        this.stopReasoningTimer();
+        this.reasoningState.status = "complete";
+      }
+
+      // After timer stops, update UI directly with collapsed block + content
+      if (hasDetectedFinalResponse) {
+        const reasoningBlock = this.buildReasoningBlockMarkup();
+        updateCurrentAiMessage(reasoningBlock + "\n\n" + fullContent);
+      }
+    };
 
     try {
       const stream = await withSuppressedTokenWarnings(() =>
@@ -568,20 +725,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           logWarn("Backend returned MALFORMED_FUNCTION_CALL - native tool calling not supported");
         }
 
-        // Extract content
-        if (typeof chunk.content === "string") {
-          fullContent += chunk.content;
-          updateCurrentAiMessage(fullContent);
-        } else if (Array.isArray(chunk.content)) {
-          for (const item of chunk.content) {
-            if (item.type === "text" && item.text) {
-              fullContent += item.text;
-              updateCurrentAiMessage(fullContent);
-            }
-          }
-        }
-
-        // Extract tool_call_chunks (LangChain streaming format)
+        // Extract tool_call_chunks FIRST (before content check)
         const tcChunks = chunk.tool_call_chunks;
         if (tcChunks && Array.isArray(tcChunks)) {
           for (const tc of tcChunks) {
@@ -591,6 +735,17 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             if (tc.name) existing.name += tc.name;
             if (tc.args) existing.args += tc.args;
             toolCallChunks.set(idx, existing);
+          }
+        }
+
+        // Extract content
+        if (typeof chunk.content === "string") {
+          handleContentUpdate(chunk.content);
+        } else if (Array.isArray(chunk.content)) {
+          for (const item of chunk.content) {
+            if (item.type === "text" && item.text) {
+              handleContentUpdate(item.text);
+            }
           }
         }
       }

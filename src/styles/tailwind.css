@@ -881,10 +881,12 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* open plugin in Editor mode for mobile */
-body.is-mobile .workspace-tab-container .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
+body.is-mobile
+  .workspace-tab-container
+  .workspace-leaf-content[data-type="copilot-chat-view"]
+  .view-content {
   padding-bottom: var(--size-4-1) !important;
 }
-
 
 /* Collapsible sources styling */
 .copilot-sources {
@@ -972,4 +974,76 @@ body.is-mobile .workspace-tab-container .workspace-leaf-content[data-type="copil
 /* fix the width of the popover on mobile */
 body.is-mobile div[data-radix-popper-content-wrapper] {
   min-width: fit-content !important;
+}
+
+/* Agent Reasoning Block */
+.agent-reasoning-block {
+  margin: 4px 0 8px;
+  padding: 0;
+  font-size: var(--font-ui-small);
+  width: 100%;
+}
+
+.agent-reasoning-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-size: var(--font-ui-smaller);
+}
+
+.agent-reasoning-header:hover:not(:disabled) {
+  color: var(--text-muted);
+}
+
+.agent-reasoning-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.agent-reasoning-title {
+  font-weight: var(--font-medium);
+}
+
+.agent-reasoning-timer {
+  color: var(--text-faint);
+}
+
+.agent-reasoning-steps {
+  margin: 8px 0 0 20px;
+  padding: 0;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-reasoning-step {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.4;
+  font-size: var(--font-ui-smaller);
+}
+
+/* Spinner animation */
+.agent-reasoning-spinner .spinner-dots {
+  display: inline-block;
+  animation: reasoning-pulse 1s ease-in-out infinite;
+}
+
+@keyframes reasoning-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
