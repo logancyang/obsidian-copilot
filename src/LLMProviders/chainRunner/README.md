@@ -128,48 +128,70 @@ while (iteration < maxIterations) {
 
 ## Key Differences
 
-| Aspect             | Legacy (Plus)           | Autonomous Agent                      |
-| ------------------ | ----------------------- | ------------------------------------- |
-| **Tool Decision**  | Brevilabs API analysis  | AI decides autonomously               |
-| **Tool Execution** | Pre-LLM, synchronous    | During conversation, iterative        |
-| **Tool Format**    | SimpleTool interface    | XML-based structured format           |
-| **Reasoning**      | Intent analysis → tools | AI reasoning → tools → more reasoning |
-| **Iterations**     | Single pass             | Up to 4 iterations                    |
-| **Tool Chaining**  | Limited                 | Full chaining support                 |
+| Aspect             | Legacy (Plus)            | Autonomous Agent                      |
+| ------------------ | ------------------------ | ------------------------------------- |
+| **Tool Decision**  | Brevilabs API analysis   | AI decides autonomously               |
+| **Tool Execution** | Pre-LLM, synchronous     | During conversation, iterative        |
+| **Tool Format**    | LangChain StructuredTool | XML-based structured format           |
+| **Reasoning**      | Intent analysis → tools  | AI reasoning → tools → more reasoning |
+| **Iterations**     | Single pass              | Up to 4 iterations                    |
+| **Tool Chaining**  | Limited                  | Full chaining support                 |
 
-## SimpleTool Interface
+## LangChain Tool Interface
 
 ### Overview
 
-The SimpleTool interface provides a clean, type-safe way to define tools with Zod validation:
+Tools are created using native LangChain's `tool()` function via the `createLangChainTool` helper, with Zod schema validation. Tool metadata (execution control, display info) is stored separately in `ToolRegistry`.
 
 ```typescript
-interface SimpleTool<TSchema extends z.ZodType = z.ZodVoid> {
+// Tool creation returns a LangChain StructuredTool
+const myTool = createLangChainTool({
   name: string;
   description: string;
-  schema: TSchema;
-  call: (args: z.infer<TSchema>) => Promise<any>;
+  schema: z.ZodType;
+  func: (args) => Promise<string | object>;
+});
+
+// Tool metadata stored in ToolRegistry
+interface ToolMetadata {
+  id: string;
+  displayName: string;
+  description: string;
+  category: "search" | "time" | "file" | "media" | "mcp" | "memory" | "custom";
+  isAlwaysEnabled?: boolean;
   timeoutMs?: number;
   isBackground?: boolean;
+  isPlusOnly?: boolean;
 }
 ```
 
 ### Creating Tools
 
-All tools are created using the unified `createTool` function with Zod schemas:
+All tools are created using `createLangChainTool` with Zod schemas:
 
 #### Tool with No Parameters
 
 ```typescript
-const indexTool = createTool({
+const indexTool = createLangChainTool({
   name: "indexVault",
   description: "Index the vault to the Copilot index",
-  schema: z.void(), // No parameters
-  handler: async () => {
+  schema: z.object({}), // Empty object for no parameters
+  func: async () => {
     // Tool implementation
-    return "Indexing complete";
+    return { status: "complete" };
   },
-  isBackground: true, // Optional: hide from user
+});
+
+// Register with metadata
+registry.register({
+  tool: indexTool,
+  metadata: {
+    id: "indexVault",
+    displayName: "Index Vault",
+    description: "Index the vault",
+    category: "file",
+    isBackground: true,
+  },
 });
 ```
 
@@ -190,27 +212,36 @@ const searchSchema = z.object({
 });
 
 // Create tool with automatic validation
-const searchTool = createTool({
+const searchTool = createLangChainTool({
   name: "localSearch",
   description: "Search for notes based on query and time range",
   schema: searchSchema,
-  handler: async ({ query, salientTerms, timeRange }) => {
+  func: async ({ query, salientTerms, timeRange }) => {
     // Handler receives fully typed and validated arguments
-    // TypeScript knows the exact types from the schema
     return performSearch(query, salientTerms, timeRange);
   },
-  timeoutMs: 30000, // Optional: custom timeout
+});
+
+// Register with metadata
+registry.register({
+  tool: searchTool,
+  metadata: {
+    id: "localSearch",
+    displayName: "Vault Search",
+    category: "search",
+    timeoutMs: 30000,
+  },
 });
 ```
 
-### Benefits of Unified Zod Approach
+### Benefits of LangChain Native Tools
 
-1. **Type Safety**: Full TypeScript type inference from schemas
+1. **Type Safety**: Full TypeScript type inference from Zod schemas
 2. **Runtime Validation**: All inputs validated before reaching handler
-3. **Consistent Interface**: One way to create all tools
+3. **Native LangChain Integration**: Compatible with `bindTools()` and LangChain tooling ecosystem
 4. **Better Error Messages**: Zod provides detailed validation errors
-5. **No Any Types**: Everything is properly typed
-6. **Simpler Codebase**: No need to maintain multiple tool creation methods
+5. **Separation of Concerns**: Tool implementation separate from execution metadata
+6. **Future-Proof**: Ready for native tool calling when models support it
 
 ### Advanced Zod Patterns
 
@@ -244,11 +275,11 @@ const actionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const actionTool = createTool({
+const actionTool = createLangChainTool({
   name: "performAction",
   description: "Perform various actions",
   schema: actionSchema,
-  handler: async (action) => {
+  func: async (action) => {
     // TypeScript knows exactly which type based on discriminator
     switch (action.type) {
       case "search":
@@ -323,10 +354,10 @@ const configSchema = z.object({
 });
 
 // Handler receives object with defaults applied
-const configTool = createTool({
+const configTool = createLangChainTool({
   name: "updateConfig",
   schema: configSchema,
-  handler: async (config) => {
+  func: async (config) => {
     // config.temperature is always defined (0.7 if not provided)
     // config.maxTokens is always defined (1000 if not provided)
     // config.model is always defined ("gpt-4" if not provided)
@@ -341,7 +372,7 @@ When AI-generated parameters fail Zod validation, the tool execution will return
 
 ```typescript
 // Example tool with strict validation
-const searchToolWithValidation = createTool({
+const searchToolWithValidation = createLangChainTool({
   name: "searchNotes",
   description: "Search notes with specific criteria",
   schema: z.object({
@@ -349,7 +380,7 @@ const searchToolWithValidation = createTool({
     limit: z.number().int().min(1).max(100),
     sortBy: z.enum(["relevance", "date", "title"]),
   }),
-  handler: async ({ query, limit, sortBy }) => {
+  func: async ({ query, limit, sortBy }) => {
     return performSearch(query, limit, sortBy);
   },
 });

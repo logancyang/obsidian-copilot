@@ -6,54 +6,29 @@ import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
-import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
-import { deriveReadNoteDisplayName, ToolResultFormatter } from "@/tools/ToolResultFormatter";
+import { StructuredTool } from "@langchain/core/tools";
+import { Runnable } from "@langchain/core/runnables";
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
-import { err2String, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
-import { formatErrorChunk, processToolResults } from "@/utils/toolResultUtils";
-import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
+import { err2String, withSuppressedTokenWarnings } from "@/utils";
+import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { CopilotPlusChainRunner } from "./CopilotPlusChainRunner";
 import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
-import {
-  joinPromptSections,
-  messageRequiresTools,
-  ModelAdapter,
-  ModelAdapterFactory,
-  STREAMING_TRUNCATE_THRESHOLD,
-} from "./utils/modelAdapter";
+import { ModelAdapter, ModelAdapterFactory } from "./utils/modelAdapter";
 import { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-import {
-  createToolCallMarker,
-  ensureEncodedToolCallMarkerResults,
-  updateToolCallMarker,
-} from "./utils/toolCallParser";
 import {
   deduplicateSources,
   executeSequentialToolCall,
-  getToolConfirmtionMessage,
-  getToolDisplayName,
-  getToolEmoji,
   logToolCall,
   logToolResult,
-  ToolExecutionResult,
 } from "./utils/toolExecution";
+import { createToolResultMessage, generateToolCallId } from "./utils/nativeToolCalling";
 
 import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { buildAgentPromptDebugReport } from "./utils/promptDebugService";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { PromptDebugReport } from "./utils/toolPromptDebugger";
-import {
-  extractToolNameFromPartialBlock,
-  parseXMLToolCalls,
-  stripToolCallXML,
-} from "./utils/xmlParsing";
-
-type ConversationMessage = {
-  role: string;
-  content: string | MessageContent[];
-};
 
 type AgentSource = {
   title: string;
@@ -62,9 +37,12 @@ type AgentSource = {
   explanation?: any;
 };
 
+/**
+ * Dependencies for the ReAct agent loop - simplified for native tool calling
+ */
 interface AgentLoopDeps {
-  availableTools: SimpleTool<any, any>[];
-  getTemporaryToolCallId: (toolName: string, index: number) => string;
+  availableTools: StructuredTool[];
+  boundModel: Runnable; // Model with tools bound via bindTools()
   processLocalSearchResult: (
     toolResult: { result: string; success: boolean },
     timeExpression?: string
@@ -79,43 +57,45 @@ interface AgentLoopDeps {
   ) => string;
 }
 
+/**
+ * Context for agent run - uses BaseMessage[] for native tool calling
+ */
 interface AgentRunContext {
-  conversationMessages: ConversationMessage[];
-  iterationHistory: string[];
+  messages: BaseMessage[]; // Native LangChain messages
   collectedSources: AgentSource[];
   originalUserPrompt: string;
   loopDeps: AgentLoopDeps;
 }
 
-interface AgentLoopParams extends AgentRunContext {
+/**
+ * Parameters for the ReAct loop
+ */
+interface ReActLoopParams {
+  boundModel: Runnable;
+  tools: StructuredTool[];
+  messages: BaseMessage[];
+  originalPrompt: string;
+  abortController: AbortController;
+  updateCurrentAiMessage: (message: string) => void;
+  processLocalSearchResult: AgentLoopDeps["processLocalSearchResult"];
+  applyCiCOrderingToLocalSearchResult: AgentLoopDeps["applyCiCOrderingToLocalSearchResult"];
   adapter: ModelAdapter;
-  abortController: AbortController;
-  updateCurrentAiMessage: (message: string) => void;
 }
 
-interface AgentLoopResult {
-  fullAIResponse: string;
+/**
+ * Result from the ReAct loop
+ */
+interface ReActLoopResult {
+  finalResponse: string;
+  sources: AgentSource[];
   responseMetadata?: ResponseMetadata;
-  iterationHistory: string[];
-  collectedSources: AgentSource[];
-  llmMessages: string[];
-}
-
-interface AgentFinalizationParams extends AgentRunContext {
-  userMessage: ChatMessage;
-  abortController: AbortController;
-  addMessage: (message: ChatMessage) => void;
-  updateCurrentAiMessage: (message: string) => void;
-  modelNameForLog?: string;
-  responseMetadata?: ResponseMetadata;
-  fullAIResponse: string;
 }
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
   private llmFormattedMessages: string[] = []; // Track LLM-formatted messages for memory
   private lastDisplayedContent = ""; // Track the last content displayed to user for error recovery
 
-  private getAvailableTools(): SimpleTool<any, any>[] {
+  private getAvailableTools(): StructuredTool[] {
     const settings = getSettings();
     const registry = ToolRegistry.getInstance();
 
@@ -131,47 +111,34 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     return registry.getEnabledTools(enabledToolIds, !!this.chainManager.app?.vault);
   }
 
-  public static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
-    const tools = availableTools;
-    return tools
-      .map((tool) => {
-        let params = "";
-
-        // All tools now have Zod schema
-        const parameters = extractParametersFromZod(tool.schema);
-        if (Object.keys(parameters).length > 0) {
-          params = Object.entries(parameters)
-            .map(([key, description]) => `<${key}>${description}</${key}>`)
-            .join("\n");
-        }
-
-        return `<${tool.name}>
-<description>${tool.description}</description>
-<parameters>
-${params}
-</parameters>
-</${tool.name}>`;
-      })
-      .join("\n\n");
-  }
-
+  /**
+   * Generate system prompt for the autonomous agent.
+   * Note: Tool schemas are handled by bindTools(), so we only include
+   * semantic guidance from tool metadata here.
+   */
   public static async generateSystemPrompt(
-    availableTools: SimpleTool<any, any>[],
+    availableTools: StructuredTool[],
     adapter: ModelAdapter,
     userMemoryManager?: UserMemoryManager
   ): Promise<string> {
     const basePrompt = await getSystemPromptWithMemory(userMemoryManager);
-    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
 
-    const toolNames = availableTools.map((tool) => tool.name);
-
-    // Get tool metadata for custom instructions
+    // Get tool metadata for custom instructions (semantic guidance only)
     const registry = ToolRegistry.getInstance();
     const toolMetadata = availableTools
       .map((tool) => registry.getToolMetadata(tool.name))
       .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
 
-    return adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, toolNames, toolMetadata);
+    // Build tool-specific instructions from metadata (no XML format needed)
+    const toolInstructions = toolMetadata
+      .filter((meta) => meta.customPromptInstructions)
+      .map((meta) => `For ${meta.displayName}: ${meta.customPromptInstructions}`)
+      .join("\n");
+
+    if (toolInstructions) {
+      return `${basePrompt}\n\n## Tool Guidelines\n${toolInstructions}`;
+    }
+    return basePrompt;
   }
 
   /**
@@ -185,7 +152,8 @@ ${params}
     const adapter = ModelAdapterFactory.createAdapter(
       this.chainManager.chatModelManager.getChatModel()
     );
-    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+    // Tool descriptions are now handled natively by bindTools()
+    const toolDescriptions = availableTools.map((t) => `${t.name}: ${t.description}`).join("\n");
 
     return buildAgentPromptDebugReport({
       chainManager: this.chainManager,
@@ -211,13 +179,9 @@ ${params}
     return ensureCiCOrderingWithQuestion(localSearchPayload, originalPrompt);
   }
 
-  private getTemporaryToolCallId(toolName: string, index: number): string {
-    return `temporary-tool-call-id-${toolName}-${index}`;
-  }
-
   /**
-   * Execute the autonomous agent workflow end-to-end, handling preparation,
-   * iterative tool execution, and final response persistence.
+   * Execute the autonomous agent workflow end-to-end using native tool calling.
+   * Follows the ReAct pattern: Reasoning → Acting → Observation → Iteration
    */
   async run(
     userMessage: ChatMessage,
@@ -232,23 +196,16 @@ ${params}
     }
   ): Promise<string> {
     this.llmFormattedMessages = [];
-    this.lastDisplayedContent = ""; // Reset to prevent stale content from previous runs
-    let fullAIResponse = "";
-    let responseMetadata: ResponseMetadata | undefined;
+    this.lastDisplayedContent = "";
 
     const isPlusUser = await checkIsPlusUser({
       isAutonomousAgent: true,
     });
 
-    // Use model adapter for clean model-specific handling
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
-
-    // Check if the current model has reasoning capability
     const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
     const excludeThinking = !hasReasoning;
-
-    // Create ThinkBlockStreamer to manage all content and errors
     const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter, excludeThinking);
 
     if (!isPlusUser) {
@@ -257,21 +214,18 @@ ${params}
         thinkStreamer.processErrorChunk.bind(thinkStreamer)
       );
       const errorResponse = thinkStreamer.close().content;
-
-      // Use handleResponse to properly save error to conversation history and memory
       return this.handleResponse(
         errorResponse,
         userMessage,
         abortController,
         addMessage,
         updateCurrentAiMessage,
-        undefined // no sources
+        undefined
       );
     }
 
     const modelNameForLog = (chatModel as { modelName?: string } | undefined)?.modelName;
 
-    // Validate and extract context envelope (required)
     const envelope = userMessage.contextEnvelope;
     if (!envelope) {
       throw new Error(
@@ -279,7 +233,7 @@ ${params}
       );
     }
 
-    logInfo("[Agent] Using envelope-based context construction");
+    logInfo("[Agent] Using native tool calling with ReAct pattern");
 
     const context = await this.prepareAgentConversation(
       userMessage,
@@ -288,102 +242,138 @@ ${params}
     );
 
     try {
-      const loopResult = await this.executeAgentLoop({
-        ...context,
-        adapter,
+      // Run the simplified ReAct loop with native tool calling
+      const loopResult = await this.runReActLoop({
+        boundModel: context.loopDeps.boundModel,
+        tools: context.loopDeps.availableTools,
+        messages: context.messages,
+        originalPrompt: context.originalUserPrompt,
         abortController,
         updateCurrentAiMessage,
+        processLocalSearchResult: context.loopDeps.processLocalSearchResult,
+        applyCiCOrderingToLocalSearchResult: context.loopDeps.applyCiCOrderingToLocalSearchResult,
+        adapter,
       });
-      fullAIResponse = loopResult.fullAIResponse;
-      responseMetadata = loopResult.responseMetadata;
-      context.iterationHistory = loopResult.iterationHistory;
-      context.collectedSources = loopResult.collectedSources;
-      this.llmFormattedMessages = loopResult.llmMessages;
+
+      // Finalize and return
+      const uniqueSources = deduplicateSources(loopResult.sources);
+
+      if (context.messages.length > 0) {
+        recordPromptPayload({
+          messages: [...context.messages],
+          modelName: modelNameForLog,
+          contextEnvelope: userMessage.contextEnvelope,
+        });
+      }
+
+      await this.handleResponse(
+        loopResult.finalResponse,
+        userMessage,
+        abortController,
+        addMessage,
+        updateCurrentAiMessage,
+        uniqueSources.length > 0 ? uniqueSources : undefined,
+        this.llmFormattedMessages.join("\n\n"),
+        loopResult.responseMetadata
+      );
+
+      this.lastDisplayedContent = "";
+      return loopResult.finalResponse;
     } catch (error: any) {
       if (error.name === "AbortError" || abortController.signal.aborted) {
         logInfo("Autonomous agent stream aborted by user", {
           reason: abortController.signal.reason,
         });
-      } else {
-        logError("Autonomous agent failed, falling back to regular Plus mode:", error);
-        try {
-          const fallbackRunner = new CopilotPlusChainRunner(this.chainManager);
-          return await fallbackRunner.run(
-            userMessage,
-            abortController,
-            updateCurrentAiMessage,
-            addMessage,
-            options
-          );
-        } catch (fallbackError) {
-          logError("Fallback to regular Plus mode also failed:", fallbackError);
+        return "";
+      }
 
-          // Use thinkStreamer to format and display the error
-          // If we have displayed content, add it first before the error
-          if (this.lastDisplayedContent) {
-            thinkStreamer.processChunk({ content: this.lastDisplayedContent });
-          }
+      logError("Autonomous agent failed, falling back to regular Plus mode:", error);
+      try {
+        const fallbackRunner = new CopilotPlusChainRunner(this.chainManager);
+        return await fallbackRunner.run(
+          userMessage,
+          abortController,
+          updateCurrentAiMessage,
+          addMessage,
+          options
+        );
+      } catch (fallbackError) {
+        logError("Fallback to regular Plus mode also failed:", fallbackError);
 
-          // Append fallback error information to the existing error response
-          const autonomousAgentErrorMsg = err2String(error);
-
-          const fallbackErrorMsg =
-            `\n\nFallback to regular Plus mode also failed: ` + err2String(fallbackError);
-
-          await this.handleError(
-            new Error(autonomousAgentErrorMsg + fallbackErrorMsg),
-            thinkStreamer.processErrorChunk.bind(thinkStreamer)
-          );
-
-          fullAIResponse = thinkStreamer.close().content;
-
-          // Return immediately to prevent further execution
-          return this.handleResponse(
-            fullAIResponse,
-            userMessage,
-            abortController,
-            addMessage,
-            updateCurrentAiMessage,
-            undefined, // no sources
-            fullAIResponse // llmFormattedOutput
-          );
+        if (this.lastDisplayedContent) {
+          thinkStreamer.processChunk({ content: this.lastDisplayedContent });
         }
+
+        const autonomousAgentErrorMsg = err2String(error);
+        const fallbackErrorMsg =
+          `\n\nFallback to regular Plus mode also failed: ` + err2String(fallbackError);
+
+        await this.handleError(
+          new Error(autonomousAgentErrorMsg + fallbackErrorMsg),
+          thinkStreamer.processErrorChunk.bind(thinkStreamer)
+        );
+
+        const fullAIResponse = thinkStreamer.close().content;
+        return this.handleResponse(
+          fullAIResponse,
+          userMessage,
+          abortController,
+          addMessage,
+          updateCurrentAiMessage,
+          undefined,
+          fullAIResponse
+        );
       }
     }
-
-    return await this.finalizeAgentRun({
-      ...context,
-      userMessage,
-      abortController,
-      addMessage,
-      updateCurrentAiMessage,
-      modelNameForLog,
-      responseMetadata,
-      fullAIResponse,
-    });
   }
 
   /**
-   * Prepare the base conversation state, including system prompt, chat history,
-   * and the initial user message tailored for the active model.
+   * Prepare the base conversation state for native tool calling.
+   * Creates a bound model with tools and builds initial messages.
    *
    * @param userMessage - The initiating user message from the UI.
    * @param chatModel - The active chat model instance.
    * @param updateLoadingMessage - Optional callback to show loading status.
-   * @returns Aggregated context required for the autonomous agent loop.
+   * @returns Context required for the ReAct agent loop.
    */
   private async prepareAgentConversation(
     userMessage: ChatMessage,
     chatModel: any,
     updateLoadingMessage?: (message: string) => void
   ): Promise<AgentRunContext> {
-    const conversationMessages: ConversationMessage[] = [];
-    const iterationHistory: string[] = [];
-    const collectedSources: AgentSource[] = [];
+    const messages: BaseMessage[] = [];
     const availableTools = this.getAvailableTools();
+
+    // DEBUG: Log tools being bound
+    logInfo(`[DEBUG] Tools to bind: ${availableTools.map((t) => t.name).join(", ")}`);
+    logInfo(`[DEBUG] Tool count: ${availableTools.length}`);
+
+    // DEBUG: Log tool schemas
+    for (const tool of availableTools) {
+      logInfo(
+        `[DEBUG] Tool "${tool.name}" schema: ${JSON.stringify(tool.schema).substring(0, 300)}`
+      );
+    }
+
+    // DEBUG: Log chat model info
+    const modelName = (chatModel as any).modelName || (chatModel as any).model || "unknown";
+    logInfo(`[DEBUG] Chat model: ${modelName}`);
+    logInfo(`[DEBUG] Chat model constructor: ${chatModel.constructor.name}`);
+
+    // Bind tools to the model for native function calling
+    // Some custom models (like BedrockChatModel) may not support bindTools yet
+    if (typeof chatModel.bindTools !== "function") {
+      throw new Error(
+        `Model ${modelName} does not support native tool calling (bindTools not available). ` +
+          `Agent mode requires a model with tool calling support.`
+      );
+    }
+    const boundModel = chatModel.bindTools(availableTools);
+    logInfo(`[DEBUG] Model ready with bindTools`);
+
     const loopDeps: AgentLoopDeps = {
       availableTools,
-      getTemporaryToolCallId: this.getTemporaryToolCallId.bind(this),
+      boundModel,
       processLocalSearchResult: this.processLocalSearchResult.bind(this),
       applyCiCOrderingToLocalSearchResult: this.applyCiCOrderingToLocalSearchResult.bind(this),
     };
@@ -401,586 +391,325 @@ ${params}
     // Get memory for chat history loading
     const memory = this.chainManager.memoryManager.getMemory();
 
-    // Build system message: L1+L2 from envelope + tool-only sections
+    // Build system message: L1+L2 from envelope + tool guidelines from metadata
     const systemMessage = baseMessages.find((m) => m.role === "system");
 
-    // Build tool-only sections (excluding base prompt which is already in L1)
-    const adapter = ModelAdapterFactory.createAdapter(chatModel);
-    const toolDescriptions = AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+    // Get tool metadata for semantic guidance (no XML format instructions needed)
     const registry = ToolRegistry.getInstance();
     const toolMetadata = availableTools
       .map((tool) => registry.getToolMetadata(tool.name))
       .filter((meta): meta is NonNullable<typeof meta> => meta !== undefined);
 
-    const allSections = adapter.buildSystemPromptSections(
-      "", // Pass empty base prompt since we already have L1+L2 from envelope
-      toolDescriptions,
-      availableTools.map((t) => t.name),
-      toolMetadata
-    );
+    // Build tool-specific instructions from metadata
+    const toolInstructions = toolMetadata
+      .filter((meta) => meta.customPromptInstructions)
+      .map((meta) => `For ${meta.displayName}: ${meta.customPromptInstructions}`)
+      .join("\n");
 
-    // Filter out base-system-prompt section (already in L1 from envelope)
-    const toolOnlySections = allSections.filter((s) => s.id !== "base-system-prompt");
-    const toolDescriptionsPrompt = joinPromptSections(toolOnlySections);
+    // Combine system message with tool guidelines
+    const systemContent = [
+      systemMessage?.content || "",
+      toolInstructions ? `\n## Tool Guidelines\n${toolInstructions}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n");
 
-    if (systemMessage || toolDescriptionsPrompt) {
-      const systemContent = [
-        systemMessage?.content || "", // L1 + L2 from envelope
-        toolDescriptionsPrompt || "", // Tool-specific sections only
-      ]
-        .filter(Boolean)
-        .join("\n\n");
-
-      conversationMessages.push({
-        role: getMessageRole(chatModel),
-        content: systemContent,
-      });
+    // Use SystemMessage for better provider compatibility
+    if (systemContent) {
+      messages.push(new SystemMessage({ content: systemContent }));
     }
 
-    // Extract L5 for original prompt and adapter enhancement
+    // Extract L5 for original prompt
     const l5User = envelope.layers.find((l) => l.id === "L5_USER");
     const l5Text = l5User?.text || "";
     const originalUserPrompt = l5Text || userMessage.originalMessage || userMessage.message;
 
     // Insert L4 (chat history) between system and user
-    await loadAndAddChatHistory(memory, conversationMessages);
+    const tempMessages: { role: string; content: string | MessageContent[] }[] = [];
+    await loadAndAddChatHistory(memory, tempMessages);
+    for (const msg of tempMessages) {
+      if (msg.role === "user") {
+        messages.push(new HumanMessage(msg.content));
+      } else {
+        messages.push(new AIMessage(msg.content));
+      }
+    }
 
     // Extract user content (L3 smart references + L5) from base messages
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
       const isMultimodal = this.isMultimodalModel(chatModel);
-
-      // Apply adapter enhancement to restore model-specific tool reminders
-      // (e.g., "REMINDER: Use the <use_tool> XML format" for GPT models)
-      const requiresTools = messageRequiresTools(l5Text);
-      const enhancedUserContent = adapter.enhanceUserMessage(
-        userMessageContent.content,
-        requiresTools
-      );
-
       const content: string | MessageContent[] = isMultimodal
-        ? await this.buildMessageContent(enhancedUserContent, userMessage)
-        : enhancedUserContent;
-
-      conversationMessages.push({
-        role: "user",
-        content,
-      });
+        ? await this.buildMessageContent(userMessageContent.content, userMessage)
+        : userMessageContent.content;
+      messages.push(new HumanMessage(content));
     }
 
     return {
-      conversationMessages,
-      iterationHistory,
-      collectedSources,
+      messages,
+      collectedSources: [],
       originalUserPrompt,
       loopDeps,
     };
   }
 
   /**
-   * Execute the autonomous agent iteration loop until completion, handling
-   * streaming updates, tool execution, and sanitized response tracking.
-   *
-   * @param params - Mutable conversation context and runtime dependencies.
-   * @returns The final response text and metadata from the executed loop.
+   * BAREBONES ReAct loop with extensive debug logging.
+   * Simplified to focus on native tool calling functionality.
    */
-  private async executeAgentLoop(params: AgentLoopParams): Promise<AgentLoopResult> {
+  private async runReActLoop(params: ReActLoopParams): Promise<ReActLoopResult> {
     const {
-      conversationMessages,
-      iterationHistory: initialIterationHistory,
-      collectedSources: initialCollectedSources,
-      originalUserPrompt,
-      loopDeps,
-      adapter,
+      boundModel,
+      tools,
+      messages,
+      originalPrompt,
       abortController,
       updateCurrentAiMessage,
+      processLocalSearchResult,
+      applyCiCOrderingToLocalSearchResult,
     } = params;
 
-    const iterationHistory = [...initialIterationHistory];
-    const collectedSources = [...initialCollectedSources];
-    const llmMessages: string[] = [];
-    const { availableTools } = loopDeps;
     const maxIterations = getSettings().autonomousAgentMaxIterations;
+    const collectedSources: AgentSource[] = [];
+
+    // DEBUG: Log bound tools
+    logInfo(`[DEBUG] Available tools: ${tools.map((t) => t.name).join(", ")}`);
+    logInfo(`[DEBUG] Initial messages count: ${messages.length}`);
+    messages.forEach((m, i) => {
+      const type = m.constructor.name;
+      const contentPreview =
+        typeof m.content === "string" ? m.content.substring(0, 200) : JSON.stringify(m.content);
+      logInfo(`[DEBUG] Message ${i} (${type}): ${contentPreview}...`);
+    });
+
     let iteration = 0;
-    let fullAIResponse = "";
     let responseMetadata: ResponseMetadata | undefined;
+    let fullContent = "";
 
     while (iteration < maxIterations) {
-      if (this.isAbortRequested(abortController)) {
-        break;
-      }
+      if (abortController.signal.aborted) break;
+      iteration++;
+      logInfo(`\n=== Agent Iteration ${iteration} ===`);
 
-      iteration += 1;
-      logInfo(`=== Autonomous Agent Iteration ${iteration} ===`);
-
-      const currentIterationToolCallMessages: string[] = [];
-
-      const response = await this.streamResponse(
-        conversationMessages,
+      // Stream response from bound model
+      const { content, aiMessage, streamingResult } = await this.streamModelResponseDebug(
+        boundModel,
+        messages,
         abortController,
-        (fullMessage) =>
-          this.updateStreamingDisplay(
-            fullMessage,
-            iterationHistory,
-            currentIterationToolCallMessages,
-            updateCurrentAiMessage,
-            loopDeps
-          ),
-        adapter
+        updateCurrentAiMessage
       );
 
       responseMetadata = {
-        wasTruncated: response.wasTruncated,
-        tokenUsage: response.tokenUsage ?? undefined,
+        wasTruncated: streamingResult.wasTruncated,
+        tokenUsage: streamingResult.tokenUsage ?? undefined,
       };
 
-      const responseContent = response.content;
-      if (!responseContent) {
-        break;
-      }
+      // DEBUG: Log full AI message
+      logInfo(`[DEBUG] AI content: "${content.substring(0, 500)}..."`);
+      logInfo(`[DEBUG] AI message tool_calls: ${JSON.stringify(aiMessage.tool_calls)}`);
 
-      const toolCalls = parseXMLToolCalls(responseContent);
-      const prematureResponseResult = adapter.detectPrematureResponse?.(responseContent);
-      if (prematureResponseResult?.hasPremature && iteration === 1) {
-        if (prematureResponseResult.type === "before") {
-          logWarn("⚠️  Model provided premature response BEFORE tool calls!");
-          logWarn("Sanitizing response to keep only tool calls for first iteration");
-        } else if (prematureResponseResult.type === "after") {
-          logWarn("⚠️  Model provided hallucinated response AFTER tool calls!");
-          logWarn("Truncating response at last tool call for first iteration");
-        }
-      }
+      // Check for native tool calls
+      const toolCalls = aiMessage.tool_calls || [];
+      logInfo(`[DEBUG] Iteration ${iteration}: ${toolCalls.length} tool calls detected`);
 
+      // No tool calls = final response
       if (toolCalls.length === 0) {
-        const cleanedResponse = stripToolCallXML(responseContent);
-        const allParts = [...iterationHistory];
-        if (cleanedResponse.trim()) {
-          allParts.push(cleanedResponse);
-        }
-        fullAIResponse = allParts.join("\n\n");
-
-        const safeAssistantMessage = ensureEncodedToolCallMarkerResults(responseContent);
-        conversationMessages.push({
-          role: "assistant",
-          content: safeAssistantMessage,
-        });
-
-        llmMessages.push(responseContent);
-        break;
+        messages.push(aiMessage);
+        fullContent += content;
+        return {
+          finalResponse: fullContent,
+          sources: collectedSources,
+          responseMetadata,
+        };
       }
 
-      let sanitizedResponse = responseContent;
-      if (adapter.sanitizeResponse && prematureResponseResult?.hasPremature) {
-        sanitizedResponse = adapter.sanitizeResponse(responseContent, iteration);
-      }
+      // Add AI message with tool calls
+      messages.push(aiMessage);
+      fullContent += content + "\n\n";
+      updateCurrentAiMessage(fullContent);
 
-      const responseForHistory = stripToolCallXML(sanitizedResponse);
-      if (responseForHistory.trim()) {
-        iterationHistory.push(responseForHistory);
-      }
+      // Execute each tool
+      for (const tc of toolCalls) {
+        if (abortController.signal.aborted) break;
 
-      const toolResults: ToolExecutionResult[] = [];
-      const toolCallIdMap = new Map<number, string>(); // Map index to tool call ID
-      currentIterationToolCallMessages.splice(toolCalls.length);
+        const toolCall = {
+          name: tc.name,
+          args: tc.args as Record<string, unknown>,
+        };
 
-      for (let i = 0; i < toolCalls.length; i += 1) {
-        const toolCall = toolCalls[i];
-        if (this.isAbortRequested(abortController)) {
-          break;
-        }
-
+        logInfo(`[DEBUG] Executing tool: ${tc.name} with args: ${JSON.stringify(tc.args)}`);
         logToolCall(toolCall, iteration);
 
-        const tool = availableTools.find((availableTool) => availableTool.name === toolCall.name);
-        const isBackgroundTool = tool?.isBackground || false;
+        // Execute the tool
+        const result = await executeSequentialToolCall(toolCall, tools, originalPrompt);
+        logInfo(`[DEBUG] Tool result success: ${result.success}`);
+        logInfo(`[DEBUG] Tool result: ${result.result.substring(0, 500)}...`);
 
-        let toolCallId: string | undefined;
-        if (!isBackgroundTool) {
-          const toolEmoji = getToolEmoji(toolCall.name);
-          let toolDisplayName = getToolDisplayName(toolCall.name);
-          if (toolCall.name === "readNote") {
-            const notePath =
-              typeof toolCall.args?.notePath === "string" ? toolCall.args.notePath : null;
-            if (notePath && notePath.trim().length > 0) {
-              toolDisplayName = deriveReadNoteDisplayName(notePath);
+        // Special handling for localSearch
+        if (tc.name === "localSearch" && result.success) {
+          const processed = processLocalSearchResult(result);
+          collectedSources.push(...processed.sources);
+          result.result = applyCiCOrderingToLocalSearchResult(
+            processed.formattedForLLM,
+            originalPrompt || ""
+          );
+        }
+
+        logToolResult(tc.name, result);
+
+        // Add ToolMessage to conversation
+        const toolMessage = createToolResultMessage(
+          tc.id || generateToolCallId(),
+          tc.name,
+          result.result
+        );
+        messages.push(toolMessage);
+        logInfo(`[DEBUG] Added ToolMessage for ${tc.name}`);
+      }
+
+      logInfo(`[DEBUG] Messages count after tools: ${messages.length}`);
+    }
+
+    // Max iterations reached
+    logWarn(`[DEBUG] Reached max iterations (${maxIterations})`);
+    return {
+      finalResponse: fullContent + "\n\n(Reached max iterations)",
+      sources: collectedSources,
+      responseMetadata,
+    };
+  }
+
+  /**
+   * BAREBONES stream response with extensive debug logging.
+   * Logs every chunk to understand what the model is returning.
+   */
+  private async streamModelResponseDebug(
+    boundModel: Runnable,
+    messages: BaseMessage[],
+    abortController: AbortController,
+    updateCurrentAiMessage: (message: string) => void
+  ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
+    logInfo(`[DEBUG] Starting stream from bound model...`);
+
+    let fullContent = "";
+    const toolCallChunks: Map<number, { id?: string; name: string; args: string }> = new Map();
+    let chunkCount = 0;
+    let malformedFunctionCall = false;
+
+    try {
+      const stream = await withSuppressedTokenWarnings(() =>
+        boundModel.stream(messages, {
+          signal: abortController.signal,
+        })
+      );
+
+      logInfo(`[DEBUG] Stream created, iterating chunks...`);
+
+      for await (const chunk of stream) {
+        if (abortController.signal.aborted) break;
+        chunkCount++;
+
+        // DEBUG: Log raw chunk
+        logInfo(`[DEBUG] Chunk ${chunkCount}: ${JSON.stringify(chunk).substring(0, 500)}`);
+
+        // Check for MALFORMED_FUNCTION_CALL error
+        const finishReason = chunk.response_metadata?.finish_reason;
+        if (finishReason === "MALFORMED_FUNCTION_CALL") {
+          logWarn(
+            `[DEBUG] Backend returned MALFORMED_FUNCTION_CALL - native tool calling not supported`
+          );
+          malformedFunctionCall = true;
+        }
+
+        // Extract content
+        if (typeof chunk.content === "string") {
+          fullContent += chunk.content;
+          updateCurrentAiMessage(fullContent);
+        } else if (Array.isArray(chunk.content)) {
+          for (const item of chunk.content) {
+            if (item.type === "text" && item.text) {
+              fullContent += item.text;
+              updateCurrentAiMessage(fullContent);
             }
           }
-          const confirmationMessage = getToolConfirmtionMessage(toolCall.name);
-
-          // Generate unique ID for this tool call
-          toolCallId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-          toolCallIdMap.set(i, toolCallId);
-
-          const toolCallMarker = createToolCallMarker(
-            toolCallId,
-            toolCall.name,
-            toolDisplayName,
-            toolEmoji,
-            confirmationMessage || "",
-            true,
-            "",
-            ""
-          );
-
-          const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
-            message.includes(loopDeps.getTemporaryToolCallId(toolCall.name, i))
-          );
-          if (existingIndex !== -1) {
-            currentIterationToolCallMessages[existingIndex] = toolCallMarker;
-          } else {
-            currentIterationToolCallMessages.push(toolCallMarker);
-            logWarn(
-              "Created tool call marker for tool call that was not created during streaming",
-              toolCall.name
-            );
-          }
-
-          updateCurrentAiMessage(
-            [...iterationHistory, ...currentIterationToolCallMessages].join("\n\n")
-          );
         }
 
-        const result = await executeSequentialToolCall(
-          toolCall,
-          availableTools,
-          originalUserPrompt
-        );
-
-        // Handle tool execution error - format error for UI display
-        if (!result.success) {
-          // Format error with errorChunk tags for proper UI display
-          result.displayResult = formatErrorChunk(result.result, "Tool execution failed");
-          // Keep the original result for LLM processing (don't modify result.result)
-        }
-
-        if (toolCall.name === "localSearch") {
-          if (result.success) {
-            const processed = loopDeps.processLocalSearchResult(result);
-            collectedSources.push(...processed.sources);
-            result.result = loopDeps.applyCiCOrderingToLocalSearchResult(
-              processed.formattedForLLM,
-              originalUserPrompt || ""
-            );
-            result.displayResult = processed.formattedForDisplay;
-          }
-        } else if (toolCall.name === "readNote") {
-          if (result.success) {
-            result.displayResult = ToolResultFormatter.format("readNote", result.result);
+        // Extract tool_call_chunks (LangChain streaming format)
+        const tcChunks = chunk.tool_call_chunks;
+        if (tcChunks && Array.isArray(tcChunks)) {
+          logInfo(`[DEBUG] Found tool_call_chunks: ${JSON.stringify(tcChunks)}`);
+          for (const tc of tcChunks) {
+            const idx = tc.index ?? 0;
+            const existing = toolCallChunks.get(idx) || { name: "", args: "" };
+            if (tc.id) existing.id = tc.id;
+            if (tc.name) existing.name += tc.name;
+            if (tc.args) existing.args += tc.args;
+            toolCallChunks.set(idx, existing);
           }
         }
 
-        toolResults.push(result);
+        // Check for direct tool_calls on chunk (non-streaming format)
+        if (chunk.tool_calls && Array.isArray(chunk.tool_calls) && chunk.tool_calls.length > 0) {
+          logInfo(`[DEBUG] Found direct tool_calls: ${JSON.stringify(chunk.tool_calls)}`);
+        }
+      }
 
-        if (toolCallId && !isBackgroundTool) {
-          const markerIndex = currentIterationToolCallMessages.findIndex((message) =>
-            message.includes(toolCallId)
-          );
-          if (markerIndex !== -1) {
-            currentIterationToolCallMessages[markerIndex] = updateToolCallMarker(
-              currentIterationToolCallMessages[markerIndex],
-              toolCallId,
-              result.displayResult ?? result.result
-            );
+      logInfo(`[DEBUG] Stream complete. Total chunks: ${chunkCount}`);
+      logInfo(`[DEBUG] Full content length: ${fullContent.length}`);
+      logInfo(`[DEBUG] Tool call chunks accumulated: ${toolCallChunks.size}`);
+      logInfo(`[DEBUG] Malformed function call: ${malformedFunctionCall}`);
+
+      // Build tool calls from accumulated chunks
+      const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
+      for (const chunk of toolCallChunks.values()) {
+        if (!chunk.name) continue;
+        let args: Record<string, unknown> = {};
+        if (chunk.args) {
+          try {
+            args = JSON.parse(chunk.args);
+          } catch {
+            logWarn(`[DEBUG] Failed to parse tool args: ${chunk.args}`);
           }
-
-          updateCurrentAiMessage(
-            [...iterationHistory, ...currentIterationToolCallMessages].join("\n\n")
-          );
         }
-
-        logToolResult(toolCall.name, result);
-      }
-
-      if (currentIterationToolCallMessages.length > 0) {
-        iterationHistory.push(currentIterationToolCallMessages.join("\n"));
-      }
-
-      const assistantMemoryContent = sanitizedResponse;
-      llmMessages.push(assistantMemoryContent);
-
-      if (toolResults.length > 0) {
-        const toolResultsForLLM = processToolResults(toolResults, true);
-        if (toolResultsForLLM) {
-          llmMessages.push(toolResultsForLLM);
-        }
-      }
-
-      const safeAssistantContent = ensureEncodedToolCallMarkerResults(sanitizedResponse);
-      conversationMessages.push({
-        role: "assistant",
-        content: safeAssistantContent,
-      });
-
-      const toolResultsForConversation = processToolResults(toolResults, false);
-      conversationMessages.push({
-        role: "user",
-        content: toolResultsForConversation,
-      });
-
-      logInfo("Tool results added to conversation");
-    }
-
-    if (iteration >= maxIterations && !fullAIResponse) {
-      logWarn(
-        `Autonomous agent reached maximum iterations (${maxIterations}) without completing the task`
-      );
-
-      const limitMessage =
-        "\n\nI've reached the maximum number of iterations (" +
-        `${maxIterations}` +
-        ") for this task. " +
-        "I attempted to gather information using various tools but couldn't complete the analysis within the iteration limit. " +
-        "You may want to try a more specific question or break down your request into smaller parts.";
-
-      fullAIResponse = iterationHistory.join("\n\n") + limitMessage;
-      conversationMessages.push({
-        role: "assistant",
-        content: fullAIResponse,
-      });
-    }
-
-    return {
-      fullAIResponse,
-      responseMetadata,
-      iterationHistory,
-      collectedSources,
-      llmMessages,
-    };
-  }
-
-  /**
-   * Handle streaming updates by maintaining tool call markers and refreshing the
-   * in-progress message display.
-   */
-  private updateStreamingDisplay(
-    fullMessage: string,
-    iterationHistory: string[],
-    currentIterationToolCallMessages: string[],
-    updateCurrentAiMessage: (message: string) => void,
-    loopDeps: AgentLoopDeps
-  ): void {
-    const cleanedMessage = stripToolCallXML(fullMessage);
-    const displayParts: string[] = [...iterationHistory];
-
-    if (cleanedMessage.trim()) {
-      displayParts.push(cleanedMessage);
-    }
-
-    const toolCalls = parseXMLToolCalls(fullMessage);
-    const backgroundToolNames = new Set(
-      loopDeps.availableTools.filter((tool) => tool.isBackground).map((tool) => tool.name)
-    );
-
-    // Remove any accidental background-tool markers to avoid orphaned spinners
-    if (currentIterationToolCallMessages.length > 0 && backgroundToolNames.size > 0) {
-      const backgroundPrefixes = Array.from(backgroundToolNames).map(
-        (name) => `temporary-tool-call-id-${name}-`
-      );
-      for (let i = currentIterationToolCallMessages.length - 1; i >= 0; i -= 1) {
-        const message = currentIterationToolCallMessages[i];
-        if (backgroundPrefixes.some((prefix) => message.includes(prefix))) {
-          currentIterationToolCallMessages.splice(i, 1);
-        }
-      }
-    }
-
-    const visibleToolNames: string[] = [];
-    toolCalls.forEach((toolCall) => {
-      if (!backgroundToolNames.has(toolCall.name)) {
-        visibleToolNames.push(toolCall.name);
-      }
-    });
-
-    const partialToolName = extractToolNameFromPartialBlock(fullMessage);
-    if (partialToolName) {
-      const lastToolNameIndex = fullMessage.lastIndexOf(partialToolName);
-      if (fullMessage.length - lastToolNameIndex > STREAMING_TRUNCATE_THRESHOLD) {
-        if (!backgroundToolNames.has(partialToolName)) {
-          visibleToolNames.push(partialToolName);
-        }
-      }
-    }
-
-    const uniqueVisibleNames = Array.from(new Set(visibleToolNames));
-
-    uniqueVisibleNames.forEach((toolName, index) => {
-      const toolCallId = loopDeps.getTemporaryToolCallId(toolName, index);
-      const existingIndex = currentIterationToolCallMessages.findIndex((message) =>
-        message.includes(toolCallId)
-      );
-      if (existingIndex !== -1) {
-        return;
-      }
-
-      const toolCallMarker = createToolCallMarker(
-        toolCallId,
-        toolName,
-        getToolDisplayName(toolName),
-        getToolEmoji(toolName),
-        "",
-        true,
-        "",
-        ""
-      );
-
-      currentIterationToolCallMessages.push(toolCallMarker);
-    });
-
-    if (currentIterationToolCallMessages.length > 0) {
-      displayParts.push(currentIterationToolCallMessages.join("\n"));
-    }
-
-    const currentDisplay = displayParts.join("\n\n");
-    this.lastDisplayedContent = currentDisplay; // Save for error handling
-    updateCurrentAiMessage(currentDisplay);
-  }
-
-  private isAbortRequested(abortController: AbortController): boolean {
-    return abortController.signal.aborted;
-  }
-
-  /**
-   * Finalize the run by persisting prompt payloads, updating memory, and
-   * returning the final response string to the caller.
-   *
-   * @param params - Finalization metadata including conversation context.
-   * @returns The finalized AI response presented to the user.
-   */
-  private async finalizeAgentRun(params: AgentFinalizationParams): Promise<string> {
-    const {
-      conversationMessages,
-      iterationHistory,
-      collectedSources,
-      userMessage,
-      abortController,
-      addMessage,
-      updateCurrentAiMessage,
-      modelNameForLog,
-      responseMetadata,
-      fullAIResponse,
-    } = params;
-
-    let finalResponse = fullAIResponse;
-    const uniqueSources = deduplicateSources(collectedSources);
-
-    if (!finalResponse && iterationHistory.length > 0) {
-      logWarn("fullAIResponse was empty, using iteration history");
-      finalResponse = iterationHistory.join("\n\n");
-    }
-
-    if (conversationMessages.length > 0) {
-      recordPromptPayload({
-        messages: [...conversationMessages],
-        modelName: modelNameForLog,
-        contextEnvelope: userMessage.contextEnvelope,
-      });
-    }
-
-    await import("./utils/toolCallParser");
-
-    const llmFormattedOutput = this.llmFormattedMessages.join("\n\n");
-
-    await this.handleResponse(
-      finalResponse,
-      userMessage,
-      abortController,
-      addMessage,
-      updateCurrentAiMessage,
-      uniqueSources.length > 0 ? uniqueSources : undefined,
-      llmFormattedOutput,
-      responseMetadata
-    );
-
-    // Reset after successful completion to prevent state leakage
-    this.lastDisplayedContent = "";
-
-    return finalResponse;
-  }
-
-  private async streamResponse(
-    messages: ConversationMessage[],
-    abortController: AbortController,
-    updateCurrentAiMessage: (message: string) => void,
-    adapter: ModelAdapter
-  ): Promise<StreamingResult> {
-    // Check if the current model has reasoning capability
-    const chatModel = this.chainManager.chatModelManager.getChatModel();
-    const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
-    const excludeThinking = !hasReasoning;
-
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, adapter, excludeThinking);
-
-    const maxRetries = 2;
-    let retryCount = 0;
-
-    while (retryCount <= maxRetries) {
-      try {
-        // Convert ConversationMessage to LangChain BaseMessage format
-        const langchainMessages: BaseMessage[] = messages.map((msg) => {
-          if (msg.role === "user") {
-            return new HumanMessage(msg.content);
-          } else {
-            return new AIMessage(msg.content);
-          }
+        toolCalls.push({
+          id: chunk.id || generateToolCallId(),
+          name: chunk.name,
+          args,
         });
-
-        const chatStream = await withSuppressedTokenWarnings(() =>
-          this.chainManager.chatModelManager.getChatModel().stream(langchainMessages, {
-            signal: abortController.signal,
-          })
-        );
-
-        for await (const chunk of chatStream) {
-          if (abortController.signal.aborted) {
-            break;
-          }
-          streamer.processChunk(chunk);
-        }
-
-        const result = streamer.close();
-
-        return {
-          content: result.content,
-          wasTruncated: result.wasTruncated,
-          tokenUsage: result.tokenUsage,
-        };
-      } catch (error) {
-        if (error.name === "AbortError" || abortController.signal.aborted) {
-          const result = streamer.close();
-          return {
-            content: result.content,
-            wasTruncated: result.wasTruncated,
-            tokenUsage: result.tokenUsage,
-          };
-        }
-
-        // Check if this is an overloaded error that we should retry
-        const isOverloadedError =
-          error?.message?.includes("overloaded") ||
-          error?.message?.includes("Overloaded") ||
-          error?.error?.type === "overloaded_error";
-
-        if (isOverloadedError && retryCount < maxRetries) {
-          retryCount++;
-          logInfo(
-            `Retrying autonomous agent request (attempt ${retryCount}/${maxRetries + 1}) due to overloaded error`
-          );
-
-          // Wait before retrying (exponential backoff)
-          await new Promise((resolve) => setTimeout(resolve, 1000 * retryCount));
-          continue;
-        }
-
-        throw error;
       }
-    }
 
-    // This should never be reached, but just in case
-    const result = streamer.close();
-    return {
-      content: result.content,
-      wasTruncated: result.wasTruncated,
-      tokenUsage: result.tokenUsage,
-    };
+      logInfo(`[DEBUG] Final tool calls: ${JSON.stringify(toolCalls)}`);
+
+      // Build AIMessage
+      const aiMessage = new AIMessage({
+        content: fullContent,
+        tool_calls: toolCalls.map((tc) => ({
+          id: tc.id,
+          name: tc.name,
+          args: tc.args,
+          type: "tool_call" as const,
+        })),
+      });
+
+      return {
+        content: fullContent,
+        aiMessage,
+        streamingResult: {
+          content: fullContent,
+          wasTruncated: false,
+          tokenUsage: null,
+        },
+      };
+    } catch (error: any) {
+      logError(`[DEBUG] Stream error: ${error.message}`);
+      if (error.name === "AbortError" || abortController.signal.aborted) {
+        return {
+          content: fullContent,
+          aiMessage: new AIMessage({ content: fullContent }),
+          streamingResult: { content: fullContent, wasTruncated: false, tokenUsage: null },
+        };
+      }
+      throw error;
+    }
   }
 }

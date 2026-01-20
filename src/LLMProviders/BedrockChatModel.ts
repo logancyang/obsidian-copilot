@@ -5,10 +5,13 @@ import {
 } from "@langchain/core/language_models/chat_models";
 import { logInfo, logWarn, logError } from "@/logger";
 import type { CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
-import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage, UsageMetadata } from "@langchain/core/messages";
 import { ChatGenerationChunk } from "@langchain/core/outputs";
 import type { ChatGeneration, ChatResult } from "@langchain/core/outputs";
+import type { StructuredToolInterface } from "@langchain/core/tools";
+import { isInteropZodSchema } from "@langchain/core/utils/types";
+import { toJsonSchema } from "@langchain/core/utils/json_schema";
 
 type FetchImplementation = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
@@ -50,6 +53,9 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
   // Public modelName property for LangChain capability detection
   public readonly modelName: string;
+
+  // Tools bound via bindTools() for native tool calling
+  private boundTools?: StructuredToolInterface[];
 
   constructor(fields: BedrockChatModelFields) {
     const {
@@ -108,6 +114,52 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return "amazon-bedrock";
   }
 
+  /**
+   * Bind tools to this model for native tool calling.
+   * Returns a new instance with tools bound.
+   */
+  bindTools(tools: StructuredToolInterface[]): BedrockChatModel {
+    const bound = Object.create(this) as BedrockChatModel;
+    bound.boundTools = tools;
+    return bound;
+  }
+
+  /**
+   * Convert LangChain tools to Claude's tool format for Bedrock.
+   */
+  private convertToolsToClaude(tools: StructuredToolInterface[]): any[] {
+    return tools.map((tool) => {
+      let inputSchema: any = { type: "object", properties: {} };
+      if (tool.schema) {
+        // Use LangChain's schema conversion utilities
+        inputSchema = isInteropZodSchema(tool.schema) ? toJsonSchema(tool.schema) : tool.schema;
+      }
+      return {
+        name: tool.name,
+        description: tool.description || "",
+        input_schema: inputSchema,
+      };
+    });
+  }
+
+  /**
+   * Extract tool calls from Claude's response format.
+   */
+  private extractToolCalls(data: any): any[] | undefined {
+    if (!Array.isArray(data?.content)) return undefined;
+
+    const toolUseBlocks = data.content.filter((block: any) => block.type === "tool_use");
+
+    if (toolUseBlocks.length === 0) return undefined;
+
+    return toolUseBlocks.map((block: any) => ({
+      id: block.id,
+      name: block.name,
+      args: block.input || {},
+      type: "tool_call" as const,
+    }));
+  }
+
   async _generate(
     messages: BaseMessage[],
     options?: BedrockChatModelCallOptions,
@@ -132,6 +184,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     const data = await response.json();
     const text = this.extractText(data);
+    const toolCalls = this.extractToolCalls(data);
 
     if (runManager && text) {
       await runManager.handleLLMNewToken(text);
@@ -150,6 +203,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       content: text,
       response_metadata: responseMetadata,
       usage_metadata: usageMetadata,
+      tool_calls: toolCalls,
     });
 
     const generation: ChatGeneration = {
@@ -395,6 +449,38 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return null;
   }
 
+  /**
+   * Extract tool call chunk from streaming event.
+   * Returns tool_call_chunks format that LangChain can concatenate.
+   */
+  private extractToolCallChunk(
+    event: any
+  ): { id?: string; index: number; name?: string; args?: string } | null {
+    if (!event || typeof event !== "object") {
+      return null;
+    }
+
+    // Handle content_block_start with tool_use - initial tool call info
+    if (event.type === "content_block_start" && event.content_block?.type === "tool_use") {
+      return {
+        id: event.content_block.id,
+        index: event.index ?? 0,
+        name: event.content_block.name,
+        args: "",
+      };
+    }
+
+    // Handle content_block_delta with input_json_delta - partial tool args
+    if (event.type === "content_block_delta" && event.delta?.type === "input_json_delta") {
+      return {
+        index: event.index ?? 0,
+        args: event.delta.partial_json || "",
+      };
+    }
+
+    return null;
+  }
+
   private async processStreamEvent(
     event: any,
     runManager: CallbackManagerForLLMRun | undefined,
@@ -428,7 +514,24 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
         // Try to build structured content (Claude-style arrays)
         const contentItems = this.buildContentItemsFromDelta(innerEvent);
 
-        if (contentItems && contentItems.length > 0) {
+        // Check for tool call chunks first (content_block_start with tool_use, or input_json_delta)
+        const toolCallChunk = this.extractToolCallChunk(innerEvent);
+        if (toolCallChunk) {
+          const messageChunk = new AIMessageChunk({
+            content: "",
+            response_metadata: chunkMetadata,
+            tool_call_chunks: [toolCallChunk],
+          });
+
+          const generationChunk = new ChatGenerationChunk({
+            message: messageChunk,
+            text: "",
+            generationInfo: chunkMetadata,
+          });
+
+          deltaChunks.push(generationChunk);
+          hasText = true; // Tool calls count as meaningful content
+        } else if (contentItems && contentItems.length > 0) {
           // We have structured content (thinking or text)
           const isThinking = contentItems[0]?.type === "thinking";
           const deltaText = isThinking
@@ -484,7 +587,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
             }
           } else {
             // Only log if it's an unexpected event type that should have had content
-            if (innerEvent.type === "content_block_delta") {
+            // But don't warn for tool-related events which are handled above
+            if (
+              innerEvent.type === "content_block_delta" &&
+              innerEvent.delta?.type !== "input_json_delta"
+            ) {
               const summary = `No content in content_block_delta event: ${this.describeEvent(innerEvent)}`;
               debugSummaries.push(summary);
               logWarn(`processStreamEvent: ${summary}`);
@@ -508,7 +615,24 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       // Try to build structured content (Claude-style arrays)
       const contentItems = this.buildContentItemsFromDelta(event);
 
-      if (contentItems && contentItems.length > 0) {
+      // Check for tool call chunks first
+      const toolCallChunk = this.extractToolCallChunk(event);
+      if (toolCallChunk) {
+        const messageChunk = new AIMessageChunk({
+          content: "",
+          response_metadata: chunkMetadata,
+          tool_call_chunks: [toolCallChunk],
+        });
+
+        const generationChunk = new ChatGenerationChunk({
+          message: messageChunk,
+          text: "",
+          generationInfo: chunkMetadata,
+        });
+
+        deltaChunks.push(generationChunk);
+        hasText = true; // Tool calls count as meaningful content
+      } else if (contentItems && contentItems.length > 0) {
         // We have structured content (thinking or text)
         const isThinking = contentItems[0]?.type === "thinking";
         const deltaText = isThinking ? contentItems[0].thinking || "" : contentItems[0]?.text || "";
@@ -1120,7 +1244,9 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   ): Record<string, unknown> {
     type ContentBlock =
       | { type: "text"; text: string }
-      | { type: "image"; source: { type: "base64"; media_type: string; data: string } };
+      | { type: "image"; source: { type: "base64"; media_type: string; data: string } }
+      | { type: "tool_use"; id: string; name: string; input: Record<string, unknown> }
+      | { type: "tool_result"; tool_use_id: string; content: string };
 
     const conversation: Array<{
       role: "assistant" | "user";
@@ -1129,19 +1255,75 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     const systemPrompts: string[] = [];
 
     messages.forEach((message) => {
-      const content = this.normaliseMessageContent(message);
-      if (!content) {
-        return;
-      }
-
       const messageType = message._getType();
 
       // Handle system messages (always text-only)
       if (messageType === "system") {
+        const content = this.normaliseMessageContent(message);
         const textContent = typeof content === "string" ? content : "";
         if (textContent) {
           systemPrompts.push(textContent);
         }
+        return;
+      }
+
+      // Handle ToolMessage (tool results) - becomes user message with tool_result
+      if (messageType === "tool") {
+        const toolMessage = message as ToolMessage;
+        const toolResultContent =
+          typeof toolMessage.content === "string"
+            ? toolMessage.content
+            : JSON.stringify(toolMessage.content);
+        conversation.push({
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: toolMessage.tool_call_id,
+              content: toolResultContent,
+            },
+          ],
+        });
+        return;
+      }
+
+      // Handle AIMessage with tool_calls - becomes assistant message with tool_use
+      if (messageType === "ai") {
+        const aiMessage = message as AIMessage;
+        const toolCalls = aiMessage.tool_calls;
+
+        if (toolCalls && toolCalls.length > 0) {
+          const contentBlocks: ContentBlock[] = [];
+
+          // Add text content if present
+          const textContent = this.normaliseMessageContent(message);
+          if (typeof textContent === "string" && textContent) {
+            contentBlocks.push({ type: "text", text: textContent });
+          }
+
+          // Add tool_use blocks for each tool call
+          for (const tc of toolCalls) {
+            contentBlocks.push({
+              type: "tool_use",
+              id: tc.id || `tool_${Date.now()}`,
+              name: tc.name,
+              input: tc.args as Record<string, unknown>,
+            });
+          }
+
+          if (contentBlocks.length > 0) {
+            conversation.push({
+              role: "assistant",
+              content: contentBlocks,
+            });
+          }
+          return;
+        }
+      }
+
+      // Standard message processing
+      const content = this.normaliseMessageContent(message);
+      if (!content) {
         return;
       }
 
@@ -1192,6 +1374,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     const payload: Record<string, unknown> = {
       messages: conversation,
     };
+
+    // Add tools if bound
+    if (this.boundTools && this.boundTools.length > 0) {
+      payload.tools = this.convertToolsToClaude(this.boundTools);
+    }
 
     if (systemPrompts.length > 0) {
       payload.system = systemPrompts.join("\n\n");

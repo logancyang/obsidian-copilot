@@ -3,7 +3,7 @@ import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
-import { createTool } from "./SimpleTool";
+import { createLangChainTool } from "./createLangChainTool";
 import { ensureFolderExists } from "@/utils";
 import { getSettings } from "@/settings/model";
 
@@ -133,7 +133,7 @@ const writeToFileSchema = z.object({
     ),
 });
 
-const writeToFileTool = createTool({
+const writeToFileTool = createLangChainTool({
   name: "writeToFile",
   description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI.
 
@@ -143,7 +143,7 @@ const writeToFileTool = createTool({
       3. If still failed to find the target file or the file path, ask the user to specify the target file.
       `,
   schema: writeToFileSchema,
-  handler: async ({ path, content, confirmation = true }) => {
+  func: async ({ path, content, confirmation = true }) => {
     // Convert object content to JSON string if needed
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
@@ -155,27 +155,26 @@ const writeToFileTool = createTool({
       try {
         const file = await getFile(path);
         await app.vault.modify(file, contentString);
-        return JSON.stringify({
+        return {
           result: "accepted" as ApplyViewResult,
           message:
             "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
-        });
-      } catch (error) {
-        return JSON.stringify({
+        };
+      } catch (error: any) {
+        return {
           result: "failed" as ApplyViewResult,
           message: `Error writing to file without preview: ${error?.message || error}`,
-        });
+        };
       }
     }
 
     const result = await show_preview(path, contentString);
     // Simple JSON wrapper for consistent parsing
-    return JSON.stringify({
+    return {
       result: result,
       message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
-    });
+    };
   },
-  timeoutMs: 0, // no timeout
 });
 
 const replaceInFileSchema = z.object({
@@ -250,11 +249,11 @@ function replaceWithLineEndingAwareness(
   return resultNormalized;
 }
 
-const replaceInFileTool = createTool({
+const replaceInFileTool = createLangChainTool({
   name: "replaceInFile",
   description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a LARGE file.`,
   schema: replaceInFileSchema,
-  handler: async ({ path, diff }: { path: string; diff: string }) => {
+  func: async ({ path, diff }: { path: string; diff: string }) => {
     const file = app.vault.getAbstractFileByPath(path);
 
     if (!file || !(file instanceof TFile)) {
@@ -318,17 +317,17 @@ const replaceInFileTool = createTool({
         // Bypass preview and apply changes directly
         try {
           await app.vault.modify(file, modifiedContent);
-          return JSON.stringify({
+          return {
             result: "accepted" as ApplyViewResult,
             blocksApplied: changesApplied,
             message: `Applied ${changesApplied} SEARCH/REPLACE block(s) without preview. Do not call this tool again to modify this file in response to the current user request.`,
-          });
-        } catch (error) {
-          return JSON.stringify({
+          };
+        } catch (error: any) {
+          return {
             result: "failed" as ApplyViewResult,
             blocksApplied: changesApplied,
             message: `Error applying changes without preview: ${error?.message || error}`,
-          });
+          };
         }
       }
 
@@ -336,16 +335,15 @@ const replaceInFileTool = createTool({
       const result = await show_preview(path, modifiedContent);
 
       // Simple JSON wrapper with essential info
-      return JSON.stringify({
+      return {
         result: result,
         blocksApplied: changesApplied,
         message: `Applied ${changesApplied} SEARCH/REPLACE block(s) (replacing all occurrences). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`,
-      });
+      };
     } catch (error) {
       return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
     }
   },
-  timeoutMs: 0, // no timeout
 });
 
 /**

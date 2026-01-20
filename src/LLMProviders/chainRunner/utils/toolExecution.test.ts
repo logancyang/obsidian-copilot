@@ -1,5 +1,6 @@
 import { executeSequentialToolCall } from "./toolExecution";
-import { createTool } from "@/tools/SimpleTool";
+import { createLangChainTool } from "@/tools/createLangChainTool";
+import { ToolRegistry } from "@/tools/ToolRegistry";
 import { z } from "zod";
 
 // Mock dependencies
@@ -28,15 +29,28 @@ describe("toolExecution", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Clear the registry before each test
+    ToolRegistry.getInstance().clear();
   });
 
   describe("executeSequentialToolCall", () => {
     it("should execute tools without isPlusOnly flag", async () => {
-      const testTool = createTool({
+      const testTool = createLangChainTool({
         name: "testTool",
         description: "Test tool",
         schema: z.object({ input: z.string() }),
-        handler: async ({ input }) => `Result: ${input}`,
+        func: async ({ input }) => `Result: ${input}`,
+      });
+
+      // Register tool without isPlusOnly
+      ToolRegistry.getInstance().register({
+        tool: testTool,
+        metadata: {
+          id: "testTool",
+          displayName: "Test Tool",
+          description: "Test tool",
+          category: "custom",
+        },
       });
 
       mockCallTool.mockResolvedValueOnce("Tool executed successfully");
@@ -55,12 +69,23 @@ describe("toolExecution", () => {
     });
 
     it("should block plus-only tools for non-plus users", async () => {
-      const plusTool = createTool({
+      const plusTool = createLangChainTool({
         name: "plusTool",
         description: "Plus-only tool",
-        schema: z.void(),
-        handler: async () => "Should not execute",
-        isPlusOnly: true,
+        schema: z.object({}),
+        func: async () => "Should not execute",
+      });
+
+      // Register tool with isPlusOnly metadata
+      ToolRegistry.getInstance().register({
+        tool: plusTool,
+        metadata: {
+          id: "plusTool",
+          displayName: "Plus Tool",
+          description: "Plus-only tool",
+          category: "custom",
+          isPlusOnly: true,
+        },
       });
 
       mockCheckIsPlusUser.mockResolvedValueOnce(false);
@@ -76,12 +101,23 @@ describe("toolExecution", () => {
     });
 
     it("should allow plus-only tools for plus users", async () => {
-      const plusTool = createTool({
+      const plusTool = createLangChainTool({
         name: "plusTool",
         description: "Plus-only tool",
-        schema: z.void(),
-        handler: async () => "Plus tool executed",
-        isPlusOnly: true,
+        schema: z.object({}),
+        func: async () => "Plus tool executed",
+      });
+
+      // Register tool with isPlusOnly metadata
+      ToolRegistry.getInstance().register({
+        tool: plusTool,
+        metadata: {
+          id: "plusTool",
+          displayName: "Plus Tool",
+          description: "Plus-only tool",
+          category: "custom",
+          isPlusOnly: true,
+        },
       });
 
       mockCheckIsPlusUser.mockResolvedValueOnce(true);

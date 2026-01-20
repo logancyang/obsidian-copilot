@@ -1,11 +1,19 @@
 import { StreamingResult, TokenUsage } from "@/types/message";
+import { AIMessage } from "@langchain/core/messages";
 import { ModelAdapter } from "./modelAdapter";
 import { detectTruncation, extractTokenUsage } from "./finishReasonDetector";
 import { formatErrorChunk } from "@/utils/toolResultUtils";
+import {
+  NativeToolCall,
+  ToolCallChunk,
+  buildToolCallsFromChunks,
+  createAIMessageWithToolCalls,
+} from "./nativeToolCalling";
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
  * that support thinking/reasoning modes (like Claude and Deepseek).
+ * Also accumulates native tool calls from tool_call_chunks during streaming.
  * Also detects truncation due to token limits across all providers.
  */
 export class ThinkBlockStreamer {
@@ -15,6 +23,10 @@ export class ThinkBlockStreamer {
   private shouldTruncate = false;
   private wasTruncated = false;
   private tokenUsage: TokenUsage | null = null;
+
+  // Native tool call accumulation
+  private toolCallChunks: Map<number, ToolCallChunk> = new Map();
+  private accumulatedToolCalls: NativeToolCall[] = [];
 
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
@@ -131,6 +143,30 @@ export class ThinkBlockStreamer {
     return false; // No thinking handled
   }
 
+  /**
+   * Accumulate native tool call chunks during streaming.
+   * LangChain providers send tool_call_chunks with incremental data.
+   */
+  private handleToolCallChunks(chunk: any) {
+    // Check for tool_call_chunks in the chunk (LangChain streaming format)
+    const toolCallChunks = chunk.tool_call_chunks;
+    if (!toolCallChunks || !Array.isArray(toolCallChunks)) {
+      return;
+    }
+
+    for (const tc of toolCallChunks) {
+      const idx = tc.index ?? 0;
+      const existing = this.toolCallChunks.get(idx) || { name: "", args: "" };
+
+      // Accumulate data from chunk
+      if (tc.id) existing.id = tc.id;
+      if (tc.name) existing.name += tc.name;
+      if (tc.args) existing.args += tc.args;
+
+      this.toolCallChunks.set(idx, existing);
+    }
+  }
+
   processChunk(chunk: any) {
     // If we've already decided to truncate, don't process more chunks
     if (this.shouldTruncate) {
@@ -148,6 +184,9 @@ export class ThinkBlockStreamer {
     if (usage) {
       this.tokenUsage = usage;
     }
+
+    // Handle native tool call chunks (LangChain streaming)
+    this.handleToolCallChunks(chunk);
 
     // Determine if this chunk will handle thinking content
     // Note: For OpenRouter, we process only delta.reasoning, but we still need to recognize
@@ -185,35 +224,49 @@ export class ThinkBlockStreamer {
     // Check if we should truncate streaming based on model adapter
     if (this.modelAdapter?.shouldTruncateStreaming?.(this.fullResponse)) {
       this.shouldTruncate = true;
-      // Find the last complete tool call to truncate cleanly
-      this.fullResponse = this.truncateToLastCompleteToolCall(this.fullResponse);
     }
 
     this.updateCurrentAiMessage(this.fullResponse);
   }
 
-  private truncateToLastCompleteToolCall(response: string): string {
-    // Find the last complete </use_tool> tag
-    const lastCompleteToolEnd = response.lastIndexOf("</use_tool>");
-
-    if (lastCompleteToolEnd === -1) {
-      // No complete tool calls found, return original response
-      return response;
-    }
-
-    // Truncate to after the last complete tool call
-    const truncated = response.substring(0, lastCompleteToolEnd + "</use_tool>".length);
-
-    // Use model adapter to sanitize if available
-    if (this.modelAdapter?.sanitizeResponse) {
-      return this.modelAdapter.sanitizeResponse(truncated, 1);
-    }
-
-    return truncated;
-  }
-
   processErrorChunk(errorMessage: string) {
     this.errorResponse = formatErrorChunk(errorMessage);
+  }
+
+  /**
+   * Get the accumulated tool calls from streaming chunks.
+   * Call this after streaming is complete to get all tool calls.
+   */
+  getToolCalls(): NativeToolCall[] {
+    // If we have pre-accumulated tool calls (from non-streaming), return those
+    if (this.accumulatedToolCalls.length > 0) {
+      return this.accumulatedToolCalls;
+    }
+    // Otherwise build from streaming chunks
+    return buildToolCallsFromChunks(this.toolCallChunks);
+  }
+
+  /**
+   * Check if there are any tool calls accumulated
+   */
+  hasToolCalls(): boolean {
+    return this.toolCallChunks.size > 0 || this.accumulatedToolCalls.length > 0;
+  }
+
+  /**
+   * Set tool calls directly (for non-streaming responses)
+   */
+  setToolCalls(toolCalls: NativeToolCall[]) {
+    this.accumulatedToolCalls = toolCalls;
+  }
+
+  /**
+   * Build an AIMessage with the accumulated content and tool calls.
+   * Use this to add the complete response to conversation history.
+   */
+  buildAIMessage(): AIMessage {
+    const toolCalls = this.getToolCalls();
+    return createAIMessageWithToolCalls(this.fullResponse, toolCalls);
   }
 
   close(): StreamingResult {

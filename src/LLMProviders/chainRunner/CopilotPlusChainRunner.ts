@@ -55,7 +55,9 @@ import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { ModelAdapterFactory, joinPromptSections } from "./utils/modelAdapter";
 import { parseXMLToolCalls, unescapeXml } from "./utils/xmlParsing";
-import { extractParametersFromZod, SimpleTool } from "@/tools/SimpleTool";
+import { extractParametersFromZod } from "@/tools/createLangChainTool";
+import { StructuredTool } from "@langchain/core/tools";
+import { z } from "zod";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
 
@@ -70,7 +72,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
    * Uses a minimal set of utility tools: time tools and file tree.
    * Search tools are handled via @commands.
    */
-  protected getAvailableToolsForPlanning(): SimpleTool<any, any>[] {
+  protected getAvailableToolsForPlanning(): StructuredTool[] {
     const registry = ToolRegistry.getInstance();
 
     // Initialize tools if not already done
@@ -78,7 +80,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       initializeBuiltinTools(this.chainManager.app?.vault);
     }
 
-    // Get all tools as SimpleTool instances
+    // Get all tools as StructuredTool instances
     const allTools = registry.getAllTools().map((def) => def.tool);
 
     // Return only utility tools that need automatic detection
@@ -98,13 +100,13 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
    * Generate tool descriptions in XML format for the model.
    * Reuses the same format as autonomous agent.
    */
-  public static generateToolDescriptions(availableTools: SimpleTool<any, any>[]): string {
+  public static generateToolDescriptions(availableTools: StructuredTool[]): string {
     return availableTools
       .map((tool) => {
         let params = "";
 
-        // Extract parameters from Zod schema
-        const parameters = extractParametersFromZod(tool.schema);
+        // Extract parameters from Zod schema (cast needed as StructuredTool uses generic schema type)
+        const parameters = extractParametersFromZod(tool.schema as z.ZodType);
         if (Object.keys(parameters).length > 0) {
           params = Object.entries(parameters)
             .map(([key, description]) => `<${key}>${description}</${key}>`)
@@ -781,7 +783,24 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
           (tc) => tc.tool.name === "getTimeRangeMs"
         );
         if (timeRangeCall) {
-          timeRange = await ToolManager.callTool(timeRangeCall.tool, timeRangeCall.args);
+          const timeRangeResult = await ToolManager.callTool(
+            timeRangeCall.tool,
+            timeRangeCall.args
+          );
+          // Parse result if it's a JSON string (LangChain tools return strings)
+          if (typeof timeRangeResult === "string") {
+            try {
+              const parsed = JSON.parse(timeRangeResult);
+              // Only use result if it's not an error
+              if (!parsed.error) {
+                timeRange = parsed;
+              }
+            } catch {
+              logWarn("[CopilotPlus] Failed to parse getTimeRangeMs result:", timeRangeResult);
+            }
+          } else if (timeRangeResult && !timeRangeResult.error) {
+            timeRange = timeRangeResult;
+          }
           logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
         }
 
@@ -964,8 +983,9 @@ OUTPUT ONLY XML - NO OTHER TEXT.`;
   }
 
   private prepareLocalSearchResult(documents: any[], timeExpression: string): string {
-    // First filter documents with includeInContext
-    const includedDocs = documents.filter((doc) => doc.includeInContext);
+    // Filter documents that should be included in context
+    // Use !== false to be consistent with formatSearchResultsForLLM and logSearchResultsDebugTable
+    const includedDocs = documents.filter((doc) => doc.includeInContext !== false);
 
     // Calculate total content length (only content, not metadata)
     const totalContentLength = includedDocs.reduce(

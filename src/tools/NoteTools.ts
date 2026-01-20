@@ -1,7 +1,7 @@
 import { TFile } from "obsidian";
 import { z } from "zod";
 import { logInfo, logWarn } from "@/logger";
-import { createTool } from "./SimpleTool";
+import { createLangChainTool } from "./createLangChainTool";
 
 const LINES_PER_CHUNK = 200;
 
@@ -380,12 +380,12 @@ const readNoteSchema = z.object({
     .describe("0-based chunk index to read. Omit to read the first chunk."),
 });
 
-const readNoteTool = createTool({
+const readNoteTool = createLangChainTool({
   name: "readNote",
   description:
     "Read a single note in search v3 sized chunks. Use only when you already know the exact note path and need its contents.",
   schema: readNoteSchema,
-  handler: async ({ notePath, chunkIndex = 0 }) => {
+  func: async ({ notePath, chunkIndex = 0 }) => {
     const sanitizedPath = notePath.trim();
 
     if (sanitizedPath.startsWith("/")) {

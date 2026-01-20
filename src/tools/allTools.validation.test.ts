@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { SimpleTool } from "./SimpleTool";
+import { StructuredTool } from "@langchain/core/tools";
 
 /**
  * Tool validation tests to ensure all tools follow best practices
@@ -37,7 +37,7 @@ function hasWeakTyping(schema: z.ZodType): boolean {
 }
 
 // Helper to validate tool metadata
-function validateToolMetadata(tool: SimpleTool<any, any>): string[] {
+function validateToolMetadata(tool: StructuredTool): string[] {
   const issues: string[] = [];
 
   if (!tool.name || tool.name.trim() === "") {
@@ -60,7 +60,7 @@ function validateToolMetadata(tool: SimpleTool<any, any>): string[] {
 }
 
 describe("All Tools Validation", () => {
-  describe("SimpleTool tools validation", () => {
+  describe("StructuredTool tools validation", () => {
     // We'll test tools individually since we can't easily import all at once due to circular deps
 
     test("Tool validation helper functions work correctly", () => {
@@ -82,21 +82,19 @@ describe("All Tools Validation", () => {
     });
 
     test("Metadata validation works correctly", () => {
-      const goodTool: SimpleTool<any, any> = {
+      const goodTool = {
         name: "testTool",
         description: "A test tool",
         schema: z.void(),
-        call: async () => "result",
-      };
+      } as unknown as StructuredTool;
 
       expect(validateToolMetadata(goodTool)).toEqual([]);
 
-      const badTool: SimpleTool<any, any> = {
+      const badTool = {
         name: "",
         description: "  ",
         schema: z.void(),
-        call: async () => "result",
-      };
+      } as unknown as StructuredTool;
 
       const issues = validateToolMetadata(badTool);
       expect(issues).toContain("Tool must have a non-empty name");
