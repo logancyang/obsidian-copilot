@@ -127,6 +127,7 @@ const monthNames = {
   aug: 8,
   august: 8,
   sep: 9,
+  sept: 9,
   september: 9,
   oct: 10,
   october: 10,
@@ -276,7 +277,7 @@ function handleWeekOf(input: string, now: DateTime) {
  */
 function handleMonthName(input: string, now: DateTime) {
   const monthMatch = input.match(
-    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)$/i
+    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)$/i
   );
   if (!monthMatch) return undefined;
 
@@ -387,7 +388,7 @@ function handleQuarter(input: string, now: DateTime) {
  */
 function handleMonthYear(input: string, now: DateTime) {
   const monthYearMatch = input.match(
-    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)\s+(\d{4})$/i
+    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+(\d{4})$/i
   );
   if (!monthYearMatch) return undefined;
 
@@ -426,8 +427,8 @@ function getTimeRangeMs(timeExpression: string) {
 
   if (result) {
     return {
-      startTime: convertToTimeInfo(result.start),
-      endTime: convertToTimeInfo(result.end),
+      startTime: result.start.toMillis(),
+      endTime: result.end.toMillis(),
     };
   }
 
@@ -445,8 +446,8 @@ function getTimeRangeMs(timeExpression: string) {
     }
 
     return {
-      startTime: convertToTimeInfo(start),
-      endTime: convertToTimeInfo(end),
+      startTime: start.toMillis(),
+      endTime: end.toMillis(),
     };
   }
 

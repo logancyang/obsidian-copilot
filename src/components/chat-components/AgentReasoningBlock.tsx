@@ -38,19 +38,19 @@ const formatTime = (seconds: number): string => {
  * 3 4 5
  *   7
  *
- * Animation sequence: 5 → 1 → 3 → 7 → 4 → (all dim) → (all dim) → repeat
- * (right → top → left → bottom → center)
+ * Animation sequence: 1 → 3 → 7 → 5 → 4 → (all dim) → (all dim) → repeat
+ * (top → left → bottom → right → center)
  */
 const CopilotSpinner: React.FC = () => {
   // Cross pattern dots: [row, col, animation index]
-  // Sequence: right → top → left → bottom → center
+  // Sequence: top → left → bottom → right → center
   // With positive delays, order is simply: 0 → 1 → 2 → 3 → 4
   const crossDots: { row: number; col: number; animIndex: number }[] = [
-    { row: 0, col: 1, animIndex: 1 }, // top - 2nd
-    { row: 1, col: 0, animIndex: 2 }, // left - 3rd
+    { row: 0, col: 1, animIndex: 0 }, // top - 1st (leads)
+    { row: 1, col: 0, animIndex: 1 }, // left - 2nd
     { row: 1, col: 1, animIndex: 4 }, // center - 5th (last)
-    { row: 1, col: 2, animIndex: 0 }, // right - 1st (leads)
-    { row: 2, col: 1, animIndex: 3 }, // bottom - 4th
+    { row: 1, col: 2, animIndex: 3 }, // right - 4th
+    { row: 2, col: 1, animIndex: 2 }, // bottom - 3rd
   ];
 
   const dotSize = 2.5;

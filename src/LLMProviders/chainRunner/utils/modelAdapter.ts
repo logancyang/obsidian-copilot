@@ -645,7 +645,12 @@ Ask yourself: "Did I actually call this tool and receive this result?"
 - If YES: You may cite it
 - If NO: Do NOT cite it or claim you did
 
-REMEMBER: It is better to say "I only searched your notes, not the web" than to fabricate web search results.`,
+REMEMBER: It is better to say "I only searched your notes, not the web" than to fabricate web search results.
+
+## Formatting Guidelines
+- AVOID using markdown tables - they often render poorly in chat interfaces
+- Instead of tables, use bullet points, numbered lists, or simple formatted text
+- Only use tables when the user explicitly requests tabular format`,
     });
 
     return sections;

@@ -759,18 +759,29 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
             timeRangeCall.args
           );
           // Parse result if it's a JSON string (LangChain tools return strings)
+          // Extract epoch values from TimeInfo objects - localSearch expects {startTime: number, endTime: number}
+          const extractEpochValues = (result: any) => {
+            if (result?.startTime?.epoch !== undefined && result?.endTime?.epoch !== undefined) {
+              return {
+                startTime: result.startTime.epoch,
+                endTime: result.endTime.epoch,
+              };
+            }
+            return result;
+          };
+
           if (typeof timeRangeResult === "string") {
             try {
               const parsed = JSON.parse(timeRangeResult);
               // Only use result if it's not an error
               if (!parsed.error) {
-                timeRange = parsed;
+                timeRange = extractEpochValues(parsed);
               }
             } catch {
               logWarn("[CopilotPlus] Failed to parse getTimeRangeMs result:", timeRangeResult);
             }
           } else if (timeRangeResult && !timeRangeResult.error) {
-            timeRange = timeRangeResult;
+            timeRange = extractEpochValues(timeRangeResult);
           }
           logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
         }

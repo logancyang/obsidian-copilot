@@ -20,8 +20,9 @@ interface DateRange {
 const verifyDateRange = async (expression: string, expected: DateRange) => {
   const result = await getTimeRangeMs(expression);
   expect(result).toBeDefined();
-  const startDate = DateTime.fromMillis(result!.startTime.epoch);
-  const endDate = DateTime.fromMillis(result!.endTime.epoch);
+  // getTimeRangeMs now returns epoch values directly: {startTime: number, endTime: number}
+  const startDate = DateTime.fromMillis(result!.startTime);
+  const endDate = DateTime.fromMillis(result!.endTime);
 
   expect(startDate.toISODate()).toBe(expected.startDate);
   expect(endDate.toISODate()).toBe(expected.endDate);
