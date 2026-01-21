@@ -26,6 +26,7 @@ interface ChatMessagesProps {
   vimNavigationEnabled?: boolean;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   onBlur?: React.FocusEventHandler<HTMLDivElement>;
+  onClick?: React.MouseEventHandler<HTMLDivElement>;
 }
 
 const ChatMessages = memo(
@@ -45,6 +46,7 @@ const ChatMessages = memo(
     vimNavigationEnabled = false,
     onKeyDown,
     onBlur,
+    onClick,
   }: ChatMessagesProps) => {
     const [loadingDots, setLoadingDots] = useState("");
 
@@ -95,6 +97,7 @@ const ChatMessages = memo(
           tabIndex={vimNavigationEnabled ? 0 : undefined}
           onKeyDown={vimNavigationEnabled ? onKeyDown : undefined}
           onBlur={vimNavigationEnabled ? onBlur : undefined}
+          onClick={vimNavigationEnabled ? onClick : undefined}
           data-testid="chat-messages"
           className="copilot-messages-focusable tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto"
         >
@@ -122,6 +125,7 @@ const ChatMessages = memo(
           tabIndex={vimNavigationEnabled ? 0 : undefined}
           onKeyDown={vimNavigationEnabled ? onKeyDown : undefined}
           onBlur={vimNavigationEnabled ? onBlur : undefined}
+          onClick={vimNavigationEnabled ? onClick : undefined}
           data-testid="chat-messages"
           className="copilot-messages-focusable tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
         >

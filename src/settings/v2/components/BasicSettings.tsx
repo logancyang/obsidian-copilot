@@ -36,12 +36,15 @@ const VimKeyMappings: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   // Sync mappingText when settings change externally
-  const vimNavigation = settings.vimNavigation;
-  const { scrollUpKey, scrollDownKey, focusInputKey } = vimNavigation;
+  const { scrollUpKey, scrollDownKey, focusInputKey, enabled } = settings.vimNavigation;
   useEffect(() => {
-    setMappingText(buildNavMappingText(vimNavigation));
-  }, [vimNavigation, scrollUpKey, scrollDownKey, focusInputKey]);
+    setMappingText(buildNavMappingText({ scrollUpKey, scrollDownKey, focusInputKey, enabled }));
+  }, [scrollUpKey, scrollDownKey, focusInputKey, enabled]);
 
+  /**
+   * Validates input on change and shows error feedback immediately.
+   * Does NOT save settings - that happens on blur.
+   */
   const handleMappingChange = (value: string) => {
     setMappingText(value);
 
@@ -52,7 +55,18 @@ const VimKeyMappings: React.FC = () => {
     }
 
     setError(null);
-    if (result.settings) {
+  };
+
+  /**
+   * Saves valid settings when user leaves the textarea.
+   * Re-parses the current text to ensure we save the latest valid state.
+   */
+  const handleBlur = () => {
+    // Re-parse on blur to get the latest valid settings
+    const result = parseNavMappings(mappingText);
+
+    // Only save if parsing succeeds and settings are valid
+    if (!result.error && result.settings) {
       updateSetting("vimNavigation", {
         ...settings.vimNavigation,
         scrollUpKey: result.settings.scrollUp,
@@ -92,6 +106,7 @@ const VimKeyMappings: React.FC = () => {
           <Textarea
             value={mappingText}
             onChange={(e) => handleMappingChange(e.target.value)}
+            onBlur={handleBlur}
             className="tw-min-h-[80px] tw-w-full tw-font-mono tw-text-sm sm:tw-w-[240px]"
             rows={3}
           />

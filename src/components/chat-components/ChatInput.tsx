@@ -66,7 +66,6 @@ interface ChatInputProps {
   focusMessages?: () => void;
   /** Whether Vim navigation is enabled (passed from parent to avoid redundant settings reads) */
   vimNavigationEnabled?: boolean;
-  isStreaming?: boolean;
 
   // Edit mode props
   editMode?: boolean;
@@ -109,7 +108,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   showProgressCard,
   focusMessages,
   vimNavigationEnabled = false,
-  isStreaming,
   editMode = false,
   onEditSave,
   onEditCancel,
@@ -797,7 +795,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
           currentChain={currentChain}
           vimNavigationEnabled={vimNavigationEnabled}
           focusMessages={focusMessages}
-          isStreaming={isStreaming ?? isGenerating}
         />
       </div>
 

@@ -42,6 +42,7 @@ export interface VimNavigationReturn {
   focusMessages: () => void;
   handleMessagesKeyDown: React.KeyboardEventHandler<HTMLDivElement>;
   handleMessagesBlur: React.FocusEventHandler<HTMLDivElement>;
+  handleMessagesClick: React.MouseEventHandler<HTMLDivElement>;
 }
 
 type ScrollDirection = "up" | "down" | null;
@@ -102,6 +103,38 @@ function hasModifierKey(event: {
   altKey: boolean;
 }): boolean {
   return event.ctrlKey || event.metaKey || event.altKey;
+}
+
+/**
+ * CSS selector for interactive elements that should not trigger container focus on click.
+ * Uses closest() to properly handle nested elements (e.g., button > svg > path).
+ */
+const INTERACTIVE_SELECTOR = [
+  "a",
+  "button",
+  "input",
+  "textarea",
+  "select",
+  "details",
+  "summary",
+  '[tabindex]:not([tabindex="-1"])',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="menuitem"]',
+  "[contenteditable=true]",
+].join(",");
+
+/**
+ * Checks whether an element (or any of its ancestors) is interactive.
+ * Uses closest() to properly handle clicks on nested elements like button > svg > path.
+ */
+function isInteractiveElement(element: EventTarget | null): boolean {
+  if (!(element instanceof HTMLElement)) {
+    return false;
+  }
+
+  // Use closest() to check the element and all its ancestors
+  return element.closest(INTERACTIVE_SELECTOR) !== null;
 }
 
 /**
@@ -299,6 +332,28 @@ export function useVimNavigation(config: VimNavigationConfig): VimNavigationRetu
     stopScrolling({ clearPressedKeys: true });
   }, [stopScrolling]);
 
+  /**
+   * Click handler for the messages container.
+   * Focuses the container when clicking on non-interactive elements,
+   * enabling Vim navigation without requiring Escape from input first.
+   */
+  const handleMessagesClick: React.MouseEventHandler<HTMLDivElement> = useCallback(
+    (event) => {
+      if (!enabledRef.current) {
+        return;
+      }
+
+      // Don't interfere with clicks on interactive elements
+      if (isInteractiveElement(event.target)) {
+        return;
+      }
+
+      // Use the unified focusMessages function to maintain consistent behavior
+      focusMessages();
+    },
+    [focusMessages]
+  );
+
   // Cleanup on unmount
   useEffect(() => {
     isUnmountedRef.current = false;
@@ -432,5 +487,6 @@ export function useVimNavigation(config: VimNavigationConfig): VimNavigationRetu
     focusMessages,
     handleMessagesKeyDown,
     handleMessagesBlur,
+    handleMessagesClick,
   };
 }

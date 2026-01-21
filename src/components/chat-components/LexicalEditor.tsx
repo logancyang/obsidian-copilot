@@ -69,7 +69,6 @@ interface LexicalEditorProps {
   focusMessages?: () => void;
   /** Whether Vim navigation is enabled (passed from parent to avoid redundant settings reads) */
   vimNavigationEnabled?: boolean;
-  isStreaming?: boolean;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -101,7 +100,6 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   currentChain,
   focusMessages,
   vimNavigationEnabled = false,
-  isStreaming,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -191,11 +189,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <HistoryPlugin />
           <KeyboardPlugin onSubmit={onSubmit} sendShortcut={settings.defaultSendShortcut} />
           {focusMessages && (
-            <VimEscapePlugin
-              enabled={vimNavigationEnabled}
-              focusMessages={focusMessages}
-              isStreaming={isStreaming ?? false}
-            />
+            <VimEscapePlugin enabled={vimNavigationEnabled} focusMessages={focusMessages} />
           )}
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />

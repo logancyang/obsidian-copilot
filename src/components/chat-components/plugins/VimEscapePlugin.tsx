@@ -8,14 +8,13 @@ import { COMMAND_PRIORITY_LOW, KEY_ESCAPE_COMMAND } from "lexical";
 export interface VimEscapePluginProps {
   enabled: boolean;
   focusMessages: () => void;
-  isStreaming: boolean;
 }
 
 /**
  * Lexical plugin that maps Escape (in the input editor) to focusing the messages area.
  * Uses COMMAND_PRIORITY_LOW so other plugins (typeahead, menus, etc.) can handle Escape first.
  */
-export function VimEscapePlugin({ enabled, focusMessages, isStreaming }: VimEscapePluginProps) {
+export function VimEscapePlugin({ enabled, focusMessages }: VimEscapePluginProps) {
   const [editor] = useLexicalComposerContext();
 
   React.useEffect(() => {
@@ -32,11 +31,6 @@ export function VimEscapePlugin({ enabled, focusMessages, isStreaming }: VimEsca
           return false;
         }
 
-        // While streaming, let other handlers (e.g., abort/stop) take precedence.
-        if (isStreaming) {
-          return false;
-        }
-
         // Only preventDefault, not stopPropagation, to allow document-level Escape handlers
         // (e.g., edit mode cancel) to still receive the event if needed.
         event.preventDefault();
@@ -49,7 +43,7 @@ export function VimEscapePlugin({ enabled, focusMessages, isStreaming }: VimEsca
       },
       COMMAND_PRIORITY_LOW
     );
-  }, [editor, enabled, focusMessages, isStreaming]);
+  }, [editor, enabled, focusMessages]);
 
   return null;
 }

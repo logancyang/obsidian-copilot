@@ -12,8 +12,9 @@ import { resetSessionSystemPromptSettings } from "@/system-prompts";
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { useVimNavigation } from "@/hooks/useVimNavigation";
-import { logInfo, logError } from "@/logger";
+import { logError, logInfo } from "@/logger";
 import type { WebTabContext } from "@/types/message";
+import { ChatMessage } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -42,7 +43,6 @@ import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
@@ -131,7 +131,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   // Vim-style keyboard navigation (settings already sanitized with defaults)
-  const { messagesRef, focusMessages, handleMessagesKeyDown, handleMessagesBlur } = useVimNavigation({
+  const {
+    messagesRef,
+    focusMessages,
+    handleMessagesKeyDown,
+    handleMessagesBlur,
+    handleMessagesClick,
+  } = useVimNavigation({
     enabled: settings.vimNavigation.enabled,
     scrollUpKey: settings.vimNavigation.scrollUpKey,
     scrollDownKey: settings.vimNavigation.scrollDownKey,
@@ -808,6 +814,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           vimNavigationEnabled={settings.vimNavigation.enabled}
           onKeyDown={handleMessagesKeyDown}
           onBlur={handleMessagesBlur}
+          onClick={handleMessagesClick}
         />
         {shouldShowProgressCard() ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
@@ -876,7 +883,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               }}
               vimNavigationEnabled={settings.vimNavigation.enabled}
               focusMessages={focusMessages}
-              isStreaming={loading}
             />
           </>
         )}
