@@ -1,6 +1,7 @@
 import { getCurrentProject } from "@/aiParams";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
+import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -223,7 +224,17 @@ export class ChatPersistenceManager {
     return messages
       .map((message) => {
         const timestamp = message.timestamp ? message.timestamp.display : "Unknown time";
-        let content = `**${message.sender}**: ${message.message}`;
+
+        // Strip agent reasoning block from AI messages before saving
+        let messageText = message.message;
+        if (message.sender === AI_SENDER) {
+          const reasoningData = parseReasoningBlock(messageText);
+          if (reasoningData) {
+            messageText = reasoningData.contentAfter;
+          }
+        }
+
+        let content = `**${message.sender}**: ${messageText}`;
 
         // Include context information if present
         if (message.context) {
@@ -240,7 +251,9 @@ export class ChatPersistenceManager {
           }
 
           if (message.context.webTabs?.length) {
-            contextParts.push(`Web Tabs: ${message.context.webTabs.map((tab) => tab.url).join(", ")}`);
+            contextParts.push(
+              `Web Tabs: ${message.context.webTabs.map((tab) => tab.url).join(", ")}`
+            );
           }
 
           if (message.context.tags?.length) {
@@ -315,6 +328,22 @@ export class ChatPersistenceManager {
 
       // Message is everything before context and timestamp
       messageText = contentLines.slice(0, endIndex).join("\n").trim();
+
+      // Strip old tool call markers and agent reasoning blocks from AI messages
+      if (sender === AI_SENDER) {
+        // Strip old tool call banners: <!--TOOL_CALL_START:...-->...<!--TOOL_CALL_END:...-->
+        messageText = messageText.replace(
+          /<!--TOOL_CALL_START:[^:]+:[^:]+:[^:]+:[^:]+:[^:]*:[^:]+-->[\s\S]*?<!--TOOL_CALL_END:[^:]+:[\s\S]*?-->/g,
+          ""
+        );
+        // Strip agent reasoning blocks: <!--AGENT_REASONING:...-->
+        const reasoningData = parseReasoningBlock(messageText);
+        if (reasoningData) {
+          messageText = reasoningData.contentAfter;
+        }
+        // Clean up any resulting multiple consecutive newlines
+        messageText = messageText.replace(/\n{3,}/g, "\n\n").trim();
+      }
 
       // Parse the timestamp
       let epoch: number | undefined;
