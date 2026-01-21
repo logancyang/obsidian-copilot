@@ -172,7 +172,7 @@ export async function forceRebuildCurrentProjectContext() {
 
 interface ChatControlsProps {
   onNewChat: () => void;
-  onSaveAsNote: () => void;
+  onSaveAsNote: () => Promise<void>;
   onLoadHistory: () => void;
   onModeChange: (mode: ChainType) => void;
   onCloseProject?: () => void;
@@ -201,7 +201,15 @@ export function ChatControls({
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
 
-  const handleModeChange = (chainType: ChainType) => {
+  const handleModeChange = async (chainType: ChainType) => {
+    // If leaving project mode with autosave enabled, save chat BEFORE clearing project context
+    // This ensures the chat is saved with the correct project prefix
+    const isLeavingProjectMode =
+      selectedChain === ChainType.PROJECT_CHAIN && chainType !== ChainType.PROJECT_CHAIN;
+    if (isLeavingProjectMode && settings.autosaveChat) {
+      await onSaveAsNote();
+    }
+
     setSelectedChain(chainType);
     onModeChange(chainType);
     if (chainType !== ChainType.PROJECT_CHAIN) {
