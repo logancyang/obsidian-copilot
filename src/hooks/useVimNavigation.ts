@@ -343,9 +343,16 @@ export function useVimNavigation(config: VimNavigationConfig): VimNavigationRetu
         return;
       }
 
-      // Don't interfere with clicks on interactive elements
-      if (isInteractiveElement(event.target)) {
-        return;
+      // Don't interfere with clicks on interactive elements.
+      // Note: We must exclude the container itself (event.currentTarget) from this check
+      // because the container has tabindex=0 for keyboard navigation, which would match
+      // the [tabindex] selector and cause all clicks to be incorrectly ignored.
+      // Use Element (not HTMLElement) to also handle SVGElement clicks (e.g., button > svg > path).
+      if (event.target instanceof Element) {
+        const interactiveAncestor = event.target.closest(INTERACTIVE_SELECTOR);
+        if (interactiveAncestor && interactiveAncestor !== event.currentTarget) {
+          return;
+        }
       }
 
       // Use the unified focusMessages function to maintain consistent behavior
