@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUpRight, Check, Edit2, Loader2, MessageCircle, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { SearchBar } from "@/components/ui/SearchBar";
@@ -27,6 +27,9 @@ interface ChatHistoryPopoverProps {
   onOpenSourceFile?: (id: string) => Promise<void>;
 }
 
+/** Number of items to render per page */
+const PAGE_SIZE = 50;
+
 export function ChatHistoryPopover({
   children,
   chatHistory,
@@ -40,8 +43,18 @@ export function ChatHistoryPopover({
   const [editingTitle, setEditingTitle] = useState("");
   const [open, setOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
   const isMobile = Platform.isMobile;
   const settings = useSettingsValue();
+
+  // Reset display count when popover opens or search query changes
+  useEffect(() => {
+    if (open) {
+      setDisplayCount(PAGE_SIZE);
+    }
+  }, [open, searchQuery]);
 
   const filteredHistory = useMemo(() => {
     if (!searchQuery.trim()) return chatHistory;
@@ -58,6 +71,14 @@ export function ChatHistoryPopover({
     });
   }, [filteredHistory, settings.chatHistorySortStrategy]);
 
+  // Paginated subset of sorted history
+  const paginatedHistory = useMemo(() => {
+    return sortedHistory.slice(0, displayCount);
+  }, [sortedHistory, displayCount]);
+
+  const hasMore = displayCount < sortedHistory.length;
+  const totalCount = sortedHistory.length;
+
   const groupedHistory = useMemo(() => {
     const sortStrategy = settings.chatHistorySortStrategy;
 
@@ -67,7 +88,7 @@ export function ChatHistoryPopover({
         {
           key: "All",
           label: "All",
-          chats: sortedHistory,
+          chats: paginatedHistory,
           priority: 0,
         },
       ];
@@ -82,7 +103,7 @@ export function ChatHistoryPopover({
     const groupMap = new Map<string, ChatHistoryItem[]>();
     const now = new Date();
 
-    sortedHistory.forEach((chat) => {
+    paginatedHistory.forEach((chat) => {
       // Use lastAccessedAt for "recent" strategy, createdAt for "created" strategy
       const referenceDate = sortStrategy === "recent" ? chat.lastAccessedAt : chat.createdAt;
       const diffTime = now.getTime() - referenceDate.getTime();
@@ -123,7 +144,50 @@ export function ChatHistoryPopover({
 
     // Sort by priority, ensuring Today is at the top.
     return groups.sort((a, b) => a.priority - b.priority);
-  }, [settings.chatHistorySortStrategy, sortedHistory]);
+  }, [settings.chatHistorySortStrategy, paginatedHistory]);
+
+  /**
+   * Load more items when sentinel becomes visible
+   */
+  const loadMore = useCallback(() => {
+    if (isLoadingMore || !hasMore) return;
+
+    setIsLoadingMore(true);
+    // Use requestAnimationFrame to avoid blocking the UI
+    requestAnimationFrame(() => {
+      setDisplayCount((prev) => Math.min(prev + PAGE_SIZE, sortedHistory.length));
+      setIsLoadingMore(false);
+    });
+  }, [isLoadingMore, hasMore, sortedHistory.length]);
+
+  /**
+   * Use IntersectionObserver to detect when sentinel element is visible
+   * This is more reliable than scroll events for Radix ScrollArea
+   */
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel || !open) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting && hasMore && !isLoadingMore) {
+          loadMore();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "100px",
+        threshold: 0,
+      }
+    );
+
+    observer.observe(sentinel);
+
+    return () => {
+      observer.disconnect();
+    };
+  }, [open, hasMore, isLoadingMore, loadMore]);
 
   const handleStartEdit = (id: string, currentTitle: string) => {
     setEditingId(id);
@@ -202,37 +266,55 @@ export function ChatHistoryPopover({
                   {searchQuery ? "No matching chat history found." : "No chat history"}
                 </div>
               ) : (
-                groupedHistory.map((group) => (
-                  <div
-                    key={group.key}
-                    className="tw-mb-3 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-border tw-pb-2"
-                    style={{ borderBottomStyle: "solid" }}
-                  >
-                    <div className="tw-mb-2 tw-px-2 tw-text-xs tw-font-medium tw-tracking-wider tw-text-muted">
-                      {group.label}
+                <>
+                  {groupedHistory.map((group) => (
+                    <div
+                      key={group.key}
+                      className="tw-mb-3 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-border tw-pb-2"
+                      style={{ borderBottomStyle: "solid" }}
+                    >
+                      <div className="tw-mb-2 tw-px-2 tw-text-xs tw-font-medium tw-tracking-wider tw-text-muted">
+                        {group.label}
+                      </div>
+                      <div className="tw-space-y-1">
+                        {group.chats.map((chat) => (
+                          <ChatHistoryItemComponent
+                            key={chat.id}
+                            chat={chat}
+                            isEditing={editingId === chat.id}
+                            editingTitle={editingTitle}
+                            onEditingTitleChange={setEditingTitle}
+                            onStartEdit={handleStartEdit}
+                            onSaveEdit={handleSaveEdit}
+                            onCancelEdit={handleCancelEdit}
+                            onDelete={handleDelete}
+                            onCancelDelete={handleCancelDelete}
+                            onLoadChat={handleLoadChat}
+                            onOpenSourceFile={onOpenSourceFile}
+                            isMobile={isMobile}
+                            confirmDeleteId={confirmDeleteId}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div className="tw-space-y-1">
-                      {group.chats.map((chat) => (
-                        <ChatHistoryItem
-                          key={chat.id}
-                          chat={chat}
-                          isEditing={editingId === chat.id}
-                          editingTitle={editingTitle}
-                          onEditingTitleChange={setEditingTitle}
-                          onStartEdit={handleStartEdit}
-                          onSaveEdit={handleSaveEdit}
-                          onCancelEdit={handleCancelEdit}
-                          onDelete={handleDelete}
-                          onCancelDelete={handleCancelDelete}
-                          onLoadChat={handleLoadChat}
-                          onOpenSourceFile={onOpenSourceFile}
-                          isMobile={isMobile}
-                          confirmDeleteId={confirmDeleteId}
-                        />
-                      ))}
+                  ))}
+
+                  {/* Sentinel element for infinite scroll detection */}
+                  <div ref={sentinelRef} className="tw-h-1" />
+
+                  {/* Loading indicator and count */}
+                  {hasMore && (
+                    <div className="tw-flex tw-items-center tw-justify-center tw-py-2 tw-text-xs tw-text-muted">
+                      {isLoadingMore ? (
+                        <Loader2 className="tw-size-4 tw-animate-spin" />
+                      ) : (
+                        <span>
+                          Showing {paginatedHistory.length} of {totalCount} conversations
+                        </span>
+                      )}
                     </div>
-                  </div>
-                ))
+                  )}
+                </>
               )}
             </div>
           </ScrollArea>
@@ -258,7 +340,11 @@ interface ChatHistoryItemProps {
   confirmDeleteId: string | null;
 }
 
-function ChatHistoryItem({
+/**
+ * Individual chat history item component.
+ * Renamed from ChatHistoryItem to avoid naming conflict with the interface.
+ */
+function ChatHistoryItemComponent({
   chat,
   isEditing,
   editingTitle,

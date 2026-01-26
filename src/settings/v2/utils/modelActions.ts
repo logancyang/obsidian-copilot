@@ -166,9 +166,11 @@ export async function verifyAndAddModel(
 /**
  * Build CustomModel object for adding to activeModels
  */
-export function buildCustomModel(
-  model: { id: string; name: string; provider: SettingKeyProviders }
-): CustomModel {
+export function buildCustomModel(model: {
+  id: string;
+  name: string;
+  provider: SettingKeyProviders;
+}): CustomModel {
   return {
     name: model.name,
     provider: model.provider,

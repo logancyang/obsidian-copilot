@@ -1,10 +1,12 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { CustomModel, getCurrentProject, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
 import {
-  NoteSelectedTextContext,
-  SelectedTextContext,
-} from "@/types/message";
+  CustomModel,
+  getCurrentProject,
+  setSelectedTextContexts,
+  getSelectedTextContexts,
+} from "@/aiParams";
+import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -610,10 +612,11 @@ export default class CopilotPlugin extends Plugin {
       const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
 
       // Use effective last used time (prefers in-memory value for immediate UI updates)
-      const effectiveLastAccessedAtMs = this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
-        file.path,
-        persistedLastAccessedAtMs ?? createdAt.getTime()
-      );
+      const effectiveLastAccessedAtMs =
+        this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
+          file.path,
+          persistedLastAccessedAtMs ?? createdAt.getTime()
+        );
       const lastAccessedAt = new Date(effectiveLastAccessedAtMs);
 
       return {

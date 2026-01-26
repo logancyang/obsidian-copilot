@@ -37,7 +37,6 @@ export interface WebViewerReaderContent {
   md: string;
 }
 
-
 /**
  * Minimal shape of Electron's webview element as observed in Obsidian Web Viewer.
  * Note: This is not part of the official Obsidian plugin API.
@@ -48,7 +47,6 @@ export interface WebviewElement extends HTMLElement {
   executeJavaScript(code: string, userGesture?: boolean): Promise<unknown>;
   getURL(): string;
   getTitle(): string;
-
 }
 
 /**
@@ -116,7 +114,6 @@ export interface WebViewerPageInfo {
   faviconUrl: string;
   mode: WebViewerMode;
 }
-
 
 /** Result of save-to-vault operation. */
 export interface SaveToVaultResult {

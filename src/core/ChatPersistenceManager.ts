@@ -240,7 +240,9 @@ export class ChatPersistenceManager {
           }
 
           if (message.context.webTabs?.length) {
-            contextParts.push(`Web Tabs: ${message.context.webTabs.map((tab) => tab.url).join(", ")}`);
+            contextParts.push(
+              `Web Tabs: ${message.context.webTabs.map((tab) => tab.url).join(", ")}`
+            );
           }
 
           if (message.context.tags?.length) {

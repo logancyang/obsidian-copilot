@@ -534,11 +534,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       // Capture open states of collapsible sections before re-rendering
       // During streaming, don't overwrite user's explicit state changes from pointerdown
-      captureCopilotCollapsibleOpenStates(
-        contentRef.current,
-        collapsibleOpenStateMap,
-        { overwriteExisting: !isStreaming }
-      );
+      captureCopilotCollapsibleOpenStates(contentRef.current, collapsibleOpenStateMap, {
+        overwriteExisting: !isStreaming,
+      });
 
       const originMessage = message.message;
       const processedMessage = preprocess(originMessage);
