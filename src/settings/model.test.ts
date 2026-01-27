@@ -6,10 +6,7 @@ import {
   SEND_SHORTCUT,
 } from "@/constants";
 import { sanitizeQaExclusions, sanitizeSettings } from "@/settings/model";
-import {
-  getEffectiveUserPrompt,
-  getSystemPrompt,
-} from "@/system-prompts/systemPromptBuilder";
+import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import * as systemPromptsState from "@/system-prompts/state";
 import * as settingsModel from "@/settings/model";
 
@@ -135,7 +132,9 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
 
     const sanitized = sanitizeSettings(newSettings);
 
-    expect(sanitized.autoAddActiveContentToContext).toBe(DEFAULT_SETTINGS.autoAddActiveContentToContext);
+    expect(sanitized.autoAddActiveContentToContext).toBe(
+      DEFAULT_SETTINGS.autoAddActiveContentToContext
+    );
   });
 });
 

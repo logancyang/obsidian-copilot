@@ -165,8 +165,10 @@ export class ChatManager {
 
     if (userInstructionsBlockRegex.test(systemPromptWithoutMemory)) {
       // Use function replacement to avoid $ being interpreted as special replacement patterns
-      return systemPromptWithoutMemory.replace(userInstructionsBlockRegex, () =>
-        `<user_custom_instructions>\n${processedUserCustomPrompt}\n</user_custom_instructions>`
+      return systemPromptWithoutMemory.replace(
+        userInstructionsBlockRegex,
+        () =>
+          `<user_custom_instructions>\n${processedUserCustomPrompt}\n</user_custom_instructions>`
       );
     }
 

@@ -212,7 +212,10 @@ function formatCurlCommand(spec: CurlRequestSpec): string {
 async function buildOpenAICompatibleRequestSpec(
   model: CustomModel,
   isEmbeddingModel: boolean
-): Promise<{ ok: true; spec: CurlRequestSpec; warnings: string[] } | { ok: false; error: string; warnings: string[] }> {
+): Promise<
+  | { ok: true; spec: CurlRequestSpec; warnings: string[] }
+  | { ok: false; error: string; warnings: string[] }
+> {
   const warnings: string[] = [];
   const provider = model.provider?.trim() ?? "";
 
@@ -334,7 +337,8 @@ async function buildAzureOpenAIRequestSpec(
   model: CustomModel,
   isEmbeddingModel: boolean
 ): Promise<
-  { ok: true; spec: CurlRequestSpec; warnings: string[] } | { ok: false; error: string; warnings: string[] }
+  | { ok: true; spec: CurlRequestSpec; warnings: string[] }
+  | { ok: false; error: string; warnings: string[] }
 > {
   const warnings: string[] = [];
 
@@ -390,7 +394,8 @@ async function buildAzureOpenAIRequestSpec(
 async function buildAnthropicRequestSpec(
   model: CustomModel
 ): Promise<
-  { ok: true; spec: CurlRequestSpec; warnings: string[] } | { ok: false; error: string; warnings: string[] }
+  | { ok: true; spec: CurlRequestSpec; warnings: string[] }
+  | { ok: false; error: string; warnings: string[] }
 > {
   const warnings: string[] = [];
 
@@ -448,7 +453,8 @@ async function buildGoogleGenerativeAIRequestSpec(
   model: CustomModel,
   isEmbeddingModel: boolean
 ): Promise<
-  { ok: true; spec: CurlRequestSpec; warnings: string[] } | { ok: false; error: string; warnings: string[] }
+  | { ok: true; spec: CurlRequestSpec; warnings: string[] }
+  | { ok: false; error: string; warnings: string[] }
 > {
   const warnings: string[] = [];
 
@@ -610,7 +616,8 @@ async function buildOllamaRequestSpec(
   model: CustomModel,
   isEmbeddingModel: boolean
 ): Promise<
-  { ok: true; spec: CurlRequestSpec; warnings: string[] } | { ok: false; error: string; warnings: string[] }
+  | { ok: true; spec: CurlRequestSpec; warnings: string[] }
+  | { ok: false; error: string; warnings: string[] }
 > {
   const warnings: string[] = [];
 
@@ -639,9 +646,7 @@ async function buildOllamaRequestSpec(
   if (hasApiKey) {
     const apiKeyResolved = await resolveApiKeyForCurl(model.apiKey);
     // Filter out "API key is empty" warnings for Ollama since it's often optional
-    const filteredWarnings = apiKeyResolved.warnings.filter(
-      (w) => !w.includes("API key is empty")
-    );
+    const filteredWarnings = apiKeyResolved.warnings.filter((w) => !w.includes("API key is empty"));
     warnings.push(...filteredWarnings);
     headers.Authorization = `Bearer ${apiKeyResolved.apiKey}`;
   }
@@ -687,7 +692,9 @@ async function buildOllamaRequestSpec(
  * Builds an example curl command for the provided model configuration.
  * Intended for debugging connectivity and validating request formats.
  */
-export async function buildCurlCommandForModel(model: CustomModel): Promise<BuildCurlCommandResult> {
+export async function buildCurlCommandForModel(
+  model: CustomModel
+): Promise<BuildCurlCommandResult> {
   const warnings: string[] = [];
   const provider = model.provider?.trim();
 
@@ -717,7 +724,11 @@ export async function buildCurlCommandForModel(model: CustomModel): Promise<Buil
   // Amazon Bedrock
   if (provider === ChatModelProviders.AMAZON_BEDROCK) {
     if (isEmbeddingModel) {
-      return { ok: false, error: "Bedrock embeddings are not supported by this generator.", warnings };
+      return {
+        ok: false,
+        error: "Bedrock embeddings are not supported by this generator.",
+        warnings,
+      };
     }
     return await buildBedrockCurlText(model);
   }
@@ -743,5 +754,9 @@ export async function buildCurlCommandForModel(model: CustomModel): Promise<Buil
     return { ok: true, command: formatCurlCommand(result.spec), warnings: result.warnings };
   }
 
-  return { ok: false, error: `Provider "${provider}" is not supported for curl generation.`, warnings };
+  return {
+    ok: false,
+    error: `Provider "${provider}" is not supported for curl generation.`,
+    warnings,
+  };
 }

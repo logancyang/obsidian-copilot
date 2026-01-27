@@ -2,7 +2,12 @@ import {
   BaseChatModel,
   type BaseChatModelParams,
 } from "@langchain/core/language_models/chat_models";
-import { AIMessage, AIMessageChunk, type BaseMessage, type MessageContent } from "@langchain/core/messages";
+import {
+  AIMessage,
+  AIMessageChunk,
+  type BaseMessage,
+  type MessageContent,
+} from "@langchain/core/messages";
 import { type ChatResult, ChatGeneration, ChatGenerationChunk } from "@langchain/core/outputs";
 import { type CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
 import { GitHubCopilotProvider } from "./GitHubCopilotProvider";

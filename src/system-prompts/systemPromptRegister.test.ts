@@ -108,9 +108,7 @@ describe("SystemPromptRegister", () => {
 
       // Verify selectedPromptTitle was cleared
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("");
-      expect(Notice).toHaveBeenCalledWith(
-        expect.stringContaining("MyPrompt")
-      );
+      expect(Notice).toHaveBeenCalledWith(expect.stringContaining("MyPrompt"));
     });
 
     it("does not clear selectedPromptTitle when deleted file does not match", async () => {
@@ -168,9 +166,7 @@ describe("SystemPromptRegister", () => {
 
       // Verify selectedPromptTitle was updated to new name
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("NewName");
-      expect(Notice).toHaveBeenCalledWith(
-        expect.stringContaining("renamed")
-      );
+      expect(Notice).toHaveBeenCalledWith(expect.stringContaining("renamed"));
     });
 
     it("clears selectedPromptTitle when file is moved out of prompts folder", async () => {
@@ -191,9 +187,7 @@ describe("SystemPromptRegister", () => {
 
       // Verify selectedPromptTitle was cleared
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("");
-      expect(Notice).toHaveBeenCalledWith(
-        expect.stringContaining("moved out")
-      );
+      expect(Notice).toHaveBeenCalledWith(expect.stringContaining("moved out"));
     });
 
     it("does not update selectedPromptTitle when renamed file does not match", async () => {
@@ -282,9 +276,7 @@ describe("SystemPromptRegister", () => {
 
       // Verify selectedPromptTitle was cleared
       expect(state.setSelectedPromptTitle).toHaveBeenCalledWith("");
-      expect(Notice).toHaveBeenCalledWith(
-        expect.stringContaining("OldPrompt")
-      );
+      expect(Notice).toHaveBeenCalledWith(expect.stringContaining("OldPrompt"));
     });
 
     it("clears defaultSystemPromptTitle when prompt not found in new folder", async () => {
@@ -317,9 +309,7 @@ describe("SystemPromptRegister", () => {
 
       // Verify defaultSystemPromptTitle was cleared
       expect(updateSetting).toHaveBeenCalledWith("defaultSystemPromptTitle", "");
-      expect(Notice).toHaveBeenCalledWith(
-        expect.stringContaining("OldDefault")
-      );
+      expect(Notice).toHaveBeenCalledWith(expect.stringContaining("OldDefault"));
     });
 
     it("does not clear prompts when they exist in new folder", async () => {
@@ -412,17 +402,25 @@ describe("SystemPromptRegister", () => {
       // 4. Request A completes later with promptsA
       // Expected: Only promptsB should be applied, promptsA should be discarded
 
-      const promptsA = [{ title: "PromptA", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 }];
-      const promptsB = [{ title: "PromptB", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 }];
+      const promptsA = [
+        { title: "PromptA", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
+      ];
+      const promptsB = [
+        { title: "PromptB", content: "", createdMs: 0, modifiedMs: 0, lastUsedMs: 0 },
+      ];
 
       // Create deferred promises to control completion order
       let resolveA: (value: typeof promptsA) => void;
       let resolveB: (value: typeof promptsB) => void;
-      const promiseA = new Promise<typeof promptsA>((r) => { resolveA = r; });
-      const promiseB = new Promise<typeof promptsB>((r) => { resolveB = r; });
+      const promiseA = new Promise<typeof promptsA>((r) => {
+        resolveA = r;
+      });
+      const promiseB = new Promise<typeof promptsB>((r) => {
+        resolveB = r;
+      });
 
       mockManager.fetchPrompts
-        .mockReturnValueOnce(promiseA)  // First call (request A)
+        .mockReturnValueOnce(promiseA) // First call (request A)
         .mockReturnValueOnce(promiseB); // Second call (request B)
 
       // Trigger first folder change (request A)

@@ -353,7 +353,11 @@ export function GitHubCopilotAuth() {
             )}
 
             {/* Error message */}
-            {error && <div className="tw-rounded-lg tw-border tw-border-border tw-p-3.5 tw-text-xs tw-text-error tw-bg-muted/10">{error}</div>}
+            {error && (
+              <div className="tw-rounded-lg tw-border tw-border-border tw-p-3.5 tw-text-xs tw-text-error tw-bg-muted/10">
+                {error}
+              </div>
+            )}
           </div>
         </CollapsibleContent>
       </Collapsible>

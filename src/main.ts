@@ -1,10 +1,12 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { CustomModel, getCurrentProject, setSelectedTextContexts, getSelectedTextContexts } from "@/aiParams";
 import {
-  NoteSelectedTextContext,
-  SelectedTextContext,
-} from "@/types/message";
+  CustomModel,
+  getCurrentProject,
+  setSelectedTextContexts,
+  getSelectedTextContexts,
+} from "@/aiParams";
+import { NoteSelectedTextContext, SelectedTextContext } from "@/types/message";
 import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
@@ -25,7 +27,9 @@ import { logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPlusUser, isSelfHostModeValid } from "@/plusUtils";
+import { MiyoBackend, MiyoIndexManager } from "@/search/miyo";
+import { RetrieverFactory } from "@/search/RetrieverFactory";
 import {
   getWebViewerService,
   startActiveWebTabTracking,
@@ -82,6 +86,8 @@ export default class CopilotPlugin extends Plugin {
   private selectionChangeHandler?: () => void;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
+  /** Miyo index manager for self-host mode vault indexing */
+  miyoIndexManager?: MiyoIndexManager;
 
   async onload(): Promise<void> {
     await this.loadSettings();
@@ -92,6 +98,9 @@ export default class CopilotPlugin extends Plugin {
         await this.saveData(next);
       }
       registerCommands(this, prev, next);
+
+      // Handle Miyo/self-host mode settings changes
+      this.handleMiyoSettingsChange(prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
@@ -110,6 +119,9 @@ export default class CopilotPlugin extends Plugin {
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
+
+    // Initialize Miyo backend if self-host mode is enabled
+    this.initializeMiyoBackend();
 
     // Initialize VaultDataManager for centralized vault data (notes, folders, tags)
     // Note: VaultDataManager tracks ALL data; hooks filter based on parameters
@@ -222,6 +234,13 @@ export default class CopilotPlugin extends Plugin {
     this.customCommandRegister.cleanup();
     this.systemPromptRegister.cleanup();
     this.settingsUnsubscriber?.();
+
+    // Cleanup Miyo index manager
+    if (this.miyoIndexManager) {
+      this.miyoIndexManager.cleanup();
+      this.miyoIndexManager = undefined;
+    }
+    RetrieverFactory.clearSelfHostedBackend();
 
     // Cleanup selection handler
     this.cleanupSelectionHandler();
@@ -610,10 +629,11 @@ export default class CopilotPlugin extends Plugin {
       const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
 
       // Use effective last used time (prefers in-memory value for immediate UI updates)
-      const effectiveLastAccessedAtMs = this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
-        file.path,
-        persistedLastAccessedAtMs ?? createdAt.getTime()
-      );
+      const effectiveLastAccessedAtMs =
+        this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
+          file.path,
+          persistedLastAccessedAtMs ?? createdAt.getTime()
+        );
       const lastAccessedAt = new Date(effectiveLastAccessedAtMs);
 
       return {
@@ -850,5 +870,122 @@ export default class CopilotPlugin extends Plugin {
       content: doc.pageContent,
       metadata: doc.metadata,
     }));
+  }
+
+  /**
+   * Initialize the Miyo backend for self-host mode.
+   * Registers the MiyoBackend with RetrieverFactory if self-host mode is enabled.
+   */
+  private initializeMiyoBackend(): void {
+    const settings = getSettings();
+
+    // Only initialize if self-host mode is enabled and validated
+    if (!isSelfHostModeValid() || !settings.selfHostUrl) {
+      logInfo("Miyo backend not initialized: self-host mode not enabled or URL not configured");
+      return;
+    }
+
+    try {
+      // Create and register the Miyo backend
+      const backend = new MiyoBackend({
+        baseUrl: settings.selfHostUrl,
+        apiKey: settings.selfHostApiKey || undefined,
+        sourceId: this.getVaultSourceId(),
+      });
+
+      RetrieverFactory.registerSelfHostedBackend(backend);
+
+      // Create the index manager
+      this.miyoIndexManager = new MiyoIndexManager(this.app, {
+        baseUrl: settings.selfHostUrl,
+        apiKey: settings.selfHostApiKey || undefined,
+        sourceId: this.getVaultSourceId(),
+      });
+
+      logInfo("Miyo backend initialized successfully", { url: settings.selfHostUrl });
+    } catch (error) {
+      logWarn("Failed to initialize Miyo backend:", error);
+    }
+  }
+
+  /**
+   * Handle changes to Miyo/self-host mode settings.
+   * Re-registers the backend when relevant settings change.
+   */
+  private handleMiyoSettingsChange(
+    prev: { enableSelfHostMode?: boolean; selfHostUrl?: string; selfHostApiKey?: string },
+    next: { enableSelfHostMode?: boolean; selfHostUrl?: string; selfHostApiKey?: string }
+  ): void {
+    // Check if relevant settings changed
+    const settingsChanged =
+      prev.enableSelfHostMode !== next.enableSelfHostMode ||
+      prev.selfHostUrl !== next.selfHostUrl ||
+      prev.selfHostApiKey !== next.selfHostApiKey;
+
+    if (!settingsChanged) {
+      return;
+    }
+
+    // Clean up existing backend
+    if (this.miyoIndexManager) {
+      this.miyoIndexManager.cleanup();
+      this.miyoIndexManager = undefined;
+    }
+    RetrieverFactory.clearSelfHostedBackend();
+
+    // Re-initialize if self-host mode is enabled
+    if (next.enableSelfHostMode && next.selfHostUrl && isSelfHostModeValid()) {
+      const backend = new MiyoBackend({
+        baseUrl: next.selfHostUrl,
+        apiKey: next.selfHostApiKey || undefined,
+        sourceId: this.getVaultSourceId(),
+      });
+
+      RetrieverFactory.registerSelfHostedBackend(backend);
+
+      this.miyoIndexManager = new MiyoIndexManager(this.app, {
+        baseUrl: next.selfHostUrl,
+        apiKey: next.selfHostApiKey || undefined,
+        sourceId: this.getVaultSourceId(),
+      });
+
+      logInfo("Miyo backend re-initialized after settings change");
+    } else {
+      logInfo("Miyo backend disabled after settings change");
+    }
+  }
+
+  /**
+   * Get a unique source ID for this vault.
+   * Used to isolate indexed content from different vaults in Miyo.
+   */
+  private getVaultSourceId(): string {
+    // Use the vault name as the source ID
+    // This allows multiple vaults to use the same Miyo instance
+    return this.app.vault.getName();
+  }
+
+  /**
+   * Index the vault using Miyo.
+   * This is called when the user triggers indexing in self-host mode.
+   *
+   * @param force - Force re-indexing of all files
+   * @returns Number of files indexed
+   */
+  async indexVaultWithMiyo(force?: boolean): Promise<number> {
+    if (!this.miyoIndexManager) {
+      logWarn("Miyo index manager not initialized");
+      return 0;
+    }
+
+    return this.miyoIndexManager.indexVault({ force });
+  }
+
+  /**
+   * Get the Miyo index manager instance.
+   * Returns undefined if self-host mode is not enabled.
+   */
+  getMiyoIndexManager(): MiyoIndexManager | undefined {
+    return this.miyoIndexManager;
   }
 }
