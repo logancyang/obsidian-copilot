@@ -2,15 +2,16 @@
  * Miyo Index Manager
  *
  * Manages vault indexing via the Miyo retrieval service.
- * Miyo handles chunking and embedding internally, so this manager
- * only needs to send file paths and track indexing status.
+ * Uses ChunkManager to produce chunks with consistent IDs and boundaries,
+ * ensuring alignment with the lexical search engine.
  */
 
 import { logError, logInfo, logWarn } from "@/logger";
 import { App, Notice, TFile } from "obsidian";
 import { getMatchingPatterns, shouldIndexFile } from "../searchUtils";
+import { ChunkManager, getSharedChunkManager } from "../v3/chunks";
 import { MiyoClient } from "./MiyoClient";
-import { MiyoClientConfig, IngestResponse } from "./types";
+import { MiyoClientConfig, IngestChunksRequest, IngestResponse, IngestChunk } from "./types";
 
 /**
  * State of the indexing operation.
@@ -38,11 +39,11 @@ export interface MiyoIndexOptions {
 }
 
 /**
- * Manages vault indexing via Miyo.
+ * Manages vault indexing via Miyo using ChunkManager for consistent chunking.
  *
- * This manager coordinates with Miyo to index vault files.
- * Unlike the local Orama-based indexing, Miyo handles chunking
- * and embedding on the server side.
+ * This manager uses ChunkManager to produce chunks, ensuring identical
+ * chunk boundaries and IDs across Miyo (semantic) and lexical search engines.
+ * Miyo handles embedding on the server side.
  *
  * @example
  * ```typescript
@@ -61,6 +62,7 @@ export interface MiyoIndexOptions {
 export class MiyoIndexManager {
   private readonly app: App;
   private client: MiyoClient;
+  private chunkManager: ChunkManager;
   private state: MiyoIndexingState;
   private currentNotice: Notice | null = null;
   private noticeMessage: HTMLSpanElement | null = null;
@@ -69,6 +71,7 @@ export class MiyoIndexManager {
   constructor(app: App, config: MiyoClientConfig) {
     this.app = app;
     this.client = new MiyoClient(config);
+    this.chunkManager = getSharedChunkManager(app);
     this.state = this.createInitialState();
   }
 
@@ -104,7 +107,7 @@ export class MiyoIndexManager {
   }
 
   /**
-   * Index all vault files to Miyo.
+   * Index all vault files to Miyo using ChunkManager for consistent chunking.
    *
    * @param options - Indexing options
    * @returns Number of files successfully indexed
@@ -141,7 +144,7 @@ export class MiyoIndexManager {
       this.createIndexingNotice();
       logInfo(`MiyoIndexManager: Starting indexing of ${files.length} files`);
 
-      // Index files
+      // Index files one by one
       for (const file of files) {
         if (this.state.isCancelled) {
           break;
@@ -194,17 +197,47 @@ export class MiyoIndexManager {
   }
 
   /**
-   * Index a single file to Miyo.
+   * Index a single file to Miyo using ChunkManager.
+   *
+   * Uses ChunkManager to produce chunks with consistent IDs (e.g., "note.md#0"),
+   * then sends them to Miyo for embedding and storage.
    *
    * @param file - The file to index
    * @param force - Force re-indexing
    * @returns The ingest response
    */
   async indexFile(file: TFile, force?: boolean): Promise<IngestResponse> {
-    return this.client.ingest({
-      file: file.path,
+    // Get chunks from ChunkManager
+    const chunks = await this.chunkManager.getChunks([file.path]);
+
+    if (chunks.length === 0) {
+      return {
+        status: "completed",
+        action: "skipped",
+        file_path: file.path,
+        chunks_created: 0,
+      };
+    }
+
+    // Convert to Miyo's IngestChunk format
+    const ingestChunks: IngestChunk[] = chunks.map((chunk) => ({
+      id: chunk.id,
+      content: chunk.content,
+      index: chunk.chunkIndex,
+      heading: chunk.heading || undefined,
+    }));
+
+    // Build request
+    const request: IngestChunksRequest = {
+      file_path: file.path,
+      chunks: ingestChunks,
+      mtime: file.stat.mtime,
+      ctime: file.stat.ctime,
+      title: file.basename,
       force: force ?? false,
-    });
+    };
+
+    return this.client.ingestChunks(request);
   }
 
   /**

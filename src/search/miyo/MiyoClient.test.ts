@@ -233,6 +233,72 @@ describe("MiyoClient", () => {
     });
   });
 
+  describe("ingestChunks", () => {
+    it("should ingest chunks with correct format", async () => {
+      const mockResponse: IngestResponse = {
+        status: "completed",
+        action: "indexed",
+        file_path: "notes/test.md",
+        chunks_created: 2,
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      const result = await client.ingestChunks({
+        file_path: "notes/test.md",
+        chunks: [
+          { id: "notes/test.md#0", content: "First chunk", index: 0, heading: "Introduction" },
+          { id: "notes/test.md#1", content: "Second chunk", index: 1, heading: "Details" },
+        ],
+        mtime: 1706300000000,
+        title: "Test Note",
+      });
+
+      expect(result).toEqual(mockResponse);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "http://localhost:8000/v0/ingest",
+        expect.objectContaining({
+          method: "POST",
+          body: JSON.stringify({
+            file_path: "notes/test.md",
+            chunks: [
+              { id: "notes/test.md#0", content: "First chunk", index: 0, heading: "Introduction" },
+              { id: "notes/test.md#1", content: "Second chunk", index: 1, heading: "Details" },
+            ],
+            mtime: 1706300000000,
+            title: "Test Note",
+            source_id: "test-vault",
+          }),
+        })
+      );
+    });
+
+    it("should add source_id from client config", async () => {
+      const mockResponse: IngestResponse = {
+        status: "completed",
+        action: "indexed",
+        file_path: "notes/test.md",
+        chunks_created: 1,
+      };
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockResponse,
+      });
+
+      await client.ingestChunks({
+        file_path: "notes/test.md",
+        chunks: [{ id: "notes/test.md#0", content: "Content", index: 0 }],
+      });
+
+      const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
+      expect(callBody.source_id).toBe("test-vault");
+    });
+  });
+
   describe("ingestBatch", () => {
     it("should ingest multiple files", async () => {
       const mockResponse: IngestResponse = {

@@ -13,6 +13,7 @@ import {
   FilesResponse,
   HealthResponse,
   IngestRequest,
+  IngestChunksRequest,
   IngestResponse,
   MiyoClientConfig,
   SearchRequest,
@@ -264,6 +265,66 @@ export class MiyoClient {
           status: "error",
           action: "failed",
           file_path: filePaths[i],
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+
+      options?.onProgress?.(i + 1, total);
+    }
+
+    return results;
+  }
+
+  /**
+   * Ingest pre-chunked content into the search index.
+   *
+   * This method allows Copilot to control chunking for consistency
+   * with the lexical search engine. Chunks should be produced by
+   * ChunkManager to ensure identical chunk boundaries and IDs.
+   *
+   * @param request - Chunk-based ingest parameters
+   * @returns Ingest result with status and chunk count
+   */
+  async ingestChunks(request: IngestChunksRequest): Promise<IngestResponse> {
+    // Add source_id if configured and not already set
+    const requestWithSource: IngestChunksRequest = {
+      ...request,
+      source_id: request.source_id ?? this.sourceId,
+    };
+
+    logInfo(
+      `MiyoClient.ingestChunks: Ingesting ${request.chunks.length} chunks for "${request.file_path}"`
+    );
+    return this.request<IngestResponse>("POST", "/ingest", { body: requestWithSource });
+  }
+
+  /**
+   * Ingest chunks for multiple files in sequence.
+   *
+   * @param requests - Array of chunk-based ingest requests
+   * @param options - Ingest options
+   * @returns Array of ingest results
+   */
+  async ingestChunksBatch(
+    requests: IngestChunksRequest[],
+    options?: { onProgress?: (completed: number, total: number) => void }
+  ): Promise<IngestResponse[]> {
+    const results: IngestResponse[] = [];
+    const total = requests.length;
+
+    for (let i = 0; i < requests.length; i++) {
+      try {
+        const result = await this.ingestChunks(requests[i]);
+        results.push(result);
+      } catch (error) {
+        logError(
+          `MiyoClient.ingestChunksBatch: Failed to ingest "${requests[i].file_path}"`,
+          error
+        );
+        results.push({
+          status: "error",
+          action: "failed",
+          file_path: requests[i].file_path,
           error: error instanceof Error ? error.message : String(error),
         });
       }

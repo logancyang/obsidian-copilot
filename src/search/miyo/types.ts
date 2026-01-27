@@ -81,7 +81,23 @@ export interface SearchResponse {
 // ============================================================================
 
 /**
- * Request body for synchronous single-file ingest endpoint.
+ * A chunk to be ingested into Miyo.
+ * Matches the Chunk interface from ChunkManager for consistency.
+ */
+export interface IngestChunk {
+  /** Unique chunk identifier (e.g., "notes/example.md#0") */
+  id: string;
+  /** The chunk text content */
+  content: string;
+  /** 0-based chunk position within the file */
+  index: number;
+  /** Section heading for this chunk (optional) */
+  heading?: string;
+}
+
+/**
+ * Request body for synchronous single-file ingest endpoint (file path mode).
+ * @deprecated Use IngestChunksRequest for chunk-based ingestion
  */
 export interface IngestRequest {
   /** File path to index */
@@ -90,6 +106,27 @@ export interface IngestRequest {
   force?: boolean;
   /** Optional identifier for this file (e.g., external source) */
   source_id?: string | null;
+}
+
+/**
+ * Request body for chunk-based ingest endpoint.
+ * Allows Copilot to control chunking for consistency with lexical search.
+ */
+export interface IngestChunksRequest {
+  /** File path this content belongs to */
+  file_path: string;
+  /** Pre-chunked content from ChunkManager */
+  chunks: IngestChunk[];
+  /** File modification time (epoch ms) for change detection */
+  mtime?: number;
+  /** File creation time (epoch ms) */
+  ctime?: number;
+  /** Note title */
+  title?: string;
+  /** Optional identifier for this file (e.g., vault name) */
+  source_id?: string | null;
+  /** If true, skip change detection and always re-embed (default: false) */
+  force?: boolean;
 }
 
 /**
