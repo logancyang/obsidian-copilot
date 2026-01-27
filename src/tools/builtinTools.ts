@@ -39,56 +39,26 @@ export const BUILTIN_TOOLS: ToolDefinition[] = [
 - Exclude time expressions like "last month", "yesterday", "last week"
 - Preserve the original language - do NOT translate terms to English
 
-Example usage:
-<use_tool>
-<name>localSearch</name>
-<query>piano learning practice</query>
-<salientTerms>["piano", "learning", "practice"]</salientTerms>
-</use_tool>
+Evaluating search results and re-searching:
+- Results include a relevance quality summary: high (score ≥0.7), medium (0.3-0.7), low (<0.3)
+- If most results are low relevance or miss key concepts from the user's question:
+  1. Try searching again with synonyms or related terms
+  2. Use more specific phrasing if query was too broad
+  3. Use more general phrasing if query was too narrow
+- Example: "machine learning algorithms" returned low results → try "ML models", "neural networks", or "AI techniques"
 
-For localSearch with tags in the query (e.g., "#projectx status update"):
-<use_tool>
-<name>localSearch</name>
-<query>#projectx status update</query>
-<salientTerms>["#projectx", "status", "update"]</salientTerms>
-</use_tool>
+Examples:
+- Query "piano learning practice" → query: "piano learning practice", salientTerms: ["piano", "learning", "practice"]
+- Query "#projectx status update" → query: "#projectx status update", salientTerms: ["#projectx", "status", "update"]
+- Query "钢琴学习" (Chinese) → query: "钢琴学习", salientTerms: ["钢琴", "学习"] (preserve original language)
 
-For localSearch with time range (e.g., "what did I do last week"):
-Step 1 - Get time range:
-<use_tool>
-<name>getTimeRangeMs</name>
-<timeExpression>last week</timeExpression>
-</use_tool>
+For time-based searches (e.g., "what did I do last week"):
+1. First call getTimeRangeMs with timeExpression: "last week"
+2. Then use localSearch with the returned timeRange, query matching the user's question, and salientTerms: [] (empty for generic time queries)
 
-Step 2 - Search with time range (after receiving time range result):
-<use_tool>
-<name>localSearch</name>
-<query>what did I do</query>
-<salientTerms>[]</salientTerms>
-<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
-</use_tool>
-
-For localSearch with meaningful terms (e.g., "python debugging notes from yesterday"):
-Step 1 - Get time range:
-<use_tool>
-<name>getTimeRangeMs</name>
-<timeExpression>yesterday</timeExpression>
-</use_tool>
-
-Step 2 - Search with time range:
-<use_tool>
-<name>localSearch</name>
-<query>python debugging notes</query>
-<salientTerms>["python", "debugging", "notes"]</salientTerms>
-<timeRange>{"startTime": {...}, "endTime": {...}}</timeRange>
-</use_tool>
-
-For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
-<use_tool>
-<name>localSearch</name>
-<query>钢琴学习</query>
-<salientTerms>["钢琴", "学习"]</salientTerms>
-</use_tool>`,
+For time-based searches with meaningful terms (e.g., "python debugging notes from yesterday"):
+1. First call getTimeRangeMs with timeExpression: "yesterday"
+2. Then use localSearch with the returned timeRange, query: "python debugging notes", salientTerms: ["python", "debugging", "notes"]`,
     },
   },
   {
@@ -106,12 +76,7 @@ For localSearch with non-English query (PRESERVE ORIGINAL LANGUAGE):
   * "Google", "search online", "look up online", "search the web"
 - Always provide an empty chatHistory array
 
-Example - "search the web for python tutorials":
-<use_tool>
-<name>webSearch</name>
-<query>python tutorials</query>
-<chatHistory>[]</chatHistory>
-</use_tool>`,
+Example: "search the web for python tutorials" → query: "python tutorials", chatHistory: []`,
     },
   },
 
@@ -130,22 +95,10 @@ Example - "search the web for python tutorials":
 - Only omit timezoneOffset when the user asks for the current local time without naming any location or timezone.
 - If you cannot confidently determine the offset from the user request, ask the user to clarify before calling the tool.
 
-Example 1 - "what time is it" (local time):
-<use_tool>
-<name>getCurrentTime</name>
-</use_tool>
-
-Example 2 - "what time is it in Tokyo" (UTC+9):
-<use_tool>
-<name>getCurrentTime</name>
-<timezoneOffset>+9</timezoneOffset>
-</use_tool>
-
-Example 3 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
-<use_tool>
-<name>getCurrentTime</name>
-<timezoneOffset>-5</timezoneOffset>
-</use_tool>`,
+Examples:
+- "what time is it" (local time) → call with no parameters
+- "what time is it in Tokyo" (UTC+9) → timezoneOffset: "+9"
+- "what time is it in New York" (UTC-5 or UTC-4 depending on DST) → timezoneOffset: "-5"`,
     },
   },
   {
@@ -170,11 +123,7 @@ Example 3 - "what time is it in New York" (UTC-5 or UTC-4 depending on DST):
 - Use this tool to convert time expressions like "last week", "yesterday", "last month" to proper time ranges
 - This is typically the first step before using localSearch with a time range
 
-Example:
-<use_tool>
-<name>getTimeRangeMs</name>
-<timeExpression>last week</timeExpression>
-</use_tool>`,
+Example: For "last week" → timeExpression: "last week"`,
     },
   },
   {
@@ -187,13 +136,7 @@ Example:
       isAlwaysEnabled: true,
       customPromptInstructions: `For timezone conversions:
 
-Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
-<use_tool>
-<name>convertTimeBetweenTimezones</name>
-<time>6pm</time>
-<fromOffset>-8</fromOffset>
-<toOffset>+9</toOffset>
-</use_tool>`,
+Example: "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9) → time: "6pm", fromOffset: "-8", toOffset: "+9"`,
     },
   },
 
@@ -211,24 +154,15 @@ Example - "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9):
 - Decide based on the user's request: only call this tool when the question requires reading note content.
 - If the user asks about a note title that is already mentioned in the current or previous turns of the conversation, or linked in <active_note> or <note_context> blocks, call readNote directly—do not use localSearch to look it up. Even if the note title mention is partial but similar to what you have seen in the context, try to infer the correct note path from context. Skip the tool when a note is irrelevant to the user query.
 - If the user asks about notes linked from that note, read the original note first, then follow the "linkedNotes" paths returned in the tool result to inspect those linked notes.
-- Always start with chunk 0 (omit <chunkIndex> or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
+- Always start with chunk 0 (omit chunkIndex or set it to 0). Only request the next chunk if the previous chunk did not answer the question.
 - Pass vault-relative paths without a leading slash. If a call fails, adjust the path (for example, add ".md" or use an alternative candidate) and retry only if necessary.
 - Every tool result may include a "linkedNotes" array. If the user needs information from those linked notes, call readNote again with one of the provided candidate paths, starting again at chunk 0. Do not expand links you don't need.
 - Stop calling readNote as soon as you have the required information.
 - Always call getFileTree to get the exact note path if it is not provided in the context before calling readNote.
 
-Example (first chunk):
-<use_tool>
-<name>readNote</name>
-<notePath>Projects/launch-plan.md</notePath>
-</use_tool>
-
-Example (next chunk):
-<use_tool>
-<name>readNote</name>
-<notePath>Projects/launch-plan.md</notePath>
-<chunkIndex>1</chunkIndex>
-</use_tool>`,
+Examples:
+- First chunk: notePath: "Projects/launch-plan.md" (chunkIndex omitted or 0)
+- Next chunk: notePath: "Projects/launch-plan.md", chunkIndex: 1`,
     },
   },
   {
@@ -239,6 +173,7 @@ Example (next chunk):
       description: "Create or modify files in your vault",
       category: "file",
       requiresVault: true,
+      timeoutMs: 0, // No timeout - waits for user preview decision
       copilotCommands: ["@composer"],
       customPromptInstructions: `For writeToFile:
 - NEVER display the file content directly in your response
@@ -250,21 +185,9 @@ Example (next chunk):
 - Always create new notes in root folder or folders the user explicitly specifies
 - When creating a new note in a folder, you MUST use getFileTree to get the exact folder path first
 
-Example usage:
-<use_tool>
-<name>writeToFile</name>
-<path>path/to/note.md</path>
-<content>FULL CONTENT OF THE NOTE</content>
-</use_tool>
-
-Example usage with user explicitly asks to skip preview or confirmation:
-<use_tool>
-<name>writeToFile</name>
-<path>path/to/note.md</path>
-<content>FULL CONTENT OF THE NOTE</content>
-<confirmation>false</confirmation>
-</use_tool>
-`,
+Examples:
+- Basic: path: "path/to/note.md", content: "FULL CONTENT OF THE NOTE"
+- Skip confirmation: path: "path/to/note.md", content: "FULL CONTENT", confirmation: false`,
     },
   },
   {
@@ -275,27 +198,15 @@ Example usage with user explicitly asks to skip preview or confirmation:
       description: "Make targeted changes to existing files using SEARCH/REPLACE blocks",
       category: "file",
       requiresVault: true,
+      timeoutMs: 0, // No timeout - waits for user preview decision
       customPromptInstructions: `For replaceInFile:
 - Remember: Small edits → replaceInFile, Major rewrites → writeToFile
 - SEARCH text must match EXACTLY including all whitespace
+- The diff parameter uses SEARCH/REPLACE block format
 
-Example usage:
-<use_tool>
-<name>replaceInFile</name>
-<path>notes/meeting.md</path>
-<diff>
-------- SEARCH
-## Attendees
-- John Smith
-- Jane Doe
-=======
-## Attendees
-- John Smith
-- Jane Doe
-- Bob Johnson
-+++++++ REPLACE
-</diff>
-</use_tool>`,
+Example: To add "Bob Johnson" to attendees list in notes/meeting.md:
+path: "notes/meeting.md"
+diff: "------- SEARCH\\n## Attendees\\n- John Smith\\n- Jane Doe\\n=======\\n## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson\\n+++++++ REPLACE"`,
     },
   },
 
@@ -307,14 +218,11 @@ Example usage:
       displayName: "YouTube Transcription",
       description: "Get transcripts from YouTube videos",
       category: "media",
+      isPlusOnly: true,
+      requiresUserMessageContent: true,
       customPromptInstructions: `For youtubeTranscription:
 - Use when user provides YouTube URLs
-- No parameters needed - the tool will process URLs from the conversation
-
-Example usage:
-<use_tool>
-<name>youtubeTranscription</name>
-</use_tool>`,
+- No parameters needed - the tool will process URLs from the conversation`,
     },
   },
 ];
@@ -334,22 +242,17 @@ export function registerFileTreeTool(vault: Vault): void {
       category: "file",
       isAlwaysEnabled: true,
       requiresVault: true,
+      isBackground: true,
       customPromptInstructions: `For getFileTree:
 - Use to browse the vault's file structure including paths of notes and folders
 - Always call this tool to explore the exact path of notes or folders when you are not given the exact path.
 - DO NOT use this tool to look up note contents or metadata - use localSearch or readNote instead.
 - No parameters needed
 
-Example usage:
-<use_tool>
-<name>getFileTree</name>
-</use_tool>
-
 Example queries that should use getFileTree:
-- "Create a new note in the projects folder" -> call getFileTree to get the exact folder path of projects folder
-- "Create a new note using the quick note template" -> call getFileTree to look up the exact folder path of the quick note template
-- "How many files are in the projects folder" -> call getFileTree to list all files in the projects folder
-`,
+- "Create a new note in the projects folder" → call getFileTree to get the exact folder path
+- "Create a new note using the quick note template" → call getFileTree to look up the template path
+- "How many files are in the projects folder" → call getFileTree to list all files`,
     },
   });
 }
@@ -369,22 +272,16 @@ export function registerTagListTool(): void {
       category: "file",
       isAlwaysEnabled: true,
       requiresVault: true,
+      isBackground: true,
       customPromptInstructions: `For getTagList:
 - Use to inspect existing tags before suggesting new ones or reorganizing notes.
 - Omit parameters to include both frontmatter and inline tags.
 - Set includeInline to false when you only need frontmatter-defined tags.
 - Use maxEntries to limit output for very large vaults.
 
-Example usage (default):
-<use_tool>
-<name>getTagList</name>
-</use_tool>
-
-Example usage (frontmatter only):
-<use_tool>
-<name>getTagList</name>
-<includeInline>false</includeInline>
-</use_tool>`,
+Examples:
+- Default (all tags): call with no parameters
+- Frontmatter only: includeInline: false`,
     },
   });
 }
@@ -406,14 +303,10 @@ export function registerMemoryTool(): void {
       copilotCommands: ["@memory"],
       isAlwaysEnabled: true,
       customPromptInstructions: `For updateMemory:
-      - Use this tool to update the memory when the user explicitly asks to update the memory
-      - DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
+- Use this tool to update the memory when the user explicitly asks to update the memory
+- DO NOT use for general information - only for personal facts, preferences, or specific things the user wants stored
 
-      Example usage:
-      <use_tool>
-      <name>updateMemory</name>
-      <statement>I'm studying Japanese and I'm preparing for JLPT N3</statement>
-      </use_tool>`,
+Example: statement: "I'm studying Japanese and I'm preparing for JLPT N3"`,
     },
   });
 }

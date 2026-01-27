@@ -287,6 +287,10 @@ export function parseToolCallMarkers(message: string, messageId?: string): Parse
 
 /**
  * Create a tool call marker
+ *
+ * @deprecated This function is deprecated and will be removed in a future version.
+ * Agent mode now uses the Agent Reasoning Block (AgentReasoningState.ts) instead of
+ * tool call markers. This function is kept only for backward compatibility.
  */
 export function createToolCallMarker(
   id: string,
@@ -304,6 +308,10 @@ export function createToolCallMarker(
 
 /**
  * Update a tool call marker with result
+ *
+ * @deprecated This function is deprecated and will be removed in a future version.
+ * Agent mode now uses the Agent Reasoning Block (AgentReasoningState.ts) instead of
+ * tool call markers. This function is kept only for backward compatibility.
  */
 export function updateToolCallMarker(message: string, id: string, result: string): string {
   // Escape the id to prevent regex injection

@@ -266,7 +266,6 @@ describe("ThinkBlockStreamer", () => {
         (msg) => {
           currentMessage = msg;
         },
-        undefined,
         true // excludeThinking = true
       );
 
@@ -297,8 +296,7 @@ describe("ThinkBlockStreamer", () => {
         (msg) => {
           currentMessage = msg;
         },
-        undefined,
-        true
+        true // excludeThinking = true
       );
 
       streamer.processChunk({

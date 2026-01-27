@@ -9,8 +9,6 @@ export { AutonomousAgentChainRunner } from "./AutonomousAgentChainRunner";
 
 // Utility exports (for internal use or testing)
 export { ThinkBlockStreamer } from "./utils/ThinkBlockStreamer";
-export { parseXMLToolCalls, stripToolCallXML } from "./utils/xmlParsing";
-export type { ToolCall } from "./utils/xmlParsing";
 export {
   executeSequentialToolCall,
   getToolDisplayName,
@@ -20,3 +18,9 @@ export {
   deduplicateSources,
 } from "./utils/toolExecution";
 export type { ToolExecutionResult } from "./utils/toolExecution";
+export {
+  createToolResultMessage,
+  generateToolCallId,
+  extractNativeToolCalls,
+} from "./utils/nativeToolCalling";
+export type { NativeToolCall } from "./utils/nativeToolCalling";

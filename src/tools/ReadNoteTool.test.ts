@@ -1,6 +1,12 @@
-import { SimpleTool } from "./SimpleTool";
+import { StructuredTool } from "@langchain/core/tools";
 
 const mockCachedRead = jest.fn();
+
+// Helper to invoke tool and parse JSON result
+const invokeReadNoteTool = async (tool: StructuredTool, args: any) => {
+  const result = await tool.invoke(args);
+  return typeof result === "string" ? JSON.parse(result) : result;
+};
 
 class MockTFile {
   path: string;
@@ -20,7 +26,7 @@ jest.mock("obsidian", () => ({
 }));
 
 describe("readNoteTool", () => {
-  let readNoteTool: SimpleTool<any, any>;
+  let readNoteTool: StructuredTool;
   let originalApp: any;
   let getAbstractFileByPathMock: jest.Mock;
   let getMarkdownFilesMock: jest.Mock;
@@ -65,7 +71,7 @@ describe("readNoteTool", () => {
     getAbstractFileByPathMock.mockReturnValue(file);
     mockCachedRead.mockResolvedValue(["## Heading", "Line 1", "Line 2"].join("\n"));
 
-    const result = await readNoteTool.call({ notePath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
     expect(result.notePath).toBe(notePath);
     expect(result.totalChunks).toBe(1);
@@ -81,7 +87,7 @@ describe("readNoteTool", () => {
     const lines = Array.from({ length: 210 }, (_, i) => `Line ${i + 1}`);
     mockCachedRead.mockResolvedValue(lines.join("\n"));
 
-    const result = await readNoteTool.call({ notePath, chunkIndex: 1 });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex: 1 });
 
     expect(result.chunkIndex).toBe(1);
     expect(result.content).toBe(lines.slice(200).join("\n"));
@@ -95,7 +101,7 @@ describe("readNoteTool", () => {
     const lines = Array.from({ length: 205 }, (_, i) => `Line ${i + 1}`);
     mockCachedRead.mockResolvedValue(lines.join("\n"));
 
-    const result = await readNoteTool.call({ notePath, chunkIndex: "1" as any });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex: "1" as any });
 
     expect(result.chunkIndex).toBe(1);
     expect(result.content).toBe(lines.slice(200).join("\n"));
@@ -105,7 +111,7 @@ describe("readNoteTool", () => {
     const notePath = "Notes/missing.md";
     getAbstractFileByPathMock.mockReturnValue(null);
 
-    const result = await readNoteTool.call({ notePath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
     expect(result).toEqual({
       notePath,
@@ -121,7 +127,7 @@ describe("readNoteTool", () => {
     getFirstLinkpathDestMock.mockReturnValue(null);
     getMarkdownFilesMock.mockReturnValue([new MockTFile("Docs/Guide.md")]);
 
-    const result = await readNoteTool.call({ notePath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
     expect(result).toEqual({
       notePath,
@@ -137,7 +143,7 @@ describe("readNoteTool", () => {
     getFirstLinkpathDestMock.mockReturnValue(null);
     getMarkdownFilesMock.mockReturnValue([new MockTFile("Docs/Guide.md")]);
 
-    const result = await readNoteTool.call({ notePath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
     expect(result).toEqual({
       notePath,
@@ -148,7 +154,7 @@ describe("readNoteTool", () => {
   });
 
   it("returns invalid_path when notePath starts with a leading slash", async () => {
-    const result = await readNoteTool.call({ notePath: "/Projects/note.md" });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath: "/Projects/note.md" });
 
     expect(result).toEqual({
       notePath: "/Projects/note.md",
@@ -172,7 +178,7 @@ describe("readNoteTool", () => {
     getMarkdownFilesMock.mockReturnValue([candidatePrimary, candidateDuplicate, file]);
     mockCachedRead.mockResolvedValue("Intro [[Project Plan]] details");
 
-    const result = await readNoteTool.call({ notePath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
     expect(result.linkedNotes).toEqual([
       {
@@ -199,7 +205,7 @@ describe("readNoteTool", () => {
     getMarkdownFilesMock.mockReturnValue([guideFile, file]);
     mockCachedRead.mockResolvedValue("See [[Docs/Guide#Setup|Quick Start]] for steps.");
 
-    const result = await readNoteTool.call({ notePath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
     expect(result.linkedNotes).toEqual([
       {
@@ -227,7 +233,7 @@ describe("readNoteTool", () => {
 
     mockCachedRead.mockResolvedValue("Content");
 
-    const result = await readNoteTool.call({ notePath: rawPath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath: rawPath });
 
     expect(result.notePath).toBe(file.path);
     expect(result.chunkIndex).toBe(0);
@@ -247,7 +253,7 @@ describe("readNoteTool", () => {
     });
     mockCachedRead.mockResolvedValue("Content");
 
-    const result = await readNoteTool.call({ notePath: requestedPath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result.notePath).toBe(targetFile.path);
     expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
@@ -263,7 +269,7 @@ describe("readNoteTool", () => {
     getMarkdownFilesMock.mockReturnValue([targetFile]);
     mockCachedRead.mockResolvedValue("Content");
 
-    const result = await readNoteTool.call({ notePath: requestedPath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result.notePath).toBe(targetFile.path);
     expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
@@ -278,7 +284,7 @@ describe("readNoteTool", () => {
     getFirstLinkpathDestMock.mockReturnValue(null);
     getMarkdownFilesMock.mockReturnValue([projectFile, archiveFile]);
 
-    const result = await readNoteTool.call({ notePath: requestedPath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result).toEqual({
       notePath: requestedPath,
@@ -302,7 +308,7 @@ describe("readNoteTool", () => {
     getMarkdownFilesMock.mockReturnValue([targetFile, duplicateFile]);
     mockCachedRead.mockResolvedValue("Content");
 
-    const result = await readNoteTool.call({ notePath: requestedPath });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result.notePath).toBe(targetFile.path);
     expect(mockCachedRead).toHaveBeenCalledWith(targetFile);

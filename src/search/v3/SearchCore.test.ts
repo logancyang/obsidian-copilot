@@ -117,9 +117,9 @@ describe("SearchCore tag recall", () => {
   it("should surface hierarchy-aware recall terms for hash tags", async () => {
     const searchCore = new SearchCore(mockApp as any);
 
-    const results = await searchCore.retrieve("#ProjectAlpha/Phase1 update");
+    const retrieveResult = await searchCore.retrieve("#ProjectAlpha/Phase1 update");
 
-    expect(results).toHaveLength(1);
+    expect(retrieveResult.results).toHaveLength(1);
     const recallQueries = searchMock.mock.calls[0][0] as string[];
 
     expect(recallQueries).toEqual(
@@ -172,13 +172,13 @@ describe("SearchCore tag recall", () => {
       { id: "note2.md#0", score: 0.8, engine: "fulltext" },
     ]);
 
-    const results = await searchCore.retrieve("#project", {
+    const retrieveResult = await searchCore.retrieve("#project", {
       salientTerms: ["#project"],
       returnAll: true,
     });
 
     expect(batchCachedReadGrepMock).toHaveBeenCalledWith(expect.any(Array), 100);
     expect(searchMock.mock.calls[0][1]).toBe(200);
-    expect(results.length).toBe(2);
+    expect(retrieveResult.results.length).toBe(2);
   });
 });

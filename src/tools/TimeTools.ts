@@ -1,7 +1,7 @@
 import * as chrono from "chrono-node";
 import { DateTime } from "luxon";
 import { z } from "zod";
-import { createTool } from "./SimpleTool";
+import { createLangChainTool } from "./createLangChainTool";
 
 export interface TimeInfo {
   epoch: number;
@@ -56,7 +56,7 @@ async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
       }
       dt = newDt;
     } catch (error) {
-      throw new Error(`${error.message}`);
+      throw new Error(`${(error as Error).message}`);
     }
   }
 
@@ -75,7 +75,7 @@ async function getCurrentTime(timezoneOffset?: string): Promise<TimeInfo> {
   };
 }
 
-const getCurrentTimeTool = createTool({
+const getCurrentTimeTool = createLangChainTool({
   name: "getCurrentTime",
   description:
     "Get the current time in local timezone or at a specified UTC offset. Returns epoch time, ISO string, and formatted strings.",
@@ -107,8 +107,7 @@ COMMON TIMEZONE OFFSETS:
 - Los Angeles: UTC-8 (UTC-7 during DST)`
       ),
   }),
-  handler: async ({ timezoneOffset }) => getCurrentTime(timezoneOffset),
-  isBackground: true,
+  func: async ({ timezoneOffset }) => getCurrentTime(timezoneOffset),
 });
 
 const monthNames = {
@@ -128,6 +127,7 @@ const monthNames = {
   aug: 8,
   august: 8,
   sep: 9,
+  sept: 9,
   september: 9,
   oct: 10,
   october: 10,
@@ -277,7 +277,7 @@ function handleWeekOf(input: string, now: DateTime) {
  */
 function handleMonthName(input: string, now: DateTime) {
   const monthMatch = input.match(
-    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)$/i
+    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)$/i
   );
   if (!monthMatch) return undefined;
 
@@ -388,7 +388,7 @@ function handleQuarter(input: string, now: DateTime) {
  */
 function handleMonthYear(input: string, now: DateTime) {
   const monthYearMatch = input.match(
-    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|september|oct|october|nov|november|dec|december)\s+(\d{4})$/i
+    /^(jan|january|feb|february|mar|march|apr|april|may|jun|june|jul|july|aug|august|sep|sept|september|oct|october|nov|november|dec|december)\s+(\d{4})$/i
   );
   if (!monthYearMatch) return undefined;
 
@@ -427,8 +427,8 @@ function getTimeRangeMs(timeExpression: string) {
 
   if (result) {
     return {
-      startTime: convertToTimeInfo(result.start),
-      endTime: convertToTimeInfo(result.end),
+      startTime: result.start.toMillis(),
+      endTime: result.end.toMillis(),
     };
   }
 
@@ -446,11 +446,12 @@ function getTimeRangeMs(timeExpression: string) {
     }
 
     return {
-      startTime: convertToTimeInfo(start),
-      endTime: convertToTimeInfo(end),
+      startTime: start.toMillis(),
+      endTime: end.toMillis(),
     };
   }
 
+  // eslint-disable-next-line no-console
   console.warn(`Unable to parse time expression: ${timeExpression}`);
   return undefined;
 }
@@ -471,7 +472,7 @@ function convertToTimeInfo(dateTime: DateTime): TimeInfo {
   };
 }
 
-const getTimeRangeMsTool = createTool({
+const getTimeRangeMsTool = createLangChainTool({
   name: "getTimeRangeMs",
   description: "Convert natural language time expressions to date ranges for use with localSearch",
   schema: z.object({
@@ -492,8 +493,13 @@ EXAMPLE WORKFLOW:
 2. First call getTimeRangeMs with timeExpression: "last week"
 3. Then use the returned time range with localSearch`),
   }),
-  handler: async ({ timeExpression }) => getTimeRangeMs(timeExpression),
-  isBackground: true,
+  func: async ({ timeExpression }) => {
+    const result = getTimeRangeMs(timeExpression);
+    if (!result) {
+      return { error: `Unable to parse time expression: ${timeExpression}` };
+    }
+    return result;
+  },
 });
 
 function getTimeInfoByEpoch(epoch: number): TimeInfo {
@@ -503,14 +509,13 @@ function getTimeInfoByEpoch(epoch: number): TimeInfo {
   return convertToTimeInfo(dateTime);
 }
 
-const getTimeInfoByEpochTool = createTool({
+const getTimeInfoByEpochTool = createLangChainTool({
   name: "getTimeInfoByEpoch",
   description: "Convert a Unix timestamp (in seconds or milliseconds) to detailed time information",
   schema: z.object({
     epoch: z.number().describe("Unix timestamp in seconds or milliseconds"),
   }),
-  handler: async ({ epoch }) => getTimeInfoByEpoch(epoch),
-  isBackground: true,
+  func: async ({ epoch }) => getTimeInfoByEpoch(epoch),
 });
 
 /**
@@ -563,11 +568,11 @@ async function convertTimeBetweenTimezones(
       convertedTime: targetDt.toLocaleString(DateTime.TIME_SIMPLE) + " " + targetDt.offsetNameShort,
     };
   } catch (error) {
-    throw new Error(`Failed to convert time: ${error.message}`);
+    throw new Error(`Failed to convert time: ${(error as Error).message}`);
   }
 }
 
-const convertTimeBetweenTimezonesTool = createTool({
+const convertTimeBetweenTimezonesTool = createLangChainTool({
   name: "convertTimeBetweenTimezones",
   description: "Convert a specific time from one timezone to another using UTC offsets",
   schema: z.object({
@@ -585,9 +590,8 @@ EXAMPLE USAGE:
 - "convert 3:30 PM EST to London time" → time: "3:30 PM", fromOffset: "-5", toOffset: "+0"
 - "what is 9am Beijing time in New York" → time: "9am", fromOffset: "+8", toOffset: "-5"`),
   }),
-  handler: async ({ time, fromOffset, toOffset }) =>
+  func: async ({ time, fromOffset, toOffset }) =>
     convertTimeBetweenTimezones(time, fromOffset, toOffset),
-  isBackground: true,
 });
 
 export {

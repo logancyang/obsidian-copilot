@@ -6,8 +6,8 @@ This directory contains the refactored chain runner system for Obsidian Copilot,
 
 The chain runner system provides two distinct tool calling approaches:
 
-1. **Legacy Tool Calling** (CopilotPlusChainRunner) - Uses Brevilabs API for intent analysis
-2. **Autonomous Agent** (AutonomousAgentChainRunner) - Uses XML-based tool calling
+1. **Copilot Plus** (CopilotPlusChainRunner) - Uses native tool calling for intent analysis
+2. **Autonomous Agent** (AutonomousAgentChainRunner) - Uses native LangChain tool calling with ReAct pattern
 
 ## Architecture
 
@@ -18,11 +18,11 @@ chainRunner/
 ├── VaultQAChainRunner.ts              # Vault-only Q&A with retrieval
 ├── CopilotPlusChainRunner.ts          # Legacy tool calling system
 ├── ProjectChainRunner.ts              # Project-aware extension of Plus
-├── AutonomousAgentChainRunner.ts   # XML-based autonomous agent tool calling
+├── AutonomousAgentChainRunner.ts   # Native tool calling with ReAct agent loop
 ├── index.ts                           # Main exports
 └── utils/
     ├── ThinkBlockStreamer.ts          # Handles thinking content from models
-    ├── xmlParsing.ts                  # XML tool call parsing utilities
+    ├── xmlParsing.ts                  # XML escape/unescape utilities (for context envelope)
     ├── toolExecution.ts               # Tool execution helpers
     └── modelAdapter.ts                # Model-specific adaptations
 ```
@@ -33,8 +33,8 @@ chainRunner/
 
 **How it works:**
 
-- Uses chat model with tool descriptions to plan which tools to call
-- Model outputs tool calls in XML format (e.g., `<use_tool><name>...</name><args>...</args></use_tool>`)
+- Uses chat model with `bindTools()` to plan which tools to call
+- Model outputs tool calls via native `tool_calls` property on AIMessage
 - Executes tools synchronously before sending to LLM for final response
 - Enhances user message with tool outputs as context
 - Supports `@` commands for explicit tool invocation (`@vault`, `@websearch`, `@memory`)
@@ -74,102 +74,218 @@ const response = await this.streamMultimodalResponse(message, toolOutputs, ...);
 
 **How it works:**
 
-- **No LangChain dependency** - Uses simple tool interface with XML-based tool calling
-- AI decides autonomously which tools to use via structured XML format
+- Uses native LangChain tool calling via `bindTools()` with ReAct pattern
+- AI decides autonomously which tools to use via structured `tool_calls`
 - Iterative loop where AI can call multiple tools in sequence
-- Each tool result informs the next decision
+- Each tool result informs the next decision via `ToolMessage`
 
 **Flow:**
 
 ```
-User Message → AI Reasoning → XML Tool Call → Tool Execution →
-AI Analysis → More Tools? → Final Response
+User Message → AI Reasoning → tool_calls → Tool Execution →
+ToolMessage → AI Analysis → More Tools? → Final Response
 ```
 
-**XML Tool Call Format:**
-
-```xml
-<use_tool>
-<name>localSearch</name>
-<args>
-{
-  "query": "machine learning notes",
-  "salientTerms": ["machine", "learning", "AI", "algorithms"]
-}
-</args>
-</use_tool>
-```
-
-**Sequential Loop:**
+**Native Tool Call Format:**
 
 ```typescript
+// AIMessage.tool_calls contains structured tool calls
+const toolCalls = response.tool_calls; // Array of { name, args, id }
+
+// Example tool call:
+{
+  name: "localSearch",
+  args: {
+    query: "machine learning notes",
+    salientTerms: ["machine", "learning", "AI", "algorithms"]
+  },
+  id: "call_abc123"
+}
+```
+
+**ReAct Loop:**
+
+```typescript
+// Bind tools to model for native tool calling
+const boundModel = chatModel.bindTools(availableTools);
+
 while (iteration < maxIterations) {
-  // 1. Get AI response
-  const response = await this.streamResponse(messages);
+  // 1. Get AI response with potential tool calls
+  const response = await boundModel.invoke(messages);
+  messages.push(response);
 
-  // 2. Parse XML tool calls
-  const toolCalls = parseXMLToolCalls(response);
-
-  if (toolCalls.length === 0) {
+  // 2. Check for tool calls in structured format
+  if (!response.tool_calls || response.tool_calls.length === 0) {
     // No tools needed - final response
     break;
   }
 
-  // 3. Execute each tool
-  for (const toolCall of toolCalls) {
+  // 3. Execute each tool and add ToolMessage
+  for (const toolCall of response.tool_calls) {
     const result = await executeSequentialToolCall(toolCall, availableTools);
-    toolResults.push(result);
+    messages.push(
+      new ToolMessage({
+        content: JSON.stringify(result),
+        tool_call_id: toolCall.id,
+        name: toolCall.name,
+      })
+    );
   }
 
-  // 4. Add results to conversation for next iteration
-  messages.push({ role: "user", content: toolResultsForConversation });
+  // 4. Continue loop - AI sees tool results via ToolMessage
 }
 ```
 
+### ReAct Prompting Flow
+
+Each iteration sends the following message structure to the LLM:
+
+**Iteration 1 (Initial):**
+
+```
+messages = [
+  SystemMessage: "You are a helpful assistant... [tool descriptions via bindTools]"
+  HumanMessage: "What did I write about machine learning last week?"
+]
+```
+
+**Iteration 1 Response:**
+
+```
+AIMessage: {
+  content: "",  // May be empty or contain reasoning
+  tool_calls: [{
+    id: "call_abc123",
+    name: "getTimeRangeMs",
+    args: { description: "last week" }
+  }]
+}
+```
+
+**Iteration 2 (After Tool Execution):**
+
+```
+messages = [
+  SystemMessage: "..."
+  HumanMessage: "What did I write about machine learning last week?"
+  AIMessage: { tool_calls: [getTimeRangeMs] }
+  ToolMessage: { tool_call_id: "call_abc123", content: '{"startTime":1736..., "endTime":1737...}' }
+]
+```
+
+**Iteration 2 Response:**
+
+```
+AIMessage: {
+  content: "",
+  tool_calls: [{
+    id: "call_def456",
+    name: "localSearch",
+    args: {
+      query: "machine learning",
+      salientTerms: ["machine learning", "ML", "AI"],
+      timeRange: { startTime: 1736..., endTime: 1737... }
+    }
+  }]
+}
+```
+
+**Iteration 3 (After Second Tool):**
+
+```
+messages = [
+  SystemMessage: "..."
+  HumanMessage: "What did I write about machine learning last week?"
+  AIMessage: { tool_calls: [getTimeRangeMs] }
+  ToolMessage: { tool_call_id: "call_abc123", content: '{"startTime":..., "endTime":...}' }
+  AIMessage: { tool_calls: [localSearch] }
+  ToolMessage: { tool_call_id: "call_def456", content: '{"documents": [...5 results...]}' }
+]
+```
+
+**Final Response (No tool_calls):**
+
+```
+AIMessage: {
+  content: "Based on your notes from last week, you wrote about...",
+  tool_calls: []  // Empty = final response, exit loop
+}
+```
+
+### Key Points
+
+1. **Tool schemas** are provided via `bindTools()` - the LLM sees them in its context
+2. **AIMessage with tool_calls** triggers tool execution; **AIMessage without tool_calls** is final response
+3. **ToolMessage** correlates with AIMessage via `tool_call_id`
+4. **Conversation history grows** - each iteration sees all previous messages
+5. **Max 4 iterations** to prevent infinite loops
+
 ## Key Differences
 
-| Aspect             | Legacy (Plus)           | Autonomous Agent                      |
-| ------------------ | ----------------------- | ------------------------------------- |
-| **Tool Decision**  | Brevilabs API analysis  | AI decides autonomously               |
-| **Tool Execution** | Pre-LLM, synchronous    | During conversation, iterative        |
-| **Tool Format**    | SimpleTool interface    | XML-based structured format           |
-| **Reasoning**      | Intent analysis → tools | AI reasoning → tools → more reasoning |
-| **Iterations**     | Single pass             | Up to 4 iterations                    |
-| **Tool Chaining**  | Limited                 | Full chaining support                 |
+| Aspect             | Copilot Plus                    | Autonomous Agent                      |
+| ------------------ | ------------------------------- | ------------------------------------- |
+| **Tool Decision**  | Model-based intent planning     | AI decides autonomously (ReAct)       |
+| **Tool Execution** | Pre-LLM, synchronous            | During conversation, iterative        |
+| **Tool Format**    | Native tool calling (bindTools) | Native tool calling (bindTools)       |
+| **Reasoning**      | Intent analysis → tools         | AI reasoning → tools → more reasoning |
+| **Iterations**     | Single pass                     | Up to 4 iterations                    |
+| **Tool Chaining**  | Limited                         | Full chaining support                 |
 
-## SimpleTool Interface
+## LangChain Tool Interface
 
 ### Overview
 
-The SimpleTool interface provides a clean, type-safe way to define tools with Zod validation:
+Tools are created using native LangChain's `tool()` function via the `createLangChainTool` helper, with Zod schema validation. Tool metadata (execution control, display info) is stored separately in `ToolRegistry`.
 
 ```typescript
-interface SimpleTool<TSchema extends z.ZodType = z.ZodVoid> {
+// Tool creation returns a LangChain StructuredTool
+const myTool = createLangChainTool({
   name: string;
   description: string;
-  schema: TSchema;
-  call: (args: z.infer<TSchema>) => Promise<any>;
+  schema: z.ZodType;
+  func: (args) => Promise<string | object>;
+});
+
+// Tool metadata stored in ToolRegistry
+interface ToolMetadata {
+  id: string;
+  displayName: string;
+  description: string;
+  category: "search" | "time" | "file" | "media" | "mcp" | "memory" | "custom";
+  isAlwaysEnabled?: boolean;
   timeoutMs?: number;
   isBackground?: boolean;
+  isPlusOnly?: boolean;
 }
 ```
 
 ### Creating Tools
 
-All tools are created using the unified `createTool` function with Zod schemas:
+All tools are created using `createLangChainTool` with Zod schemas:
 
 #### Tool with No Parameters
 
 ```typescript
-const indexTool = createTool({
+const indexTool = createLangChainTool({
   name: "indexVault",
   description: "Index the vault to the Copilot index",
-  schema: z.void(), // No parameters
-  handler: async () => {
+  schema: z.object({}), // Empty object for no parameters
+  func: async () => {
     // Tool implementation
-    return "Indexing complete";
+    return { status: "complete" };
   },
-  isBackground: true, // Optional: hide from user
+});
+
+// Register with metadata
+registry.register({
+  tool: indexTool,
+  metadata: {
+    id: "indexVault",
+    displayName: "Index Vault",
+    description: "Index the vault",
+    category: "file",
+    isBackground: true,
+  },
 });
 ```
 
@@ -190,27 +306,36 @@ const searchSchema = z.object({
 });
 
 // Create tool with automatic validation
-const searchTool = createTool({
+const searchTool = createLangChainTool({
   name: "localSearch",
   description: "Search for notes based on query and time range",
   schema: searchSchema,
-  handler: async ({ query, salientTerms, timeRange }) => {
+  func: async ({ query, salientTerms, timeRange }) => {
     // Handler receives fully typed and validated arguments
-    // TypeScript knows the exact types from the schema
     return performSearch(query, salientTerms, timeRange);
   },
-  timeoutMs: 30000, // Optional: custom timeout
+});
+
+// Register with metadata
+registry.register({
+  tool: searchTool,
+  metadata: {
+    id: "localSearch",
+    displayName: "Vault Search",
+    category: "search",
+    timeoutMs: 30000,
+  },
 });
 ```
 
-### Benefits of Unified Zod Approach
+### Benefits of LangChain Native Tools
 
-1. **Type Safety**: Full TypeScript type inference from schemas
+1. **Type Safety**: Full TypeScript type inference from Zod schemas
 2. **Runtime Validation**: All inputs validated before reaching handler
-3. **Consistent Interface**: One way to create all tools
+3. **Native LangChain Integration**: Compatible with `bindTools()` and LangChain tooling ecosystem
 4. **Better Error Messages**: Zod provides detailed validation errors
-5. **No Any Types**: Everything is properly typed
-6. **Simpler Codebase**: No need to maintain multiple tool creation methods
+5. **Separation of Concerns**: Tool implementation separate from execution metadata
+6. **Future-Proof**: Ready for native tool calling when models support it
 
 ### Advanced Zod Patterns
 
@@ -244,11 +369,11 @@ const actionSchema = z.discriminatedUnion("type", [
   }),
 ]);
 
-const actionTool = createTool({
+const actionTool = createLangChainTool({
   name: "performAction",
   description: "Perform various actions",
   schema: actionSchema,
-  handler: async (action) => {
+  func: async (action) => {
     // TypeScript knows exactly which type based on discriminator
     switch (action.type) {
       case "search":
@@ -323,10 +448,10 @@ const configSchema = z.object({
 });
 
 // Handler receives object with defaults applied
-const configTool = createTool({
+const configTool = createLangChainTool({
   name: "updateConfig",
   schema: configSchema,
-  handler: async (config) => {
+  func: async (config) => {
     // config.temperature is always defined (0.7 if not provided)
     // config.maxTokens is always defined (1000 if not provided)
     // config.model is always defined ("gpt-4" if not provided)
@@ -341,7 +466,7 @@ When AI-generated parameters fail Zod validation, the tool execution will return
 
 ```typescript
 // Example tool with strict validation
-const searchToolWithValidation = createTool({
+const searchToolWithValidation = createLangChainTool({
   name: "searchNotes",
   description: "Search notes with specific criteria",
   schema: z.object({
@@ -349,7 +474,7 @@ const searchToolWithValidation = createTool({
     limit: z.number().int().min(1).max(100),
     sortBy: z.enum(["relevance", "date", "title"]),
   }),
-  handler: async ({ query, limit, sortBy }) => {
+  func: async ({ query, limit, sortBy }) => {
     return performSearch(query, limit, sortBy);
   },
 });
@@ -372,22 +497,7 @@ const searchToolWithValidation = createTool({
 
 The validation errors are automatically formatted to be clear and actionable, helping the AI self-correct. The autonomous agent's iterative design naturally provides retry capability with the AI learning from each error.
 
-## XML Tool Calling Details
-
-### Tool Call Parsing (`xmlParsing.ts`)
-
-```typescript
-// Parse XML tool calls from AI response
-function parseXMLToolCalls(text: string): ToolCall[] {
-  const regex = /<use_tool>([\s\S]*?)<\/use_tool>/g;
-  // Extracts name and args from XML structure
-}
-
-// Strip tool calls from display
-function stripToolCallXML(text: string): string {
-  // Removes XML tool blocks and code blocks for clean display
-}
-```
+## Native Tool Calling Details
 
 ### Tool Execution (`toolExecution.ts`)
 
@@ -401,16 +511,23 @@ async function executeSequentialToolCall(
   // Error handling and validation
   // Result formatting
 }
+
+// ToolCall interface (from native tool calling)
+interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+  id?: string; // Used for ToolMessage correlation
+}
 ```
 
-### Available Tools in Sequential Mode
+### Available Tools in Agent Mode
 
-All tools from the legacy system plus autonomous decision-making:
+All tools from the Copilot Plus system plus autonomous decision-making:
 
-- **localSearch** - Vault content search with salient terms
+- **localSearch** - Vault content search with salient terms and query expansion
 - **webSearch** - Web search with chat history context
 - **getFileTree** - File structure exploration
-- **getCurrentTime** - Time-based queries
+- **getCurrentTime** / **getTimeRangeMs** - Time-based queries
 - **pomodoroTool** - Productivity timer
 - **indexTool** - Vault indexing operations
 - **youtubeTranscription** - Video content analysis
@@ -419,26 +536,22 @@ All tools from the legacy system plus autonomous decision-making:
 
 The Autonomous Agent mode uses a comprehensive system prompt that:
 
-1. **Explains the XML format** with exact examples
-2. **Provides tool descriptions** with parameter details
+1. **Describes available tools** - Tool schemas are provided via `bindTools()`
+2. **Provides behavioral guidance** - When to use each tool, how to chain them
 3. **Sets expectations** for reasoning and tool chaining
 4. **Includes critical requirements** (e.g., salientTerms for localSearch)
 
-Example system prompt section:
+Tool descriptions are provided automatically via Zod schemas. Model adapters add behavioral guidance:
 
-```
-When you need to use a tool, format it EXACTLY like this:
-<use_tool>
-<name>localSearch</name>
-<args>
-{
-  "query": "piano learning",
-  "salientTerms": ["piano", "learning", "practice", "music"]
+```typescript
+// Example: Model adapter adds tool usage guidance
+enhanceSystemPrompt(basePrompt: string): string {
+  return basePrompt + `
+
+When searching notes, always provide both "query" (string) and "salientTerms" (array of key terms).
+Use getTimeRangeMs before localSearch for time-based queries.
+`;
 }
-</args>
-</use_tool>
-
-CRITICAL: For localSearch, you MUST always provide both "query" (string) and "salientTerms" (array of strings).
 ```
 
 ## Benefits of Autonomous Agent
@@ -446,9 +559,10 @@ CRITICAL: For localSearch, you MUST always provide both "query" (string) and "sa
 1. **Autonomous Tool Selection** - AI decides what tools to use without pre-analysis
 2. **Tool Chaining** - Can use results from one tool to inform the next
 3. **Complex Workflows** - Multi-step reasoning with tool support
-4. **Model Agnostic** - Works with any LLM that can follow XML format
+4. **Model Agnostic** - Works with any LLM that supports native tool calling
 5. **No External Dependencies** - No Brevilabs API required
-6. **Transparency** - User can see the AI's reasoning process
+6. **Transparency** - User can see the AI's reasoning process via Agent Reasoning Block
+7. **Native Integration** - Uses LangChain's `bindTools()` for proper tool calling support
 
 ## Usage
 
@@ -511,16 +625,11 @@ The Model Adapter pattern handles model-specific quirks and requirements cleanly
 interface ModelAdapter {
   enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string;
   enhanceUserMessage(message: string, requiresTools: boolean): string;
-  parseToolCalls?(response: string): any[]; // Future extension
   needsSpecialHandling(): boolean;
-  sanitizeResponse?(response: string, iteration: number): string;
-  shouldTruncateStreaming?(partialResponse: string): boolean;
-  detectPrematureResponse?(response: string): {
-    hasPremature: boolean;
-    type: "before" | "after" | null;
-  };
 }
 ```
+
+> **Note:** With native tool calling via `bindTools()`, tool calls are returned in structured `response.tool_calls` format. Model adapters now focus on behavioral guidance rather than parsing or response sanitization.
 
 ### Current Adapters
 
@@ -560,58 +669,17 @@ The `ClaudeModelAdapter` includes specialized handling for Claude thinking model
 - **Think Block Preservation** - Maintains valuable reasoning context in responses
 - **Temperature Control** - Disables temperature for thinking models (as required by API)
 
-#### Claude 4 Hallucination Prevention
+> **Note:** With native tool calling, tool calls are returned in structured `response.tool_calls` format. Intermediate tool calls are hidden from users and displayed via the Agent Reasoning Block. Only final responses are streamed to the UI.
 
-Claude 4 has a tendency to write complete responses immediately after tool calls instead of waiting for results. The adapter addresses this with:
+#### Agent Reasoning Block
 
-```typescript
-// Enhanced prompting with explicit autonomous agent pattern
-enhanceSystemPrompt(basePrompt: string, toolDescriptions: string): string {
-  if (this.isClaudeSonnet4()) {
-    // Add specific instructions for Claude 4:
-    // - Brief sentence + tool calls + STOP pattern
-    // - Explicit warnings about premature responses
-    // - Clear autonomous agent iteration guidance
-  }
-}
-
-// Detection of premature responses
-detectPrematureResponse(response: string): {
-  hasPremature: boolean;
-  type: "before" | "after" | null;
-} {
-  // Allows brief sentences before tool calls (up to 2 sentences, 200 chars)
-  // Detects substantial content after tool calls (forbidden)
-  // Uses threshold-based detection for generalizability
-}
-
-// Response sanitization
-sanitizeResponse(response: string, iteration: number): string {
-  // Preserves ALL think blocks
-  // Removes substantial non-thinking content after tool calls
-  // Only applies to first iteration when hallucination occurs
-}
-
-// Streaming truncation
-shouldTruncateStreaming(partialResponse: string): boolean {
-  // Prevents streaming of hallucinated content to users
-  // Truncates at last complete tool call when threshold exceeded
-}
-```
-
-#### Flow Improvement
-
-The adapter creates a better conversational flow by allowing brief explanatory sentences before tool calls:
+The reasoning process is now displayed via the Agent Reasoning Block component, which shows:
 
 ```
-[Think block]
-I'll search your vault and web for piano practice information.
-🔍 Calling vault search...
-[Think block]
-Let me gather more specific information about practice routines.
-🌐 Calling web search...
-[Think block]
-[final answer]
+⏱️ 2.3s elapsed
+├─ Searching notes for "piano", "learning", "practice"...
+├─ Found 5 notes: Piano Practice.md, Learning Music.md...
+└─ Generating response...
 ```
 
 ### Benefits
@@ -632,10 +700,9 @@ Let me gather more specific information about practice routines.
 3. **Parallel Execution** - Multiple tools simultaneously
 4. **Tool Result Caching** - Avoid redundant calls
 5. **Advanced Reasoning** - More sophisticated decision trees
-6. **Tool Permissions** - User control over tool access
-7. **Alternative Parsing** - Model adapters could handle non-XML formats
+6. **Tool Permissions** - User control over tool access (human-in-the-loop approval)
+7. **Deep Search** - Iterative search refinement for complex queries
 8. **Response Validation** - Adapters could validate model outputs
 9. **Model-Specific Optimizations** - Expand adapter capabilities for emerging models
-10. **Hallucination Detection** - More sophisticated premature response detection
 
-The autonomous agent approach represents a significant evolution from traditional tool calling, enabling more sophisticated AI reasoning and autonomous task completion.
+The autonomous agent approach using native tool calling represents a significant evolution from traditional tool calling, enabling more sophisticated AI reasoning and autonomous task completion.

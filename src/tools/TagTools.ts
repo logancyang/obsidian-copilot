@@ -1,6 +1,6 @@
 import { MetadataCache } from "obsidian";
 import { z } from "zod";
-import { createTool } from "./SimpleTool";
+import { createLangChainTool } from "./createLangChainTool";
 
 const TAG_LIST_SIZE_LIMIT_BYTES = 500_000;
 const DEFAULT_MAX_TAG_ENTRIES = 500;
@@ -20,7 +20,7 @@ export const TagListToolSchema = z
     maxEntries: z
       .number()
       .int()
-      .positive()
+      .min(1) // Use min(1) instead of positive() - Gemini doesn't support exclusiveMinimum
       .max(5000)
       .optional()
       .describe(
@@ -237,11 +237,11 @@ function formatTagListResult(payload: TagListPayload): string {
  * @returns A tool for retrieving vault tag statistics.
  */
 export const createGetTagListTool = () =>
-  createTool({
+  createLangChainTool({
     name: "getTagList",
     description: "Get the list of tags in the vault with occurrence statistics.",
     schema: TagListToolSchema,
-    handler: async (args) => {
+    func: async (args) => {
       const metadataCache = getMetadataCache();
       const includeInline = args?.includeInline ?? true;
       const maxEntries = args?.maxEntries ?? DEFAULT_MAX_TAG_ENTRIES;
@@ -263,7 +263,6 @@ export const createGetTagListTool = () =>
       const boundedPayload = enforceSizeLimit(payload);
       return formatTagListResult(boundedPayload);
     },
-    isBackground: true,
   });
 
 export { collectTagEntries, enforceSizeLimit };

@@ -1,49 +1,52 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { extractAllYoutubeUrls } from "@/utils";
 import { z } from "zod";
-import { createTool } from "./SimpleTool";
+import { createLangChainTool } from "./createLangChainTool";
 
 // Maximum input length to prevent potential DoS attacks
 const MAX_USER_MESSAGE_LENGTH = 50000; // Maximum number of characters
 
 interface YouTubeHandlerArgs {
-  _userMessageContent: string;
+  _userMessageContent?: string;
 }
 
-const youtubeTranscriptionTool = createTool({
+const youtubeTranscriptionTool = createLangChainTool({
   name: "youtubeTranscription",
   description: "Get transcripts of YouTube videos when the user provides YouTube URLs",
-  schema: z.object({}), // Empty schema - the tool will receive _userMessageContent internally
-  isPlusOnly: true,
-  requiresUserMessageContent: true,
-  handler: async (args: YouTubeHandlerArgs) => {
+  schema: z.object({
+    _userMessageContent: z
+      .string()
+      .optional()
+      .describe("Internal: user message content injected by the system"),
+  }),
+  func: async (args: YouTubeHandlerArgs) => {
     // The _userMessageContent is injected by the tool execution system
     const { _userMessageContent } = args;
 
     // Input validation
     if (typeof _userMessageContent !== "string") {
-      return JSON.stringify({
+      return {
         success: false,
         message: "Invalid input: User message must be a string",
-      });
+      };
     }
 
     if (_userMessageContent.length > MAX_USER_MESSAGE_LENGTH) {
-      return JSON.stringify({
+      return {
         success: false,
         message: `Input too long: Maximum allowed length is ${MAX_USER_MESSAGE_LENGTH} characters`,
-      });
+      };
     }
 
     // Extract YouTube URLs only from the user's message
     const urls = extractAllYoutubeUrls(_userMessageContent);
 
     if (urls.length === 0) {
-      return JSON.stringify({
+      return {
         success: false,
         message:
           "No YouTube URLs found in the user prompt. URLs must be in the user prompt instead of the context notes.",
-      });
+      };
     }
 
     // Process multiple URLs if present
@@ -82,11 +85,11 @@ const youtubeTranscriptionTool = createTool({
     // Check if at least one transcription was successful
     const hasSuccessfulTranscriptions = results.some((result) => result.success);
 
-    return JSON.stringify({
+    return {
       success: hasSuccessfulTranscriptions,
       results,
       total_urls: urls.length,
-    });
+    };
   },
 });
 

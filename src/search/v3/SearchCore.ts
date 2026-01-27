@@ -5,7 +5,7 @@ import { App } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { FullTextEngine } from "./engines/FullTextEngine";
 import { NoteIdRank, SearchOptions } from "./interfaces";
-import { QueryExpander } from "./QueryExpander";
+import { ExpandedQuery, QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
 import { FolderBoostCalculator } from "./scoring/FolderBoostCalculator";
 import { GraphBoostCalculator } from "./scoring/GraphBoostCalculator";
@@ -14,6 +14,15 @@ import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 // Search constants
 const FULLTEXT_RESULT_MULTIPLIER = 2;
 export const RETURN_ALL_LIMIT = 100;
+
+/**
+ * Result from the retrieval pipeline, including both results and query expansion metadata.
+ * The query expansion data can be used by the caller to understand what terms were searched.
+ */
+export interface RetrieveResult {
+  results: NoteIdRank[];
+  queryExpansion: ExpandedQuery;
+}
 
 /**
  * Core search engine that orchestrates the multi-stage retrieval pipeline
@@ -58,19 +67,28 @@ export class SearchCore {
    * Main retrieval pipeline (now chunk-based by default)
    * @param query - User's search query
    * @param options - Search options
-   * @returns Ranked list of chunk IDs
+   * @returns Ranked list of chunk IDs with query expansion metadata
    */
-  async retrieve(query: string, options: SearchOptions = {}): Promise<NoteIdRank[]> {
+  async retrieve(query: string, options: SearchOptions = {}): Promise<RetrieveResult> {
+    // Create empty expansion for early returns
+    const emptyExpansion: ExpandedQuery = {
+      queries: [],
+      salientTerms: [],
+      originalQuery: query || "",
+      expandedQueries: [],
+      expandedTerms: [],
+    };
+
     // Input validation: check query
     if (!query || typeof query !== "string") {
       logWarn("SearchCore: Invalid query provided");
-      return [];
+      return { results: [], queryExpansion: emptyExpansion };
     }
 
     const trimmedQuery = query.trim();
     if (trimmedQuery.length === 0) {
       logWarn("SearchCore: Empty query provided");
-      return [];
+      return { results: [], queryExpansion: emptyExpansion };
     }
 
     if (trimmedQuery.length > 1000) {
@@ -94,8 +112,21 @@ export class SearchCore {
       // Log search start with minimal verbosity
       logInfo(`SearchCore: Searching for "${query}"`);
 
-      // 1. Expand query into variants and terms
-      const expanded = await this.queryExpander.expand(query);
+      // 1. Expand query into variants and terms (skip if pre-expanded data provided)
+      let expanded: ExpandedQuery;
+      if (options.preExpandedQuery) {
+        // Use pre-expanded data to avoid double LLM calls
+        logInfo("SearchCore: Using pre-expanded query data (skipping QueryExpander)");
+        expanded = {
+          queries: options.preExpandedQuery.queries || [query],
+          salientTerms: options.preExpandedQuery.salientTerms || [],
+          originalQuery: options.preExpandedQuery.originalQuery || query,
+          expandedQueries: options.preExpandedQuery.expandedQueries || [],
+          expandedTerms: options.preExpandedQuery.expandedTerms || [],
+        };
+      } else {
+        expanded = await this.queryExpander.expand(query);
+      }
       const queries = expanded.queries;
       // Combine expanded salient terms with any provided salient terms
       const salientTerms = options.salientTerms
@@ -183,17 +214,17 @@ export class SearchCore {
         logInfo("SearchCore: No results found");
       }
 
-      return finalResults;
+      return { results: finalResults, queryExpansion: expanded };
     } catch (error) {
       logError("SearchCore: Retrieval failed", error);
 
       // Fallback to simple grep results (guaranteed to return [])
       try {
         const fallbackResults = await this.fallbackSearch(query, maxResults);
-        return fallbackResults;
+        return { results: fallbackResults, queryExpansion: emptyExpansion };
       } catch (fallbackError) {
         logError("SearchCore: Fallback search also failed", fallbackError);
-        return []; // Always return empty array on complete failure
+        return { results: [], queryExpansion: emptyExpansion }; // Always return empty array on complete failure
       }
     }
   }

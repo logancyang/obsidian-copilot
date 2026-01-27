@@ -1,7 +1,8 @@
-import { SimpleTool } from "./SimpleTool";
+import { StructuredTool } from "@langchain/core/tools";
 
 /**
- * Tool metadata for registration and UI display
+ * Tool metadata for registration and UI display.
+ * Contains tool configuration including execution control properties.
  */
 export interface ToolMetadata {
   id: string;
@@ -12,13 +13,18 @@ export interface ToolMetadata {
   requiresVault?: boolean; // Tools that need vault access
   customPromptInstructions?: string; // Optional custom instructions for this tool
   copilotCommands?: string[]; // Optional Copilot slash command aliases (e.g., "@vault")
+  // Execution control properties
+  timeoutMs?: number;
+  isBackground?: boolean; // If true, tool execution is not shown to user
+  isPlusOnly?: boolean; // If true, tool requires Plus subscription
+  requiresUserMessageContent?: boolean; // If true, tool receives original user message for URL extraction
 }
 
 /**
  * Complete tool definition including implementation and metadata
  */
 export interface ToolDefinition {
-  tool: SimpleTool<any, any>;
+  tool: StructuredTool; // LangChain native tool - compatible with bindTools()
   metadata: ToolMetadata;
 }
 
@@ -61,9 +67,10 @@ export class ToolRegistry {
 
   /**
    * Get tools filtered by enabled status
+   * Returns LangChain StructuredTool instances ready for bindTools()
    */
-  getEnabledTools(enabledToolIds: Set<string>, vaultAvailable: boolean): SimpleTool<any, any>[] {
-    const enabledTools: SimpleTool<any, any>[] = [];
+  getEnabledTools(enabledToolIds: Set<string>, vaultAvailable: boolean): StructuredTool[] {
+    const enabledTools: StructuredTool[] = [];
 
     for (const [id, definition] of this.tools) {
       const { metadata, tool } = definition;
@@ -145,6 +152,13 @@ export class ToolRegistry {
    */
   getToolMetadata(id: string): ToolMetadata | undefined {
     return this.tools.get(id)?.metadata;
+  }
+
+  /**
+   * Get tool definition by ID
+   */
+  getToolDefinition(id: string): ToolDefinition | undefined {
+    return this.tools.get(id);
   }
 
   /**

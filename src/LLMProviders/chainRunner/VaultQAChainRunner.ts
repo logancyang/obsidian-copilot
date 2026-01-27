@@ -2,8 +2,7 @@ import { ABORT_REASON, ModelCapability, RETRIEVED_DOCUMENT_TAG } from "@/constan
 import { getStandaloneQuestion } from "@/chainUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
-import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
-import { MergedSemanticRetriever } from "@/search/v3/MergedSemanticRetriever";
+import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -57,7 +56,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       );
     }
 
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, undefined, excludeThinking);
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
 
     try {
       // Tiered lexical retriever doesn't need index check - it builds indexes on demand
@@ -96,29 +95,15 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Step 5: Create retriever based on semantic search setting
       const settings = getSettings();
 
-      const sharedOptions = {
+      // Create retriever using factory (handles priority: Self-hosted > Semantic > Lexical)
+      const retrieverResult = await RetrieverFactory.createRetriever(app, {
         minSimilarityScore: 0.01,
         maxK: settings.maxSourceChunks,
-        salientTerms: tags.length > 0 ? [...tags] : ([] as string[]),
-        timeRange: undefined,
-        textWeight: undefined,
-        returnAll: false,
-        useRerankerThreshold: undefined,
-      };
-
-      const retriever = settings.enableSemanticSearchV3
-        ? new MergedSemanticRetriever(app, {
-            ...sharedOptions,
-            returnAll: tags.length > 0 ? true : false,
-            returnAllTags: tags.length > 0,
-            tagTerms: tags,
-          })
-        : new TieredLexicalRetriever(app, {
-            ...sharedOptions,
-            returnAll: tags.length > 0 ? true : false,
-            returnAllTags: tags.length > 0,
-            tagTerms: tags,
-          });
+        salientTerms: tags.length > 0 ? [...tags] : [],
+        tagTerms: tags,
+      });
+      const retriever = retrieverResult.retriever;
+      logInfo(`VaultQA: Using ${retrieverResult.type} retriever - ${retrieverResult.reason}`);
 
       // Retrieve relevant documents
       const retrievedDocs = await retriever.getRelevantDocuments(standaloneQuestion);

@@ -4,7 +4,7 @@ import { ToolMetadata, ToolRegistry } from "@/tools/ToolRegistry";
 import { ChatMessage } from "@/types/message";
 import { messageRequiresTools, ModelAdapter } from "./modelAdapter";
 import { buildPromptDebugReport, PromptDebugReport } from "./toolPromptDebugger";
-import { SimpleTool } from "@/tools/SimpleTool";
+import { StructuredTool } from "@langchain/core/tools";
 
 interface GeneratePromptDebugReportParams {
   chainManager: ChainManager;
@@ -72,7 +72,7 @@ export async function resolveBasePrompt(chainManager: ChainManager): Promise<str
 interface AgentPromptDebugOptions {
   chainManager: ChainManager;
   adapter: ModelAdapter;
-  availableTools: SimpleTool<any, any>[];
+  availableTools: StructuredTool[];
   toolDescriptions: string;
   userMessage: ChatMessage;
 }

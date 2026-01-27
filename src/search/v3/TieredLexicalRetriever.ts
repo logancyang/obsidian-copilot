@@ -1,6 +1,6 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { isInternalExcludedFile } from "@/search/searchUtils";
+import { isInternalExcludedFile, shouldIndexFile, getMatchingPatterns } from "@/search/searchUtils";
 import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
@@ -8,6 +8,7 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { RETURN_ALL_LIMIT, SearchCore } from "./SearchCore";
+import { ExpandedQuery } from "./QueryExpander";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
 async function safeGetChatModel() {
@@ -38,6 +39,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
   public lc_namespace = ["tiered_lexical_retriever"];
   private searchCore: SearchCore;
   private chunkManager: ChunkManager;
+  private lastQueryExpansion: ExpandedQuery | null = null;
 
   constructor(
     private app: App,
@@ -51,6 +53,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
       useRerankerThreshold?: number; // Not used in v3, kept for compatibility
       returnAllTags?: boolean;
       tagTerms?: string[];
+      preExpandedQuery?: ExpandedQuery; // Pre-expanded query data to avoid double expansion
     }
   ) {
     super();
@@ -58,6 +61,15 @@ export class TieredLexicalRetriever extends BaseRetriever {
     this.searchCore = new SearchCore(app, safeGetChatModel);
     // Use shared singleton to ensure all systems share the same cache
     this.chunkManager = getSharedChunkManager(app);
+  }
+
+  /**
+   * Get the query expansion data from the last search.
+   * Returns the expanded terms, salient terms, and queries used.
+   * @returns The last query expansion data or null if no search has been performed
+   */
+  getLastQueryExpansion(): ExpandedQuery | null {
+    return this.lastQueryExpansion;
   }
 
   /**
@@ -99,12 +111,15 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
       // Perform the tiered search
       const settings = getSettings();
-      const searchResults = await this.searchCore.retrieve(query, {
+      const retrieveResult = await this.searchCore.retrieve(query, {
         maxResults: this.options.returnAllTags ? RETURN_ALL_LIMIT : this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableLexicalBoosts: settings.enableLexicalBoosts,
         returnAll: this.options.returnAllTags,
+        preExpandedQuery: this.options.preExpandedQuery, // Pass pre-expanded data to skip double expansion
       });
+      const searchResults = retrieveResult.results;
+      this.lastQueryExpansion = retrieveResult.queryExpansion;
 
       // Get title-matched notes that should always be included
       const titleMatches = await this.getTitleMatches(noteFiles);
@@ -155,10 +170,13 @@ export class TieredLexicalRetriever extends BaseRetriever {
       });
     }
 
+    // Get QA exclusion/inclusion patterns for filtering
+    const { inclusions, exclusions } = getMatchingPatterns();
+
     // Extract daily note files by exact title match
     const dailyNoteQuery = dailyNoteTitles.join(", ");
-    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter(
-      (f) => !isInternalExcludedFile(f)
+    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter((f) =>
+      shouldIndexFile(f, inclusions, exclusions)
     );
 
     // Get documents for daily notes
@@ -172,7 +190,10 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
     // For time-based queries, we DON'T run regular search
     // Instead, find all documents modified within the time range
-    const allFiles = this.app.vault.getMarkdownFiles().filter((f) => !isInternalExcludedFile(f));
+    // Apply QA exclusion filter to respect user settings
+    const allFiles = this.app.vault
+      .getMarkdownFiles()
+      .filter((f) => shouldIndexFile(f, inclusions, exclusions));
     const timeFilteredDocuments: Document[] = [];
 
     // Limit the number of time-filtered documents to avoid overwhelming results
@@ -339,13 +360,15 @@ export class TieredLexicalRetriever extends BaseRetriever {
     const settings = getSettings();
     const tagQuery = tagTerms.join(" ") || originalQuery;
 
-    const searchResults = await this.searchCore.retrieve(tagQuery, {
+    const retrieveResult = await this.searchCore.retrieve(tagQuery, {
       maxResults: RETURN_ALL_LIMIT,
       candidateLimit: RETURN_ALL_LIMIT,
       salientTerms: tagTerms,
       enableLexicalBoosts: settings.enableLexicalBoosts,
       returnAll: true,
     });
+    const searchResults = retrieveResult.results;
+    this.lastQueryExpansion = retrieveResult.queryExpansion;
 
     const titleMatches = await this.getTitleMatches(noteFiles);
     const searchDocuments = await this.convertToDocuments(searchResults);

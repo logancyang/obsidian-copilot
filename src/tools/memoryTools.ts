@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { createTool, SimpleTool } from "./SimpleTool";
+import { createLangChainTool } from "./createLangChainTool";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { logError } from "@/logger";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
@@ -15,14 +15,11 @@ const memorySchema = z.object({
 /**
  * Memory tool for saving information that the user explicitly asks the assistant to remember
  */
-export const updateMemoryTool: SimpleTool<
-  typeof memorySchema,
-  { success: boolean; message: string }
-> = createTool({
+export const updateMemoryTool = createLangChainTool({
   name: "updateMemory",
   description: "Update the user memory when the user explicitly asks to update the memory",
   schema: memorySchema,
-  handler: async ({ statement }) => {
+  func: async ({ statement }) => {
     try {
       const memoryManager = new UserMemoryManager(app);
       const chatModel = ChatModelManager.getInstance().getChatModel();
@@ -40,7 +37,7 @@ export const updateMemoryTool: SimpleTool<
         success: true,
         message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
       };
-    } catch (error) {
+    } catch (error: any) {
       logError("[updateMemoryTool] Error updating memory:", error);
 
       return {

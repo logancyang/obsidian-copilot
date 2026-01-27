@@ -1,9 +1,14 @@
 import { DateTime } from "luxon";
 import { getTimeRangeMsTool } from "./TimeTools";
 
-// Helper function to extract the tool function
+// Helper function to call the tool and parse result
 const getTimeRangeMs = async (timeExpression: string) => {
-  return await getTimeRangeMsTool.call({ timeExpression });
+  const result = await (getTimeRangeMsTool as any).invoke({ timeExpression });
+  // The tool returns JSON string, parse it
+  const parsed = typeof result === "string" ? JSON.parse(result) : result;
+  // Return undefined if it's an error response
+  if (parsed.error) return undefined;
+  return parsed;
 };
 
 // Helper to verify date ranges
@@ -15,8 +20,9 @@ interface DateRange {
 const verifyDateRange = async (expression: string, expected: DateRange) => {
   const result = await getTimeRangeMs(expression);
   expect(result).toBeDefined();
-  const startDate = DateTime.fromMillis(result!.startTime.epoch);
-  const endDate = DateTime.fromMillis(result!.endTime.epoch);
+  // getTimeRangeMs now returns epoch values directly: {startTime: number, endTime: number}
+  const startDate = DateTime.fromMillis(result!.startTime);
+  const endDate = DateTime.fromMillis(result!.endTime);
 
   expect(startDate.toISODate()).toBe(expected.startDate);
   expect(endDate.toISODate()).toBe(expected.endDate);

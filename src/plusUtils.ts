@@ -25,19 +25,69 @@ export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
 export const DEFAULT_FREE_CHAT_MODEL_KEY = DEFAULT_SETTINGS.defaultModelKey;
 export const DEFAULT_FREE_EMBEDDING_MODEL_KEY = DEFAULT_SETTINGS.embeddingModelKey;
 
+/** Grace period for self-host mode: 14 days (matches refund policy) */
+const SELF_HOST_GRACE_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
+
+/** Plans that qualify for self-host mode */
+const SELF_HOST_ELIGIBLE_PLANS = ["believer", "supporter"];
+
+/**
+ * Check if self-host mode is valid (enabled AND validated within grace period).
+ * Requires prior validation from an eligible plan (Believer, Supporter) that hasn't expired.
+ */
+export function isSelfHostModeValid(): boolean {
+  const settings = getSettings();
+  if (!settings.enableSelfHostMode || settings.selfHostModeValidatedAt == null) {
+    return false;
+  }
+  return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+}
+
 /** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
   return modelKey.split("|")[1] === EmbeddingModelProviders.COPILOT_PLUS;
 }
 
-/** Hook to get the isPlusUser setting. */
+/**
+ * Synchronous check if Plus features should be enabled.
+ * Returns true when self-host mode is valid OR user has valid Plus subscription.
+ * Use this for synchronous checks (e.g., model validation, UI state).
+ */
+export function isPlusEnabled(): boolean {
+  const settings = getSettings();
+  // Self-host mode with valid plan validation bypasses Plus requirements
+  if (isSelfHostModeValid()) {
+    return true;
+  }
+  return settings.isPlusUser === true;
+}
+
+/**
+ * Hook to get the isPlusUser setting.
+ * Returns true when self-host mode is valid to allow offline usage.
+ */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
+  // Self-host mode with valid plan validation bypasses Plus requirements
+  if (settings.enableSelfHostMode && settings.selfHostModeValidatedAt != null) {
+    const isValid = Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+    if (isValid) {
+      return true;
+    }
+  }
   return settings.isPlusUser;
 }
 
-/** Check if the user is a Plus user. */
+/**
+ * Check if the user is a Plus user.
+ * When self-host mode is valid, this returns true to allow offline usage.
+ */
 export async function checkIsPlusUser(context?: Record<string, any>): Promise<boolean | undefined> {
+  // Self-host mode with valid plan validation bypasses license check
+  if (isSelfHostModeValid()) {
+    return true;
+  }
+
   if (!getSettings().plusLicenseKey) {
     turnOffPlus();
     return false;
@@ -47,14 +97,63 @@ export async function checkIsPlusUser(context?: Record<string, any>): Promise<bo
   return result.isValid;
 }
 
-/** Check if the user is on the believer plan. */
-export async function isBelieverPlan(): Promise<boolean> {
+/** Check if the user is on a plan that qualifies for self-host mode. */
+export async function isSelfHostEligiblePlan(): Promise<boolean> {
   if (!getSettings().plusLicenseKey) {
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
   const result = await brevilabsClient.validateLicenseKey();
-  return result.plan?.toLowerCase() === "believer";
+  const planName = result.plan?.toLowerCase();
+  return planName != null && SELF_HOST_ELIGIBLE_PLANS.includes(planName);
+}
+
+/**
+ * Validate self-host mode eligibility for the current user.
+ * Call this when the user manually enables self-host mode in the UI.
+ * If validation fails, the UI should revert the toggle.
+ * @returns true if user is on an eligible plan, false otherwise
+ */
+export async function validateSelfHostMode(): Promise<boolean> {
+  const isEligible = await isSelfHostEligiblePlan();
+  if (!isEligible) {
+    logInfo("Self-host mode requires an eligible plan (Believer, Supporter)");
+    new Notice("Self-host mode is only available for Believer and Supporter plan subscribers.");
+    return false;
+  }
+
+  // Set the validation timestamp (UI handles enableSelfHostMode toggle)
+  updateSetting("selfHostModeValidatedAt", Date.now());
+  logInfo("Self-host mode validation successful");
+  return true;
+}
+
+/**
+ * Refresh self-host mode validation if user is online.
+ * Call this periodically (e.g., on plugin load) to extend the grace period.
+ */
+export async function refreshSelfHostModeValidation(): Promise<void> {
+  const settings = getSettings();
+  if (!settings.enableSelfHostMode) {
+    return;
+  }
+
+  try {
+    const isEligible = await isSelfHostEligiblePlan();
+    if (isEligible) {
+      updateSetting("selfHostModeValidatedAt", Date.now());
+      logInfo("Self-host mode validation refreshed");
+    } else {
+      // User is no longer on an eligible plan, disable self-host mode
+      updateSetting("enableSelfHostMode", false);
+      updateSetting("selfHostModeValidatedAt", null);
+      logInfo("Self-host mode disabled - user is no longer on an eligible plan");
+      new Notice("Self-host mode has been disabled. An eligible plan is required.");
+    }
+  } catch (error) {
+    // Offline or API error - keep existing validation (grace period still applies)
+    logInfo("Could not refresh self-host mode validation (offline?):", error);
+  }
 }
 
 /**

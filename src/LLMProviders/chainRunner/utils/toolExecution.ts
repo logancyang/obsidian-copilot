@@ -2,8 +2,17 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { ToolManager } from "@/tools/toolManager";
+import { ToolRegistry } from "@/tools/ToolRegistry";
 import { err2String } from "@/utils";
-import { ToolCall } from "./xmlParsing";
+
+/**
+ * Represents a tool call with name and arguments.
+ * Used by native tool calling flow.
+ */
+export interface ToolCall {
+  name: string;
+  args: Record<string, unknown>;
+}
 
 export interface ToolExecutionResult {
   toolName: string;
@@ -48,8 +57,12 @@ export async function executeSequentialToolCall(
       };
     }
 
+    // Get tool metadata from registry
+    const registry = ToolRegistry.getInstance();
+    const metadata = registry.getToolMetadata(toolCall.name);
+
     // Check if tool requires Plus subscription
-    if (tool.isPlusOnly) {
+    if (metadata?.isPlusOnly) {
       const isPlusUser = await checkIsPlusUser();
       if (!isPlusUser) {
         return {
@@ -64,14 +77,14 @@ export async function executeSequentialToolCall(
     const toolArgs = { ...toolCall.args };
 
     // If tool requires user message content and it's provided, inject it
-    if (tool.requiresUserMessageContent && originalUserMessage) {
+    if (metadata?.requiresUserMessageContent && originalUserMessage) {
       toolArgs._userMessageContent = originalUserMessage;
     }
 
     // Determine timeout for this tool
     let timeout = DEFAULT_TOOL_TIMEOUT;
-    if (typeof tool.timeoutMs === "number") {
-      timeout = tool.timeoutMs;
+    if (typeof metadata?.timeoutMs === "number") {
+      timeout = metadata.timeoutMs;
     }
 
     let result;

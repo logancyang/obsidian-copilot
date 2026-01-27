@@ -96,7 +96,7 @@ export class LLMChainRunner extends BaseChainRunner {
       );
     }
 
-    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, undefined, excludeThinking);
+    const streamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
 
     try {
       // Construct messages using envelope or legacy approach

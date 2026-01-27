@@ -8,6 +8,7 @@ import {
 } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
+import { isPlusEnabled } from "@/plusUtils";
 import {
   CopilotSettings,
   getModelKeyFromModel,
@@ -56,7 +57,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
-  [ChatModelProviders.COPILOT_PLUS]: ChatOpenAI,
+  [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
   [ChatModelProviders.AMAZON_BEDROCK]: BedrockChatModel,
@@ -620,8 +621,8 @@ export default class ChatModelManager {
       return false;
     }
 
-    // Check Copilot Plus entitlement requirements
-    if (model.plusExclusive && !settings.isPlusUser) {
+    // Check Copilot Plus entitlement requirements (bypassed in self-host mode)
+    if (model.plusExclusive && !isPlusEnabled()) {
       return false;
     }
 

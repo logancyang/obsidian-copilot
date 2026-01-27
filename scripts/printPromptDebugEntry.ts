@@ -103,9 +103,10 @@ export async function run(args: string[]): Promise<void> {
   const enabledToolIds = new Set(settings.autonomousAgentEnabledToolIds || []);
   const availableTools = registry.getEnabledTools(enabledToolIds, false);
 
-  const toolDescriptions = (
-    await import("@/LLMProviders/chainRunner/AutonomousAgentChainRunner")
-  ).AutonomousAgentChainRunner.generateToolDescriptions(availableTools);
+  // Generate simple tool descriptions (native tool calling handles schema via bindTools)
+  const toolDescriptions = availableTools
+    .map((tool) => `${tool.name}: ${tool.description}`)
+    .join("\n");
 
   const memoryManager = MemoryManager.getInstance();
   const userMemoryManager = new UserMemoryManager(app as any);

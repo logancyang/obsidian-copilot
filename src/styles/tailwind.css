@@ -795,6 +795,16 @@ If your plugin does not need CSS, delete this file.
   .tool-call-container {
     margin: 0.5rem 0;
   }
+
+  /* Agent Reasoning Block responsive styles */
+  .agent-reasoning-block {
+    margin: 2px 0 6px;
+  }
+
+  .agent-reasoning-steps {
+    margin: 6px 0 0 16px;
+    gap: 4px;
+  }
 }
 
 .model-card {
@@ -881,10 +891,12 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* open plugin in Editor mode for mobile */
-body.is-mobile .workspace-tab-container .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
+body.is-mobile
+  .workspace-tab-container
+  .workspace-leaf-content[data-type="copilot-chat-view"]
+  .view-content {
   padding-bottom: var(--size-4-1) !important;
 }
-
 
 /* Collapsible sources styling */
 .copilot-sources {
@@ -972,4 +984,148 @@ body.is-mobile .workspace-tab-container .workspace-leaf-content[data-type="copil
 /* fix the width of the popover on mobile */
 body.is-mobile div[data-radix-popper-content-wrapper] {
   min-width: fit-content !important;
+}
+
+/* Agent Reasoning Block */
+.agent-reasoning-block {
+  margin: 4px 0 8px;
+  padding: 0;
+  font-size: var(--font-ui-small);
+  width: 100%;
+}
+
+.agent-reasoning-header {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  font-size: var(--font-ui-smaller);
+}
+
+.agent-reasoning-header:hover:not(:disabled) {
+  color: var(--text-muted);
+}
+
+.agent-reasoning-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  flex-shrink: 0;
+}
+
+.agent-reasoning-title {
+  font-weight: var(--font-medium);
+}
+
+.agent-reasoning-timer {
+  color: var(--text-faint);
+}
+
+.agent-reasoning-steps {
+  margin: 8px 0 0 20px;
+  padding: 0;
+  list-style: disc;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.agent-reasoning-step {
+  margin: 0;
+  color: var(--text-muted);
+  line-height: 1.4;
+  font-size: var(--font-ui-smaller);
+}
+
+/* Copilot Cross Spinner Animation
+ * 5 dots in cross pattern with 2 dim intervals
+ * Sequence: center(4) → right(5) → top(1) → left(3) → bottom(7) → dim → dim → repeat
+ * 7 total phases (5 dots + 2 dim intervals), 1s cycle
+ */
+.copilot-spinner {
+  display: block;
+}
+
+.copilot-spinner-dot {
+  fill: var(--text-faint);
+}
+
+/* Animation for each dot (5 dots, 7 phases total, ~143ms per phase for 1s cycle)
+ * Positive delays: dot-0 lights first, dot-1 lights 143ms later, etc.
+ */
+.copilot-spinner-dot-0 {
+  animation: copilot-dot-chase 1s linear infinite;
+  animation-delay: 0ms;
+}
+.copilot-spinner-dot-1 {
+  animation: copilot-dot-chase 1s linear infinite;
+  animation-delay: 143ms;
+}
+.copilot-spinner-dot-2 {
+  animation: copilot-dot-chase 1s linear infinite;
+  animation-delay: 286ms;
+}
+.copilot-spinner-dot-3 {
+  animation: copilot-dot-chase 1s linear infinite;
+  animation-delay: 429ms;
+}
+.copilot-spinner-dot-4 {
+  animation: copilot-dot-chase 1s linear infinite;
+  animation-delay: 572ms;
+}
+
+/* Chase animation with 7 phases (each ~14.3%):
+ * Phase 0 (0-14%): full bright (this dot's turn)
+ * Phase 1 (14-28%): 80% (trailing)
+ * Phase 2 (28-43%): 55% (trailing)
+ * Phase 3 (43-57%): 35% (fading out)
+ * Phase 4-6 (57-100%): dim (includes 2 "all dim" intervals at end)
+ */
+@keyframes copilot-dot-chase {
+  0%,
+  14% {
+    fill: var(--text-normal);
+    opacity: 1;
+  }
+  14.1%,
+  28% {
+    fill: var(--text-muted);
+    opacity: 0.8;
+  }
+  28.1%,
+  43% {
+    fill: var(--text-muted);
+    opacity: 0.55;
+  }
+  43.1%,
+  57% {
+    fill: var(--text-faint);
+    opacity: 0.35;
+  }
+  57.1%,
+  100% {
+    fill: var(--text-faint);
+    opacity: 0.2;
+  }
+}
+
+/* Legacy spinner animation (deprecated) */
+.agent-reasoning-spinner .spinner-dots {
+  display: inline-block;
+  animation: reasoning-pulse 1s ease-in-out infinite;
+}
+
+@keyframes reasoning-pulse {
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 1;
+  }
 }
