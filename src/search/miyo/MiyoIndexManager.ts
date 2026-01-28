@@ -11,7 +11,7 @@ import { App, Notice, TFile } from "obsidian";
 import { getMatchingPatterns, shouldIndexFile } from "../searchUtils";
 import { ChunkManager, getSharedChunkManager } from "../v3/chunks";
 import { MiyoClient } from "./MiyoClient";
-import { MiyoClientConfig, IngestChunksRequest, IngestResponse, IngestChunk } from "./types";
+import { MiyoClientConfig, IngestChunksRequest, IngestResponse } from "./types";
 
 /**
  * State of the indexing operation.
@@ -199,8 +199,8 @@ export class MiyoIndexManager {
   /**
    * Index a single file to Miyo using ChunkManager.
    *
-   * Uses ChunkManager to produce chunks with consistent IDs (e.g., "note.md#0"),
-   * then sends them to Miyo for embedding and storage.
+   * Uses ChunkManager to produce chunks with consistent boundaries,
+   * then sends the chunk content strings to Miyo for embedding and storage.
    *
    * @param file - The file to index
    * @param force - Force re-indexing
@@ -219,21 +219,13 @@ export class MiyoIndexManager {
       };
     }
 
-    // Convert to Miyo's IngestChunk format
-    const ingestChunks: IngestChunk[] = chunks.map((chunk) => ({
-      id: chunk.id,
-      content: chunk.content,
-      index: chunk.chunkIndex,
-      heading: chunk.heading || undefined,
-    }));
+    // Extract chunk content strings for Miyo
+    const chunkContents: string[] = chunks.map((chunk) => chunk.content);
 
-    // Build request
+    // Build request matching Miyo's API format
     const request: IngestChunksRequest = {
-      file_path: file.path,
-      chunks: ingestChunks,
-      mtime: file.stat.mtime,
-      ctime: file.stat.ctime,
-      title: file.basename,
+      file: file.path,
+      chunks: chunkContents,
       force: force ?? false,
     };
 

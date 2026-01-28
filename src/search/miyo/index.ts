@@ -24,7 +24,6 @@ export type {
   MetadataFilter,
   // Ingest
   IngestRequest,
-  IngestChunk,
   IngestChunksRequest,
   IngestResponse,
   // Files

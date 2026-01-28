@@ -280,7 +280,7 @@ export class MiyoClient {
    *
    * This method allows Copilot to control chunking for consistency
    * with the lexical search engine. Chunks should be produced by
-   * ChunkManager to ensure identical chunk boundaries and IDs.
+   * ChunkManager to ensure identical chunk boundaries.
    *
    * @param request - Chunk-based ingest parameters
    * @returns Ingest result with status and chunk count
@@ -293,7 +293,7 @@ export class MiyoClient {
     };
 
     logInfo(
-      `MiyoClient.ingestChunks: Ingesting ${request.chunks.length} chunks for "${request.file_path}"`
+      `MiyoClient.ingestChunks: Ingesting ${request.chunks.length} chunks for "${request.file}"`
     );
     return this.request<IngestResponse>("POST", "/ingest", { body: requestWithSource });
   }
@@ -317,14 +317,11 @@ export class MiyoClient {
         const result = await this.ingestChunks(requests[i]);
         results.push(result);
       } catch (error) {
-        logError(
-          `MiyoClient.ingestChunksBatch: Failed to ingest "${requests[i].file_path}"`,
-          error
-        );
+        logError(`MiyoClient.ingestChunksBatch: Failed to ingest "${requests[i].file}"`, error);
         results.push({
           status: "error",
           action: "failed",
-          file_path: requests[i].file_path,
+          file_path: requests[i].file,
           error: error instanceof Error ? error.message : String(error),
         });
       }

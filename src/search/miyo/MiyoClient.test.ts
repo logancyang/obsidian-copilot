@@ -248,13 +248,8 @@ describe("MiyoClient", () => {
       });
 
       const result = await client.ingestChunks({
-        file_path: "notes/test.md",
-        chunks: [
-          { id: "notes/test.md#0", content: "First chunk", index: 0, heading: "Introduction" },
-          { id: "notes/test.md#1", content: "Second chunk", index: 1, heading: "Details" },
-        ],
-        mtime: 1706300000000,
-        title: "Test Note",
+        file: "notes/test.md",
+        chunks: ["First chunk content", "Second chunk content"],
       });
 
       expect(result).toEqual(mockResponse);
@@ -263,13 +258,8 @@ describe("MiyoClient", () => {
         expect.objectContaining({
           method: "POST",
           body: JSON.stringify({
-            file_path: "notes/test.md",
-            chunks: [
-              { id: "notes/test.md#0", content: "First chunk", index: 0, heading: "Introduction" },
-              { id: "notes/test.md#1", content: "Second chunk", index: 1, heading: "Details" },
-            ],
-            mtime: 1706300000000,
-            title: "Test Note",
+            file: "notes/test.md",
+            chunks: ["First chunk content", "Second chunk content"],
             source_id: "test-vault",
           }),
         })
@@ -290,8 +280,8 @@ describe("MiyoClient", () => {
       });
 
       await client.ingestChunks({
-        file_path: "notes/test.md",
-        chunks: [{ id: "notes/test.md#0", content: "Content", index: 0 }],
+        file: "notes/test.md",
+        chunks: ["Content"],
       });
 
       const callBody = JSON.parse(mockFetch.mock.calls[0][1].body);
