@@ -21,6 +21,7 @@ import {
   getModelInfo,
   ModelInfo,
   safeFetch,
+  safeFetchNoThrow,
   withSuppressedTokenWarnings,
 } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
@@ -356,6 +357,11 @@ export default class ChatModelManager {
       [ChatModelProviders.AMAZON_BEDROCK]: {} as BedrockChatModelFields,
       [ChatModelProviders.GITHUB_COPILOT]: {
         modelName: modelName,
+        // Use safeFetchNoThrow for CORS bypass on mobile platforms.
+        // This doesn't throw on HTTP errors so 401 retry logic works correctly.
+        // WARNING: AbortSignal/timeout will NOT work when enableCors is true
+        // because Obsidian's requestUrl doesn't support cancellation.
+        fetchImplementation: customModel.enableCors ? safeFetchNoThrow : undefined,
       },
     };
 

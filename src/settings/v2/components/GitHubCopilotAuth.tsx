@@ -6,13 +6,14 @@ import {
   GitHubCopilotProvider,
   DeviceCodeResponse,
 } from "@/LLMProviders/githubCopilot/GitHubCopilotProvider";
+import { isAuthCancelledError } from "@/LLMProviders/githubCopilot/errors";
 import { useSettingsValue } from "@/settings/model";
 import { ModelImporter } from "@/settings/v2/components/ModelImporter";
 import { ChevronDown, ChevronUp, Loader2, Copy } from "lucide-react";
 import { Notice } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 
-type AuthStep = "idle" | "pending" | "user" | "polling" | "done" | "error";
+type AuthStep = "idle" | "pending" | "polling" | "done" | "error";
 
 /**
  * GitHub Copilot OAuth authentication component.
@@ -23,6 +24,7 @@ export function GitHubCopilotAuth() {
   const [copilotProvider] = useState(() => GitHubCopilotProvider.getInstance());
   const [authStep, setAuthStep] = useState<AuthStep>("idle");
   const [deviceCode, setDeviceCode] = useState<DeviceCodeResponse | null>(null);
+  const [pollCount, setPollCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const authRequestIdRef = useRef(0);
@@ -51,8 +53,8 @@ export function GitHubCopilotAuth() {
   useEffect(() => {
     const state = copilotProvider.getAuthState();
     if (state.status === "authenticated") {
-      // Don't override in-flight auth UI; handleCompleteAuth() will set the final state.
-      if (authStep !== "pending" && authStep !== "user" && authStep !== "polling") {
+      // Don't override in-flight auth UI during polling
+      if (authStep !== "pending" && authStep !== "polling") {
         setAuthStep("done");
       }
     } else if (authStep === "done") {
@@ -68,14 +70,44 @@ export function GitHubCopilotAuth() {
   ]);
 
   /**
+   * Runs the polling flow to complete OAuth authorization.
+   * Shared by handleStartAuth (after getting device code) and handleRetryPolling.
+   * @param code - The device code response containing deviceCode, interval, expiresIn
+   * @param requestId - The request ID to check for cancellation
+   */
+  const runPollingFlow = async (code: DeviceCodeResponse, requestId: number) => {
+    await copilotProvider.pollForAccessToken(
+      code.deviceCode,
+      code.interval,
+      code.expiresIn,
+      (attempt) => {
+        if (isMountedRef.current && requestId === authRequestIdRef.current) {
+          setPollCount(attempt);
+        }
+      }
+    );
+
+    await copilotProvider.fetchCopilotToken();
+
+    if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+      return;
+    }
+
+    setAuthStep("done");
+    setDeviceCode(null);
+    new Notice("GitHub Copilot connected successfully!");
+  };
+
+  /**
    * Initiates the GitHub OAuth device code flow.
-   * Requests a device code and displays it to the user for authorization.
+   * Requests a device code and automatically starts polling for authorization.
    */
   const handleStartAuth = async () => {
     const requestId = ++authRequestIdRef.current;
 
     setAuthStep("pending");
     setError(null);
+    setPollCount(0);
 
     try {
       const deviceCodeResponse = await copilotProvider.startDeviceCodeFlow();
@@ -86,53 +118,23 @@ export function GitHubCopilotAuth() {
       }
 
       setDeviceCode(deviceCodeResponse);
-      setAuthStep("user");
+      setAuthStep("polling");
       setExpanded(true);
-      new Notice("Please authorize in your browser, then click 'Complete'");
-    } catch (e: unknown) {
-      // Ignore errors if request was cancelled or component unmounted
-      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
-        return;
+
+      // Automatically start polling for authorization
+      try {
+        await runPollingFlow(deviceCodeResponse, requestId);
+      } catch (pollError: unknown) {
+        // Ignore if cancelled or component unmounted
+        if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+          return;
+        }
+        // If cancelled by user (e.g., handleReset called), don't show error
+        if (isAuthCancelledError(pollError)) {
+          return;
+        }
+        throw pollError;
       }
-
-      const errorMessage = e instanceof Error ? e.message : String(e);
-      setError(errorMessage);
-      setAuthStep("error");
-      new Notice(`Failed to start authentication: ${errorMessage}`);
-    }
-  };
-
-  /**
-   * Completes the OAuth flow by polling for the access token.
-   * Called after user has authorized the app in their browser.
-   */
-  const handleCompleteAuth = async () => {
-    if (!deviceCode) {
-      new Notice("Please start authentication first");
-      return;
-    }
-
-    const requestId = ++authRequestIdRef.current;
-
-    setAuthStep("polling");
-    setError(null);
-
-    try {
-      await copilotProvider.pollForAccessToken(
-        deviceCode.deviceCode,
-        deviceCode.interval,
-        deviceCode.expiresIn
-      );
-      await copilotProvider.fetchCopilotToken();
-
-      // Check if request was cancelled or component unmounted
-      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
-        return;
-      }
-
-      setAuthStep("done");
-      setDeviceCode(null);
-      new Notice("GitHub Copilot connected successfully!");
     } catch (e: unknown) {
       // Ignore errors if request was cancelled or component unmounted
       if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
@@ -148,17 +150,21 @@ export function GitHubCopilotAuth() {
 
   /**
    * Resets the authentication state and clears all stored tokens.
-   * Disconnects the user from GitHub Copilot.
+   * Disconnects the user from GitHub Copilot or cancels in-progress authentication.
    */
   const handleReset = () => {
+    // Check if we're in an auth flow: actively authenticating OR error state with device code
+    const isInAuthFlow =
+      authStep === "pending" || authStep === "polling" || (authStep === "error" && deviceCode);
     // Increment requestId to invalidate any in-flight async operations
     authRequestIdRef.current += 1;
     copilotProvider.resetAuth();
     setAuthStep("idle");
     setDeviceCode(null);
     setError(null);
+    setPollCount(0);
     setExpanded(false);
-    new Notice("GitHub Copilot disconnected");
+    new Notice(isInAuthFlow ? "Authentication cancelled" : "GitHub Copilot disconnected");
   };
 
   /**
@@ -176,7 +182,38 @@ export function GitHubCopilotAuth() {
 
   const isAuthenticated = authStep === "done";
   const isAuthenticating = authStep === "pending" || authStep === "polling";
-  const showDeviceCode = authStep === "user" || authStep === "polling";
+  // Show device code during polling or error (if device code still exists and hasn't expired)
+  const showDeviceCode = (authStep === "polling" || authStep === "error") && deviceCode !== null;
+
+  /**
+   * Retries polling with the existing device code.
+   * Used when polling fails due to network errors but device code is still valid.
+   */
+  const handleRetryPolling = async () => {
+    if (!deviceCode) return;
+
+    const requestId = ++authRequestIdRef.current;
+    setAuthStep("polling");
+    setError(null);
+    setPollCount(0);
+
+    try {
+      await runPollingFlow(deviceCode, requestId);
+    } catch (e: unknown) {
+      if (!isMountedRef.current || requestId !== authRequestIdRef.current) {
+        return;
+      }
+      // If cancelled by user (e.g., handleReset called), don't show error
+      if (isAuthCancelledError(e)) {
+        return;
+      }
+
+      const errorMessage = e instanceof Error ? e.message : String(e);
+      setError(errorMessage);
+      setAuthStep("error");
+      new Notice(`Authentication failed: ${errorMessage}`);
+    }
+  };
 
   return (
     <>
@@ -193,46 +230,43 @@ export function GitHubCopilotAuth() {
                 </p>
               </div>
             }
-            side="right"
+            side="bottom"
           >
             <span className="tw-cursor-help tw-text-warning">⚠️</span>
           </HelpTooltip>
         </div>
-        <div className="tw-flex tw-flex-row tw-items-center tw-gap-2">
-          <div className="tw-flex-1">
-            {/* Status display */}
-            <div
-              className={`tw-flex tw-h-9 tw-w-full tw-items-center tw-rounded-md tw-border tw-border-border tw-px-3 tw-text-sm ${
-                isAuthenticated
-                  ? "tw-text-success"
-                  : isAuthenticating
-                    ? "tw-text-warning"
-                    : authStep === "error"
-                      ? "tw-text-error"
-                      : "tw-text-muted"
-              }`}
-            >
-              {isAuthenticated
-                ? "✓ Connected"
+        <div className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center">
+          {/* Status display */}
+          <div
+            className={`tw-flex tw-h-9 tw-flex-1 tw-items-center tw-rounded-md tw-border tw-border-border tw-px-3 tw-text-sm ${
+              isAuthenticated
+                ? "tw-text-success"
                 : isAuthenticating
-                  ? "Authenticating..."
+                  ? "tw-text-warning"
                   : authStep === "error"
-                    ? "Error - Click Setup to retry"
-                    : "Not connected"}
-            </div>
+                    ? "tw-text-error"
+                    : "tw-text-muted"
+            }`}
+          >
+            {isAuthenticated
+              ? "✓ Connected"
+              : isAuthenticating
+                ? "Authenticating..."
+                : authStep === "error"
+                  ? "Error - Click Setup to retry"
+                  : "Not connected"}
           </div>
-          <div>
+          {/* Action buttons */}
+          <div className="tw-flex tw-items-center tw-gap-2">
             {isAuthenticated && (
               <Button
                 onClick={handleReset}
                 variant="ghost"
-                className="tw-flex tw-items-center tw-justify-center tw-whitespace-nowrap tw-px-4 tw-py-2 tw-text-warning hover:tw-text-warning"
+                className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-whitespace-nowrap tw-px-4 tw-py-2 tw-text-warning hover:tw-text-warning sm:tw-flex-none"
               >
                 Disconnect
               </Button>
             )}
-          </div>
-          <div>
             <Button
               onClick={() => {
                 if (!isAuthenticated && !isAuthenticating) {
@@ -243,7 +277,7 @@ export function GitHubCopilotAuth() {
               }}
               disabled={isAuthenticating}
               variant="secondary"
-              className="tw-flex tw-w-full tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-px-4 tw-py-2"
+              className="tw-flex tw-flex-1 tw-items-center tw-justify-center tw-gap-2 tw-whitespace-nowrap tw-px-4 tw-py-2 sm:tw-flex-none"
             >
               {isAuthenticating ? (
                 <Loader2 className="tw-size-4 tw-animate-spin" />
@@ -319,25 +353,44 @@ export function GitHubCopilotAuth() {
                   </Button>
                 </div>
 
-                <div className="tw-flex tw-items-center tw-gap-2 tw-border-t tw-pt-1 tw-border-border/50">
-                  <Button
-                    onClick={handleCompleteAuth}
-                    disabled={authStep === "polling"}
-                    variant="secondary"
-                    size="sm"
-                  >
-                    {authStep === "polling" ? (
-                      <>
-                        <Loader2 className="tw-mr-1.5 tw-size-3.5 tw-animate-spin" />
-                        Waiting...
-                      </>
-                    ) : (
-                      "Complete"
-                    )}
-                  </Button>
-                  <Button onClick={handleReset} variant="ghost" size="sm">
-                    Cancel
-                  </Button>
+                <div className="tw-flex tw-flex-col tw-gap-2 tw-border-t tw-pt-2 tw-border-border/50">
+                  {authStep === "polling" ? (
+                    <>
+                      <div className="tw-flex tw-items-center tw-justify-center tw-gap-2 tw-py-1 tw-text-xs tw-text-muted">
+                        <Loader2 className="tw-size-3.5 tw-animate-spin" />
+                        <span>
+                          Waiting for authorization...{pollCount > 0 && ` (Attempt ${pollCount})`}
+                        </span>
+                      </div>
+                      <Button onClick={handleReset} variant="ghost" size="sm" className="tw-w-full">
+                        Cancel
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="tw-flex tw-items-center tw-justify-center tw-gap-2 tw-py-1 tw-text-xs tw-text-error">
+                        <span>Polling failed - you can retry with the same code</span>
+                      </div>
+                      <div className="tw-flex tw-gap-2">
+                        <Button
+                          onClick={handleRetryPolling}
+                          variant="secondary"
+                          size="sm"
+                          className="tw-flex-1"
+                        >
+                          Retry
+                        </Button>
+                        <Button
+                          onClick={handleReset}
+                          variant="ghost"
+                          size="sm"
+                          className="tw-flex-1"
+                        >
+                          Start Over
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
             )}

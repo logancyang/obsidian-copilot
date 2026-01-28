@@ -23,6 +23,12 @@ import { getApiKeyForProvider } from "@/utils/modelUtils";
 export { err2String } from "@/errorFormat";
 
 /**
+ * Unified type for fetch implementation.
+ * Used for dependency injection of fetch (e.g., safeFetch for CORS bypass).
+ */
+export type FetchImplementation = (url: string, init?: RequestInit) => Promise<Response>;
+
+/**
  * Extract domain from URL, removing 'www.' prefix.
  * Returns the original URL string if parsing fails.
  * @param url - The URL to extract domain from
@@ -756,10 +762,30 @@ export function extractAllYoutubeUrls(text: string): string[] {
   return Array.from(matches, (match) => match[0]);
 }
 
-/** Proxy function to use in place of fetch() to bypass CORS restrictions.
- * It currently doesn't support streaming until this is implemented
- * https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381 */
-export async function safeFetch(url: string, options: RequestInit = {}): Promise<Response> {
+/**
+ * Proxy function to use in place of fetch() to bypass CORS restrictions.
+ * Uses Obsidian's requestUrl which bypasses browser CORS restrictions.
+ *
+ * @param url - The URL to fetch
+ * @param options - Fetch options (subset of RequestInit)
+ * @param options.throwOnHttpError - If true (default), throws on HTTP >= 400. Set to false for fetch-like behavior.
+ *
+ * @remarks
+ * **AbortSignal Limitation**: The `signal` option is accepted for API compatibility
+ * but is NOT honored by the underlying `requestUrl` implementation. Requests made
+ * through this function cannot be cancelled via AbortSignal. If cancellation is
+ * required, use native `fetch` instead (which may encounter CORS issues on mobile).
+ *
+ * **Streaming Limitation**: This function does not support true streaming responses.
+ * The entire response body is buffered before being returned.
+ *
+ * @see https://forum.obsidian.md/t/support-streaming-the-request-and-requesturl-response-body/87381
+ */
+export async function safeFetch(
+  url: string,
+  options: RequestInit & { throwOnHttpError?: boolean } = {}
+): Promise<Response> {
+  const { throwOnHttpError = true } = options;
   // Initialize headers if not provided
   const normalizedHeaders = new Headers(options.headers);
   const headers = Object.fromEntries(normalizedHeaders.entries());
@@ -781,8 +807,8 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
     throw: false, // Don't throw so we can get the response body
   });
 
-  // Check if response is error status
-  if (response.status >= 400) {
+  // Check if response is error status (only throw if throwOnHttpError is true)
+  if (throwOnHttpError && response.status >= 400) {
     let errorJson;
     try {
       errorJson = typeof response.json === "string" ? JSON.parse(response.json) : response.json;
@@ -853,6 +879,21 @@ export async function safeFetch(url: string, options: RequestInit = {}): Promise
       throw new Error("not implemented");
     },
   };
+}
+
+/**
+ * Wrapper around safeFetch that doesn't throw on HTTP errors (fetch-like behavior).
+ * Use this when you need to check response.status for retry logic (e.g., 401 token refresh).
+ *
+ * @remarks
+ * Inherits all limitations from safeFetch:
+ * - AbortSignal is NOT honored (requests cannot be cancelled)
+ * - No true streaming support (response is fully buffered)
+ *
+ * @see safeFetch for full documentation
+ */
+export function safeFetchNoThrow(url: string, options: RequestInit = {}): Promise<Response> {
+  return safeFetch(url, { ...options, throwOnHttpError: false });
 }
 
 function createReadableStreamFromString(input: string) {

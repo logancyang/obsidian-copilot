@@ -12,6 +12,7 @@ import { type ChatResult, ChatGeneration, ChatGenerationChunk } from "@langchain
 import { type CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
 import { GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import { extractTextFromChunk } from "@/utils";
+import type { FetchImplementation } from "@/utils";
 
 // Approximate characters per token for English text
 const CHARS_PER_TOKEN = 4;
@@ -19,6 +20,8 @@ const CHARS_PER_TOKEN = 4;
 export interface GitHubCopilotChatModelParams extends BaseChatModelParams {
   modelName: string;
   streaming?: boolean;
+  /** Custom fetch implementation for CORS bypass (e.g., safeFetch on mobile platforms) */
+  fetchImplementation?: FetchImplementation;
 }
 
 /**
@@ -31,12 +34,16 @@ export class GitHubCopilotChatModel extends BaseChatModel {
   private provider: GitHubCopilotProvider;
   modelName: string;
   streaming: boolean;
+  /** Fetch implementation to use - custom implementation for CORS bypass, native fetch otherwise */
+  private fetchImpl: FetchImplementation;
 
   constructor(fields: GitHubCopilotChatModelParams) {
     super(fields);
     this.provider = GitHubCopilotProvider.getInstance();
     this.modelName = fields.modelName;
     this.streaming = fields.streaming ?? true;
+    // Use provided fetch implementation or default to native fetch
+    this.fetchImpl = fields.fetchImplementation ?? fetch;
   }
 
   _llmType(): string {
@@ -80,13 +87,17 @@ export class GitHubCopilotChatModel extends BaseChatModel {
    */
   async _generate(
     messages: BaseMessage[],
-    _options: this["ParsedCallOptions"],
+    options: this["ParsedCallOptions"],
     _runManager?: CallbackManagerForLLMRun
   ): Promise<ChatResult> {
     const chatMessages = this.toCopilotMessages(messages);
 
-    // Call Copilot API
-    const response = await this.provider.sendChatMessage(chatMessages, this.modelName);
+    // Call Copilot API with fetchImpl for CORS detection parity with other providers
+    const response = await this.provider.sendChatMessage(chatMessages, {
+      model: this.modelName,
+      fetchImpl: this.fetchImpl,
+      signal: options?.signal,
+    });
     const choice = response.choices?.[0];
     const content = choice?.message?.content || "";
     const finishReason = choice?.finish_reason;
@@ -160,14 +171,14 @@ export class GitHubCopilotChatModel extends BaseChatModel {
     }
 
     const chatMessages = this.toCopilotMessages(messages);
-    let didYieldChunk = false;
+    let yieldedUsableChunk = false;
 
     // Stream directly, no fallback - errors are propagated to caller
-    for await (const chunk of this.provider.sendChatMessageStream(
-      chatMessages,
-      this.modelName,
-      options?.signal
-    )) {
+    for await (const chunk of this.provider.sendChatMessageStream(chatMessages, {
+      model: this.modelName,
+      signal: options?.signal,
+      fetchImpl: this.fetchImpl,
+    })) {
       const choice = chunk.choices?.[0];
       const content = choice?.delta?.content || "";
 
@@ -212,14 +223,16 @@ export class GitHubCopilotChatModel extends BaseChatModel {
         await runManager.handleLLMNewToken(content);
       }
 
-      didYieldChunk = true;
+      yieldedUsableChunk = true;
       yield generationChunk;
     }
 
-    // Detect silent failures where streaming completed but produced no chunks at all.
-    // Avoid treating metadata-only streams as failures.
-    if (!didYieldChunk) {
-      throw new Error("GitHub Copilot streaming produced no chunks");
+    // Detect silent failures where Provider yielded chunks but none were usable by ChatModel.
+    // Provider's check catches "no JSON at all", this catches "JSON but no usable content".
+    if (!yieldedUsableChunk) {
+      throw new Error(
+        "GitHub Copilot streaming produced no usable chunks (no content, finish_reason, or usage)"
+      );
     }
   }
 
