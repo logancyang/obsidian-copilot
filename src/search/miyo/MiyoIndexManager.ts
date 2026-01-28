@@ -202,6 +202,9 @@ export class MiyoIndexManager {
    * Uses ChunkManager to produce chunks with consistent boundaries,
    * then sends the chunk content strings to Miyo for embedding and storage.
    *
+   * Note: Deletes existing chunks for the file before ingesting new ones
+   * to prevent stale chunks when chunk count changes.
+   *
    * @param file - The file to index
    * @param force - Force re-indexing
    * @returns The ingest response
@@ -211,12 +214,26 @@ export class MiyoIndexManager {
     const chunks = await this.chunkManager.getChunks([file.path]);
 
     if (chunks.length === 0) {
+      // No content to index - remove any existing chunks
+      try {
+        await this.client.deleteFile(file.path);
+      } catch {
+        // Ignore errors if file wasn't indexed
+      }
       return {
         status: "completed",
         action: "skipped",
         file_path: file.path,
         chunks_created: 0,
       };
+    }
+
+    // Delete existing chunks first to prevent stale data
+    // This handles the case where a file previously had more chunks
+    try {
+      await this.client.deleteFile(file.path);
+    } catch {
+      // Ignore errors if file wasn't previously indexed
     }
 
     // Extract chunk content strings for Miyo
@@ -281,7 +298,11 @@ export class MiyoIndexManager {
   }
 
   /**
-   * Run garbage collection to remove files that no longer exist in the vault.
+   * Run garbage collection to remove stale files from the index.
+   *
+   * Removes files that:
+   * 1. No longer exist in the vault
+   * 2. Exist but are now excluded by inclusion/exclusion patterns
    *
    * @returns Number of files removed
    */
@@ -293,12 +314,22 @@ export class MiyoIndexManager {
         return 0;
       }
 
-      // Find files that no longer exist in vault
+      // Get current inclusion/exclusion patterns
+      const { inclusions, exclusions } = getMatchingPatterns();
+
+      // Find stale files
       const staleFiles: string[] = [];
       for (const filePath of indexedFiles) {
         const file = this.app.vault.getAbstractFileByPath(filePath);
+
         if (!file) {
+          // File no longer exists in vault
           staleFiles.push(filePath);
+        } else if (file instanceof TFile) {
+          // File exists but check if it should still be indexed
+          if (!shouldIndexFile(file, inclusions, exclusions)) {
+            staleFiles.push(filePath);
+          }
         }
       }
 
