@@ -109,6 +109,9 @@ export class MiyoIndexManager {
   /**
    * Index all vault files to Miyo using ChunkManager for consistent chunking.
    *
+   * Runs garbage collection first to remove stale files (deleted or now excluded),
+   * then indexes new/modified files.
+   *
    * @param options - Indexing options
    * @returns Number of files successfully indexed
    */
@@ -125,6 +128,17 @@ export class MiyoIndexManager {
       if (!isAvailable) {
         new Notice("Miyo service is not available. Please check your connection settings.");
         return 0;
+      }
+
+      // Run garbage collection first to clean up stale files
+      // This handles: deleted files, files now excluded by patterns
+      try {
+        const removedCount = await this.garbageCollect();
+        if (removedCount > 0) {
+          logInfo(`MiyoIndexManager: Garbage collection removed ${removedCount} stale files`);
+        }
+      } catch (error) {
+        logWarn("MiyoIndexManager: Garbage collection failed, continuing with indexing", error);
       }
 
       // Get files to index
