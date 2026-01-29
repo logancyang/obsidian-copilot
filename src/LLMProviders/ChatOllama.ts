@@ -62,10 +62,25 @@ export class ChatOllama extends BaseChatOllama {
     const apiUrl = `${baseUrl}/api/chat`;
 
     // Convert LangChain messages to Ollama format
-    const ollamaMessages = messages.map((msg) => ({
-      role: msg._getType() === "human" ? "user" : msg._getType() === "ai" ? "assistant" : "system",
-      content: typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content),
-    }));
+    const ollamaMessages = messages.map((msg) => {
+      const type = msg._getType();
+      const content = typeof msg.content === "string" ? msg.content : JSON.stringify(msg.content);
+
+      // Handle tool messages for native tool calling
+      if (type === "tool") {
+        return {
+          role: "tool" as const,
+          content,
+          tool_name: (msg as any).name || "unknown",
+        };
+      }
+
+      // Handle standard message types
+      return {
+        role: type === "human" ? "user" : type === "ai" ? "assistant" : "system",
+        content,
+      };
+    });
 
     const requestBody = {
       model: this.model,

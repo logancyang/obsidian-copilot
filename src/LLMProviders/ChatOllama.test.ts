@@ -6,7 +6,7 @@
  */
 
 import { ChatOllama } from "./ChatOllama";
-import { HumanMessage } from "@langchain/core/messages";
+import { HumanMessage, ToolMessage } from "@langchain/core/messages";
 
 // Mock fetch globally
 global.fetch = jest.fn();
@@ -315,6 +315,103 @@ describe("ChatOllama", () => {
 
       // Verify fetch was called with /api/chat (not /v1/api/chat)
       expect(mockFetch).toHaveBeenCalledWith("http://localhost:11434/api/chat", expect.any(Object));
+    });
+  });
+
+  describe("Tool message handling", () => {
+    it("should properly map tool messages for native tool calling", async () => {
+      const messages = [
+        new HumanMessage("What's the weather?"),
+        new ToolMessage({
+          content: "Temperature: 72°F",
+          tool_call_id: "call_123",
+          name: "get_weather",
+        }),
+      ];
+
+      const chatOllama = new ChatOllama({
+        model: "llama3.2",
+        baseUrl: "http://localhost:11434",
+      });
+
+      let requestBody: any;
+      mockFetch.mockImplementationOnce((url, options) => {
+        requestBody = JSON.parse(options?.body as string);
+        return Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: () => Promise.resolve({ done: true, value: undefined }),
+            }),
+          },
+        } as any);
+      });
+
+      const stream = chatOllama._streamResponseChunks(messages, {});
+      await stream.next();
+
+      expect(requestBody.messages).toHaveLength(2);
+      expect(requestBody.messages[0]).toEqual({
+        role: "user",
+        content: "What's the weather?",
+      });
+      expect(requestBody.messages[1]).toEqual({
+        role: "tool",
+        content: "Temperature: 72°F",
+        tool_name: "get_weather",
+      });
+    });
+
+    it("should handle mixed message types including tools", async () => {
+      const messages = [
+        new HumanMessage("Execute function"),
+        new ToolMessage({
+          content: "Result from tool A",
+          tool_call_id: "call_1",
+          name: "tool_a",
+        }),
+        new ToolMessage({
+          content: "Result from tool B",
+          tool_call_id: "call_2",
+          name: "tool_b",
+        }),
+        new HumanMessage("What are the results?"),
+      ];
+
+      const chatOllama = new ChatOllama({
+        model: "llama3.2",
+        baseUrl: "http://localhost:11434",
+      });
+
+      let requestBody: any;
+      mockFetch.mockImplementationOnce((url, options) => {
+        requestBody = JSON.parse(options?.body as string);
+        return Promise.resolve({
+          ok: true,
+          body: {
+            getReader: () => ({
+              read: () => Promise.resolve({ done: true, value: undefined }),
+            }),
+          },
+        } as any);
+      });
+
+      const stream = chatOllama._streamResponseChunks(messages, {});
+      await stream.next();
+
+      expect(requestBody.messages).toHaveLength(4);
+      expect(requestBody.messages[0].role).toBe("user");
+      expect(requestBody.messages[1]).toEqual({
+        role: "tool",
+        content: "Result from tool A",
+        tool_name: "tool_a",
+      });
+      expect(requestBody.messages[2]).toEqual({
+        role: "tool",
+        content: "Result from tool B",
+        tool_name: "tool_b",
+      });
+      expect(requestBody.messages[3].role).toBe("user");
     });
   });
 });
