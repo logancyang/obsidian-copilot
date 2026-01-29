@@ -147,10 +147,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   const uniqueUrls = React.useMemo(() => Array.from(new Set(contextUrls)), [contextUrls]);
 
   // Defensive dedupe for web tabs (by URL) using shared normalization policy
-  const uniqueWebTabs = React.useMemo(
-    () => mergeWebTabContexts(contextWebTabs),
-    [contextWebTabs]
-  );
+  const uniqueWebTabs = React.useMemo(() => mergeWebTabContexts(contextWebTabs), [contextWebTabs]);
 
   // Any selection hides both active note and active web tab
   const hasAnySelection = selectedTextContexts.length > 0;

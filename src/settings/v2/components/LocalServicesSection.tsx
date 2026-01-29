@@ -36,10 +36,7 @@ function normalizeBaseUrl(url: string): string {
 }
 
 /** Fetch models from a local service */
-async function fetchModelsFromService(
-  url: string,
-  kind: LocalServiceKind
-): Promise<LocalModel[]> {
+async function fetchModelsFromService(url: string, kind: LocalServiceKind): Promise<LocalModel[]> {
   const normalizedUrl = normalizeBaseUrl(url);
 
   if (kind === ChatModelProviders.OLLAMA) {
@@ -139,7 +136,10 @@ function LocalServiceItem({ service, expanded, onToggleExpand }: LocalServiceIte
         }
       } else {
         if (verificationFailed) {
-          new Notice(`Model ${model.name} already exists (verification failed: ${verificationError})`, 5000);
+          new Notice(
+            `Model ${model.name} already exists (verification failed: ${verificationError})`,
+            5000
+          );
         } else {
           new Notice(`Model ${model.name} already exists.`);
         }
@@ -188,10 +188,7 @@ function LocalServiceItem({ service, expanded, onToggleExpand }: LocalServiceIte
 
       <Collapsible open={expanded} className="tw-mt-2">
         <CollapsibleContent className="tw-rounded-md tw-p-3">
-          <FormField
-            label="Model"
-            description="Add the currently selected model to model List."
-          >
+          <FormField label="Model" description="Add the currently selected model to model List.">
             <div>
               <div className="tw-flex tw-items-center tw-gap-2">
                 <div className="tw-flex-1">
@@ -217,11 +214,7 @@ function LocalServiceItem({ service, expanded, onToggleExpand }: LocalServiceIte
                     size="sm"
                     className="tw-w-full tw-whitespace-nowrap"
                   >
-                    {verifying ? (
-                      <Loader2 className="tw-size-4 tw-animate-spin" />
-                    ) : (
-                      "Add"
-                    )}
+                    {verifying ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Add"}
                   </Button>
                 </div>
               </div>
@@ -246,8 +239,18 @@ export function LocalServicesSection() {
 
   // Fixed local providers
   const localProviders: LocalService[] = [
-    { id: "ollama", name: "Ollama", url: "http://localhost:11434", kind: ChatModelProviders.OLLAMA },
-    { id: "lm-studio", name: "LM Studio", url: "http://localhost:1234", kind: ChatModelProviders.LM_STUDIO },
+    {
+      id: "ollama",
+      name: "Ollama",
+      url: "http://localhost:11434",
+      kind: ChatModelProviders.OLLAMA,
+    },
+    {
+      id: "lm-studio",
+      name: "LM Studio",
+      url: "http://localhost:1234",
+      kind: ChatModelProviders.LM_STUDIO,
+    },
   ];
 
   return (
@@ -284,4 +287,3 @@ export function LocalServicesSection() {
     </div>
   );
 }
-

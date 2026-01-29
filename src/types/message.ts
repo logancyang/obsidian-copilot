@@ -56,9 +56,7 @@ export function isNoteSelectedTextContext(
 /**
  * Type guard for web selected text context
  */
-export function isWebSelectedTextContext(
-  ctx: SelectedTextContext
-): ctx is WebSelectedTextContext {
+export function isWebSelectedTextContext(ctx: SelectedTextContext): ctx is WebSelectedTextContext {
   return ctx.sourceType === "web";
 }
 

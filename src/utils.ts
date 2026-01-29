@@ -158,10 +158,7 @@ export interface StripFrontmatterOptions {
  * @param options - Options controlling how leading whitespace is handled.
  * @returns The content without the frontmatter block.
  */
-export function stripFrontmatter(
-  content: string,
-  options: StripFrontmatterOptions = {}
-): string {
+export function stripFrontmatter(content: string, options: StripFrontmatterOptions = {}): string {
   const { trimStart = true } = options;
 
   if (content.startsWith("---")) {
