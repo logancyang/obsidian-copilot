@@ -31,12 +31,12 @@ import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatMistralAI } from "@langchain/mistralai";
-import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
+import { ChatOllama } from "./ChatOllama";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 

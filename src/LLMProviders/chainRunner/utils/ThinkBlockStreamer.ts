@@ -141,6 +141,35 @@ export class ThinkBlockStreamer {
   }
 
   /**
+   * Handle Ollama thinking content
+   * Ollama exposes reasoning via message.thinking field
+   */
+  private handleOllamaChunk(chunk: any) {
+    // Handle Ollama thinking content
+    if (chunk.message?.thinking) {
+      // Skip thinking content if excludeThinking is enabled
+      if (this.excludeThinking) {
+        return true;
+      }
+      if (!this.hasOpenThinkBlock) {
+        this.fullResponse += "\n<think>";
+        this.hasOpenThinkBlock = true;
+      }
+      if (chunk.message.thinking !== undefined) {
+        this.fullResponse += chunk.message.thinking;
+      }
+      return true; // Indicate we handled a thinking chunk
+    }
+
+    // Handle standard Ollama content
+    if (chunk.message?.content && typeof chunk.message.content === "string") {
+      this.fullResponse += chunk.message.content;
+    }
+
+    return false; // No thinking chunk handled
+  }
+
+  /**
    * Accumulate native tool call chunks during streaming.
    * LangChain providers send tool_call_chunks with incremental data.
    */
@@ -189,7 +218,8 @@ export class ThinkBlockStreamer {
       (chunk.additional_kwargs?.reasoning_details &&
         Array.isArray(chunk.additional_kwargs.reasoning_details) &&
         chunk.additional_kwargs.reasoning_details.length > 0) ||
-      chunk.additional_kwargs?.reasoning_content; // Deepseek format
+      chunk.additional_kwargs?.reasoning_content || // Deepseek format
+      chunk.message?.thinking; // Ollama format
 
     // Close think block BEFORE processing non-thinking content
     if (this.hasOpenThinkBlock && !isThinkingChunk) {
@@ -205,6 +235,9 @@ export class ThinkBlockStreamer {
     } else if (chunk.additional_kwargs?.reasoning_content) {
       // Deepseek format with reasoning_content
       this.handleDeepseekChunk(chunk);
+    } else if (chunk.message !== undefined) {
+      // Ollama format with message.thinking or message.content
+      this.handleOllamaChunk(chunk);
     } else if (isThinkingChunk) {
       // OpenRouter format with delta.reasoning or reasoning_details
       this.handleOpenRouterChunk(chunk);

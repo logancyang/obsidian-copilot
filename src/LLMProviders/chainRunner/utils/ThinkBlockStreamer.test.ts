@@ -313,6 +313,140 @@ describe("ThinkBlockStreamer", () => {
     });
   });
 
+  describe("Ollama thinking content", () => {
+    it("should handle Ollama thinking chunks", () => {
+      let capturedMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        capturedMessage = msg;
+      });
+
+      // Simulate Ollama thinking chunks
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "",
+          thinking: "Let me think about this. ",
+        },
+        done: false,
+      });
+
+      expect(capturedMessage).toBe("\n<think>Let me think about this. ");
+
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "",
+          thinking: "The answer is 42.",
+        },
+        done: false,
+      });
+
+      expect(capturedMessage).toBe("\n<think>Let me think about this. The answer is 42.");
+
+      // Simulate content chunk (thinking ends)
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "42",
+          thinking: null,
+        },
+        done: false,
+      });
+
+      const result = streamer.close();
+      expect(result.content).toContain("<think>");
+      expect(result.content).toContain("Let me think about this. The answer is 42.");
+      expect(result.content).toContain("</think>");
+      expect(result.content).toContain("42");
+    });
+
+    it("should skip Ollama thinking content when excludeThinking is true", () => {
+      const streamer = new ThinkBlockStreamer(() => {}, true); // excludeThinking = true
+
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "",
+          thinking: "Internal reasoning here",
+        },
+        done: false,
+      });
+
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "Final answer",
+          thinking: null,
+        },
+        done: false,
+      });
+
+      const result = streamer.close();
+      expect(result.content).not.toContain("<think>");
+      expect(result.content).not.toContain("Internal reasoning");
+      expect(result.content).toBe("Final answer");
+    });
+
+    it("should handle mixed Ollama thinking and content", () => {
+      const streamer = new ThinkBlockStreamer((msg) => {});
+
+      // Thinking phase
+      streamer.processChunk({
+        message: { role: "assistant", content: "", thinking: "Step 1: " },
+      });
+      streamer.processChunk({
+        message: { role: "assistant", content: "", thinking: "analyze the problem." },
+      });
+
+      // Transition to content
+      streamer.processChunk({
+        message: { role: "assistant", content: "The ", thinking: null },
+      });
+      streamer.processChunk({
+        message: { role: "assistant", content: "solution is X.", thinking: null },
+      });
+
+      const result = streamer.close();
+      expect(result.content).toMatch(
+        /<think>Step 1: analyze the problem\.<\/think>The solution is X\./
+      );
+    });
+
+    it("should not create empty think tags for empty thinking strings", () => {
+      let capturedMessage = "";
+      const streamer = new ThinkBlockStreamer((msg) => {
+        capturedMessage = msg;
+      });
+
+      // Empty thinking should be ignored
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "",
+          thinking: "",
+        },
+        done: false,
+      });
+
+      expect(capturedMessage).toBe("");
+      expect(capturedMessage).not.toContain("<think>");
+
+      // Regular content should work normally
+      streamer.processChunk({
+        message: {
+          role: "assistant",
+          content: "Answer",
+          thinking: null,
+        },
+        done: false,
+      });
+
+      const result = streamer.close();
+      expect(result.content).toBe("Answer");
+      expect(result.content).not.toContain("<think>");
+    });
+  });
+
   describe("close() method", () => {
     it("should close any open think block at the end", () => {
       let currentMessage = "";
