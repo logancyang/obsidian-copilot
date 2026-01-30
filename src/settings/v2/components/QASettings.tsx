@@ -1,14 +1,15 @@
-import { PatternMatchingModal } from "@/components/modals/PatternMatchingModal";
+import React from "react";
+
+import { Notice } from "obsidian";
+
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
-import { Button } from "@/components/ui/button";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { Notice } from "obsidian";
-import React from "react";
+import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -258,55 +259,24 @@ export const QASettings: React.FC = () => {
           <SettingItem
             type="custom"
             title="Exclusions"
-            description={
-              <>
-                <p>
-                  Exclude folders, tags, note titles or file extensions from being indexed.
-                  Previously indexed files will remain until a force re-index is performed.
-                </p>
-              </>
-            }
+            description="Exclude folders, tags, note titles or file extensions from being indexed. Previously indexed files will remain until a force re-index is performed."
           >
-            <Button
-              variant="secondary"
-              onClick={() =>
-                new PatternMatchingModal(
-                  app,
-                  (value) => updateSetting("qaExclusions", value),
-                  settings.qaExclusions,
-                  "Manage Exclusions"
-                ).open()
-              }
-            >
-              Manage
-            </Button>
+            <PatternListEditor
+              value={settings.qaExclusions}
+              onChange={(value) => updateSetting("qaExclusions", value)}
+            />
           </SettingItem>
 
           {/* Inclusions */}
           <SettingItem
             type="custom"
             title="Inclusions"
-            description={
-              <p>
-                Index only the specified paths, tags, or note titles. Exclusions take precedence
-                over inclusions. Previously indexed files will remain until a force re-index is
-                performed.
-              </p>
-            }
+            description="Index only the specified paths, tags, or note titles. Exclusions take precedence over inclusions. Previously indexed files will remain until a force re-index is performed."
           >
-            <Button
-              variant="secondary"
-              onClick={() =>
-                new PatternMatchingModal(
-                  app,
-                  (value) => updateSetting("qaInclusions", value),
-                  settings.qaInclusions,
-                  "Manage Inclusions"
-                ).open()
-              }
-            >
-              Manage
-            </Button>
+            <PatternListEditor
+              value={settings.qaInclusions}
+              onChange={(value) => updateSetting("qaInclusions", value)}
+            />
           </SettingItem>
 
           {/* Enable Obsidian Sync */}

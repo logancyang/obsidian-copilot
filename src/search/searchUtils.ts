@@ -63,7 +63,15 @@ export function getDecodedPatterns(value: string): string[] {
   patterns.push(
     ...value
       .split(",")
-      .map((item) => decodeURIComponent(item.trim()))
+      .map((item) => {
+        const trimmed = item.trim();
+        try {
+          return decodeURIComponent(trimmed);
+        } catch {
+          // Return original value if decodeURIComponent fails (e.g., invalid % sequence)
+          return trimmed;
+        }
+      })
       .filter((item) => item.length > 0)
   );
 
@@ -363,6 +371,11 @@ export function getFilePattern(file: TFile): string {
   return `[[${file.basename}]]`;
 }
 
+/**
+ * Generate extension pattern from user input.
+ * Note: User input is used as-is. If user inputs ".md", the result will be "*..md".
+ * This is intentional - user is responsible for correct input format (e.g., "md" not ".md").
+ */
 export function getExtensionPattern(extension: string): string {
   return `*.${extension}`;
 }
