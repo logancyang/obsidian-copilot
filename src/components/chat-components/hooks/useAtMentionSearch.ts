@@ -149,9 +149,7 @@ export function useAtMentionSearch(
           });
         }
 
-        return activeOptions.length > 0
-          ? [...activeOptions, ...categoryOptions]
-          : categoryOptions;
+        return activeOptions.length > 0 ? [...activeOptions, ...categoryOptions] : categoryOptions;
       }
 
       // Search across all categories when query exists

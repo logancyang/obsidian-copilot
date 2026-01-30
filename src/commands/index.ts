@@ -8,10 +8,15 @@ import {
 } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
-import { EMPTY_COMMAND, QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
+import { EMPTY_COMMAND } from "@/commands/constants";
 import { CustomCommandManager } from "@/commands/customCommandManager";
-import { removeQuickCommandBlocks } from "@/commands/customCommandUtils";
 import { getCachedCustomCommands } from "@/commands/state";
+import { CustomCommand } from "@/commands/type";
+import {
+  QUICK_COMMAND_SYSTEM_PROMPT,
+  appendIncludeNoteContextPlaceholders,
+} from "@/commands/quickCommandPrompts";
+import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
 import { checkIsPlusUser } from "@/plusUtils";
@@ -107,6 +112,8 @@ export function registerCommands(
     plugin.newChat();
   });
 
+  // Quick Command - opens a modal dialog for quick interactions
+  // Note: For inline floating panel experience, use Quick Ask instead
   addCheckCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_COMMAND, (checking: boolean) => {
     const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
 
@@ -135,15 +142,33 @@ export function registerCommands(
       return false;
     }
 
-    removeQuickCommandBlocks(editor);
+    // Directly open the Modal
+    const quickCommand: CustomCommand = {
+      title: "Quick Command",
+      content: "", // Empty content, wait for user input
+      showInContextMenu: false,
+      showInSlashMenu: false,
+      order: 0,
+      modelKey: "", // Empty = inherit from quickCommandModelKey
+      lastUsedMs: Date.now(),
+    };
 
-    // Get the current cursor/selection position (after potential content update)
-    const cursor = editor.getCursor("from");
-    const line = cursor.line;
-
-    // Insert the quick command code block above the selected text
-    const codeBlock = `\`\`\`${QUICK_COMMAND_CODE_BLOCK}\n\`\`\`\n`;
-    editor.replaceRange(codeBlock, { line, ch: 0 });
+    const modal = new CustomCommandChatModal(plugin.app, {
+      selectedText,
+      command: quickCommand,
+      systemPrompt: QUICK_COMMAND_SYSTEM_PROMPT,
+      behaviorConfig: {
+        autoExecuteOnOpen: false,
+        hideContentAreaOnIdle: true,
+        commandLabel: "Quick Command",
+        commandIcon: null, // No icon for Quick Command
+        showIncludeNoteContext: true, // Show the Note checkbox
+        modelSelectionScope: "quick-command", // Persist model changes to quickCommandModelKey
+        firstSubmitTransform: (input, includeNoteContext) =>
+          appendIncludeNoteContextPlaceholders(input, includeNoteContext),
+      },
+    });
+    modal.open();
 
     return true;
   });
@@ -546,5 +571,38 @@ export function registerCommands(
 
     const modal = new YoutubeTranscriptModal(plugin.app);
     modal.open();
+  });
+
+  // Add Quick Ask command (recommended shortcut: cmd/ctrl+K)
+  // Quick Ask is the floating panel that appears near the selection in the editor
+  addCheckCommand(plugin, COMMAND_IDS.TRIGGER_QUICK_ASK, (checking: boolean) => {
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+
+    if (checking) {
+      // Return true only if we're not in source mode and have an active editor
+      return !!(!isSourceModeOn() && activeView && activeView.editor);
+    }
+
+    // Need to check this again because it can still be triggered via shortcut
+    if (isSourceModeOn()) {
+      new Notice("Quick Ask is not available in source mode.");
+      return false;
+    }
+
+    if (!activeView || !activeView.editor) {
+      new Notice("No active editor found.");
+      return false;
+    }
+
+    // Get the CM6 EditorView from the Obsidian editor
+    const view = activeView.editor.cm;
+    if (!view) {
+      new Notice("Could not access CodeMirror editor.");
+      return false;
+    }
+
+    // Show the Quick Ask panel (pass activeView for leaf binding)
+    plugin.quickAskController.show(activeView, view);
+    return true;
   });
 }

@@ -9,7 +9,7 @@ import {
   SettingKeyProviders,
   USER_SENDER,
 } from "@/constants";
-import { logInfo } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { CopilotSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -952,6 +952,11 @@ export function cleanMessageForCopy(message: string): string {
   return cleanedMessage;
 }
 
+/**
+ * Inserts a message into the active markdown editor, optionally replacing the current selection.
+ * Uses a single CM6 transaction to avoid undo stack splitting.
+ * Ensures the inserted/replaced range is selected after the operation.
+ */
 export async function insertIntoEditor(message: string, replace: boolean = false) {
   let leaf = app.workspace.getMostRecentLeaf();
   if (!leaf) {
@@ -975,13 +980,65 @@ export async function insertIntoEditor(message: string, replace: boolean = false
 
   // Clean the message before inserting (removes think tags, writeToFile blocks, tool calls)
   const cleanedMessage = cleanMessageForCopy(message);
+  const cleanedLines = cleanedMessage.split("\n");
 
-  if (replace) {
-    editor.replaceRange(cleanedMessage, cursorFrom, cursorTo);
-  } else {
-    editor.replaceRange(cleanedMessage, cursorTo);
+  /** Computes the end editor position after inserting text at start position */
+  const getEndPosition = (
+    start: { line: number; ch: number },
+    textLines: string[]
+  ): { line: number; ch: number } => {
+    const lineDelta = textLines.length - 1;
+    if (lineDelta === 0) {
+      return { line: start.line, ch: start.ch + (textLines[0]?.length ?? 0) };
+    }
+    return { line: start.line + lineDelta, ch: textLines[textLines.length - 1]?.length ?? 0 };
+  };
+
+  /** Inserts via Obsidian Editor API (fallback when CM6 unavailable or dispatch fails) */
+  const insertWithEditorAPI = (): void => {
+    const changeFrom = replace ? cursorFrom : cursorTo;
+    editor.replaceRange(cleanedMessage, changeFrom, cursorTo);
+    editor.setSelection(changeFrom, getEndPosition(changeFrom, cleanedLines));
+  };
+
+  /** Focuses the editor and shows success notice */
+  const finalizeInsertion = (): void => {
+    editor.focus();
+    new Notice("Message inserted into the active note.");
+  };
+
+  // Check if CM6 EditorView is available and valid
+  const view = editor.cm;
+  const isCM6View = view?.state?.doc && typeof view.dispatch === "function";
+
+  if (!isCM6View) {
+    insertWithEditorAPI();
+    finalizeInsertion();
+    return;
   }
-  new Notice("Message inserted into the active note.");
+
+  // Use CM6 selection offsets directly (simpler than manual line/ch conversion)
+  const { from, to } = view.state.selection.main;
+  const changeFrom = replace ? from : to;
+
+  // Use CM6's toText to handle CRLF normalization correctly
+  // (CM6 treats \r\n as single newline, so string.length would be wrong)
+  const insertText = view.state.toText(cleanedMessage);
+  const endOffset = changeFrom + insertText.length;
+
+  try {
+    // Single transaction: text change + selection change
+    view.dispatch({
+      changes: { from: changeFrom, to, insert: insertText },
+      selection: { anchor: changeFrom, head: endOffset },
+    });
+  } catch (e) {
+    // Fallback to Obsidian API if CM6 dispatch fails
+    logWarn("CM6 dispatch failed, falling back to Obsidian API", e);
+    insertWithEditorAPI();
+  }
+
+  finalizeInsertion();
 }
 
 export function debounce<T extends (...args: any[]) => void>(

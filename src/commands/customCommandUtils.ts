@@ -213,18 +213,25 @@ export async function processCommandPrompt(
   // Also, selected text is required for custom commands. If neither `{}` nor
   // `{copilot-selection}` is found, append the selected text to the prompt.
   const index = processedPrompt.indexOf(LEGACY_SELECTED_TEXT_PLACEHOLDER);
-  if (index === -1 && selectedText.trim()) {
-    return (
-      processedPrompt +
-      "\n\n<" +
-      SELECTED_TEXT_TAG +
-      ">" +
-      selectedText +
-      "</" +
-      SELECTED_TEXT_TAG +
-      ">"
-    );
+  if (index === -1) {
+    // No legacy placeholder found
+    if (selectedText.trim()) {
+      // Append selected text if present
+      return (
+        processedPrompt +
+        "\n\n<" +
+        SELECTED_TEXT_TAG +
+        ">" +
+        selectedText +
+        "</" +
+        SELECTED_TEXT_TAG +
+        ">"
+      );
+    }
+    // No placeholder and no selected text - return as is
+    return processedPrompt;
   }
+  // Replace legacy placeholder with selected text
   return (
     processedPrompt.slice(0, index) +
     selectedText +

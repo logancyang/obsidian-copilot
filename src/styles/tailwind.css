@@ -1129,3 +1129,92 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
     opacity: 1;
   }
 }
+
+/* Quick Ask Overlay Styles */
+.copilot-quick-ask-overlay-host {
+  position: relative;
+}
+
+/* Override Obsidian's default contenteditable border */
+.copilot-quick-ask-overlay [contenteditable] {
+  border: none !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.copilot-quick-ask-overlay-root {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: var(--layer-popover);
+}
+
+.copilot-quick-ask-overlay {
+  position: absolute;
+  pointer-events: auto;
+  z-index: var(--layer-popover);
+  animation: copilot-quick-ask-fade-in 0.2s ease-out;
+}
+
+.copilot-quick-ask-overlay.closing {
+  animation: copilot-quick-ask-fade-out 0.2s ease-in forwards;
+}
+
+@keyframes copilot-quick-ask-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes copilot-quick-ask-fade-out {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* Quick Ask Resize Indicators */
+.quick-ask-resize-indicator-right::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.quick-ask-resize-indicator-left::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: -1px;
+  width: 8px;
+  height: 8px;
+  border-left: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  border-bottom: 2px solid color-mix(in srgb, var(--text-muted) 35%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  pointer-events: none;
+}
+
+.tw-group:hover .quick-ask-resize-indicator-right::after,
+.tw-group:hover .quick-ask-resize-indicator-left::after {
+  opacity: 1;
+}

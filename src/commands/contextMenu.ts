@@ -1,30 +1,58 @@
 import { getCommandId, sortCommandsByOrder } from "@/commands/customCommandUtils";
 import { getCachedCustomCommands } from "@/commands/state";
 import { COMMAND_IDS } from "@/constants";
-import { Menu } from "obsidian";
-import { CustomCommand } from "./type";
+import type { App, Menu } from "obsidian";
+import type { CustomCommand } from "./type";
 
-export function registerContextMenu(menu: Menu) {
+interface CommandManager {
+  executeCommandById: (commandId: string) => boolean;
+}
+
+interface AppWithCommands extends App {
+  commands: CommandManager;
+}
+
+/**
+ * Type guard for the command manager surface used by Copilot.
+ */
+function hasCommandManager(app: App): app is AppWithCommands {
+  return typeof (app as Partial<AppWithCommands>).commands?.executeCommandById === "function";
+}
+
+/**
+ * Registers the Copilot submenu entries in Obsidian's editor context menu.
+ */
+export function registerContextMenu(menu: Menu, obsidianApp: App): void {
+  if (!hasCommandManager(obsidianApp)) return;
+
+  const execute = (commandId: string): void => {
+    obsidianApp.commands.executeCommandById(commandId);
+  };
+
   // Create the main "Copilot" submenu
   menu.addItem((item) => {
     item.setTitle("Copilot");
-    (item as any).setSubmenu();
+    item.setSubmenu();
 
-    const submenu = (item as any).submenu;
+    const submenu = item.submenu;
     if (!submenu) return;
 
     // Add the main selection command
-    submenu.addItem((subItem: any) => {
+    submenu.addItem((subItem) => {
       subItem.setTitle("Add selection to chat context").onClick(() => {
-        (app as any).commands.executeCommandById(
-          `copilot:${COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT}`
-        );
+        execute(`copilot:${COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT}`);
       });
     });
 
-    submenu.addItem((subItem: any) => {
+    submenu.addItem((subItem) => {
+      subItem.setTitle("Quick Ask").onClick(() => {
+        execute(`copilot:${COMMAND_IDS.TRIGGER_QUICK_ASK}`);
+      });
+    });
+
+    submenu.addItem((subItem) => {
       subItem.setTitle("Trigger quick command").onClick(() => {
-        (app as any).commands.executeCommandById(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);
+        execute(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);
       });
     });
 
@@ -41,9 +69,9 @@ export function registerContextMenu(menu: Menu) {
 
     // Add custom commands to submenu
     sortCommandsByOrder(visibleCustomCommands).forEach((command: CustomCommand) => {
-      submenu.addItem((subItem: any) => {
+      submenu.addItem((subItem) => {
         subItem.setTitle(command.title).onClick(() => {
-          (app as any).commands.executeCommandById(`copilot:${getCommandId(command.title)}`);
+          execute(`copilot:${getCommandId(command.title)}`);
         });
       });
     });

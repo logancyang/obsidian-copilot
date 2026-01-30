@@ -748,6 +748,7 @@ export const COMMAND_IDS = {
   OPEN_LOG_FILE: "open-log-file",
   CLEAR_LOG_FILE: "clear-log-file",
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
+  TRIGGER_QUICK_ASK: "trigger-quick-ask",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -776,6 +777,7 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.OPEN_LOG_FILE]: "Create log file",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
+  [COMMAND_IDS.TRIGGER_QUICK_ASK]: "Quick Ask",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
