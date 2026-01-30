@@ -1129,3 +1129,8 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
     opacity: 1;
   }
 }
+
+/* Gradient fade mask for truncated content */
+.copilot-fade-mask-bottom {
+  background: linear-gradient(to top, var(--background-primary), transparent);
+}
