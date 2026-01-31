@@ -94,6 +94,7 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
 
       switch (event.key) {
         case "ArrowDown": {
+          if (options.length === 0) return false;
           event.preventDefault();
           let nextIndex = state.selectedIndex + 1;
           // Skip disabled options
@@ -109,6 +110,7 @@ export function useTypeaheadPlugin<T extends TypeaheadOption>({
         }
 
         case "ArrowUp": {
+          if (options.length === 0) return false;
           event.preventDefault();
           let prevIndex = state.selectedIndex - 1;
           // Skip disabled options
