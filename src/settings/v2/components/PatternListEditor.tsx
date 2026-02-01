@@ -26,7 +26,7 @@ import {
   getTagPattern,
 } from "@/search/searchUtils";
 
-// 类型配置（与 context-manage-modal 保持一致）
+// Pattern type configuration (consistent with context-manage-modal)
 const PATTERN_TYPE_CONFIG = {
   folder: { icon: Folder, label: "Folder", colorClass: "tw-text-context-manager-yellow" },
   tag: { icon: Tag, label: "Tag", colorClass: "tw-text-context-manager-orange" },
@@ -61,7 +61,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   // Helper to decode and deduplicate patterns
   const getUniquePatterns = (val: string) => [...new Set(getDecodedPatterns(val))];
 
-  // 解析并去重 patterns
+  // Parse and deduplicate patterns
   const patterns = useMemo(() => getUniquePatterns(value), [value]);
 
   const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = useMemo(
@@ -69,7 +69,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     [patterns]
   );
 
-  // 使用 ResizeObserver 检测溢出（响应容器尺寸变化）
+  // Use ResizeObserver to detect overflow (responds to container size changes)
   useLayoutEffect(() => {
     const el = contentRef.current;
     if (!el) return;
@@ -94,7 +94,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   const isTruncated = isOverflowing && !isExpanded;
   const animatedMaxHeight = isExpanded ? contentHeight : maxCollapsedHeight;
 
-  // 更新 patterns
+  // Update patterns
   const updatePatterns = (newCategories: {
     tagPatterns?: string[];
     extensionPatterns?: string[];
@@ -110,7 +110,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     onChange(newValue);
   };
 
-  // 删除处理
+  // Handle pattern removal
   const handleRemove = (pattern: string, type: PatternType) => {
     const filterFn = (p: string) => p !== pattern;
     switch (type) {
@@ -147,7 +147,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     }
   };
 
-  // 添加处理 - use valueRef to get latest value when modal callback executes
+  // Handle pattern addition - use valueRef to get latest value when modal callback executes
   const handleAddFolder = () => {
     new FolderSearchModal(app, (folder) => {
       addPatternIfNew("folderPatterns", folder);
@@ -209,7 +209,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     }).open();
   };
 
-  // 渲染单个 Badge（参考 context-manage-modal 样式）
+  // Render a single badge (styled like context-manage-modal)
   const renderBadge = (pattern: string, type: PatternType) => {
     const config = PATTERN_TYPE_CONFIG[type];
     const Icon = config.icon;
@@ -235,7 +235,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
     );
   };
 
-  // 准备 Badge 数据
+  // Prepare badge data
   const allBadges = useMemo(() => {
     const badges: { pattern: string; type: PatternType }[] = [];
     folderPatterns.forEach((p) => badges.push({ pattern: p, type: "folder" }));
@@ -249,21 +249,21 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
 
   return (
     <div ref={containerRef} className="tw-flex tw-w-full tw-flex-col tw-gap-2">
-      {/* 内容容器 */}
+      {/* Content container */}
       <div className="tw-relative tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2">
         <div
           ref={contentRef}
           className="tw-overflow-hidden tw-transition-[max-height] tw-duration-300 tw-ease-in-out"
           style={{ maxHeight: isOverflowing ? animatedMaxHeight : undefined }}
         >
-          {/* 空状态 */}
+          {/* Empty state */}
           {!hasPatterns && (
             <div className="tw-py-2 tw-text-center tw-text-sm tw-italic tw-text-muted">
               No patterns configured
             </div>
           )}
 
-          {/* Badge 列表 - 始终渲染全部，用 CSS 截断 */}
+          {/* Badge list - always render all, CSS handles truncation */}
           {hasPatterns && (
             <div className="tw-flex tw-flex-wrap tw-gap-1.5">
               {allBadges.map((b) => renderBadge(b.pattern, b.type))}
@@ -271,15 +271,15 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
           )}
         </div>
 
-        {/* 渐变遮罩 */}
+        {/* Gradient fade mask */}
         {isTruncated && (
           <div className="copilot-fade-mask-bottom tw-pointer-events-none tw-absolute tw-inset-x-0 tw-bottom-0 tw-h-10 tw-rounded-b-md" />
         )}
       </div>
 
-      {/* 控制栏：始终一行，Show 左边，Add 右边 */}
+      {/* Control bar: single row, Show on left, Add on right */}
       <div className="tw-flex tw-flex-row tw-items-center tw-justify-between">
-        {/* 展开/折叠按钮（左边） */}
+        {/* Expand/collapse button (left side) */}
         {isOverflowing ? (
           <Button
             variant="ghost2"
@@ -298,10 +298,10 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
             )}
           </Button>
         ) : (
-          <div /> // 占位，保持 Add 在右边
+          <div /> // Spacer to keep Add button on the right
         )}
 
-        {/* 添加下拉菜单（右边，亮色按钮） */}
+        {/* Add dropdown menu (right side) */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button size="sm" className="tw-h-9 tw-gap-1 tw-px-3 sm:tw-h-auto sm:tw-px-2">
