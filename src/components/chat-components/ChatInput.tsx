@@ -63,6 +63,9 @@ interface ChatInputProps {
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
+  focusMessages?: () => void;
+  /** Whether Vim navigation is enabled (passed from parent to avoid redundant settings reads) */
+  vimNavigationEnabled?: boolean;
 
   // Edit mode props
   editMode?: boolean;
@@ -103,6 +106,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
+  focusMessages,
+  vimNavigationEnabled = false,
   editMode = false,
   onEditSave,
   onEditCancel,
@@ -788,6 +793,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
           isCopilotPlus={isCopilotPlus}
           currentActiveFile={currentActiveNote}
           currentChain={currentChain}
+          vimNavigationEnabled={vimNavigationEnabled}
+          focusMessages={focusMessages}
         />
       </div>
 

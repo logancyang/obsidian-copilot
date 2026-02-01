@@ -11,8 +11,10 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
+  DEFAULT_VIM_NAVIGATION,
   EmbeddingModelProviders,
   SEND_SHORTCUT,
+  type VimNavigationSettings,
 } from "@/constants";
 
 /**
@@ -180,6 +182,8 @@ export interface CopilotSettings {
   defaultSystemPromptTitle: string;
   /** Token threshold for auto-compacting large context (range: 64k-1M tokens, default: 128000) */
   autoCompactThreshold: number;
+  /** Vim-style keyboard navigation settings for the chat UI */
+  vimNavigation: VimNavigationSettings;
 }
 
 export const settingsStore = createStore();
@@ -519,6 +523,12 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       : DEFAULT_SETTINGS.userSystemPromptsFolder;
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
+
+  // Ensure vimNavigation has all required fields with defaults
+  sanitizedSettings.vimNavigation = {
+    ...DEFAULT_VIM_NAVIGATION,
+    ...(settingsToSanitize.vimNavigation ?? {}),
+  };
 
   return sanitizedSettings;
 }
