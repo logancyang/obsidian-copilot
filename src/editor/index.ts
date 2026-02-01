@@ -19,3 +19,10 @@ export {
   quickAskOverlayPlugin,
   createQuickAskExtension,
 } from "./quickAskExtension";
+
+// Chat selection highlight
+export {
+  ChatSelectionHighlightController,
+  hideChatSelectionHighlight,
+} from "./chatSelectionHighlightController";
+export type { ChatSelectionHighlightControllerOptions } from "./chatSelectionHighlightController";

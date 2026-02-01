@@ -42,7 +42,7 @@ import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
-import { QuickAskController, SelectionHighlight } from "@/editor";
+import { ChatSelectionHighlightController, hideChatSelectionHighlight, QuickAskController, SelectionHighlight } from "@/editor";
 import {
   Editor,
   MarkdownView,
@@ -78,6 +78,7 @@ export default class CopilotPlugin extends Plugin {
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
+  chatSelectionHighlightController: ChatSelectionHighlightController;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
   private lastSelectionSignature?: string;
@@ -133,6 +134,12 @@ export default class CopilotPlugin extends Plugin {
     this.quickAskController = new QuickAskController(this);
     this.registerEditorExtension(this.quickAskController.createExtension());
 
+    // Initialize Chat selection highlight controller
+    this.chatSelectionHighlightController = new ChatSelectionHighlightController(this, {
+      closeQuickAskOnChatFocus: false,
+    });
+    this.chatSelectionHighlightController.initialize();
+
     // Single source of truth for Active Web Tab ({activeWebTab}) state
     // Preserves activeWebTab when switching to Chat view
     // Only run on desktop - Web Viewer is not available on mobile
@@ -165,6 +172,9 @@ export default class CopilotPlugin extends Plugin {
 
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
+        // Delegate to chat selection highlight controller
+        this.chatSelectionHighlightController.handleActiveLeafChange(leaf ?? null);
+
         if (leaf && leaf.view instanceof MarkdownView) {
           const file = leaf.view.file;
           if (file) {
@@ -208,6 +218,9 @@ export default class CopilotPlugin extends Plugin {
     // This prevents "stuck" highlights after hot reload (dev environment)
     this.clearAllPersistentSelectionHighlights();
 
+    // Cleanup chat selection highlight controller
+    this.chatSelectionHighlightController?.cleanup();
+
     if (this.projectManager) {
       this.projectManager.onunload();
     }
@@ -249,7 +262,10 @@ export default class CopilotPlugin extends Plugin {
         const view = leaf.view;
         if (!(view instanceof MarkdownView)) continue;
         const cm = view.editor?.cm;
-        if (cm) SelectionHighlight.hide(cm);
+        if (cm) {
+          SelectionHighlight.hide(cm);
+          hideChatSelectionHighlight(cm);
+        }
       }
     } catch (error) {
       logWarn("Failed to clear persistent selection highlights:", error);
