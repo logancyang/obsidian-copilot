@@ -466,65 +466,123 @@ export class CustomCommandChatModal {
 
   /**
    * Calculate initial position based on cursor/selection in the editor.
-   * If the cursor position is not visible in the viewport, center the modal on screen.
+   * Handles: single-line, multi-line, line-start trap, flip when near bottom edge.
    */
   private getInitialPosition(activeView: MarkdownView | null): { x: number; y: number } {
     const win = this.resolveWindow(activeView);
     const panelWidth = Math.min(500, win.innerWidth * 0.9);
     const panelHeight = 440;
     const margin = 12;
+    const gap = 6;
 
-    // Fallback: center on screen with proper clamping for small windows
+    // Fallback: center on screen
     const fallback = {
       x: Math.max(margin, (win.innerWidth - panelWidth) / 2),
       y: Math.max(margin, (win.innerHeight - panelHeight) / 2),
     };
 
-    if (!activeView?.editor) {
+    if (!activeView?.editor?.cm) {
       return fallback;
     }
 
-    const editor = activeView.editor;
-    const view = editor.cm;
-
-    if (!view) {
-      return fallback;
-    }
-
-    // Try selection head first, then anchor - use whichever is visible
+    const view = activeView.editor.cm;
     const selection = view.state.selection.main;
-    const positionsToTry = [selection.head, selection.anchor];
-    const scrollRect = view.scrollDOM.getBoundingClientRect();
+    const isCursor = selection.empty;
 
-    for (const pos of positionsToTry) {
-      const coords = view.coordsAtPos(pos);
-      if (!coords) continue;
+    // Reason: Use `head` (where user's cursor is) instead of `to`, so that
+    // reverse selections still position the popup near the user's focus point.
+    let anchorPos = selection.head;
 
-      // Check if the position is within the visible scroll area
-      const isVisible =
-        coords.bottom >= scrollRect.top &&
-        coords.top <= scrollRect.bottom &&
-        coords.right >= scrollRect.left &&
-        coords.left <= scrollRect.right;
-
-      if (isVisible) {
-        const offsetY = 6;
-
-        let left = coords.left;
-        left = Math.min(left, win.innerWidth - margin - panelWidth);
-        left = Math.max(left, margin);
-
-        // Also clamp top to ensure modal stays within viewport
-        let top = coords.bottom + offsetY;
-        top = Math.min(top, win.innerHeight - panelHeight);
-        top = Math.max(top, margin);
-
-        return { x: left, y: top };
+    // Fix "line-start trap": when head lands on next line's start after selecting newline
+    // Reason: Only apply when head is at the END of selection (head === to), not when
+    // user reverse-selects TO a line start (head === from). This avoids jumping to
+    // previous line when user intentionally selects to line beginning.
+    if (!isCursor && anchorPos > 0 && anchorPos === selection.to) {
+      const lineAtHead = view.state.doc.lineAt(anchorPos);
+      if (anchorPos === lineAtHead.from) {
+        // Head is at line start and is the selection end, move back to previous line's end
+        anchorPos = anchorPos - 1;
       }
     }
 
-    // Neither head nor anchor is visible - center the modal
-    return fallback;
+    // Get coordinates for anchor position
+    const anchorCoords = view.coordsAtPos(anchorPos);
+    if (!anchorCoords) {
+      return fallback;
+    }
+
+    // Check visibility (both vertical and horizontal)
+    const scrollRect = view.scrollDOM.getBoundingClientRect();
+    const isVerticallyVisible =
+      anchorCoords.bottom >= scrollRect.top && anchorCoords.top <= scrollRect.bottom;
+    const isHorizontallyVisible =
+      anchorCoords.right >= scrollRect.left && anchorCoords.left <= scrollRect.right;
+
+    if (!isVerticallyVisible || !isHorizontallyVisible) {
+      return fallback;
+    }
+
+    // Calculate horizontal position
+    let centerX: number;
+    if (isCursor) {
+      // Cursor only: position near cursor (not centered, to avoid obscuring)
+      centerX = anchorCoords.left;
+    } else {
+      // Selection: check if single-line or multi-line
+      const lineAtFrom = view.state.doc.lineAt(selection.from);
+      const lineAtTo = view.state.doc.lineAt(selection.to);
+
+      if (lineAtFrom.number === lineAtTo.number) {
+        // Single-line: center between from and to
+        const fromCoords = view.coordsAtPos(selection.from);
+        const toCoords = view.coordsAtPos(selection.to);
+        if (fromCoords && toCoords) {
+          centerX = (fromCoords.left + toCoords.right) / 2;
+        } else {
+          centerX = anchorCoords.left;
+        }
+      } else {
+        // Multi-line: follow the anchor (head) position
+        centerX = anchorCoords.left;
+      }
+    }
+
+    // Calculate left position
+    // For cursor: align left edge near cursor; for selection: center the panel
+    let left: number;
+    if (isCursor) {
+      left = centerX;
+    } else {
+      left = centerX - panelWidth / 2;
+    }
+    left = Math.max(margin, Math.min(left, win.innerWidth - margin - panelWidth));
+
+    // Calculate vertical position with flip logic
+    const anchorBottom = anchorCoords.bottom;
+    const anchorTop = anchorCoords.top;
+    const spaceBelow = win.innerHeight - anchorBottom - gap;
+    const spaceAbove = anchorTop - gap;
+
+    let top: number;
+    if (spaceBelow >= panelHeight + margin) {
+      // Enough space below: place below anchor
+      top = anchorBottom + gap;
+    } else if (spaceAbove >= panelHeight + margin) {
+      // Not enough below but enough above: flip to above
+      top = anchorTop - gap - panelHeight;
+    } else {
+      // Neither side has enough space: prefer the side with more space
+      if (spaceBelow >= spaceAbove) {
+        top = anchorBottom + gap;
+      } else {
+        top = anchorTop - gap - panelHeight;
+      }
+    }
+
+    // Final clamp to ensure panel stays within viewport
+    top = Math.max(margin, Math.min(top, win.innerHeight - margin - panelHeight));
+
+    return { x: left, y: top };
   }
 
   open() {
