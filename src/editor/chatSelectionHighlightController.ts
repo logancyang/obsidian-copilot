@@ -2,127 +2,31 @@
  * ChatSelectionHighlightController
  *
  * Manages persistent selection highlight for the Chat panel.
- * Uses an independent CM6 StateField to avoid conflicts with SelectionHighlight
- * used by QuickAsk and CustomCommandModal.
+ * Uses an independent CM6 StateField (via `createPersistentHighlight`) to avoid
+ * conflicts with SelectionHighlight used by QuickAsk and CustomCommandModal.
  */
 
-import { StateEffect, StateField } from "@codemirror/state";
-import { Decoration, EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { MarkdownView, type WorkspaceLeaf } from "obsidian";
 
 import type CopilotPlugin from "@/main";
 import { CHAT_VIEWTYPE } from "@/constants";
 import type { SelectedTextContext } from "@/types/message";
 import { logError, logWarn } from "@/logger";
+import {
+  createPersistentHighlight,
+  type PersistentHighlightRange,
+} from "@/editor/persistentHighlight";
 
 // ============================================================================
-// Independent CM6 Highlight Mechanism (does not conflict with SelectionHighlight)
+// Independent CM6 Highlight Instance (isolated from SelectionHighlight)
 // ============================================================================
 
 /**
- * A highlight range in CM6 document offsets.
+ * Chat-owned persistent highlight primitives.
+ * Completely independent from the QuickAsk/CustomCommandModal highlight.
  */
-interface HighlightRange {
-  from: number;
-  to: number;
-}
-
-/**
- * Normalize and clamp a range to the current document.
- * Returns null when the range is empty or invalid after normalization.
- * @param docLength - The length of the document
- * @param from - The start offset
- * @param to - The end offset
- * @returns Normalized range or null if invalid
- */
-function normalizeRange(docLength: number, from: number, to: number): HighlightRange | null {
-  const clampedFrom = Math.max(0, Math.min(from, docLength));
-  const clampedTo = Math.max(0, Math.min(to, docLength));
-  if (clampedFrom === clampedTo) return null;
-  return {
-    from: Math.min(clampedFrom, clampedTo),
-    to: Math.max(clampedFrom, clampedTo),
-  };
-}
-
-/**
- * Effect used to set or clear the chat selection highlight.
- * - `null` means "hide".
- * - `{from,to}` means "show/update".
- */
-const setChatHighlightEffect = StateEffect.define<HighlightRange | null>();
-
-/**
- * Mark decoration used to render the chat selection highlight.
- */
-const chatHighlightMark = Decoration.mark({ class: "copilot-chat-selection-highlight" });
-
-/**
- * StateField that stores a single persistent highlight range for Chat.
- * - On doc changes: maps the range using `mapPos` and normalizes.
- * - On effects: updates/clears the range.
- * - Provides decorations via `EditorView.decorations`.
- */
-const chatHighlightField = StateField.define<HighlightRange | null>({
-  /**
-   * Initializes with no highlight.
-   */
-  create: () => null,
-
-  /**
-   * Updates highlight state:
-   * - Maps existing range through document changes
-   * - Applies set/clear effects
-   */
-  update(value, tr) {
-    let next = value;
-
-    // Map existing range through document changes
-    if (next && !tr.changes.empty) {
-      const mappedFrom = tr.changes.mapPos(next.from, 1);
-      const mappedTo = tr.changes.mapPos(next.to, -1);
-      next = normalizeRange(tr.state.doc.length, mappedFrom, mappedTo);
-    }
-
-    // Apply effects
-    for (const effect of tr.effects) {
-      if (effect.is(setChatHighlightEffect)) {
-        if (!effect.value) {
-          next = null;
-        } else {
-          next = normalizeRange(tr.state.doc.length, effect.value.from, effect.value.to);
-        }
-      }
-    }
-
-    return next;
-  },
-
-  /**
-   * Exposes mark decorations derived from the current range.
-   */
-  provide: (field) =>
-    EditorView.decorations.from(field, (range) =>
-      range
-        ? Decoration.set([chatHighlightMark.range(range.from, range.to)])
-        : Decoration.none
-    ),
-});
-
-/**
- * Minimal default theme for the chat selection highlight.
- */
-const chatHighlightTheme = EditorView.baseTheme({
-  ".copilot-chat-selection-highlight": {
-    backgroundColor: "var(--text-selection)",
-    borderRadius: "2px",
-  },
-});
-
-/**
- * Extension that enables chat selection highlight support.
- */
-const chatHighlightExtension = [chatHighlightField, chatHighlightTheme];
+const chatHighlight = createPersistentHighlight("copilot-chat-selection-highlight");
 
 /**
  * Hide chat selection highlight on a specific EditorView.
@@ -131,10 +35,12 @@ const chatHighlightExtension = [chatHighlightField, chatHighlightTheme];
  */
 export function hideChatSelectionHighlight(view: EditorView): void {
   try {
-    if (view.state.field(chatHighlightField, false) === undefined) return;
-    view.dispatch({ effects: [setChatHighlightEffect.of(null)] });
+    const effects = chatHighlight.buildEffects(view, null);
+    if (effects.length > 0) {
+      view.dispatch({ effects });
+    }
   } catch {
-    // Ignore errors during cleanup
+    // Ignore errors during cleanup (view may be destroyed)
   }
 }
 
@@ -320,13 +226,18 @@ export class ChatSelectionHighlightController {
       return;
     }
 
-    // Clear previous highlight on different view
+    // Clear previous highlight on different view and reset snapshot
+    // This ensures snapshot is always in sync: either null or pointing to current highlight
     if (this.snapshot && this.snapshot.view !== cm) {
       this.hideHighlight(this.snapshot.view);
+      this.snapshot = null; // Clear immediately to avoid stale reference
     }
 
-    this.showHighlight(cm, from, to);
-    this.snapshot = { view: cm, from, to };
+    // Only update snapshot if dispatch succeeds (avoids state desync on view destroyed)
+    const success = this.showHighlight(cm, from, to);
+    if (success) {
+      this.snapshot = { view: cm, from, to };
+    }
   }
 
   /**
@@ -360,7 +271,7 @@ export class ChatSelectionHighlightController {
   }
 
   // --------------------------------------------------------------------------
-  // Internal: CM6 Highlight Primitives
+  // Internal: CM6 Highlight Primitives (delegating to factory instance)
   // --------------------------------------------------------------------------
 
   /**
@@ -369,20 +280,20 @@ export class ChatSelectionHighlightController {
    * @param view - The EditorView to highlight
    * @param from - Start offset
    * @param to - End offset
+   * @returns true if effects were dispatched successfully, false otherwise
    */
-  private showHighlight(view: EditorView, from: number, to: number): void {
+  private showHighlight(view: EditorView, from: number, to: number): boolean {
     try {
-      const effects: StateEffect<unknown>[] = [];
-
-      // Install extension if needed
-      if (view.state.field(chatHighlightField, false) === undefined) {
-        effects.push(StateEffect.appendConfig.of(chatHighlightExtension));
+      const effects = chatHighlight.buildEffects(view, { from, to });
+      if (effects.length === 0) {
+        // No effects to dispatch (e.g., invalid range) — not a success
+        return false;
       }
-
-      effects.push(setChatHighlightEffect.of({ from, to }));
       view.dispatch({ effects });
+      return true;
     } catch (error) {
       logError("ChatSelectionHighlight show failed:", error);
+      return false;
     }
   }
 
@@ -394,8 +305,10 @@ export class ChatSelectionHighlightController {
    */
   private hideHighlight(view: EditorView): void {
     try {
-      if (view.state.field(chatHighlightField, false) === undefined) return;
-      view.dispatch({ effects: [setChatHighlightEffect.of(null)] });
+      const effects = chatHighlight.buildEffects(view, null);
+      if (effects.length > 0) {
+        view.dispatch({ effects });
+      }
     } catch (error) {
       // Use warn instead of error - failures here are often due to
       // view being destroyed, which is a normal race condition
@@ -408,7 +321,7 @@ export class ChatSelectionHighlightController {
    * @param view - The EditorView to query
    * @returns The current highlight range, or null if none
    */
-  private getHighlightRange(view: EditorView): HighlightRange | null {
-    return view.state.field(chatHighlightField, false) ?? null;
+  private getHighlightRange(view: EditorView): PersistentHighlightRange | null {
+    return chatHighlight.getRange(view);
   }
 }

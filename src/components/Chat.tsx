@@ -1,6 +1,7 @@
 import {
   clearSelectedTextContexts,
   getCurrentProject,
+  getSelectedTextContexts,
   ProjectConfig,
   removeSelectedTextContext,
   setCurrentProject,
@@ -579,20 +580,28 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleRemoveSelectedText = useCallback(
     (id: string) => {
-      const removed = selectedTextContexts.find((ctx) => ctx.id === id);
+      // Get fresh state to avoid stale closure issues (fixes race condition on rapid removals)
+      const currentContexts = getSelectedTextContexts();
+      const removed = currentContexts.find((ctx) => ctx.id === id);
       removeSelectedTextContext(id);
-
-      // Clear highlight if no note contexts remain
-      const nextContexts = selectedTextContexts.filter((ctx) => ctx.id !== id);
-      plugin.chatSelectionHighlightController.clearIfNoNoteContexts(nextContexts);
 
       // Suppress web selection to prevent it from being auto-captured again
       if (removed?.sourceType === "web") {
         plugin.suppressCurrentWebSelection(removed.url);
       }
+      // Note: highlight cleanup is now handled by the useEffect below that watches selectedTextContexts
     },
-    [plugin, selectedTextContexts]
+    [plugin]
   );
+
+  /**
+   * State-driven highlight cleanup: automatically clear editor highlight
+   * when no note contexts remain. This ensures highlight stays in sync
+   * with context state regardless of how contexts are modified.
+   */
+  useEffect(() => {
+    plugin.chatSelectionHighlightController.clearIfNoNoteContexts(selectedTextContexts);
+  }, [selectedTextContexts, plugin]);
 
   useEffect(() => {
     const handleChatVisibility = () => {

@@ -278,7 +278,7 @@ export function useStreamingChatSession(
         handleDelta(text);
       };
 
-      const thinkStreamer = new ThinkBlockStreamer(turnScopedDelta, undefined, excludeThinking);
+      const thinkStreamer = new ThinkBlockStreamer(turnScopedDelta, excludeThinking);
 
       let didNonAbortError = false;
       let memory: BaseChatMemory | null = null;

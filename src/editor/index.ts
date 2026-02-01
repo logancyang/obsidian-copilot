@@ -2,7 +2,11 @@
  * Editor utilities - CM6 extensions and helpers.
  */
 
-// Selection highlight
+// Persistent highlight factory
+export { createPersistentHighlight } from "./persistentHighlight";
+export type { PersistentHighlightRange, PersistentHighlightInstance } from "./persistentHighlight";
+
+// Selection highlight (QuickAsk / CustomCommandModal)
 export {
   SelectionHighlight,
   showSelectionHighlight,
