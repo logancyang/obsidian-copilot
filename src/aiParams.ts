@@ -124,6 +124,7 @@ export interface CustomModel {
   enableCors?: boolean;
   core?: boolean;
   stream?: boolean;
+  streamUsage?: boolean;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
