@@ -7,6 +7,7 @@
 
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import { ToolCall as LangChainToolCall } from "@langchain/core/messages/tool";
+import { logError } from "@/logger";
 
 /**
  * Standardized tool call structure extracted from AIMessage
@@ -27,6 +28,41 @@ export interface ToolCallChunk {
 }
 
 /**
+ * Recursively remove empty objects from tool arguments.
+ * Some models (e.g., Ollama) return empty objects {} for optional fields,
+ * which can fail Zod schema validation when the schema expects specific fields.
+ *
+ * @param obj - Object to sanitize
+ * @returns Sanitized object with empty objects removed
+ */
+function sanitizeToolArgs(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+
+  for (const [key, value] of Object.entries(obj)) {
+    if (value === null || value === undefined) {
+      continue;
+    }
+
+    if (typeof value === "object" && !Array.isArray(value)) {
+      const nested = value as Record<string, unknown>;
+      // Skip empty objects
+      if (Object.keys(nested).length === 0) {
+        continue;
+      }
+      // Recursively sanitize nested objects
+      const sanitized = sanitizeToolArgs(nested);
+      if (Object.keys(sanitized).length > 0) {
+        result[key] = sanitized;
+      }
+    } else {
+      result[key] = value;
+    }
+  }
+
+  return result;
+}
+
+/**
  * Extract native tool calls from an AIMessage.
  * Returns empty array if no tool calls present.
  *
@@ -43,7 +79,8 @@ export function extractNativeToolCalls(message: AIMessage): NativeToolCall[] {
   return toolCalls.map((tc: LangChainToolCall) => ({
     id: tc.id || generateToolCallId(),
     name: tc.name,
-    args: (tc.args as Record<string, unknown>) || {},
+    // Sanitize to remove empty objects that can fail schema validation
+    args: sanitizeToolArgs((tc.args as Record<string, unknown>) || {}),
   }));
 }
 
@@ -107,8 +144,10 @@ export function buildToolCallsFromChunks(chunks: Map<number, ToolCallChunk>): Na
     if (chunk.args) {
       try {
         args = JSON.parse(chunk.args);
+        // Sanitize to remove empty objects that can fail schema validation
+        args = sanitizeToolArgs(args);
       } catch {
-        // If args can't be parsed, use empty object
+        logError(`[ToolCall] Failed to parse args for tool "${chunk.name}": ${chunk.args}`);
         args = {};
       }
     }

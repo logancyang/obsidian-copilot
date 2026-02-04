@@ -124,10 +124,19 @@ export async function executeSequentialToolCall(
       success: true,
     };
   } catch (error) {
-    logError(`Error executing tool ${toolCall.name}:`, error);
+    // Log actionable error with args for debugging schema mismatches
+    const errorMsg = err2String(error);
+    const isSchemaError = errorMsg.includes("schema");
+    if (isSchemaError) {
+      logError(
+        `[ToolCall] Schema validation failed for "${toolCall.name}". Args: ${JSON.stringify(toolCall.args, null, 2)}`
+      );
+    } else {
+      logError(`[ToolCall] Error executing "${toolCall.name}": ${errorMsg}`);
+    }
     return {
       toolName: toolCall.name,
-      result: `Error: ${err2String(error)}`,
+      result: `Error: ${errorMsg}`,
       success: false,
     };
   }
