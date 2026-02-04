@@ -292,6 +292,8 @@ export default class ChatModelManager {
         think: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
         // Reduce repetition in local models (1.1 = slight penalty, helps with hallucination loops)
         repeatPenalty: 1.1,
+        // Request large context window - Ollama caps at model's actual max anyway
+        numCtx: 131072,
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
