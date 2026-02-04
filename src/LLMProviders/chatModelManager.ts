@@ -284,9 +284,12 @@ export default class ChatModelManager {
         model: modelName,
         // MUST NOT use /v1 in the baseUrl for ollama
         baseUrl: customModel.baseUrl || "http://localhost:11434",
-        headers: new Headers({
+        headers: {
           Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
-        }),
+        },
+        // Enable thinking for models with REASONING capability (e.g., qwen3, deepseek-r1)
+        // Thinking content goes to additional_kwargs.reasoning_content
+        think: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
