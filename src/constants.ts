@@ -882,6 +882,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSemanticSearchV3: false,
   enableSelfHostMode: false,
   selfHostModeValidatedAt: null,
+  selfHostValidationCount: 0,
   selfHostUrl: "",
   selfHostApiKey: "",
   enableLexicalBoosts: true,

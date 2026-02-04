@@ -13,6 +13,7 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
+import React from "react";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
@@ -28,18 +29,26 @@ export const DEFAULT_FREE_EMBEDDING_MODEL_KEY = DEFAULT_SETTINGS.embeddingModelK
 /** Grace period for self-host mode: 14 days (matches refund policy) */
 const SELF_HOST_GRACE_PERIOD_MS = 14 * 24 * 60 * 60 * 1000;
 
+/** Number of successful validations required for permanent self-host mode */
+const SELF_HOST_PERMANENT_VALIDATION_COUNT = 3;
+
 /** Plans that qualify for self-host mode */
 const SELF_HOST_ELIGIBLE_PLANS = ["believer", "supporter"];
 
 /**
- * Check if self-host mode is valid (enabled AND validated within grace period).
- * Requires prior validation from an eligible plan (Believer, Supporter) that hasn't expired.
+ * Check if self-host mode is valid.
+ * Valid if: permanently validated (3+ successful checks) OR within 14-day grace period.
  */
 export function isSelfHostModeValid(): boolean {
   const settings = getSettings();
   if (!settings.enableSelfHostMode || settings.selfHostModeValidatedAt == null) {
     return false;
   }
+  // Permanently valid after 3 successful validations
+  if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+    return true;
+  }
+  // Otherwise, check grace period
   return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
 }
 
@@ -70,6 +79,11 @@ export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
   // Self-host mode with valid plan validation bypasses Plus requirements
   if (settings.enableSelfHostMode && settings.selfHostModeValidatedAt != null) {
+    // Permanently valid after 3 successful validations
+    if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+      return true;
+    }
+    // Otherwise, check grace period
     const isValid = Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
     if (isValid) {
       return true;
@@ -109,12 +123,56 @@ export async function isSelfHostEligiblePlan(): Promise<boolean> {
 }
 
 /**
+ * Hook to check if current user is eligible for self-host mode.
+ * Returns undefined while loading, boolean once checked.
+ * If self-host mode is already enabled and validated (or permanently valid), returns true.
+ */
+export function useIsSelfHostEligible(): boolean | undefined {
+  const settings = useSettingsValue();
+  const [isEligible, setIsEligible] = React.useState<boolean | undefined>(undefined);
+
+  React.useEffect(() => {
+    // If self-host mode is already enabled and validated, show the section (offline support)
+    if (isSelfHostModeValid()) {
+      setIsEligible(true);
+      return;
+    }
+
+    if (!settings.plusLicenseKey) {
+      setIsEligible(false);
+      return;
+    }
+
+    // Check via API for users who haven't enabled self-host mode yet
+    isSelfHostEligiblePlan()
+      .then(setIsEligible)
+      .catch(() => setIsEligible(false));
+  }, [
+    settings.plusLicenseKey,
+    settings.enableSelfHostMode,
+    settings.selfHostModeValidatedAt,
+    settings.selfHostValidationCount,
+  ]);
+
+  return isEligible;
+}
+
+/**
  * Validate self-host mode eligibility for the current user.
  * Call this when the user manually enables self-host mode in the UI.
  * If validation fails, the UI should revert the toggle.
  * @returns true if user is on an eligible plan, false otherwise
  */
 export async function validateSelfHostMode(): Promise<boolean> {
+  const settings = getSettings();
+
+  // Already permanently validated, just update timestamp
+  if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+    updateSetting("selfHostModeValidatedAt", Date.now());
+    logInfo("Self-host mode re-enabled (permanently validated)");
+    return true;
+  }
+
   const isEligible = await isSelfHostEligiblePlan();
   if (!isEligible) {
     logInfo("Self-host mode requires an eligible plan (Believer, Supporter)");
@@ -122,15 +180,18 @@ export async function validateSelfHostMode(): Promise<boolean> {
     return false;
   }
 
-  // Set the validation timestamp (UI handles enableSelfHostMode toggle)
+  // Set the validation timestamp, preserve existing count or initialize to 1
+  const newCount = Math.max(settings.selfHostValidationCount || 0, 1);
   updateSetting("selfHostModeValidatedAt", Date.now());
-  logInfo("Self-host mode validation successful");
+  updateSetting("selfHostValidationCount", newCount);
+  logInfo(`Self-host mode validation successful (${newCount}/3)`);
   return true;
 }
 
 /**
  * Refresh self-host mode validation if user is online.
  * Call this periodically (e.g., on plugin load) to extend the grace period.
+ * After 3 successful validations, self-host mode becomes permanently valid.
  */
 export async function refreshSelfHostModeValidation(): Promise<void> {
   const settings = getSettings();
@@ -138,15 +199,30 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
     return;
   }
 
+  // Already permanently validated, no need to refresh
+  if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+    logInfo("Self-host mode permanently validated, skipping refresh");
+    return;
+  }
+
   try {
     const isEligible = await isSelfHostEligiblePlan();
     if (isEligible) {
+      const newCount = (settings.selfHostValidationCount || 0) + 1;
       updateSetting("selfHostModeValidatedAt", Date.now());
-      logInfo("Self-host mode validation refreshed");
+      updateSetting("selfHostValidationCount", newCount);
+
+      if (newCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+        logInfo("Self-host mode permanently validated (3/3)");
+        new Notice("Self-host mode is now permanently enabled!");
+      } else {
+        logInfo(`Self-host mode validation refreshed (${newCount}/3)`);
+      }
     } else {
       // User is no longer on an eligible plan, disable self-host mode
       updateSetting("enableSelfHostMode", false);
       updateSetting("selfHostModeValidatedAt", null);
+      updateSetting("selfHostValidationCount", 0);
       logInfo("Self-host mode disabled - user is no longer on an eligible plan");
       new Notice("Self-host mode has been disabled. An eligible plan is required.");
     }
