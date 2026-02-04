@@ -290,6 +290,8 @@ export default class ChatModelManager {
         // Enable thinking for models with REASONING capability (e.g., qwen3, deepseek-r1)
         // Thinking content goes to additional_kwargs.reasoning_content
         think: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
+        // Reduce repetition in local models (1.1 = slight penalty, helps with hallucination loops)
+        repeatPenalty: 1.1,
       },
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
