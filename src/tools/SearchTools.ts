@@ -70,8 +70,8 @@ const localSearchSchema = z.object({
     ),
   timeRange: z
     .object({
-      startTime: z.number().describe("Start time as epoch milliseconds"),
-      endTime: z.number().describe("End time as epoch milliseconds"),
+      startTime: z.number().optional().describe("Start time as epoch milliseconds"),
+      endTime: z.number().optional().describe("End time as epoch milliseconds"),
     })
     .optional()
     .describe("Optional time range filter. Use epoch milliseconds from getTimeRangeMs result."),
@@ -222,7 +222,8 @@ const lexicalSearchTool = createLangChainTool({
   name: "lexicalSearch",
   description: "Search for notes using lexical/keyword-based search",
   schema: localSearchSchema,
-  func: async ({ timeRange, query, salientTerms }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
+    const timeRange = validateTimeRange(rawTimeRange);
     return await performLexicalSearch({ timeRange, query, salientTerms });
   },
 });
@@ -232,7 +233,8 @@ const semanticSearchTool = createLangChainTool({
   name: "semanticSearch",
   description: "Search for notes using semantic/meaning-based search with embeddings",
   schema: localSearchSchema,
-  func: async ({ timeRange, query, salientTerms }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
+    const timeRange = validateTimeRange(rawTimeRange);
     const settings = getSettings();
 
     const returnAll = timeRange !== undefined;
@@ -305,19 +307,21 @@ const semanticSearchTool = createLangChainTool({
 
 /**
  * Validate and sanitize time range to prevent LLM hallucinations.
- * Returns undefined if the time range is invalid or nonsensical.
+ * Returns undefined if the time range is invalid, incomplete, or nonsensical.
+ * Handles cases where LLMs return empty objects {} or partial objects.
  */
 function validateTimeRange(timeRange?: {
-  startTime: number;
-  endTime: number;
+  startTime?: number;
+  endTime?: number;
 }): { startTime: number; endTime: number } | undefined {
   if (!timeRange) return undefined;
 
   const { startTime, endTime } = timeRange;
 
-  // Check for invalid values (0, negative, or non-numbers)
+  // Check for missing, invalid values (0, negative, or non-numbers)
+  // This handles LLM returning {} or {startTime: undefined, endTime: undefined}
   if (!startTime || !endTime || startTime <= 0 || endTime <= 0) {
-    logInfo("localSearch: Ignoring invalid time range (zero or negative values)");
+    logInfo("localSearch: Ignoring invalid time range (missing, zero, or negative values)");
     return undefined;
   }
 
@@ -327,7 +331,7 @@ function validateTimeRange(timeRange?: {
     return undefined;
   }
 
-  return timeRange;
+  return { startTime, endTime };
 }
 
 // Smart wrapper that uses RetrieverFactory for unified retriever selection

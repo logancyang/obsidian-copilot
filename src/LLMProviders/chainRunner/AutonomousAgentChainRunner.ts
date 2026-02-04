@@ -22,7 +22,12 @@ import {
   logToolCall,
   logToolResult,
 } from "./utils/toolExecution";
-import { createToolResultMessage, generateToolCallId } from "./utils/nativeToolCalling";
+import {
+  createToolResultMessage,
+  generateToolCallId,
+  buildToolCallsFromChunks,
+  ToolCallChunk,
+} from "./utils/nativeToolCalling";
 
 import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
@@ -273,7 +278,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    */
   public static async generateSystemPrompt(
     availableTools: StructuredTool[],
-    adapter: ModelAdapter,
+    _adapter?: ModelAdapter, // Unused, kept for backwards compatibility with tests
     userMemoryManager?: UserMemoryManager
   ): Promise<string> {
     const basePrompt = await getSystemPromptWithMemory(userMemoryManager);
@@ -500,13 +505,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    *
    * @param userMessage - The initiating user message from the UI.
    * @param chatModel - The active chat model instance.
-   * @param updateLoadingMessage - Optional callback to show loading status.
+   * @param _updateLoadingMessage - Unused, kept for potential future use.
    * @returns Context required for the ReAct agent loop.
    */
   private async prepareAgentConversation(
     userMessage: ChatMessage,
     chatModel: any,
-    updateLoadingMessage?: (message: string) => void
+    _updateLoadingMessage?: (message: string) => void // Unused, kept for potential future use
   ): Promise<AgentRunContext> {
     const messages: BaseMessage[] = [];
     const availableTools = this.getAvailableTools();
@@ -856,7 +861,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     _updateCurrentAiMessage: (message: string) => void
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
     let fullContent = "";
-    const toolCallChunks: Map<number, { id?: string; name: string; args: string }> = new Map();
+    const toolCallChunks: Map<number, ToolCallChunk> = new Map();
 
     // Helper to handle content updates - don't detect final response here,
     // let runReActLoop decide based on whether there are tool calls
@@ -908,24 +913,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         }
       }
 
-      // Build tool calls from accumulated chunks
-      const toolCalls: Array<{ id: string; name: string; args: Record<string, unknown> }> = [];
-      for (const chunk of toolCallChunks.values()) {
-        if (!chunk.name) continue;
-        let args: Record<string, unknown> = {};
-        if (chunk.args) {
-          try {
-            args = JSON.parse(chunk.args);
-          } catch {
-            logWarn(`Failed to parse tool args: ${chunk.args}`);
-          }
-        }
-        toolCalls.push({
-          id: chunk.id || generateToolCallId(),
-          name: chunk.name,
-          args,
-        });
-      }
+      // Build tool calls from accumulated chunks (with sanitization for empty objects)
+      const toolCalls = buildToolCallsFromChunks(toolCallChunks);
 
       // Build AIMessage
       const aiMessage = new AIMessage({

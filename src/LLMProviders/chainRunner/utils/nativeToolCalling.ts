@@ -7,6 +7,7 @@
 
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
 import { ToolCall as LangChainToolCall } from "@langchain/core/messages/tool";
+import { logError } from "@/logger";
 
 /**
  * Standardized tool call structure extracted from AIMessage
@@ -108,7 +109,7 @@ export function buildToolCallsFromChunks(chunks: Map<number, ToolCallChunk>): Na
       try {
         args = JSON.parse(chunk.args);
       } catch {
-        // If args can't be parsed, use empty object
+        logError(`[ToolCall] Failed to parse args for tool "${chunk.name}": ${chunk.args}`);
         args = {};
       }
     }

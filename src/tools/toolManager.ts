@@ -1,4 +1,4 @@
-import { Notice } from "obsidian";
+import { logWarn } from "@/logger";
 
 export const getToolDescription = (tool: string): string => {
   switch (tool) {
@@ -16,28 +16,22 @@ export const getToolDescription = (tool: string): string => {
 };
 
 export class ToolManager {
+  /**
+   * Call a tool with the given arguments.
+   * Throws on error so caller can handle with proper context (args, tool name).
+   */
   static async callTool(tool: any, args: any): Promise<any> {
-    try {
-      if (!tool) {
-        throw new Error("Tool is undefined");
-      }
+    if (!tool) {
+      throw new Error("Tool is undefined");
+    }
 
-      const result = await tool.call(args);
+    const result = await tool.call(args);
 
-      if (result === undefined || result === null) {
-        console.warn(`Tool ${tool.name} returned null/undefined result`);
-        return null;
-      }
-
-      return result;
-    } catch (error) {
-      console.error(`Error calling tool:`, error);
-      if (error instanceof Error) {
-        new Notice(error.message);
-      } else {
-        new Notice("An error occurred while executing the tool. Check console for details.");
-      }
+    if (result === undefined || result === null) {
+      logWarn(`[ToolCall] Tool "${tool.name}" returned null/undefined`);
       return null;
     }
+
+    return result;
   }
 }
