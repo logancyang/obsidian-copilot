@@ -52,7 +52,13 @@ describe("AtMentionTypeahead", () => {
       // Setup: 3 options where middle one is disabled
       mockUseAtMentionSearch.mockReturnValue([
         { key: "1", title: "Option 1", category: "notes", data: "file1", disabled: false },
-        { key: "2", title: "Option 2 (disabled)", category: "notes", data: "file2", disabled: true },
+        {
+          key: "2",
+          title: "Option 2 (disabled)",
+          category: "notes",
+          data: "file2",
+          disabled: true,
+        },
         { key: "3", title: "Option 3", category: "notes", data: "file3", disabled: false },
       ]);
 
@@ -75,7 +81,13 @@ describe("AtMentionTypeahead", () => {
     it("should skip disabled options when pressing ArrowUp", () => {
       mockUseAtMentionSearch.mockReturnValue([
         { key: "1", title: "Option 1", category: "notes", data: "file1", disabled: false },
-        { key: "2", title: "Option 2 (disabled)", category: "notes", data: "file2", disabled: true },
+        {
+          key: "2",
+          title: "Option 2 (disabled)",
+          category: "notes",
+          data: "file2",
+          disabled: true,
+        },
         { key: "3", title: "Option 3", category: "notes", data: "file3", disabled: false },
       ]);
 
@@ -189,9 +201,7 @@ describe("AtMentionTypeahead", () => {
     it("should render nothing when isOpen is false", () => {
       mockUseAtMentionSearch.mockReturnValue([]);
 
-      const { container } = render(
-        <AtMentionTypeahead {...defaultProps} isOpen={false} />
-      );
+      const { container } = render(<AtMentionTypeahead {...defaultProps} isOpen={false} />);
 
       expect(container.firstChild).toBeNull();
     });

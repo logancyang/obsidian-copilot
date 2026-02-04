@@ -173,10 +173,7 @@ export function MenuCommandModal({
               >
                 Note
               </label>
-              <HelpTooltip
-                content="Include the active note's content as context"
-                side="top"
-              />
+              <HelpTooltip content="Include the active note's content as context" side="top" />
             </div>
           )}
         </div>

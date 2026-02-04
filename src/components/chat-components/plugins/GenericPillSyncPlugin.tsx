@@ -51,10 +51,7 @@ export function GenericPillSyncPlugin<T>({
   // Default configuration values
   const { isPillNode, extractData, getKey = (item: T) => String(item), getChangeKey } = config;
   // Use getChangeKey for state comparison, fallback to getKey if not provided
-  const getComparisonKey = React.useMemo(
-    () => getChangeKey ?? getKey,
-    [getChangeKey, getKey]
-  );
+  const getComparisonKey = React.useMemo(() => getChangeKey ?? getKey, [getChangeKey, getKey]);
 
   React.useEffect(() => {
     if (!onChange && !onRemoved) return;

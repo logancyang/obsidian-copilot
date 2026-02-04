@@ -2,10 +2,7 @@ import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
 import { SelectionHighlight } from "@/editor/selectionHighlight";
-import {
-  createHighlightReplaceGuard,
-  type ReplaceGuard,
-} from "@/editor/replaceGuard";
+import { createHighlightReplaceGuard, type ReplaceGuard } from "@/editor/replaceGuard";
 import { logError, logWarn } from "@/logger";
 import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
 import type { EditorView } from "@codemirror/view";

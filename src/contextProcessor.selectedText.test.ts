@@ -68,7 +68,8 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
     const webContext: WebSelectedTextContext = {
       id: "web-1",
       sourceType: "web",
-      content: "# React Documentation\n\nReact is a JavaScript library for building user interfaces.",
+      content:
+        "# React Documentation\n\nReact is a JavaScript library for building user interfaces.",
       title: "React Docs",
       url: "https://react.dev/learn",
     };
@@ -138,7 +139,7 @@ describe("ContextProcessor.processSelectedTextContexts", () => {
     const noteContext: NoteSelectedTextContext = {
       id: "note-1",
       sourceType: "note",
-      content: "Code with <tags> & special \"chars\"",
+      content: 'Code with <tags> & special "chars"',
       noteTitle: "Test <Note>",
       notePath: "test/path&file.md",
       startLine: 1,

@@ -109,10 +109,7 @@ export const getCopilotCollapsibleDetailsFromEvent = (
 /**
  * Returns true when the event originated from the <summary> of the given <details>.
  */
-export const isEventWithinDetailsSummary = (
-  event: Event,
-  details: HTMLDetailsElement
-): boolean => {
+export const isEventWithinDetailsSummary = (event: Event, details: HTMLDetailsElement): boolean => {
   const summary = details.querySelector("summary");
   if (!summary) {
     return false;

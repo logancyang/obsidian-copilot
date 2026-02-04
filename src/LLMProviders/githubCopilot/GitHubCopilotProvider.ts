@@ -203,7 +203,9 @@ export class GitHubCopilotProvider {
             ? data.error
             : "";
       throw new Error(
-        errorDetail ? `Failed to get device code: ${errorDetail}` : `Failed to get device code: ${res.status}`
+        errorDetail
+          ? `Failed to get device code: ${errorDetail}`
+          : `Failed to get device code: ${res.status}`
       );
     }
 
@@ -552,7 +554,11 @@ export class GitHubCopilotProvider {
     const data = this.getRequestUrlJson(res);
 
     // Validate response structure
-    if (!data || typeof data !== "object" || !Array.isArray((data as Record<string, unknown>).choices)) {
+    if (
+      !data ||
+      typeof data !== "object" ||
+      !Array.isArray((data as Record<string, unknown>).choices)
+    ) {
       throw new Error("Invalid response from Copilot API: missing choices array");
     }
 
@@ -604,7 +610,8 @@ export class GitHubCopilotProvider {
 
     if (!response.ok) {
       const errorText = await response.text();
-      const baseMessage = HTTP_STATUS_MESSAGES[response.status] || `Request failed: ${response.status}`;
+      const baseMessage =
+        HTTP_STATUS_MESSAGES[response.status] || `Request failed: ${response.status}`;
       throw new Error(errorText ? `${baseMessage}: ${errorText}` : baseMessage);
     }
 

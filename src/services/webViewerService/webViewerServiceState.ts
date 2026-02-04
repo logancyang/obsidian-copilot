@@ -213,11 +213,14 @@ export class WebViewerStateManager {
         }
 
         // Return first title match as fallback
-        logWarn("[WebViewerStateManager] Multiple leaves matched URL + title; returning first match.", {
-          url: targetRaw,
-          title: titleHint,
-          matches: titleMatchedLeaves.length,
-        });
+        logWarn(
+          "[WebViewerStateManager] Multiple leaves matched URL + title; returning first match.",
+          {
+            url: targetRaw,
+            title: titleHint,
+            matches: titleMatchedLeaves.length,
+          }
+        );
         return titleMatchedLeaves[0];
       }
     }
@@ -235,10 +238,13 @@ export class WebViewerStateManager {
     }
 
     // Cannot disambiguate further - return first match as deterministic fallback
-    logWarn("[WebViewerStateManager] Multiple leaves matched URL; returning first match as fallback.", {
-      url: targetRaw,
-      matches: matchedLeaves.length,
-    });
+    logWarn(
+      "[WebViewerStateManager] Multiple leaves matched URL; returning first match as fallback.",
+      {
+        url: targetRaw,
+        matches: matchedLeaves.length,
+      }
+    );
     return matchedLeaves[0];
   }
 
@@ -281,7 +287,9 @@ export class WebViewerStateManager {
    * Start tracking Active Web Tab state using workspace events.
    * Call this in plugin onload() and register the returned EventRefs.
    */
-  startActiveWebTabTracking(options: StartActiveWebTabTrackingOptions = {}): ActiveWebTabTrackingRefs {
+  startActiveWebTabTracking(
+    options: StartActiveWebTabTrackingOptions = {}
+  ): ActiveWebTabTrackingRefs {
     // If already tracking, stop first to allow re-initialization with new options
     if (this.activeWebTabTrackingRefs) {
       this.stopActiveWebTabTracking();
@@ -289,18 +297,21 @@ export class WebViewerStateManager {
 
     this.activeWebTabTrackingPreserveViewTypes = [...(options.preserveOnViewTypes ?? [])];
 
-    const activeLeafRef = this.app.workspace.on("active-leaf-change", (leaf: WorkspaceLeaf | null) => {
-      // Also update lastActiveLeaf for backward compatibility
-      try {
-        if (isWebViewerLeaf(leaf)) this.lastActiveLeaf = leaf;
-      } catch (err) {
-        logWarn("WebViewerStateManager failed to track active leaf:", err);
-      }
+    const activeLeafRef = this.app.workspace.on(
+      "active-leaf-change",
+      (leaf: WorkspaceLeaf | null) => {
+        // Also update lastActiveLeaf for backward compatibility
+        try {
+          if (isWebViewerLeaf(leaf)) this.lastActiveLeaf = leaf;
+        } catch (err) {
+          logWarn("WebViewerStateManager failed to track active leaf:", err);
+        }
 
-      this.recomputeActiveWebTabState({ trigger: "active-leaf-change", activeLeaf: leaf });
-      // Re-subscribe to webview events when active leaf changes
-      this.subscribeToWebviewLoadEvents();
-    });
+        this.recomputeActiveWebTabState({ trigger: "active-leaf-change", activeLeaf: leaf });
+        // Re-subscribe to webview events when active leaf changes
+        this.subscribeToWebviewLoadEvents();
+      }
+    );
 
     const layoutRef = this.app.workspace.on("layout-change", () => {
       this.recomputeActiveWebTabState({ trigger: "layout-change" });
@@ -311,7 +322,10 @@ export class WebViewerStateManager {
     this.activeWebTabTrackingRefs = { activeLeafRef, layoutRef };
 
     // Initialize snapshot eagerly
-    this.recomputeActiveWebTabState({ trigger: "active-leaf-change", activeLeaf: this.app.workspace.activeLeaf ?? null });
+    this.recomputeActiveWebTabState({
+      trigger: "active-leaf-change",
+      activeLeaf: this.app.workspace.activeLeaf ?? null,
+    });
     // Initial subscription to webview events
     this.subscribeToWebviewLoadEvents();
 
@@ -538,7 +552,9 @@ export class WebViewerStateManager {
     } else if (params.trigger === "active-leaf-change") {
       // 2) Sticky semantics only applies to active-leaf-change.
       const viewType = params.activeLeaf?.view?.getViewType();
-      const preserve = Boolean(viewType && this.activeWebTabTrackingPreserveViewTypes.includes(viewType));
+      const preserve = Boolean(
+        viewType && this.activeWebTabTrackingPreserveViewTypes.includes(viewType)
+      );
       if (!preserve) {
         nextActiveWebTabLeaf = null;
         nextActiveWebTabForMentions = null;
@@ -617,8 +633,14 @@ export class WebViewerStateManager {
   private setActiveWebTabState(next: ActiveWebTabStateSnapshot): void {
     const prev = this.activeWebTabState;
     const unchanged =
-      WebViewerStateManager.areWebTabContextsEqual(prev.activeWebTabForMentions, next.activeWebTabForMentions) &&
-      WebViewerStateManager.areWebTabContextsEqual(prev.activeOrLastWebTab, next.activeOrLastWebTab);
+      WebViewerStateManager.areWebTabContextsEqual(
+        prev.activeWebTabForMentions,
+        next.activeWebTabForMentions
+      ) &&
+      WebViewerStateManager.areWebTabContextsEqual(
+        prev.activeOrLastWebTab,
+        next.activeOrLastWebTab
+      );
 
     if (unchanged) {
       return;

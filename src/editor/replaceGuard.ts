@@ -7,53 +7,53 @@ import { SelectionHighlight } from "./selectionHighlight";
 import { logError } from "@/logger";
 
 /**
- * Replace 校验失败原因
+ * Replace validation failure reasons.
  */
 export type ReplaceInvalidReason =
-  | "no_range" // 没有有效范围
-  | "range_out_of_bounds" // 范围超出文档边界
-  | "content_changed" // 选区内容已变化
-  | "file_changed" // 文件已切换
-  | "editor_changed" // EditorView 已变化
-  | "leaf_changed" // Leaf 已变化
-  | "target_unavailable"; // 目标不可用
+  | "no_range" // No valid range
+  | "range_out_of_bounds" // Range exceeds document bounds
+  | "content_changed" // Selection content has changed
+  | "file_changed" // File has switched
+  | "editor_changed" // EditorView has changed
+  | "leaf_changed" // Leaf has changed
+  | "target_unavailable"; // Target unavailable
 
 /**
- * Replace 校验状态 / 执行结果（统一结构）
+ * Replace validation status / execution result (unified structure).
  */
 export interface ReplaceStatus {
   ok: boolean;
   reason: ReplaceInvalidReason | null;
   range: { from: number; to: number } | null;
-  /** 用户提示消息 */
+  /** User-facing message */
   message?: string;
 }
 
 /**
- * ReplaceGuard 接口
- * 统一 "捕获 → 映射 → 校验 → 替换" 流程
- * 允许不同的映射策略
+ * ReplaceGuard interface.
+ * Unifies the "capture → map → validate → replace" flow.
+ * Allows different mapping strategies.
  */
 export interface ReplaceGuard {
-  /** 获取当前映射后的范围 */
+  /** Get the current mapped range */
   getRange(): { from: number; to: number } | null;
 
-  /** 校验 Replace 是否可执行 */
+  /** Validate whether replace is executable */
   validate(): ReplaceStatus;
 
   /**
-   * 文档变化时更新映射 (可选)
-   * - MapPos 策略: 需要实现
-   * - SelectionHighlight 策略: 不需要实现
+   * Update mapping on document changes (optional).
+   * - MapPos strategy: needs implementation
+   * - SelectionHighlight strategy: not needed
    */
   onDocChanged?(changes: ChangeDesc): void;
 
-  /** 执行替换 (内部会先校验) */
+  /** Execute replacement (validates internally first) */
   replace(replacement: string): ReplaceStatus;
 }
 
 /**
- * 获取用户友好的错误消息
+ * Get user-friendly error message.
  */
 export function getErrorMessage(reason: ReplaceInvalidReason | null): string {
   switch (reason) {
@@ -114,17 +114,17 @@ function dispatchReplace(
 
 export interface MapPosReplaceGuardParams {
   editorView: EditorView;
-  /** 打开时的 leaf 引用 */
+  /** Leaf reference at open time */
   leafSnapshot: WorkspaceLeaf;
-  /** 打开时的文件路径 */
+  /** File path at open time */
   filePathSnapshot: string | null;
-  /** 打开时的选中文本 (从 doc.sliceString 获取) */
+  /** Selected text at open time (from doc.sliceString) */
   selectedTextSnapshot: string;
-  /** 打开时的选区范围 */
+  /** Selection range at open time */
   initialRange: { from: number; to: number };
   /**
-   * 获取当前 leaf 的状态
-   * 必须轻量，因为 Quick Ask 高频校验
+   * Get current leaf state.
+   * Must be lightweight since Quick Ask validates frequently.
    */
   getLeafState: () => {
     leaf: WorkspaceLeaf | null;
@@ -134,7 +134,7 @@ export interface MapPosReplaceGuardParams {
 }
 
 /**
- * Quick Ask 使用的 MapPos 策略
+ * MapPos strategy used by Quick Ask.
  */
 export function createMapPosReplaceGuard(params: MapPosReplaceGuardParams): ReplaceGuard {
   const {
@@ -146,10 +146,10 @@ export function createMapPosReplaceGuard(params: MapPosReplaceGuardParams): Repl
     getLeafState,
   } = params;
 
-  // 内部维护的映射范围
+  // Internally maintained mapped range
   let range = { ...initialRange };
 
-  // validate 缓存：仅在 docChanged 或 leafState 变化时重新计算
+  // Validation cache: only recompute on docChanged or leafState change
   type LeafStateSnapshot = ReturnType<MapPosReplaceGuardParams["getLeafState"]>;
   let isValidationDirty = true;
   let lastLeafStateSnapshot: LeafStateSnapshot | null = null;
@@ -196,25 +196,25 @@ export function createMapPosReplaceGuard(params: MapPosReplaceGuardParams): Repl
       message: getErrorMessage(reason),
     });
 
-    // 1. 检查 leaf 是否还是同一个
+    // 1. Check if leaf is still the same
     if (!state.leaf || state.leaf !== leafSnapshot) {
       lastValidationResult = invalid("leaf_changed", null);
       return lastValidationResult;
     }
 
-    // 2. 检查 EditorView 是否还是同一个
+    // 2. Check if EditorView is still the same
     if (!state.editorView || state.editorView !== editorView) {
       lastValidationResult = invalid("editor_changed", null);
       return lastValidationResult;
     }
 
-    // 3. 检查文件路径是否一致
+    // 3. Check if file path matches
     if (state.filePath !== filePathSnapshot) {
       lastValidationResult = invalid("file_changed", null);
       return lastValidationResult;
     }
 
-    // 4. 检查 EditorView 是否可用
+    // 4. Check if EditorView is available
     if (!editorView.dom.isConnected) {
       lastValidationResult = invalid("target_unavailable", null);
       return lastValidationResult;
@@ -222,13 +222,13 @@ export function createMapPosReplaceGuard(params: MapPosReplaceGuardParams): Repl
 
     const doc = editorView.state.doc;
 
-    // 5. 检查范围边界
+    // 5. Check range bounds
     if (range.from < 0 || range.to > doc.length || range.from >= range.to) {
       lastValidationResult = invalid("range_out_of_bounds", null);
       return lastValidationResult;
     }
 
-    // 6. 检查内容是否一致
+    // 6. Check if content matches
     const currentText = doc.sliceString(range.from, range.to);
     if (currentText !== selectedTextSnapshot) {
       lastValidationResult = invalid("content_changed", { ...range });
@@ -268,12 +268,12 @@ export function createMapPosReplaceGuard(params: MapPosReplaceGuardParams): Repl
 
 export interface HighlightReplaceGuardParams {
   editorView: EditorView;
-  /** 打开时的文件路径 */
+  /** File path at open time */
   filePathSnapshot: string | null;
-  /** 打开时的选中文本 (从 doc.sliceString 获取) */
+  /** Selected text at open time (from doc.sliceString) */
   selectedTextSnapshot: string;
   /**
-   * 获取当前 active view 上下文
+   * Get current active view context.
    */
   getCurrentContext: () => {
     editorView: EditorView | null;
@@ -282,7 +282,7 @@ export interface HighlightReplaceGuardParams {
 }
 
 /**
- * Modal 使用的 SelectionHighlight 策略
+ * SelectionHighlight strategy used by Modal.
  */
 export function createHighlightReplaceGuard(params: HighlightReplaceGuardParams): ReplaceGuard {
   const { editorView, filePathSnapshot, selectedTextSnapshot, getCurrentContext } = params;
@@ -305,22 +305,22 @@ export function createHighlightReplaceGuard(params: HighlightReplaceGuardParams)
       message: getErrorMessage(reason),
     });
 
-    // 1. 检查是否有 active EditorView
+    // 1. Check if there is an active EditorView
     if (!context.editorView) {
       return invalid("target_unavailable", null);
     }
 
-    // 2. 检查 EditorView 实例是否一致
+    // 2. Check if EditorView instance matches
     if (context.editorView !== editorView) {
       return invalid("editor_changed", null);
     }
 
-    // 3. 检查文件路径是否一致
+    // 3. Check if file path matches
     if (context.filePath !== filePathSnapshot) {
       return invalid("file_changed", null);
     }
 
-    // 4. 获取映射后的范围
+    // 4. Get the mapped range
     const range = getRange();
     if (!range) {
       return invalid("no_range", null);
@@ -328,12 +328,12 @@ export function createHighlightReplaceGuard(params: HighlightReplaceGuardParams)
 
     const doc = editorView.state.doc;
 
-    // 5. 检查范围边界
+    // 5. Check range bounds
     if (range.from < 0 || range.to > doc.length || range.from >= range.to) {
       return invalid("range_out_of_bounds", null);
     }
 
-    // 6. 检查内容是否一致
+    // 6. Check if content matches
     const currentText = doc.sliceString(range.from, range.to);
     if (currentText !== selectedTextSnapshot) {
       return invalid("content_changed", range);
@@ -362,6 +362,6 @@ export function createHighlightReplaceGuard(params: HighlightReplaceGuardParams)
     }
   };
 
-  // SelectionHighlight 自己 mapPos，不需要 onDocChanged
+  // SelectionHighlight handles mapPos internally, no need for onDocChanged
   return { getRange, validate, replace };
 }
