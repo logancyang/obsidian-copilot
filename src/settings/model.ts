@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { type ChainType } from "@/chainFactory";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
+  AGENT_MAX_ITERATIONS_LIMIT,
   BUILTIN_CHAT_MODELS,
   BUILTIN_EMBEDDING_MODELS,
   COPILOT_FOLDER_ROOT,
@@ -395,7 +396,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   if (
     isNaN(autonomousAgentMaxIterations) ||
     autonomousAgentMaxIterations < 4 ||
-    autonomousAgentMaxIterations > 8
+    autonomousAgentMaxIterations > AGENT_MAX_ITERATIONS_LIMIT
   ) {
     sanitizedSettings.autonomousAgentMaxIterations = DEFAULT_SETTINGS.autonomousAgentMaxIterations;
   } else {

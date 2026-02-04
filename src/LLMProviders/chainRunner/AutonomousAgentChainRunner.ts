@@ -1,4 +1,4 @@
-import { ModelCapability } from "@/constants";
+import { AGENT_LOOP_TIMEOUT_MS, ModelCapability } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -626,12 +626,20 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     const maxIterations = getSettings().autonomousAgentMaxIterations;
     const collectedSources: AgentSource[] = [];
+    const loopStartTime = Date.now();
 
     let iteration = 0;
     let responseMetadata: ResponseMetadata | undefined;
 
     while (iteration < maxIterations) {
       if (abortController.signal.aborted) break;
+
+      // Check for loop timeout (5 minutes)
+      const elapsedTime = Date.now() - loopStartTime;
+      if (elapsedTime >= AGENT_LOOP_TIMEOUT_MS) {
+        logWarn(`Agent loop timed out after ${Math.round(elapsedTime / 1000)}s`);
+        break;
+      }
       iteration++;
 
       // Stream response - streamModelResponse updates this.accumulatedContent
@@ -834,13 +842,20 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       };
     }
 
-    // Max iterations reached - shouldn't normally get here since we return inside the loop
-    logWarn(`Agent reached max iterations (${maxIterations})`);
-    const maxIterMessage =
-      "I've reached the maximum number of tool calls. Here's what I found so far based on the search results.";
-    const finalResponse = reasoningBlock
-      ? reasoningBlock + "\n\n" + maxIterMessage
-      : maxIterMessage;
+    // Check if we exited due to timeout or max iterations
+    const elapsedTime = Date.now() - loopStartTime;
+    const timedOut = elapsedTime >= AGENT_LOOP_TIMEOUT_MS;
+
+    if (timedOut) {
+      logWarn(`Agent loop timed out after ${Math.round(elapsedTime / 1000)}s`);
+    } else {
+      logWarn(`Agent reached max iterations (${maxIterations})`);
+    }
+
+    const limitMessage = timedOut
+      ? "I've reached the time limit for reasoning. Here's what I found so far based on the search results."
+      : "I've reached the maximum number of tool calls. Here's what I found so far based on the search results.";
+    const finalResponse = reasoningBlock ? reasoningBlock + "\n\n" + limitMessage : limitMessage;
 
     return {
       finalResponse,

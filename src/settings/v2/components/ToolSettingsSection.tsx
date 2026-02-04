@@ -1,7 +1,8 @@
 import React from "react";
 import { SettingItem } from "@/components/ui/setting-item";
-import { ToolRegistry } from "@/tools/ToolRegistry";
+import { AGENT_MAX_ITERATIONS_LIMIT } from "@/constants";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { ToolRegistry } from "@/tools/ToolRegistry";
 
 export const ToolSettingsSection: React.FC = () => {
   const settings = useSettingsValue();
@@ -62,7 +63,7 @@ export const ToolSettingsSection: React.FC = () => {
           updateSetting("autonomousAgentMaxIterations", value);
         }}
         min={4}
-        max={8}
+        max={AGENT_MAX_ITERATIONS_LIMIT}
         step={1}
       />
 
