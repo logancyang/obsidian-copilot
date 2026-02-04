@@ -154,7 +154,9 @@ export class SystemPromptRegister {
 
       // Check if this is still the latest request
       if (currentRequestId !== this.folderChangeRequestId) {
-        logInfo(`Folder change request ${currentRequestId} superseded by ${this.folderChangeRequestId}, discarding results`);
+        logInfo(
+          `Folder change request ${currentRequestId} superseded by ${this.folderChangeRequestId}, discarding results`
+        );
         return;
       }
 
@@ -182,9 +184,14 @@ export class SystemPromptRegister {
     const selectedTitle = getSelectedPromptTitle();
 
     // Check defaultSystemPromptTitle
-    if (settings.defaultSystemPromptTitle && !availableTitles.has(settings.defaultSystemPromptTitle)) {
+    if (
+      settings.defaultSystemPromptTitle &&
+      !availableTitles.has(settings.defaultSystemPromptTitle)
+    ) {
       updateSetting("defaultSystemPromptTitle", "");
-      logInfo(`Cleared defaultSystemPromptTitle (not found in new folder): ${settings.defaultSystemPromptTitle}`);
+      logInfo(
+        `Cleared defaultSystemPromptTitle (not found in new folder): ${settings.defaultSystemPromptTitle}`
+      );
       new Notice(
         `Default system prompt "${settings.defaultSystemPromptTitle}" not found in new folder. Cleared default selection.`
       );
@@ -281,7 +288,9 @@ export class SystemPromptRegister {
 
     const folder = getSystemPromptsFolder();
     // Check if old path was a valid prompt file (direct child, not in subfolders like unsupported/)
-    const oldRelativePath = oldPath.startsWith(folder + "/") ? oldPath.slice(folder.length + 1) : "";
+    const oldRelativePath = oldPath.startsWith(folder + "/")
+      ? oldPath.slice(folder.length + 1)
+      : "";
     const wasValidPromptFile =
       oldRelativePath !== "" && !oldRelativePath.includes("/") && oldPath.endsWith(".md");
     // Use type guard to check if file is a valid system prompt file
@@ -293,7 +302,6 @@ export class SystemPromptRegister {
     }
 
     try {
-
       // Remove the old prompt from cache if it was a valid prompt file
       if (wasValidPromptFile) {
         const oldFilename = oldPath.split("/").pop()?.replace(/\.md$/i, "");

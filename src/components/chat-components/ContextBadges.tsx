@@ -6,11 +6,7 @@ import { TruncatedText } from "@/components/TruncatedText";
 import { getDomainFromUrl } from "@/utils";
 import { cn } from "@/lib/utils";
 import { ContextBadgeWrapper } from "./ContextBadgeWrapper";
-import {
-  SelectedTextContext,
-  WebTabContext,
-  isWebSelectedTextContext,
-} from "@/types/message";
+import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
 
 interface BaseContextBadgeProps {
   onRemove?: () => void;
@@ -56,7 +52,11 @@ interface FaviconOrGlobeProps {
   className?: string;
 }
 
-export function FaviconOrGlobe({ faviconUrl, isLoaded = true, className = "tw-size-3" }: FaviconOrGlobeProps) {
+export function FaviconOrGlobe({
+  faviconUrl,
+  isLoaded = true,
+  className = "tw-size-3",
+}: FaviconOrGlobeProps) {
   const [showFavicon, setShowFavicon] = React.useState<boolean>(Boolean(faviconUrl));
 
   React.useEffect(() => {
@@ -331,11 +331,7 @@ export function ContextSelectedTextBadge({
   // Handle web selected text
   if (isWebSelectedTextContext(selectedText)) {
     const domain = getDomainFromUrl(selectedText.url);
-    const tooltipContent = (
-      <div className="tw-text-left">
-        {selectedText.url}
-      </div>
-    );
+    const tooltipContent = <div className="tw-text-left">{selectedText.url}</div>;
 
     return (
       <ContextBadgeWrapper hasRemoveButton={!!onRemove}>

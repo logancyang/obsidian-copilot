@@ -9,4 +9,9 @@ export { QuickAskInput } from "./QuickAskInput";
 export { useQuickAskSession } from "./useQuickAskSession";
 // Reason: ModeSelector and modeRegistry are not exported because edit/edit-direct modes
 // are not yet implemented. Export them when those modes are ready.
-export type { QuickAskMode, QuickAskMessage, QuickAskPanelProps, QuickAskWidgetPayload } from "./types";
+export type {
+  QuickAskMode,
+  QuickAskMessage,
+  QuickAskPanelProps,
+  QuickAskWidgetPayload,
+} from "./types";

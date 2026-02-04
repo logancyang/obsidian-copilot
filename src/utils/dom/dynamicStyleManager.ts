@@ -61,7 +61,8 @@ function normalizeStyles(styles: StyleRecord): Map<string, string> {
     let stringValue: string;
     if (typeof value === "number" && !property.startsWith("--")) {
       // Check both camelCase and kebab-case versions for unitless properties
-      const isUnitless = UNITLESS_CSS_PROPERTIES.has(property) || UNITLESS_CSS_PROPERTIES.has(cssProperty);
+      const isUnitless =
+        UNITLESS_CSS_PROPERTIES.has(property) || UNITLESS_CSS_PROPERTIES.has(cssProperty);
       stringValue = isUnitless ? String(value) : `${value}px`;
     } else {
       stringValue = String(value);

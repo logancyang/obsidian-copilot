@@ -65,7 +65,10 @@ export function ModelImporter({
         setModels(result.models);
       } else {
         setError(result.error || "Failed to load models");
-        new Notice(`Failed to load models for ${getProviderLabel(provider)}: ${result.error}`, 5000);
+        new Notice(
+          `Failed to load models for ${getProviderLabel(provider)}: ${result.error}`,
+          5000
+        );
       }
     } catch (err) {
       const errorMsg = err2String(err);

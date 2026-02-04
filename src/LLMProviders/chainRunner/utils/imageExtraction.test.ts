@@ -368,7 +368,7 @@ describe("Image extraction from content", () => {
     });
   });
 
-  describe("Image with title syntax ![alt](url \"title\")", () => {
+  describe('Image with title syntax ![alt](url "title")', () => {
     it("should extract URL with double-quoted title", async () => {
       const content = 'Image with title ![alt](https://example.com/img.png "This is the title")';
 

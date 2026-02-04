@@ -62,9 +62,7 @@ export function ModeSelector({ modes, value, onChange, disabled }: ModeSelectorP
               <ModeIcon className="tw-size-4" />
               <div className="tw-flex tw-flex-col">
                 <span>{mode.label}</span>
-                {!mode.implemented && (
-                  <span className="tw-text-xs tw-text-muted">Coming soon</span>
-                )}
+                {!mode.implemented && <span className="tw-text-xs tw-text-muted">Coming soon</span>}
               </div>
             </DropdownMenuItem>
           );

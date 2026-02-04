@@ -418,8 +418,7 @@ export class QuickAskOverlay {
     }
 
     const doc = this.ownerDocument ?? document;
-    const hostRect =
-      this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
+    const hostRect = this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
 
     const viewportWidth = hostRect.width;
 
@@ -598,8 +597,7 @@ export class QuickAskOverlay {
     if (!this.resizeStartRect || !this.resizeStartMouse || !this.resizeDirection) return;
 
     const doc = this.ownerDocument ?? document;
-    const hostRect =
-      this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
+    const hostRect = this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
 
     const deltaX = clientX - this.resizeStartMouse.x;
     const deltaY = clientY - this.resizeStartMouse.y;
@@ -715,8 +713,7 @@ export class QuickAskOverlay {
     if (!this.overlayContainer || !this.dragPosition) return;
 
     const doc = this.ownerDocument ?? document;
-    const hostRect =
-      this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
+    const hostRect = this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
 
     const viewportWidth = hostRect.width;
 

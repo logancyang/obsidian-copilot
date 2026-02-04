@@ -197,7 +197,11 @@ export class WebSelectionTracker {
 
       // Deduplication: check if url + text combo has changed
       // This handles the case of same text on different pages
-      if (state.lastSelection && state.lastSelection.url === url && state.lastSelection.text === selectedText) {
+      if (
+        state.lastSelection &&
+        state.lastSelection.url === url &&
+        state.lastSelection.text === selectedText
+      ) {
         return;
       }
 
@@ -307,7 +311,10 @@ export class WebSelectionTracker {
   /**
    * Clear selection badge when current page URL is empty/invalid (best-effort, debounced).
    */
-  private maybeClearSelectionForInvalidUrl(leaf: WebViewerLeaf, state: LeafSelectionTrackingState): void {
+  private maybeClearSelectionForInvalidUrl(
+    leaf: WebViewerLeaf,
+    state: LeafSelectionTrackingState
+  ): void {
     // Only clear when we previously observed a valid selection for this leaf
     if (!state.lastSelection) {
       return;

@@ -53,14 +53,20 @@ export function startActiveWebTabTracking(
 /**
  * Resolve the current Web Viewer leaf.
  */
-export async function resolveWebViewerLeaf(app: App, options?: ResolveLeafOptions): Promise<WebViewerLeaf> {
+export async function resolveWebViewerLeaf(
+  app: App,
+  options?: ResolveLeafOptions
+): Promise<WebViewerLeaf> {
   return getWebViewerService(app).resolveLeaf(options);
 }
 
 /**
  * Get reader-mode Markdown from the current Web Viewer.
  */
-export async function getWebViewerMarkdown(app: App, options?: ResolveLeafOptions): Promise<string> {
+export async function getWebViewerMarkdown(
+  app: App,
+  options?: ResolveLeafOptions
+): Promise<string> {
   const leaf = await resolveWebViewerLeaf(app, options);
   return getWebViewerService(app).getReaderModeMarkdown(leaf);
 }
@@ -80,7 +86,10 @@ export async function getWebViewerSelectedText(
 /**
  * Get selected content as Markdown from the current Web Viewer.
  */
-export async function getWebViewerSelectedMarkdown(app: App, options?: ResolveLeafOptions): Promise<string> {
+export async function getWebViewerSelectedMarkdown(
+  app: App,
+  options?: ResolveLeafOptions
+): Promise<string> {
   const leaf = await resolveWebViewerLeaf(app, options);
   return getWebViewerService(app).getSelectedMarkdown(leaf);
 }
