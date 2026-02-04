@@ -37,6 +37,7 @@ import { PromptDebugReport } from "./utils/toolPromptDebugger";
 import {
   AgentReasoningState,
   createInitialReasoningState,
+  extractFirstSentence,
   LocalSearchSourceInfo,
   serializeReasoningBlock,
   summarizeToolCall,
@@ -224,7 +225,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    * @param summary - Human-readable summary of the step
    * @param toolName - Optional name of the tool associated with this step
    */
-  private addReasoningStep(summary: string, toolName?: string): void {
+  private addReasoningStep(summary: string, toolName?: string, detailedOnly = false): void {
     const step = {
       timestamp: Date.now(),
       summary,
@@ -232,6 +233,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     };
     // Always add to full history
     this.allReasoningSteps.push(step);
+
+    // For detailed-only steps, skip the rolling display
+    if (detailedOnly) {
+      return;
+    }
+
     // Add to display state (rolling window)
     this.reasoningState.steps.push(step);
     // Keep only last 4 steps for rolling window display during reasoning
@@ -251,6 +258,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.reasoningState.status = "collapsed";
   }
 
+  /**
+   * Get early feedback message for a tool that may take a while to stream.
+   * This provides immediate UX feedback while the model generates content.
+   *
+   * @param toolName - Name of the tool being called
+   * @returns Early feedback message, or null if no early feedback needed
+   */
   /**
    * Build the reasoning block markup for embedding in the message.
    * During reasoning: uses rolling window (last 4 steps).
@@ -706,8 +720,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       // Add AI message with tool calls - but DON'T accumulate intermediate content
       // Intermediate content (like "I'll search for..." ) should not appear in final response
       messages.push(aiMessage);
-      // NOTE: We intentionally do NOT add content to fullContent here
-      // The model's intermediate "thinking aloud" text is not shown to the user
+
+      // For iterations > 1, the model's content often contains its summary of findings
+      // from previous tool calls. Extract first sentence as a "finding summary".
+      // (Iteration 1 has no previous findings - its content is just "I'll search for...")
+      if (iteration > 1 && content && content.trim().length > 0) {
+        const findingSummary = extractFirstSentence(content);
+        if (findingSummary) {
+          this.addReasoningStep(findingSummary);
+        }
+      }
 
       // Execute each tool
       for (const tc of toolCalls) {
@@ -763,8 +785,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           }
         }
 
-        // Add reasoning step for tool call (timer will display it)
-        // For localSearch, include pre-expanded terms
+        // Add tool call step (shown in both rolling display and expanded view)
         const toolCallSummary = summarizeToolCall(tc.name, toolCall.args, preExpandedTerms);
         this.addReasoningStep(toolCallSummary, tc.name);
 
@@ -800,7 +821,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         logToolResult(tc.name, result);
 
-        // Add reasoning step for tool result (timer will display it)
+        // Add tool result step (shown in rolling display - this is the "what was found")
         const resultSummary = summarizeToolResult(tc.name, result, sourceInfo, toolCall.args);
         this.addReasoningStep(resultSummary, tc.name);
 

@@ -191,6 +191,22 @@ export function summarizeToolResult(
       return "Fetched video transcript";
     case "fetchUrl":
       return "Fetched URL content";
+    case "writeToFile":
+    case "replaceInFile": {
+      // Parse the result to check if accepted/rejected
+      const filePath = args?.path as string | undefined;
+      const fileName = filePath ? filePath.split("/").pop() || filePath : "file";
+
+      // Result is JSON string, check for rejected/accepted status
+      const resultStr = result.result || "";
+      if (resultStr.includes('"rejected"') || resultStr.includes("rejected")) {
+        return `Edit rejected for "${fileName}"`;
+      }
+      if (resultStr.includes('"failed"') || resultStr.includes("Error")) {
+        return `Edit failed for "${fileName}"`;
+      }
+      return toolName === "writeToFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
+    }
     default:
       return `Completed ${toolName}`;
   }
@@ -278,7 +294,50 @@ export function summarizeToolCall(
       return "Fetching video transcript";
     case "fetchUrl":
       return "Fetching URL content";
+    case "writeToFile": {
+      const filePath = args?.path as string | undefined;
+      if (filePath) {
+        const fileName = filePath.split("/").pop() || filePath;
+        return `Writing to "${fileName}"`;
+      }
+      return "Writing to file";
+    }
+    case "replaceInFile": {
+      const filePath = args?.path as string | undefined;
+      if (filePath) {
+        const fileName = filePath.split("/").pop() || filePath;
+        return `Editing "${fileName}"`;
+      }
+      return "Editing file";
+    }
     default:
       return `Calling ${toolName}`;
   }
+}
+
+/**
+ * Truncate text to a maximum length, adding ellipsis if needed.
+ */
+function truncate(text: string, maxLen: number): string {
+  return text.length > maxLen ? text.slice(0, maxLen - 3) + "..." : text;
+}
+
+/**
+ * Extract the first sentence from model's intermediate reasoning content.
+ * Used to show what the model found/concluded from previous tool calls.
+ *
+ * Uses a simple approach: take first line, truncate if needed.
+ * This avoids edge cases with abbreviations (Dr., U.S.) that confuse regex-based
+ * sentence detection.
+ *
+ * @param content - Model's intermediate content (may contain reasoning about findings)
+ * @returns First line/sentence if found, null otherwise
+ */
+export function extractFirstSentence(content: string): string | null {
+  if (!content || content.trim().length === 0) {
+    return null;
+  }
+
+  const firstLine = content.trim().split("\n")[0];
+  return truncate(firstLine, 100);
 }
