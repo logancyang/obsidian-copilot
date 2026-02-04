@@ -4,7 +4,13 @@ import { FileText, Wrench, Folder, Globe } from "lucide-react";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
-export type AtMentionCategory = "notes" | "tools" | "folders" | "activeNote" | "webTabs" | "activeWebTab";
+export type AtMentionCategory =
+  | "notes"
+  | "tools"
+  | "folders"
+  | "activeNote"
+  | "webTabs"
+  | "activeWebTab";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;

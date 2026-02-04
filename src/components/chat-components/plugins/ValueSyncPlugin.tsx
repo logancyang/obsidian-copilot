@@ -25,9 +25,12 @@ export function ValueSyncPlugin({ value }: ValueSyncPluginProps) {
 
       if (currentText !== value) {
         root.clear();
+        // Always add a paragraph node to ensure editor is in a valid state
+        const paragraph = $createParagraphNode();
         if (value) {
-          root.append($createParagraphNode().append($createTextNode(value)));
+          paragraph.append($createTextNode(value));
         }
+        root.append(paragraph);
       }
     });
   }, [editor, value]);

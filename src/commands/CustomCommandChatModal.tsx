@@ -1,422 +1,633 @@
 import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
-import { Button } from "@/components/ui/button";
-import { getModelDisplayText } from "@/components/ui/model-display";
-import ChatModelManager from "@/LLMProviders/chatModelManager";
-import { ThinkBlockStreamer } from "@/LLMProviders/chainRunner/utils/ThinkBlockStreamer";
-import { logError } from "@/logger";
-import { findCustomModel, insertIntoEditor } from "@/utils";
+import { MenuCommandModal, type ContentState } from "@/components/command-ui";
+import { SelectionHighlight } from "@/editor/selectionHighlight";
 import {
-  ChatPromptTemplate,
-  HumanMessagePromptTemplate,
-  MessagesPlaceholder,
-  SystemMessagePromptTemplate,
-} from "@langchain/core/prompts";
-import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChatMemory, BufferMemory } from "@langchain/classic/memory";
-import { ArrowBigUp, Bot, Command, Copy, CornerDownLeft, PenLine } from "lucide-react";
-import { App, Modal, Notice, Platform } from "obsidian";
+  createHighlightReplaceGuard,
+  type ReplaceGuard,
+} from "@/editor/replaceGuard";
+import { logError, logWarn } from "@/logger";
+import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
+import type { EditorView } from "@codemirror/view";
+import { PenLine } from "lucide-react";
+import { App, Notice, MarkdownView } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { CustomCommand } from "@/commands/type";
-import { useSettingsValue } from "@/settings/model";
+import { useSettingsValue, updateSetting } from "@/settings/model";
+import {
+  useStreamingChatSession,
+  type StreamingChatTurnContext,
+} from "@/hooks/use-streaming-chat-session";
+import { ABORT_REASON } from "@/constants";
 
-// Custom hook for managing chat chain
-function useChatChain(selectedModel: CustomModel, systemPrompt?: string) {
-  const [chatMemory] = useState<BaseChatMemory>(
-    new BufferMemory({ returnMessages: true, memoryKey: "history" })
-  );
-  const [chatChain, setChatChain] = useState<RunnableSequence | null>(null);
+// ============================================================================
+// Behavior Config - Replaces mode-based branching
+// ============================================================================
 
-  // Initialize chat chain
-  useEffect(() => {
-    async function initChatChain() {
-      const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
+/**
+ * Model selection scope determines how model changes are persisted.
+ * - 'quick-command': Changes persist to quickCommandModelKey (shared with Quick Ask)
+ * - 'custom-command': Changes only affect current session (respects command-level config)
+ */
+export type ModelSelectionScope = "quick-command" | "custom-command";
 
-      const defaultSystemPrompt =
-        "You are a helpful assistant. You'll help the user with their content editing needs.";
-      const chatPrompt = ChatPromptTemplate.fromMessages([
-        SystemMessagePromptTemplate.fromTemplate(systemPrompt || defaultSystemPrompt),
-        new MessagesPlaceholder("history"),
-        HumanMessagePromptTemplate.fromTemplate("{input}"),
-      ]);
-
-      const newChatChain = RunnableSequence.from([
-        {
-          input: (initialInput) => initialInput.input,
-          memory: () => chatMemory.loadMemoryVariables({}),
-        },
-        {
-          input: (previousOutput) => previousOutput.input,
-          history: (previousOutput) => previousOutput.memory.history,
-        },
-        chatPrompt,
-        chatModel,
-      ]);
-
-      setChatChain(newChatChain);
-    }
-
-    initChatChain();
-  }, [selectedModel, chatMemory, systemPrompt]);
-
-  return { chatChain, chatMemory };
+/**
+ * Configuration for modal behavior.
+ * This replaces the mode-based branching with explicit configuration.
+ */
+export interface ModalBehaviorConfig {
+  /** Whether to auto-execute the command on open (menu mode: true, quick mode: false) */
+  autoExecuteOnOpen: boolean;
+  /** Whether to hide ContentArea when state is idle */
+  hideContentAreaOnIdle: boolean;
+  /** Transform function for first submit (e.g., append note context placeholders) */
+  firstSubmitTransform?: (input: string, includeNoteContext: boolean) => string;
+  /** Label to display in the modal header */
+  commandLabel: string;
+  /** Icon to display in the modal header (null for no icon, undefined for default) */
+  commandIcon?: React.ReactNode | null;
+  /** Whether to show the "Include note context" checkbox */
+  showIncludeNoteContext?: boolean;
+  /**
+   * Model selection scope - determines persistence behavior.
+   * - 'quick-command': Persists to quickCommandModelKey (default for Quick Command)
+   * - 'custom-command': Only affects current session (default for Custom Commands)
+   */
+  modelSelectionScope?: ModelSelectionScope;
 }
+
+/**
+ * Resolves modal behavior defaults and caller overrides.
+ */
+function resolveBehaviorConfig(
+  command: CustomCommand,
+  overrides?: Partial<ModalBehaviorConfig>
+): ModalBehaviorConfig {
+  const defaults: ModalBehaviorConfig = {
+    autoExecuteOnOpen: true,
+    hideContentAreaOnIdle: false,
+    commandLabel: command.title,
+    commandIcon: <PenLine className="tw-size-4 tw-text-muted" />,
+  };
+
+  return { ...defaults, ...overrides };
+}
+
+// ============================================================================
+// Content Component
+// ============================================================================
 
 interface CustomCommandChatModalContentProps {
   originalText: string;
   command: CustomCommand;
   onInsert: (message: string) => void;
   onReplace: (message: string) => void;
+  onClose: () => void;
   systemPrompt?: string;
+  initialPosition?: { x: number; y: number };
+  behaviorConfig?: Partial<ModalBehaviorConfig>;
 }
 
+/**
+ * Content component for CustomCommandChatModal using the new MenuCommandModal.
+ */
 function CustomCommandChatModalContent({
   originalText,
   command,
   onInsert,
   onReplace,
+  onClose,
   systemPrompt,
+  initialPosition,
+  behaviorConfig,
 }: CustomCommandChatModalContentProps) {
-  const [aiCurrentMessage, setAiCurrentMessage] = useState<string | null>(null);
-  const [processedMessage, setProcessedMessage] = useState<string | null>(null);
-  const [followupInstruction, setFollowupInstruction] = useState<string>("");
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const followupRef = useRef<HTMLTextAreaElement>(null);
-  const [generating, setGenerating] = useState(true);
-  const [modelKey] = useModelKey();
-  const settings = useSettingsValue();
-  const selectedModel = useMemo(
-    () => findCustomModel(command.modelKey || modelKey, settings.activeModels),
-    [command.modelKey, modelKey, settings.activeModels]
+  // Resolve behavior configuration
+  const behavior = useMemo(
+    () => resolveBehaviorConfig(command, behaviorConfig),
+    [command, behaviorConfig]
   );
 
-  const { chatChain, chatMemory } = useChatChain(selectedModel, systemPrompt);
+  // Prevent concurrent submissions (double-Enter / re-entrancy).
+  const followUpSubmitLockRef = useRef(false);
+  // Track mount state to avoid setState on unmounted component
+  const isMountedRef = useRef(true);
 
-  const commandTitle = command.title;
-
-  /**
-   * Compute the display value for the textarea
-   */
-  const displayValue = useMemo(() => {
-    // If we have a processed message, show that
-    if (processedMessage) {
-      return processedMessage;
-    }
-
-    // If not generating, show loading
-    if (!generating) {
-      return "loading...";
-    }
-
-    // If generating but no content yet, show loading
-    if (!aiCurrentMessage || aiCurrentMessage.trim() === "") {
-      return "loading...";
-    }
-
-    // Otherwise show the streaming content
-    return aiCurrentMessage;
-  }, [processedMessage, generating, aiCurrentMessage]);
-
-  // Reusable function to handle streaming responses wrapped in useCallback
-  const streamResponse = useCallback(
-    async (input: string, abortController: AbortController) => {
-      if (!chatChain) {
-        console.error("Chat chain not initialized");
-        new Notice("Chat engine not ready. Please try again.");
-        setGenerating(false);
-        return null;
-      }
-
-      try {
-        setAiCurrentMessage(null);
-        setProcessedMessage(null);
-        setGenerating(true);
-
-        const chainWithSignal = chatChain.withConfig({ signal: abortController.signal });
-
-        const stream = await chainWithSignal.stream({ input });
-
-        // Initialize ThinkBlockStreamer to handle reasoning content from Claude and Deepseek
-        // excludeThinking=true means thinking tokens are not included in the response
-        const thinkStreamer = new ThinkBlockStreamer(
-          (message: string) => {
-            setAiCurrentMessage(message);
-          },
-          true // excludeThinking
-        );
-
-        for await (const chunk of stream) {
-          if (abortController.signal.aborted) break;
-          thinkStreamer.processChunk(chunk);
-        }
-
-        // Close the streamer to finalize the response and close any open think blocks
-        const result = thinkStreamer.close();
-
-        if (!abortController.signal.aborted) {
-          const trimmedResponse = result.content.trim();
-          setProcessedMessage(trimmedResponse);
-          setGenerating(false);
-
-          await chatMemory.saveContext({ input }, { output: trimmedResponse });
-
-          return trimmedResponse;
-        }
-
-        return null;
-      } catch (error) {
-        logError("Error generating response:", error);
-        setGenerating(false);
-        return null;
-      }
-    },
-    [chatChain, chatMemory]
-  );
-
-  // Generate initial response
+  // Cleanup on unmount
   useEffect(() => {
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // State
+  const [finalText, setFinalText] = useState<string>("");
+  const [editedText, setEditedText] = useState<string>("");
+  const [isLoading, setIsLoading] = useState(behavior.autoExecuteOnOpen);
+  const [followUpValue, setFollowUpValue] = useState("");
+
+  // Model selection
+  const [globalModelKey] = useModelKey();
+  const settings = useSettingsValue();
+  const modelSelectionScope = behavior.modelSelectionScope ?? "custom-command";
+
+  // Determine initial model key based on scope:
+  // - quick-command: Use quickCommandModelKey (shared with Quick Ask)
+  // - custom-command: Use command's modelKey if set, otherwise global model
+  const initialModelKey = useMemo(() => {
+    if (modelSelectionScope === "quick-command") {
+      // Use ?? to match QuickAskPanel behavior (empty string is valid, only null/undefined falls back)
+      return settings.quickCommandModelKey ?? globalModelKey;
+    }
+    // For custom-command scope, respect command-level config
+    // Use || here because empty string means "inherit from global"
+    return command.modelKey || globalModelKey;
+  }, [modelSelectionScope, settings.quickCommandModelKey, command.modelKey, globalModelKey]);
+
+  const [selectedModelKey, setSelectedModelKey] = useState(initialModelKey);
+
+  // Handle model change with scope-aware persistence
+  const handleModelChange = useCallback(
+    (newModelKey: string) => {
+      setSelectedModelKey(newModelKey);
+      // Only persist for quick-command scope (shared with Quick Ask)
+      if (modelSelectionScope === "quick-command") {
+        updateSetting("quickCommandModelKey", newModelKey);
+      }
+      // For custom-command scope, changes only affect current session
+    },
+    [modelSelectionScope]
+  );
+
+  // Include note context state (for Quick Command mode)
+  // Use local state for immediate UI updates, sync to settings on change
+  const [includeNoteContext, setIncludeNoteContext] = useState(
+    () => settings.quickCommandIncludeNoteContext
+  );
+
+  const handleIncludeNoteContextChange = useCallback((checked: boolean) => {
+    setIncludeNoteContext(checked);
+    updateSetting("quickCommandIncludeNoteContext", checked);
+  }, []);
+
+  // Track if we've already shown the fallback notice to avoid repeated notices
+  const didShowFallbackNoticeRef = useRef(false);
+
+  // Safely resolve the selected model with fallback to first enabled model
+  const resolvedModel = useMemo((): CustomModel | null => {
+    try {
+      const model = findCustomModel(selectedModelKey, settings.activeModels);
+      // Treat disabled models as invalid selections (ModelSelector won't present them)
+      if (!model.enabled) {
+        throw new Error(`Selected model is disabled: ${selectedModelKey}`);
+      }
+      return model;
+    } catch {
+      // Stale model key can happen when a model is removed/renamed/disabled; don't crash the modal.
+      // Avoid side effects during render; notify/log in the effect below.
+      return settings.activeModels.find((m) => m.enabled) ?? null;
+    }
+  }, [selectedModelKey, settings.activeModels]);
+
+  // Compute the key for the resolved model
+  const resolvedModelKey = useMemo(() => {
+    if (!resolvedModel) return null;
+    return `${resolvedModel.name}|${resolvedModel.provider}`;
+  }, [resolvedModel]);
+
+  // Update selectedModelKey if we had to fall back to a different model
+  useEffect(() => {
+    if (!resolvedModelKey) return;
+    if (resolvedModelKey === selectedModelKey) return;
+
+    // Always keep UI selection consistent with the resolved model
+    setSelectedModelKey(resolvedModelKey);
+
+    // Notify only once per modal lifecycle
+    if (didShowFallbackNoticeRef.current) return;
+    didShowFallbackNoticeRef.current = true;
+    logWarn("Selected model is no longer available. Falling back to a default model.", {
+      selectedModelKey,
+      resolvedModelKey,
+    });
+    new Notice("Selected model is no longer available. Falling back to a default model.");
+  }, [resolvedModelKey, selectedModelKey]);
+
+  // Use shared streaming hook
+  const {
+    isStreaming,
+    streamingText,
+    runTurn,
+    stop: stopStreaming,
+    getLatestStreamingText,
+  } = useStreamingChatSession({
+    model: resolvedModel,
+    systemPrompt: systemPrompt || "",
+    excludeThinking: true,
+    onNoModel: () => {
+      new Notice("No active model is configured. Please configure a model in Copilot settings.");
+      setIsLoading(false);
+    },
+    onNonAbortError: (error) => {
+      logError("Error generating response:", error);
+      new Notice("Error generating response. Please try again.");
+      setIsLoading(false);
+    },
+  });
+
+  // Track the last input prompt for saving context on stop
+  const lastInputPromptRef = useRef<string>("");
+
+  // Sync editedText with finalText when finalText changes
+  useEffect(() => {
+    if (finalText) {
+      setEditedText(finalText);
+    }
+  }, [finalText]);
+
+  // Compute content state for MenuCommandModal
+  const contentState: ContentState = useMemo(() => {
+    if (isLoading && !isStreaming && !streamingText && !finalText) {
+      return { type: "loading" };
+    }
+    if (isStreaming || streamingText) {
+      return { type: "result", text: streamingText || finalText, isStreaming };
+    }
+    if (finalText) {
+      return { type: "result", text: finalText, isStreaming: false };
+    }
+    return { type: "idle" };
+  }, [isLoading, isStreaming, streamingText, finalText]);
+
+  // Track if auto-execute has already run (prevent re-execution on model change)
+  const didAutoExecuteRef = useRef(false);
+
+  // Generate initial response (only for autoExecuteOnOpen mode)
+  useEffect(() => {
+    if (!behavior.autoExecuteOnOpen) return;
+    // Only execute once - prevent re-execution when model changes
+    if (didAutoExecuteRef.current) return;
+    didAutoExecuteRef.current = true;
+
+    let cancelled = false;
 
     async function generateInitialResponse() {
-      if (!chatChain) {
-        // We'll wait for the chain to be ready
-        return;
-      }
-
       try {
-        const prompt = await processCommandPrompt(command.content, originalText);
-        await streamResponse(prompt, abortController);
+        const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
+          if (ctx.signal.aborted) return "";
+          const prompt = await processCommandPrompt(command.content, originalText);
+          lastInputPromptRef.current = prompt;
+          return prompt;
+        });
+
+        if (!cancelled && result) {
+          setFinalText(result);
+          lastInputPromptRef.current = "";
+        }
       } catch (error) {
         logError("Error in initial response:", error);
-        setGenerating(false);
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
       }
     }
 
     generateInitialResponse();
+
     return () => {
-      abortController.abort();
+      cancelled = true;
+      stopStreaming(ABORT_REASON.UNMOUNT);
     };
-  }, [command.content, originalText, chatChain, streamResponse]);
+  }, [behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
 
-  const abortControllerRef = useRef<AbortController | null>(null);
+  const handleFollowUpSubmit = async () => {
+    if (!followUpValue.trim()) return;
 
-  const handleFollowupSubmit = async () => {
-    if (!followupInstruction.trim() || !chatChain) {
-      if (!chatChain) {
-        new Notice("Chat engine not ready. Please try again.");
-      }
-      return;
-    }
+    // Prevent concurrent submissions
+    if (followUpSubmitLockRef.current) return;
+    if (isLoading || isStreaming) return;
 
-    const abortController = new AbortController();
-    abortControllerRef.current = abortController;
+    followUpSubmitLockRef.current = true;
 
-    // Skip appending the selected text to the prompt because it's already
-    // included in the original prompt.
-    const prompt = await processCommandPrompt(followupInstruction, originalText, true);
+    // Clear input and previous result immediately for responsive UI
+    const inputValue = followUpValue;
+    setFollowUpValue("");
+    setFinalText("");
+    setEditedText("");
+
     try {
-      const result = await streamResponse(prompt, abortController);
+      setIsLoading(true);
+
+      const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
+        if (ctx.signal.aborted) return "";
+
+        // Use ctx.isFirstTurn to determine if this is the first turn
+        const isFirstTurn = ctx.isFirstTurn;
+
+        // Apply first submit transform if provided (e.g., append note context placeholders)
+        let rawInput = inputValue;
+        if (isFirstTurn && behavior.firstSubmitTransform) {
+          rawInput = behavior.firstSubmitTransform(rawInput, includeNoteContext);
+        }
+
+        // Process prompt (expand placeholders)
+        const prompt = await processCommandPrompt(rawInput, originalText, !isFirstTurn);
+        lastInputPromptRef.current = prompt;
+        return prompt;
+      });
+
+      // Guard against unmount during async operation
+      if (!isMountedRef.current) return;
 
       if (result) {
-        // Reset follow-up instruction on success
-        setFollowupInstruction("");
+        setFinalText(result);
+        lastInputPromptRef.current = "";
+      }
+    } catch (error) {
+      // Handle errors in follow-up submit
+      if (error instanceof Error && error.name === "AbortError") {
+        // Silently ignore abort errors
+      } else {
+        logError("Error in follow-up submit:", error);
+        if (isMountedRef.current) {
+          new Notice("Failed to send message. Please try again.");
+        }
       }
     } finally {
-      if (abortController.signal.aborted) {
-        setGenerating(false);
-        setProcessedMessage(aiCurrentMessage ?? "");
+      if (isMountedRef.current) {
+        setIsLoading(false);
       }
-      abortControllerRef.current = null;
+      followUpSubmitLockRef.current = false;
     }
   };
 
-  // Handle stopping generation
-  const handleStopGeneration = () => {
-    if (abortControllerRef.current) {
-      abortControllerRef.current.abort();
-      abortControllerRef.current = null;
-      setGenerating(false);
+  /**
+   * Handle user stop action.
+   * The shared hook handles memory persistence on USER_STOPPED automatically.
+   * We only need to capture the latest text for UI display.
+   */
+  const handleStop = useCallback(() => {
+    // Reason: Use getLatestStreamingText() to bypass RAF throttle,
+    // ensuring we capture the most recent streamed content.
+    const latestStreamedText = getLatestStreamingText().trim();
+
+    stopStreaming(ABORT_REASON.USER_STOPPED);
+
+    if (latestStreamedText) {
+      setFinalText(latestStreamedText);
     }
+    lastInputPromptRef.current = "";
+  }, [stopStreaming, getLatestStreamingText]);
+
+  const handleInsert = () => {
+    const text = editedText || finalText || streamingText;
+    if (text) onInsert(text);
   };
 
-  // Handle keyboard shortcuts
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.nativeEvent.isComposing) return;
-
-    // For insert/replace buttons
-    if (!generating && processedMessage && !showFollowupSubmit) {
-      // Command+Enter (Mac) or Ctrl+Enter (Windows) for Replace
-      if (e.key === "Enter" && (Platform.isMacOS ? e.metaKey : e.ctrlKey) && !e.shiftKey) {
-        e.preventDefault();
-        onReplace(processedMessage);
-      }
-
-      // Command+Shift+Enter (Mac) or Ctrl+Shift+Enter (Windows) for Insert
-      if (e.key === "Enter" && (Platform.isMacOS ? e.metaKey : e.ctrlKey) && e.shiftKey) {
-        e.preventDefault();
-        onInsert(processedMessage);
-      }
-    }
-
-    // For submit button (follow-up instruction)
-    if (showFollowupSubmit && e.key === "Enter" && !e.shiftKey && !e.metaKey && !e.ctrlKey) {
-      e.preventDefault();
-      handleFollowupSubmit();
-    }
+  const handleReplace = () => {
+    const text = editedText || finalText || streamingText;
+    if (text) onReplace(text);
   };
-
-  // Scroll textarea to bottom when generating content
-  useEffect(() => {
-    if (textareaRef.current && aiCurrentMessage && generating) {
-      const textarea = textareaRef.current;
-      textarea.scrollTop = textarea.scrollHeight;
-    }
-  }, [aiCurrentMessage, generating]);
-
-  // Determine if follow-up submit button should be shown
-  const showFollowupSubmit = !generating && followupInstruction.trim().length > 0;
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-4" onKeyDown={handleKeyDown}>
-      <div className="tw-max-h-60 tw-overflow-y-auto tw-whitespace-pre-wrap tw-text-muted">
-        {originalText}
-      </div>
-      <div className="tw-flex tw-flex-col tw-gap-2">
-        {commandTitle && (
-          <div className="tw-flex tw-items-center tw-gap-2 tw-font-bold tw-text-normal">
-            <PenLine className="tw-size-4" />
-            {commandTitle}
-          </div>
-        )}
-      </div>
-      <div className="tw-group tw-relative">
-        <textarea
-          ref={textareaRef}
-          className="tw-peer tw-h-60 tw-w-full tw-text-text"
-          value={displayValue}
-          disabled={processedMessage == null}
-          onChange={(e) => setProcessedMessage(e.target.value)}
-        />
-        {processedMessage && (
-          <button
-            className="tw-absolute tw-right-2 tw-top-2 tw-opacity-0 tw-transition-opacity group-hover:tw-opacity-100 peer-focus-visible:!tw-opacity-0"
-            onClick={() => {
-              navigator.clipboard.writeText(processedMessage);
-              new Notice("Copied to clipboard");
-            }}
-          >
-            <Copy className="tw-size-4 hover:tw-text-accent" />
-          </button>
-        )}
-      </div>
-
-      {!generating && processedMessage && (
-        <div className="tw-flex tw-flex-col tw-gap-2">
-          <textarea
-            autoFocus
-            ref={followupRef}
-            className="tw-h-20 tw-w-full tw-text-text"
-            placeholder="Enter follow-up instructions..."
-            value={followupInstruction}
-            onChange={(e) => setFollowupInstruction(e.target.value)}
-          />
-        </div>
-      )}
-
-      <div className="tw-flex tw-justify-between tw-gap-2">
-        <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-font-bold tw-text-faint">
-          <Bot className="tw-size-4" />
-          {getModelDisplayText(selectedModel)}
-        </div>
-        <div className="tw-flex tw-gap-2">
-          {generating ? (
-            // When generating, show Stop button
-            <Button size="sm" variant="secondary" onClick={handleStopGeneration}>
-              Stop
-            </Button>
-          ) : showFollowupSubmit ? (
-            // When follow-up instruction has content, show Submit button with Enter shortcut
-            <Button
-              size="sm"
-              onClick={handleFollowupSubmit}
-              className="tw-flex tw-items-center tw-gap-1"
-            >
-              <span>Submit</span>
-              <CornerDownLeft className="tw-size-3" />
-            </Button>
-          ) : (
-            // Otherwise, show Insert and Replace buttons with shortcut indicators
-            <>
-              <Button
-                size="sm"
-                onClick={() => onInsert(processedMessage ?? "")}
-                className="tw-flex tw-items-center tw-gap-1"
-              >
-                <span>Insert</span>
-                <div className="tw-flex tw-items-center tw-text-xs">
-                  {Platform.isMacOS ? (
-                    <>
-                      <Command className="tw-size-3" />
-                      <ArrowBigUp className="tw-size-3" />
-                      <CornerDownLeft className="tw-size-3" />
-                    </>
-                  ) : (
-                    <>
-                      <span className="tw-text-xs">Ctrl</span>
-                      <ArrowBigUp className="tw-size-3" />
-                      <CornerDownLeft className="tw-size-3" />
-                    </>
-                  )}
-                </div>
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => onReplace(processedMessage ?? "")}
-                className="tw-flex tw-items-center tw-gap-1"
-              >
-                <span>Replace</span>
-                <div className="tw-flex tw-items-center tw-text-xs">
-                  {Platform.isMacOS ? (
-                    <>
-                      <Command className="tw-size-3" />
-                      <CornerDownLeft className="tw-size-3" />
-                    </>
-                  ) : (
-                    <>
-                      <span className="tw-text-xs">Ctrl</span>
-                      <CornerDownLeft className="tw-size-3" />
-                    </>
-                  )}
-                </div>
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </div>
+    <MenuCommandModal
+      open={true}
+      onClose={onClose}
+      commandIcon={behavior.commandIcon}
+      commandLabel={behavior.commandLabel}
+      selectedText={originalText}
+      contentState={contentState}
+      editableContent={editedText}
+      onEditableContentChange={setEditedText}
+      followUpValue={followUpValue}
+      onFollowUpChange={setFollowUpValue}
+      onFollowUpSubmit={handleFollowUpSubmit}
+      selectedModel={selectedModelKey}
+      onSelectModel={handleModelChange}
+      onStop={handleStop}
+      onInsert={handleInsert}
+      onReplace={handleReplace}
+      initialPosition={initialPosition}
+      resizable
+      hideContentAreaOnIdle={behavior.hideContentAreaOnIdle}
+      includeNoteContext={behavior.showIncludeNoteContext ? includeNoteContext : undefined}
+      onIncludeNoteContextChange={
+        behavior.showIncludeNoteContext ? handleIncludeNoteContextChange : undefined
+      }
+    />
   );
 }
 
-export class CustomCommandChatModal extends Modal {
-  private root: Root;
+// ============================================================================
+// Modal Class
+// ============================================================================
+
+/**
+ * Standalone floating modal for CustomCommandChat (not using Obsidian Modal).
+ * This avoids the overlay issue caused by Obsidian's Modal class.
+ * Positions itself near the cursor/selection like Quick Ask.
+ */
+export class CustomCommandChatModal {
+  private root: Root | null = null;
+  private container: HTMLElement | null = null;
+  private highlightView: EditorView | null = null;
+  private replaceGuard: ReplaceGuard | null = null;
 
   constructor(
-    app: App,
+    private app: App,
     private configs: {
       selectedText: string;
       command: CustomCommand;
       systemPrompt?: string;
+      behaviorConfig?: Partial<ModalBehaviorConfig>;
     }
-  ) {
-    super(app);
+  ) {}
+
+  /**
+   * Resolve the correct window for a given view (or the active view).
+   * Reason: In Obsidian popout windows, the global `window` refers to the main window,
+   * but the editor lives in a different window. Using ownerDocument.defaultView ensures
+   * the modal is positioned relative to the correct window.
+   */
+  private resolveWindow(view?: MarkdownView | null): Window {
+    return view?.containerEl?.ownerDocument?.defaultView ?? window;
   }
 
-  onOpen() {
-    const { contentEl } = this;
-    this.root = createRoot(contentEl);
-    const { selectedText, command, systemPrompt } = this.configs;
+  /**
+   * Resolve the correct document for a given view (or the active view).
+   * Reason: Same multi-window concern as resolveWindow — the modal container must be
+   * appended to the document that owns the triggering view.
+   */
+  private resolveDocument(view?: MarkdownView | null): Document {
+    return view?.containerEl?.ownerDocument ?? document;
+  }
+
+  /**
+   * Calculate initial position based on cursor/selection in the editor.
+   * Handles: single-line, multi-line, line-start trap, flip when near bottom edge.
+   */
+  private getInitialPosition(activeView: MarkdownView | null): { x: number; y: number } {
+    const win = this.resolveWindow(activeView);
+    const panelWidth = Math.min(500, win.innerWidth * 0.9);
+    const panelHeight = 440;
+    const margin = 12;
+    const gap = 6;
+
+    // Fallback: center on screen
+    const fallback = {
+      x: Math.max(margin, (win.innerWidth - panelWidth) / 2),
+      y: Math.max(margin, (win.innerHeight - panelHeight) / 2),
+    };
+
+    if (!activeView?.editor?.cm) {
+      return fallback;
+    }
+
+    const view = activeView.editor.cm;
+    const selection = view.state.selection.main;
+    const isCursor = selection.empty;
+
+    // Reason: Use `head` (where user's cursor is) instead of `to`, so that
+    // reverse selections still position the popup near the user's focus point.
+    let anchorPos = selection.head;
+
+    // Fix "line-start trap": when head lands on next line's start after selecting newline
+    // Reason: Only apply when head is at the END of selection (head === to), not when
+    // user reverse-selects TO a line start (head === from). This avoids jumping to
+    // previous line when user intentionally selects to line beginning.
+    if (!isCursor && anchorPos > 0 && anchorPos === selection.to) {
+      const lineAtHead = view.state.doc.lineAt(anchorPos);
+      if (anchorPos === lineAtHead.from) {
+        // Head is at line start and is the selection end, move back to previous line's end
+        anchorPos = anchorPos - 1;
+      }
+    }
+
+    // Get coordinates for anchor position
+    const anchorCoords = view.coordsAtPos(anchorPos);
+    if (!anchorCoords) {
+      return fallback;
+    }
+
+    // Check visibility (both vertical and horizontal)
+    const scrollRect = view.scrollDOM.getBoundingClientRect();
+    const isVerticallyVisible =
+      anchorCoords.bottom >= scrollRect.top && anchorCoords.top <= scrollRect.bottom;
+    const isHorizontallyVisible =
+      anchorCoords.right >= scrollRect.left && anchorCoords.left <= scrollRect.right;
+
+    if (!isVerticallyVisible || !isHorizontallyVisible) {
+      return fallback;
+    }
+
+    // Calculate horizontal position
+    let centerX: number;
+    if (isCursor) {
+      // Cursor only: position near cursor (not centered, to avoid obscuring)
+      centerX = anchorCoords.left;
+    } else {
+      // Selection: check if single-line or multi-line
+      const lineAtFrom = view.state.doc.lineAt(selection.from);
+      const lineAtTo = view.state.doc.lineAt(selection.to);
+
+      if (lineAtFrom.number === lineAtTo.number) {
+        // Single-line: center between from and to
+        const fromCoords = view.coordsAtPos(selection.from);
+        const toCoords = view.coordsAtPos(selection.to);
+        if (fromCoords && toCoords) {
+          centerX = (fromCoords.left + toCoords.right) / 2;
+        } else {
+          centerX = anchorCoords.left;
+        }
+      } else {
+        // Multi-line: follow the anchor (head) position
+        centerX = anchorCoords.left;
+      }
+    }
+
+    // Calculate left position
+    // For cursor: align left edge near cursor; for selection: center the panel
+    let left: number;
+    if (isCursor) {
+      left = centerX;
+    } else {
+      left = centerX - panelWidth / 2;
+    }
+    left = Math.max(margin, Math.min(left, win.innerWidth - margin - panelWidth));
+
+    // Calculate vertical position with flip logic
+    const anchorBottom = anchorCoords.bottom;
+    const anchorTop = anchorCoords.top;
+    const spaceBelow = win.innerHeight - anchorBottom - gap;
+    const spaceAbove = anchorTop - gap;
+
+    let top: number;
+    if (spaceBelow >= panelHeight + margin) {
+      // Enough space below: place below anchor
+      top = anchorBottom + gap;
+    } else if (spaceAbove >= panelHeight + margin) {
+      // Not enough below but enough above: flip to above
+      top = anchorTop - gap - panelHeight;
+    } else {
+      // Neither side has enough space: prefer the side with more space
+      if (spaceBelow >= spaceAbove) {
+        top = anchorBottom + gap;
+      } else {
+        top = anchorTop - gap - panelHeight;
+      }
+    }
+
+    // Final clamp to ensure panel stays within viewport
+    top = Math.max(margin, Math.min(top, win.innerHeight - margin - panelHeight));
+
+    return { x: left, y: top };
+  }
+
+  open() {
+    // Reason: Capture activeView once at open time to ensure document/window/editor
+    // all reference the same view. Avoids subtle inconsistencies if the user switches
+    // tabs between resolveDocument() and the selection snapshot below.
+    const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
+
+    const doc = this.resolveDocument(activeView);
+    this.container = doc.createElement("div");
+    this.container.className = "copilot-menu-command-modal-container";
+    doc.body.appendChild(this.container);
+
+    this.root = createRoot(this.container);
+
+    // Capture ReplaceGuard (replaces captureReplaceSnapshot)
+    const { selectedText, command, systemPrompt, behaviorConfig } = this.configs;
+    let selectedTextSnapshot = selectedText;
+
+    if (activeView?.editor?.cm) {
+      const view = activeView.editor.cm;
+      const selection = view.state.selection.main;
+      const filePath = activeView.file?.path ?? null;
+      selectedTextSnapshot = view.state.doc.sliceString(selection.from, selection.to);
+
+      // Show persistent selection highlight
+      SelectionHighlight.show(view, selection.from, selection.to);
+      this.highlightView = view;
+
+      // Create ReplaceGuard
+      this.replaceGuard = createHighlightReplaceGuard({
+        editorView: view,
+        filePathSnapshot: filePath,
+        selectedTextSnapshot,
+        getCurrentContext: () => {
+          const currentView = this.app.workspace.getActiveViewOfType(MarkdownView);
+          return {
+            editorView: currentView?.editor?.cm ?? null,
+            filePath: currentView?.file?.path ?? null,
+          };
+        },
+      });
+    }
+
+    const initialPosition = this.getInitialPosition(activeView);
 
     const handleInsert = (message: string) => {
       insertIntoEditor(message);
@@ -424,22 +635,52 @@ export class CustomCommandChatModal extends Modal {
     };
 
     const handleReplace = (message: string) => {
-      insertIntoEditor(message, true);
+      if (!this.replaceGuard) {
+        new Notice("No selection to replace.");
+        return;
+      }
+
+      const cleanedMessage = cleanMessageForCopy(message);
+      const result = this.replaceGuard.replace(cleanedMessage);
+
+      if (!result.ok) {
+        new Notice(result.message ?? "Cannot replace.");
+        return;
+      }
+
+      new Notice("Message replaced in the active note.");
+      this.close();
+    };
+
+    const handleClose = () => {
       this.close();
     };
 
     this.root.render(
       <CustomCommandChatModalContent
-        originalText={selectedText}
+        originalText={selectedTextSnapshot}
         command={command}
         onInsert={handleInsert}
         onReplace={handleReplace}
+        onClose={handleClose}
         systemPrompt={systemPrompt}
+        initialPosition={initialPosition}
+        behaviorConfig={behaviorConfig}
       />
     );
   }
 
-  onClose() {
-    this.root.unmount();
+  close() {
+    // Hide selection highlight
+    if (this.highlightView) {
+      SelectionHighlight.hide(this.highlightView);
+      this.highlightView = null;
+    }
+    // Clean up ReplaceGuard reference
+    this.replaceGuard = null;
+    this.root?.unmount();
+    this.root = null;
+    this.container?.remove();
+    this.container = null;
   }
 }

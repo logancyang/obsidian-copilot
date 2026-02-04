@@ -1,6 +1,7 @@
 import {
   clearSelectedTextContexts,
   getCurrentProject,
+  getSelectedTextContexts,
   ProjectConfig,
   removeSelectedTextContext,
   setCurrentProject,
@@ -128,6 +129,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   // Ref for the chat container (used for drag-and-drop)
   const chatContainerRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * Persist editor selection highlight when clicking into Chat
+   */
+  const handleChatPointerDownCapture = useCallback((): void => {
+    plugin.chatSelectionHighlightController.persistFromPointerDown();
+  }, [plugin]);
 
   // Safe setter utilities - automatically wrap state setters to prevent updates after unmount
   const safeSet = useMemo<{
@@ -572,15 +580,28 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleRemoveSelectedText = useCallback(
     (id: string) => {
-      const removed = selectedTextContexts.find((ctx) => ctx.id === id);
+      // Get fresh state to avoid stale closure issues (fixes race condition on rapid removals)
+      const currentContexts = getSelectedTextContexts();
+      const removed = currentContexts.find((ctx) => ctx.id === id);
       removeSelectedTextContext(id);
+
       // Suppress web selection to prevent it from being auto-captured again
       if (removed?.sourceType === "web") {
         plugin.suppressCurrentWebSelection(removed.url);
       }
+      // Note: highlight cleanup is now handled by the useEffect below that watches selectedTextContexts
     },
-    [plugin, selectedTextContexts]
+    [plugin]
   );
+
+  /**
+   * State-driven highlight cleanup: automatically clear editor highlight
+   * when no note contexts remain. This ensures highlight stays in sync
+   * with context state regardless of how contexts are modified.
+   */
+  useEffect(() => {
+    plugin.chatSelectionHighlightController.clearIfNoNoteContexts(selectedTextContexts);
+  }, [selectedTextContexts, plugin]);
 
   useEffect(() => {
     const handleChatVisibility = () => {
@@ -649,6 +670,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Capture web selection URL before clearing for suppression
     const webSelectionUrl = selectedTextContexts.find((ctx) => ctx.sourceType === "web")?.url;
     clearSelectedTextContexts();
+    // Clear chat selection highlight
+    plugin.chatSelectionHighlightController.clearForNewChat();
     // Suppress web selection to prevent it from reappearing in new chat
     plugin.suppressCurrentWebSelection(webSelectionUrl);
     // Respect the autoAddActiveContentToContext setting for all non-project chains
@@ -859,7 +882,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   );
 
   return (
-    <div ref={chatContainerRef} className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+    <div
+      ref={chatContainerRef}
+      onPointerDownCapture={handleChatPointerDownCapture}
+      className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden"
+    >
       <div className="tw-h-full">
         <div className="tw-relative tw-flex tw-h-full tw-flex-col">
           {isDragActive && (

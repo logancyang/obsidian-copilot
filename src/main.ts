@@ -10,13 +10,11 @@ import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
 
-import { QUICK_COMMAND_CODE_BLOCK } from "@/commands/constants";
 import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
-import { createQuickCommandContainer } from "@/components/QuickCommand";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
@@ -44,6 +42,7 @@ import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
+import { ChatSelectionHighlightController, hideChatSelectionHighlight, QuickAskController, SelectionHighlight } from "@/editor";
 import {
   Editor,
   MarkdownView,
@@ -78,8 +77,11 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
+  quickAskController: QuickAskController;
+  chatSelectionHighlightController: ChatSelectionHighlightController;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
+  private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
 
@@ -128,6 +130,16 @@ export default class CopilotPlugin extends Plugin {
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
 
+    // Initialize QuickAskController and register CM6 extension
+    this.quickAskController = new QuickAskController(this);
+    this.registerEditorExtension(this.quickAskController.createExtension());
+
+    // Initialize Chat selection highlight controller
+    this.chatSelectionHighlightController = new ChatSelectionHighlightController(this, {
+      closeQuickAskOnChatFocus: false,
+    });
+    this.chatSelectionHighlightController.initialize();
+
     // Single source of truth for Active Web Tab ({activeWebTab}) state
     // Preserves activeWebTab when switching to Chat view
     // Only run on desktop - Web Viewer is not available on mobile
@@ -150,28 +162,19 @@ export default class CopilotPlugin extends Plugin {
 
     registerCommands(this, undefined, getSettings());
 
-    this.registerMarkdownCodeBlockProcessor(QUICK_COMMAND_CODE_BLOCK, (_, el) => {
-      createQuickCommandContainer({
-        plugin: this,
-        element: el,
-      });
-
-      // Remove parent element class names to clear default code block styling
-      if (el.parentElement) {
-        el.parentElement.className = "";
-      }
-    });
-
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu: Menu) => {
-        return registerContextMenu(menu);
+        registerContextMenu(menu, this.app);
       })
     );
 
     this.registerEvent(
       this.app.workspace.on("active-leaf-change", (leaf) => {
+        // Delegate to chat selection highlight controller
+        this.chatSelectionHighlightController.handleActiveLeafChange(leaf ?? null);
+
         if (leaf && leaf.view instanceof MarkdownView) {
           const file = leaf.view.file;
           if (file) {
@@ -211,6 +214,13 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
+    // Clear all persistent selection highlights before unload
+    // This prevents "stuck" highlights after hot reload (dev environment)
+    this.clearAllPersistentSelectionHighlights();
+
+    // Cleanup chat selection highlight controller
+    this.chatSelectionHighlightController?.cleanup();
+
     if (this.projectManager) {
       this.projectManager.onunload();
     }
@@ -239,6 +249,27 @@ export default class CopilotPlugin extends Plugin {
     // Best-effort flush of log file
     await logFileManager.flush();
     logInfo("Copilot plugin unloaded");
+  }
+
+  /**
+   * Clear all persistent selection highlights across all Markdown editors.
+   * Called during plugin unload to prevent "stuck" highlights after hot reload.
+   */
+  private clearAllPersistentSelectionHighlights(): void {
+    try {
+      const leaves = this.app.workspace.getLeavesOfType("markdown");
+      for (const leaf of leaves) {
+        const view = leaf.view;
+        if (!(view instanceof MarkdownView)) continue;
+        const cm = view.editor?.cm;
+        if (cm) {
+          SelectionHighlight.hide(cm);
+          hideChatSelectionHighlight(cm);
+        }
+      }
+    } catch (error) {
+      logWarn("Failed to clear persistent selection highlights:", error);
+    }
   }
 
   updateUserMessageHistory(newMessage: string) {
@@ -386,21 +417,38 @@ export default class CopilotPlugin extends Plugin {
     }
 
     const editor = activeView.editor;
-    const selectedText = editor.getSelection();
-
-    // Only process non-empty selections
-    if (!selectedText || !selectedText.trim()) {
-      return;
-    }
-
     const activeFile = this.app.workspace.getActiveFile();
-    if (!activeFile) {
-      return;
-    }
 
-    // Get selection range to determine line numbers
+    // Get selection range first to validate it exists
     const selectionRange = editor.listSelections()[0];
     if (!selectionRange) {
+      return;
+    }
+
+    // Compute selection signature to avoid redundant updates
+    const signature = activeFile
+      ? `${activeFile.path}:${selectionRange.anchor.line}:${selectionRange.anchor.ch}:${selectionRange.head.line}:${selectionRange.head.ch}`
+      : "";
+
+    // Skip if selection hasn't changed
+    if (signature === this.lastSelectionSignature) {
+      return;
+    }
+    this.lastSelectionSignature = signature;
+
+    const selectedText = editor.getSelection();
+
+    // If selection is empty, clear note-type contexts
+    if (!selectedText || !selectedText.trim()) {
+      const currentContexts = getSelectedTextContexts();
+      const nonNoteContexts = currentContexts.filter((ctx) => ctx.sourceType !== "note");
+      if (currentContexts.length !== nonNoteContexts.length) {
+        setSelectedTextContexts(nonNoteContexts);
+      }
+      return;
+    }
+
+    if (!activeFile) {
       return;
     }
 
