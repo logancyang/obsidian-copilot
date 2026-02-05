@@ -1,7 +1,7 @@
 import { DEFAULT_MODEL_SETTING, ReasoningEffort, Verbosity } from "@/constants";
 
 /**
- * 模型参数配置接口
+ * Model parameters configuration interface
  */
 export interface ModelParams {
   temperature?: number;
@@ -13,17 +13,18 @@ export interface ModelParams {
 }
 
 /**
- * Reasoning effort 选项配置
+ * Reasoning effort options configuration
  */
 export const REASONING_EFFORT_OPTIONS = [
   { value: ReasoningEffort.MINIMAL, label: "Minimal" },
   { value: ReasoningEffort.LOW, label: "Low" },
   { value: ReasoningEffort.MEDIUM, label: "Medium" },
   { value: ReasoningEffort.HIGH, label: "High" },
+  { value: ReasoningEffort.XHIGH, label: "Extra High" },
 ];
 
 /**
- * Verbosity 选项配置
+ * Verbosity options configuration
  */
 export const VERBOSITY_OPTIONS = [
   { value: Verbosity.LOW, label: "Low" },
@@ -32,14 +33,14 @@ export const VERBOSITY_OPTIONS = [
 ];
 
 /**
- * 获取 reasoningEffort 的默认值
+ * Get the default reasoning effort value
  */
 export function getDefaultReasoningEffort(): ReasoningEffort {
   return DEFAULT_MODEL_SETTING.REASONING_EFFORT;
 }
 
 /**
- * 获取 verbosity 的默认值
+ * Get the default verbosity value
  */
 export function getDefaultVerbosity(): Verbosity {
   return DEFAULT_MODEL_SETTING.VERBOSITY;
