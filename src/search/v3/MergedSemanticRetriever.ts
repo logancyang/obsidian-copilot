@@ -104,7 +104,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
   ): Promise<Document[]> {
     const [lexicalDocs, semanticDocs] = await Promise.all([
       this.lexicalRetriever.getRelevantDocuments(query, config),
-      this.semanticRetriever.getRelevantDocuments(query, config),
+      this.semanticRetriever.invoke(query, config),
     ]);
 
     const merged = new Map<string, Document>();

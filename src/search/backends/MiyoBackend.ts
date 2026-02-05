@@ -109,8 +109,9 @@ export class MiyoBackend implements VectorSearchBackend {
         logInfo("MiyoBackend: search response (full)", parsed);
       }
       const mapped = results.map((item) => this.mapResult(item));
-      if (typeof options.minScore === "number") {
-        return mapped.filter((item) => item.score >= options.minScore);
+      const minScore = options.minScore;
+      if (typeof minScore === "number") {
+        return mapped.filter((item) => item.score >= minScore);
       }
       return mapped;
     } catch (error) {
