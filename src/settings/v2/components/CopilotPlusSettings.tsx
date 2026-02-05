@@ -127,7 +127,7 @@ export const CopilotPlusSettings: React.FC = () => {
                             custom model deployments.
                           </div>
                           <div className="tw-text-xs tw-text-muted">
-                            Requires re-validation every 14 days when online.
+                            Requires re-validation every 15 days when online.
                           </div>
                         </div>
                       }
