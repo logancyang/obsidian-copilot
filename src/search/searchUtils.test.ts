@@ -403,6 +403,12 @@ describe("searchUtils", () => {
         "folder/with/100 spaces",
       ]);
     });
+
+    it("should handle malformed URI sequences gracefully", () => {
+      // Invalid % sequences that would throw URIError
+      const value = "bad%2,valid,bad%zz,%E0%A4";
+      expect(getDecodedPatterns(value)).toEqual(["bad%2", "valid", "bad%zz", "%E0%A4"]);
+    });
   });
 
   describe("getMatchingPatterns", () => {
