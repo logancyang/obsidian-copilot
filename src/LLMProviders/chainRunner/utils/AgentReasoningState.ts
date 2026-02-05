@@ -205,6 +205,9 @@ export function summarizeToolResult(
       if (resultStr.includes('"failed"') || resultStr.includes("Error")) {
         return `Edit failed for "${fileName}"`;
       }
+      // TODO(@wenzhengjiang): Handle no-op cases (e.g., "File is too small", "Search text not found")
+      // Requires ComposerTools to return structured results instead of plain strings.
+      // See docs/TODO-composer-tool-redesign.md
       return toolName === "writeToFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
     }
     default:

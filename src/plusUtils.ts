@@ -208,15 +208,26 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
   try {
     const isEligible = await isSelfHostEligiblePlan();
     if (isEligible) {
-      const newCount = (settings.selfHostValidationCount || 0) + 1;
-      updateSetting("selfHostModeValidatedAt", Date.now());
-      updateSetting("selfHostValidationCount", newCount);
+      const now = Date.now();
+      const timeSinceLastValidation = now - (settings.selfHostModeValidatedAt || 0);
+      const shouldIncrementCount = timeSinceLastValidation >= SELF_HOST_GRACE_PERIOD_MS;
 
-      if (newCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
-        logInfo("Self-host mode permanently validated (3/3)");
-        new Notice("Self-host mode is now permanently enabled!");
+      if (shouldIncrementCount) {
+        // 14+ days since last validation - increment count
+        const newCount = (settings.selfHostValidationCount || 0) + 1;
+        updateSetting("selfHostModeValidatedAt", now);
+        updateSetting("selfHostValidationCount", newCount);
+
+        if (newCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+          logInfo("Self-host mode permanently validated (3/3)");
+          new Notice("Self-host mode is now permanently enabled!");
+        } else {
+          logInfo(`Self-host mode validation refreshed (${newCount}/3)`);
+        }
       } else {
-        logInfo(`Self-host mode validation refreshed (${newCount}/3)`);
+        // Less than 14 days - just refresh timestamp, don't increment
+        updateSetting("selfHostModeValidatedAt", now);
+        logInfo("Self-host mode timestamp refreshed (waiting for 14-day interval)");
       }
     } else {
       // User is no longer on an eligible plan, disable self-host mode

@@ -112,6 +112,31 @@ Benefits:
 
 Candidates: Gemini Flash Lite or comparable models.
 
+### Structured Tool Results
+
+Currently, ComposerTools returns plain strings for errors/no-ops, making result parsing fragile:
+
+```typescript
+// Current: Plain strings (fragile)
+return `File is too small to use this tool...`;
+return `Search text not found in file ${path}...`;
+return `No changes made to ${path}...`;
+```
+
+The reasoning UI (`AgentReasoningState.ts`) uses string matching to detect these cases, which breaks if messages change.
+
+**Proposed:** Return structured results:
+
+```typescript
+interface ComposerToolResult {
+  status: "success" | "rejected" | "no-op" | "error";
+  message: string;
+  path?: string;
+}
+```
+
+This enables reliable status detection in the reasoning UI without fragile string matching.
+
 ## Related Files
 
 - `src/tools/ComposerTools.ts` - Current tool implementations
