@@ -8,6 +8,7 @@ import {
   buildToolCallsFromChunks,
   createAIMessageWithToolCalls,
 } from "./nativeToolCalling";
+import { logInfo, logWarn } from "@/logger";
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
@@ -21,6 +22,8 @@ export class ThinkBlockStreamer {
   private errorResponse = "";
   private wasTruncated = false;
   private tokenUsage: TokenUsage | null = null;
+  // Track if we've handled text-level think tags (e.g., from nvidia/nemotron)
+  private hasHandledTextLevelThinkTag = false;
 
   // Native tool call accumulation
   private toolCallChunks: Map<number, ToolCallChunk> = new Map();
@@ -29,7 +32,49 @@ export class ThinkBlockStreamer {
   constructor(
     private updateCurrentAiMessage: (message: string) => void,
     private excludeThinking: boolean = false
-  ) {}
+  ) {
+    logInfo(`[ThinkBlockStreamer] Created with excludeThinking=${excludeThinking}`);
+  }
+
+  /**
+   * Handle text-level think tags embedded in content (e.g., nvidia/nemotron models).
+   * Some models output thinking with only </think> closing tag, no opening tag.
+   * This method detects and fixes this during streaming.
+   */
+  private handleTextLevelThinkTags() {
+    const hasCloseTag = this.fullResponse.includes("</think>");
+    const hasOpenTag = this.fullResponse.includes("<think>");
+
+    // Skip if there's no </think> tag yet
+    if (!hasCloseTag) {
+      return;
+    }
+
+    // If excludeThinking is true, strip all think content
+    if (this.excludeThinking) {
+      // Handle case: content with </think> but no <think> (malformed)
+      // Strip everything before and including </think>
+      if (!hasOpenTag) {
+        const closeTagIndex = this.fullResponse.indexOf("</think>");
+        this.fullResponse = this.fullResponse.substring(closeTagIndex + "</think>".length).trim();
+      } else {
+        // Handle case: proper <think>...</think> tags
+        // Strip all think blocks
+        this.fullResponse = this.fullResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
+      }
+      return;
+    }
+
+    // excludeThinking is false - fix missing opening tag if needed
+    if (!hasOpenTag && !this.hasHandledTextLevelThinkTag) {
+      this.hasHandledTextLevelThinkTag = true;
+      logWarn(
+        "Detected </think> closing tag without opening <think> tag. " +
+          "This may indicate a misconfigured chat template in LM Studio. Adding opening tag."
+      );
+      this.fullResponse = "<think>" + this.fullResponse;
+    }
+  }
 
   private handleClaudeChunk(content: any[]) {
     let textContent = "";
@@ -213,6 +258,9 @@ export class ThinkBlockStreamer {
       this.handleDeepseekChunk(chunk);
     }
 
+    // Handle text-level think tags (e.g., from nvidia/nemotron models)
+    this.handleTextLevelThinkTags();
+
     this.updateCurrentAiMessage(this.fullResponse);
   }
 
@@ -261,6 +309,9 @@ export class ThinkBlockStreamer {
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
     }
+
+    // Final check for text-level think tags (in case stream ended before </think> was seen)
+    this.handleTextLevelThinkTags();
 
     if (this.errorResponse) {
       this.fullResponse += this.errorResponse;

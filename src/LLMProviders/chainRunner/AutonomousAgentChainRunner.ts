@@ -1,4 +1,4 @@
-import { AGENT_LOOP_TIMEOUT_MS, ModelCapability } from "@/constants";
+import { AGENT_LOOP_TIMEOUT_MS } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -378,9 +378,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     const chatModel = this.chainManager.chatModelManager.getChatModel();
     const adapter = ModelAdapterFactory.createAdapter(chatModel);
-    const hasReasoning = this.hasCapability(chatModel, ModelCapability.REASONING);
-    const excludeThinking = !hasReasoning;
-    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, excludeThinking);
+    // Agent mode should never show thinking tokens in the response
+    const thinkStreamer = new ThinkBlockStreamer(updateCurrentAiMessage, true);
 
     if (!isPlusUser) {
       await this.handleError(
@@ -889,6 +888,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    * Stream response from the bound model and accumulate tool call chunks.
    * Does NOT stop the timer - that's handled by runReActLoop when it determines
    * this is the final response (no tool calls).
+   *
+   * Uses ThinkBlockStreamer with excludeThinking=true to strip any thinking
+   * content from the response (agent mode should never show thinking tokens).
    */
   private async streamModelResponse(
     boundModel: Runnable,
@@ -896,16 +898,14 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     abortController: AbortController,
     _updateCurrentAiMessage: (message: string) => void
   ): Promise<{ content: string; aiMessage: AIMessage; streamingResult: StreamingResult }> {
-    let fullContent = "";
     const toolCallChunks: Map<number, ToolCallChunk> = new Map();
 
-    // Helper to handle content updates - don't detect final response here,
-    // let runReActLoop decide based on whether there are tool calls
-    const handleContentUpdate = (newContent: string) => {
-      fullContent += newContent;
-      // Don't update accumulatedContent for intermediate responses -
-      // intermediate content should not be shown to the user
-    };
+    // Use ThinkBlockStreamer with excludeThinking=true to strip thinking content
+    // Agent mode should never show thinking tokens in the response
+    const thinkStreamer = new ThinkBlockStreamer(
+      () => {}, // No-op update function - we don't display intermediate content
+      true // excludeThinking = true for agent mode
+    );
 
     try {
       const stream = await withSuppressedTokenWarnings(() =>
@@ -937,17 +937,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           }
         }
 
-        // Extract content
-        if (typeof chunk.content === "string") {
-          handleContentUpdate(chunk.content);
-        } else if (Array.isArray(chunk.content)) {
-          for (const item of chunk.content) {
-            if (item.type === "text" && item.text) {
-              handleContentUpdate(item.text);
-            }
-          }
-        }
+        // Process chunk through ThinkBlockStreamer to strip thinking content
+        thinkStreamer.processChunk(chunk);
       }
+
+      // Close the streamer to finalize content (handles unclosed think blocks, etc.)
+      const streamingResult = thinkStreamer.close();
+      const fullContent = streamingResult.content;
 
       // Build tool calls from accumulated chunks (with sanitization for empty objects)
       const toolCalls = buildToolCallsFromChunks(toolCallChunks);
@@ -966,19 +962,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       return {
         content: fullContent,
         aiMessage,
-        streamingResult: {
-          content: fullContent,
-          wasTruncated: false,
-          tokenUsage: null,
-        },
+        streamingResult,
       };
     } catch (error: any) {
       logError(`Stream error: ${error.message}`);
       if (error.name === "AbortError" || abortController.signal.aborted) {
+        const streamingResult = thinkStreamer.close();
         return {
-          content: fullContent,
-          aiMessage: new AIMessage({ content: fullContent }),
-          streamingResult: { content: fullContent, wasTruncated: false, tokenUsage: null },
+          content: streamingResult.content,
+          aiMessage: new AIMessage({ content: streamingResult.content }),
+          streamingResult,
         };
       }
       throw error;
