@@ -613,6 +613,19 @@ export default class CopilotPlugin extends Plugin {
       return;
     }
 
+    try {
+      const discovery = await import("@/search/miyo/MiyoServiceDiscovery").then((module) =>
+        module.discoverMiyoService({ forceRefresh: true })
+      );
+      if (discovery) {
+        logInfo("Miyo discovery (settings toggle)", discovery);
+      } else {
+        logWarn("Miyo discovery failed (settings toggle)");
+      }
+    } catch (error) {
+      logWarn("Miyo discovery error (settings toggle)", error);
+    }
+
     const backend = new MiyoBackend({
       url: settings.selfHostUrl,
       apiKey: settings.selfHostApiKey,

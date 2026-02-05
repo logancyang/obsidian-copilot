@@ -61,6 +61,9 @@ const SELF_HOST_ELIGIBLE_PLANS = ["believer", "supporter"];
  */
 export function isSelfHostModeValid(): boolean {
   const settings = getSettings();
+  if (settings.debug && settings.enableSelfHostMode) {
+    return true;
+  }
   if (!settings.enableSelfHostMode || settings.selfHostModeValidatedAt == null) {
     return false;
   }
@@ -97,6 +100,9 @@ export function isPlusEnabled(): boolean {
  */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
+  if (settings.debug && settings.enableSelfHostMode) {
+    return true;
+  }
   // Self-host mode with valid plan validation bypasses Plus requirements
   if (settings.enableSelfHostMode && settings.selfHostModeValidatedAt != null) {
     // Permanently valid after 3 successful validations
@@ -160,6 +166,10 @@ export function useIsSelfHostEligible(): boolean | undefined {
   const [isEligible, setIsEligible] = React.useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
+    if (settings.debug) {
+      setIsEligible(true);
+      return;
+    }
     // Permanently validated users can always see the section (even if toggle is off, offline)
     if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
       setIsEligible(true);
@@ -186,6 +196,7 @@ export function useIsSelfHostEligible(): boolean | undefined {
       .catch(() => setIsEligible(false));
   }, [
     settings.plusLicenseKey,
+    settings.debug,
     settings.enableSelfHostMode,
     settings.selfHostModeValidatedAt,
     settings.selfHostValidationCount,
@@ -209,6 +220,11 @@ export function useIsSelfHostEligible(): boolean | undefined {
  */
 export async function validateSelfHostMode(): Promise<boolean> {
   const settings = getSettings();
+  if (settings.debug) {
+    updateSetting("selfHostModeValidatedAt", Date.now());
+    logInfo("Self-host mode validation bypassed (debug mode)");
+    return true;
+  }
 
   // Already permanently validated - allow re-enable (offline-safe)
   if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
@@ -258,6 +274,10 @@ export async function validateSelfHostMode(): Promise<boolean> {
  */
 export async function refreshSelfHostModeValidation(): Promise<void> {
   const settings = getSettings();
+  if (settings.debug) {
+    logInfo("Self-host mode validation refresh skipped (debug mode)");
+    return;
+  }
   if (!settings.enableSelfHostMode) {
     return;
   }

@@ -1,6 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import { VectorSearchBackend, VectorSearchResult } from "@/search/selfHostRetriever";
 import { discoverMiyoService } from "@/search/miyo/MiyoServiceDiscovery";
+import { getSettings } from "@/settings/model";
 import { safeFetch } from "@/utils";
 
 /**
@@ -82,6 +83,10 @@ export class MiyoBackend implements VectorSearchBackend {
       limit: options.limit,
       filters: this.mapFilters(options.filter),
     };
+    logInfo("MiyoBackend: search request", {
+      url: `${baseUrl}/v0/search`,
+      body: requestBody,
+    });
 
     try {
       const response = await safeFetch(`${baseUrl}/v0/search`, {
@@ -94,6 +99,15 @@ export class MiyoBackend implements VectorSearchBackend {
         typeof raw === "string" ? (JSON.parse(raw) as MiyoSearchResponse) : raw;
 
       const results = Array.isArray(parsed?.results) ? parsed.results : [];
+      logInfo("MiyoBackend: search response", {
+        status: response.status,
+        count: parsed?.count ?? results.length,
+        execution_time_ms: parsed?.execution_time_ms ?? null,
+        resultsPreview: this.summarizeResults(results),
+      });
+      if (getSettings().debug) {
+        logInfo("MiyoBackend: search response (full)", parsed);
+      }
       const mapped = results.map((item) => this.mapResult(item));
       if (typeof options.minScore === "number") {
         return mapped.filter((item) => item.score >= options.minScore);
@@ -247,5 +261,19 @@ export class MiyoBackend implements VectorSearchBackend {
         totalChunks,
       },
     };
+  }
+
+  /**
+   * Summarize results for logging without dumping large payloads.
+   */
+  private summarizeResults(results: MiyoSearchResultItem[]): Array<Record<string, unknown>> {
+    const previewLimit = 5;
+    return results.slice(0, previewLimit).map((item) => ({
+      file_path: item.file_path,
+      score: item.score,
+      chunk_index: item.chunk_index ?? null,
+      snippet_length: item.snippet?.length ?? 0,
+      chunk_text_length: item.chunk_text?.length ?? 0,
+    }));
   }
 }
