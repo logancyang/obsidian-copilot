@@ -125,14 +125,20 @@ export async function isSelfHostEligiblePlan(): Promise<boolean> {
 /**
  * Hook to check if current user is eligible for self-host mode.
  * Returns undefined while loading, boolean once checked.
- * If self-host mode is already enabled and validated (or permanently valid), returns true.
+ * If permanently validated or currently valid, returns true (supports offline re-enable).
  */
 export function useIsSelfHostEligible(): boolean | undefined {
   const settings = useSettingsValue();
   const [isEligible, setIsEligible] = React.useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
-    // If self-host mode is already enabled and validated, show the section (offline support)
+    // Permanently validated users can always see the section (even if toggle is off, offline)
+    if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+      setIsEligible(true);
+      return;
+    }
+
+    // If self-host mode is currently enabled and validated, show the section
     if (isSelfHostModeValid()) {
       setIsEligible(true);
       return;
@@ -213,7 +219,7 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
       const shouldIncrementCount = timeSinceLastValidation >= SELF_HOST_GRACE_PERIOD_MS;
 
       if (shouldIncrementCount) {
-        // 14+ days since last validation - increment count
+        // 14+ days since last validation - increment count and update timestamp
         const newCount = (settings.selfHostValidationCount || 0) + 1;
         updateSetting("selfHostModeValidatedAt", now);
         updateSetting("selfHostValidationCount", newCount);
@@ -225,9 +231,8 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
           logInfo(`Self-host mode validation refreshed (${newCount}/3)`);
         }
       } else {
-        // Less than 14 days - just refresh timestamp, don't increment
-        updateSetting("selfHostModeValidatedAt", now);
-        logInfo("Self-host mode timestamp refreshed (waiting for 14-day interval)");
+        // Less than 14 days - don't update timestamp (preserve interval countdown)
+        logInfo("Self-host mode validated (waiting for 14-day interval to increment count)");
       }
     } else {
       // User is no longer on an eligible plan, disable self-host mode
