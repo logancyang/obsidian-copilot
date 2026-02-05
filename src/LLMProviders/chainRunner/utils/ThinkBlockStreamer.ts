@@ -8,6 +8,7 @@ import {
   buildToolCallsFromChunks,
   createAIMessageWithToolCalls,
 } from "./nativeToolCalling";
+import { logWarn } from "@/logger";
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
@@ -260,6 +261,16 @@ export class ThinkBlockStreamer {
     // Make sure to close any open think block at the end
     if (this.hasOpenThinkBlock) {
       this.fullResponse += "</think>";
+    }
+
+    // Post-process: fix missing opening <think> tag
+    // Some models (e.g., nvidia/nemotron) output thinking content with only </think> closing tag
+    if (this.fullResponse.includes("</think>") && !this.fullResponse.includes("<think>")) {
+      logWarn(
+        "Detected </think> closing tag without opening <think> tag. " +
+          "This may indicate a misconfigured chat template in LM Studio. Adding opening tag."
+      );
+      this.fullResponse = "<think>" + this.fullResponse;
     }
 
     if (this.errorResponse) {
