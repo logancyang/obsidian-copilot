@@ -139,17 +139,18 @@ export const PLUS_UTM_MEDIUMS = {
 export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
 /**
- * OpenAI reasoning models 的推理强度级别
+ * Reasoning effort levels for OpenAI reasoning models
  */
 export enum ReasoningEffort {
   MINIMAL = "minimal",
   LOW = "low",
   MEDIUM = "medium",
   HIGH = "high",
+  XHIGH = "xhigh",
 }
 
 /**
- * GPT-5 模型的输出详细程度
+ * Output verbosity levels for GPT-5 models
  */
 export enum Verbosity {
   LOW = "low",
@@ -166,7 +167,7 @@ export const DEFAULT_MODEL_SETTING = {
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
-  GPT_5 = "gpt-5",
+  GPT_5_2 = "gpt-5.2",
   GPT_5_mini = "gpt-5-mini",
   GPT_5_nano = "gpt-5-nano",
   GPT_41 = "gpt-4.1",
@@ -302,7 +303,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.GPT_5,
+    name: ChatModels.GPT_5_2,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,

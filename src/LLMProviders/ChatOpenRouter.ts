@@ -27,11 +27,12 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
   enableReasoning?: boolean;
 
   /**
-   * Reasoning effort level: "minimal", "low", "medium", or "high"
+   * Reasoning effort level: "minimal", "low", "medium", "high", or "xhigh"
    * Controls the amount of reasoning the model uses
    * Note: "minimal" will be treated as "low" for OpenRouter
+   * Note: "xhigh" is only supported by GPT-5.2 models
    */
-  reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 
   // All other ChatOpenAI parameters
   modelName?: string;
@@ -49,7 +50,7 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
 
 export class ChatOpenRouter extends ChatOpenAI {
   private enableReasoning: boolean;
-  private reasoningEffort?: "minimal" | "low" | "medium" | "high";
+  private reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
   private openaiClient: OpenAI;
 
   constructor(fields: ChatOpenRouterInput) {
