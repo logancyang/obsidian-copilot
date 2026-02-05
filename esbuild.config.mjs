@@ -41,7 +41,9 @@ const context = await esbuild.context({
     "@lezer/lr",
     // Node.js built-in modules (available in Electron) - except node:module which we shim
     "node:fs",
+    "node:fs/promises",
     "node:path",
+    "node:os",
     "node:url",
     "node:buffer",
     "node:stream",
