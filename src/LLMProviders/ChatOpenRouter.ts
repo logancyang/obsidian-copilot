@@ -217,6 +217,15 @@ export class ChatOpenRouter extends ChatOpenAI {
         } as OpenRouterMessageParam;
       }
 
+      // Handle modern tool_calls format (used by autonomous agent)
+      if (msg.additional_kwargs?.tool_calls) {
+        return {
+          role: mappedRole,
+          content: msg.content,
+          tool_calls: msg.additional_kwargs.tool_calls,
+        } as OpenRouterMessageParam;
+      }
+
       return {
         role: mappedRole,
         content: msg.content,
