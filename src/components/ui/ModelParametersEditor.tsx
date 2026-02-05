@@ -12,7 +12,7 @@ import {
 } from "@/utils/modelParamsHelper";
 
 /**
- * 参数范围配置（硬编码，简单明了）
+ * Parameter range configuration
  */
 const PARAM_RANGES = {
   temperature: { min: 0, max: 2, step: 0.01, default: DEFAULT_MODEL_SETTING.TEMPERATURE },
@@ -26,12 +26,12 @@ interface ModelParametersEditorProps {
   settings: CopilotSettings;
   onChange: (field: keyof CustomModel, value: any) => void;
   onReset?: (field: keyof CustomModel) => void;
-  showTokenLimit?: boolean; // 是否显示 Token limit，默认 true
+  showTokenLimit?: boolean; // Whether to show Token limit, defaults to true
 }
 
 /**
- * 共享的模型参数编辑器组件
- * 用于 ChatSettingsPopover 和 ModelEditDialog
+ * Shared model parameters editor component.
+ * Used by ChatSettingsPopover and ModelEditDialog.
  */
 export function ModelParametersEditor({
   model,
@@ -40,7 +40,7 @@ export function ModelParametersEditor({
   onReset,
   showTokenLimit = true,
 }: ModelParametersEditorProps) {
-  // 参数值：model.xxx ?? settings.xxx
+  // Parameter values: model.xxx ?? settings.xxx
   const temperature = model.temperature ?? settings.temperature;
   const maxTokens = model.maxTokens ?? settings.maxTokens;
   const topP = model.topP;
@@ -48,15 +48,23 @@ export function ModelParametersEditor({
   const reasoningEffort = model.reasoningEffort;
   const verbosity = model.verbosity;
 
-  // 判断是否为推理模型
-  const isReasoningModel =
-    model.name.startsWith("o1") ||
-    model.name.startsWith("o3") ||
-    model.name.startsWith("o4") ||
-    model.name.startsWith("gpt-5");
+  // Check if this is an OpenAI native reasoning model
+  const isOpenAIReasoningModel =
+    (model.name.startsWith("o1") ||
+      model.name.startsWith("o3") ||
+      model.name.startsWith("o4") ||
+      model.name.startsWith("gpt-5")) &&
+    model.provider === "openai";
 
-  // 参数适用性判断
-  const showReasoningEffort = isReasoningModel && model.provider === "openai";
+  // Check if model has REASONING capability enabled
+  const hasReasoningCapability = model.capabilities?.includes(ModelCapability.REASONING) ?? false;
+
+  // Show reasoning effort for: OpenAI reasoning models, OpenRouter, LM Studio, or any model with REASONING capability
+  const showReasoningEffort =
+    isOpenAIReasoningModel ||
+    model.provider === "openrouterai" ||
+    model.provider === "lm_studio" ||
+    hasReasoningCapability;
   const showVerbosity = model.name.startsWith("gpt-5") && model.provider === "openai";
 
   return (
@@ -148,7 +156,7 @@ export function ModelParametersEditor({
         />
       </FormField>
 
-      {/* Reasoning Effort - Only for reasoning models */}
+      {/* Reasoning Effort - For models with reasoning capability */}
       {showReasoningEffort && (
         <FormField>
           <ParameterControl
@@ -160,7 +168,7 @@ export function ModelParametersEditor({
             disableFn={onReset ? () => onReset("reasoningEffort") : undefined}
             defaultValue={settings.reasoningEffort ?? getDefaultReasoningEffort()}
             options={[
-              ...(model.name.startsWith("gpt-5")
+              ...(model.name.startsWith("gpt-5") && model.provider === "openai"
                 ? [{ value: ReasoningEffort.MINIMAL, label: "Minimal" }]
                 : []),
               ...REASONING_EFFORT_OPTIONS.filter((opt) => opt.value !== ReasoningEffort.MINIMAL),
@@ -169,15 +177,21 @@ export function ModelParametersEditor({
               <>
                 <p>
                   Controls the amount of reasoning effort the model uses. Higher effort provides
-                  more thorough reasoning but takes longer. Note: thinking tokens are not available
-                  yet!
+                  more thorough reasoning but takes longer.
                 </p>
                 <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                  <li>Minimal: Fastest responses, minimal reasoning (GPT-5 only)</li>
+                  {model.name.startsWith("gpt-5") && model.provider === "openai" && (
+                    <li>Minimal: Fastest responses, minimal reasoning (GPT-5 only)</li>
+                  )}
                   <li>Low: Faster responses, basic reasoning (default)</li>
                   <li>Medium: Balanced performance</li>
                   <li>High: Thorough reasoning, slower responses</li>
                 </ul>
+                {!hasReasoningCapability && !isOpenAIReasoningModel && (
+                  <p className="tw-mt-2 tw-text-warning">
+                    Enable the &quot;Reasoning&quot; capability above to use this feature.
+                  </p>
+                )}
               </>
             }
           />
@@ -204,42 +218,6 @@ export function ModelParametersEditor({
                   <li>Medium: Balanced detail</li>
                   <li>High: Detailed, comprehensive responses</li>
                 </ul>
-              </>
-            }
-          />
-        </FormField>
-      )}
-
-      {/* Reasoning Effort - Only for OpenRouter models */}
-      {model.provider === "openrouterai" && (
-        <FormField>
-          <ParameterControl
-            type="select"
-            optional={true}
-            label="Reasoning Effort"
-            value={reasoningEffort}
-            onChange={(value) => onChange("reasoningEffort", value)}
-            disableFn={onReset ? () => onReset("reasoningEffort") : undefined}
-            defaultValue={settings.reasoningEffort ?? getDefaultReasoningEffort()}
-            options={REASONING_EFFORT_OPTIONS.filter(
-              (opt) => opt.value !== ReasoningEffort.MINIMAL
-            )}
-            helpText={
-              <>
-                <p>
-                  Controls the amount of reasoning effort the model uses. Higher effort provides
-                  more thorough reasoning but takes longer.
-                </p>
-                <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                  <li>Low: Faster responses, basic reasoning (default)</li>
-                  <li>Medium: Balanced performance</li>
-                  <li>High: Thorough reasoning, slower responses</li>
-                </ul>
-                {!model.capabilities?.includes(ModelCapability.REASONING) && (
-                  <p className="tw-mt-2 tw-text-warning">
-                    Enable the &quot;Reasoning&quot; capability above to use this feature.
-                  </p>
-                )}
               </>
             }
           />

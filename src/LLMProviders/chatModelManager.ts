@@ -54,7 +54,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.XAI]: ChatXAI,
   [ChatModelProviders.OPENROUTERAI]: ChatOpenRouter,
   [ChatModelProviders.OLLAMA]: ChatOllama,
-  [ChatModelProviders.LM_STUDIO]: ChatOpenAI,
+  [ChatModelProviders.LM_STUDIO]: ChatOpenRouter,
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
@@ -303,6 +303,14 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
+        // Enable reasoning extraction for models with REASONING capability
+        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
+        // Pass reasoning effort if configured and reasoning capability is enabled
+        reasoningEffort:
+          customModel.capabilities?.includes(ModelCapability.REASONING) &&
+          customModel.reasoningEffort
+            ? customModel.reasoningEffort
+            : undefined,
       },
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
