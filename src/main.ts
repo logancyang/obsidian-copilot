@@ -25,7 +25,7 @@ import { logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import { checkIsPlusUser } from "@/plusUtils";
+import { checkIsPlusUser, refreshSelfHostModeValidation } from "@/plusUtils";
 import {
   getWebViewerService,
   startActiveWebTabTracking,
@@ -113,6 +113,7 @@ export default class CopilotPlugin extends Plugin {
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
+    refreshSelfHostModeValidation();
 
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);

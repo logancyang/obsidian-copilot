@@ -1,7 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
-import { validateSelfHostMode } from "@/plusUtils";
+import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
@@ -9,6 +9,7 @@ import { ToolSettingsSection } from "./ToolSettingsSection";
 export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
   const [isValidatingSelfHost, setIsValidatingSelfHost] = useState(false);
+  const isSelfHostEligible = useIsSelfHostEligible();
 
   const handleSelfHostModeToggle = async (enabled: boolean) => {
     if (enabled) {
@@ -98,40 +99,47 @@ export const CopilotPlusSettings: React.FC = () => {
             }}
           />
 
-          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Self-Host Mode</div>
-
-          <SettingItem
-            type="switch"
-            title="Enable Self-Host Mode"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">
-                  Use your own infrastructure for LLMs, embeddings (and local document understanding
-                  soon with our upcoming desktop app).
-                </span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Self-Host Mode (Believer/Supporter only)
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        Connect to your own self-hosted backend (e.g., Miyo) for complete control
-                        over your AI infrastructure. This allows offline usage and custom model
-                        deployments.
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        Requires re-validation every 14 days when online.
-                      </div>
-                    </div>
-                  }
-                />
+          {isSelfHostEligible && (
+            <>
+              <div className="tw-flex tw-items-center tw-gap-1.5 tw-pt-4 tw-text-xl tw-font-semibold">
+                Self-Host Mode
+                <HelpTooltip content="Lifetime license required" />
               </div>
-            }
-            checked={settings.enableSelfHostMode}
-            onCheckedChange={handleSelfHostModeToggle}
-            disabled={isValidatingSelfHost}
-          />
+
+              <SettingItem
+                type="switch"
+                title="Enable Self-Host Mode"
+                description={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">
+                      Use your own infrastructure for LLMs, embeddings (and local document
+                      understanding soon with our upcoming desktop app).
+                    </span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                          <div className="tw-text-sm tw-font-medium tw-text-accent">
+                            Self-Host Mode (Believer/Supporter only)
+                          </div>
+                          <div className="tw-text-xs tw-text-muted">
+                            Connect to your own self-hosted backend (e.g., Miyo) for complete
+                            control over your AI infrastructure. This allows offline usage and
+                            custom model deployments.
+                          </div>
+                          <div className="tw-text-xs tw-text-muted">
+                            Requires re-validation every 15 days when online.
+                          </div>
+                        </div>
+                      }
+                    />
+                  </div>
+                }
+                checked={settings.enableSelfHostMode}
+                onCheckedChange={handleSelfHostModeToggle}
+                disabled={isValidatingSelfHost}
+              />
+            </>
+          )}
         </div>
       </section>
     </div>

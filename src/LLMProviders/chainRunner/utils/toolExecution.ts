@@ -33,7 +33,7 @@ export async function executeSequentialToolCall(
   availableTools: any[],
   originalUserMessage?: string
 ): Promise<ToolExecutionResult> {
-  const DEFAULT_TOOL_TIMEOUT = 60000; // 60 seconds timeout per tool
+  const DEFAULT_TOOL_TIMEOUT = 120000; // 120 seconds timeout per tool
 
   try {
     // Validate tool call

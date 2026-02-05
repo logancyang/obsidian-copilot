@@ -121,6 +121,8 @@ export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
 export const LLM_TIMEOUT_MS = 30000; // 30 seconds timeout for LLM operations
+export const AGENT_LOOP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for agent loop
+export const AGENT_MAX_ITERATIONS_LIMIT = 16; // Maximum allowed value for agent iterations setting
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -426,6 +428,7 @@ export enum EmbeddingModels {
   COPILOT_PLUS_LARGE = "copilot-plus-large",
   COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
   SILICONFLOW_QWEN3_EMBEDDING_0_6B = "Qwen/Qwen3-Embedding-0.6B",
+  OPENROUTER_OPENAI_EMBEDDING_SMALL = "openai/text-embedding-3-small",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
@@ -458,6 +461,14 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
     core: true,
     plusExclusive: true,
     dimensions: 512,
+  },
+  {
+    name: EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL,
+    provider: EmbeddingModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+    core: true,
   },
   {
     name: EmbeddingModels.OPENAI_EMBEDDING_SMALL,
@@ -819,7 +830,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   githubCopilotTokenExpiresAt: 0,
   defaultChainType: ChainType.LLM_CHAIN,
   defaultModelKey: ChatModels.OPENROUTER_GEMINI_2_5_FLASH + "|" + ChatModelProviders.OPENROUTERAI,
-  embeddingModelKey: EmbeddingModels.OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENAI,
+  embeddingModelKey:
+    EmbeddingModels.OPENROUTER_OPENAI_EMBEDDING_SMALL + "|" + EmbeddingModelProviders.OPENROUTERAI,
   temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
   maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
   contextTurns: 15,
@@ -870,6 +882,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSemanticSearchV3: false,
   enableSelfHostMode: false,
   selfHostModeValidatedAt: null,
+  selfHostValidationCount: 0,
   selfHostUrl: "",
   selfHostApiKey: "",
   enableLexicalBoosts: true,

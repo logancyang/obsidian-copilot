@@ -1,4 +1,4 @@
-import { ModelCapability } from "@/constants";
+import { AGENT_LOOP_TIMEOUT_MS, ModelCapability } from "@/constants";
 import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { logError, logInfo, logWarn } from "@/logger";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -37,6 +37,7 @@ import { PromptDebugReport } from "./utils/toolPromptDebugger";
 import {
   AgentReasoningState,
   createInitialReasoningState,
+  extractFirstSentence,
   LocalSearchSourceInfo,
   serializeReasoningBlock,
   summarizeToolCall,
@@ -224,7 +225,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    * @param summary - Human-readable summary of the step
    * @param toolName - Optional name of the tool associated with this step
    */
-  private addReasoningStep(summary: string, toolName?: string): void {
+  private addReasoningStep(summary: string, toolName?: string, detailedOnly = false): void {
     const step = {
       timestamp: Date.now(),
       summary,
@@ -232,6 +233,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     };
     // Always add to full history
     this.allReasoningSteps.push(step);
+
+    // For detailed-only steps, skip the rolling display
+    if (detailedOnly) {
+      return;
+    }
+
     // Add to display state (rolling window)
     this.reasoningState.steps.push(step);
     // Keep only last 4 steps for rolling window display during reasoning
@@ -251,6 +258,13 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.reasoningState.status = "collapsed";
   }
 
+  /**
+   * Get early feedback message for a tool that may take a while to stream.
+   * This provides immediate UX feedback while the model generates content.
+   *
+   * @param toolName - Name of the tool being called
+   * @returns Early feedback message, or null if no early feedback needed
+   */
   /**
    * Build the reasoning block markup for embedding in the message.
    * During reasoning: uses rolling window (last 4 steps).
@@ -626,12 +640,20 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     const maxIterations = getSettings().autonomousAgentMaxIterations;
     const collectedSources: AgentSource[] = [];
+    const loopStartTime = Date.now();
 
     let iteration = 0;
     let responseMetadata: ResponseMetadata | undefined;
 
     while (iteration < maxIterations) {
       if (abortController.signal.aborted) break;
+
+      // Check for loop timeout (5 minutes)
+      const elapsedTime = Date.now() - loopStartTime;
+      if (elapsedTime >= AGENT_LOOP_TIMEOUT_MS) {
+        logWarn(`Agent loop timed out after ${Math.round(elapsedTime / 1000)}s`);
+        break;
+      }
       iteration++;
 
       // Stream response - streamModelResponse updates this.accumulatedContent
@@ -698,8 +720,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       // Add AI message with tool calls - but DON'T accumulate intermediate content
       // Intermediate content (like "I'll search for..." ) should not appear in final response
       messages.push(aiMessage);
-      // NOTE: We intentionally do NOT add content to fullContent here
-      // The model's intermediate "thinking aloud" text is not shown to the user
+
+      // For iterations > 1, the model's content often contains its summary of findings
+      // from previous tool calls. Extract first sentence as a "finding summary".
+      // (Iteration 1 has no previous findings - its content is just "I'll search for...")
+      if (iteration > 1 && content && content.trim().length > 0) {
+        const findingSummary = extractFirstSentence(content);
+        if (findingSummary) {
+          this.addReasoningStep(findingSummary);
+        }
+      }
 
       // Execute each tool
       for (const tc of toolCalls) {
@@ -755,8 +785,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           }
         }
 
-        // Add reasoning step for tool call (timer will display it)
-        // For localSearch, include pre-expanded terms
+        // Add tool call step (shown in both rolling display and expanded view)
         const toolCallSummary = summarizeToolCall(tc.name, toolCall.args, preExpandedTerms);
         this.addReasoningStep(toolCallSummary, tc.name);
 
@@ -792,7 +821,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         logToolResult(tc.name, result);
 
-        // Add reasoning step for tool result (timer will display it)
+        // Add tool result step (shown in rolling display - this is the "what was found")
         const resultSummary = summarizeToolResult(tc.name, result, sourceInfo, toolCall.args);
         this.addReasoningStep(resultSummary, tc.name);
 
@@ -834,13 +863,20 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       };
     }
 
-    // Max iterations reached - shouldn't normally get here since we return inside the loop
-    logWarn(`Agent reached max iterations (${maxIterations})`);
-    const maxIterMessage =
-      "I've reached the maximum number of tool calls. Here's what I found so far based on the search results.";
-    const finalResponse = reasoningBlock
-      ? reasoningBlock + "\n\n" + maxIterMessage
-      : maxIterMessage;
+    // Check if we exited due to timeout or max iterations
+    const elapsedTime = Date.now() - loopStartTime;
+    const timedOut = elapsedTime >= AGENT_LOOP_TIMEOUT_MS;
+
+    if (timedOut) {
+      logWarn(`Agent loop timed out after ${Math.round(elapsedTime / 1000)}s`);
+    } else {
+      logWarn(`Agent reached max iterations (${maxIterations})`);
+    }
+
+    const limitMessage = timedOut
+      ? "I've reached the time limit for reasoning. Here's what I found so far based on the search results."
+      : "I've reached the maximum number of tool calls. Here's what I found so far based on the search results.";
+    const finalResponse = reasoningBlock ? reasoningBlock + "\n\n" + limitMessage : limitMessage;
 
     return {
       finalResponse,

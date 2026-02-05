@@ -30,31 +30,32 @@ const formatTime = (seconds: number): string => {
 };
 
 /**
- * Animated spinner using a 5-dot cross/plus pattern.
- * Dots light up in sequence with gradient trail, then all dim briefly.
+ * Animated spinner using a 7-dot sigma (Σ) pattern.
+ * Dots light up in sequence with gradient trail (snake effect).
  *
- * Grid positions (cross pattern, no corners):
- *   1
- * 3 4 5
- *   7
+ * Grid positions (3x3 grid, sigma shape):
+ * 0 1 2
+ *   4
+ * 6 7 8
  *
- * Animation sequence: 1 → 3 → 7 → 5 → 4 → (all dim) → (all dim) → repeat
- * (top → left → bottom → right → center)
+ * Animation sequence (traces sigma shape):
+ * 2 → 1 → 0 → 4 → 6 → 7 → 8 → (all dim) → repeat
  */
 const CopilotSpinner: React.FC = () => {
-  // Cross pattern dots: [row, col, animation index]
-  // Sequence: top → left → bottom → right → center
-  // With positive delays, order is simply: 0 → 1 → 2 → 3 → 4
-  const crossDots: { row: number; col: number; animIndex: number }[] = [
-    { row: 0, col: 1, animIndex: 0 }, // top - 1st (leads)
-    { row: 1, col: 0, animIndex: 1 }, // left - 2nd
-    { row: 1, col: 1, animIndex: 4 }, // center - 5th (last)
-    { row: 1, col: 2, animIndex: 3 }, // right - 4th
-    { row: 2, col: 1, animIndex: 2 }, // bottom - 3rd
+  // Sigma pattern dots: [row, col, animation index]
+  // Animation traces the sigma: top-right to top-left, down to center, then bottom-left to bottom-right
+  const sigmaDots: { row: number; col: number; animIndex: number }[] = [
+    { row: 0, col: 0, animIndex: 2 }, // top-left - 3rd
+    { row: 0, col: 1, animIndex: 1 }, // top-center - 2nd
+    { row: 0, col: 2, animIndex: 0 }, // top-right - 1st (leads)
+    { row: 1, col: 1, animIndex: 3 }, // center - 4th
+    { row: 2, col: 0, animIndex: 4 }, // bottom-left - 5th
+    { row: 2, col: 1, animIndex: 5 }, // bottom-center - 6th
+    { row: 2, col: 2, animIndex: 6 }, // bottom-right - 7th (last)
   ];
 
   const dotSize = 2.5;
-  const gap = 4;
+  const gap = 3;
   const gridSize = dotSize * 3 + gap * 2;
 
   return (
@@ -64,7 +65,7 @@ const CopilotSpinner: React.FC = () => {
       viewBox={`0 0 ${gridSize} ${gridSize}`}
       className="copilot-spinner"
     >
-      {crossDots.map((dot, index) => {
+      {sigmaDots.map((dot, index) => {
         const cx = dot.col * (dotSize + gap) + dotSize / 2;
         const cy = dot.row * (dotSize + gap) + dotSize / 2;
 

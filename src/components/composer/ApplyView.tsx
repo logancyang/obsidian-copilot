@@ -421,7 +421,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
         change.accepted === null ? { ...change, accepted: false } : change
       );
 
-      const result = await applyDecidedChangesToFile(updatedDiff);
+      const result = await applyDecidedChangesToFile(updatedDiff, false);
       close(result ? "rejected" : "failed"); // Pass result
     } catch (error) {
       logError("Error applying changes:", error);
@@ -444,7 +444,10 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   // Shared function to apply changes to file
-  const applyDecidedChangesToFile = async (updatedDiff: ExtendedChange[]) => {
+  const applyDecidedChangesToFile = async (
+    updatedDiff: ExtendedChange[],
+    showSuccessNotice = true
+  ) => {
     // Apply changes based on their accepted status
     const newContent = updatedDiff
       .filter((change) => {
@@ -463,7 +466,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     }
 
     await app.vault.modify(file, newContent);
-    new Notice("Changes applied successfully");
+    if (showSuccessNotice) {
+      new Notice("Changes applied successfully");
+    }
     return true;
   };
 
