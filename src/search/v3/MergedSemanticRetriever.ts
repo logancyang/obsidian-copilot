@@ -20,6 +20,8 @@ type RetrieverOptions = {
 
 type SourceKind = "lexical" | "semantic";
 
+type SemanticRetrieverFactory = (options: RetrieverOptions) => BaseRetriever;
+
 /**
  * Merges semantic (vector-based) and lexical (Search v3) retrieval results into a single ranked list.
  * When semantic search is enabled this retriever ensures keyword/tag matches from Search v3
@@ -29,7 +31,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
   public lc_namespace = ["merged_semantic_retriever"];
 
   private lexicalRetriever: TieredLexicalRetriever;
-  private semanticRetriever: HybridRetriever;
+  private semanticRetriever: BaseRetriever;
   private readonly originalMaxK: number;
   private readonly returnAll: boolean;
 
@@ -45,7 +47,8 @@ export class MergedSemanticRetriever extends BaseRetriever {
    */
   constructor(
     private app: App,
-    private options: RetrieverOptions
+    private options: RetrieverOptions,
+    private semanticRetrieverFactory?: SemanticRetrieverFactory
   ) {
     super();
     this.originalMaxK = Math.max(1, options.maxK);
@@ -69,15 +72,23 @@ export class MergedSemanticRetriever extends BaseRetriever {
       ? RETURN_ALL_LIMIT
       : Math.min(this.originalMaxK * 2, RETURN_ALL_LIMIT);
 
-    this.semanticRetriever = new HybridRetriever({
-      minSimilarityScore: options.minSimilarityScore ?? 0.1,
+    const semanticOptions: RetrieverOptions = {
+      ...options,
       maxK: semanticMax,
-      salientTerms: options.salientTerms,
-      timeRange: options.timeRange,
-      textWeight: options.textWeight,
       returnAll: this.returnAll,
-      useRerankerThreshold: options.useRerankerThreshold,
-    });
+    };
+
+    this.semanticRetriever = this.semanticRetrieverFactory
+      ? this.semanticRetrieverFactory(semanticOptions)
+      : new HybridRetriever({
+          minSimilarityScore: options.minSimilarityScore ?? 0.1,
+          maxK: semanticMax,
+          salientTerms: options.salientTerms,
+          timeRange: options.timeRange,
+          textWeight: options.textWeight,
+          returnAll: this.returnAll,
+          useRerankerThreshold: options.useRerankerThreshold,
+        });
   }
 
   /**

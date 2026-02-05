@@ -3,6 +3,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { Notice } from "obsidian";
 import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
@@ -138,6 +139,22 @@ export const CopilotPlusSettings: React.FC = () => {
                 onCheckedChange={handleSelfHostModeToggle}
                 disabled={isValidatingSelfHost}
               />
+
+              {settings.enableSelfHostMode && (
+                <SettingItem
+                  type="switch"
+                  title="Enable Miyo Search (local)"
+                  description="Uses the local Miyo service for semantic retrieval. Replaces semantic search while enabled."
+                  checked={settings.enableMiyoSearch}
+                  onCheckedChange={(checked) => {
+                    updateSetting("enableMiyoSearch", checked);
+                    if (checked && settings.enableSemanticSearchV3) {
+                      updateSetting("enableSemanticSearchV3", false);
+                      new Notice("Semantic search disabled while Miyo search is enabled.");
+                    }
+                  }}
+                />
+              )}
             </>
           )}
         </div>

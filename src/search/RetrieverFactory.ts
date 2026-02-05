@@ -147,21 +147,23 @@ export class RetrieverFactory {
 
     // Self-host mode handling - requires valid validation (within grace period)
     if (isSelfHostModeValid()) {
-      // If URL is configured, try to use self-host backend (API key is optional)
-      if (currentSettings.selfHostUrl) {
+      // Miyo search (self-host) replaces semantic leg while keeping Search v3 merge + expansion
+      if (currentSettings.enableMiyoSearch) {
         const backend = await RetrieverFactory.getSelfHostedBackend(currentSettings);
         if (backend) {
-          const retriever = new SelfHostRetriever(app, backend, normalizedOptions);
-          logInfo("RetrieverFactory: Using self-host mode backend");
+          const retriever = new MergedSemanticRetriever(
+            app,
+            normalizedOptions,
+            (semanticOptions) => new SelfHostRetriever(app, backend, semanticOptions)
+          );
+          logInfo("RetrieverFactory: Using Miyo backend with merged v3 retriever");
           return {
             retriever,
             type: "self_hosted",
-            reason: "Self-host mode is enabled and backend is available",
+            reason: "Self-host mode is enabled with Miyo search",
           };
         }
-        logWarn("RetrieverFactory: Self-host mode backend unavailable, falling back");
-      } else {
-        logInfo("RetrieverFactory: Self-host mode enabled but URL not configured, falling back");
+        logWarn("RetrieverFactory: Miyo backend unavailable, falling back");
       }
 
       // Self-host mode fallback: use semantic if enabled, otherwise lexical
@@ -280,8 +282,8 @@ export class RetrieverFactory {
 
     // Self-host mode handling - requires valid validation (within grace period)
     if (isSelfHostModeValid()) {
-      // URL configured with backend available → self_hosted (API key is optional)
-      if (currentSettings.selfHostUrl && RetrieverFactory.selfHostedBackend) {
+      // Self-host + Miyo enabled with backend available → self_hosted
+      if (currentSettings.enableMiyoSearch && RetrieverFactory.selfHostedBackend) {
         return "self_hosted";
       }
       // Self-host mode enabled but not ready → check semantic setting

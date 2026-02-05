@@ -26,6 +26,8 @@ import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { checkIsPlusUser, refreshSelfHostModeValidation } from "@/plusUtils";
+import { RetrieverFactory } from "@/search/RetrieverFactory";
+import { MiyoBackend } from "@/search/backends/MiyoBackend";
 import {
   getWebViewerService,
   startActiveWebTabTracking,
@@ -36,6 +38,7 @@ import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
   getSettings,
+  type CopilotSettings,
   sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
@@ -101,6 +104,14 @@ export default class CopilotPlugin extends Plugin {
         await this.saveData(next);
       }
       registerCommands(this, prev, next);
+      if (
+        prev.enableSelfHostMode !== next.enableSelfHostMode ||
+        prev.enableMiyoSearch !== next.enableMiyoSearch ||
+        prev.selfHostUrl !== next.selfHostUrl ||
+        prev.selfHostApiKey !== next.selfHostApiKey
+      ) {
+        await this.syncMiyoBackend(next);
+      }
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
@@ -114,6 +125,7 @@ export default class CopilotPlugin extends Plugin {
     this.brevilabsClient.setPluginVersion(this.manifest.version);
     checkIsPlusUser();
     refreshSelfHostModeValidation();
+    await this.syncMiyoBackend(getSettings());
 
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
@@ -590,6 +602,22 @@ export default class CopilotPlugin extends Plugin {
     const savedSettings = await this.loadData();
     const sanitizedSettings = sanitizeSettings(savedSettings);
     setSettings(sanitizedSettings);
+  }
+
+  /**
+   * Register or clear the Miyo backend based on self-host settings.
+   */
+  private async syncMiyoBackend(settings: CopilotSettings): Promise<void> {
+    if (!settings.enableSelfHostMode || !settings.enableMiyoSearch) {
+      RetrieverFactory.clearSelfHostedBackend();
+      return;
+    }
+
+    const backend = new MiyoBackend({
+      url: settings.selfHostUrl,
+      apiKey: settings.selfHostApiKey,
+    });
+    RetrieverFactory.registerSelfHostedBackend(backend);
   }
 
   mergeActiveModels(

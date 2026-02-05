@@ -129,6 +129,8 @@ export interface CopilotSettings {
   enableSemanticSearchV3: boolean;
   /** Enable self-host mode (e.g., Miyo) - uses self-hosted services for search, LLMs, OCR, etc. */
   enableSelfHostMode: boolean;
+  /** Enable Miyo search when self-host mode is active. */
+  enableMiyoSearch: boolean;
   /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
   selfHostModeValidatedAt: number | null;
   /** Count of successful periodic validations (3 = permanently valid) */
@@ -327,6 +329,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
   if (rawSettings.selfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
     sanitizedSettings.selfHostApiKey = rawSettings.selfHostedSearchApiKey as string;
+  }
+  if (sanitizedSettings.enableMiyoSearch === undefined) {
+    sanitizedSettings.enableMiyoSearch = DEFAULT_SETTINGS.enableMiyoSearch;
   }
 
   // Stuff in settings are string even when the interface has number type!
