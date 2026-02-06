@@ -42,6 +42,23 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   }
 
   /**
+   * Insert or update multiple documents in Orama.
+   *
+   * @param docs - Documents to upsert.
+   * @returns Number of documents successfully processed.
+   */
+  public async upsertBatch(docs: SemanticIndexDocument[]): Promise<number> {
+    let processed = 0;
+    for (const doc of docs) {
+      const result = await this.dbOps.upsert(doc);
+      if (result) {
+        processed += 1;
+      }
+    }
+    return processed;
+  }
+
+  /**
    * Remove all documents associated with a file path.
    */
   public async removeByPath(path: string): Promise<void> {

@@ -1,6 +1,7 @@
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
+import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React, { useState } from "react";
@@ -11,6 +12,11 @@ export const CopilotPlusSettings: React.FC = () => {
   const [isValidatingSelfHost, setIsValidatingSelfHost] = useState(false);
   const isSelfHostEligible = useIsSelfHostEligible();
 
+  /**
+   * Toggle self-host mode and handle validation requirements.
+   *
+   * @param enabled - Whether self-host mode should be enabled.
+   */
   const handleSelfHostModeToggle = async (enabled: boolean) => {
     if (enabled) {
       setIsValidatingSelfHost(true);
@@ -23,7 +29,36 @@ export const CopilotPlusSettings: React.FC = () => {
       updateSetting("enableSelfHostMode", true);
     } else {
       updateSetting("enableSelfHostMode", false);
+      if (settings.enableMiyoSearch) {
+        updateSetting("enableMiyoSearch", false);
+      }
     }
+  };
+
+  /**
+   * Toggle Miyo-backed semantic search and trigger a full reindex when needed.
+   *
+   * @param enabled - Whether Miyo search should be enabled.
+   */
+  const handleMiyoSearchToggle = async (enabled: boolean) => {
+    if (enabled === settings.enableMiyoSearch) {
+      return;
+    }
+
+    const confirmChange = async () => {
+      updateSetting("enableMiyoSearch", enabled);
+
+      if (enabled && !settings.enableSemanticSearchV3) {
+        updateSetting("enableSemanticSearchV3", true);
+      }
+
+      if (settings.enableSemanticSearchV3 || enabled) {
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+      }
+    };
+
+    new RebuildIndexConfirmModal(app, confirmChange).open();
   };
 
   return (
@@ -136,6 +171,16 @@ export const CopilotPlusSettings: React.FC = () => {
             onCheckedChange={handleSelfHostModeToggle}
             disabled={!isSelfHostEligible || isValidatingSelfHost}
           />
+
+          {settings.enableSelfHostMode && (
+            <SettingItem
+              type="switch"
+              title="Enable Miyo Search"
+              description="Use your Miyo backend for semantic indexing and retrieval while preserving Search v3 lexical merging."
+              checked={settings.enableMiyoSearch}
+              onCheckedChange={handleMiyoSearchToggle}
+            />
+          )}
         </div>
       </section>
     </div>

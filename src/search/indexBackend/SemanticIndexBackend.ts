@@ -39,6 +39,11 @@ export interface SemanticIndexBackend {
   upsert(doc: SemanticIndexDocument): Promise<SemanticIndexDocument | undefined>;
 
   /**
+   * Insert or update multiple semantic documents in a single operation.
+   */
+  upsertBatch(docs: SemanticIndexDocument[]): Promise<number>;
+
+  /**
    * Remove all indexed documents associated with a file path.
    */
   removeByPath(path: string): Promise<void>;

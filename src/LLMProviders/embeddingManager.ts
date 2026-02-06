@@ -1,8 +1,15 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CustomModel } from "@/aiParams";
-import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from "@/constants";
+import {
+  BREVILABS_MODELS_BASE_URL,
+  EmbeddingModelProviders,
+  MIYO_EMBEDDING_MODEL_KEY,
+  ProviderInfo,
+} from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
+import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
+import { isSelfHostModeValid } from "@/plusUtils";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
@@ -29,6 +36,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
   [EmbeddingModelProviders.SILICONFLOW]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.OPENROUTERAI]: CustomOpenAIEmbeddings,
+  [EmbeddingModelProviders.MIYO]: CustomOpenAIEmbeddings,
 } as const;
 
 type EmbeddingProviderConstructorMap = typeof EMBEDDING_PROVIDER_CONSTRUCTORS;
@@ -58,6 +66,7 @@ export default class EmbeddingManager {
     [EmbeddingModelProviders.OPENAI_FORMAT]: () => "default-key",
     [EmbeddingModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
     [EmbeddingModelProviders.OPENROUTERAI]: () => getSettings().openRouterAiApiKey,
+    [EmbeddingModelProviders.MIYO]: () => getSettings().selfHostApiKey || "default-key",
   };
 
   private constructor() {
@@ -138,7 +147,10 @@ export default class EmbeddingManager {
   }
 
   async getEmbeddingsAPI(): Promise<Embeddings> {
-    const { embeddingModelKey } = getSettings();
+    const settings = getSettings();
+    const embeddingModelKey = this.shouldUseMiyoEmbeddings(settings)
+      ? MIYO_EMBEDDING_MODEL_KEY
+      : settings.embeddingModelKey;
 
     if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
       throw new CustomError(`No embedding model found for: ${embeddingModelKey}`);
@@ -301,12 +313,69 @@ export default class EmbeddingManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
+      [EmbeddingModelProviders.MIYO]: {
+        modelName,
+        apiKey: await getDecryptedKey(
+          customModel.apiKey || settings.selfHostApiKey || "default-key"
+        ),
+        batchSize: getSettings().embeddingBatchSize,
+        headers: this.getMiyoAuthHeaders(settings),
+        configuration: {
+          baseURL: await this.getMiyoEmbeddingBaseUrl(settings),
+          fetch: safeFetch,
+        },
+      },
     };
 
     const selectedProviderConfig =
       providerConfig[customModel.provider as EmbeddingModelProviders] || {};
 
     return { ...baseConfig, ...selectedProviderConfig };
+  }
+
+  /**
+   * Determine whether Miyo embeddings should override the configured model.
+   *
+   * @param settings - Current Copilot settings.
+   * @returns True when Miyo embeddings should be used.
+   */
+  private shouldUseMiyoEmbeddings(settings: ReturnType<typeof getSettings>): boolean {
+    return (
+      settings.enableSelfHostMode &&
+      settings.enableMiyoSearch &&
+      settings.enableSemanticSearchV3 &&
+      isSelfHostModeValid()
+    );
+  }
+
+  /**
+   * Resolve the base URL for Miyo embeddings.
+   *
+   * @param settings - Current Copilot settings.
+   * @returns Base URL pointing to the Miyo OpenAI-compatible API.
+   */
+  private async getMiyoEmbeddingBaseUrl(settings: ReturnType<typeof getSettings>): Promise<string> {
+    const discovery = MiyoServiceDiscovery.getInstance();
+    const baseUrl = await discovery.resolveBaseUrl({ overrideUrl: settings.selfHostUrl });
+    if (!baseUrl) {
+      throw new CustomError("Miyo base URL not available for embeddings.");
+    }
+    return baseUrl.endsWith("/v1") ? baseUrl : `${baseUrl}/v1`;
+  }
+
+  /**
+   * Build optional auth headers for Miyo embedding requests.
+   *
+   * @param settings - Current Copilot settings.
+   * @returns Headers object (empty when no key is configured).
+   */
+  private getMiyoAuthHeaders(settings: ReturnType<typeof getSettings>): Record<string, string> {
+    if (!settings.selfHostApiKey) {
+      return {};
+    }
+    return {
+      "X-API-Key": settings.selfHostApiKey,
+    };
   }
 
   async ping(model: CustomModel): Promise<boolean> {

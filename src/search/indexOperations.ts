@@ -14,7 +14,10 @@ import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
 import { MD5 } from "crypto-js";
 import { App, Notice, TFile } from "obsidian";
-import type { SemanticIndexBackend } from "./indexBackend/SemanticIndexBackend";
+import type {
+  SemanticIndexBackend,
+  SemanticIndexDocument,
+} from "./indexBackend/SemanticIndexBackend";
 import { getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
 export interface IndexingState {
@@ -161,7 +164,9 @@ export class IndexOperations {
             );
           }
 
-          // Save batch to database
+          const docsToUpsert: Array<{ doc: SemanticIndexDocument; filePath: string }> = [];
+
+          // Build batch payload
           for (let j = 0; j < batch.length; j++) {
             const chunk = batch[j];
             const embedding = embeddings[j];
@@ -173,25 +178,38 @@ export class IndexOperations {
               continue;
             }
 
-            try {
-              await this.indexBackend.upsert({
-                ...chunk.fileInfo,
+            docsToUpsert.push({
+              doc: {
+                ...(chunk.fileInfo as SemanticIndexDocument),
                 id: this.getDocHash(chunk.content),
                 content: chunk.content,
                 embedding,
                 created_at: Date.now(),
                 nchars: chunk.content.length,
-              });
-              // Mark success for this file
-              this.state.processedFiles.add(chunk.fileInfo.path);
-            } catch (err) {
-              // Log error but continue processing other documents in batch
-              this.handleError(err, {
-                filePath: chunk.fileInfo.path,
-                errors,
-              });
-              this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
-              continue;
+              },
+              filePath: chunk.fileInfo.path,
+            });
+          }
+
+          if (docsToUpsert.length > 0) {
+            try {
+              await this.indexBackend.upsertBatch(docsToUpsert.map((item) => item.doc));
+              docsToUpsert.forEach((item) => this.state.processedFiles.add(item.filePath));
+            } catch (error) {
+              logError("Batch upsert failed; falling back to per-document upserts.", error);
+              // Fall back to per-document upserts to isolate failures
+              for (const item of docsToUpsert) {
+                try {
+                  await this.indexBackend.upsert(item.doc);
+                  this.state.processedFiles.add(item.filePath);
+                } catch (innerErr) {
+                  this.handleError(innerErr, {
+                    filePath: item.filePath,
+                    errors,
+                  });
+                  this.indexBackend.markFileMissingEmbeddings(item.filePath);
+                }
+              }
             }
           }
 
