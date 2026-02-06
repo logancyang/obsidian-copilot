@@ -71,6 +71,12 @@ VectorStoreManager should select the backend based on settings:
 - Modify `MergedSemanticRetriever` to accept an injected semantic retriever.
 - Implement `MiyoSemanticRetriever` that queries Miyo for semantic results (hybrid search), mapping results into LangChain `Document` objects.
 - When Miyo indexing is enabled, semantic leg uses Miyo; otherwise fallback to `HybridRetriever` (Orama).
+- **Search response should return only required fields** (no snippet requirement):
+  - `path`, `title`, `ctime`, `mtime`, `tags`
+  - `chunk_text` (full chunk content)
+  - `chunk_index`
+  - `metadata.chunkId` (stable `note_path#chunk_index`)
+  - `score`
 
 ### 5. Indexing Hooks (No UX Change)
 

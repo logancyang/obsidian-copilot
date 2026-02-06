@@ -7,12 +7,15 @@ import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchTog
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
+  const visibleEmbeddingModels = settings.activeEmbeddingModels.filter(
+    (model) => model.provider !== EmbeddingModelProviders.MIYO
+  );
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
     if (modelKey === settings.embeddingModelKey) return;
@@ -54,6 +57,9 @@ export const QASettings: React.FC = () => {
                 app,
                 async () => {
                   updateSetting("enableSemanticSearchV3", checked);
+                  if (!checked && settings.enableMiyoSearch) {
+                    updateSetting("enableMiyoSearch", false);
+                  }
                   if (checked) {
                     const VectorStoreManager = (await import("@/search/vectorStoreManager"))
                       .default;
@@ -108,7 +114,7 @@ export const QASettings: React.FC = () => {
             }
             value={settings.embeddingModelKey}
             onChange={handleSetDefaultEmbeddingModel}
-            options={settings.activeEmbeddingModels.map((model) => ({
+            options={visibleEmbeddingModels.map((model) => ({
               label: getModelDisplayWithIcons(model),
               value: getModelKeyFromModel(model),
             }))}
