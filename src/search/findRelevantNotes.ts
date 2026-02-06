@@ -1,5 +1,6 @@
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
+import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { TFile } from "obsidian";
@@ -11,13 +12,12 @@ const LINKS_WEIGHT = 0.3;
 /**
  * Gets the embeddings for the given note path.
  * @param notePath - The note path to get embeddings for.
- * @param db - The Orama database.
  * @returns The embeddings for the given note path.
  */
-async function getNoteEmbeddings(notePath: string, db: Orama<any>): Promise<number[][]> {
+async function getNoteEmbeddings(notePath: string): Promise<number[][]> {
   const debug = getSettings().debug;
-  const hits = await DBOperations.getDocsByPath(db, notePath);
-  if (!hits) {
+  const docs = await VectorStoreManager.getInstance().getDocumentsByPath(notePath);
+  if (docs.length === 0) {
     if (debug) {
       console.log("No hits found for note:", notePath);
     }
@@ -25,14 +25,14 @@ async function getNoteEmbeddings(notePath: string, db: Orama<any>): Promise<numb
   }
 
   const embeddings: number[][] = [];
-  for (const hit of hits) {
-    if (!hit?.document?.embedding) {
+  for (const doc of docs) {
+    if (!doc?.embedding) {
       if (debug) {
         console.log("No embedding found for note:", notePath);
       }
       continue;
     }
-    embeddings.push(hit.document.embedding);
+    embeddings.push(doc.embedding);
   }
   return embeddings;
 }
@@ -76,7 +76,7 @@ async function calculateSimilarityScore({
 }): Promise<Map<string, number>> {
   const debug = getSettings().debug;
 
-  const currentNoteEmbeddings = await getNoteEmbeddings(filePath, db);
+  const currentNoteEmbeddings = await getNoteEmbeddings(filePath);
   if (currentNoteEmbeddings.length === 0) {
     if (debug) {
       console.log("No embeddings found for note:", filePath);

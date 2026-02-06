@@ -64,6 +64,11 @@ export interface SemanticIndexBackend {
   hasIndex(path: string): Promise<boolean>;
 
   /**
+   * Return all indexed documents for a given file path.
+   */
+  getDocumentsByPath(path: string): Promise<SemanticIndexDocument[]>;
+
+  /**
    * Check for embedding model changes and trigger required rebuilds.
    */
   checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean>;

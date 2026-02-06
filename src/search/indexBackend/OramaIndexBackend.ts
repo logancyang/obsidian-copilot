@@ -77,6 +77,21 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   }
 
   /**
+   * Return all indexed documents for a given file path.
+   */
+  public async getDocumentsByPath(path: string): Promise<SemanticIndexDocument[]> {
+    const db = this.dbOps.getDb();
+    if (!db) {
+      throw new Error("Database is not loaded. Please restart the plugin.");
+    }
+    const hits = await DBOperations.getDocsByPath(db, path);
+    if (!hits) {
+      return [];
+    }
+    return hits.map((hit) => hit.document as SemanticIndexDocument);
+  }
+
+  /**
    * Detect embedding model changes and rebuild as needed.
    */
   public async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {

@@ -7,7 +7,10 @@ import { Orama } from "@orama/orama";
 import { Notice, Platform, TFile } from "obsidian";
 import type { DBOperations } from "./dbOperations";
 import { OramaIndexBackend } from "./indexBackend/OramaIndexBackend";
-import type { SemanticIndexBackend } from "./indexBackend/SemanticIndexBackend";
+import type {
+  SemanticIndexBackend,
+  SemanticIndexDocument,
+} from "./indexBackend/SemanticIndexBackend";
 import { IndexEventHandler } from "./indexEventHandler";
 import { IndexOperations } from "./indexOperations";
 
@@ -133,6 +136,17 @@ export default class VectorStoreManager {
   public async hasIndex(notePath: string): Promise<boolean> {
     await this.waitForInitialization();
     return this.indexBackend.hasIndex(notePath);
+  }
+
+  /**
+   * Retrieve all indexed documents for a file path.
+   *
+   * @param notePath - The vault-relative file path to look up.
+   * @returns The list of indexed documents for the file.
+   */
+  public async getDocumentsByPath(notePath: string): Promise<SemanticIndexDocument[]> {
+    await this.waitForInitialization();
+    return this.indexBackend.getDocumentsByPath(notePath);
   }
 
   public onunload(): void {
