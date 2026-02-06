@@ -22,11 +22,14 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
   }
 
   private async callEmbeddingAPI(texts: string[]): Promise<number[][]> {
-    const requestBody = {
-      model: this.customConfig.modelName,
+    const requestBody: Record<string, unknown> = {
       input: texts,
       encoding_format: "float",
     };
+    const modelName = this.customConfig.modelName ?? this.customConfig.model;
+    if (modelName && !this.customConfig.omitModelName) {
+      requestBody.model = modelName;
+    }
 
     // Get the correct baseURL, apiKey, and fetch function from the configuration
     const baseURL = this.customConfig.configuration?.baseURL || "https://api.openai.com/v1";
