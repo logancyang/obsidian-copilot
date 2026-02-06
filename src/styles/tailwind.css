@@ -887,15 +887,57 @@ If your plugin does not need CSS, delete this file.
 /* use 'important' to prevent ob default css style from being third-party theme overridden */
 
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
-  padding-bottom: max(var(--safe-area-inset-bottom), var(--size-4-8)) !important;
+  padding-bottom: max(calc(var(--safe-area-inset-bottom, 0px) + var(--size-4-1)), var(--size-4-8)) !important;
 }
 
-/* open plugin in Editor mode for mobile */
+/* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
 body.is-mobile
   .workspace-tab-container
   .workspace-leaf-content[data-type="copilot-chat-view"]
   .view-content {
   padding-bottom: var(--size-4-1) !important;
+}
+
+/* Editor mode for mobile - new version (with bottom navbar visible): reserve navbar space */
+@supports selector(body:has(*)) {
+  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
+    .workspace-tab-container
+    .workspace-leaf-content[data-type="copilot-chat-view"]
+    .view-content {
+    padding-bottom: calc(
+      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) + var(--size-4-1)
+    ) !important;
+  }
+}
+
+/* ApplyView for mobile - new version (with bottom navbar visible): reserve navbar space */
+@supports selector(body:has(*)) {
+  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
+    .workspace-tab-container
+    .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
+    .view-content {
+    padding-bottom: calc(
+      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
+        var(--size-4-1) + var(--size-4-4)
+    ) !important;
+  }
+
+  /* Lift the fixed Accept/Reject button bar above the navbar */
+  body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
+    .workspace-tab-container
+    .workspace-leaf-content[data-type="obsidian-copilot-apply-view"]
+    .tw-fixed.tw-bottom-4 {
+    bottom: calc(
+      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
+        var(--size-4-1)
+    ) !important;
+  }
+}
+
+/* Hide drawer header and tab-options when keyboard is open in Copilot's drawer */
+body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-header,
+body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-options {
+  display: none !important;
 }
 
 /* Collapsible sources styling */

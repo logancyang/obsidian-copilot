@@ -5,7 +5,7 @@ import { AppContext, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { FileParserManager } from "@/tools/FileParserManager";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { ItemView, WorkspaceLeaf } from "obsidian";
+import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { createRoot, Root } from "react-dom/client";
 
@@ -17,6 +17,8 @@ export default class CopilotView extends ItemView {
   private fileParserManager: FileParserManager;
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
+  private keyboardObserver: MutationObserver | null = null;
+  private lastDrawerEl: HTMLElement | null = null;
   eventTarget: EventTarget;
 
   constructor(
@@ -58,6 +60,52 @@ export default class CopilotView extends ItemView {
     };
 
     this.renderView(handleSaveAsNote, updateUserMessageHistory);
+    this.setupMobileKeyboardObserver();
+  }
+
+  /**
+   * Observe --keyboard-height on <html> style to toggle a class on the
+   * parent .workspace-drawer when the soft keyboard is open.
+   * CSS uses this class to hide drawer header elements on mobile.
+   *
+   * Reason: The drawer lookup is inside the callback (not at setup time) because
+   * the view can be moved from editor tab to drawer without triggering onOpen again.
+   */
+  private setupMobileKeyboardObserver(): void {
+    if (!Platform.isMobile) return;
+
+    // Reason: Disconnect any existing observer defensively in case onOpen runs more than once
+    this.keyboardObserver?.disconnect();
+
+    const syncKeyboardClass = () => {
+      const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+
+      // Reason: If the view moved out of its previous drawer, clear the class on the old one
+      // so drawer chrome (header/tab options) is restored.
+      if (this.lastDrawerEl && this.lastDrawerEl !== drawer) {
+        this.lastDrawerEl.classList.remove("copilot-keyboard-open");
+      }
+      this.lastDrawerEl = drawer;
+
+      if (!drawer) return;
+
+      // Reason: Check if this view itself is inside the active tab content, rather than
+      // querying by data-type which is more brittle across Obsidian versions.
+      const isCopilotActive = !!this.containerEl.closest(".workspace-drawer-active-tab-content");
+      const kbHeight = parseFloat(
+        document.documentElement.style.getPropertyValue("--keyboard-height") || "0"
+      );
+      drawer.classList.toggle("copilot-keyboard-open", isCopilotActive && kbHeight > 0);
+    };
+
+    this.keyboardObserver = new MutationObserver(syncKeyboardClass);
+    this.keyboardObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+
+    // Reason: Sync initial state in case keyboard is already open when view opens
+    syncKeyboardClass();
   }
 
   private renderView(
@@ -104,6 +152,14 @@ export default class CopilotView extends ItemView {
   }
 
   async onClose(): Promise<void> {
+    this.keyboardObserver?.disconnect();
+    this.keyboardObserver = null;
+    // Reason: Clean up the class on the tracked drawer element when the view is closed.
+    // Use lastDrawerEl instead of querying closest(), because the view may have already
+    // been detached from the drawer DOM by the time onClose fires.
+    this.lastDrawerEl?.classList.remove("copilot-keyboard-open");
+    this.lastDrawerEl = null;
+
     if (this.root) {
       this.root.unmount();
       this.root = null;
