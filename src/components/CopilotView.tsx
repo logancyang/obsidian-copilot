@@ -18,6 +18,7 @@ export default class CopilotView extends ItemView {
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private keyboardObserver: MutationObserver | null = null;
+  private lastDrawerEl: HTMLElement | null = null;
   eventTarget: EventTarget;
 
   constructor(
@@ -78,6 +79,14 @@ export default class CopilotView extends ItemView {
 
     const syncKeyboardClass = () => {
       const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+
+      // Reason: If the view moved out of its previous drawer, clear the class on the old one
+      // so drawer chrome (header/tab options) is restored.
+      if (this.lastDrawerEl && this.lastDrawerEl !== drawer) {
+        this.lastDrawerEl.classList.remove("copilot-keyboard-open");
+      }
+      this.lastDrawerEl = drawer;
+
       if (!drawer) return;
 
       // Reason: Check if this view itself is inside the active tab content, rather than
@@ -145,9 +154,11 @@ export default class CopilotView extends ItemView {
   async onClose(): Promise<void> {
     this.keyboardObserver?.disconnect();
     this.keyboardObserver = null;
-    // Reason: Clean up the class on the drawer element when the view is closed
-    (this.containerEl.closest(".workspace-drawer") as HTMLElement | null)
-      ?.classList.remove("copilot-keyboard-open");
+    // Reason: Clean up the class on the tracked drawer element when the view is closed.
+    // Use lastDrawerEl instead of querying closest(), because the view may have already
+    // been detached from the drawer DOM by the time onClose fires.
+    this.lastDrawerEl?.classList.remove("copilot-keyboard-open");
+    this.lastDrawerEl = null;
 
     if (this.root) {
       this.root.unmount();
