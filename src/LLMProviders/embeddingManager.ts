@@ -315,7 +315,6 @@ export default class EmbeddingManager {
       },
       [EmbeddingModelProviders.MIYO]: {
         modelName,
-        omitModelName: true,
         apiKey: await getDecryptedKey(
           customModel.apiKey || settings.selfHostApiKey || "default-key"
         ),
