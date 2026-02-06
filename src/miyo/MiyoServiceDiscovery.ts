@@ -12,6 +12,8 @@ export interface MiyoServiceConfig {
   pid: number;
 }
 
+type NodeRequire = (id: string) => any;
+
 /**
  * Resolves the Miyo base URL using self-host settings or local service discovery.
  */
@@ -82,9 +84,13 @@ export class MiyoServiceDiscovery {
    *
    * @returns Absolute path to the Miyo service.json file.
    */
-  private async getServiceFilePath(): Promise<string> {
-    const osModule = await import("os");
-    const pathModule = await import("path");
+  private getServiceFilePath(): string | null {
+    const nodeRequire = this.getNodeRequire();
+    if (!nodeRequire) {
+      return null;
+    }
+    const osModule = nodeRequire("os") as { homedir: () => string };
+    const pathModule = nodeRequire("path") as { join: (...parts: string[]) => string };
     return pathModule.join(
       osModule.homedir(),
       "Library",
@@ -100,9 +106,18 @@ export class MiyoServiceDiscovery {
    * @returns Parsed service config or null if unavailable.
    */
   private async readServiceConfig(): Promise<MiyoServiceConfig | null> {
-    const servicePath = await this.getServiceFilePath();
+    const servicePath = this.getServiceFilePath();
+    if (!servicePath) {
+      return null;
+    }
     try {
-      const fsModule = await import("fs");
+      const nodeRequire = this.getNodeRequire();
+      if (!nodeRequire) {
+        return null;
+      }
+      const fsModule = nodeRequire("fs") as {
+        promises: { readFile: (path: string, encoding: string) => Promise<string> };
+      };
       const raw = await fsModule.promises.readFile(servicePath, "utf8");
       const parsed = JSON.parse(raw) as Partial<MiyoServiceConfig>;
 
@@ -126,5 +141,18 @@ export class MiyoServiceDiscovery {
       }
       return null;
     }
+  }
+
+  /**
+   * Get Node-style require from the runtime (desktop-only).
+   *
+   * @returns Node require function or null when unavailable.
+   */
+  private getNodeRequire(): NodeRequire | null {
+    const maybeRequire = (globalThis as { require?: NodeRequire } | undefined)?.require;
+    if (typeof maybeRequire === "function") {
+      return maybeRequire;
+    }
+    return null;
   }
 }
