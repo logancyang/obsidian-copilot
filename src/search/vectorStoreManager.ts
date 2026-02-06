@@ -5,7 +5,9 @@ import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
 import { Notice, Platform, TFile } from "obsidian";
-import { DBOperations } from "./dbOperations";
+import type { DBOperations } from "./dbOperations";
+import { OramaIndexBackend } from "./indexBackend/OramaIndexBackend";
+import type { SemanticIndexBackend } from "./indexBackend/SemanticIndexBackend";
 import { IndexEventHandler } from "./indexEventHandler";
 import { IndexOperations } from "./indexOperations";
 
@@ -16,13 +18,15 @@ export default class VectorStoreManager {
   private initializationPromise: Promise<void>;
   private lastKnownSettings: CopilotSettings | undefined;
   private embeddingsManager: EmbeddingsManager;
-  private dbOps: DBOperations;
+  private indexBackend: SemanticIndexBackend;
+  private oramaBackend: OramaIndexBackend;
 
   private constructor() {
     this.embeddingsManager = EmbeddingsManager.getInstance();
-    this.dbOps = new DBOperations(app);
-    this.indexOps = new IndexOperations(app, this.dbOps, this.embeddingsManager);
-    this.eventHandler = new IndexEventHandler(app, this.indexOps, this.dbOps);
+    this.oramaBackend = new OramaIndexBackend(app);
+    this.indexBackend = this.oramaBackend;
+    this.indexOps = new IndexOperations(app, this.indexBackend, this.embeddingsManager);
+    this.eventHandler = new IndexEventHandler(app, this.indexOps, this.indexBackend);
 
     this.initializationPromise = this.initialize();
     this.setupSettingsSubscription();
@@ -46,12 +50,8 @@ export default class VectorStoreManager {
 
       // Handle path changes (enableIndexSync)
       if (settings.enableIndexSync !== prevSettings?.enableIndexSync) {
-        const newPath = await this.dbOps.getDbPath();
-        const oldPath = this.dbOps.getCurrentDbPath();
-
-        if (oldPath !== newPath) {
-          await this.dbOps.initializeDB(await this.embeddingsManager.getEmbeddingsAPI());
-        }
+        const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
+        await this.oramaBackend.reinitializeForIndexSyncChange(embeddingInstance);
       }
     };
 
@@ -71,7 +71,7 @@ export default class VectorStoreManager {
       while (retries > 0) {
         try {
           const embeddingAPI = await this.embeddingsManager.getEmbeddingsAPI();
-          await this.dbOps.initializeDB(embeddingAPI);
+          await this.indexBackend.initialize(embeddingAPI);
           break;
         } catch (error) {
           if (
@@ -112,42 +112,42 @@ export default class VectorStoreManager {
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
-    await this.dbOps.clearIndex(await this.embeddingsManager.getEmbeddingsAPI());
+    await this.indexBackend.clearIndex(await this.embeddingsManager.getEmbeddingsAPI());
   }
 
   public async garbageCollectVectorStore(): Promise<number> {
     await this.waitForInitialization();
-    return this.dbOps.garbageCollect();
+    return this.indexBackend.garbageCollect();
   }
 
   public async getIndexedFiles(): Promise<string[]> {
     await this.waitForInitialization();
-    return this.dbOps.getIndexedFiles();
+    return this.indexBackend.getIndexedFiles();
   }
 
   public async isIndexEmpty(): Promise<boolean> {
     await this.waitForInitialization();
-    return await this.dbOps.isIndexEmpty();
+    return await this.indexBackend.isIndexEmpty();
   }
 
   public async hasIndex(notePath: string): Promise<boolean> {
     await this.waitForInitialization();
-    return this.dbOps.hasIndex(notePath);
+    return this.indexBackend.hasIndex(notePath);
   }
 
   public onunload(): void {
     this.eventHandler.cleanup();
-    this.dbOps.onunload();
+    this.indexBackend.onunload();
   }
 
   public async getDbOps(): Promise<DBOperations> {
     await this.waitForInitialization();
-    return this.dbOps;
+    return this.oramaBackend.getDbOperations();
   }
 
   public async getDb(): Promise<Orama<any>> {
     await this.waitForInitialization();
-    const db = this.dbOps.getDb();
+    const db = this.oramaBackend.getDb();
     if (!db) {
       throw new Error("Database is not loaded. Please restart the plugin.");
     }

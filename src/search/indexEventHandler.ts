@@ -3,7 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { App, MarkdownView, Platform, TAbstractFile, TFile } from "obsidian";
-import { DBOperations } from "./dbOperations";
+import type { SemanticIndexBackend } from "./indexBackend/SemanticIndexBackend";
 import { IndexOperations } from "./indexOperations";
 import { getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
@@ -18,7 +18,7 @@ export class IndexEventHandler {
   constructor(
     private app: App,
     private indexOps: IndexOperations,
-    private dbOps: DBOperations
+    private indexBackend: SemanticIndexBackend
   ) {
     this.syncEventListeners();
     subscribeToSettingsChange(() => {
@@ -136,7 +136,7 @@ export class IndexEventHandler {
       return;
     }
     if (file instanceof TFile) {
-      await this.dbOps.removeDocs(file.path);
+      await this.indexBackend.removeByPath(file.path);
     }
   };
 
