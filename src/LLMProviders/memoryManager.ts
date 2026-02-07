@@ -1,3 +1,4 @@
+import { compactAssistantOutput } from "@/context/ChatHistoryCompactor";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { BaseChatMemory, BufferWindowMemory } from "@langchain/classic/memory";
 import { BaseChatMessageHistory } from "@langchain/core/chat_history";
@@ -52,8 +53,21 @@ export default class MemoryManager {
     return variables;
   }
 
+  /**
+   * Save a conversation turn to memory.
+   * The output (assistant response) is compacted to reduce memory bloat from
+   * accumulated tool results (localSearch, readNote, etc.).
+   */
   async saveContext(input: any, output: any): Promise<void> {
-    if (this.debug) console.log("Saving to memory - Input:", input, "Output:", output);
-    await this.memory.saveContext(input, output);
+    // Compact the output to prevent memory bloat from tool results
+    const compactedOutput =
+      typeof output === "string"
+        ? compactAssistantOutput(output)
+        : { ...output, output: compactAssistantOutput(output.output) };
+
+    if (this.debug) {
+      console.log("Saving to memory - Input:", input, "Output (compacted):", compactedOutput);
+    }
+    await this.memory.saveContext(input, compactedOutput);
   }
 }

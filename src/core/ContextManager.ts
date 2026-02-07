@@ -3,6 +3,7 @@ import { ChainType } from "@/chainFactory";
 import { processPrompt } from "@/commands/customCommandUtils";
 import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";
+import { compactXmlBlock, getL2RefetchInstruction } from "@/context/L2ContextCompactor";
 import {
   PromptContextEnvelope,
   PromptLayerId,
@@ -405,7 +406,10 @@ export class ContextManager {
           const segmentContent: string[] = [];
           for (const segment of l3Layer.segments || []) {
             if (segment.content) {
-              segmentContent.push(segment.content);
+              // Compact large L3 segments for L2 to reduce context size
+              // This extracts structure + preview with tool hints for re-fetching
+              const compacted = this.compactSegmentForL2(segment.content);
+              segmentContent.push(compacted);
             }
           }
           if (segmentContent.length > 0) {
@@ -448,7 +452,16 @@ export class ContextManager {
       // - Lazy rebuild: process context.notes when first accessed after load
     }
 
-    return { l2Context: l2Parts.join("\n"), l2Paths };
+    // Build the L2 context string
+    const l2Content = l2Parts.join("\n");
+
+    // Append re-fetch instruction if there's any L2 content with prior_context blocks
+    const hasCompactedContent = l2Content.includes("<prior_context ");
+    const l2Context = hasCompactedContent
+      ? l2Content + "\n\n" + getL2RefetchInstruction()
+      : l2Content;
+
+    return { l2Context, l2Paths };
   }
 
   private buildPromptContextEnvelope(
@@ -607,7 +620,7 @@ export class ContextManager {
 
   /**
    * Parse context XML string into individual segments (one per note/context item)
-   * Extracts <note_context> and <active_note> blocks and creates segments with path as ID
+   * Extracts <note_context>, <active_note>, and <prior_context> blocks and creates segments with path as ID
    */
   private parseContextIntoSegments(contextXml: string, stable: boolean): PromptLayerSegment[] {
     if (!contextXml.trim()) {
@@ -616,27 +629,44 @@ export class ContextManager {
 
     const segments: PromptLayerSegment[] = [];
 
-    // Match both <note_context> and <active_note> blocks
+    // Match <note_context>, <active_note>, and <prior_context> blocks
+    // prior_context has attributes: <prior_context source="path" type="note">
     const noteContextRegex =
       /<(?:note_context|active_note)>[\s\S]*?<\/(?:note_context|active_note)>/g;
+    const priorContextRegex = /<prior_context\s+source="([^"]+)"[^>]*>[\s\S]*?<\/prior_context>/g;
+
     let match: RegExpExecArray | null;
 
+    // Parse original note blocks
     while ((match = noteContextRegex.exec(contextXml)) !== null) {
       const block = match[0];
-
-      // Extract path from the block
       const pathMatch = /<path>([^<]+)<\/path>/.exec(block);
       if (!pathMatch) continue;
 
       const notePath = pathMatch[1];
-
       segments.push({
-        id: notePath, // Use note path as unique ID for comparison
+        id: notePath,
         content: block,
         stable,
         metadata: {
           source: stable ? "previous_turns" : "current_turn",
           notePath,
+        },
+      });
+    }
+
+    // Parse compacted prior_context blocks (L2 from previous turns)
+    while ((match = priorContextRegex.exec(contextXml)) !== null) {
+      const block = match[0];
+      const source = match[1]; // Extracted from source="..." attribute
+
+      segments.push({
+        id: source,
+        content: block,
+        stable,
+        metadata: {
+          source: "previous_turns_compacted",
+          notePath: source,
         },
       });
     }
@@ -709,6 +739,28 @@ export class ContextManager {
    */
   getSelectedTextContexts() {
     return getSelectedTextContexts();
+  }
+
+  /**
+   * Compact an L3 segment's content for inclusion in L2 (previous turn context).
+   *
+   * Large content is compacted by extracting structure (headings) and previews
+   * from each section. Small content and selected text are kept verbatim.
+   * A single re-fetch instruction is appended at the L2 level (not per-block).
+   *
+   * @param content - The segment content (typically an XML block)
+   * @returns Compacted content for L2
+   */
+  private compactSegmentForL2(content: string): string {
+    // Detect block type from XML tag
+    const blockTypeMatch = content.match(/^<(\w+)>/);
+    if (!blockTypeMatch) {
+      // Not an XML block, return as-is
+      return content;
+    }
+
+    const blockType = blockTypeMatch[1];
+    return compactXmlBlock(content, blockType);
   }
 }
 

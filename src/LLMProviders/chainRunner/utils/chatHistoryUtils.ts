@@ -219,17 +219,8 @@ export function extractConversationTurns(processedHistory: ProcessedMessage[]): 
  * Load chat history from memory and add to messages array.
  * This is the single entry point for all chain runners to use.
  *
- * NOTE: Chat history compaction was intentionally removed for simplicity.
- * A previous implementation would summarize older conversation turns when
- * total context exceeded a threshold. This was removed because:
- * 1. It added complexity (LLM calls for summarization)
- * 2. Context compaction in ContextManager already handles large context
- * 3. BufferWindowMemory already limits conversation history length
- *
- * If chat history compaction is needed in the future, consider:
- * - Extracting conversation turns with extractConversationTurns()
- * - Summarizing older turns while keeping recent ones intact
- * - Using the same autoCompactThreshold setting for consistency
+ * Note: Chat history is already compacted at save time (in MemoryManager.saveContext)
+ * so tool results (localSearch, readNote, etc.) are stored as compact summaries.
  *
  * @param memory - LangChain memory instance
  * @param messages - Target messages array (system message should already be added)
@@ -248,7 +239,7 @@ export async function loadAndAddChatHistory(
 
   const processedHistory = processRawChatHistory(rawHistory);
 
-  // Add history messages directly
+  // Add history messages directly (already compacted at save time)
   for (const msg of processedHistory) {
     messages.push({ role: msg.role, content: msg.content });
   }
