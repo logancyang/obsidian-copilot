@@ -111,5 +111,61 @@ Done.`;
       const output = { some: "object" };
       expect(compactAssistantOutput(output as any)).toBe(output);
     });
+
+    it("should handle readNote JSON with nested braces in content", () => {
+      // Content contains code with nested braces - this used to break the regex
+      const codeContent = `## Code Example
+${"function test() { if (true) { return { value: 1 }; } } ".repeat(100)}
+
+## Another Section
+${"More content here. ".repeat(100)}`;
+
+      const readNoteResult = JSON.stringify({
+        notePath: "code/example.md",
+        noteTitle: "Code Example",
+        content: codeContent,
+        chunkIndex: 0,
+        totalChunks: 1,
+      });
+
+      const output = `Here's the code:
+
+Tool 'readNote' result: ${readNoteResult}
+
+That's the implementation.`;
+
+      const result = compactAssistantOutput(output, { verbatimThreshold: 1000 });
+      expect(typeof result).toBe("string");
+      expect((result as string).length).toBeLessThan(output.length);
+      expect(result).toContain("COMPACTED");
+      expect(result).toContain("## Code Example");
+      expect(result).toContain("That's the implementation");
+    });
+
+    it("should handle multiple readNote results in sequence", () => {
+      const content1 = "A".repeat(3000);
+      const content2 = "B".repeat(3000);
+
+      const result1 = JSON.stringify({ notePath: "a.md", content: content1 });
+      const result2 = JSON.stringify({ notePath: "b.md", content: content2 });
+
+      const output = `First note:
+Tool 'readNote' result: ${result1}
+
+Second note:
+Tool 'readNote' result: ${result2}
+
+Done.`;
+
+      const result = compactAssistantOutput(output, { verbatimThreshold: 1000 });
+      expect(typeof result).toBe("string");
+      expect((result as string).length).toBeLessThan(output.length);
+      expect(result).toContain("First note:");
+      expect(result).toContain("Second note:");
+      expect(result).toContain("Done.");
+      // Both should be compacted
+      const compactedCount = ((result as string).match(/COMPACTED/g) || []).length;
+      expect(compactedCount).toBe(2);
+    });
   });
 });

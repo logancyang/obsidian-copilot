@@ -45,10 +45,56 @@ function buildToolResultPatterns(): Array<{ pattern: RegExp; tag: string }> {
 const TOOL_RESULT_PATTERNS = buildToolResultPatterns();
 
 /**
- * Pattern to match readNote tool JSON results embedded in chat history.
- * Format: Tool 'readNote' result: {...json...}
+ * Pattern to find readNote tool result prefix in chat history.
+ * The JSON is extracted separately using brace-balanced parsing.
  */
-const READ_NOTE_RESULT_PATTERN = /Tool 'readNote' result: (\{[\s\S]*?\})(?=\n\n|\n<|$)/g;
+const READ_NOTE_PREFIX = "Tool 'readNote' result: ";
+
+/**
+ * Extract a brace-balanced JSON object starting at position.
+ * Returns the JSON string and end position, or null if not valid.
+ */
+function extractBalancedJson(
+  content: string,
+  startPos: number
+): { json: string; endPos: number } | null {
+  if (content[startPos] !== "{") return null;
+
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+
+  for (let i = startPos; i < content.length; i++) {
+    const char = content[i];
+
+    if (escape) {
+      escape = false;
+      continue;
+    }
+
+    if (char === "\\" && inString) {
+      escape = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (inString) continue;
+
+    if (char === "{") depth++;
+    else if (char === "}") {
+      depth--;
+      if (depth === 0) {
+        return { json: content.slice(startPos, i + 1), endPos: i + 1 };
+      }
+    }
+  }
+
+  return null; // Unbalanced braces
+}
 
 /**
  * Compact an assistant's output before saving to memory.
@@ -102,19 +148,59 @@ function compactOutputString(content: string, config: Partial<CompactionConfig> 
     });
   }
 
-  // Compact readNote JSON results
-  result = result.replace(READ_NOTE_RESULT_PATTERN, (fullMatch, jsonStr) => {
+  // Compact readNote JSON results using brace-balanced extraction
+  result = compactReadNoteResults(result, threshold, config);
+
+  return result;
+}
+
+/**
+ * Find and compact all readNote JSON results in content using brace-balanced extraction.
+ */
+function compactReadNoteResults(
+  content: string,
+  threshold: number,
+  config: Partial<CompactionConfig>
+): string {
+  let result = "";
+  let searchPos = 0;
+
+  while (searchPos < content.length) {
+    const prefixPos = content.indexOf(READ_NOTE_PREFIX, searchPos);
+    if (prefixPos === -1) {
+      result += content.slice(searchPos);
+      break;
+    }
+
+    // Add content before the prefix
+    result += content.slice(searchPos, prefixPos);
+
+    const jsonStart = prefixPos + READ_NOTE_PREFIX.length;
+    const extracted = extractBalancedJson(content, jsonStart);
+
+    if (!extracted) {
+      // No valid JSON found, keep original prefix and continue
+      result += READ_NOTE_PREFIX;
+      searchPos = jsonStart;
+      continue;
+    }
+
     try {
-      const parsed = JSON.parse(jsonStr);
+      const parsed = JSON.parse(extracted.json);
       if (parsed.content && parsed.content.length > threshold) {
         const compactedResult = compactReadNoteResult(parsed, config);
-        return `Tool 'readNote' result: ${JSON.stringify(compactedResult)}`;
+        result += `${READ_NOTE_PREFIX}${JSON.stringify(compactedResult)}`;
+      } else {
+        // Keep original if under threshold
+        result += READ_NOTE_PREFIX + extracted.json;
       }
     } catch {
-      // JSON parse failed, return original
+      // JSON parse failed (shouldn't happen with balanced extraction), keep original
+      result += READ_NOTE_PREFIX + extracted.json;
     }
-    return fullMatch;
-  });
+
+    searchPos = extracted.endPos;
+  }
 
   return result;
 }
