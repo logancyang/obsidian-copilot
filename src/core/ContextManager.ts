@@ -4,6 +4,7 @@ import { processPrompt } from "@/commands/customCommandUtils";
 import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";
 import { compactXmlBlock, getL2RefetchInstruction } from "@/context/L2ContextCompactor";
+import { CONTEXT_BLOCK_TYPES, detectBlockTag } from "@/context/contextBlockRegistry";
 import {
   PromptContextEnvelope,
   PromptLayerId,
@@ -748,34 +749,38 @@ export class ContextManager {
    * from each section. Small content and selected text are kept verbatim.
    * A single re-fetch instruction is appended at the L2 level (not per-block).
    *
-   * Handles multiple concatenated XML blocks (e.g., multiple url_content blocks)
-   * by splitting and compacting each one independently.
+   * Handles multiple concatenated XML blocks of different types (e.g., web_tab_context
+   * mixed with youtube_video_context) by finding and compacting each block independently.
    *
    * @param content - The segment content (one or more XML blocks)
    * @returns Compacted content for L2
    */
   private compactSegmentForL2(content: string): string {
-    // Detect block type from XML tag
-    const blockTypeMatch = content.match(/^<(\w+)[\s>]/);
-    if (!blockTypeMatch) {
-      // Not an XML block, return as-is
+    // Build a regex that matches any known block type
+    const blockTags = CONTEXT_BLOCK_TYPES.map((bt) => bt.tag).join("|");
+    const allBlocksRegex = new RegExp(`<(${blockTags})[^>]*>[\\s\\S]*?</\\1>`, "g");
+
+    const blocks = content.match(allBlocksRegex);
+
+    if (!blocks || blocks.length === 0) {
+      // No recognized XML blocks, return as-is
       return content;
     }
 
-    const blockType = blockTypeMatch[1];
-
-    // Check if there are multiple blocks of the same type concatenated
-    // Pattern: <tag>...</tag> repeated
-    const multiBlockRegex = new RegExp(`<${blockType}[^>]*>[\\s\\S]*?</${blockType}>`, "g");
-    const blocks = content.match(multiBlockRegex);
-
-    if (!blocks || blocks.length <= 1) {
-      // Single block or no match, use standard compaction
-      return compactXmlBlock(content, blockType);
+    if (blocks.length === 1) {
+      // Single block - detect type and compact
+      const blockType = detectBlockTag(blocks[0]);
+      if (!blockType) return content;
+      return compactXmlBlock(blocks[0], blockType);
     }
 
     // Multiple blocks found - compact each one independently
-    const compactedBlocks = blocks.map((block) => compactXmlBlock(block, blockType));
+    const compactedBlocks = blocks.map((block) => {
+      const blockType = detectBlockTag(block);
+      if (!blockType) return block;
+      return compactXmlBlock(block, blockType);
+    });
+
     return compactedBlocks.join("\n\n");
   }
 }
