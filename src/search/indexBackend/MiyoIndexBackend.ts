@@ -75,8 +75,11 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
     }
     const baseUrl = await this.getBaseUrl();
     const sourceId = this.getSourceId();
+    this.logUpsertBatchRequested(docs, baseUrl, sourceId);
     const payloadDocs = docs.map((doc) => this.toMiyoDocument(doc));
-    return this.client.upsertDocuments(baseUrl, sourceId, payloadDocs);
+    const upserted = await this.client.upsertDocuments(baseUrl, sourceId, payloadDocs);
+    this.logUpsertBatchResult(docs.length, upserted);
+    return upserted;
   }
 
   /**
@@ -260,6 +263,41 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   private getSourceId(): string {
     return getMiyoSourceId(this.app);
+  }
+
+  /**
+   * Log details about the pending upsert batch for debugging parity with Orama.
+   *
+   * @param docs - Documents being upserted.
+   * @param baseUrl - Miyo base URL.
+   * @param sourceId - Vault source ID.
+   */
+  private logUpsertBatchRequested(
+    docs: SemanticIndexDocument[],
+    baseUrl: string,
+    sourceId: string
+  ): void {
+    logInfo(`Miyo upsert batch: ${docs.length} documents`, { baseUrl, sourceId });
+    docs.forEach((doc) => {
+      const chunkId = doc.metadata?.chunkId;
+      const chunkSuffix =
+        typeof chunkId === "string" && chunkId.length > 0 ? ` (chunkId: ${chunkId})` : "";
+      logInfo(`Miyo upsert document ${doc.id} @ ${doc.path}${chunkSuffix}`);
+    });
+  }
+
+  /**
+   * Log the result of a Miyo upsert batch.
+   *
+   * @param requested - Number of documents requested for upsert.
+   * @param upserted - Number of documents reported by Miyo.
+   */
+  private logUpsertBatchResult(requested: number, upserted: number): void {
+    if (upserted === requested) {
+      logInfo(`Miyo upsert batch completed: ${upserted}/${requested} documents`);
+      return;
+    }
+    logWarn(`Miyo upsert batch returned ${upserted}/${requested} documents`);
   }
 
   /**
