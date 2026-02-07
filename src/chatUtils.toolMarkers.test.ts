@@ -17,6 +17,10 @@ class MockMemoryManager {
   getMemory() {
     return this.memory;
   }
+  async saveContext(input: { input: string }, output: { output: string }) {
+    // Mock the MemoryManager.saveContext behavior (compaction is tested separately)
+    await this.memory.saveContext(input, output);
+  }
 }
 
 describe("updateChatMemory with tool call markers", () => {

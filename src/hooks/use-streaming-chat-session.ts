@@ -16,6 +16,7 @@ import type { BaseChatMemory } from "@langchain/classic/memory";
 
 import type { CustomModel } from "@/aiParams";
 import { createChatChain, createChatMemory } from "@/commands/customCommandChatEngine";
+import { compactAssistantOutput } from "@/context/ChatHistoryCompactor";
 import { ThinkBlockStreamer } from "@/LLMProviders/chainRunner/utils/ThinkBlockStreamer";
 import { ABORT_REASON } from "@/constants";
 import { logError } from "@/logger";
@@ -333,9 +334,14 @@ export function useStreamingChatSession(
           committed = result;
 
           // Best-effort persistence - failure doesn't affect UI
+          // Compact the output to reduce memory bloat from tool results
           if (memory) {
             try {
-              await memory.saveContext({ input: prompt }, { output: result });
+              const compactedResult = compactAssistantOutput(result);
+              await memory.saveContext(
+                { input: prompt },
+                { output: typeof compactedResult === "string" ? compactedResult : result }
+              );
               hasSavedContextOnceRef.current = true;
             } catch (error) {
               logError("Error saving chat context:", error);

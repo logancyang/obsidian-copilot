@@ -70,14 +70,16 @@ export abstract class BaseChainRunner implements ChainRunner {
       !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT);
 
     if (shouldAddMessage) {
-      // Use saveContext for atomic operation and proper memory management
-      // Note: LangChain's memory expects text content, not multimodal arrays, so multimodal content is not saved
+      // Use MemoryManager.saveContext for atomic operation and proper memory management
+      // This applies chat history compaction to reduce memory bloat from tool results
+      // Note: LangChain's memory expects text content, not multimodal arrays
       // For truncated empty responses, save a placeholder message
       const outputForMemory =
         llmFormattedOutput || fullAIResponse || "[Response truncated - no content generated]";
-      await this.chainManager.memoryManager
-        .getMemory()
-        .saveContext({ input: userMessage.message }, { output: outputForMemory });
+      await this.chainManager.memoryManager.saveContext(
+        { input: userMessage.message },
+        { output: outputForMemory }
+      );
 
       // For empty truncated responses, show a helpful message
       const displayMessage =
