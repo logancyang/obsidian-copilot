@@ -1,6 +1,10 @@
 import { ImageProcessor } from "@/imageProcessing/imageProcessor";
-import { BrevilabsClient, Url4llmResponse } from "@/LLMProviders/brevilabsClient";
-import { err2String, isYoutubeUrl } from "@/utils";
+import {
+  BrevilabsClient,
+  Twitter4llmResponse,
+  Url4llmResponse,
+} from "@/LLMProviders/brevilabsClient";
+import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
 import { logError } from "@/logger";
 
 export interface MentionData {
@@ -63,6 +67,16 @@ export class Mention {
     }
   }
 
+  async processTwitterUrl(url: string): Promise<Twitter4llmResponse & { error?: string }> {
+    try {
+      return await this.brevilabsClient.twitter4llm(url);
+    } catch (error) {
+      const msg = err2String(error);
+      logError(`Error processing Twitter URL ${url}: ${msg}`);
+      return { response: url, elapsed_time_ms: 0, error: msg };
+    }
+  }
+
   /**
    * Process a list of URLs directly (both regular and YouTube URLs).
    *
@@ -105,6 +119,20 @@ export class Mention {
         return { type: "youtube", data: this.mentions.get(url) };
       }
 
+      // Check if it's a Twitter/X URL
+      if (isTwitterUrl(url)) {
+        if (!this.mentions.has(url)) {
+          const processed = await this.processTwitterUrl(url);
+          this.mentions.set(url, {
+            type: "twitter",
+            original: url,
+            processed: processed.response,
+            error: processed.error,
+          });
+        }
+        return { type: "twitter", data: this.mentions.get(url) };
+      }
+
       // Regular URL
       if (!this.mentions.has(url)) {
         const processed = await this.processUrl(url);
@@ -133,6 +161,8 @@ export class Mention {
       if (urlData.processed) {
         if (result.type === "youtube") {
           urlContext += `\n\n<youtube_transcript>\n<url>${urlData.original}</url>\n<transcript>\n${urlData.processed}\n</transcript>\n</youtube_transcript>`;
+        } else if (result.type === "twitter") {
+          urlContext += `\n\n<twitter_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</twitter_content>`;
         } else {
           urlContext += `\n\n<url_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</url_content>`;
         }

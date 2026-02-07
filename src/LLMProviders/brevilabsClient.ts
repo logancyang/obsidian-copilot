@@ -62,6 +62,11 @@ export interface Youtube4llmResponse {
   elapsed_time_ms: number;
 }
 
+export interface Twitter4llmResponse {
+  response: any;
+  elapsed_time_ms: number;
+}
+
 export interface LicenseResponse {
   is_valid: boolean;
   plan: string;
@@ -368,6 +373,18 @@ export class BrevilabsClient {
     }
     if (!data) {
       throw new Error("No data returned from youtube4llm");
+    }
+
+    return data;
+  }
+
+  async twitter4llm(url: string): Promise<Twitter4llmResponse> {
+    const { data, error } = await this.makeRequest<Twitter4llmResponse>("/twitter4llm", { url });
+    if (error) {
+      throw error;
+    }
+    if (!data) {
+      throw new Error("No data returned from twitter4llm");
     }
 
     return data;
