@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
+import { MIYO_EMBEDDING_MODEL_KEY } from "@/constants";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React, { useState } from "react";
@@ -50,6 +51,10 @@ export const CopilotPlusSettings: React.FC = () => {
 
       if (enabled && !settings.enableSemanticSearchV3) {
         updateSetting("enableSemanticSearchV3", true);
+      }
+
+      if (enabled) {
+        updateSetting("embeddingModelKey", MIYO_EMBEDDING_MODEL_KEY);
       }
 
       if (settings.enableSemanticSearchV3 || enabled) {
