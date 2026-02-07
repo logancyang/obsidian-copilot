@@ -13,6 +13,7 @@ import {
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
   EmbeddingModelProviders,
+  MIYO_EMBEDDING_MODEL_KEY,
   SEND_SHORTCUT,
 } from "@/constants";
 
@@ -191,10 +192,33 @@ export const settingsStore = createStore();
 export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
 
 /**
+ * Resolve a valid embedding model key for the current settings.
+ *
+ * @param settings - Current Copilot settings.
+ * @returns A valid embedding model key.
+ */
+function resolveEmbeddingModelKey(settings: CopilotSettings): string {
+  if (settings.enableMiyoSearch) {
+    return MIYO_EMBEDDING_MODEL_KEY;
+  }
+
+  const activeEmbeddingModelKeys = new Set(
+    (settings.activeEmbeddingModels || []).map((model) => getModelKeyFromModel(model))
+  );
+
+  if (settings.embeddingModelKey && activeEmbeddingModelKeys.has(settings.embeddingModelKey)) {
+    return settings.embeddingModelKey;
+  }
+
+  return DEFAULT_SETTINGS.embeddingModelKey;
+}
+
+/**
  * Sets the settings in the atom.
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+  newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
   settingsStore.set(settingsAtom, newSettings);
 }
 
