@@ -22,7 +22,6 @@ import {
   ModelInfo,
   safeFetch,
   safeFetchNoThrow,
-  withSuppressedTokenWarnings,
 } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
@@ -761,6 +760,22 @@ export default class ChatModelManager {
     }
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
+
+    // Override getNumTokens to avoid tiktoken's remote fetch of gpt2.json from
+    // tiktoken.pages.dev. LangChain's default implementation tries to download
+    // a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls when the
+    // CDN is unreachable. Use a simple char-based estimation instead — modern LLM
+    // APIs return accurate token usage in response metadata anyway.
+    newModelInstance.getNumTokens = async (
+      content: string | Array<{ type: string; text?: string }>
+    ) => {
+      const text =
+        typeof content === "string"
+          ? content
+          : content.map((item) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
+      return Math.ceil(text.length / 4);
+    };
+
     return newModelInstance;
   }
 
@@ -780,22 +795,7 @@ export default class ChatModelManager {
   }
 
   async countTokens(inputStr: string): Promise<number> {
-    try {
-      return await withSuppressedTokenWarnings(async () => {
-        return ChatModelManager.chatModel?.getNumTokens(inputStr) ?? 0;
-      });
-    } catch (error) {
-      // If there's an error calculating tokens, use a simple approximation instead
-      // This prevents "Unknown model" errors from appearing in the console
-      if (error instanceof Error && error.message.includes("Unknown model")) {
-        // Simple approximation: 1 token ~= 4 characters for English text
-        logInfo("Using estimated token count due to tokenizer error");
-        // Fall back to our estimation if LangChain's method fails
-        return this.estimateTokens(inputStr);
-      }
-      // For other errors, rethrow
-      throw error;
-    }
+    return ChatModelManager.chatModel?.getNumTokens(inputStr) ?? this.estimateTokens(inputStr);
   }
 
   private validateCurrentModel(): void {
