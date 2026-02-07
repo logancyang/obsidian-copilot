@@ -61,7 +61,13 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   ): Promise<Document[]> {
     const explicitChunks = await this.getExplicitChunks(extractNoteFiles(query, this.app.vault));
     const searchChunks = await this.searchMiyo(query);
-    return this.mergeResults(explicitChunks, searchChunks);
+    const mergedChunks = this.mergeResults(explicitChunks, searchChunks);
+
+    if (getSettings().debug) {
+      this.logDebugInfo(query, explicitChunks, searchChunks, mergedChunks);
+    }
+
+    return mergedChunks;
   }
 
   /**
@@ -74,11 +80,27 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     try {
       const baseUrl = await this.client.resolveBaseUrl(getSettings().selfHostUrl);
       const limit = this.returnAll ? RETURN_ALL_LIMIT : this.maxK;
+      if (getSettings().debug) {
+        logInfo("MiyoSemanticRetriever: search params:", {
+          baseUrl,
+          limit,
+          maxK: this.maxK,
+          minSimilarityScore: this.minSimilarityScore,
+          returnAll: this.returnAll,
+        });
+      }
       const response = await this.client.search(baseUrl, getMiyoSourceId(this.app), query, limit);
 
-      return (response.results || [])
-        .filter((result) => this.isScoreAboveThreshold(result))
-        .map((result) => this.toDocument(result));
+      const rawResults = response.results || [];
+      const filteredResults = rawResults.filter((result) => this.isScoreAboveThreshold(result));
+
+      if (getSettings().debug) {
+        logInfo(
+          `MiyoSemanticRetriever: received ${rawResults.length} results, ${filteredResults.length} after threshold`
+        );
+      }
+
+      return filteredResults.map((result) => this.toDocument(result));
     } catch (error) {
       logWarn(`MiyoSemanticRetriever: search failed: ${error}`);
       return [];
@@ -193,6 +215,35 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     }
 
     return Array.from(combined.values());
+  }
+
+  /**
+   * Log debug information to mirror Orama hybrid retriever output.
+   *
+   * @param query - User query string.
+   * @param explicitChunks - Explicit note chunks.
+   * @param semanticChunks - Semantic search chunks.
+   * @param mergedChunks - Combined results.
+   */
+  private logDebugInfo(
+    query: string,
+    explicitChunks: Document[],
+    semanticChunks: Document[],
+    mergedChunks: Document[]
+  ): void {
+    logInfo("*** MIYO SEMANTIC RETRIEVER DEBUG INFO: ***");
+    logInfo("Query: ", query);
+    logInfo("Explicit Chunks: ", explicitChunks);
+    logInfo("Miyo Chunks: ", semanticChunks);
+    logInfo("Combined Chunks: ", mergedChunks);
+
+    const maxSemanticScore = semanticChunks.reduce((max, chunk) => {
+      const score = chunk.metadata?.score;
+      const isValidScore = typeof score === "number" && !Number.isNaN(score);
+      return isValidScore ? Math.max(max, score) : max;
+    }, 0);
+
+    logInfo("Max Miyo Score: ", maxSemanticScore);
   }
 
   /**
