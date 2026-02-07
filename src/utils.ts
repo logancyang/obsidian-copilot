@@ -747,6 +747,25 @@ export function isYoutubeUrl(url: string): boolean {
 }
 
 /**
+ * Check if a URL is a Twitter/X URL (e.g. tweet or post link)
+ */
+export function isTwitterUrl(url: string): boolean {
+  if (!url || typeof url !== "string") return false;
+  try {
+    const urlObj = new URL(url.trim());
+    return (
+      (urlObj.hostname === "x.com" ||
+        urlObj.hostname === "www.x.com" ||
+        urlObj.hostname === "twitter.com" ||
+        urlObj.hostname === "www.twitter.com") &&
+      urlObj.pathname.includes("/status/")
+    );
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Extract first YouTube URL from text (legacy function for backward compatibility)
  */
 export function extractYoutubeUrl(text: string): string | null {
