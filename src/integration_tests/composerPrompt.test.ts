@@ -32,7 +32,9 @@ jest.mock("../encryptionService", () => ({
   getDecryptedKey: jest.fn().mockImplementation((key) => Promise.resolve(key)),
 }));
 
-describe("Composer Instructions - Integration Tests", () => {
+// TODO(@logancyang, @wenzhengjiang): Re-enable once composer is revamped.
+// Currently skipped due to flaky 503 errors from Gemini API causing CI failures.
+describe.skip("Composer Instructions - Integration Tests", () => {
   let genAI: GoogleGenerativeAI;
   let model: GenerativeModel;
 
