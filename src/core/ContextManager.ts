@@ -748,19 +748,35 @@ export class ContextManager {
    * from each section. Small content and selected text are kept verbatim.
    * A single re-fetch instruction is appended at the L2 level (not per-block).
    *
-   * @param content - The segment content (typically an XML block)
+   * Handles multiple concatenated XML blocks (e.g., multiple url_content blocks)
+   * by splitting and compacting each one independently.
+   *
+   * @param content - The segment content (one or more XML blocks)
    * @returns Compacted content for L2
    */
   private compactSegmentForL2(content: string): string {
     // Detect block type from XML tag
-    const blockTypeMatch = content.match(/^<(\w+)>/);
+    const blockTypeMatch = content.match(/^<(\w+)[\s>]/);
     if (!blockTypeMatch) {
       // Not an XML block, return as-is
       return content;
     }
 
     const blockType = blockTypeMatch[1];
-    return compactXmlBlock(content, blockType);
+
+    // Check if there are multiple blocks of the same type concatenated
+    // Pattern: <tag>...</tag> repeated
+    const multiBlockRegex = new RegExp(`<${blockType}[^>]*>[\\s\\S]*?</${blockType}>`, "g");
+    const blocks = content.match(multiBlockRegex);
+
+    if (!blocks || blocks.length <= 1) {
+      // Single block or no match, use standard compaction
+      return compactXmlBlock(content, blockType);
+    }
+
+    // Multiple blocks found - compact each one independently
+    const compactedBlocks = blocks.map((block) => compactXmlBlock(block, blockType));
+    return compactedBlocks.join("\n\n");
   }
 }
 
