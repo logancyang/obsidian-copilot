@@ -167,5 +167,53 @@ Done.`;
       const compactedCount = ((result as string).match(/COMPACTED/g) || []).length;
       expect(compactedCount).toBe(2);
     });
+
+    it("should preserve all documents in localSearch results", () => {
+      const largeContent1 = "First document content. ".repeat(200);
+      const largeContent2 = "Second document content. ".repeat(200);
+      const largeContent3 = "Third document content. ".repeat(200);
+
+      const output = `I found these notes:
+
+<localSearch>
+<document>
+<title>First Note</title>
+<path>folder/first.md</path>
+<content>${largeContent1}</content>
+</document>
+<document>
+<title>Second Note</title>
+<path>folder/second.md</path>
+<content>${largeContent2}</content>
+</document>
+<document>
+<title>Third Note</title>
+<path>third.md</path>
+<content>${largeContent3}</content>
+</document>
+</localSearch>
+
+Based on my search, here's what I found.`;
+
+      const result = compactAssistantOutput(output, { verbatimThreshold: 1000 });
+      expect(typeof result).toBe("string");
+      const resultStr = result as string;
+
+      // Should be compacted (smaller than original)
+      expect(resultStr.length).toBeLessThan(output.length);
+
+      // All three documents should be preserved
+      expect(resultStr).toContain("First Note");
+      expect(resultStr).toContain("Second Note");
+      expect(resultStr).toContain("Third Note");
+      expect(resultStr).toContain("folder/first.md");
+      expect(resultStr).toContain("folder/second.md");
+      expect(resultStr).toContain("third.md");
+      expect(resultStr).toContain("3 search results");
+
+      // Surrounding text should be preserved
+      expect(resultStr).toContain("I found these notes:");
+      expect(resultStr).toContain("here's what I found");
+    });
   });
 });

@@ -218,6 +218,11 @@ function compactToolResultBlock(
     return xmlBlock;
   }
 
+  // Special handling for localSearch with multiple documents
+  if (tag === "localSearch") {
+    return compactLocalSearchBlock(xmlBlock, config);
+  }
+
   const source = extractSourceFromBlock(xmlBlock, tag);
   const content = extractContentFromBlock(xmlBlock);
   const sourceType = getSourceType(tag);
@@ -229,6 +234,63 @@ function compactToolResultBlock(
 
   return `<prior_context source="${escapeXmlAttr(source)}" type="${sourceType}">
 ${compactedContent}
+</prior_context>`;
+}
+
+/**
+ * Compact a localSearch block, preserving all documents with their paths.
+ * Each document gets its content compacted but title/path are preserved.
+ */
+function compactLocalSearchBlock(xmlBlock: string, config: Partial<CompactionConfig> = {}): string {
+  const previewChars =
+    config.previewCharsPerSection ?? DEFAULT_COMPACTION_CONFIG.previewCharsPerSection;
+
+  // Extract all document blocks
+  const documentRegex = /<document>([\s\S]*?)<\/document>/g;
+  const documents: Array<{ path: string; title: string; preview: string }> = [];
+
+  let match;
+  while ((match = documentRegex.exec(xmlBlock)) !== null) {
+    const docContent = match[1];
+
+    // Extract path and title from the document
+    const pathMatch = /<path>([^<]+)<\/path>/.exec(docContent);
+    const titleMatch = /<title>([^<]+)<\/title>/.exec(docContent);
+    const contentMatch = /<content>([\s\S]*?)<\/content>/.exec(docContent);
+
+    const path = pathMatch?.[1] ?? "";
+    const title = titleMatch?.[1] ?? path.split("/").pop() ?? "Untitled";
+    const content = contentMatch?.[1] ?? "";
+
+    // Truncate content to preview length
+    const preview =
+      content.length > previewChars ? content.slice(0, previewChars) + "..." : content;
+
+    documents.push({ path, title, preview: preview.trim() });
+  }
+
+  if (documents.length === 0) {
+    // Fallback: no documents found, use generic compaction
+    const content = extractContentFromBlock(xmlBlock);
+    const compactedContent = compactBySection(
+      content,
+      previewChars,
+      config.maxSections ?? DEFAULT_COMPACTION_CONFIG.maxSections
+    );
+    return `<prior_context source="localSearch" type="note">
+${compactedContent}
+</prior_context>`;
+  }
+
+  // Build compacted output with all documents listed
+  const docList = documents
+    .map((doc, i) => `${i + 1}. [[${doc.title}]] (${doc.path})\n   ${doc.preview}`)
+    .join("\n\n");
+
+  return `<prior_context source="localSearch" type="note">
+[${documents.length} search results - use localSearch to re-query]
+
+${docList}
 </prior_context>`;
 }
 
