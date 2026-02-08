@@ -17,6 +17,7 @@ describe("contextBlockRegistry", () => {
       expect(tags).toContain("active_note");
       expect(tags).toContain("url_content");
       expect(tags).toContain("youtube_video_context");
+      expect(tags).toContain("twitter_content");
       expect(tags).toContain("selected_text");
       expect(tags).toContain("localSearch");
     });
@@ -45,6 +46,7 @@ describe("contextBlockRegistry", () => {
     it("should return correct source type for URL blocks", () => {
       expect(getSourceType("url_content")).toBe("url");
       expect(getSourceType("web_tab_context")).toBe("url");
+      expect(getSourceType("twitter_content")).toBe("url");
     });
 
     it("should return correct source type for YouTube blocks", () => {
@@ -61,6 +63,7 @@ describe("contextBlockRegistry", () => {
       expect(isRecoverable("note_context")).toBe(true);
       expect(isRecoverable("url_content")).toBe(true);
       expect(isRecoverable("youtube_video_context")).toBe(true);
+      expect(isRecoverable("twitter_content")).toBe(true);
     });
 
     it("should return false for non-recoverable types", () => {
@@ -108,6 +111,14 @@ describe("contextBlockRegistry", () => {
       expect(extractSourceFromBlock(xml, "embedded_pdf")).toBe("document.pdf");
     });
 
+    it("should extract URL from twitter_content blocks", () => {
+      const xml = `<twitter_content>
+<url>https://x.com/user/status/123</url>
+<content>Tweet</content>
+</twitter_content>`;
+      expect(extractSourceFromBlock(xml, "twitter_content")).toBe("https://x.com/user/status/123");
+    });
+
     it("should return empty string for blocks without source extractor", () => {
       const xml = `<selected_text><content>Just text</content></selected_text>`;
       expect(extractSourceFromBlock(xml, "selected_text")).toBe("");
@@ -138,6 +149,19 @@ describe("contextBlockRegistry", () => {
     it("should return null for invalid blocks", () => {
       expect(detectBlockTag("not xml")).toBeNull();
       expect(detectBlockTag("")).toBeNull();
+    });
+  });
+
+  describe("tag alignment", () => {
+    it("should have all URL-producing tags registered (prevents tag mismatch bugs)", () => {
+      // These are the tags that Mention.ts and other URL processors create.
+      // If a new tag is added to URL processing, it MUST be registered here.
+      const registeredTags = new Set(CONTEXT_BLOCK_TYPES.map((bt) => bt.tag));
+      const urlProducerTags = ["url_content", "youtube_video_context", "twitter_content"];
+
+      for (const tag of urlProducerTags) {
+        expect(registeredTags.has(tag)).toBe(true);
+      }
     });
   });
 });

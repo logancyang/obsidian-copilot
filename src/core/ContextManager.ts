@@ -5,6 +5,7 @@ import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";
 import { compactXmlBlock, getL2RefetchInstruction } from "@/context/L2ContextCompactor";
 import { CONTEXT_BLOCK_TYPES, detectBlockTag } from "@/context/contextBlockRegistry";
+import { parseContextIntoSegments } from "@/context/parseContextSegments";
 import {
   PromptContextEnvelope,
   PromptLayerId,
@@ -620,59 +621,11 @@ export class ContextManager {
   }
 
   /**
-   * Parse context XML string into individual segments (one per note/context item)
-   * Extracts <note_context>, <active_note>, and <prior_context> blocks and creates segments with path as ID
+   * Parse context XML string into individual segments (one per context item).
+   * Delegates to the standalone parseContextIntoSegments function.
    */
   private parseContextIntoSegments(contextXml: string, stable: boolean): PromptLayerSegment[] {
-    if (!contextXml.trim()) {
-      return [];
-    }
-
-    const segments: PromptLayerSegment[] = [];
-
-    // Match <note_context>, <active_note>, and <prior_context> blocks
-    // prior_context has attributes: <prior_context source="path" type="note">
-    const noteContextRegex =
-      /<(?:note_context|active_note)>[\s\S]*?<\/(?:note_context|active_note)>/g;
-    const priorContextRegex = /<prior_context\s+source="([^"]+)"[^>]*>[\s\S]*?<\/prior_context>/g;
-
-    let match: RegExpExecArray | null;
-
-    // Parse original note blocks
-    while ((match = noteContextRegex.exec(contextXml)) !== null) {
-      const block = match[0];
-      const pathMatch = /<path>([^<]+)<\/path>/.exec(block);
-      if (!pathMatch) continue;
-
-      const notePath = pathMatch[1];
-      segments.push({
-        id: notePath,
-        content: block,
-        stable,
-        metadata: {
-          source: stable ? "previous_turns" : "current_turn",
-          notePath,
-        },
-      });
-    }
-
-    // Parse compacted prior_context blocks (L2 from previous turns)
-    while ((match = priorContextRegex.exec(contextXml)) !== null) {
-      const block = match[0];
-      const source = match[1]; // Extracted from source="..." attribute
-
-      segments.push({
-        id: source,
-        content: block,
-        stable,
-        metadata: {
-          source: "previous_turns_compacted",
-          notePath: source,
-        },
-      });
-    }
-
-    return segments;
+    return parseContextIntoSegments(contextXml, stable);
   }
 
   private appendTurnContextSegment(

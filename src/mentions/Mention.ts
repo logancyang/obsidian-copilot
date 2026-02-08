@@ -160,7 +160,7 @@ export class Mention {
 
       if (urlData.processed) {
         if (result.type === "youtube") {
-          urlContext += `\n\n<youtube_transcript>\n<url>${urlData.original}</url>\n<transcript>\n${urlData.processed}\n</transcript>\n</youtube_transcript>`;
+          urlContext += `\n\n<youtube_video_context>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</youtube_video_context>`;
         } else if (result.type === "twitter") {
           urlContext += `\n\n<twitter_content>\n<url>${urlData.original}</url>\n<content>\n${urlData.processed}\n</content>\n</twitter_content>`;
         } else {

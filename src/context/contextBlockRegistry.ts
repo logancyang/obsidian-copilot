@@ -56,6 +56,9 @@ export const CONTEXT_BLOCK_TYPES: ContextBlockType[] = [
     sourceExtractor: "url",
   },
 
+  // Twitter/X (recoverable via URL processing)
+  { tag: "twitter_content", sourceType: "url", recoverable: true, sourceExtractor: "url" },
+
   // PDF (partially recoverable - needs the file in vault)
   { tag: "embedded_pdf", sourceType: "pdf", recoverable: true, sourceExtractor: "name" },
 
