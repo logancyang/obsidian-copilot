@@ -333,7 +333,11 @@ export default class ChainManager {
   ) {
     const { ignoreSystemMessage = false } = options;
 
-    logInfo("Step 0: Initial user message:\n", userMessage.message);
+    const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
+    logInfo(
+      "Step 0: Initial user message:\n",
+      l5Text || userMessage.originalMessage || userMessage.message
+    );
 
     this.validateChatModel();
     this.validateChainInitialization();

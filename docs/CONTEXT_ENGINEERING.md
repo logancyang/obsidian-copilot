@@ -6,11 +6,12 @@
 2. [First-Principles Goals](#first-principles-goals)
 3. [Current Architecture (Verified)](#current-architecture-verified)
 4. [Example Chat Walkthrough](#example-chat-walkthrough)
-5. [Strengths](#strengths)
-6. [Known Gaps](#known-gaps)
-7. [Improvement Roadmap](#improvement-roadmap)
-8. [Testing and Observability](#testing-and-observability)
-9. [References](#references)
+5. [Chain Runner Envelope Usage](#chain-runner-envelope-usage)
+6. [Strengths](#strengths)
+7. [Known Gaps](#known-gaps)
+8. [Improvement Roadmap](#improvement-roadmap)
+9. [Testing and Observability](#testing-and-observability)
+10. [References](#references)
 
 ---
 
@@ -225,6 +226,52 @@ L5 (User Message):
 | **L2 carry-forward compaction** | L2 content  | Full `<note_context>` → `<prior_context>` with structure+preview  |
 | **L4 displayText only**         | Memory save | `"Summarize this"` — no `<note_context>` XML                      |
 | **Prefix cache stability**      | L1+L2       | L1 stable across turns; L2 grows monotonically, doesn't shrink    |
+
+---
+
+## Chain Runner Envelope Usage
+
+All four chain runners use the context envelope for LLM message construction. Each delegates final response handling to `BaseChainRunner.handleResponse()`, which saves only L5 text (expanded user query, no context XML) to L4 memory.
+
+### Per-Runner Behavior
+
+| Runner                         | Envelope Construction                                                                 | Tool Results                                                  | User Message Source  |
+| ------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------- |
+| **LLMChainRunner**             | `LayerToMessagesConverter.convert()` → system (L1+L2), user (L3 refs + L5)            | None                                                          | Envelope only        |
+| **CopilotPlusChainRunner**     | Same converter, then `ensureUserQueryLabel` adds `[User query]:` separator            | Prepended to user message in CiC order                        | L5 text via envelope |
+| **AutonomousAgentChainRunner** | Same converter for initial messages; ReAct loop appends AI + ToolMessages iteratively | Native tool calling — each result is a separate `ToolMessage` | L5 text via envelope |
+| **VaultQAChainRunner**         | Same converter                                                                        | Retrieval results via hybrid/lexical retriever                | Envelope only        |
+
+### CopilotPlus: Single-Shot Tool Flow
+
+1. Planning phase analyzes L5 text to determine which `@commands` to execute.
+2. Tool results (localSearch, web fetch, etc.) are formatted and prepended to the user message using CiC ordering: `[tool results] → [L3 references + L5 with User query label]`.
+3. Single LLM call with the complete message array: `[system (L1+L2)] → [L4 history] → [user (tools + L3 + L5)]`.
+
+### Autonomous Agent: ReAct Loop Flow
+
+1. Initial message array built identically to CopilotPlus: `[system (L1+L2+tool guidelines)] → [L4 history] → [user (L3 refs + L5)]`.
+2. Model responds with native tool calls (e.g., `localSearch`, `readFile`).
+3. Each tool result becomes a `ToolMessage` appended to the growing messages array.
+4. `localSearch` results get CiC ordering: the user's question (from L5 `originalUserPrompt`) is appended after the search payload via `ensureCiCOrderingWithQuestion`.
+5. Loop repeats until model responds without tool calls (final answer).
+
+### Token Efficiency Audit
+
+**Verified efficient (no action needed):**
+
+- L1+L2 prefix is stable and cacheable across turns — tool results never enter the system message.
+- L3 uses smart references for artifacts already in L2 — no content duplication in the user message.
+- L4 contains only displayText (via L5 extraction in `handleResponse`) — no context XML leakage.
+- Chain runners extract L5 text from the envelope for `cleanedUserMessage` and `originalUserPrompt`, never using `processedText` (which contains L2+L3+L5 concatenated).
+
+**Known inefficiencies (accepted tradeoffs):**
+
+| Issue                                                                     | Severity | Tokens Wasted                                                   | Rationale                                                                                                                                                 |
+| ------------------------------------------------------------------------- | -------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CiC user-question repeated per `localSearch` tool call in agent loop      | LOW      | ~50 tokens x N searches                                         | Intentional — each `ToolMessage` is independent; the model needs the question for grounding across ReAct iterations                                       |
+| L2 content may overlap with `localSearch` results                         | MEDIUM   | Variable (L2 has compacted preview, search has relevant chunks) | Structural limitation — search doesn't know about L2. Overlap is partial since L2 is compacted to structure+preview while search returns precision chunks |
+| Legacy `processedText` stores L2+L3+L5 concatenation in MessageRepository | LOW      | 0 (not sent to LLM)                                             | Storage-only waste. Field is unused by envelope-based chain runners but persisted for backward compatibility                                              |
 
 ---
 
