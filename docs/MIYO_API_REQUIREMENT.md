@@ -56,7 +56,7 @@ All endpoints below are **Copilot-facing** and should be implemented exactly as 
 
 ```json
 {
-  "model": "embeddinggemma-300M",
+  "model": "jina-embeddings-v3",
   "input": ["text1", "text2"],
   "encoding_format": "float"
 }
@@ -93,7 +93,7 @@ Notes:
       "title": "example",
       "content": "NOTE TITLE: [[example]]\n\nMETADATA:{...}\n\nNOTE BLOCK CONTENT:\n\n...",
       "embedding": [0.1, 0.2, 0.3],
-      "embedding_model": "embeddinggemma-300M",
+      "embedding_model": "jina-embeddings-v3",
       "created_at": 1730000000000,
       "ctime": 1730000000000,
       "mtime": 1730000000000,
@@ -186,7 +186,7 @@ Notes:
   "total_chunks": 12345,
   "total_files": 456,
   "latest_mtime": 1730000000000,
-  "embedding_model": "embeddinggemma-300M",
+  "embedding_model": "jina-embeddings-v3",
   "embedding_dim": 1536
 }
 ```
@@ -214,7 +214,7 @@ Used when Copilot needs full note context (e.g., explicit `[[Note]]` references)
         "chunkId": "Notes/example.md#0",
         "heading": "Heading"
       },
-      "embedding_model": "embeddinggemma-300M",
+      "embedding_model": "jina-embeddings-v3",
       "ctime": 1730000000000,
       "mtime": 1730000000000,
       "tags": ["#tag"],
@@ -239,8 +239,9 @@ Used when Copilot needs full note context (e.g., explicit `[[Note]]` references)
   "query": "find notes about scaling databases",
   "collection_name": "<collection_name>",
   "limit": 10,
+  "filters": [{ "field": "mtime", "gte": 1738886400000, "lte": 1738972800000 }],
   "embedding": {
-    "model": "text-embedding-3-small",
+    "model": "jina-embeddings-v3",
     "vector": [0.1, 0.2, 0.3]
   }
 }
@@ -262,7 +263,7 @@ Used when Copilot needs full note context (e.g., explicit `[[Note]]` references)
         "chunkId": "Notes/example.md#0",
         "heading": "Heading"
       },
-      "embedding_model": "embeddinggemma-300M",
+      "embedding_model": "jina-embeddings-v3",
       "ctime": 1730000000000,
       "mtime": 1730000000000,
       "tags": ["#tag"],
@@ -278,6 +279,7 @@ Notes:
 
 - No snippet field is required; `chunk_text` is the full chunk content.
 - Response fields intentionally mirror Orama’s document fields so Copilot can map them to LangChain `Document` metadata without special casing.
+- `filters` are optional; Copilot uses epoch milliseconds for `mtime`/`ctime` comparisons.
 
 ## Data Model
 
@@ -354,7 +356,7 @@ Primary key: `(collection_name, path)`
 - Use the existing ONNX embedder.
 - Return `data: [{ embedding: [...] }]` with matching order and length.
 - Ignore auth headers (per `docs/copilot_integration.md`).
-- For now, only `embeddinggemma-300M` is supported. Reject other models with 400.
+- For now, only `jina-embeddings-v3` is supported. Reject other models with 400.
 
 ## Performance & Storage Notes
 
@@ -394,4 +396,4 @@ Primary key: `(collection_name, path)`
 1. `/v0/search` defaults to searching across all collections when `collection_name` is omitted.
 2. Enforce a single embedding model per `collection_name`.
 3. Client-managed indexing bypasses any licensing guard (there is no license enforcement in Miyo today).
-4. Supported model for Copilot flow: `embeddinggemma-300M` only (reject others).
+4. Supported model for Copilot flow: `jina-embeddings-v3` only (reject others).
