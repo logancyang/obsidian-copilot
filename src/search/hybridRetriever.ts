@@ -19,7 +19,6 @@ import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
 import { TFile } from "obsidian";
-import { DBOperations } from "./dbOperations";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
@@ -170,33 +169,33 @@ export class HybridRetriever extends BaseRetriever {
   private async getExplicitChunks(noteFiles: TFile[]): Promise<Document[]> {
     const explicitChunks: Document[] = [];
     for (const noteFile of noteFiles) {
-      const db = await VectorStoreManager.getInstance().getDb();
-      const hits = await DBOperations.getDocsByPath(db, noteFile.path);
-      if (hits) {
-        const matchingChunks = hits.map(
-          (hit: any) =>
-            new Document({
-              pageContent: hit.document.content,
-              metadata: {
-                ...hit.document.metadata,
-                score: hit.score,
-                path: hit.document.path,
-                mtime: hit.document.mtime,
-                ctime: hit.document.ctime,
-                title: hit.document.title,
-                id: hit.document.id,
-                embeddingModel: hit.document.embeddingModel,
-                tags: hit.document.tags,
-                extension: hit.document.extension,
-                created_at: hit.document.created_at,
-                nchars: hit.document.nchars,
-                // Expose chunkId explicitly for cross-engine deduplication
-                chunkId: hit.document.metadata?.chunkId,
-              },
-            })
-        );
-        explicitChunks.push(...matchingChunks);
+      const docs = await VectorStoreManager.getInstance().getDocumentsByPath(noteFile.path);
+      if (docs.length === 0) {
+        continue;
       }
+      const matchingChunks = docs.map(
+        (doc) =>
+          new Document({
+            pageContent: doc.content,
+            metadata: {
+              ...doc.metadata,
+              score: 1,
+              path: doc.path,
+              mtime: doc.mtime,
+              ctime: doc.ctime,
+              title: doc.title,
+              id: doc.id,
+              embeddingModel: doc.embeddingModel,
+              tags: doc.tags,
+              extension: doc.extension,
+              created_at: doc.created_at,
+              nchars: doc.nchars,
+              // Expose chunkId explicitly for cross-engine deduplication
+              chunkId: doc.metadata?.chunkId,
+            },
+          })
+      );
+      explicitChunks.push(...matchingChunks);
     }
     return explicitChunks;
   }
