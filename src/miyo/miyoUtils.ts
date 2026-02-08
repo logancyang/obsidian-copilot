@@ -2,15 +2,18 @@ import { MD5 } from "crypto-js";
 import { App, FileSystemAdapter } from "obsidian";
 
 /**
- * Compute a stable source_id for Miyo based on the vault name and path hash.
+ * Compute a stable collection name for Miyo based on the vault name and
+ * the first three characters of the vault path MD5 hash.
  *
  * @param app - Obsidian application instance.
- * @returns Stable source_id string.
+ * @returns Stable collection name string.
  */
-export function getMiyoSourceId(app: App): string {
+export function getMiyoCollectionName(app: App): string {
   const vaultName = app.vault.getName();
   const vaultPath = getVaultBasePath(app);
-  const pathHash = MD5(vaultPath ?? vaultName).toString();
+  const pathHash = MD5(vaultPath ?? vaultName)
+    .toString()
+    .slice(0, 3);
   return `${vaultName}_${pathHash}`;
 }
 

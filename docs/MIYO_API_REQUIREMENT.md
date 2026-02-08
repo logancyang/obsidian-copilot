@@ -5,8 +5,16 @@ This document defines the Miyo API surface needed for Copilot’s client-managed
 ## Goals
 
 - Support Copilot’s client-managed ingestion contract in `docs/copilot_integration.md`.
-- Partition data per `source_id` so multiple client vaults can coexist safely.
+- Partition data per `collection_name` so multiple client vaults can coexist safely.
 - Preserve hybrid search (dense + BM25 sparse) and the `/v0/search` response shape Copilot consumes.
+
+## Collection Naming (Copilot-Managed)
+
+Each vault maps to a dedicated Miyo collection. Copilot constructs the collection name as:
+
+- `{vault_name}_{md5(vault_path).slice(0, 3)}`
+
+Example: `my-vault_1bc`
 
 ## Non-Goals
 
@@ -16,9 +24,9 @@ This document defines the Miyo API surface needed for Copilot’s client-managed
 ## High-Level Approach
 
 1. Add a **client-managed indexing service**.
-2. Store client-provided chunks directly in Qdrant, with a `source_id` payload filter.
+2. Store client-provided chunks directly in Qdrant, with a `collection_name` payload filter.
 3. Maintain a lightweight **client manifest** table for file-level metadata and stats.
-4. Extend existing search to filter by `source_id`.
+4. Extend existing search to filter by `collection_name`.
 5. Add an OpenAI-compatible `/v1/embeddings` endpoint to align Copilot’s embedding pipeline.
 
 ## API Surface (New/Extended)
@@ -32,7 +40,7 @@ Reference: `docs/copilot_integration.md`
 - `GET /v0/index/files` (new)
 - `GET /v0/index/stats` (new)
 - `GET /v0/index/documents` (new)
-- `POST /v0/search` (extend to accept `source_id`)
+- `POST /v0/search` (extend to accept `collection_name`)
 
 ## API Endpoints (Requests & Responses)
 
@@ -77,7 +85,7 @@ Notes:
 
 ```json
 {
-  "source_id": "<vault_id>",
+  "collection_name": "<collection_name>",
   "documents": [
     {
       "id": "<hash>",
@@ -118,7 +126,7 @@ Notes:
 **Request**
 
 ```json
-{ "source_id": "<vault_id>", "path": "Notes/example.md" }
+{ "collection_name": "<collection_name>", "path": "Notes/example.md" }
 ```
 
 **Response**
@@ -129,7 +137,7 @@ Notes:
 
 Notes:
 
-- Must delete **all chunks** for the given `path` within `source_id`.
+- Must delete **all chunks** for the given `path` within `collection_name`.
 - Response counts are advisory; deleting a missing path should still succeed.
 
 ### 4. Clear Index
@@ -141,7 +149,7 @@ Notes:
 **Request**
 
 ```json
-{ "source_id": "<vault_id>" }
+{ "collection_name": "<collection_name>" }
 ```
 
 **Response**
@@ -154,7 +162,7 @@ Notes:
 
 **Endpoint**
 
-- `GET /v0/index/files?source_id=<vault_id>&offset=0&limit=200`
+- `GET /v0/index/files?collection_name=<collection_name>&offset=0&limit=200`
 
 **Response**
 
@@ -169,7 +177,7 @@ Notes:
 
 **Endpoint**
 
-- `GET /v0/index/stats?source_id=<vault_id>`
+- `GET /v0/index/stats?collection_name=<collection_name>`
 
 **Response**
 
@@ -189,7 +197,7 @@ Used when Copilot needs full note context (e.g., explicit `[[Note]]` references)
 
 **Endpoint**
 
-- `GET /v0/index/documents?source_id=<vault_id>&path=Notes/example.md`
+- `GET /v0/index/documents?collection_name=<collection_name>&path=Notes/example.md`
 
 **Response**
 
@@ -229,8 +237,12 @@ Used when Copilot needs full note context (e.g., explicit `[[Note]]` references)
 ```json
 {
   "query": "find notes about scaling databases",
-  "source_id": "<vault_id>",
-  "limit": 10
+  "collection_name": "<collection_name>",
+  "limit": 10,
+  "embedding": {
+    "model": "text-embedding-3-small",
+    "vector": [0.1, 0.2, 0.3]
+  }
 }
 ```
 
@@ -275,7 +287,7 @@ These fields must be present for client-managed documents. The service will map 
 
 | Field             | Source                                                      | Notes                                                |
 | ----------------- | ----------------------------------------------------------- | ---------------------------------------------------- |
-| `source_id`       | request                                                     | Required for partitioning.                           |
+| `collection_name` | request                                                     | Required for partitioning.                           |
 | `file_path`       | `documents[].path`                                          | Use `file_path` in payload to match existing search. |
 | `title`           | `documents[].title`                                         | Optional.                                            |
 | `mtime`           | `documents[].mtime`                                         | Milliseconds since epoch.                            |
@@ -290,7 +302,7 @@ These fields must be present for client-managed documents. The service will map 
 
 Use a **stable, collision-free** scheme:
 
-- `"{source_id}:{document.id}"`
+- `"{collection_name}:{document.id}"`
 - This prevents collisions when multiple clients use the same `id` across vaults.
 
 ### Client Manifest (SQLite)
@@ -299,18 +311,18 @@ Add a new table for client-managed file metadata to avoid overloading the folder
 
 Proposed table: `client_indexed_files`
 
-| Column            | Type    | Notes                            |
-| ----------------- | ------- | -------------------------------- |
-| `source_id`       | TEXT    | Partition key.                   |
-| `path`            | TEXT    | Unique per source.               |
-| `mtime`           | INTEGER | Latest known mtime.              |
-| `ctime`           | INTEGER | Latest known ctime.              |
-| `total_chunks`    | INTEGER | Chunks stored for the path.      |
-| `embedding_model` | TEXT    | Single model per source for now. |
-| `embedding_dim`   | INTEGER | From service embedder.           |
-| `updated_at`      | INTEGER | Last upsert time.                |
+| Column            | Type    | Notes                                |
+| ----------------- | ------- | ------------------------------------ |
+| `collection_name` | TEXT    | Partition key.                       |
+| `path`            | TEXT    | Unique per collection.               |
+| `mtime`           | INTEGER | Latest known mtime.                  |
+| `ctime`           | INTEGER | Latest known ctime.                  |
+| `total_chunks`    | INTEGER | Chunks stored for the path.          |
+| `embedding_model` | TEXT    | Single model per collection for now. |
+| `embedding_dim`   | INTEGER | From service embedder.               |
+| `updated_at`      | INTEGER | Last upsert time.                    |
 
-Primary key: `(source_id, path)`
+Primary key: `(collection_name, path)`
 
 ## Indexing Flow (Client-Managed)
 
@@ -319,13 +331,14 @@ Primary key: `(source_id, path)`
 3. Miyo:
    - validates embedding dimensionality,
    - computes **sparse BM25 vectors** from `content`,
-   - upserts to Qdrant with `source_id` filter,
+   - upserts to Qdrant with `collection_name` filter,
    - updates `client_indexed_files` for each path in the batch.
 
 ## Search Flow
 
-- `POST /v0/search` accepts required `source_id` for Copilot.
-- Apply a Qdrant filter `source_id == <value>` in hybrid search.
+- `POST /v0/search` accepts required `collection_name` for Copilot.
+- `POST /v0/search` may include `embedding.model` + `embedding.vector` for query validation.
+- Apply a Qdrant filter `collection_name == <value>` in hybrid search.
 - Return only fields Copilot needs (no snippet requirement):
   - `path`, `title`, `ctime`, `mtime`, `tags`
   - `chunk_text` (full chunk content)
@@ -345,15 +358,15 @@ Primary key: `(source_id, path)`
 
 ## Performance & Storage Notes
 
-- Add Qdrant payload indexes for `source_id` and `file_path` to speed filtering.
+- Add Qdrant payload indexes for `collection_name` and `file_path` to speed filtering.
 - Upsert should support batches of 100+ chunks (already supported in Qdrant client).
 - Listing indexed files and stats should use SQLite for speed, not Qdrant scans.
 
 ## Error Handling
 
 - Reject upserts when `embedding_dim` does not match the server’s configured `embedding_dim`.
-- Enforce a single `embedding_model` per `source_id` (return 409 on mismatch).
-- Return structured 4xx for invalid requests (missing `source_id`, empty `documents`).
+- Enforce a single `embedding_model` per `collection_name` (return 409 on mismatch).
+- Return structured 4xx for invalid requests (missing `collection_name`, empty `documents`).
 
 ## Implementation Phases
 
@@ -362,15 +375,15 @@ Primary key: `(source_id, path)`
    - Define client manifest schema and migration.
 2. **Qdrant Payload & Indexing**
    - Implement upsert, delete, clear, documents-by-path, files list, stats.
-   - Add Qdrant payload indexes for `source_id` and `file_path`.
+   - Add Qdrant payload indexes for `collection_name` and `file_path`.
 3. **Search Extension**
-   - Add `source_id` filter to `searcher.search`.
+   - Add `collection_name` filter to `searcher.search`.
    - Confirm returned fields match Copilot requirements (no snippet requirement).
 4. **Embeddings Endpoint**
    - Add `/v1/embeddings` and validate response ordering.
 5. **Tests**
    - API tests for upsert/delete/clear/files/stats/documents.
-   - Search filtering by `source_id`.
+   - Search filtering by `collection_name`.
    - Embedding shape and order.
 6. **Documentation**
    - Update `docs/arch.md` to reflect dual indexing modes.
@@ -378,7 +391,7 @@ Primary key: `(source_id, path)`
 
 ## Decisions (Resolved)
 
-1. `/v0/search` defaults to searching across all sources when `source_id` is omitted.
-2. Enforce a single embedding model per `source_id`.
+1. `/v0/search` defaults to searching across all collections when `collection_name` is omitted.
+2. Enforce a single embedding model per `collection_name`.
 3. Client-managed indexing bypasses any licensing guard (there is no license enforcement in Miyo today).
 4. Supported model for Copilot flow: `embeddinggemma-300M` only (reject others).

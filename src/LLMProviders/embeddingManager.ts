@@ -1,15 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { CustomModel } from "@/aiParams";
-import {
-  BREVILABS_MODELS_BASE_URL,
-  EmbeddingModelProviders,
-  MIYO_EMBEDDING_MODEL_KEY,
-  ProviderInfo,
-} from "@/constants";
+import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
-import { isSelfHostModeValid } from "@/plusUtils";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
@@ -148,9 +142,7 @@ export default class EmbeddingManager {
 
   async getEmbeddingsAPI(): Promise<Embeddings> {
     const settings = getSettings();
-    const embeddingModelKey = this.shouldUseMiyoEmbeddings(settings)
-      ? MIYO_EMBEDDING_MODEL_KEY
-      : settings.embeddingModelKey;
+    const embeddingModelKey = settings.embeddingModelKey;
 
     if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
       throw new CustomError(`No embedding model found for: ${embeddingModelKey}`);
@@ -331,21 +323,6 @@ export default class EmbeddingManager {
       providerConfig[customModel.provider as EmbeddingModelProviders] || {};
 
     return { ...baseConfig, ...selectedProviderConfig };
-  }
-
-  /**
-   * Determine whether Miyo embeddings should override the configured model.
-   *
-   * @param settings - Current Copilot settings.
-   * @returns True when Miyo embeddings should be used.
-   */
-  private shouldUseMiyoEmbeddings(settings: ReturnType<typeof getSettings>): boolean {
-    return (
-      settings.enableSelfHostMode &&
-      settings.enableMiyoSearch &&
-      settings.enableSemanticSearchV3 &&
-      isSelfHostModeValid()
-    );
   }
 
   /**

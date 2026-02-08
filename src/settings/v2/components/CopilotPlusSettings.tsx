@@ -2,7 +2,6 @@ import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
-import { MIYO_EMBEDDING_MODEL_KEY } from "@/constants";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import React, { useState } from "react";
@@ -51,10 +50,6 @@ export const CopilotPlusSettings: React.FC = () => {
 
       if (enabled && !settings.enableSemanticSearchV3) {
         updateSetting("enableSemanticSearchV3", true);
-      }
-
-      if (enabled) {
-        updateSetting("embeddingModelKey", MIYO_EMBEDDING_MODEL_KEY);
       }
 
       if (settings.enableSemanticSearchV3 || enabled) {
@@ -181,7 +176,7 @@ export const CopilotPlusSettings: React.FC = () => {
             <SettingItem
               type="switch"
               title="Enable Miyo Search"
-              description="Use your Miyo backend for semantic indexing and retrieval while preserving Search v3 lexical merging."
+              description="Use your Miyo backend for semantic indexing and retrieval while preserving Search v3 lexical merging. Enabling this will prompt you to force refresh the index so data is stored in Miyo."
               checked={settings.enableMiyoSearch}
               onCheckedChange={handleMiyoSearchToggle}
             />
