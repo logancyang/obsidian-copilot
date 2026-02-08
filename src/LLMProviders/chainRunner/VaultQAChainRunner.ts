@@ -1,4 +1,9 @@
-import { ABORT_REASON, ModelCapability, RETRIEVED_DOCUMENT_TAG } from "@/constants";
+import {
+  ABORT_REASON,
+  DEFAULT_MAX_SOURCE_CHUNKS,
+  ModelCapability,
+  RETRIEVED_DOCUMENT_TAG,
+} from "@/constants";
 import { getStandaloneQuestion } from "@/chainUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
@@ -98,7 +103,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Create retriever using factory (handles priority: Self-hosted > Semantic > Lexical)
       const retrieverResult = await RetrieverFactory.createRetriever(app, {
         minSimilarityScore: 0.01,
-        maxK: settings.maxSourceChunks,
+        maxK: DEFAULT_MAX_SOURCE_CHUNKS,
         salientTerms: tags.length > 0 ? [...tags] : [],
         tagTerms: tags,
       });

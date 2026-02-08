@@ -1,5 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
-import { TEXT_WEIGHT } from "@/constants";
+import { DEFAULT_MAX_SOURCE_CHUNKS, TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logInfo } from "@/logger";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
@@ -101,13 +101,11 @@ async function performLexicalSearch({
   forceLexical?: boolean;
   preExpandedQuery?: QueryExpansionInfo;
 }) {
-  const settings = getSettings();
-
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
   const returnAll = timeRange !== undefined;
   const returnAllTags = tagTerms.length > 0;
   const shouldReturnAll = returnAll || returnAllTags;
-  const effectiveMaxK = shouldReturnAll ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
+  const effectiveMaxK = shouldReturnAll ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
 
   logInfo(
     `lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags}), forceLexical: ${forceLexical}`
@@ -235,12 +233,11 @@ const semanticSearchTool = createLangChainTool({
   schema: localSearchSchema,
   func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
     const timeRange = validateTimeRange(rawTimeRange);
-    const settings = getSettings();
 
     const returnAll = timeRange !== undefined;
     const effectiveMaxK = returnAll
-      ? Math.max(settings.maxSourceChunks, 200)
-      : settings.maxSourceChunks;
+      ? Math.max(DEFAULT_MAX_SOURCE_CHUNKS, 200)
+      : DEFAULT_MAX_SOURCE_CHUNKS;
 
     logInfo(`semanticSearch returnAll: ${returnAll}`);
 
