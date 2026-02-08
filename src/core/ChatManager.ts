@@ -5,7 +5,7 @@ import {
   getSystemPromptWithMemory,
 } from "@/system-prompts/systemPromptBuilder";
 import { ChainType } from "@/chainFactory";
-import { getCurrentProject } from "@/aiParams";
+import { getChainType, getCurrentProject } from "@/aiParams";
 import { logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";
 import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
@@ -589,10 +589,33 @@ export class ChatManager {
         return false;
       }
 
-      const llmMessage = currentRepo.getLLMMessage(userMessage.id);
+      let llmMessage = currentRepo.getLLMMessage(userMessage.id);
       if (!llmMessage) {
         logInfo(`[ChatManager] LLM message not found for regeneration`);
         return false;
+      }
+
+      // Lazy reprocess: if contextEnvelope is missing (e.g., loaded from disk),
+      // reprocess context before running the chain
+      if (!llmMessage.contextEnvelope) {
+        logInfo(`[ChatManager] Context envelope missing, reprocessing context for regeneration`);
+        const chainType = getChainType();
+        const activeNote = this.plugin.app.workspace.getActiveFile();
+        const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
+          await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
+        await this.contextManager.reprocessMessageContext(
+          userMessage.id,
+          currentRepo,
+          this.fileParserManager,
+          this.plugin.app.vault,
+          chainType,
+          false,
+          activeNote,
+          systemPrompt,
+          systemPromptIncludedFiles
+        );
+        // Re-fetch the LLM message with the newly created envelope
+        llmMessage = currentRepo.getLLMMessage(userMessage.id)!;
       }
 
       // Run the chain to regenerate the response

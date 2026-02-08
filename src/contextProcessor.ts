@@ -573,10 +573,10 @@ export class ContextProcessor {
         const ctime = stats ? new Date(stats.ctime).toISOString() : "Unknown";
         const mtime = stats ? new Date(stats.mtime).toISOString() : "Unknown";
 
-        additionalContext += `\n\n<${prompt_tag}>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
+        additionalContext += `\n\n<${prompt_tag}>\n<title>${escapeXml(note.basename)}</title>\n<path>${note.path}</path>\n<ctime>${ctime}</ctime>\n<mtime>${mtime}</mtime>\n<content>\n${content}\n</content>\n</${prompt_tag}>`;
       } catch (error) {
         logError(`Error processing file ${note.path}:`, error);
-        additionalContext += `\n\n<${prompt_tag}_error>\n<title>${note.basename}</title>\n<path>${note.path}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;
+        additionalContext += `\n\n<${prompt_tag}_error>\n<title>${escapeXml(note.basename)}</title>\n<path>${note.path}</path>\n<error>[Error: Could not process file]</error>\n</${prompt_tag}_error>`;
       }
     };
 

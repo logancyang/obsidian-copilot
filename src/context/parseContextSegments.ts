@@ -25,6 +25,10 @@ export function parseContextIntoSegments(
   const allTags = [...registeredTags, "prior_context"];
   const allBlocksRegex = new RegExp(`<(${allTags.join("|")})(\\s[^>]*)?>[\\s\\S]*?</\\1>`, "g");
 
+  // Track tag-based fallback IDs to ensure uniqueness for blocks without source extractors
+  // (e.g., multiple selected_text blocks should not share the same ID)
+  const tagIdCounts = new Map<string, number>();
+
   let match: RegExpExecArray | null;
   while ((match = allBlocksRegex.exec(contextXml)) !== null) {
     const block = match[0];
@@ -45,7 +49,16 @@ export function parseContextIntoSegments(
       });
     } else {
       // Use registry to extract the source identifier
-      const sourceId = extractSourceFromBlock(block, tag) || tag;
+      const extractedId = extractSourceFromBlock(block, tag);
+      let sourceId: string;
+      if (extractedId) {
+        sourceId = extractedId;
+      } else {
+        // Fallback: use tag name with counter to ensure uniqueness
+        const count = (tagIdCounts.get(tag) || 0) + 1;
+        tagIdCounts.set(tag, count);
+        sourceId = count === 1 ? tag : `${tag}:${count}`;
+      }
       const isNote = getSourceType(tag) === "note";
       segments.push({
         id: sourceId,

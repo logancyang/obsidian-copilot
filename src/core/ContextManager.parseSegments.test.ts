@@ -116,6 +116,20 @@ describe("parseContextIntoSegments", () => {
       expect(segments).toHaveLength(1);
       expect(segments[0].id).toBe("selected_text");
     });
+
+    it("should assign unique IDs to multiple selected_text blocks", () => {
+      const xml = `<selected_text>
+<content>First selection</content>
+</selected_text>
+
+<selected_text>
+<content>Second selection</content>
+</selected_text>`;
+      const segments = parseContextIntoSegments(xml, false);
+      expect(segments).toHaveLength(2);
+      expect(segments[0].id).toBe("selected_text");
+      expect(segments[1].id).toBe("selected_text:2");
+    });
   });
 
   describe("prior_context blocks (compaction artifacts)", () => {
