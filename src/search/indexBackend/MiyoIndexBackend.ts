@@ -1,15 +1,17 @@
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, Notice } from "obsidian";
-import { areEmbeddingModelsSame } from "@/utils";
+import { CustomError } from "@/error";
+import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoUpsertDocument } from "@/miyo/MiyoClient";
 import { getMiyoCollectionName } from "@/miyo/miyoUtils";
+import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import type {
   SemanticIndexBackend,
   SemanticIndexDocument,
 } from "@/search/indexBackend/SemanticIndexBackend";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { getSettings } from "@/settings/model";
+import { areEmbeddingModelsSame } from "@/utils";
 
 /**
  * Miyo-backed implementation of the semantic index backend.
@@ -203,10 +205,44 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   }
 
   /**
-   * Remove stale documents (no-op for Miyo).
+   * Remove stale documents that no longer match the vault state.
    */
   public async garbageCollect(): Promise<number> {
-    return 0;
+    try {
+      const files = this.app.vault.getMarkdownFiles();
+      const filePaths = new Set(files.map((file) => file.path));
+
+      const { inclusions, exclusions } = getMatchingPatterns();
+      const allowedPaths = new Set(
+        files
+          .filter((file) => shouldIndexFile(file, inclusions, exclusions))
+          .map((file) => file.path)
+      );
+
+      const indexedPaths = await this.getIndexedFiles();
+      const pathsToRemove = indexedPaths.filter(
+        (path) => !filePaths.has(path) || !allowedPaths.has(path)
+      );
+
+      if (pathsToRemove.length === 0) {
+        return 0;
+      }
+
+      logInfo("Miyo index: Paths to remove during garbage collection:", pathsToRemove.join(", "));
+
+      const baseUrl = await this.getBaseUrl();
+      const collectionName = this.getCollectionName();
+      let deleted = 0;
+
+      for (const path of pathsToRemove) {
+        deleted += await this.client.deleteByPath(baseUrl, collectionName, path);
+      }
+
+      return deleted;
+    } catch (error) {
+      logError("Error garbage collecting the Miyo index:", error);
+      throw new CustomError("Failed to garbage collect the Copilot index.");
+    }
   }
 
   /**
