@@ -1,6 +1,7 @@
 import { logInfo } from "@/logger";
 import { App } from "obsidian";
 import { NoteIdRank } from "../interfaces";
+import { extractNotePathFromChunkId } from "../utils/chunkIdUtils";
 
 /**
  * Configuration for folder boost calculation
@@ -77,7 +78,8 @@ export class FolderBoostCalculator {
 
     // Apply boosts to results
     return results.map((result) => {
-      const folder = this.extractFolder(result.id);
+      const notePath = extractNotePathFromChunkId(result.id);
+      const folder = this.extractFolder(notePath);
       const stats = folderStats.get(folder);
 
       if (stats) {
@@ -112,12 +114,21 @@ export class FolderBoostCalculator {
    * @returns Map of folder paths to boost statistics
    */
   private calculateFolderStats(results: NoteIdRank[]): Map<string, FolderBoostResult> {
-    const folderCounts = new Map<string, number>();
+    const folderNotes = new Map<string, Set<string>>();
 
-    // Count documents per folder
+    // Count unique notes per folder (chunks from the same note count once)
     for (const result of results) {
-      const folder = this.extractFolder(result.id);
-      folderCounts.set(folder, (folderCounts.get(folder) || 0) + 1);
+      const notePath = extractNotePathFromChunkId(result.id);
+      const folder = this.extractFolder(notePath);
+      if (!folderNotes.has(folder)) {
+        folderNotes.set(folder, new Set());
+      }
+      folderNotes.get(folder)!.add(notePath);
+    }
+
+    const folderCounts = new Map<string, number>();
+    for (const [folder, notes] of folderNotes.entries()) {
+      folderCounts.set(folder, notes.size);
     }
 
     // Get total document counts per folder from vault

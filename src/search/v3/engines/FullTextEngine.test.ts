@@ -839,7 +839,7 @@ describe("FullTextEngine", () => {
     it("should return correct weights for known fields", () => {
       const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
 
-      expect(getFieldWeight("title")).toBe(3);
+      expect(getFieldWeight("title")).toBe(5);
       expect(getFieldWeight("heading")).toBe(2.5);
       expect(getFieldWeight("path")).toBe(1.5); // Actual weight from implementation
       expect(getFieldWeight("headings")).toBe(1.5);

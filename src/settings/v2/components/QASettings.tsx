@@ -173,18 +173,6 @@ export const QASettings: React.FC = () => {
             placeholder="Strategy"
           />
 
-          {/* Max Sources */}
-          <SettingItem
-            type="slider"
-            title="Max Sources"
-            description="Copilot goes through your vault to find relevant notes and passes the top N to the LLM. Default for N is 15. Increase if you want more notes included in the answer generation step."
-            min={1}
-            max={128}
-            step={1}
-            value={settings.maxSourceChunks}
-            onChange={(value) => updateSetting("maxSourceChunks", value)}
-          />
-
           {/* Embedding-related settings - Only shown when semantic search is enabled */}
           {settings.enableSemanticSearchV3 && (
             <>

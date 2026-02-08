@@ -58,7 +58,12 @@ For time-based searches (e.g., "what did I do last week"):
 
 For time-based searches with meaningful terms (e.g., "python debugging notes from yesterday"):
 1. First call getTimeRangeMs with timeExpression: "yesterday"
-2. Then use localSearch with the returned timeRange, query: "python debugging notes", salientTerms: ["python", "debugging", "notes"]`,
+2. Then use localSearch with the returned timeRange, query: "python debugging notes", salientTerms: ["python", "debugging", "notes"]
+
+For exhaustive "find all" searches:
+- Set returnAll: true when the user wants ALL matching notes (e.g., "find all my X", "list every Y", "show me all Z", "how many notes about W")
+- Keep returnAll: false (or omit) for normal questions seeking specific information
+- When setting returnAll: true, also call getFileTree to get all note titles as reference. This helps verify search completeness and identify notes the search may have missed.`,
     },
   },
   {

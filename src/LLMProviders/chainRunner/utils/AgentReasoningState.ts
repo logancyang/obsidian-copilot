@@ -148,7 +148,8 @@ export function summarizeToolResult(
   args?: Record<string, unknown>
 ): string {
   if (!result.success) {
-    return `${toolName} failed`;
+    // Reuse the human-friendly call summary (e.g., "Searching notes") → "Searching notes failed"
+    return `${summarizeToolCall(toolName, args)} failed`;
   }
 
   switch (toolName) {
@@ -188,9 +189,24 @@ export function summarizeToolResult(
     case "deleteNote":
       return "Deleted note";
     case "youtubeTranscript":
+    case "youtubeTranscription":
       return "Fetched video transcript";
     case "fetchUrl":
       return "Fetched URL content";
+    case "getFileTree":
+      return "Retrieved vault file tree";
+    case "getTagList":
+      return "Retrieved vault tags";
+    case "getCurrentTime":
+      return "Got current time";
+    case "getTimeInfoByEpoch":
+      return "Converted timestamp";
+    case "convertTimeBetweenTimezones":
+      return "Converted timezone";
+    case "indexVault":
+      return "Indexed vault";
+    case "updateMemory":
+      return "Updated memory";
     case "writeToFile":
     case "replaceInFile": {
       // Parse the result to check if accepted/rejected
@@ -211,7 +227,7 @@ export function summarizeToolResult(
       return toolName === "writeToFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
     }
     default:
-      return `Completed ${toolName}`;
+      return "Done";
   }
 }
 
@@ -294,9 +310,24 @@ export function summarizeToolCall(
     case "deleteNote":
       return "Deleting note";
     case "youtubeTranscript":
+    case "youtubeTranscription":
       return "Fetching video transcript";
     case "fetchUrl":
       return "Fetching URL content";
+    case "getFileTree":
+      return "Browsing vault file tree";
+    case "getTagList":
+      return "Loading vault tags";
+    case "getCurrentTime":
+      return "Getting current time";
+    case "getTimeInfoByEpoch":
+      return "Converting timestamp";
+    case "convertTimeBetweenTimezones":
+      return "Converting timezone";
+    case "indexVault":
+      return "Indexing vault";
+    case "updateMemory":
+      return "Saving to memory";
     case "writeToFile": {
       const filePath = args?.path as string | undefined;
       if (filePath) {
@@ -314,7 +345,7 @@ export function summarizeToolCall(
       return "Editing file";
     }
     default:
-      return `Calling ${toolName}`;
+      return "Processing";
   }
 }
 

@@ -69,7 +69,7 @@ jest.mock("./chunks", () => {
   };
 });
 
-import { SearchCore } from "./SearchCore";
+import { SearchCore, selectDiverseTopK } from "./SearchCore";
 
 describe("SearchCore tag recall", () => {
   let mockApp: any;
@@ -178,7 +178,89 @@ describe("SearchCore tag recall", () => {
     });
 
     expect(batchCachedReadGrepMock).toHaveBeenCalledWith(expect.any(Array), 100);
-    expect(searchMock.mock.calls[0][1]).toBe(200);
+    expect(searchMock.mock.calls[0][1]).toBe(300);
     expect(retrieveResult.results.length).toBe(2);
+  });
+});
+
+describe("selectDiverseTopK", () => {
+  it("should ensure all unique notes are represented before any note gets a second slot", () => {
+    // 30 chunks from 3 notes, limit=15 → all 3 notes must appear
+    const results: NoteIdRank[] = [];
+    for (let note = 1; note <= 3; note++) {
+      for (let chunk = 0; chunk < 10; chunk++) {
+        results.push({
+          id: `note${note}.md#${chunk}`,
+          score: 1 - (note - 1) * 0.1 - chunk * 0.01,
+        });
+      }
+    }
+    // Sort descending by score
+    results.sort((a, b) => b.score - a.score);
+
+    const selected = selectDiverseTopK(results, 15);
+
+    expect(selected).toHaveLength(15);
+
+    // All 3 notes must be represented
+    const uniqueNotes = new Set(selected.map((r) => r.id.split("#")[0]));
+    expect(uniqueNotes.size).toBe(3);
+
+    // Results should be sorted by score descending
+    for (let i = 1; i < selected.length; i++) {
+      expect(selected[i].score).toBeLessThanOrEqual(selected[i - 1].score);
+    }
+  });
+
+  it("should pick top notes by score when more unique notes than limit", () => {
+    // 20 chunks from 20 different notes, limit=10
+    const results: NoteIdRank[] = Array.from({ length: 20 }, (_, i) => ({
+      id: `note${i + 1}.md#0`,
+      score: 1 - i * 0.05,
+    }));
+
+    const selected = selectDiverseTopK(results, 10);
+
+    expect(selected).toHaveLength(10);
+
+    // Should be the top 10 by score (since each note has 1 chunk)
+    for (let i = 0; i < 10; i++) {
+      expect(selected[i].id).toBe(`note${i + 1}.md#0`);
+    }
+  });
+
+  it("should return all results unchanged when under limit", () => {
+    const results: NoteIdRank[] = [
+      { id: "a.md#0", score: 0.9 },
+      { id: "b.md#0", score: 0.8 },
+    ];
+
+    const selected = selectDiverseTopK(results, 10);
+    expect(selected).toEqual(results);
+  });
+
+  it("should maintain score ordering in output", () => {
+    // Note A dominates with high scores but note B should still appear
+    const results: NoteIdRank[] = [
+      { id: "a.md#0", score: 0.95 },
+      { id: "a.md#1", score: 0.9 },
+      { id: "a.md#2", score: 0.85 },
+      { id: "b.md#0", score: 0.5 },
+      { id: "b.md#1", score: 0.45 },
+    ];
+
+    const selected = selectDiverseTopK(results, 3);
+
+    expect(selected).toHaveLength(3);
+
+    // Both notes represented
+    const noteIds = new Set(selected.map((r) => r.id.split("#")[0]));
+    expect(noteIds.has("a.md")).toBe(true);
+    expect(noteIds.has("b.md")).toBe(true);
+
+    // Score order maintained
+    for (let i = 1; i < selected.length; i++) {
+      expect(selected[i].score).toBeLessThanOrEqual(selected[i - 1].score);
+    }
   });
 });

@@ -103,13 +103,17 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   private async planToolCalls(
     userMessage: string,
     chatModel: BaseChatModel
-  ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[] }> {
+  ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[]; returnAll: boolean }> {
     const availableTools = this.getAvailableToolsForPlanning();
 
     // Check if model supports native tool calling
     if (typeof (chatModel as any).bindTools !== "function") {
       logWarn("[CopilotPlus] Model does not support native tool calling, skipping tool planning");
-      return { toolCalls: [], salientTerms: this.extractSalientTermsFromQuery(userMessage) };
+      return {
+        toolCalls: [],
+        salientTerms: this.extractSalientTermsFromQuery(userMessage),
+        returnAll: false,
+      };
     }
 
     // Bind tools to the model for native function calling
@@ -129,7 +133,10 @@ After analyzing, extract key search terms from the user's message that would be 
 - Preserve the EXACT words and language from the user's message (works for any language)
 - Exclude time expressions (those are handled by tools)
 
-Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
+Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]
+
+If the user wants ALL matching notes (e.g., "find all my X", "list every Y", "show me all Z", "how many notes about W"), output: [RETURN_ALL: true]
+Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
 
     // Create planning request
     const planningMessages = [
@@ -157,8 +164,11 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     logInfo("[CopilotPlus] Native tool calls:", nativeToolCalls.length);
 
-    // Extract salient terms from response text
-    const salientTerms = this.extractSalientTermsFromResponse(responseText, userMessage);
+    // Extract salient terms and returnAll intent from response text
+    const { salientTerms, returnAll } = this.extractPlanningFieldsFromResponse(
+      responseText,
+      userMessage
+    );
 
     // Convert native tool calls to executor format
     const toolCalls: ToolCallWithExecutor[] = [];
@@ -175,27 +185,35 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }
     }
 
-    return { toolCalls, salientTerms };
+    return { toolCalls, salientTerms, returnAll };
   }
 
   /**
-   * Extract salient terms from model response or fallback to query extraction.
+   * Extract salient terms and returnAll intent from model response.
    */
-  private extractSalientTermsFromResponse(responseText: string, originalQuery: string): string[] {
-    // Try to extract from [SALIENT_TERMS: ...] format
-    const match = responseText.match(/\[SALIENT_TERMS:\s*([^\]]+)\]/i);
-    if (match) {
-      const terms = match[1]
+  private extractPlanningFieldsFromResponse(
+    responseText: string,
+    originalQuery: string
+  ): { salientTerms: string[]; returnAll: boolean } {
+    // Extract salient terms from [SALIENT_TERMS: ...] format
+    let salientTerms: string[];
+    const termsMatch = responseText.match(/\[SALIENT_TERMS:\s*([^\]]+?)\s*\]/i);
+    if (termsMatch) {
+      const terms = termsMatch[1]
         .split(",")
         .map((t) => t.trim())
         .filter((t) => t.length > 0);
-      if (terms.length > 0) {
-        return terms;
-      }
+      salientTerms = terms.length > 0 ? terms : this.extractSalientTermsFromQuery(originalQuery);
+    } else {
+      salientTerms = this.extractSalientTermsFromQuery(originalQuery);
     }
 
-    // Fallback to extracting from original query
-    return this.extractSalientTermsFromQuery(originalQuery);
+    // Extract returnAll from [RETURN_ALL: true/false] format
+    // Allow optional whitespace/newlines around the value and before closing bracket
+    const returnAllMatch = responseText.match(/\[RETURN_ALL:\s*(true|false)\s*\]/i);
+    const returnAll = returnAllMatch ? returnAllMatch[1].toLowerCase() === "true" : false;
+
+    return { salientTerms, returnAll };
   }
 
   /**
@@ -218,7 +236,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   private async processAtCommands(
     userMessage: string,
     existingToolCalls: ToolCallWithExecutor[],
-    context: { salientTerms: string[]; timeRange?: any }
+    context: { salientTerms: string[]; timeRange?: any; returnAll?: boolean }
   ): Promise<ToolCallWithExecutor[]> {
     const message = userMessage.toLowerCase();
     const cleanQuery = this.removeAtCommands(userMessage);
@@ -235,6 +253,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
             query: cleanQuery,
             salientTerms: context.salientTerms,
             timeRange: context.timeRange,
+            returnAll: context.returnAll === true ? true : undefined,
           },
         });
       }
@@ -797,10 +816,11 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         });
 
         // Process @commands - this may add localSearch, webSearch, or updateMemory
-        // Pass timeRange in context so @vault commands can use it
+        // Pass timeRange and returnAll in context so @vault commands can use them
         toolCalls = await this.processAtCommands(messageForAnalysis, filteredToolCalls, {
           salientTerms: planningResult.salientTerms,
           timeRange,
+          returnAll: planningResult.returnAll,
         });
       } catch (error: any) {
         return this.handleResponse(
