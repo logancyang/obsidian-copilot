@@ -98,6 +98,16 @@ export interface MiyoEmbeddingPayload {
   vector: number[];
 }
 
+export interface MiyoSearchFilter {
+  field: string;
+  gte?: number;
+  lte?: number;
+  gt?: number;
+  lt?: number;
+  equals?: string | number | boolean;
+  containsAny?: string[];
+}
+
 /**
  * Client for calling the Miyo HTTP API.
  */
@@ -247,14 +257,19 @@ export class MiyoClient {
     collectionName: string,
     query: string,
     limit: number,
-    embedding?: MiyoEmbeddingPayload
+    embedding?: MiyoEmbeddingPayload,
+    filters?: MiyoSearchFilter[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
       collection_name: collectionName,
       limit,
       ...(embedding ? { embedding } : {}),
+      ...(filters && filters.length > 0 ? { filters } : {}),
     };
+    if (getSettings().debug) {
+      logInfo("Miyo search request:", { baseUrl, payload });
+    }
     return this.requestJson<MiyoSearchResponse>(baseUrl, "/v0/search", {
       method: "POST",
       body: payload,

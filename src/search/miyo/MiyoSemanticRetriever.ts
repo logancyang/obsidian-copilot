@@ -4,7 +4,12 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { MiyoClient, MiyoEmbeddingPayload, MiyoSearchResult } from "@/miyo/MiyoClient";
+import {
+  MiyoClient,
+  MiyoEmbeddingPayload,
+  MiyoSearchFilter,
+  MiyoSearchResult,
+} from "@/miyo/MiyoClient";
 import { getMiyoCollectionName } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -84,6 +89,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       const baseUrl = await this.client.resolveBaseUrl(getSettings().selfHostUrl);
       const limit = this.returnAll ? RETURN_ALL_LIMIT : this.maxK;
       const embedding = await this.buildQueryEmbedding(query);
+      const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {
           baseUrl,
@@ -92,6 +98,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           minSimilarityScore: this.minSimilarityScore,
           returnAll: this.returnAll,
           embeddingModel: embedding?.model,
+          filters,
         });
       }
       const response = await this.client.search(
@@ -99,7 +106,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         getMiyoCollectionName(this.app),
         query,
         limit,
-        embedding
+        embedding,
+        filters
       );
 
       const rawResults = response.results || [];
@@ -134,6 +142,26 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       logWarn(`MiyoSemanticRetriever: failed to embed query: ${error}`);
       return undefined;
     }
+  }
+
+  /**
+   * Build optional Miyo search filters for time range queries.
+   *
+   * @returns Array of filters when time range is specified, otherwise undefined.
+   */
+  private buildSearchFilters(): MiyoSearchFilter[] | undefined {
+    if (!this.options.timeRange) {
+      return undefined;
+    }
+
+    const { startTime, endTime } = this.options.timeRange;
+    return [
+      {
+        field: "mtime",
+        gte: startTime,
+        lte: endTime,
+      },
+    ];
   }
 
   /**
