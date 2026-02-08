@@ -70,14 +70,18 @@ export abstract class BaseChainRunner implements ChainRunner {
       !(abortController.signal.aborted && abortController.signal.reason === ABORT_REASON.NEW_CHAT);
 
     if (shouldAddMessage) {
-      // Use MemoryManager.saveContext for atomic operation and proper memory management
-      // This applies chat history compaction to reduce memory bloat from tool results
-      // Note: LangChain's memory expects text content, not multimodal arrays
-      // For truncated empty responses, save a placeholder message
+      // Save the expanded user message (L5) to memory — NOT the full processedText.
+      // processedText includes context artifact XML (L3), which already lives in the
+      // envelope's L2/L3 layers. Baking it into L4 chat history would cause
+      // triple-inclusion and waste tokens.
+      // L5 preserves prompt-expanded content (e.g. {include_note_content} placeholders)
+      // while excluding context artifact blocks.
+      const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
+      const inputForMemory = l5Text || userMessage.originalMessage || userMessage.message;
       const outputForMemory =
         llmFormattedOutput || fullAIResponse || "[Response truncated - no content generated]";
       await this.chainManager.memoryManager.saveContext(
-        { input: userMessage.message },
+        { input: inputForMemory },
         { output: outputForMemory }
       );
 

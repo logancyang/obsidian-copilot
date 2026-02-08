@@ -371,16 +371,4 @@ export default class ChainManager {
       options
     );
   }
-
-  async updateMemoryWithLoadedMessages(messages: ChatMessage[]) {
-    await this.memoryManager.clearChatMemory();
-    // Use memoryManager.saveContext to apply compaction for any old uncompacted messages
-    for (let i = 0; i < messages.length; i += 2) {
-      const userMsg = messages[i];
-      const aiMsg = messages[i + 1];
-      if (userMsg && aiMsg && userMsg.sender === USER_SENDER) {
-        await this.memoryManager.saveContext({ input: userMsg.message }, { output: aiMsg.message });
-      }
-    }
-  }
 }
