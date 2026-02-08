@@ -606,10 +606,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         }
 
         const trimmedQuestion =
-          originalUserQuestion.trim() ||
-          userMessage.message?.trim() ||
-          userMessage.originalMessage?.trim() ||
-          "";
+          originalUserQuestion.trim() || userMessage.originalMessage?.trim() || "";
         if (trimmedQuestion.length > 0) {
           sections.push(`${userQueryLabel}\n${trimmedQuestion}`);
         } else {
@@ -740,7 +737,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         );
       }
       const l5User = envelope.layers.find((l) => l.id === "L5_USER");
-      const messageForAnalysis = l5User?.text || userMessage.originalMessage || userMessage.message;
+      const messageForAnalysis = l5User?.text || userMessage.originalMessage || "";
 
       try {
         // Use model-based planning instead of Broca
@@ -816,7 +813,13 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       }
 
       // Clean user message by removing @command tokens
-      const cleanedUserMessage = this.removeAtCommands(userMessage.message);
+      // Use L5 text (expanded user query without context XML) or displayText as fallback.
+      // userMessage.message is processedText which includes context artifact XML — using it
+      // here would re-inject L3 context into the user message, bypassing envelope separation.
+      const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
+      const cleanedUserMessage = this.removeAtCommands(
+        l5Text || userMessage.originalMessage || userMessage.message
+      );
 
       const { toolOutputs, sources: toolSources } = await this.executeToolCalls(
         toolCalls,

@@ -28,6 +28,7 @@ jest.mock("./ChatPersistenceManager", () => ({
 
 jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
+  getChainType: jest.fn().mockReturnValue("copilot_plus_chain"),
 }));
 
 jest.mock("@/LLMProviders/projectManager", () => {
@@ -329,7 +330,10 @@ describe("ChatManager", () => {
     it("should regenerate AI message successfully", async () => {
       const mockAiMessage = createMockMessage("msg-2", "AI response", "AI");
       const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
-      const mockLLMMessage = createMockMessage("msg-1", "Hello with context", USER_SENDER);
+      const mockLLMMessage = {
+        ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
+        contextEnvelope: { layers: [] } as any, // Has envelope, no lazy reprocessing needed
+      };
 
       mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
       mockMessageRepo.getDisplayMessages.mockReturnValue([mockUserMessage, mockAiMessage]);
@@ -353,6 +357,53 @@ describe("ChatManager", () => {
         expect.any(AbortController),
         mockUpdateMessage,
         mockAddMessage,
+        expect.any(Object)
+      );
+    });
+
+    it("should lazily reprocess context when envelope is missing (loaded from disk)", async () => {
+      const mockAiMessage = createMockMessage("msg-2", "AI response", "AI");
+      const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
+      // First call: no envelope (loaded from disk)
+      const mockLLMMessageNoEnvelope = createMockMessage(
+        "msg-1",
+        "Hello with context",
+        USER_SENDER
+      );
+      // Second call: after reprocessing, has envelope
+      const mockLLMMessageWithEnvelope = {
+        ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
+        contextEnvelope: { layers: [] } as any,
+      };
+
+      mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
+      mockMessageRepo.getDisplayMessages.mockReturnValue([mockUserMessage, mockAiMessage]);
+      mockMessageRepo.getLLMMessage
+        .mockReturnValueOnce(mockLLMMessageNoEnvelope)
+        .mockReturnValueOnce(mockLLMMessageWithEnvelope);
+      mockMessageRepo.truncateAfter.mockReturnValue(undefined);
+      mockChainManager.runChain.mockResolvedValue(undefined);
+      mockContextManager.reprocessMessageContext.mockResolvedValue(undefined);
+
+      const result = await chatManager.regenerateMessage("msg-2", jest.fn(), jest.fn());
+
+      expect(result).toBe(true);
+      expect(mockContextManager.reprocessMessageContext).toHaveBeenCalledWith(
+        "msg-1",
+        expect.anything(), // messageRepo
+        expect.anything(), // fileParserManager
+        undefined, // vault (undefined in mock)
+        "copilot_plus_chain", // chainType
+        false, // includeActiveNote
+        undefined, // activeNote
+        "Test system prompt", // systemPrompt
+        [] // systemPromptIncludedFiles
+      );
+      expect(mockChainManager.runChain).toHaveBeenCalledWith(
+        mockLLMMessageWithEnvelope,
+        expect.any(AbortController),
+        expect.any(Function),
+        expect.any(Function),
         expect.any(Object)
       );
     });
@@ -621,7 +672,10 @@ describe("ChatManager", () => {
       it("should handle regeneration with proper message truncation", async () => {
         const mockAiMessage = createMockMessage("msg-2", "AI response", "AI");
         const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
-        const mockLLMMessage = createMockMessage("msg-1", "Hello with context", USER_SENDER);
+        const mockLLMMessage = {
+          ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
+          contextEnvelope: { layers: [] } as any,
+        };
 
         mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
         mockMessageRepo.getDisplayMessages.mockReturnValue([mockUserMessage, mockAiMessage]);

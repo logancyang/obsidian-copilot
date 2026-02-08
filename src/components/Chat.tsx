@@ -259,7 +259,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       );
 
       // Handle composer prompt
-      let displayText = inputMessage;
+      let displayText = inputMessage.trim();
 
       // Add tool calls if present
       if (toolCalls) {

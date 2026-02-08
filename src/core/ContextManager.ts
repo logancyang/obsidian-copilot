@@ -5,6 +5,7 @@ import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";
 import { compactXmlBlock, getL2RefetchInstruction } from "@/context/L2ContextCompactor";
 import { CONTEXT_BLOCK_TYPES, detectBlockTag } from "@/context/contextBlockRegistry";
+import { parseContextIntoSegments } from "@/context/parseContextSegments";
 import {
   PromptContextEnvelope,
   PromptLayerId,
@@ -359,10 +360,9 @@ export class ContextManager {
    * - Comparing current file mtime with stored mtime when building L2
    * - Skipping path deduplication for stale compacted segments
    *
-   * TODO: Deduplicate L2 content by notePath when building l2Context.
-   * Currently, if the same note is included across multiple turns (e.g., auto-added active note),
-   * its content is appended to L2 once per turn, causing linear growth. Consider deduplicating
-   * by notePath when concatenating L3 segments, not just collecting paths for exclusions.
+   * L2 deduplication: Segments are deduplicated by ID (last-write-wins). When the same
+   * artifact (note, URL, etc.) appears in multiple turns, only the most recent version
+   * is kept in L2, preventing linear growth.
    */
   private buildL2ContextFromPreviousTurns(
     currentMessageId: string,
@@ -379,7 +379,10 @@ export class ContextManager {
       .slice(0, currentIndex)
       .filter((msg) => msg.sender === "user");
 
-    const l2Parts: string[] = [];
+    // Deduplicated map: segment ID → compacted content (last-write-wins)
+    const l2SegmentMap = new Map<string, string>();
+    // Insertion order tracking for stable output
+    const l2SegmentOrder: string[] = [];
     const l2Paths = new Set<string>();
 
     // Find the most recent compacted message index.
@@ -404,17 +407,15 @@ export class ContextManager {
         // Only include L3 content from the most recent compacted message onwards.
         // Earlier messages' content is already included in the compacted L3.
         if (i >= mostRecentCompactedIndex) {
-          const segmentContent: string[] = [];
           for (const segment of l3Layer.segments || []) {
             if (segment.content) {
-              // Compact large L3 segments for L2 to reduce context size
-              // This extracts structure + preview with tool hints for re-fetching
               const compacted = this.compactSegmentForL2(segment.content);
-              segmentContent.push(compacted);
+              // Deduplicate by segment ID: later turns overwrite earlier ones
+              if (!l2SegmentMap.has(segment.id)) {
+                l2SegmentOrder.push(segment.id);
+              }
+              l2SegmentMap.set(segment.id, compacted);
             }
-          }
-          if (segmentContent.length > 0) {
-            l2Parts.push(segmentContent.join("\n"));
           }
         }
 
@@ -423,13 +424,11 @@ export class ContextManager {
           if (segment.metadata?.notePath) {
             l2Paths.add(segment.metadata.notePath as string);
           }
-          // Handle compacted segments
           if (segment.metadata?.compactedPaths) {
             for (const path of segment.metadata.compactedPaths as string[]) {
               l2Paths.add(path);
             }
           }
-          // Handle tag/folder segments that store paths in notePaths
           if (segment.metadata?.notePaths) {
             for (const path of segment.metadata.notePaths as string[]) {
               l2Paths.add(path);
@@ -437,24 +436,10 @@ export class ContextManager {
           }
         }
       }
-      // Note: Messages without envelopes (pre-envelope chat history or loaded from disk)
-      // are intentionally NOT tracked for L2 deduplication to avoid filtering notes
-      // without their content appearing in L2.
-      //
-      // TODO: Rebuild L2 context for loaded chats.
-      // ChatPersistenceManager saves context metadata (note paths, tags, folders) but not
-      // the full contextEnvelope. When a chat is loaded, messages have context but no envelope,
-      // so L2 context is lost. This means:
-      // 1. AI loses the "context library" from turns before the save
-      // 2. Same notes can be duplicated if re-attached after loading
-      // Fix options:
-      // - Persist envelopes to disk (increases storage, requires migration)
-      // - Rebuild L2 content by re-reading files from message.context on load (expensive)
-      // - Lazy rebuild: process context.notes when first accessed after load
     }
 
-    // Build the L2 context string
-    const l2Content = l2Parts.join("\n");
+    // Build the L2 context string in insertion order (deduplicated)
+    const l2Content = l2SegmentOrder.map((id) => l2SegmentMap.get(id)!).join("\n");
 
     // Append re-fetch instruction if there's any L2 content with prior_context blocks
     const hasCompactedContent = l2Content.includes("<prior_context ");
@@ -504,25 +489,20 @@ export class ContextManager {
       turnSegments.push(...noteSegments);
     }
 
-    // Parse other context types (tags, folders, URLs, selected text)
-    // Store note paths in metadata for L2 deduplication
-    this.appendTurnContextSegment(turnSegments, "tags", params.tagContextAddition, {
+    // Parse other context types into per-artifact segments for accurate smart referencing.
+    // Each XML block gets its own segment with a content-derived ID (URL, path, etc.)
+    // so L2/L3 deduplication works at the individual artifact level.
+    this.appendParsedSegments(turnSegments, params.tagContextAddition, {
       source: "tags",
       notePaths: params.tagNotePaths,
     });
-    this.appendTurnContextSegment(turnSegments, "folders", params.folderContextAddition, {
+    this.appendParsedSegments(turnSegments, params.folderContextAddition, {
       source: "folders",
       notePaths: params.folderNotePaths,
     });
-    this.appendTurnContextSegment(turnSegments, "urls", params.urlContext, {
-      source: "urls",
-    });
-    this.appendTurnContextSegment(turnSegments, "selected_text", params.selectedText, {
-      source: "selected_text",
-    });
-    this.appendTurnContextSegment(turnSegments, "web_tabs", params.webTabContext, {
-      source: "web_tabs",
-    });
+    this.appendParsedSegments(turnSegments, params.urlContext);
+    this.appendParsedSegments(turnSegments, params.selectedText);
+    this.appendParsedSegments(turnSegments, params.webTabContext);
 
     if (turnSegments.length > 0) {
       layerSegments.L3_TURN = turnSegments;
@@ -620,78 +600,46 @@ export class ContextManager {
   }
 
   /**
-   * Parse context XML string into individual segments (one per note/context item)
-   * Extracts <note_context>, <active_note>, and <prior_context> blocks and creates segments with path as ID
+   * Parse context XML string into individual segments (one per context item).
+   * Delegates to the standalone parseContextIntoSegments function.
    */
   private parseContextIntoSegments(contextXml: string, stable: boolean): PromptLayerSegment[] {
-    if (!contextXml.trim()) {
-      return [];
-    }
-
-    const segments: PromptLayerSegment[] = [];
-
-    // Match <note_context>, <active_note>, and <prior_context> blocks
-    // prior_context has attributes: <prior_context source="path" type="note">
-    const noteContextRegex =
-      /<(?:note_context|active_note)>[\s\S]*?<\/(?:note_context|active_note)>/g;
-    const priorContextRegex = /<prior_context\s+source="([^"]+)"[^>]*>[\s\S]*?<\/prior_context>/g;
-
-    let match: RegExpExecArray | null;
-
-    // Parse original note blocks
-    while ((match = noteContextRegex.exec(contextXml)) !== null) {
-      const block = match[0];
-      const pathMatch = /<path>([^<]+)<\/path>/.exec(block);
-      if (!pathMatch) continue;
-
-      const notePath = pathMatch[1];
-      segments.push({
-        id: notePath,
-        content: block,
-        stable,
-        metadata: {
-          source: stable ? "previous_turns" : "current_turn",
-          notePath,
-        },
-      });
-    }
-
-    // Parse compacted prior_context blocks (L2 from previous turns)
-    while ((match = priorContextRegex.exec(contextXml)) !== null) {
-      const block = match[0];
-      const source = match[1]; // Extracted from source="..." attribute
-
-      segments.push({
-        id: source,
-        content: block,
-        stable,
-        metadata: {
-          source: "previous_turns_compacted",
-          notePath: source,
-        },
-      });
-    }
-
-    return segments;
+    return parseContextIntoSegments(contextXml, stable);
   }
 
-  private appendTurnContextSegment(
+  /**
+   * Parse context XML into individual per-artifact segments and append to target.
+   * Each XML block gets its own segment with a content-derived ID (URL, path, etc.)
+   * from the registry. Extra metadata (e.g., notePaths for tags/folders) is merged
+   * into each resulting segment.
+   */
+  private appendParsedSegments(
     target: PromptLayerSegment[],
-    segmentId: string,
     content: string,
-    metadata: Record<string, unknown>
+    extraMetadata?: Record<string, unknown>
   ) {
     const normalized = (content || "").trim();
     if (!normalized) {
       return;
     }
 
-    target.push({
-      id: `${segmentId}`,
-      content: normalized,
-      stable: false,
-      metadata,
-    });
+    const segments = this.parseContextIntoSegments(normalized, false);
+    if (segments.length > 0) {
+      for (const seg of segments) {
+        if (extraMetadata) {
+          seg.metadata = { ...seg.metadata, ...extraMetadata };
+        }
+        target.push(seg);
+      }
+    } else {
+      // Fallback: content didn't parse into known XML blocks, keep as single segment
+      target.push({
+        id: `unparsed-${Date.now()}`,
+        content: normalized,
+        stable: false,
+        metadata: { source: "unparsed", ...extraMetadata },
+      });
+    }
   }
 
   /**

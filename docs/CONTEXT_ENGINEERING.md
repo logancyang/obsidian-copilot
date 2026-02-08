@@ -2,678 +2,463 @@
 
 ## Table of Contents
 
-1. [Overview](#overview)
-2. [Layered Prefix Architecture (L1-L5)](#layered-prefix-architecture-l1-l5)
-3. [Current Implementation Status](#current-implementation-status)
-4. [Architecture Components](#architecture-components)
-5. [Tool System Design](#tool-system-design)
-6. [Testing & Migration](#testing--migration)
-7. [Historical Context](#historical-context)
+1. [Purpose](#purpose)
+2. [First-Principles Goals](#first-principles-goals)
+3. [Current Architecture (Verified)](#current-architecture-verified)
+4. [Example Chat Walkthrough](#example-chat-walkthrough)
+5. [Chain Runner Envelope Usage](#chain-runner-envelope-usage)
+6. [Strengths](#strengths)
+7. [Known Gaps](#known-gaps)
+8. [Improvement Roadmap](#improvement-roadmap)
+9. [Testing and Observability](#testing-and-observability)
+10. [References](#references)
 
 ---
 
-## Overview
+## Purpose
 
-### Intent
+The context envelope system is the canonical prompt-construction pipeline for chat turns.
 
-Copilot's layered context system (L1-L5) enables provider-side prefix caching by organizing prompt content from most stable (L1) to most volatile (L5). This prevents duplicate context transmission across turns and allows deterministic token budget control.
+It exists to guarantee:
 
-### Design Goals
+- reproducible prompt assembly,
+- minimal duplication across L2/L3/L4,
+- safe compaction behavior on large context,
+- and cache-friendly request prefixes for major providers.
 
-- **Layered prefix** (L1–L5) ordered from most stable to most volatile for cache hits
-- **Model-agnostic** baseline: OpenAI/Gemini implicit caching, Anthropic long-context guidance
-- **Provider-aware optimizations** (optional): Gemini explicit cache, Anthropic `cache_control`
-- **No contract changes** for `ChainRunner` or tool execution APIs
-- **Backward compatibility** with existing chat markdown exports
-
-### Key Benefits
-
-- **Maximum cache stability**: L2 grows monotonically → cache hits maximized
-- **Minimal redundancy**: Items in L2 referenced by ID in L3 → fewer tokens
-- **Smart referencing**: Clear instructions to find context in Context Library
-- **Simple logic**: Set membership test decides ID vs. full content
+This document is an implementation audit and roadmap based on current production code.
 
 ---
 
-## Layered Prefix Architecture (L1-L5)
+## First-Principles Goals
+
+### 1. Reproducibility
+
+For the same turn inputs, envelope construction should be deterministic and byte-stable.
+
+### 2. Token Efficiency
+
+Context artifacts should appear once in canonical form (or as references), not duplicated across layers.
+
+### 3. Prefix Cache Stability
+
+Stable content should stay in early request tokens (L1/L2) so implicit provider caching has maximal hit rate.
+
+### 4. Compaction Safety
+
+Compaction must preserve answerability and recovery affordances, especially for non-recoverable context.
+
+### 5. Persistence Parity
+
+Loading chat history should preserve envelope quality (or deterministically reconstruct it), so behavior after load matches in-session behavior.
+
+---
+
+## Current Architecture (Verified)
 
 ### Layer Definitions
 
-| Layer                     | Source                                  | Update Trigger                   | Purpose                                        |
-| ------------------------- | --------------------------------------- | -------------------------------- | ---------------------------------------------- |
-| **L1: System & Policies** | System prompt + user memory             | Only when settings/memory change | Cacheable prefix with instructions             |
-| **L2: Context Library**   | ALL previous context items (cumulative) | Grows with new context           | Stable reference library                       |
-| **L3: Smart References**  | Current turn context                    | Every turn                       | References L2 by ID, new items as full content |
-| **L4: Chat History**      | LangChain memory (raw messages)         | Each Q/A pair                    | Conversation continuity                        |
-| **L5: User Message**      | Raw user input                          | Every turn                       | Minimal user query                             |
+| Layer           | Current Source                                               | Update Trigger                  | Stability |
+| --------------- | ------------------------------------------------------------ | ------------------------------- | --------- |
+| **L1_SYSTEM**   | `ChatManager.getSystemPromptForMessage()`                    | settings/memory/project changes | High      |
+| **L2_PREVIOUS** | Auto-promoted previous user-turn L3 segments                 | per user turn                   | Medium    |
+| **L3_TURN**     | Current-turn context artifacts (notes/URLs/tags/folders/etc) | every user turn                 | Low       |
+| **L4_STRIP**    | Deferred in envelope, injected from LangChain memory         | every turn                      | Low       |
+| **L5_USER**     | processed user query (templated user text)                   | every user turn                 | Lowest    |
 
-### L2: Context Library (Cumulative Design)
+### End-to-End Flow
 
-**Key Insight**: L2 is a simple cumulative library of all context ever seen in the conversation.
+1. `ChatManager.sendMessage()` creates a user message and resolves L1 system prompt.
+2. `ContextManager.processMessageContext()`:
+   - builds L2 from previous user messages' stored envelopes,
+   - processes current-turn context artifacts,
+   - optionally compacts large context,
+   - builds `PromptContextEnvelope` via `PromptContextEngine`.
+3. `MessageRepository.updateProcessedText()` stores both legacy `processedText` and `contextEnvelope`.
+4. Chain runners require `contextEnvelope`, convert with `LayerToMessagesConverter`, inject L4 from memory, then append tool context into user-side payload.
 
-**Rules**:
+### L2/L3 Smart Referencing
 
-1. **Cumulative**: Grows monotonically, never shrinks
-2. **Auto-promotion**: Context from previous turns automatically moves to L2
-3. **Smart referencing**: Items in L2 referenced by path/ID in L3
-4. **New items only**: L3 includes full content only for brand-new items
+- L2 is now deduplicated by segment ID with last-write-wins content updates and stable first-seen ordering.
+- L3 segments whose IDs already exist in L2 are rendered as references; new IDs include full content.
+- Segment parsing is centralized in `parseContextIntoSegments()` using `contextBlockRegistry` tags.
 
-**Example Flow**:
+### Tool Placement Model
 
-```
-Turn 1: User adds project-spec.md
-  L1: System prompt
-  L2: (empty)
-  L3: <note_context>project-spec.md (full content)</note_context>  ← NEW
-  L5: "Summarize this"
+- System message contains only L1 + L2.
+- Tool outputs remain turn-scoped and are prepended to user-side content (`CiC` ordering).
+- This keeps cacheable prefix isolated from tool variability.
 
-Turn 2: User keeps project-spec.md, adds api-docs.md
-  L1: System prompt (stable ✅)
-  L2: <note_context>project-spec.md (full content)</note_context>  ← Promoted to library
-  L3: "Context attached:
-        - Piano Lessons/project-spec.md
-       Find them in the Context Library above."
-       <note_context>api-docs.md (full content)</note_context>  ← NEW
-  L5: "What's the API?"
+### Persistence Behavior
 
-Turn 3: User keeps project-spec.md only
-  L1: System prompt (stable ✅)
-  L2: <note_context>project-spec.md</note_context>
-      <note_context>api-docs.md</note_context>  ← STABLE! Cache hit!
-  L3: "Context attached:
-        - Piano Lessons/project-spec.md
-       Find them in the Context Library above."  ← Just ID reference
-  L5: "Explain that"
-```
+- Chat markdown persists message text plus context references (`[Context: ...]`), not full envelopes.
+- On load, messages are restored without `contextEnvelope`.
+- Regeneration now has lazy reprocessing: if envelope is missing, `ChatManager.regenerateMessage()` reprocesses the target user message before running the chain.
+- Continuing chat after load still does not automatically reconstruct historical envelopes for prior turns.
 
-### Unique Identifiers
+### Compaction Stack
 
-- **Notes**: Full file path (`note.path`)
-- **URLs**: Full URL string
-- **Selected text**: Source file path + line range
-- **Dataview blocks**: Source file path + query hash
+- **Turn-time compaction** (`ContextCompactor`): map-reduce summarization when total context exceeds threshold.
+- **L2 carry-forward compaction** (`compactSegmentForL2` + `L2ContextCompactor`): deterministic structure+preview compression for promoted previous context.
+
+### L4 Memory Behavior
+
+- L4 (chat history) is injected by chain runners from LangChain `BufferWindowMemory`.
+- **Only `displayText` (raw user message) is saved to memory** — context artifacts are NOT included.
+- This prevents duplication: context artifacts already live in L2/L3 via the envelope; baking them into L4 would cause triple-inclusion and waste tokens.
+- Assistant responses are saved as-is (or with tool-call formatting stripped).
 
 ---
 
-## Current Implementation Status
+## Example Chat Walkthrough
 
-### ✅ Completed (Production)
+This shows the concrete layer contents across a 3-turn conversation. The user attaches `project-spec.md` in Turn 1, adds `api-docs.md` in Turn 2, then drops `api-docs.md` in Turn 3.
 
-1. **Phase 1: Foundations**
+### Turn 1: User adds `project-spec.md`
 
-   - ✅ `PromptContextEngine` with deterministic L3/L5 rendering
-   - ✅ `ContextManager` returns structured `ContextProcessingResult`
-   - ✅ `MessageRepository` persists `contextEnvelope` per message
-   - ✅ Feature flag removed - system active for all conversations
+```
+L1 (System):
+  [system prompt + user memory + project instructions]
 
-2. **Phase 2: L2 Auto-Promotion**
+L2 (Previous Context Library):
+  (empty — first turn, no prior context)
 
-   - ✅ `buildL2ContextFromPreviousTurns()` collects previous context
-   - ✅ Cumulative L2 (no deduplication from current turn)
-   - ✅ Segment-based smart referencing with path IDs
-   - ✅ `LayerToMessagesConverter` handles smart references
+L3 (Current Turn Context):
+  <note_context>
+  <title>project-spec</title>
+  <path>project-spec.md</path>
+  <content>... full note content ...</content>
+  </note_context>
+  → Segment ID: "project-spec.md" (NEW — full content included)
 
-3. **Phase 3: ChainRunner Migration**
-   - ✅ `LLMChainRunner` envelope-based
-   - ✅ `VaultQAChainRunner` envelope-based
-   - ✅ `CopilotPlusChainRunner` envelope-based with uniform tool handling
-   - ✅ `AutonomousAgentChainRunner` envelope-based with iterative tool loop
-   - ✅ `ProjectChainRunner` envelope-based with project context in L1
+L4 (Chat History):
+  (empty — first turn)
 
-### 🎯 Current Design: Uniform Tool Placement
+L5 (User Message):
+  "Summarize this"
+```
 
-**System Message** = L1 (system prompt) + L2 (Context Library) ONLY
-**User Message** = Tool results + L3 (smart refs) + L5 (user query)
+After Turn 1, `BaseChainRunner.handleResponse()` saves to memory:
 
-All tools (`localSearch`, `webSearch`, `getFileTree`, etc.) are treated uniformly:
+- Input: `"Summarize this"` (displayText only — no context XML)
+- Output: `"Here is a summary of the project spec..."`
 
-- Wrapped as `<toolName>content</toolName>`
-- Prepended to user message using CiC (Context in Context) format
-- Turn-specific, never promoted to L2
+### Turn 2: User keeps `project-spec.md`, adds `api-docs.md`
 
-### 🔄 In Progress / Deferred
+```
+L1 (System):
+  [system prompt — stable ✅, cache-friendly]
 
-**Next Phase**:
+L2 (Previous Context Library):
+  <prior_context source="project-spec.md" type="note">
+  Structure: project-spec (project-spec.md) | Preview: ...first 200 chars...
+  </prior_context>
+  → Segment ID: "project-spec.md" (promoted from Turn 1 L3, compacted for L2)
 
-- Cache stability monitoring
+L3 (Current Turn Context):
+  Context attached to this message:
+  - project-spec.md
 
-**Future Enhancements** (deferred):
+  Find them in the Context Library in the system prompt above.
 
-- Provider-specific cache controls (Anthropic `cache_control`, Gemini explicit cache)
-- L4 conversation strip with summarization
-- Optional manual pinning UI
+  <note_context>
+  <title>api-docs</title>
+  <path>docs/api-docs.md</path>
+  <content>... full note content ...</content>
+  </note_context>
+  → "project-spec.md" rendered as REFERENCE (already in L2)
+  → "docs/api-docs.md" is NEW — full content included
+
+L4 (Chat History):
+  Human: "Summarize this"
+  AI: "Here is a summary of the project spec..."
+  → Only displayText — no context XML in L4
+
+L5 (User Message):
+  "What endpoints does the API support?"
+```
+
+### Turn 3: User keeps `project-spec.md` only (drops `api-docs.md`)
+
+```
+L1 (System):
+  [system prompt — stable ✅]
+
+L2 (Previous Context Library):
+  <prior_context source="project-spec.md" type="note">
+  Structure: project-spec (project-spec.md) | Preview: ...first 200 chars...
+  </prior_context>
+  <prior_context source="docs/api-docs.md" type="note">
+  Structure: api-docs (docs/api-docs.md) | Preview: ...first 200 chars...
+  </prior_context>
+  → Both deduplicated by segment ID. "project-spec.md" retains its
+    first-seen position; "docs/api-docs.md" added after.
+  → L2 is CUMULATIVE and STABLE — cache hit for the prefix ✅
+
+L3 (Current Turn Context):
+  Context attached to this message:
+  - project-spec.md
+
+  Find them in the Context Library in the system prompt above.
+  → "project-spec.md" is a REFERENCE (in L2)
+  → "docs/api-docs.md" is NOT referenced (user didn't attach it this turn)
+    but it remains in L2 for cache stability and potential follow-up use
+
+L4 (Chat History):
+  Human: "Summarize this"
+  AI: "Here is a summary of the project spec..."
+  Human: "What endpoints does the API support?"
+  AI: "The API supports the following endpoints..."
+  → Clean displayText only — no bloat
+
+L5 (User Message):
+  "Explain the auth flow from the spec"
+```
+
+### Key Behaviors Demonstrated
+
+| Behavior                        | Where       | Example                                                           |
+| ------------------------------- | ----------- | ----------------------------------------------------------------- |
+| **Per-artifact segment IDs**    | L3 parsing  | `"project-spec.md"`, `"docs/api-docs.md"` — not generic `"notes"` |
+| **L2 dedup (last-write-wins)**  | L2 build    | Same ID across turns → content updated, position preserved        |
+| **Smart referencing**           | L3 render   | Items in L2 become `- project-spec.md` references                 |
+| **L2 cumulative growth**        | L2 library  | `api-docs.md` stays in L2 even when dropped from L3               |
+| **L2 carry-forward compaction** | L2 content  | Full `<note_context>` → `<prior_context>` with structure+preview  |
+| **L4 displayText only**         | Memory save | `"Summarize this"` — no `<note_context>` XML                      |
+| **Prefix cache stability**      | L1+L2       | L1 stable across turns; L2 grows monotonically, doesn't shrink    |
 
 ---
 
-## Chain Integration Summary
+## Chain Runner Envelope Usage
 
-### LLMChainRunner
+All four chain runners use the context envelope for LLM message construction. Each delegates final response handling to `BaseChainRunner.handleResponse()`, which saves only L5 text (expanded user query, no context XML) to L4 memory.
 
-- Replaced legacy prompt assembly with `LayerToMessagesConverter` output.
-- System message = envelope L1 + L2 only; no tool payloads injected.
-- User message = L3 smart references + L5; supports composer instructions via shared helper.
-- Payload recorder logs layered view for every request.
+### Per-Runner Behavior
 
-### VaultQAChainRunner
+| Runner                         | Envelope Construction                                                                 | Tool Results                                                  | User Message Source  |
+| ------------------------------ | ------------------------------------------------------------------------------------- | ------------------------------------------------------------- | -------------------- |
+| **LLMChainRunner**             | `LayerToMessagesConverter.convert()` → system (L1+L2), user (L3 refs + L5)            | None                                                          | Envelope only        |
+| **CopilotPlusChainRunner**     | Same converter, then `ensureUserQueryLabel` adds `[User query]:` separator            | Prepended to user message in CiC order                        | L5 text via envelope |
+| **AutonomousAgentChainRunner** | Same converter for initial messages; ReAct loop appends AI + ToolMessages iteratively | Native tool calling — each result is a separate `ToolMessage` | L5 text via envelope |
+| **VaultQAChainRunner**         | Same converter                                                                        | Retrieval results via hybrid/lexical retriever                | Envelope only        |
 
-- Uses envelope-derived system message (L1/L2) plus chat history before user turn.
-- Vault RAG results and citation guidance prepended to user message, keeping system cacheable.
-- Applies CiC ordering so the user question follows retrieved documents.
-- Multimodal handling respects envelope rules (images only from active note).
+### CopilotPlus: Single-Shot Tool Flow
 
-### CopilotPlusChainRunner
+1. Planning phase analyzes L5 text to determine which `@commands` to execute.
+2. Tool results (localSearch, web fetch, etc.) are formatted and prepended to the user message using CiC ordering: `[tool results] → [L3 references + L5 with User query label]`.
+3. Single LLM call with the complete message array: `[system (L1+L2)] → [L4 history] → [user (tools + L3 + L5)]`.
 
-- Intent analysis still Broca-based (ToolCallPlanner pending), but prompt assembly is envelope-first.
-- All tool outputs (localSearch, webSearch, file tree, etc.) formatted uniformly and prepended to user message.
-- LocalSearch payload is self-contained: includes RAG instruction, documents, and citation guidance all within the `<localSearch>` block.
-- Each localSearch call carries its own guidance block (source catalog + citation rules), ensuring correct citations in multi-search turns.
-- Composer instructions appended once to avoid duplication; payload recorder captures tool XML alongside L3/L5.
+### Autonomous Agent: ReAct Loop Flow
 
-### AutonomousAgentChainRunner
+1. Initial message array built identically to CopilotPlus: `[system (L1+L2+tool guidelines)] → [L4 history] → [user (L3 refs + L5)]`.
+2. Model responds with native tool calls (e.g., `localSearch`, `readFile`).
+3. Each tool result becomes a `ToolMessage` appended to the growing messages array.
+4. `localSearch` results get CiC ordering: the user's question (from L5 `originalUserPrompt`) is appended after the search payload via `ensureCiCOrderingWithQuestion`.
+5. Loop repeats until model responds without tool calls (final answer).
 
-- Validates envelope presence and reuses converter for baseline messages.
-- System prompt combines envelope L1/L2 with tool descriptions from model adapters (no duplicate base prompt).
-- L5 text flows through adapter hints so GPT/Claude reminders continue to fire.
-- Iterative tool loop reuses existing Think/Action streamers; prompt recorder receives envelope for each run.
+### Token Efficiency Audit
 
-### ProjectChainRunner
+**Verified efficient (no action needed):**
 
-- Fully migrated to envelope-based context construction.
-- Project context automatically added to L1 via `ChatManager.getSystemPromptForMessage()`.
-- No special-case logic needed - inherits all behavior from `CopilotPlusChainRunner`.
+- L1+L2 prefix is stable and cacheable across turns — tool results never enter the system message.
+- L3 uses smart references for artifacts already in L2 — no content duplication in the user message.
+- L4 contains only displayText (via L5 extraction in `handleResponse`) — no context XML leakage.
+- Chain runners extract L5 text from the envelope for `cleanedUserMessage` and `originalUserPrompt`, never using `processedText` (which contains L2+L3+L5 concatenated).
 
-#### Implementation
+**Known inefficiencies (accepted tradeoffs):**
 
-1. **Centralized L1 assembly with helper method.**
-   Added `ChatManager.getSystemPromptForMessage(chainType)` that calls `await getSystemPromptWithMemory(...)`, then (for `PROJECT_CHAIN` only) appends project system/context blocks:
-
-   ```ts
-   async getSystemPromptForMessage(chainType: ChainType): Promise<string> {
-     const basePrompt = await getSystemPromptWithMemory(this.chainManager.userMemoryManager);
-
-     // Special case: Add project context for project chain
-     if (chainType === ChainType.PROJECT_CHAIN) {
-       const project = getCurrentProject();
-       if (project) {
-         const context = await ProjectManager.instance.getProjectContext(project.id);
-         let result = `${basePrompt}\n\n<project_system_prompt>\n${project.systemPrompt}\n</project_system_prompt>`;
-
-         // Only add project_context block if context exists (guards against null)
-         if (context) {
-           result += `\n\n<project_context>\n${context}\n</project_context>`;
-         }
-
-         return result;
-       }
-     }
-     return basePrompt;
-   }
-   ```
-
-2. **Null guard for project context.**
-   When `ProjectManager.instance.getProjectContext()` returns `null` (e.g., context still loading or cache miss), the `<project_context>` block is omitted entirely rather than interpolating the literal string "null" into L1.
-
-3. **Envelope integration.**
-   The helper's return value is passed into `processMessageContext` / `reprocessMessageContext`. `PromptContextEngine` serializes the full string into the L1 layer, so `ProjectChainRunner` drops its bespoke `getSystemPrompt` override and reuses the envelope just like Copilot Plus.
-
-4. **Simplified ProjectChainRunner.**
-   The class is now just a pass-through to `CopilotPlusChainRunner` with no overrides - project context automatically appears in L1 via `ChatManager`.
+| Issue                                                                     | Severity | Tokens Wasted                                                   | Rationale                                                                                                                                                 |
+| ------------------------------------------------------------------------- | -------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CiC user-question repeated per `localSearch` tool call in agent loop      | LOW      | ~50 tokens x N searches                                         | Intentional — each `ToolMessage` is independent; the model needs the question for grounding across ReAct iterations                                       |
+| L2 content may overlap with `localSearch` results                         | MEDIUM   | Variable (L2 has compacted preview, search has relevant chunks) | Structural limitation — search doesn't know about L2. Overlap is partial since L2 is compacted to structure+preview while search returns precision chunks |
+| Legacy `processedText` stores L2+L3+L5 concatenation in MessageRepository | LOW      | 0 (not sent to LLM)                                             | Storage-only waste. Field is unused by envelope-based chain runners but persisted for backward compatibility                                              |
 
 ---
 
-## Architecture Components
+## Strengths
 
-### 1. PromptContextEngine
-
-**Purpose**: Centralizes prompt assembly, replacing "context baked into message" workflow.
-
-**Input**: `PromptContextRequest`
-
-- `chatId`, `currentMessageId`
-- User text, structured attachments
-- Tool outputs, provider metadata
-- Token budget hints
-
-**Output**: `PromptContextEnvelope`
-
-- `layers` (L1-L5 structured)
-- `llmMessages` (formatted for provider)
-- `renderedSegments` (serialized layers)
-- Cache hints (`layerHashes`)
-- Back-compat `processedUserText`
-
-### 2. Layer Builders
-
-**L2 Builder**:
-
-- Collects context from all previous messages
-- Deduplicated by unique ID (note path, URL)
-- Sorted by first appearance for stability
-- Excludes current turn's L3
-
-**L3 TurnContextAssembler**:
-
-- Reuses `ContextProcessor` for current message only
-- Emits structured entries: `{ id, type, sha256, content }`
-- Smart referencing logic (ID vs. full content)
-
-**L4 History**:
-
-- Provided by LangChain memory (`MessageRepository.getLLMMessages()`)
-- Returns raw messages without context
-
-**Renderer**:
-
-- Deterministically serializes each layer
-- Whitespace normalization for byte-identical outputs
-- Hash generation for cache validation
-
-### 3. LayerToMessagesConverter
-
-**Purpose**: Converts envelope to provider-ready messages with smart referencing.
-
-**Smart Referencing Logic**:
-
-```typescript
-// Parse L2 into segments by unique ID
-const l2SegmentIds = new Set(parseContextIntoSegments(l2Text).map((s) => s.id));
-
-// For each item in L3:
-if (l2SegmentIds.has(itemId)) {
-  // Reference by ID: "Find Piano Lessons/project-spec.md in Context Library above"
-} else {
-  // Include full content: <note_context>full content</note_context>
-}
-```
-
-### 4. Data Persistence
-
-**MessageRepository**:
-
-- Stores `contextEnvelope?: SerializedLayerRef` per message
-- Contains L3 entries + pointers to L1/L2/L4 snapshots
-- Backward compatible with legacy `processedText`
-
-**ChatPersistenceManager**:
-
-- Saves `displayText` + context metadata to markdown
-- Hidden JSON frontmatter for layer reconstruction: `<!-- copilot-context: {...} -->`
-- On load: rebuild envelope from metadata (legacy mode if missing)
-
-**ProcessedText Evolution**:
-
-- **Phase 1 (Current)**: Dual storage - both `processedText` and `contextEnvelope`
-- **Phase 2 (After migration)**: `processedText` becomes computed from envelope
-- **Phase 3 (Future)**: Drop `processedText` entirely
+1. Envelope-first prompt construction is now consistent across all active chain runners.
+2. L2 deduplication by artifact ID prevents linear repeated growth for repeated attachments.
+3. Segment parsing is centralized and registry-driven, avoiding ad-hoc per-chain parsing logic.
+4. Uniform tool placement removes previous cache-boundary ambiguity.
+5. Memory-side assistant compaction reduces L4 bloat from tool payloads.
+6. Regeneration path is now resilient to missing envelopes on loaded history.
 
 ---
 
-## Tool System Design
+## Known Gaps
 
-### Uniform Tool Placement
+### P0: Persistence Parity Is Still Incomplete
 
-**All tools go to user message** - no special cases:
+- Loaded chats do not rehydrate historical envelopes.
+- Result: follow-up turns after load do not benefit from historical L2 library unless messages are individually reprocessed.
 
-```typescript
-// System message: L1 + L2 only
-messages.push({
-  role: "system",
-  content: systemMessage.content, // Just L1 + L2, no tools
-});
+### P0: Non-Deterministic Fallback Segment IDs
 
-// User message: Tools + L3 + L5
-const toolContext = formatAllToolOutputs(allToolOutputs); // Uniform for all tools
-const finalUserContent = renderCiCMessage(
-  toolContext, // <localSearch>...</localSearch>\n<webSearch>...</webSearch>
-  userMessageContent.content, // L3 smart refs + L5
-  false
-);
-```
+- `appendParsedSegments()` uses `unparsed-${Date.now()}` when parsing fails.
+- This breaks deterministic envelope identity and degrades cache behavior in edge cases.
 
-### Tool Output Formatting
+### P1: Parser Still Depends on Regex Over Rendered XML
 
-**All tools use consistent XML wrapping**:
+- `parseContextIntoSegments()` is significantly better than earlier local regex logic, but it still parses serialized XML strings rather than typed artifacts.
+- Malformed/nested edge cases can still create parse misses and fallback behavior.
 
-```xml
-# Additional context:
+### P1: Compaction Semantics Need Stronger Invariants
 
-<localSearch timeRange="last week">
-Answer the question based only on the following context:
+- Two compaction modes exist (LLM summarization vs deterministic L2 preview compaction), but explicit invariants on what must remain verbatim are not enforced centrally.
+- Non-recoverable context (e.g., selected text) needs stricter protection policies under heavy compaction.
 
-[Retrieved documents...]
+### P1: L2 Mutation Tradeoff Not Formalized
 
-<guidance>
-[Citation rules and source catalog...]
-</guidance>
-</localSearch>
+- Current policy is ID-dedup + content overwrite.
+- This is token-efficient, but mutable artifacts can invalidate long cached prefixes when content changes.
+- The system needs an explicit "freshness vs cache stability" policy.
 
-<webSearch>
-[Web search results...]
-</webSearch>
-```
+### P2: Envelope Metadata Is Underused
 
-**Key Points**:
+- `conversationId` is currently `null`.
+- Missing stable conversation-level identity weakens observability and future caching strategies.
 
-- Each tool wrapped as `<toolName>content</toolName>`
-- Prepended to user message via `renderCiCMessage()`
-- RAG instruction ("Answer based on context") included in localSearch output
-- Citation guidance included directly within each `<localSearch>` block (self-contained)
-- Multi-search turns: each localSearch has its own guidance block with source mappings
-- Turn-specific, never cached in L2
+### P2: Documentation Drift Risk
 
-### Intent Analysis
-
-**Current**: `IntentAnalyzer` analyzes L5 (raw user query) for tool selection
-
-**Future (Deferred)**: `ToolCallPlanner`
-
-- Uses user's chat model instead of Broca API
-- Input: L5 + L3 summary (metadata only, not full content)
-- Output: JSON tool-call array with schema validation
-- Shared between CopilotPlus and Agent chains
+- Prior docs contained stale statements (e.g., fallback-to-processedText behavior, on-load envelope reconstruction).
+- This doc now reflects current code; future changes should keep this aligned.
 
 ---
 
-## Testing & Migration
+## Improvement Roadmap
 
-### Testing Strategy
+### Phase 1: Correctness and Determinism
 
-**Unit Tests**:
+1. Replace timestamp fallback IDs with deterministic IDs:
+   - `unparsed:${sha256(content)}` (plus optional short prefix by source type).
+2. Add envelope invariants checker (debug + tests):
+   - no duplicate segment IDs inside a layer,
+   - no L3 full-content block when ID exists in L2 unless explicitly marked override,
+   - stable layer ordering and hash consistency.
+3. Add robust parse-failure telemetry:
+   - count parse misses,
+   - log failing tag/source metadata,
+   - capture hash-only samples in debug mode.
 
-- Layer renderer snapshot tests (byte-identical output)
-- L2 auto-promotion tests (deterministic collection)
-- Smart referencing tests (ID vs. full content logic)
-- Deduplication tests (L3 priority over L2)
+### Phase 2: Persistence Parity
 
-**Integration Tests**:
+1. Add lazy historical envelope reconstruction on first post-load send:
+   - reprocess only prior user messages that have context references and missing envelopes,
+   - skip URL/web-tab refetch by policy where needed.
+2. Optional long-term path:
+   - persist compact envelope metadata (or typed artifact snapshots) alongside markdown history for deterministic restoration.
 
-- Golden prompt fixtures (no context, heavy context, tool-heavy, multimodal)
-- ChainRunner streaming smoke tests
-- Tool marker parsing validation
+### Phase 3: Compaction Safety and Policy
 
-**Observability**:
+1. Define explicit compaction classes:
+   - recoverable artifacts: can be summarized with re-fetch instructions,
+   - non-recoverable artifacts: preserve verbatim or bounded extractive compaction only.
+2. Add post-compaction validation:
+   - each compacted artifact must retain deterministic source identity and recoverability hints.
+3. Make compaction strategy configurable by chain type and context source type.
 
-- Log layer hashes + cached token counts (debug mode)
-- Warn if L1/L2 hash changes mid-conversation without trigger
-- Prompt payload recorder with layered view
+### Phase 4: Cache Optimization
 
-### Migration Caveats
+1. Split L1 into stable and mutable subsections (for example:
+   - static system contract,
+   - user memory and project overlays) to reduce unnecessary prefix invalidation.
+2. Introduce provider-aware cache hooks (opt-in):
+   - Anthropic `cache_control`,
+   - Gemini explicit cache primitives,
+   - keep model-agnostic baseline unchanged.
+3. Add per-turn prefix hash diff reporting:
+   - `L1 hash`, `L2 hash`, combined prefix hash,
+   - classify why prefix changed (settings, context attach, file change, memory update).
 
-#### Multimodal (Images)
+### Phase 5: Typed Artifact Pipeline (Strategic)
 
-**Constraint**: Image extraction must read from envelope, not raw message.
+Move from "render XML then parse XML" to a typed artifact graph:
 
-**Solution** (CopilotPlusChainRunner):
+- `ContextProcessor` emits typed artifacts directly (`artifactKey`, `sourceType`, `recoverable`, `payload`, `contentHash`).
+- Envelope stores typed segments as canonical source-of-truth.
+- XML remains a rendering format, not parsing substrate.
 
-```typescript
-// Extract images from active note ONLY (in L3)
-const l3Turn = envelope.layers.find((l) => l.id === "L3_TURN");
-if (l3Turn) {
-  const activeNoteRegex = /<active_note>([\s\S]*?)<\/active_note>/;
-  const activeNoteMatch = activeNoteRegex.exec(l3Turn.text);
-  if (activeNoteMatch) {
-    const sourcePath = extractPath(activeNoteMatch[1]);
-    const content = extractContent(activeNoteMatch[1]);
-    const images = await this.extractEmbeddedImages(content, sourcePath);
-  }
-}
-```
+This is the highest-leverage change for long-term reproducibility and parser robustness.
 
-**Rules**:
+### Phase 6: Context Envelope Integration Test Suite
 
-- Extract from `<active_note>` only (not `<note_context>`)
-- Never promote image-bearing notes to L2
-- Legacy behavior unchanged (no envelope fallback)
+Build a comprehensive test suite that validates multi-turn envelope behavior without requiring manual UI testing:
 
-#### Chat Persistence
+1. **Multi-turn envelope simulation tests**:
 
-**Saving** (ChatPersistenceManager.formatChatContent):
+   - Simulate 3+ turn conversations with various artifact combinations (notes, URLs, YouTube, PDFs, selected text).
+   - Assert correct L2 promotion, dedup, smart referencing, and compaction at each turn.
+   - Validate that L4 memory contains only displayText (no context XML leakage).
 
-1. Save `displayText` (UI view) to markdown
-2. Save context metadata with **full vault-relative paths**:
-   - Notes: `[Context: Notes: Piano Lessons/Lesson 4.md, DailyNotes/2025-01-27.md]`
-   - URLs, tags, folders saved as-is
-3. `contextEnvelope` NOT saved (deliberate - want fresh content on load)
+2. **Layer composition snapshot tests**:
 
-**Loading** (ChatPersistenceManager.parseContextString):
+   - For canonical conversation trajectories, snapshot the full `[L1, L2, L3, L4, L5]` payload sent to the LLM.
+   - Detect unintended regressions in layer ordering, dedup behavior, or content placement.
 
-1. Parse context metadata from markdown
-2. Resolve note paths via vault lookup:
-   - **Primary**: Resolve by full path (`app.vault.getAbstractFileByPath()`)
-   - **Fallback**: Resolve by basename if unique (backward compatibility)
-   - **Skip**: If deleted or ambiguous, log warning and continue
-3. Return resolved TFile[] for context.notes
-4. When conversation continues: `buildL2ContextFromPreviousTurns()` processes resolved notes with fresh content
+3. **Round-trip persistence tests**:
 
-**Stale Context Handling**:
+   - Save a conversation to markdown, reload it, send a follow-up turn.
+   - Assert that lazy reprocessing reconstructs envelopes and L2 correctly.
 
-- **Deleted note**: Skip with warning, continue without it
-- **Changed content**: Use current content (expected - provides fresh context)
-- **Moved note**: Resolves via basename fallback if unique, otherwise skips
-- **Ambiguous basename**: Multiple matches → skip with warning listing all matches
+4. **Edge-case regression tests**:
 
-**Backward Compatibility** (2025-01-27 update):
+   - Same artifact attached across 5+ turns (dedup stability).
+   - Artifact added, removed, re-added (L2 cumulative behavior).
+   - Multiple `selected_text` blocks in same turn (unique ID generation).
+   - Malformed XML blocks (graceful fallback, no silent data loss).
+   - Very large context triggering compaction (invariants preserved).
 
-- **Old chats** (basenames only): Basename fallback resolution attempts vault-wide search
-- **New chats** (full paths): Direct resolution, faster and unambiguous
-- **Migration**: Automatic - no user action needed
+5. **Property-based tests** (optional, aspirational):
+   - Generate random artifact sequences and assert envelope invariants hold:
+     no duplicate segment IDs within a layer, L3 references only exist if ID is in L2,
+     L4 never contains XML block tags.
 
-### Backward Compatibility
-
-**ChainRunner Contracts**:
-
-- `ChainRunner.run()` signatures unchanged
-- Envelope passed via `userMessage.contextEnvelope`
-- Fallback to `processedText` if envelope missing
-
-**Markdown Archives**:
-
-- Continue storing full `processedText`
-- Layer metadata additive and optional
-- Legacy chats rebuild on load (compat mode)
-
-**Settings**:
-
-- No new toggles required
-- System always active, backward compatible
+This suite replaces the need for manual multi-turn chat testing in the UI and provides a safety net for all future envelope changes.
 
 ---
 
-## Historical Context
+## Testing and Observability
 
-### Design Simplifications
+### Core Tests to Add/Strengthen
 
-#### 1. Simplified Layer Serialization
+1. Post-load follow-up turn should rebuild/rehydrate envelope behavior deterministically.
+2. Deterministic fallback ID behavior (no wall-clock dependence).
+3. Property tests for parser with malformed/nested blocks.
+4. Compaction invariants:
+   - non-recoverable blocks never become unrecoverable summaries without explicit guardrails.
+5. Prefix-hash stability tests across common conversation trajectories.
 
-- **Original**: XML tags wrapping each layer (`<L3_TURN>...</L3_TURN>`)
-- **Simplification**: Clean double-newline separation
-- **Rationale**: XML redundant, simpler text cleaner for LLM
+### Runtime Metrics (Debug Mode)
 
-#### 2. Deferred L4 Conversation Strip
-
-- **Original**: Summary + last K turns with deterministic truncation
-- **Simplification**: Continue using existing LangChain memory
-- **Rationale**: Token optimization, not required for cache correctness
-
-#### 3. Deferred Provider-Specific Caching
-
-- **Original**: Gemini explicit cache, Anthropic `cache_control`
-- **Simplification**: Model-agnostic baseline only (stable prefixes)
-- **Rationale**: Baseline first, optimizations incremental
-
-### Bug Fixes
-
-#### L2 Context Deduplication Bug (2025-01-25)
-
-**Problem**: `buildL2ContextFromPreviousTurns()` removed items from L2 if they appeared in current turn, breaking cache stability.
-
-**Symptom**: Same note sent twice across consecutive turns instead of being referenced by ID.
-
-**Root Cause**:
-
-```typescript
-// WRONG: Prevents L2 accumulation
-if (currentTurnContext) {
-  const currentTurnNotePaths = new Set((currentTurnContext.notes || []).map((note) => note.path));
-  for (const notePath of currentTurnNotePaths) {
-    uniqueNotes.delete(notePath); // BUG
-  }
-}
-```
-
-**Fix**:
-
-1. Removed deduplication logic from `buildL2ContextFromPreviousTurns()`
-2. L2 contains ALL previous context (no filtering)
-3. `LayerToMessagesConverter` compares segment IDs for smart referencing
-
-**Result**: L2 grows monotonically ✅ Cache hits maximized ✅
-
-#### Uniform Tool Placement Refactor (2025-01-27)
-
-**Problem**: Architectural complexity with localSearch in system message vs. other tools in user message.
-
-**Old Design**:
-
-- `localSearch` → system message (RAG as authoritative knowledge)
-- Other tools → user message (supplementary info)
-- Complex branching logic, special-casing
-
-**New Design**:
-
-- ALL tools → user message uniformly
-- System = L1 + L2 only (cacheable prefix)
-- Single code path: `formatAllToolOutputs()`
-
-**Benefits**:
-
-- Eliminated ~100 lines of special-case code
-- Clear cache boundary
-- Automatic tool detection via `ToolRegistry`
-
-### Implementation Progress Phases
-
-**Phase 1** (Completed):
-
-- Canonical Layered Prefix types
-- `PromptContextEngine` singleton
-- `ContextManager` structured output
-- `MessageRepository` envelope persistence
-
-**Phase 2** (Completed):
-
-- L2 auto-promotion implementation
-- Cumulative L2 design (no deduplication)
-- Segment-based smart referencing
-- Stable ordering by first appearance
-
-**Phase 3** (Completed):
-
-- LLM chain envelope migration
-- VaultQA chain envelope migration
-- CopilotPlus chain envelope migration + uniform tools
-- Agent chain envelope migration + iterative tool loop
-- Payload logging with layered view
-
-**Phase 4** (Deferred):
-
-- Provider-specific cache controls
-- Optional manual pinning UI
-- L4 conversation strip with summarization
-
-### Agent Chain Runner Implementation
-
-**Goal**: Integrate the autonomous agent chain with the layered context system, following the same envelope-first architecture as CopilotPlus while preserving the iterative tool execution loop.
-
-**Implementation** (Completed 2025-01-27):
-
-The agent chain integration follows the CopilotPlus pattern with minimal changes to support the unique iterative tool loop:
-
-**1. Envelope Extraction & Validation**
-
-- Added envelope validation at start of `run()` method
-- Fails fast with clear error if envelope missing
-- Logs envelope-based context construction for debugging
-
-**2. System Message Construction**
-
-```typescript
-// Extract L1+L2 from envelope via LayerToMessagesConverter
-const baseMessages = LayerToMessagesConverter.convert(envelope, {
-  includeSystemMessage: true,
-  mergeUserContent: true,
-});
-
-// Combine with tool descriptions from model adapter
-const systemContent = [
-  systemMessage?.content || "", // L1 + L2 from envelope
-  toolDescriptionsPrompt || "", // Tool descriptions + guidelines
-]
-  .filter(Boolean)
-  .join("\n\n");
-```
-
-**3. Initial User Message Assembly**
-
-- Extract L3 (smart references) + L5 (user query) from converter
-- Build multimodal content if images present (inherited from CopilotPlus)
-- No adapter enhancement needed (envelope contains formatted content)
-
-**4. Original Prompt Extraction**
-
-- Extract L5 text for CiC ordering in tool results
-- Used by `applyCiCOrderingToLocalSearchResult()` to append question
-
-**5. Agent Loop (Unchanged)**
-
-- Tool execution, parsing, and result formatting remain identical
-- Tool results added to conversation as assistant/user message pairs
-- CiC ordering applied to localSearch results as before
-- ThinkBlockStreamer and ActionBlockStreamer preserved
-- Iteration history and source collection unchanged
-
-**Key Design Points**:
-
-- **Minimal changes**: Only `prepareAgentConversation()` and envelope extraction modified
-- **Tool system preserved**: All tool execution, streaming, and display logic unchanged
-- **Message structure**: System (L1+L2+tools) → History → User (L3+L5) → Agent loop
-- **Tool results**: Continue to be added to conversation messages, never promoted to L2
-- **Multimodal support**: Image extraction inherited from CopilotPlus base class
-
-**Differences from CopilotPlus**:
-
-| Aspect             | CopilotPlus                               | Agent                                       |
-| ------------------ | ----------------------------------------- | ------------------------------------------- |
-| **Tool Execution** | Pre-run (single batch via IntentAnalyzer) | Iterative loop (multi-turn)                 |
-| **Tool Results**   | Formatted once, prepended to user message | Accumulated across iterations               |
-| **System Prompt**  | L1 + L2                                   | L1 + L2 + tool descriptions + guidelines    |
-| **Conversation**   | Single turn                               | Multiple assistant/user pairs per iteration |
-| **Streaming**      | ThinkBlockStreamer only                   | ThinkBlockStreamer + ActionBlockStreamer    |
-
----
-
-## Open Questions
-
-1. ~~L2 storage location?~~ **RESOLVED**: Auto-promotion from message history
-2. ~~Pin/unpin UI?~~ **RESOLVED**: Auto-promotion, no UI needed
-3. Memory snapshot UI affordance? (Deferred)
-4. Layer metadata format in markdown exports? (HTML comment vs. YAML frontmatter)
-5. Dataview query caching by note + mtime? (Optimization, not critical)
+- Envelope build time by phase (L2 build, context processing, compaction, render).
+- Segment counts per layer and dedup ratio.
+- Prefix hash change reason classification.
+- Parse-failure count and compacted-context proportion.
 
 ---
 
 ## References
 
-### Key Files
+### Primary Implementation Files
 
-- **Core**: `src/context/PromptContextEngine.ts`, `src/core/ContextManager.ts`
-- **Layer Conversion**: `src/context/LayerToMessagesConverter.ts`
-- **Persistence**: `src/core/MessageRepository.ts`, `src/core/ChatPersistenceManager.ts`
-- **Chain Runners**: `src/LLMProviders/chainRunner/*.ts`
-- **Utilities**: `src/LLMProviders/chainRunner/utils/cicPromptUtils.ts`
+- `src/core/ChatManager.ts`
+- `src/core/ContextManager.ts`
+- `src/context/PromptContextTypes.ts`
+- `src/context/PromptContextEngine.ts`
+- `src/context/parseContextSegments.ts`
+- `src/context/LayerToMessagesConverter.ts`
+- `src/core/MessageRepository.ts`
+- `src/core/ChatPersistenceManager.ts`
+- `src/LLMProviders/chainRunner/LLMChainRunner.ts`
+- `src/LLMProviders/chainRunner/VaultQAChainRunner.ts`
+- `src/LLMProviders/chainRunner/CopilotPlusChainRunner.ts`
+- `src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts`
 
-### Related Documentation
+### Related Docs
 
-- Message Architecture: `docs/MESSAGE_ARCHITECTURE.md`
-- Technical Debt: `docs/TECHDEBT.md`
-- Current Tasks: `TODO.md`
+- `docs/MESSAGE_ARCHITECTURE.md`
+- `docs/TOOLS.md`
+- `docs/NATIVE_TOOL_CALLING_MIGRATION.md`
+- `docs/TECHDEBT.md`
+- `TODO.md`

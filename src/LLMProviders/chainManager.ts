@@ -333,7 +333,11 @@ export default class ChainManager {
   ) {
     const { ignoreSystemMessage = false } = options;
 
-    logInfo("Step 0: Initial user message:\n", userMessage.message);
+    const l5Text = userMessage.contextEnvelope?.layers.find((l) => l.id === "L5_USER")?.text;
+    logInfo(
+      "Step 0: Initial user message:\n",
+      l5Text || userMessage.originalMessage || userMessage.message
+    );
 
     this.validateChatModel();
     this.validateChainInitialization();
@@ -370,17 +374,5 @@ export default class ChainManager {
       addMessage,
       options
     );
-  }
-
-  async updateMemoryWithLoadedMessages(messages: ChatMessage[]) {
-    await this.memoryManager.clearChatMemory();
-    // Use memoryManager.saveContext to apply compaction for any old uncompacted messages
-    for (let i = 0; i < messages.length; i += 2) {
-      const userMsg = messages[i];
-      const aiMsg = messages[i + 1];
-      if (userMsg && aiMsg && userMsg.sender === USER_SENDER) {
-        await this.memoryManager.saveContext({ input: userMsg.message }, { output: aiMsg.message });
-      }
-    }
   }
 }
