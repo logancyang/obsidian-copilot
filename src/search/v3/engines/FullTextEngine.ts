@@ -29,7 +29,7 @@ export class FullTextEngine {
 
   // Field weights for search scoring
   private static readonly FIELD_WEIGHTS = {
-    title: 3,
+    title: 5,
     heading: 2.5,
     headings: 1.5,
     path: 1.5,

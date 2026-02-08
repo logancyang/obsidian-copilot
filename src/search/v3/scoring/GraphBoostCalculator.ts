@@ -1,6 +1,7 @@
 import { logInfo } from "@/logger";
 import { App, MetadataCache, TFile } from "obsidian";
 import { NoteIdRank } from "../interfaces";
+import { extractNotePathFromChunkId } from "../utils/chunkIdUtils";
 
 /**
  * Connection types for graph boost calculation
@@ -60,7 +61,7 @@ export class GraphBoostCalculator {
       return results;
     }
 
-    // Filter candidates
+    // Filter candidates (deduplicated to note level)
     const candidates = this.filterCandidates(results);
 
     // Early exit if no candidates or too few for meaningful connections
@@ -68,19 +69,21 @@ export class GraphBoostCalculator {
       return results;
     }
 
-    const candidateSet = new Set(candidates.map((r) => r.id));
+    // Build candidate set at note level for metadata lookups
+    const candidateNotePaths = new Set(candidates.map((r) => extractNotePathFromChunkId(r.id)));
 
-    // Calculate connections for each candidate
-    const connectionsMap = new Map<string, GraphConnections>();
+    // Calculate connections for each unique note
+    const noteConnectionsMap = new Map<string, GraphConnections>();
 
-    for (const result of candidates) {
-      const connections = this.calculateConnections(result.id, candidateSet);
-      connectionsMap.set(result.id, connections);
+    for (const notePath of candidateNotePaths) {
+      const connections = this.calculateConnections(notePath, candidateNotePaths);
+      noteConnectionsMap.set(notePath, connections);
     }
 
-    // Apply boost to all results (not just top N)
+    // Apply boost to all results — all chunks of a boosted note get the same multiplier
     const boostedResults = results.map((result) => {
-      const connections = connectionsMap.get(result.id);
+      const notePath = extractNotePathFromChunkId(result.id);
+      const connections = noteConnectionsMap.get(notePath);
 
       if (!connections || connections.boostMultiplier === 1.0) {
         return result;
@@ -106,7 +109,8 @@ export class GraphBoostCalculator {
 
     // Log summary
     const boosted = boostedResults.filter((r) => {
-      const conn = connectionsMap.get(r.id);
+      const notePath = extractNotePathFromChunkId(r.id);
+      const conn = noteConnectionsMap.get(notePath);
       return conn && conn.boostMultiplier > 1.0;
     });
 
@@ -271,18 +275,28 @@ export class GraphBoostCalculator {
   }
 
   /**
-   * Filter candidates based on max limit
+   * Filter candidates by deduplicating to unique notes, then applying the max limit.
+   * Keeps the best-scoring chunk per note so that the limit applies to note count, not chunk count.
    */
   private filterCandidates(results: NoteIdRank[]): NoteIdRank[] {
-    let candidates = results;
+    // Deduplicate: keep the best chunk per unique note (results are score-sorted)
+    const bestPerNote = new Map<string, NoteIdRank>();
+    for (const result of results) {
+      const notePath = extractNotePathFromChunkId(result.id);
+      if (!bestPerNote.has(notePath)) {
+        bestPerNote.set(notePath, result);
+      }
+    }
 
-    // Apply max candidates limit
+    let candidates = Array.from(bestPerNote.values());
+
+    // Apply max candidates limit at note level
     const beforeLimit = candidates.length;
     candidates = candidates.slice(0, this.config.maxCandidates);
 
     if (beforeLimit > this.config.maxCandidates) {
       logInfo(
-        `GraphBoost: Limited to top ${this.config.maxCandidates} candidates (from ${beforeLimit})`
+        `GraphBoost: Limited to top ${this.config.maxCandidates} note candidates (from ${beforeLimit} unique notes)`
       );
     }
 

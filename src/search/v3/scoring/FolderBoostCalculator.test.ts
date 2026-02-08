@@ -277,6 +277,49 @@ describe("FolderBoostCalculator", () => {
       expect(boosted[0].score).toBeGreaterThan(0.8);
       expect(boosted[1].score).toBeGreaterThan(0.6);
     });
+
+    it("should count unique notes when results contain chunk IDs", () => {
+      // 3 unique notes in folder, but 6 chunks total
+      mockApp = createMockApp(["folder/note1.md", "folder/note2.md", "folder/note3.md"]);
+      calculator = new FolderBoostCalculator(mockApp);
+
+      const results: NoteIdRank[] = [
+        { id: "folder/note1.md#0", score: 0.9 },
+        { id: "folder/note1.md#1", score: 0.85 },
+        { id: "folder/note2.md#0", score: 0.8 },
+        { id: "folder/note2.md#1", score: 0.75 },
+        { id: "folder/note3.md#0", score: 0.7 },
+        { id: "folder/note3.md#1", score: 0.65 },
+      ];
+
+      const boosted = calculator.applyBoosts(results);
+
+      // 3 unique notes / 3 total = 100% relevance ratio → should boost
+      boosted.forEach((result) => {
+        const originalScore = results.find((r) => r.id === result.id)!.score;
+        expect(result.score).toBeGreaterThan(originalScore);
+      });
+    });
+
+    it("should not over-count chunks as separate notes for folder ratio", () => {
+      // 10 notes in folder, but results have 6 chunks from only 2 unique notes
+      mockApp = createMockApp(Array.from({ length: 10 }, (_, i) => `folder/note${i + 1}.md`));
+      calculator = new FolderBoostCalculator(mockApp);
+
+      const results: NoteIdRank[] = [
+        { id: "folder/note1.md#0", score: 0.9 },
+        { id: "folder/note1.md#1", score: 0.85 },
+        { id: "folder/note1.md#2", score: 0.8 },
+        { id: "folder/note2.md#0", score: 0.75 },
+        { id: "folder/note2.md#1", score: 0.7 },
+        { id: "folder/note2.md#2", score: 0.65 },
+      ];
+
+      const boosted = calculator.applyBoosts(results);
+
+      // 2 unique notes / 10 total = 20% relevance ratio → below 40% threshold, no boost
+      expect(boosted).toEqual(results);
+    });
   });
 
   describe("getFolderBoosts", () => {

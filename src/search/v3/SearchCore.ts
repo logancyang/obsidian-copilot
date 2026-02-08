@@ -9,10 +9,11 @@ import { ExpandedQuery, QueryExpander } from "./QueryExpander";
 import { GrepScanner } from "./scanners/GrepScanner";
 import { FolderBoostCalculator } from "./scoring/FolderBoostCalculator";
 import { GraphBoostCalculator } from "./scoring/GraphBoostCalculator";
+import { adaptiveCutoff } from "./scoring/AdaptiveCutoff";
 import { ScoreNormalizer } from "./utils/ScoreNormalizer";
 
 // Search constants
-const FULLTEXT_RESULT_MULTIPLIER = 2;
+const FULLTEXT_RESULT_MULTIPLIER = 3;
 export const RETURN_ALL_LIMIT = 100;
 
 /**
@@ -52,7 +53,7 @@ export class SearchCore {
     this.folderBoostCalculator = new FolderBoostCalculator(app);
     this.graphBoostCalculator = new GraphBoostCalculator(app, {
       enabled: true,
-      maxCandidates: 10, // Absolute ceiling
+      maxCandidates: 20, // Absolute ceiling (note-level after chunk dedup)
       boostStrength: 0.1,
       maxBoostMultiplier: 1.15,
     });
@@ -199,9 +200,9 @@ export class SearchCore {
       // 8. Clean up full-text index to free memory
       this.fullTextEngine.clear();
 
-      // 9. Return top K results
+      // 9. Note-diverse top-K selection
       if (finalResults.length > maxResults) {
-        finalResults = finalResults.slice(0, maxResults);
+        finalResults = selectDiverseTopK(finalResults, maxResults);
       }
 
       // Log final result summary
@@ -372,4 +373,27 @@ export class SearchCore {
       return [];
     }
   }
+}
+
+/**
+ * Select top-K results with note diversity guarantee.
+ * Delegates to adaptiveCutoff with score cutoff disabled (threshold=0),
+ * so only diversity and ceiling logic apply.
+ *
+ * @param results - Score-sorted results (descending)
+ * @param limit - Maximum results to return
+ * @returns Diverse top-K results, sorted by score descending
+ */
+export function selectDiverseTopK(results: NoteIdRank[], limit: number): NoteIdRank[] {
+  if (results.length <= limit) {
+    return results;
+  }
+
+  return adaptiveCutoff(results, {
+    floor: 0,
+    ceiling: limit,
+    relativeThreshold: 0,
+    absoluteMinScore: 0,
+    ensureDiversity: true,
+  }).results;
 }
