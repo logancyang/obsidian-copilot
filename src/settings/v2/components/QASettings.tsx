@@ -7,11 +7,7 @@ import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchTog
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import {
-  EmbeddingModelProviders,
-  MIYO_EMBEDDING_MODEL_KEY,
-  VAULT_VECTOR_STORE_STRATEGIES,
-} from "@/constants";
+import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 
@@ -24,16 +20,6 @@ export const QASettings: React.FC = () => {
     }
     return shouldShowMiyoEmbedding;
   });
-  const miyoEmbeddingModel =
-    settings.activeEmbeddingModels.find(
-      (model) => model.provider === EmbeddingModelProviders.MIYO
-    ) || null;
-  const miyoEmbeddingModelKey = miyoEmbeddingModel
-    ? getModelKeyFromModel(miyoEmbeddingModel)
-    : MIYO_EMBEDDING_MODEL_KEY;
-  const miyoEmbeddingLabel = miyoEmbeddingModel
-    ? getModelDisplayWithIcons(miyoEmbeddingModel)
-    : "Miyo Jina Embeddings v3";
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
     if (modelKey === settings.embeddingModelKey) return;
@@ -100,79 +86,43 @@ export const QASettings: React.FC = () => {
             onCheckedChange={(checked) => updateSetting("enableInlineCitations", checked)}
           />
 
-          {settings.enableMiyoSearch ? (
-            <SettingItem
-              type="select"
-              title="Embedding Model"
-              description={
-                <div className="tw-space-y-2">
-                  <div className="tw-flex tw-items-center tw-gap-1.5">
-                    <span className="tw-font-medium tw-leading-none tw-text-accent">
-                      Miyo Search locks embeddings to Miyo Jina Embeddings v3.
-                    </span>
-                    <HelpTooltip
-                      content={
-                        <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                          <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                            Miyo Search uses a fixed embedding model to keep indexing and retrieval
-                            consistent. Disable Miyo Search to choose another embedding model.
-                          </div>
+          <SettingItem
+            type="select"
+            title="Embedding Model"
+            description={
+              <div className="tw-space-y-2">
+                <div className="tw-flex tw-items-center tw-gap-1.5">
+                  <span className="tw-font-medium tw-leading-none tw-text-accent">
+                    Powers Semantic Vault Search and Relevant Notes. Enable Semantic Search to use
+                    it.
+                  </span>
+                  <HelpTooltip
+                    content={
+                      <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
+                        <div className="tw-pt-2 tw-text-sm tw-text-muted">
+                          This model converts text into vector representations, essential for
+                          semantic search and Question Answering (QA) functionality. Changing the
+                          embedding model will:
                         </div>
-                      }
-                    />
-                  </div>
+                        <ul className="tw-pl-4 tw-text-sm tw-text-muted">
+                          <li>Require rebuilding your vault&#39;s vector index</li>
+                          <li>Affect semantic search quality</li>
+                          <li>Impact Question Answering feature performance</li>
+                        </ul>
+                      </div>
+                    }
+                  />
                 </div>
-              }
-              value={miyoEmbeddingModelKey}
-              onChange={handleSetDefaultEmbeddingModel}
-              options={[
-                {
-                  label: miyoEmbeddingLabel,
-                  value: miyoEmbeddingModelKey,
-                },
-              ]}
-              placeholder="Model"
-              disabled
-            />
-          ) : (
-            <SettingItem
-              type="select"
-              title="Embedding Model"
-              description={
-                <div className="tw-space-y-2">
-                  <div className="tw-flex tw-items-center tw-gap-1.5">
-                    <span className="tw-font-medium tw-leading-none tw-text-accent">
-                      Powers Semantic Vault Search and Relevant Notes. Enable Semantic Search to use
-                      it.
-                    </span>
-                    <HelpTooltip
-                      content={
-                        <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2">
-                          <div className="tw-pt-2 tw-text-sm tw-text-muted">
-                            This model converts text into vector representations, essential for
-                            semantic search and Question Answering (QA) functionality. Changing the
-                            embedding model will:
-                          </div>
-                          <ul className="tw-pl-4 tw-text-sm tw-text-muted">
-                            <li>Require rebuilding your vault&#39;s vector index</li>
-                            <li>Affect semantic search quality</li>
-                            <li>Impact Question Answering feature performance</li>
-                          </ul>
-                        </div>
-                      }
-                    />
-                  </div>
-                </div>
-              }
-              value={settings.embeddingModelKey}
-              onChange={handleSetDefaultEmbeddingModel}
-              options={visibleEmbeddingModels.map((model) => ({
-                label: getModelDisplayWithIcons(model),
-                value: getModelKeyFromModel(model),
-              }))}
-              placeholder="Model"
-            />
-          )}
+              </div>
+            }
+            value={settings.embeddingModelKey}
+            onChange={handleSetDefaultEmbeddingModel}
+            options={visibleEmbeddingModels.map((model) => ({
+              label: getModelDisplayWithIcons(model),
+              value: getModelKeyFromModel(model),
+            }))}
+            placeholder="Model"
+          />
 
           {/* Auto-Index Strategy */}
           <SettingItem

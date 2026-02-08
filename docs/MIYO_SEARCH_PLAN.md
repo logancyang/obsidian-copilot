@@ -99,7 +99,8 @@ These hooks should call VectorStoreManager which delegates to the chosen backend
 
 - Switching from Orama to Miyo should trigger a full reindex (force rebuild) because vectors move stores.
 - Switching back from Miyo to Orama should also trigger a full reindex to rebuild local Orama state.
-- Miyo can keep data in a single collection for now; Copilot will still pass `source_id` for future isolation.
+- Each vault should map to its own Miyo collection; Copilot passes `collection_name` on every request.
+- Collection name format: `{vault_name}_{md5(vault_path).slice(0, 3)}` (example: `my-vault_1bc`).
 
 ## Two-Phase Delivery Plan
 
