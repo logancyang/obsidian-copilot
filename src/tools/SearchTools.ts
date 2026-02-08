@@ -75,6 +75,15 @@ const localSearchSchema = z.object({
     })
     .optional()
     .describe("Optional time range filter. Use epoch milliseconds from getTimeRangeMs result."),
+  returnAll: z
+    .boolean()
+    .optional()
+    .describe(
+      "Set to true when the user wants ALL matching notes, not just the best few. " +
+        "Use for requests like 'find all my X', 'list every Y', 'show me all my Z', " +
+        "'how many notes about W'. Returns up to 100 results instead of default 30. " +
+        "Leave false/undefined for normal questions."
+    ),
   _preExpandedQuery: z
     .object({
       originalQuery: z.string(),
@@ -94,21 +103,23 @@ async function performLexicalSearch({
   salientTerms,
   forceLexical = false,
   preExpandedQuery,
+  explicitReturnAll = false,
 }: {
   timeRange?: { startTime: number; endTime: number };
   query: string;
   salientTerms: string[];
   forceLexical?: boolean;
   preExpandedQuery?: QueryExpansionInfo;
+  explicitReturnAll?: boolean;
 }) {
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
   const returnAll = timeRange !== undefined;
   const returnAllTags = tagTerms.length > 0;
-  const shouldReturnAll = returnAll || returnAllTags;
+  const shouldReturnAll = returnAll || returnAllTags || explicitReturnAll;
   const effectiveMaxK = shouldReturnAll ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
 
   logInfo(
-    `lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags}), forceLexical: ${forceLexical}`
+    `lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags}, explicit: ${explicitReturnAll}), forceLexical: ${forceLexical}`
   );
 
   // Convert QueryExpansionInfo to ExpandedQuery format (adding queries field)
@@ -220,9 +231,14 @@ const lexicalSearchTool = createLangChainTool({
   name: "lexicalSearch",
   description: "Search for notes using lexical/keyword-based search",
   schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll }) => {
     const timeRange = validateTimeRange(rawTimeRange);
-    return await performLexicalSearch({ timeRange, query, salientTerms });
+    return await performLexicalSearch({
+      timeRange,
+      query,
+      salientTerms,
+      explicitReturnAll: returnAll === true,
+    });
   },
 });
 
@@ -231,15 +247,15 @@ const semanticSearchTool = createLangChainTool({
   name: "semanticSearch",
   description: "Search for notes using semantic/meaning-based search with embeddings",
   schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll: explicitReturnAll }) => {
     const timeRange = validateTimeRange(rawTimeRange);
 
-    const returnAll = timeRange !== undefined;
+    const returnAll = timeRange !== undefined || explicitReturnAll === true;
     const effectiveMaxK = returnAll
       ? Math.max(DEFAULT_MAX_SOURCE_CHUNKS, 200)
       : DEFAULT_MAX_SOURCE_CHUNKS;
 
-    logInfo(`semanticSearch returnAll: ${returnAll}`);
+    logInfo(`semanticSearch returnAll: ${returnAll} (explicit: ${explicitReturnAll === true})`);
 
     // Always use HybridRetriever for semantic search
     const retriever = new (await import("@/search/hybridRetriever")).HybridRetriever({
@@ -337,7 +353,7 @@ const localSearchTool = createLangChainTool({
   description:
     "Search for notes in the vault based on query, salient terms, and optional time range",
   schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll, _preExpandedQuery }) => {
     // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
     const timeRange = validateTimeRange(rawTimeRange);
 
@@ -354,6 +370,7 @@ const localSearchTool = createLangChainTool({
         salientTerms,
         forceLexical: true,
         preExpandedQuery: _preExpandedQuery,
+        explicitReturnAll: returnAll === true,
       });
     }
 
@@ -367,6 +384,7 @@ const localSearchTool = createLangChainTool({
       query,
       salientTerms,
       preExpandedQuery: _preExpandedQuery,
+      explicitReturnAll: returnAll === true,
     });
   },
 });
