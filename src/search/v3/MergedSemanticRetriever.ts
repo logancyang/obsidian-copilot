@@ -1,7 +1,6 @@
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
-import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
@@ -84,16 +83,12 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * Retrieves relevant documents by combining semantic and lexical matches.
    *
    * @param query - User query string
-   * @param config - Optional LangChain callback configuration
    * @returns Array of merged and ranked Documents
    */
-  public async getRelevantDocuments(
-    query: string,
-    config?: BaseCallbackConfig
-  ): Promise<Document[]> {
+  public async getRelevantDocuments(query: string): Promise<Document[]> {
     const [lexicalDocs, semanticDocs] = await Promise.all([
-      this.lexicalRetriever.getRelevantDocuments(query, config),
-      this.semanticRetriever.getRelevantDocuments(query, config),
+      this.lexicalRetriever.getRelevantDocuments(query),
+      this.semanticRetriever.getRelevantDocuments(query),
     ]);
 
     const merged = new Map<string, Document>();
