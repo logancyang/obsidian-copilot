@@ -1,29 +1,17 @@
 // DEPRECATED: Legacy hybrid retriever backed by Orama. Replaced by v3 TieredLexicalRetriever + MemoryIndexManager.
-import { LLM_TIMEOUT_MS } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
-import ProjectManager from "@/LLMProviders/projectManager";
 import { logInfo } from "@/logger";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import {
-  extractNoteFiles,
-  removeThinkTags,
-  removeErrorTags,
-  withSuppressedTokenWarnings,
-  withTimeout,
-} from "@/utils";
-import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
+import { extractNoteFiles, withSuppressedTokenWarnings } from "@/utils";
 import { Document } from "@langchain/core/documents";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { search } from "@orama/orama";
 import { TFile } from "obsidian";
 
 export class HybridRetriever extends BaseRetriever {
   public lc_namespace = ["hybrid_retriever"];
-
-  private queryRewritePrompt: ChatPromptTemplate;
 
   constructor(
     private options: {
@@ -37,15 +25,9 @@ export class HybridRetriever extends BaseRetriever {
     }
   ) {
     super();
-    this.queryRewritePrompt = ChatPromptTemplate.fromTemplate(
-      "Please write a passage to answer the question. If you don't know the answer, just make up a passage. \nQuestion: {question}\nPassage:"
-    );
   }
 
-  public async getRelevantDocuments(
-    query: string,
-    config?: BaseCallbackConfig
-  ): Promise<Document[]> {
+  public async getRelevantDocuments(query: string): Promise<Document[]> {
     // Wrap the entire function in token warning suppression
     return withSuppressedTokenWarnings(async () => {
       // Extract note TFiles wrapped in [[]] from the query
@@ -57,15 +39,9 @@ export class HybridRetriever extends BaseRetriever {
 
       // Retrieve chunks for explicitly mentioned note files
       const explicitChunks = await this.getExplicitChunks(noteFiles);
-      let rewrittenQuery = query;
-      if (config?.runName !== "no_hyde") {
-        // Use config to determine if HyDE should be used
-        // Generate a hypothetical answer passage
-        rewrittenQuery = await this.rewriteQuery(query);
-      }
       // Pass enhanced salient terms to include titles
       const oramaChunks = await this.getOramaChunks(
-        rewrittenQuery,
+        query,
         enhancedSalientTerms,
         this.options.textWeight
       );
@@ -115,12 +91,6 @@ export class HybridRetriever extends BaseRetriever {
 
       if (getSettings().debug) {
         console.log("*** HYBRID RETRIEVER DEBUG INFO: ***");
-
-        if (config?.runName !== "no_hyde") {
-          console.log("\nOriginal Query: ", query);
-          console.log("Rewritten Query: ", rewrittenQuery);
-        }
-
         console.log("\nExplicit Chunks: ", explicitChunks);
         console.log("Orama Chunks: ", oramaChunks);
         console.log("Combined Chunks: ", combinedChunks);
@@ -134,36 +104,6 @@ export class HybridRetriever extends BaseRetriever {
 
       return finalChunks;
     });
-  }
-
-  private async rewriteQuery(query: string): Promise<string> {
-    try {
-      return await withTimeout(async () => {
-        const promptResult = await this.queryRewritePrompt.format({ question: query });
-
-        // Execute model invocation with warnings suppressed
-        const rewrittenQueryObject = await withSuppressedTokenWarnings(async () => {
-          // Use temperature=0 for deterministic HyDE query rewriting
-          const chatModel = await ProjectManager.instance
-            .getCurrentChainManager()
-            .chatModelManager.getChatModelWithTemperature(0);
-
-          return chatModel.invoke(promptResult);
-        });
-
-        // Process the result
-        if (rewrittenQueryObject && "content" in rewrittenQueryObject) {
-          const cleanedContent = removeThinkTags(rewrittenQueryObject.content as string);
-          return removeErrorTags(cleanedContent);
-        }
-
-        console.warn("Unexpected rewrittenQuery format. Falling back to original query.");
-        return query;
-      }, LLM_TIMEOUT_MS); // Timeout for HyDE query generation
-    } catch (error) {
-      console.error("Error in rewriteQuery:", error);
-      return query;
-    }
   }
 
   private async getExplicitChunks(noteFiles: TFile[]): Promise<Document[]> {
