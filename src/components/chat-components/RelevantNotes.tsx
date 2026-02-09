@@ -13,6 +13,7 @@ import {
   getSimilarityCategory,
   RelevantNoteEntry,
 } from "@/search/findRelevantNotes";
+import { onIndexChanged } from "@/search/indexSignal";
 import {
   ArrowRight,
   ChevronDown,
@@ -28,7 +29,10 @@ import React, { memo, useCallback, useEffect, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
+  const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
+
+  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
 
   useEffect(() => {
     async function fetchNotes() {
@@ -50,13 +54,17 @@ function useRelevantNotes(refresher: number) {
     }
 
     fetchNotes();
-  }, [activeFile?.path, refresher]);
+  }, [activeFile?.path, refresher, signalTick]);
 
   return relevantNotes;
 }
 
 function useHasIndex(notePath: string, refresher: number) {
   const [hasIndex, setHasIndex] = useState(true);
+  const [signalTick, setSignalTick] = useState(0);
+
+  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
+
   useEffect(() => {
     if (!notePath) return;
 
@@ -71,7 +79,7 @@ function useHasIndex(notePath: string, refresher: number) {
     }
 
     fetchHasIndex();
-  }, [notePath, refresher]);
+  }, [notePath, refresher, signalTick]);
   return hasIndex;
 }
 
@@ -312,20 +320,26 @@ export const RelevantNotes = memo(
             <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
               <span className="tw-font-semibold tw-text-normal">Relevant Notes</span>
               <HelpTooltip
-                content="Relevance is a combination of semantic similarity and links."
+                content="Relevance is a combination of semantic similarity and links. Requires semantic search setting on."
                 contentClassName="tw-w-64"
                 buttonClassName="tw-size-4 tw-text-muted"
               />
             </div>
             <div className="tw-flex tw-items-center">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost2" size="icon" onClick={refreshIndex}>
-                    <RefreshCcw className="tw-size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
-              </Tooltip>
+              {hasIndex ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost2" size="icon" onClick={refreshIndex}>
+                      <RefreshCcw className="tw-size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={handleBuildIndex}>
+                  Build Index
+                </Button>
+              )}
               {relevantNotes.length > 0 && (
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost2" size="icon">
@@ -339,15 +353,9 @@ export const RelevantNotes = memo(
               )}
             </div>
           </div>
-          {relevantNotes.length === 0 && (
+          {relevantNotes.length === 0 && hasIndex && (
             <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-items-center tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
-              {!hasIndex ? (
-                <Button variant="secondary" size="sm" onClick={handleBuildIndex}>
-                  Build Index
-                </Button>
-              ) : (
-                <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
-              )}
+              <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (
