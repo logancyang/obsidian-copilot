@@ -12,6 +12,7 @@ import type {
   SemanticIndexDocument,
 } from "./indexBackend/SemanticIndexBackend";
 import { IndexEventHandler } from "./indexEventHandler";
+import { notifyIndexChanged } from "./indexSignal";
 import { IndexOperations } from "./indexOperations";
 
 export default class VectorStoreManager {
@@ -110,12 +111,15 @@ export default class VectorStoreManager {
       new Notice("Indexing is disabled on mobile devices");
       return 0;
     }
-    return this.indexOps.indexVaultToVectorStore(overwrite);
+    const count = await this.indexOps.indexVaultToVectorStore(overwrite);
+    notifyIndexChanged();
+    return count;
   }
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
     await this.indexBackend.clearIndex(await this.embeddingsManager.getEmbeddingsAPI());
+    notifyIndexChanged();
   }
 
   public async garbageCollectVectorStore(): Promise<number> {
@@ -171,5 +175,6 @@ export default class VectorStoreManager {
   public async reindexFile(file: TFile): Promise<void> {
     await this.waitForInitialization();
     await this.indexOps.reindexFile(file);
+    notifyIndexChanged();
   }
 }

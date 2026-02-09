@@ -7,11 +7,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { cn } from "@/lib/utils";
+import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
 import {
   findRelevantNotes,
   getSimilarityCategory,
   RelevantNoteEntry,
 } from "@/search/findRelevantNotes";
+import { onIndexChanged } from "@/search/indexSignal";
 import {
   ArrowRight,
   ChevronDown,
@@ -21,14 +23,16 @@ import {
   FileOutput,
   PlusCircle,
   RefreshCcw,
-  TriangleAlert,
 } from "lucide-react";
 import { Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
+  const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
+
+  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
 
   useEffect(() => {
     async function fetchNotes() {
@@ -50,13 +54,17 @@ function useRelevantNotes(refresher: number) {
     }
 
     fetchNotes();
-  }, [activeFile?.path, refresher]);
+  }, [activeFile?.path, refresher, signalTick]);
 
   return relevantNotes;
 }
 
 function useHasIndex(notePath: string, refresher: number) {
   const [hasIndex, setHasIndex] = useState(true);
+  const [signalTick, setSignalTick] = useState(0);
+
+  useEffect(() => onIndexChanged(() => setSignalTick((t) => t + 1)), []);
+
   useEffect(() => {
     if (!notePath) return;
 
@@ -71,7 +79,7 @@ function useHasIndex(notePath: string, refresher: number) {
     }
 
     fetchHasIndex();
-  }, [notePath, refresher]);
+  }, [notePath, refresher, signalTick]);
   return hasIndex;
 }
 
@@ -274,7 +282,31 @@ export const RelevantNotes = memo(
         setRefresher(refresher + 1);
       }
     };
-    // Show the UI even without an index so users can build/refresh it
+
+    const handleBuildIndex = async () => {
+      const { getSettings, updateSetting } = await import("@/settings/model");
+      const settings = getSettings();
+
+      if (!settings.enableSemanticSearchV3) {
+        // Semantic search is off — show confirmation modal (same as settings page)
+        new SemanticSearchToggleModal(
+          app,
+          async () => {
+            updateSetting("enableSemanticSearchV3", true);
+            const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+            await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+            setRefresher(refresher + 1);
+          },
+          true // enabling
+        ).open();
+      } else {
+        // Semantic search is on but index missing — build it
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+        new Notice("Semantic search index built.");
+        setRefresher(refresher + 1);
+      }
+    };
 
     return (
       <div
@@ -288,26 +320,26 @@ export const RelevantNotes = memo(
             <div className="tw-flex tw-flex-1 tw-items-center tw-gap-2">
               <span className="tw-font-semibold tw-text-normal">Relevant Notes</span>
               <HelpTooltip
-                content="Relevance is a combination of semantic similarity and links."
+                content="Relevance is a combination of semantic similarity and links. Requires semantic search setting on."
                 contentClassName="tw-w-64"
                 buttonClassName="tw-size-4 tw-text-muted"
               />
-
-              {!hasIndex && (
-                <HelpTooltip content="Note has not been indexed" side="bottom">
-                  <TriangleAlert className="tw-size-4 tw-text-warning" />
-                </HelpTooltip>
-              )}
             </div>
             <div className="tw-flex tw-items-center">
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="ghost2" size="icon" onClick={refreshIndex}>
-                    <RefreshCcw className="tw-size-4" />
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
-              </Tooltip>
+              {hasIndex ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="ghost2" size="icon" onClick={refreshIndex}>
+                      <RefreshCcw className="tw-size-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button variant="secondary" size="sm" onClick={handleBuildIndex}>
+                  Build Index
+                </Button>
+              )}
               {relevantNotes.length > 0 && (
                 <CollapsibleTrigger asChild>
                   <Button variant="ghost2" size="icon">
@@ -321,13 +353,9 @@ export const RelevantNotes = memo(
               )}
             </div>
           </div>
-          {relevantNotes.length === 0 && (
-            <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
-              <span className="tw-text-xs tw-text-muted">
-                {!hasIndex
-                  ? "No index available. Click refresh to build index."
-                  : "No relevant notes found"}
-              </span>
+          {relevantNotes.length === 0 && hasIndex && (
+            <div className="tw-flex tw-max-h-12 tw-flex-wrap tw-items-center tw-gap-x-2 tw-gap-y-1 tw-overflow-y-hidden tw-px-1">
+              <span className="tw-text-xs tw-text-muted">No relevant notes found</span>
             </div>
           )}
           {!isOpen && relevantNotes.length > 0 && (
