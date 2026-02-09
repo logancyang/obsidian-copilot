@@ -57,10 +57,13 @@ const SELF_HOST_ELIGIBLE_PLANS = ["believer", "supporter"];
 
 /**
  * Check if self-host mode is valid.
- * Valid if: permanently validated (3+ successful checks) OR within 15-day grace period.
+ * Requires license key + toggle enabled + (permanent validation OR within grace period).
  */
 export function isSelfHostModeValid(): boolean {
   const settings = getSettings();
+  if (!settings.plusLicenseKey) {
+    return false;
+  }
   if (!settings.enableSelfHostMode || settings.selfHostModeValidatedAt == null) {
     return false;
   }
@@ -97,8 +100,12 @@ export function isPlusEnabled(): boolean {
  */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
-  // Self-host mode with valid plan validation bypasses Plus requirements
-  if (settings.enableSelfHostMode && settings.selfHostModeValidatedAt != null) {
+  // Self-host mode with valid plan validation bypasses Plus requirements (requires license key)
+  if (
+    settings.plusLicenseKey &&
+    settings.enableSelfHostMode &&
+    settings.selfHostModeValidatedAt != null
+  ) {
     // Permanently valid after 3 successful validations
     if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
       return true;
@@ -146,44 +153,52 @@ export async function isSelfHostEligiblePlan(): Promise<boolean> {
  * Hook to check if user should see the self-host mode settings section.
  * Returns undefined while loading, boolean once checked.
  *
- * Eligibility rules (checked in order):
- * 1. Permanent validation (count >= 3): Always show (offline-safe, toggle-independent)
- * 2. Within 15-day grace period: Always show (offline-safe, toggle-independent)
- * 3. Has license key: Check via API (requires online)
- * 4. No license key: Hide section
- *
- * This allows offline re-enable for users who previously validated.
- * If grace period expires while offline, user must go online to revalidate.
+ * Eligibility rules:
+ * 1. No license key: Not eligible (immediately revokes access)
+ * 2. Has license key: Verify via API (handles key changes, e.g. believer → plus)
+ *    - API success: Use result (revoke self-host mode if not eligible)
+ *    - API failure (offline): Fall back to cached validation
+ *      (permanent count >= 3 OR within 15-day grace period)
  */
 export function useIsSelfHostEligible(): boolean | undefined {
   const settings = useSettingsValue();
   const [isEligible, setIsEligible] = React.useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
-    // Permanently validated users can always see the section (even if toggle is off, offline)
-    if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
-      setIsEligible(true);
-      return;
-    }
-
-    // Users within grace period can see the section (supports offline re-enable)
-    if (
-      settings.selfHostModeValidatedAt != null &&
-      Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS
-    ) {
-      setIsEligible(true);
-      return;
-    }
-
+    // No license key = not eligible, regardless of cached validation state.
+    // Also force self-host mode OFF so the toggle reflects the revoked state.
     if (!settings.plusLicenseKey) {
+      if (settings.enableSelfHostMode) {
+        updateSetting("enableSelfHostMode", false);
+      }
       setIsEligible(false);
       return;
     }
 
-    // Check via API for users who haven't enabled self-host mode yet
+    // Has license key - always verify via API to handle key changes (e.g. believer → plus).
+    // Fall back to cached validation only when offline.
     isSelfHostEligiblePlan()
-      .then(setIsEligible)
-      .catch(() => setIsEligible(false));
+      .then((eligible) => {
+        if (!eligible && settings.enableSelfHostMode) {
+          updateSetting("enableSelfHostMode", false);
+        }
+        setIsEligible(eligible);
+      })
+      .catch(() => {
+        // Offline fallback: trust cached validation state
+        if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
+          setIsEligible(true);
+          return;
+        }
+        if (
+          settings.selfHostModeValidatedAt != null &&
+          Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS
+        ) {
+          setIsEligible(true);
+          return;
+        }
+        setIsEligible(false);
+      });
   }, [
     settings.plusLicenseKey,
     settings.enableSelfHostMode,
