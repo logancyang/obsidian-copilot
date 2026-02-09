@@ -57,10 +57,13 @@ const SELF_HOST_ELIGIBLE_PLANS = ["believer", "supporter"];
 
 /**
  * Check if self-host mode is valid.
- * Valid if: permanently validated (3+ successful checks) OR within 15-day grace period.
+ * Requires license key + toggle enabled + (permanent validation OR within grace period).
  */
 export function isSelfHostModeValid(): boolean {
   const settings = getSettings();
+  if (!settings.plusLicenseKey) {
+    return false;
+  }
   if (!settings.enableSelfHostMode || settings.selfHostModeValidatedAt == null) {
     return false;
   }
@@ -97,8 +100,12 @@ export function isPlusEnabled(): boolean {
  */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
-  // Self-host mode with valid plan validation bypasses Plus requirements
-  if (settings.enableSelfHostMode && settings.selfHostModeValidatedAt != null) {
+  // Self-host mode with valid plan validation bypasses Plus requirements (requires license key)
+  if (
+    settings.plusLicenseKey &&
+    settings.enableSelfHostMode &&
+    settings.selfHostModeValidatedAt != null
+  ) {
     // Permanently valid after 3 successful validations
     if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
       return true;
@@ -147,19 +154,29 @@ export async function isSelfHostEligiblePlan(): Promise<boolean> {
  * Returns undefined while loading, boolean once checked.
  *
  * Eligibility rules (checked in order):
- * 1. Permanent validation (count >= 3): Always show (offline-safe, toggle-independent)
- * 2. Within 15-day grace period: Always show (offline-safe, toggle-independent)
- * 3. Has license key: Check via API (requires online)
- * 4. No license key: Hide section
+ * 1. No license key: Not eligible (removing key immediately revokes access)
+ * 2. Permanent validation (count >= 3): Eligible (offline-safe, toggle-independent)
+ * 3. Within 15-day grace period: Eligible (offline-safe, toggle-independent)
+ * 4. Has license key: Check via API (requires online)
  *
- * This allows offline re-enable for users who previously validated.
- * If grace period expires while offline, user must go online to revalidate.
+ * License key presence is checked first so that removing the key
+ * immediately disables access, even with prior grace/permanent validation.
  */
 export function useIsSelfHostEligible(): boolean | undefined {
   const settings = useSettingsValue();
   const [isEligible, setIsEligible] = React.useState<boolean | undefined>(undefined);
 
   React.useEffect(() => {
+    // No license key = not eligible, regardless of grace period or permanent validation.
+    // Also force self-host mode OFF so the toggle reflects the revoked state.
+    if (!settings.plusLicenseKey) {
+      if (settings.enableSelfHostMode) {
+        updateSetting("enableSelfHostMode", false);
+      }
+      setIsEligible(false);
+      return;
+    }
+
     // Permanently validated users can always see the section (even if toggle is off, offline)
     if (settings.selfHostValidationCount >= SELF_HOST_PERMANENT_VALIDATION_COUNT) {
       setIsEligible(true);
@@ -172,11 +189,6 @@ export function useIsSelfHostEligible(): boolean | undefined {
       Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS
     ) {
       setIsEligible(true);
-      return;
-    }
-
-    if (!settings.plusLicenseKey) {
-      setIsEligible(false);
       return;
     }
 
