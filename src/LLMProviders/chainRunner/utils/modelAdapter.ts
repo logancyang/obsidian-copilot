@@ -401,7 +401,8 @@ class ClaudeModelAdapter extends BaseModelAdapter {
       this.modelName.includes("claude-3-7-sonnet") ||
       this.modelName.includes("claude-sonnet-4") ||
       this.modelName.includes("claude-3.7-sonnet") ||
-      this.modelName.includes("claude-4-sonnet")
+      this.modelName.includes("claude-4-sonnet") ||
+      this.modelName.includes("claude-opus-4")
     );
   }
 
