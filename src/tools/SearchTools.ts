@@ -243,8 +243,8 @@ async function performLexicalSearch({
     .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
     .filter(Boolean);
 
-  // Combine: filter results first, then deduped search results
-  const allDocs = [...taggedFilterResults, ...dedupedSearchDocs];
+  // Combine: filter results first, then deduped search results (capped to prevent oversized payloads)
+  const allDocs = [...taggedFilterResults, ...dedupedSearchDocs].slice(0, effectiveMaxK);
 
   return { type: "local_search", documents: allDocs, queryExpansion };
 }

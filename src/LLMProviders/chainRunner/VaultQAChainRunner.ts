@@ -125,7 +125,9 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Step 5c: Retrieve search results and merge with filter results
       const searchDocs = await retriever.getRelevantDocuments(standaloneQuestion);
       const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
-      const retrievedDocs = [...filterResults, ...searchResults];
+      // Cap total docs to prevent oversized prompts (filter results prioritized)
+      const merged = [...filterResults, ...searchResults];
+      const retrievedDocs = merged.slice(0, DEFAULT_MAX_SOURCE_CHUNKS);
 
       // Store retrieved documents for sources
       this.chainManager.storeRetrieverDocuments(retrievedDocs);
