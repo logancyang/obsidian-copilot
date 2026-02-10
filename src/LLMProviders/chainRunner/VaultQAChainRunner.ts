@@ -127,6 +127,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
       // Cap total docs to prevent oversized prompts (filter results prioritized)
       const merged = [...filterResults, ...searchResults];
+      const retrieverCapReached = merged.length > DEFAULT_MAX_SOURCE_CHUNKS;
       const retrievedDocs = merged.slice(0, DEFAULT_MAX_SOURCE_CHUNKS);
 
       // Store retrieved documents for sources
@@ -156,10 +157,15 @@ export class VaultQAChainRunner extends BaseChainRunner {
         }));
       const sourceCatalog = formatSourceCatalog(sourceEntries).join("\n");
 
+      const capNotice = retrieverCapReached
+        ? `\n\nIMPORTANT: The retrieval limit of ${DEFAULT_MAX_SOURCE_CHUNKS} documents was reached. ${merged.length - DEFAULT_MAX_SOURCE_CHUNKS} additional matching documents were omitted. Inform the user: "Note: The retrieval cap was reached — some matching documents were not included. Upgrade to Copilot Plus for more complete answers."`
+        : "";
+
       const qaInstructions =
         "\n\nAnswer the question based only on the following context:\n" +
         context +
-        getQACitationInstructions(sourceCatalog, settings.enableInlineCitations);
+        getQACitationInstructions(sourceCatalog, settings.enableInlineCitations) +
+        capNotice;
 
       // Build messages using envelope-based context construction
       logInfo("[VaultQA] Using envelope-based context construction with LayerToMessagesConverter");
