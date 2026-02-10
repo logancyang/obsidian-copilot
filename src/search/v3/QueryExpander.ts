@@ -4,7 +4,6 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
 import { withSuppressedTokenWarnings, withTimeout } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
-import { FuzzyMatcher } from "./utils/FuzzyMatcher";
 
 export interface QueryExpanderOptions {
   maxVariants?: number;
@@ -245,9 +244,9 @@ Format:
     // Check if content has any XML structure (queries or terms)
     const hasXMLContent = queries.length > 1 || salientFromLLM.size > 0 || /<term>/.test(content);
 
-    // If no XML tags found at all, try legacy parsing
+    // If no XML tags found at all, fall back to extracting from original query
     if (!hasXMLContent) {
-      return this.parseLegacyFormat(content, originalQuery);
+      return this.fallbackExpansion(originalQuery);
     }
 
     // Salient terms: from LLM's <salient> section, or fallback to extracting from original query
@@ -267,108 +266,21 @@ Format:
   }
 
   /**
-   * Parses legacy non-XML format responses for backward compatibility.
-   * @param content - The LLM response content
-   * @param originalQuery - The original query
-   * @returns Parsed expanded queries and salient terms
-   */
-  private parseLegacyFormat(content: string, originalQuery: string): ExpandedQuery {
-    // Fallback parser for non-XML responses
-    const lines = content.split("\n").map((line) => line.trim());
-    const queries: string[] = [originalQuery];
-
-    let section: "queries" | "terms" | null = null;
-
-    for (const line of lines) {
-      if (!line || line === "") continue;
-
-      // Detect section headers
-      if (line.toUpperCase().includes("QUERIES")) {
-        section = "queries";
-        continue;
-      }
-      if (line.toUpperCase().includes("TERMS") || line.toUpperCase().includes("KEYWORDS")) {
-        section = "terms";
-        continue;
-      }
-
-      // Parse content based on current section (only queries are used now)
-      if (section === "queries" && queries.length <= this.config.maxVariants) {
-        const cleanQuery = line.replace(/^[-•*\d.)\s]+/, "").trim();
-        if (cleanQuery && cleanQuery !== originalQuery) {
-          queries.push(cleanQuery);
-        }
-      }
-    }
-
-    // If no sections found, treat lines as queries
-    if (queries.length === 1) {
-      for (const line of lines.slice(0, this.config.maxVariants)) {
-        if (line && !line.toUpperCase().includes("QUERY")) {
-          queries.push(line);
-        }
-      }
-    }
-
-    // Salient terms must come from original query only (for ranking)
-    const salientTerms = this.extractSalientTermsFromOriginal(originalQuery);
-
-    const expandedQueries = queries.slice(1);
-    return {
-      queries: queries.slice(0, this.config.maxVariants + 1),
-      salientTerms: salientTerms,
-      originalQuery: originalQuery,
-      expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
-    };
-  }
-
-  /**
    * Provides a fallback expansion when LLM is unavailable or fails.
    * Extracts terms directly from the original query and generates fuzzy variants.
    * @param query - The original query
    * @returns Fallback expansion with original query, fuzzy variants, and extracted terms
    */
   private fallbackExpansion(query: string): ExpandedQuery {
-    // Extract terms from the original query
     const baseTerms = this.extractTermsFromQueries([query]);
     const tagTerms = extractTagsFromQuery(query);
     const terms = this.combineBaseAndTagTerms(baseTerms, tagTerms, query);
 
-    // Generate fuzzy variants for important terms
-    const queries = new Set<string>([query]);
-
-    // Generate variants for each salient term
-    for (const term of terms) {
-      if (term.startsWith("#")) {
-        // Skip fuzzing tag tokens; tags must remain intact
-        continue;
-      }
-      if (term.length >= 3) {
-        // Only generate variants for meaningful terms
-        const variants = FuzzyMatcher.generateVariants(term);
-        // Add query with each variant substituted
-        for (const variant of variants.slice(0, 3)) {
-          // Limit variants per term
-          if (variant !== term) {
-            const fuzzyQuery = query
-              .toLowerCase()
-              .replace(new RegExp(`\\b${term}\\b`, "gi"), variant);
-            if (fuzzyQuery !== query.toLowerCase()) {
-              queries.add(fuzzyQuery);
-            }
-          }
-        }
-      }
-    }
-
-    // Limit total number of queries: keep only the original to satisfy strict fallback tests
-    const queryArray = [query];
-
     return {
-      queries: queryArray,
+      queries: [query],
       salientTerms: terms,
       originalQuery: query,
-      expandedQueries: [], // No expansion in fallback
+      expandedQueries: [],
     };
   }
 
@@ -586,16 +498,5 @@ Format:
    */
   getCacheSize(): number {
     return this.cache.size;
-  }
-
-  /**
-   * Backward compatibility method that returns only expanded queries.
-   * @deprecated Use expand() instead for both queries and terms
-   * @param query - The query to expand
-   * @returns Array of expanded query strings
-   */
-  async expandQueries(query: string): Promise<string[]> {
-    const result = await this.expand(query);
-    return result.queries;
   }
 }

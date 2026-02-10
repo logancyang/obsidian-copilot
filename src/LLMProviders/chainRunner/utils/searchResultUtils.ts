@@ -292,15 +292,7 @@ export function formatSplitSearchResultsForLLM(
         const title = doc.title || "Untitled";
         const path = doc.path || "";
         const matchType = doc.matchType || doc.source || "filter";
-        const content = doc.content || "";
-
-        let modified: string | null = null;
-        if (doc.mtime) {
-          const date = new Date(doc.mtime);
-          if (!isNaN(date.getTime())) {
-            modified = date.toISOString();
-          }
-        }
+        const modified = toIsoString(doc.mtime);
 
         return `<document>
 <id>${id}</id>
@@ -308,7 +300,7 @@ export function formatSplitSearchResultsForLLM(
 <path>${path}</path>
 <matchType>${matchType}</matchType>${modified ? `\n<modified>${modified}</modified>` : ""}
 <content>
-${content}
+${doc.content || ""}
 </content>
 </document>`;
       })
@@ -324,16 +316,7 @@ ${content}
         const id = (doc as any).__sourceId || currentId++;
         const title = doc.title || "Untitled";
         const path = doc.path || "";
-
-        let modified: string | null = null;
-        if (doc.mtime) {
-          const date = new Date(doc.mtime);
-          if (!isNaN(date.getTime())) {
-            modified = date.toISOString();
-          }
-        }
-
-        const content = doc.content || "";
+        const modified = toIsoString(doc.mtime);
 
         return `<document>
 <id>${id}</id>
@@ -349,7 +332,7 @@ ${content}
             : ""
         }
 <content>
-${content}
+${doc.content || ""}
 </content>
 </document>`;
       })

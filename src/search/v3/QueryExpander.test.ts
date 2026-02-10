@@ -329,6 +329,21 @@ describe("QueryExpander", () => {
       expect(result.salientTerms).not.toContain("notation");
     });
 
+    it("should fallback when LLM responds with non-XML format", async () => {
+      // LLM responds with plain text instead of XML — should fall back to extracting from original
+      mockChatModel.invoke.mockResolvedValue({
+        content: `Some plain text response without XML tags`,
+      });
+
+      const result = await expander.expand("typescript interfaces");
+
+      // Should fall back: original query only, terms extracted from original
+      expect(result.queries).toEqual(["typescript interfaces"]);
+      expect(result.expandedQueries).toEqual([]);
+      expect(result.salientTerms).toContain("typescript");
+      expect(result.salientTerms).toContain("interfaces");
+    });
+
     it("should handle malformed LLM responses", async () => {
       // Test with null response
       mockChatModel.invoke.mockResolvedValue(null);
@@ -384,7 +399,9 @@ describe("QueryExpander", () => {
 
       mockChatModel.invoke.mockImplementation((prompt: string) => {
         const query = prompt.match(/"([^"]+)"/)?.[1] || "";
-        return { content: `QUERIES:\n- ${query}_variant` };
+        return {
+          content: `<queries><query>${query}_variant</query></queries><terms><term>${query}</term></terms>`,
+        };
       });
 
       await expander.expand("query1");
@@ -416,12 +433,14 @@ describe("QueryExpander", () => {
       });
 
       mockChatModel.invoke.mockResolvedValue({
-        content: `QUERIES:
-- v1
-- v2
-- v3
-- v4
-- v5`,
+        content: `<queries>
+<query>v1</query>
+<query>v2</query>
+<query>v3</query>
+<query>v4</query>
+<query>v5</query>
+</queries>
+<terms><term>test</term></terms>`,
       });
 
       const result = await expander.expand("test");
@@ -433,21 +452,6 @@ describe("QueryExpander", () => {
         getChatModel: async () => mockChatModel,
       });
       expect(expander.getCacheSize()).toBe(0);
-    });
-  });
-
-  describe("backward compatibility", () => {
-    it("should support expandQueries method", async () => {
-      mockChatModel.invoke.mockResolvedValue({
-        content: `QUERIES:
-- variant1
-- variant2`,
-      });
-
-      const queries = await expander.expandQueries("test");
-      expect(queries).toContain("test");
-      expect(queries).toContain("variant1");
-      expect(queries).toContain("variant2");
     });
   });
 });

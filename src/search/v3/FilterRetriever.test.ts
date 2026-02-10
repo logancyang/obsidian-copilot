@@ -149,6 +149,70 @@ describe("FilterRetriever", () => {
       const results = await retriever.getRelevantDocuments("a query without tags");
       expect(results.length).toBe(0);
     });
+
+    it("should cap tag matches at maxK when returnAll is false", async () => {
+      const obsidianMock = jest.requireMock("obsidian");
+
+      // Create 10 files all matching the tag, but set maxK to 3
+      const files = Array.from({ length: 10 }, (_, i) => {
+        const f = new (TFile as any)(`note${i}.md`);
+        Object.setPrototypeOf(f, (TFile as any).prototype);
+        f.path = `note${i}.md`;
+        f.basename = `note${i}`;
+        f.stat = { mtime: 1000 + i, ctime: 500 };
+        return f;
+      });
+
+      mockApp.vault.getMarkdownFiles.mockReturnValue(files);
+      mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [{ tag: "#daily" }] });
+      obsidianMock.getAllTags.mockImplementation((cache: any) => {
+        if (!cache?.tags) return [];
+        return cache.tags.map((t: any) => t.tag);
+      });
+      mockApp.vault.cachedRead.mockResolvedValue("Content");
+
+      const retriever = new FilterRetriever(mockApp, {
+        salientTerms: ["#daily"],
+        maxK: 3,
+      });
+
+      const results = await retriever.getRelevantDocuments("#daily");
+      expect(results.length).toBe(3);
+    });
+
+    it("should use RETURN_ALL_LIMIT when returnAll is true (tag queries need expanded limits)", async () => {
+      const obsidianMock = jest.requireMock("obsidian");
+
+      // Create 40 files all matching the tag, set maxK to 3 but returnAll to true
+      const files = Array.from({ length: 40 }, (_, i) => {
+        const f = new (TFile as any)(`note${i}.md`);
+        Object.setPrototypeOf(f, (TFile as any).prototype);
+        f.path = `note${i}.md`;
+        f.basename = `note${i}`;
+        f.stat = { mtime: 1000 + i, ctime: 500 };
+        return f;
+      });
+
+      mockApp.vault.getMarkdownFiles.mockReturnValue(files);
+      mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [{ tag: "#daily" }] });
+      obsidianMock.getAllTags.mockImplementation((cache: any) => {
+        if (!cache?.tags) return [];
+        return cache.tags.map((t: any) => t.tag);
+      });
+      mockApp.vault.cachedRead.mockResolvedValue("Content");
+
+      const retriever = new FilterRetriever(mockApp, {
+        salientTerms: ["#daily"],
+        maxK: 3,
+        returnAll: true,
+      });
+
+      const results = await retriever.getRelevantDocuments("#daily");
+      // With returnAll: true, should get all 40 (well under RETURN_ALL_LIMIT of 100)
+      expect(results.length).toBe(40);
+      // And definitely more than maxK of 3
+      expect(results.length).toBeGreaterThan(3);
+    });
   });
 
   describe("deduplication", () => {
