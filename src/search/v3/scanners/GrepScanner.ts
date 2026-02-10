@@ -134,25 +134,18 @@ export class GrepScanner {
 
   /**
    * Determines if a term is specific enough for grep matching.
-   * Short ASCII terms like "na" or "an" match too many file paths, causing performance issues.
-   * CJK characters are semantically dense, so shorter terms are acceptable.
+   * Single-character terms are always noise. For 2+ characters, CJK is always
+   * allowed and ASCII is allowed since short terms like "ai", "ml", "ui" are
+   * common meaningful searches. The real noise filter is single-char terms.
    *
    * @param term - Lowercased search term
    * @returns true if the term is worth including in grep queries
    */
   private isGrepWorthy(term: string): boolean {
-    if (!term || term.length === 0) {
+    if (!term || term.length <= 1) {
       return false;
     }
-
-    // CJK characters are semantically dense — allow 2+ character terms
-    const cjkPattern = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
-    if (cjkPattern.test(term)) {
-      return term.length >= 2;
-    }
-
-    // ASCII-only terms: require 3+ characters to avoid matching too many paths
-    return term.length >= 3;
+    return true;
   }
 
   /**
