@@ -10,6 +10,8 @@ import { createLangChainTool } from "./createLangChainTool";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import { FilterRetriever } from "@/search/v3/FilterRetriever";
+import { mergeFilterAndSearchResults } from "@/search/v3/mergeResults";
 
 /**
  * Query expansion data returned with search results.
@@ -131,94 +133,133 @@ async function performLexicalSearch({
   // Extract tag terms for self-host retriever (server-side tag filtering)
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
 
-  const retrieverOptions = {
-    minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
-    maxK: effectiveMaxK,
+  // --- Step 1: Run FilterRetriever (always) ---
+  const filterRetriever = new FilterRetriever(app, {
     salientTerms,
     timeRange,
-    textWeight: TEXT_WEIGHT,
-    returnAll,
-    useRerankerThreshold: 0.5,
-    tagTerms, // Used by SelfHostRetriever for server-side tag filtering
-    preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
-  };
+    maxK: effectiveMaxK,
+    returnAll: shouldReturnAll,
+  });
 
-  // If forceLexical is true, bypass the factory and use lexical retriever directly
-  // This ensures time-range and tag filtering works correctly
-  let retriever;
-  let retrieverType: string;
-  if (forceLexical) {
-    retriever = RetrieverFactory.createLexicalRetriever(app, retrieverOptions);
-    retrieverType = "lexical (forced)";
-  } else {
-    const retrieverResult = await RetrieverFactory.createRetriever(app, retrieverOptions);
-    retriever = retrieverResult.retriever;
-    retrieverType = retrieverResult.type;
-  }
+  const filterDocs = await filterRetriever.getRelevantDocuments(query);
 
-  logInfo(`lexicalSearch using ${retrieverType} retriever`);
-  const documents = await retriever.getRelevantDocuments(query);
+  logInfo(`lexicalSearch filterRetriever returned ${filterDocs.length} filter docs`);
 
-  // Extract query expansion from the lexical retriever if available
+  // --- Step 2: Run main retriever (skip if time range — filter results are the complete set) ---
+  let searchDocs: import("@langchain/core/documents").Document[] = [];
   let queryExpansion: QueryExpansionInfo | undefined;
-  if (retriever instanceof TieredLexicalRetriever) {
-    const expansion = retriever.getLastQueryExpansion();
-    if (expansion) {
-      queryExpansion = {
-        originalQuery: expansion.originalQuery,
-        salientTerms: expansion.salientTerms,
-        expandedQueries: expansion.expandedQueries,
-        recallTerms: computeRecallTerms(expansion),
-      };
+
+  if (!filterRetriever.hasTimeRange()) {
+    const retrieverOptions = {
+      minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
+      maxK: effectiveMaxK,
+      salientTerms,
+      textWeight: TEXT_WEIGHT,
+      returnAll,
+      useRerankerThreshold: 0.5,
+      tagTerms, // Used by SelfHostRetriever for server-side tag filtering
+      preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
+    };
+
+    let retriever;
+    let retrieverType: string;
+    if (forceLexical) {
+      retriever = RetrieverFactory.createLexicalRetriever(app, retrieverOptions);
+      retrieverType = "lexical (forced)";
+    } else {
+      const retrieverResult = await RetrieverFactory.createRetriever(app, retrieverOptions);
+      retriever = retrieverResult.retriever;
+      retrieverType = retrieverResult.type;
+    }
+
+    logInfo(`lexicalSearch using ${retrieverType} retriever`);
+    searchDocs = await retriever.getRelevantDocuments(query);
+
+    // Extract query expansion from the lexical retriever if available
+    if (retriever instanceof TieredLexicalRetriever) {
+      const expansion = retriever.getLastQueryExpansion();
+      if (expansion) {
+        queryExpansion = {
+          originalQuery: expansion.originalQuery,
+          salientTerms: expansion.salientTerms,
+          expandedQueries: expansion.expandedQueries,
+          recallTerms: computeRecallTerms(expansion),
+        };
+      }
     }
   }
 
-  logInfo(`lexicalSearch found ${documents.length} documents for query: "${query}"`);
+  // --- Step 3: Merge filter + search results ---
+  const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
+
+  // Tag each result with isFilterResult and matchType
+  const taggedFilterResults = filterResults.map((doc) => ({
+    title: doc.metadata.title || "Untitled",
+    content: doc.pageContent,
+    path: doc.metadata.path || "",
+    score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
+    rerank_score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
+    includeInContext: doc.metadata.includeInContext ?? true,
+    source: doc.metadata.source,
+    mtime: doc.metadata.mtime ?? null,
+    ctime: doc.metadata.ctime ?? null,
+    chunkId: (doc.metadata as any).chunkId ?? null,
+    isChunk: (doc.metadata as any).isChunk ?? false,
+    explanation: doc.metadata.explanation ?? null,
+    isFilterResult: true,
+    matchType: doc.metadata.source || "filter",
+  }));
+
+  const taggedSearchResults = searchResults.map((doc) => ({
+    title: doc.metadata.title || "Untitled",
+    content: doc.pageContent,
+    path: doc.metadata.path || "",
+    score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
+    rerank_score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
+    includeInContext: doc.metadata.includeInContext ?? true,
+    source: doc.metadata.source,
+    mtime: doc.metadata.mtime ?? null,
+    ctime: doc.metadata.ctime ?? null,
+    chunkId: (doc.metadata as any).chunkId ?? null,
+    isChunk: (doc.metadata as any).isChunk ?? false,
+    explanation: doc.metadata.explanation ?? null,
+    isFilterResult: false,
+    matchType: undefined as string | undefined,
+  }));
+
+  logInfo(
+    `lexicalSearch found ${taggedFilterResults.length} filter + ${taggedSearchResults.length} search documents for query: "${query}"`
+  );
   if (timeRange) {
     logInfo(
       `Time range search from ${new Date(timeRange.startTime).toISOString()} to ${new Date(timeRange.endTime).toISOString()}`
     );
   }
 
-  const formattedResults = documents.map((doc) => {
-    const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
-    return {
-      title: doc.metadata.title || "Untitled",
-      content: doc.pageContent,
-      path: doc.metadata.path || "",
-      score: scored,
-      rerank_score: scored,
-      includeInContext: doc.metadata.includeInContext ?? true,
-      source: doc.metadata.source,
-      mtime: doc.metadata.mtime ?? null,
-      ctime: doc.metadata.ctime ?? null,
-      chunkId: (doc.metadata as any).chunkId ?? null,
-      isChunk: (doc.metadata as any).isChunk ?? false,
-      explanation: doc.metadata.explanation ?? null,
-    };
-  });
-  // Reuse the same dedupe logic used by Show Sources (path fallback to title, keep highest score)
-  const sourcesLike = formattedResults.map((d) => ({
+  // Deduplicate only search results (filter results are never deduped away)
+  const searchSourcesLike = taggedSearchResults.map((d) => ({
     title: d.title || d.path || "Untitled",
     path: d.path || d.title || "",
     score: d.rerank_score || d.score || 0,
   }));
-  const dedupedSources = deduplicateSources(sourcesLike);
+  const dedupedSearchSources = deduplicateSources(searchSourcesLike);
 
-  // Map back to document objects in the same deduped order
   const bestByKey = new Map<string, any>();
-  for (const d of formattedResults) {
+  for (const d of taggedSearchResults) {
     const key = (d.path || d.title).toLowerCase();
     const existing = bestByKey.get(key);
     if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
       bestByKey.set(key, d);
     }
   }
-  const dedupedDocs = dedupedSources
+  const dedupedSearchDocs = dedupedSearchSources
     .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
     .filter(Boolean);
 
-  return { type: "local_search", documents: dedupedDocs, queryExpansion };
+  // Combine: filter results first, then deduped search results
+  const allDocs = [...taggedFilterResults, ...dedupedSearchDocs];
+
+  return { type: "local_search", documents: allDocs, queryExpansion };
 }
 
 // Local search tool using RetrieverFactory (handles Self-hosted > Semantic > Lexical priority)

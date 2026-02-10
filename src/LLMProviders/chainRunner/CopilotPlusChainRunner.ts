@@ -42,6 +42,7 @@ import {
   extractSourcesFromSearchResults,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
+  formatSplitSearchResultsForLLM,
   generateQualitySummary,
   formatQualitySummary,
   logSearchResultsDebugTable,
@@ -992,7 +993,7 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
     // Use !== false to be consistent with formatSearchResultsForLLM and logSearchResultsDebugTable
     const includedDocs = documents.filter((doc) => doc.includeInContext !== false);
 
-    // Generate quality summary for the LLM to evaluate results
+    // Generate quality summary across all docs combined
     const qualitySummary = generateQualitySummary(includedDocs);
     const qualityHeader = formatQualitySummary(qualitySummary);
 
@@ -1012,23 +1013,27 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
       );
       processedDocs = includedDocs.map((doc) => ({
         ...doc,
-        // Truncate only content, preserve all metadata
         content:
           doc.content?.slice(0, Math.floor((doc.content?.length || 0) * truncationRatio)) || "",
       }));
     }
 
-    // Sanitize content to remove any pre-existing citation markers to prevent number leakage
-
-    // Assign stable source ids and sanitize content
+    // Assign stable source ids (continuous across both groups) and sanitize content
     const withIds = processedDocs.map((doc, idx) => ({
       ...doc,
       __sourceId: idx + 1,
       content: sanitizeContentForCitations(doc.content || ""),
     }));
 
-    // Format documents with essential metadata including source id
-    const formattedContent = formatSearchResultsForLLM(withIds);
+    // Split into filter and search docs by isFilterResult flag
+    const filterDocs = withIds.filter((d: any) => d.isFilterResult === true);
+    const searchDocs = withIds.filter((d: any) => d.isFilterResult !== true);
+
+    // Use split formatter if there are filter results, otherwise fall back to unified format
+    const hasFilterResults = filterDocs.length > 0;
+    const formattedContent = hasFilterResults
+      ? formatSplitSearchResultsForLLM(filterDocs, searchDocs)
+      : formatSearchResultsForLLM(withIds);
 
     // Build a compact, unnumbered source catalog to avoid bias
     const sourceEntries: SourceCatalogEntry[] = withIds

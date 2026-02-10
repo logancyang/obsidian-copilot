@@ -266,6 +266,105 @@ export function summarizeExplanation(explanation: any): string {
  *   # | CHUNK/PATH                              | TITLE        | CTIME                | MTIME                | SCORE  | EXPLANATION
  *   1 | notes/file.md#3                         | File         | 2024-09-01T...      | 2024-09-10T...      | 0.8123 | Lexical(body): term1, term2 | Graph 2.0 (3 backlinks)
  */
+/**
+ * Formats split filter/search results as XML for LLM consumption.
+ * Filter results get a `<matchType>` element; search results get `<modified>`.
+ * Both use continuous `<id>` numbering across sections and are nested inside `<localSearch>`.
+ *
+ * @param filterDocs - Guaranteed-inclusion documents (title/tag/time matches)
+ * @param searchDocs - Scored search results
+ * @param startId - Starting ID for continuous numbering (default 1)
+ * @returns Formatted XML string with `<filterResults>` and `<searchResults>` sections
+ */
+export function formatSplitSearchResultsForLLM(
+  filterDocs: any[],
+  searchDocs: any[],
+  startId = 1
+): string {
+  let currentId = startId;
+  const sections: string[] = [];
+
+  // Format filter results
+  if (filterDocs.length > 0) {
+    const filterXml = filterDocs
+      .map((doc: any) => {
+        const id = (doc as any).__sourceId || currentId++;
+        const title = doc.title || "Untitled";
+        const path = doc.path || "";
+        const matchType = doc.matchType || doc.source || "filter";
+        const content = doc.content || "";
+
+        let modified: string | null = null;
+        if (doc.mtime) {
+          const date = new Date(doc.mtime);
+          if (!isNaN(date.getTime())) {
+            modified = date.toISOString();
+          }
+        }
+
+        return `<document>
+<id>${id}</id>
+<title>${title}</title>
+<path>${path}</path>
+<matchType>${matchType}</matchType>${modified ? `\n<modified>${modified}</modified>` : ""}
+<content>
+${content}
+</content>
+</document>`;
+      })
+      .join("\n\n");
+
+    sections.push(`<filterResults>\n${filterXml}\n</filterResults>`);
+  }
+
+  // Format search results
+  if (searchDocs.length > 0) {
+    const searchXml = searchDocs
+      .map((doc: any) => {
+        const id = (doc as any).__sourceId || currentId++;
+        const title = doc.title || "Untitled";
+        const path = doc.path || "";
+
+        let modified: string | null = null;
+        if (doc.mtime) {
+          const date = new Date(doc.mtime);
+          if (!isNaN(date.getTime())) {
+            modified = date.toISOString();
+          }
+        }
+
+        const content = doc.content || "";
+
+        return `<document>
+<id>${id}</id>
+<title>${title}</title>${
+          path && path !== title
+            ? `
+<path>${path}</path>`
+            : ""
+        }${
+          modified
+            ? `
+<modified>${modified}</modified>`
+            : ""
+        }
+<content>
+${content}
+</content>
+</document>`;
+      })
+      .join("\n\n");
+
+    sections.push(`<searchResults>\n${searchXml}\n</searchResults>`);
+  }
+
+  if (sections.length === 0) {
+    return "No relevant documents found.";
+  }
+
+  return sections.join("\n\n");
+}
+
 export function logSearchResultsDebugTable(searchResults: any[]): void {
   if (!Array.isArray(searchResults) || searchResults.length === 0) {
     logInfo("Search Results: (none)");

@@ -8,6 +8,12 @@ Search v3 is the lexical retrieval core used by `TieredLexicalRetriever`, with o
 ```mermaid
 graph TD
     A[User query] --> B[RetrieverFactory]
+    A --> FR[FilterRetriever]
+
+    FR --> FR1[Title matches - note mentions]
+    FR --> FR2[Tag matches - hashtag scan]
+    FR --> FR3[Time-range docs - daily notes + mtime]
+
     B -->|default| C[TieredLexicalRetriever]
     B -->|semantic enabled| D[MergedSemanticRetriever]
     B -->|self-host valid| E[SelfHostRetriever]
@@ -20,20 +26,30 @@ graph TD
     J --> K[Post-ranking: Folder/Graph boosts]
     K --> Q[Post-ranking: ScoreNormalizer + diverse top-K]
     Q --> R[Lexical note/chunk ranks]
-    R --> S[Tiered conversion + guaranteed title/tag docs]
-    S -->|lexical mode| L[LangChain Documents]
+    R --> L[LangChain Documents]
 
     D --> C
     D --> M[HybridRetriever]
-    S --> N[Lexical docs]
+    R --> N[Lexical docs]
     M --> O[Semantic docs]
     N --> P[Merge + dedupe + blend]
     O --> P
     P --> L
+
+    FR1 --> MR[mergeFilterAndSearchResults]
+    FR2 --> MR
+    FR3 --> MR
+    L --> MR
+
+    MR --> |filterResults| XML1[filterResults XML section]
+    MR --> |searchResults| XML2[searchResults XML section]
+    XML1 --> LLM[LLM Context]
+    XML2 --> LLM
 ```
 
-`Lexical docs` are produced from the same `SearchCore` path (after Tiered conversion/guaranteed-match composition); they are not a separate retrieval branch.
-Ranking happens at `FullTextEngine BM25+` and is then adjusted by post-ranking boosts/normalization.
+`FilterRetriever` runs at the `SearchTools` orchestration layer, parallel to the main search retriever.
+Its results bypass ALL downstream retriever processing (MergedSemanticRetriever top-K, score normalization, etc.).
+When `timeRange` is set, only FilterRetriever runs (no main retriever), preserving the time-range short-circuit behavior.
 
 ## Doc Title/Tag Guarantee (In-Depth)
 
@@ -42,7 +58,7 @@ This section describes exactly how title/tag intent is carried through retrieval
 ### 1. Where guaranteed docs come from
 
 - Title guarantee source:
-  - `TieredLexicalRetriever` extracts explicit `[[note]]` mentions from query text (`extractNoteFiles`).
+  - `FilterRetriever` extracts explicit `[[note]]` mentions from query text (`extractNoteFiles`).
   - Those files are loaded as full-note documents via `getTitleMatches()`.
 - Tag guarantee source:
   - Tag terms are resolved from hash-prefixed salient terms (or extracted from raw query as fallback).
@@ -50,7 +66,7 @@ This section describes exactly how title/tag intent is carried through retrieval
     - exact match: `#project/alpha == #project/alpha`
     - prefix match: searching `#project` also matches `#project/alpha`
 
-### 2. What makes them "guaranteed" in lexical retrieval
+### 2. What makes them "guaranteed"
 
 Guaranteed title/tag docs are emitted with:
 
@@ -59,44 +75,35 @@ Guaranteed title/tag docs are emitted with:
 - `metadata.score = 1.0` and `metadata.rerank_score = 1.0`
 - `metadata.source = "title-match"` or `"tag-match"`
 
-This means they do not depend on BM25 lexical score thresholds to be context-eligible.
+Since `FilterRetriever` runs at the orchestration layer (not inside a retriever), these docs **cannot** be lost to downstream top-K slicing in `MergedSemanticRetriever` or score normalization.
 
-### 3. Priority and dedupe behavior in `TieredLexicalRetriever`
+### 3. Merge and dedup at orchestration layer
 
-`TieredLexicalRetriever.getRelevantDocuments()` performs:
+`SearchTools.performLexicalSearch()` performs:
 
-1. `searchCore.retrieve()` for normal lexical chunk ranks
-2. build guaranteed sets (`titleMatches`, `tagMatches`)
-3. `combineGuaranteedMatches(title, tag)`:
-   - dedupes by note path
-   - title set is applied first (title wins if same path appears in tag set)
-4. `combineResults(searchDocuments, guaranteedMatches)`:
-   - guaranteed docs are inserted first
-   - chunk docs from notes already covered by a title-guaranteed doc are skipped
-   - remaining docs are score-sorted (with chunk-order preservation for near-ties in same note)
-
-Net effect: explicit title/tag intent is represented at note level before ordinary lexical chunk expansion.
+1. `FilterRetriever.getRelevantDocuments()` — always runs
+2. Main retriever (if no timeRange) — `RetrieverFactory` selects lexical/semantic/self-host
+3. `mergeFilterAndSearchResults(filterDocs, searchDocs)`:
+   - Search docs from notes already covered by filter docs are dropped
+   - Filter docs are never removed
 
 ### 4. How they reach final RAG context
 
-After retrieval, `SearchTools` maps documents into tool payload entries and preserves `includeInContext`.
+After merging, docs are tagged with `isFilterResult: boolean` and `matchType`.
 
-Then RAG formatting does:
+Then in `CopilotPlusChainRunner.prepareLocalSearchResult()`:
 
-- `processLocalSearchResult()` -> `prepareLocalSearchResult()`
-- context inclusion filter: keep docs where `includeInContext !== false`
-- `formatSearchResultsForLLM()` applies the same inclusion rule
+- Docs are split by `isFilterResult` flag
+- Filter docs get `<filterResults>` XML wrapper with `<matchType>` element
+- Search docs get `<searchResults>` XML wrapper with `<modified>` element
+- Both use continuous `<id>` numbering for consistent citations
+- If no filter results, falls back to unified `formatSearchResultsForLLM()`
 
-Since guaranteed docs are emitted with `includeInContext: true`, they pass this filter path by default.
+### 5. Scope of the guarantee
 
-### 5. Scope of the guarantee (important caveats)
-
-- Strong guarantee in lexical path:
-  - For lexical retrieval output, title/tag-guaranteed docs are always injected and marked context-eligible.
-- Bounded by downstream selection/dedupe:
-  - Tool-level dedupe and ordering can still choose one best entry per path/title key.
-  - In semantic mode (`MergedSemanticRetriever`), lexical docs are merged with semantic docs and then top-K slicing is applied.
-  - So "guaranteed" means guaranteed injection into lexical candidate/output flow, not an absolute promise that every guaranteed note survives every later global cap in every mode.
+- **Strong guarantee**: Filter results bypass all retriever-level processing (top-K, scoring, normalization)
+- **Separate XML sections**: LLM can distinguish exact filter matches from relevance-scored search hits
+- **Dedup is one-directional**: Search results are deduped against filter paths, never the reverse
 
 ## Step-by-Step: Lexical Search Path
 
@@ -147,7 +154,7 @@ Recall terms are built in this order and deduplicated/lowercased:
 1. `expanded.queries` (includes original query string)
 2. `salientTerms` (plus any caller-provided salient terms)
 
-Tag matching is handled separately by `getTagMatches()` in `TieredLexicalRetriever` via Obsidian's metadata cache, not through grep recall terms.
+Tag matching is handled separately by `FilterRetriever` at the `SearchTools` orchestration layer, not through grep recall terms.
 
 ### 4. Candidate recall (`GrepScanner`)
 
@@ -226,17 +233,8 @@ Score normalization in SearchCore:
 
 `TieredLexicalRetriever` stores `lastQueryExpansion` and converts chunk IDs to `Document`.
 
-Guaranteed inclusion paths:
-
-- explicit `[[note]]` title matches -> full-note documents with score `1.0`
-- tag matches from metadata cache (prefix-aware, e.g. `#project` matches `#project/alpha`) -> full-note docs with score `1.0`
-
-Combine rules:
-
-- title/tag guaranteed documents are added first
-- chunk results from notes already covered by title matches are skipped
-- remaining docs sorted by score
-- near-tie chunks from same note preserve chunk order
+It now returns **only scored search results** — no title/tag/time-range handling.
+Filter matching is handled by `FilterRetriever` at the `SearchTools` orchestration layer.
 
 ### 8. Failure fallback
 
@@ -248,14 +246,14 @@ If the main SearchCore pipeline throws, SearchCore falls back to simple grep-onl
 
 ## Time-Range Flow (Special Path)
 
-When `timeRange` is provided, `TieredLexicalRetriever` bypasses SearchCore lexical pipeline and:
+When `timeRange` is provided, `SearchTools.performLexicalSearch()` runs only `FilterRetriever`:
 
-1. generates daily-note titles in range (`[[YYYY-MM-DD]]`)
-2. includes matching daily notes
-3. adds all notes with `mtime` within range (up to limits)
-4. ranks by recency score
+1. Generates daily-note titles in range (`[[YYYY-MM-DD]]`)
+2. Includes matching daily notes
+3. Adds all notes with `mtime` within range (up to limits)
+4. Ranks by recency score
 
-This path does not use query expansion/BM25 ranking.
+The main retriever is **not** created when timeRange is set. This path does not use query expansion/BM25 ranking.
 
 ## Semantic Mode (`MergedSemanticRetriever`)
 
@@ -274,6 +272,8 @@ Current behavior:
 - writes blended score to `metadata.score` and `metadata.rerank_score`
 - returns top `maxK` (or `RETURN_ALL_LIMIT` in return-all mode)
 
+**Important**: `FilterRetriever` runs at the orchestration layer, so filter results are **not** subject to `MergedSemanticRetriever`'s top-K slicing.
+
 ## Limits and Defaults
 
 ### SearchCore limits
@@ -290,7 +290,7 @@ Current behavior:
   - return-all: `100 * 3 = 300`
 
 Note: these return-all branches apply only when the caller sets `SearchOptions.returnAll = true`.
-`TieredLexicalRetriever` standard (non-time-range) path currently governs result volume primarily via `maxK`.
+`TieredLexicalRetriever` standard path currently governs result volume primarily via `maxK`.
 
 ### QueryExpander limits
 
@@ -355,3 +355,5 @@ interface ExpandedQuery {
 - Older docs referenced 90/10 weighted query-expansion scoring. Current code does not do that.
 - Older docs referenced an `<expanded>` term section. Current parser uses `<salient>` and `<queries>` only.
 - Semantic fusion is implemented and active via `MergedSemanticRetriever` when enabled; it is not design-only.
+- `FilterRetriever` is a standalone class at `src/search/v3/FilterRetriever.ts`, not a LangChain `BaseRetriever` subclass.
+- `mergeFilterAndSearchResults` in `src/search/v3/mergeResults.ts` handles the dedup logic between filter and search results.

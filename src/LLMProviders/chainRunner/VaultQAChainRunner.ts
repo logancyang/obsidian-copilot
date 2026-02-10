@@ -8,6 +8,8 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
+import { FilterRetriever } from "@/search/v3/FilterRetriever";
+import { mergeFilterAndSearchResults } from "@/search/v3/mergeResults";
 import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -100,7 +102,14 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Step 5: Create retriever based on semantic search setting
       const settings = getSettings();
 
-      // Create retriever using factory (handles priority: Self-hosted > Semantic > Lexical)
+      // Step 5a: Run FilterRetriever for guaranteed title/tag matches
+      const filterRetriever = new FilterRetriever(app, {
+        salientTerms: tags.length > 0 ? [...tags] : [],
+        maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+      });
+      const filterDocs = await filterRetriever.getRelevantDocuments(standaloneQuestion);
+
+      // Step 5b: Create main retriever using factory (handles priority: Self-hosted > Semantic > Lexical)
       const retrieverResult = await RetrieverFactory.createRetriever(app, {
         minSimilarityScore: 0.01,
         maxK: DEFAULT_MAX_SOURCE_CHUNKS,
@@ -110,8 +119,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const retriever = retrieverResult.retriever;
       logInfo(`VaultQA: Using ${retrieverResult.type} retriever - ${retrieverResult.reason}`);
 
-      // Retrieve relevant documents
-      const retrievedDocs = await retriever.getRelevantDocuments(standaloneQuestion);
+      // Step 5c: Retrieve search results and merge with filter results
+      const searchDocs = await retriever.getRelevantDocuments(standaloneQuestion);
+      const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
+      const retrievedDocs = [...filterResults, ...searchResults];
 
       // Store retrieved documents for sources
       this.chainManager.storeRetrieverDocuments(retrievedDocs);

@@ -25,9 +25,7 @@ export interface RetrieverOptions {
   returnAll?: boolean;
   /** Threshold for using reranker */
   useRerankerThreshold?: number;
-  /** Return all documents matching tags */
-  returnAllTags?: boolean;
-  /** Tag terms to filter by */
+  /** Tag terms to filter by (used by SelfHostRetriever for server-side filtering) */
   tagTerms?: string[];
 }
 
@@ -43,7 +41,6 @@ interface NormalizedRetrieverOptions {
   textWeight?: number;
   returnAll: boolean;
   useRerankerThreshold?: number;
-  returnAllTags: boolean;
   tagTerms: string[];
 }
 
@@ -61,9 +58,6 @@ export interface RetrieverSelectionResult {
  * Ensures all required fields are present with proper types.
  */
 function normalizeOptions(options: RetrieverOptions): NormalizedRetrieverOptions {
-  const tagTerms = options.tagTerms ?? [];
-  const hasTagTerms = tagTerms.length > 0;
-
   return {
     minSimilarityScore: options.minSimilarityScore ?? 0.1,
     maxK: options.maxK,
@@ -72,8 +66,7 @@ function normalizeOptions(options: RetrieverOptions): NormalizedRetrieverOptions
     textWeight: options.textWeight,
     returnAll: options.returnAll ?? false,
     useRerankerThreshold: options.useRerankerThreshold,
-    returnAllTags: hasTagTerms,
-    tagTerms,
+    tagTerms: options.tagTerms ?? [],
   };
 }
 
