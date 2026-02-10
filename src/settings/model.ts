@@ -554,8 +554,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
   settings.activeModels = mergeActiveModels(settings.activeModels, BUILTIN_CHAT_MODELS);
+  const supportedEmbeddingModels = settings.activeEmbeddingModels.filter((model) =>
+    Object.values(EmbeddingModelProviders).includes(model.provider as EmbeddingModelProviders)
+  );
   settings.activeEmbeddingModels = mergeActiveModels(
-    settings.activeEmbeddingModels,
+    supportedEmbeddingModels,
     BUILTIN_EMBEDDING_MODELS
   );
   return settings;
