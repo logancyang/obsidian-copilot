@@ -103,9 +103,11 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const settings = getSettings();
 
       // Step 5a: Run FilterRetriever for guaranteed title/tag matches
+      const hasTagTerms = tags.length > 0;
       const filterRetriever = new FilterRetriever(app, {
-        salientTerms: tags.length > 0 ? [...tags] : [],
+        salientTerms: hasTagTerms ? [...tags] : [],
         maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+        returnAll: hasTagTerms,
       });
       const filterDocs = await filterRetriever.getRelevantDocuments(standaloneQuestion);
 
@@ -113,8 +115,9 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const retrieverResult = await RetrieverFactory.createRetriever(app, {
         minSimilarityScore: 0.01,
         maxK: DEFAULT_MAX_SOURCE_CHUNKS,
-        salientTerms: tags.length > 0 ? [...tags] : [],
+        salientTerms: hasTagTerms ? [...tags] : [],
         tagTerms: tags,
+        returnAll: hasTagTerms,
       });
       const retriever = retrieverResult.retriever;
       logInfo(`VaultQA: Using ${retrieverResult.type} retriever - ${retrieverResult.reason}`);
