@@ -161,11 +161,14 @@ export class FilterRetriever {
       }
     }
 
-    const results = Array.from(documentMap.values()).sort((a, b) => {
-      const scoreA = a.metadata.score || 0;
-      const scoreB = b.metadata.score || 0;
-      return scoreB - scoreA;
-    });
+    const limit = this.options.returnAll ? RETURN_ALL_LIMIT : this.options.maxK;
+    const results = Array.from(documentMap.values())
+      .sort((a, b) => {
+        const scoreA = a.metadata.score || 0;
+        const scoreB = b.metadata.score || 0;
+        return scoreB - scoreA;
+      })
+      .slice(0, limit);
 
     if (getSettings().debug) {
       logInfo("FilterRetriever: Time range search complete", {
@@ -317,8 +320,11 @@ export class FilterRetriever {
     const { inclusions, exclusions } = getMatchingPatterns();
     const allFiles = this.app.vault.getMarkdownFiles();
     const documents: Document[] = [];
+    const limit = this.options.returnAll ? RETURN_ALL_LIMIT : this.options.maxK;
 
     for (const file of allFiles) {
+      if (documents.length >= limit) break;
+
       if (!shouldIndexFile(file, inclusions, exclusions) || isInternalExcludedFile(file)) {
         continue;
       }
