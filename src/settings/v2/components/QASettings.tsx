@@ -7,19 +7,13 @@ import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchTog
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
-import { EmbeddingModelProviders, VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
+import { VAULT_VECTOR_STORE_STRATEGIES } from "@/constants";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
 import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
-  const shouldShowMiyoEmbedding = settings.enableSelfHostMode;
-  const visibleEmbeddingModels = settings.activeEmbeddingModels.filter((model) => {
-    if (model.provider !== EmbeddingModelProviders.MIYO) {
-      return true;
-    }
-    return shouldShowMiyoEmbedding;
-  });
+  const visibleEmbeddingModels = settings.activeEmbeddingModels;
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
     if (modelKey === settings.embeddingModelKey) return;
