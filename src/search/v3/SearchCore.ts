@@ -77,7 +77,6 @@ export class SearchCore {
       salientTerms: [],
       originalQuery: query || "",
       expandedQueries: [],
-      expandedTerms: [],
     };
 
     // Input validation: check query
@@ -106,7 +105,7 @@ export class SearchCore {
       : Math.min(Math.max(1, options.maxResults || 30), 100);
     const candidateLimit = returnAll
       ? RETURN_ALL_LIMIT
-      : Math.min(Math.max(10, options.candidateLimit || 500), 1000);
+      : Math.min(Math.max(10, options.candidateLimit || 200), 1000);
     const enableLexicalBoosts = Boolean(options.enableLexicalBoosts ?? true); // Default to enabled
 
     try {
@@ -123,7 +122,6 @@ export class SearchCore {
           salientTerms: options.preExpandedQuery.salientTerms || [],
           originalQuery: options.preExpandedQuery.originalQuery || query,
           expandedQueries: options.preExpandedQuery.expandedQueries || [],
-          expandedTerms: options.preExpandedQuery.expandedTerms || [],
         };
       } else {
         expanded = await this.queryExpander.expand(query);
@@ -134,8 +132,7 @@ export class SearchCore {
         ? [...new Set([...expanded.salientTerms, ...options.salientTerms])]
         : expanded.salientTerms;
 
-      // Build recall queries, ensuring tag variants are included for maximum recall
-      const tagRecallTerms = this.buildTagRecallQueries(salientTerms);
+      // Build recall queries from expanded queries and salient terms
       const recallQueries: string[] = [];
       const recallLookup = new Set<string>();
 
@@ -152,22 +149,19 @@ export class SearchCore {
       };
 
       queries.forEach(addRecallTerm);
-      expanded.expandedTerms.forEach(addRecallTerm);
       salientTerms.forEach(addRecallTerm);
-      tagRecallTerms.forEach(addRecallTerm);
 
       // Only log details if expansion produced significant variants
-      if (queries.length > 1 || salientTerms.length > 0 || expanded.expandedTerms.length > 0) {
+      if (queries.length > 1 || salientTerms.length > 0) {
         logInfo(
           `Query expansion: variants=${JSON.stringify(queries)}, salient=${JSON.stringify(
             salientTerms
-          )}, recall=${JSON.stringify(expanded.expandedTerms)}`
+          )}`
         );
       }
 
       // 2. GREP for initial candidates (use all terms for maximum recall)
-      // Use higher limit for large vaults - path matches are prioritized anyway
-      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 500;
+      const grepLimit = returnAll ? RETURN_ALL_LIMIT : 200;
       const grepHits = await this.grepScanner.batchCachedReadGrep(recallQueries, grepLimit);
 
       // 3. Limit candidates (no graph expansion - we use graph for boost only)
@@ -183,8 +177,7 @@ export class SearchCore {
         salientTerms,
         maxResults,
         expanded.originalQuery,
-        returnAll,
-        expanded.expandedTerms
+        returnAll
       );
 
       // 6. Apply boosts to lexical results (if enabled)
@@ -278,47 +271,6 @@ export class SearchCore {
   }
 
   /**
-   * Builds additional recall terms for tag queries so that tagged notes are always considered during recall.
-   * Generates lowercase variants without the hash prefix and splits hierarchical tags into their components.
-   *
-   * @param salientTerms - Salient terms extracted from the original query (may include hash-prefixed tags)
-   * @returns Unique recall terms derived from tag tokens (e.g., ['project/alpha', 'project', 'alpha'])
-   */
-  private buildTagRecallQueries(salientTerms: string[]): string[] {
-    const tagQueries = new Set<string>();
-
-    for (const term of salientTerms) {
-      if (!term || !term.startsWith("#")) {
-        continue;
-      }
-
-      const normalized = term.toLowerCase();
-      if (normalized.length <= 1) {
-        continue;
-      }
-
-      const withoutHash = normalized.slice(1);
-      if (withoutHash.length === 0) {
-        continue;
-      }
-
-      tagQueries.add(withoutHash);
-
-      const segments = withoutHash.split("/").filter((segment) => segment.length > 0);
-      if (segments.length > 0) {
-        let prefix = "";
-        for (const segment of segments) {
-          prefix = prefix ? `${prefix}/${segment}` : segment;
-          tagQueries.add(prefix);
-          tagQueries.add(segment);
-        }
-      }
-    }
-
-    return Array.from(tagQueries);
-  }
-
-  /**
    * Execute lexical search with full-text index
    * @param candidates - Candidate documents to index
    * @param recallQueries - All queries for recall (original + expanded + salient terms)
@@ -326,7 +278,6 @@ export class SearchCore {
    * @param maxResults - Maximum number of results
    * @param originalQuery - The original user query for scoring
    * @param returnAll - Whether to return all results up to RETURN_ALL_LIMIT
-   * @param expandedTerms - LLM-generated related terms (secondary scoring for recall boost)
    * @returns Ranked list of documents from lexical search
    */
   private async executeLexicalSearch(
@@ -335,8 +286,7 @@ export class SearchCore {
     salientTerms: string[],
     maxResults: number,
     originalQuery?: string,
-    returnAll: boolean = false,
-    expandedTerms: string[] = []
+    returnAll: boolean = false
   ): Promise<NoteIdRank[]> {
     try {
       // Build ephemeral full-text index
@@ -358,8 +308,7 @@ export class SearchCore {
         recallQueries,
         searchLimit,
         salientTerms,
-        originalQuery,
-        expandedTerms
+        originalQuery
       );
       const searchTime = Date.now() - searchStartTime;
 

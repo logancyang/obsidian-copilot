@@ -18,7 +18,6 @@ export interface ExpandedQuery {
   salientTerms: string[]; // Important terms extracted ONLY from original query (used for scoring)
   originalQuery: string; // The original user query
   expandedQueries: string[]; // Only the expanded variants (not including original)
-  expandedTerms: string[]; // LLM-generated terms (used for recall only, not scoring)
 }
 
 /**
@@ -43,19 +42,16 @@ SALIENT TERMS (for ranking - ONLY from original query):
 - Exclude: action verbs (find, search, get), pronouns (my, your), articles (the, a), prepositions (in, on, for), conjunctions (and, or)
 - These terms determine search ranking - must be from original query
 
-EXPANDED (for recall - can add new related terms):
-- Alternative phrasings of the query
-- Related/synonym terms to find more documents
+ALTERNATIVE QUERIES (for recall - specific alternative phrasings):
+- Alternative phrasings of the query (specific enough to be useful for search)
 
 Example: "find my piano notes"
 - Salient (from original): piano, notes
-- Expanded queries: "piano lesson notes", "piano practice sheets"
-- Expanded terms: music, sheet, practice, lesson
+- Queries: "piano lesson notes", "piano practice sheets"
 
 Example: "查找我的学习笔记"
 - Salient (from original): 学习, 笔记
-- Expanded queries: "个人笔记文档"
-- Expanded terms: 文档, 记录, 资料
+- Queries: "个人笔记文档"
 
 Format:
 <salient>
@@ -63,10 +59,7 @@ Format:
 </salient>
 <queries>
 <query>alternative query</query>
-</queries>
-<expanded>
-<term>related_term_for_recall</term>
-</expanded>`;
+</queries>`;
 
   constructor(private readonly options: QueryExpanderOptions = {}) {
     this.config = {
@@ -91,7 +84,6 @@ Format:
         salientTerms: [],
         originalQuery: "",
         expandedQueries: [],
-        expandedTerms: [],
       };
     }
 
@@ -226,7 +218,6 @@ Format:
   private parseXMLResponse(content: string, originalQuery: string): ExpandedQuery {
     const queries: string[] = [originalQuery]; // Always include original
     const salientFromLLM = new Set<string>(); // Salient terms from original query (for ranking)
-    const expandedFromLLM = new Set<string>(); // Expanded terms (for recall only)
 
     // Extract queries from XML tags
     const queryRegex = /<query>(.*?)<\/query>/g;
@@ -251,34 +242,11 @@ Format:
       }
     }
 
-    // Extract EXPANDED terms (for recall, can include new related terms)
-    const expandedSection = content.match(/<expanded>([\s\S]*?)<\/expanded>/);
-    if (expandedSection) {
-      const termRegex = /<term>(.*?)<\/term>/g;
-      let termMatch;
-      while ((termMatch = termRegex.exec(expandedSection[1])) !== null) {
-        const term = termMatch[1]?.trim().toLowerCase();
-        if (term && this.isValidTerm(term)) {
-          expandedFromLLM.add(term);
-        }
-      }
-    }
-
-    // Fallback: if no salient/expanded sections, try old <terms> format
-    if (salientFromLLM.size === 0 && expandedFromLLM.size === 0) {
-      const termRegex = /<term>(.*?)<\/term>/g;
-      let termMatch;
-      while ((termMatch = termRegex.exec(content)) !== null) {
-        const term = termMatch[1]?.trim().toLowerCase();
-        if (term && this.isValidTerm(term)) {
-          // Old format: treat all terms as expanded (for recall)
-          expandedFromLLM.add(term);
-        }
-      }
-    }
+    // Check if content has any XML structure (queries or terms)
+    const hasXMLContent = queries.length > 1 || salientFromLLM.size > 0 || /<term>/.test(content);
 
     // If no XML tags found at all, try legacy parsing
-    if (queries.length === 1 && salientFromLLM.size === 0 && expandedFromLLM.size === 0) {
+    if (!hasXMLContent) {
       return this.parseLegacyFormat(content, originalQuery);
     }
 
@@ -295,7 +263,6 @@ Format:
       salientTerms: salientTerms, // From original query only (for ranking)
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
-      expandedTerms: Array.from(expandedFromLLM), // New related terms (for recall)
     };
   }
 
@@ -309,7 +276,6 @@ Format:
     // Fallback parser for non-XML responses
     const lines = content.split("\n").map((line) => line.trim());
     const queries: string[] = [originalQuery];
-    const llmTerms = new Set<string>(); // LLM-generated terms (stopwords filtered by LLM)
 
     let section: "queries" | "terms" | null = null;
 
@@ -326,25 +292,17 @@ Format:
         continue;
       }
 
-      // Parse content based on current section
+      // Parse content based on current section (only queries are used now)
       if (section === "queries" && queries.length <= this.config.maxVariants) {
         const cleanQuery = line.replace(/^[-•*\d.)\s]+/, "").trim();
         if (cleanQuery && cleanQuery !== originalQuery) {
           queries.push(cleanQuery);
         }
-      } else if (section === "terms") {
-        const cleanTerm = line
-          .replace(/^[-•*\d.)\s]+/, "")
-          .trim()
-          .toLowerCase();
-        if (cleanTerm && this.isValidTerm(cleanTerm)) {
-          llmTerms.add(cleanTerm);
-        }
       }
     }
 
     // If no sections found, treat lines as queries
-    if (queries.length === 1 && llmTerms.size === 0) {
+    if (queries.length === 1) {
       for (const line of lines.slice(0, this.config.maxVariants)) {
         if (line && !line.toUpperCase().includes("QUERY")) {
           queries.push(line);
@@ -352,18 +310,15 @@ Format:
       }
     }
 
-    // Legacy format doesn't distinguish salient vs expanded terms
     // Salient terms must come from original query only (for ranking)
-    // LLM terms go to expandedTerms (for recall)
     const salientTerms = this.extractSalientTermsFromOriginal(originalQuery);
 
     const expandedQueries = queries.slice(1);
     return {
       queries: queries.slice(0, this.config.maxVariants + 1),
-      salientTerms: salientTerms, // Always from original query
+      salientTerms: salientTerms,
       originalQuery: originalQuery,
       expandedQueries: expandedQueries.slice(0, this.config.maxVariants),
-      expandedTerms: Array.from(llmTerms), // LLM terms for recall only
     };
   }
 
@@ -414,7 +369,6 @@ Format:
       salientTerms: terms,
       originalQuery: query,
       expandedQueries: [], // No expansion in fallback
-      expandedTerms: [], // No LLM expansion in fallback
     };
   }
 

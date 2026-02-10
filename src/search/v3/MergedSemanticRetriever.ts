@@ -13,8 +13,6 @@ type RetrieverOptions = {
   textWeight?: number;
   returnAll?: boolean;
   useRerankerThreshold?: number;
-  returnAllTags?: boolean;
-  tagTerms?: string[];
 };
 
 type SourceKind = "lexical" | "semantic";
@@ -58,8 +56,6 @@ export class MergedSemanticRetriever extends BaseRetriever {
       ...options,
       maxK: lexicalMax,
       returnAll: this.returnAll,
-      returnAllTags: options.returnAllTags,
-      tagTerms: options.tagTerms,
     };
 
     this.lexicalRetriever = new TieredLexicalRetriever(app, lexicalOptions);

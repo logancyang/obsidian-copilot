@@ -55,7 +55,6 @@ describe("TieredLexicalRetriever", () => {
         salientTerms: [],
         originalQuery: "",
         expandedQueries: [],
-        expandedTerms: [],
       },
     });
 
@@ -73,11 +72,16 @@ describe("TieredLexicalRetriever", () => {
       Promise.resolve(getChunkContent(id))
     );
 
+    // Default getAllTags mock: return empty so getTagMatches is a no-op unless overridden
+    const obsidianMock = jest.requireMock("obsidian");
+    obsidianMock.getAllTags = jest.fn().mockReturnValue([]);
+
     // Mock app
     mockApp = {
       vault: {
         getAbstractFileByPath: jest.fn(),
         cachedRead: jest.fn(),
+        getMarkdownFiles: jest.fn().mockReturnValue([]),
       },
       metadataCache: {
         getFileCache: jest.fn(),
@@ -190,7 +194,6 @@ describe("TieredLexicalRetriever", () => {
           salientTerms: [],
           originalQuery: "test query",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
 
@@ -225,7 +228,6 @@ describe("TieredLexicalRetriever", () => {
           salientTerms: [],
           originalQuery: "",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
       const emptyRetriever = new TieredLexicalRetriever(mockApp, {
@@ -237,114 +239,75 @@ describe("TieredLexicalRetriever", () => {
       expect(results).toEqual([]);
     });
 
-    it("should retrieve all tag matches when returnAllTags is enabled", async () => {
-      retrieveMock.mockResolvedValue({
-        results: [
-          { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
-          { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
-        ],
+    it("should include tag-matched notes via normal flow when salientTerms contain tags", async () => {
+      const obsidianMock = jest.requireMock("obsidian");
+
+      // A tagged file found via metadata cache
+      const taggedFile = new (TFile as any)("projects/alpha.md");
+      Object.setPrototypeOf(taggedFile, (TFile as any).prototype);
+      taggedFile.path = "projects/alpha.md";
+      taggedFile.basename = "alpha";
+      taggedFile.stat = { mtime: 2000, ctime: 1000 };
+
+      mockApp.vault.getMarkdownFiles.mockReturnValue([taggedFile]);
+      mockApp.metadataCache.getFileCache.mockImplementation((file: any) => {
+        if (file.path === "projects/alpha.md") return { tags: [{ tag: "#project" }] };
+        return null;
+      });
+      obsidianMock.getAllTags.mockImplementation((cache: any) => {
+        if (!cache?.tags) return [];
+        return cache.tags.map((t: any) => t.tag);
+      });
+      mockApp.vault.cachedRead.mockImplementation((file: any) => {
+        if (file.path === "projects/alpha.md") return Promise.resolve("Alpha full content");
+        return Promise.resolve("Other");
+      });
+
+      // SearchCore returns a chunk from a different note
+      retrieveMock.mockResolvedValueOnce({
+        results: [{ id: "other.md#0", score: 0.5, engine: "fulltext" }],
         queryExpansion: {
           queries: [],
           salientTerms: ["#project"],
-          originalQuery: "#project",
+          originalQuery: "#project work log",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
 
-      const tagRetrieverOptions: ConstructorParameters<typeof TieredLexicalRetriever>[1] = {
-        minSimilarityScore: 0.1,
-        maxK: Number.MAX_SAFE_INTEGER,
-        salientTerms: ["#project"],
-        returnAllTags: true,
-        tagTerms: ["#project"],
-      };
-
-      const tagRetriever = new TieredLexicalRetriever(mockApp, tagRetrieverOptions);
+      const otherFile = new (TFile as any)("other.md");
+      Object.setPrototypeOf(otherFile, (TFile as any).prototype);
+      otherFile.path = "other.md";
+      otherFile.basename = "other";
+      otherFile.stat = { mtime: 1000, ctime: 1000 };
 
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "tagNote.md") {
-          const file = new (TFile as any)(path);
-          Object.setPrototypeOf(file, (TFile as any).prototype);
-          (file as any).stat = { mtime: 1000, ctime: 1000 };
-          return file;
-        }
+        if (path === "other.md") return otherFile;
         return null;
       });
 
-      const getTagContent = (id: string) => {
-        if (id === "tagNote.md#0") return "Tag chunk 0";
-        if (id === "tagNote.md#1") return "Tag chunk 1";
-        return "";
-      };
-      mockChunkManager.getChunkTextSync.mockImplementation(getTagContent);
+      const getContent = (id: string) => (id === "other.md#0" ? "Other chunk" : "");
+      mockChunkManager.getChunkTextSync.mockImplementation(getContent);
       mockChunkManager.getChunkText.mockImplementation((id: string) =>
-        Promise.resolve(getTagContent(id))
+        Promise.resolve(getContent(id))
       );
+
+      const tagRetriever = new TieredLexicalRetriever(mockApp, {
+        minSimilarityScore: 0.1,
+        maxK: 30,
+        salientTerms: ["#project"],
+      });
 
       const results = await tagRetriever.getRelevantDocuments("#project work log");
 
-      expect(retrieveMock).toHaveBeenCalledWith(
-        expect.stringContaining("#project"),
-        expect.objectContaining({
-          returnAll: true,
-          salientTerms: ["#project"],
-        })
-      );
-      expect(results.length).toBe(2);
-    });
+      // Tag-matched note should be included as full note
+      const alphaDoc = results.find((d) => d.metadata.path === "projects/alpha.md");
+      expect(alphaDoc).toBeDefined();
+      expect(alphaDoc!.metadata.includeInContext).toBe(true);
+      expect(alphaDoc!.metadata.source).toBe("tag-match");
+      expect(alphaDoc!.pageContent).toBe("Alpha full content");
 
-    it("should derive tag terms from query when returnAllTags is set without explicit tags", async () => {
-      retrieveMock.mockResolvedValue({
-        results: [
-          { id: "tagNote.md#0", score: 0.9, engine: "fulltext" },
-          { id: "tagNote.md#1", score: 0.8, engine: "fulltext" },
-        ],
-        queryExpansion: {
-          queries: [],
-          salientTerms: ["#project"],
-          originalQuery: "#PROJECT planning",
-          expandedQueries: [],
-          expandedTerms: [],
-        },
-      });
-
-      const derivedRetriever = new TieredLexicalRetriever(mockApp, {
-        minSimilarityScore: 0.1,
-        maxK: Number.MAX_SAFE_INTEGER,
-        salientTerms: [],
-        returnAllTags: true,
-      });
-
-      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
-        if (path === "tagNote.md") {
-          const file = new (TFile as any)(path);
-          Object.setPrototypeOf(file, (TFile as any).prototype);
-          (file as any).stat = { mtime: 1000, ctime: 1000 };
-          return file;
-        }
-        return null;
-      });
-
-      const getTagContent = (id: string) => {
-        if (id === "tagNote.md#0") return "Tag chunk 0";
-        if (id === "tagNote.md#1") return "Tag chunk 1";
-        return "";
-      };
-      mockChunkManager.getChunkTextSync.mockImplementation(getTagContent);
-      mockChunkManager.getChunkText.mockImplementation((id: string) =>
-        Promise.resolve(getTagContent(id))
-      );
-
-      const results = await derivedRetriever.getRelevantDocuments("#PROJECT planning");
-
-      expect(retrieveMock).toHaveBeenCalledWith(
-        expect.stringContaining("#project"),
-        expect.objectContaining({
-          returnAll: true,
-          salientTerms: ["#project"],
-        })
-      );
+      // Search result also present
+      expect(results.find((d) => d.metadata.path === "other.md")).toBeDefined();
       expect(results.length).toBe(2);
     });
 
@@ -388,7 +351,6 @@ describe("TieredLexicalRetriever", () => {
           salientTerms: [],
           originalQuery: "search [[mentioned]] for something",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
 
@@ -431,7 +393,6 @@ describe("TieredLexicalRetriever", () => {
           salientTerms: [],
           originalQuery: "test query",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
 
@@ -472,7 +433,6 @@ describe("TieredLexicalRetriever", () => {
           salientTerms: [],
           originalQuery: "test query",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
 
@@ -513,7 +473,6 @@ describe("TieredLexicalRetriever", () => {
           salientTerms: [],
           originalQuery: "test query",
           expandedQueries: [],
-          expandedTerms: [],
         },
       });
 
@@ -540,6 +499,113 @@ describe("TieredLexicalRetriever", () => {
       expect(results.length).toBe(3);
       const largeNoteChunks = results.filter((r) => r.metadata.path === "large.md");
       expect(largeNoteChunks.length).toBe(2);
+    });
+  });
+
+  describe("tag match injection", () => {
+    it("should include all tag-matched files as full notes in results", async () => {
+      const obsidianMock = jest.requireMock("obsidian");
+      const mockedGetAllTags = obsidianMock.getAllTags as jest.Mock;
+
+      // Create mock files with tags
+      const taggedFile1 = new (TFile as any)("projects/alpha.md");
+      Object.setPrototypeOf(taggedFile1, (TFile as any).prototype);
+      taggedFile1.path = "projects/alpha.md";
+      taggedFile1.basename = "alpha";
+      taggedFile1.stat = { mtime: 2000, ctime: 1000 };
+
+      const taggedFile2 = new (TFile as any)("projects/beta.md");
+      Object.setPrototypeOf(taggedFile2, (TFile as any).prototype);
+      taggedFile2.path = "projects/beta.md";
+      taggedFile2.basename = "beta";
+      taggedFile2.stat = { mtime: 3000, ctime: 1000 };
+
+      const untaggedFile = new (TFile as any)("notes/unrelated.md");
+      Object.setPrototypeOf(untaggedFile, (TFile as any).prototype);
+      untaggedFile.path = "notes/unrelated.md";
+      untaggedFile.basename = "unrelated";
+      untaggedFile.stat = { mtime: 1000, ctime: 1000 };
+
+      // Mock vault.getMarkdownFiles
+      mockApp.vault.getMarkdownFiles = jest
+        .fn()
+        .mockReturnValue([taggedFile1, taggedFile2, untaggedFile]);
+
+      // Mock metadataCache to return caches with tags
+      mockApp.metadataCache.getFileCache.mockImplementation((file: any) => {
+        if (file.path === "projects/alpha.md") return { tags: [{ tag: "#project" }] };
+        if (file.path === "projects/beta.md") return { tags: [{ tag: "#project/beta" }] };
+        if (file.path === "notes/unrelated.md") return { tags: [{ tag: "#random" }] };
+        return null;
+      });
+
+      // Mock getAllTags to return tags from the cache
+      mockedGetAllTags.mockImplementation((cache: any) => {
+        if (!cache?.tags) return [];
+        return cache.tags.map((t: any) => t.tag);
+      });
+
+      // Mock cachedRead to return distinct content per file
+      mockApp.vault.cachedRead.mockImplementation((file: any) => {
+        if (file.path === "projects/alpha.md") return Promise.resolve("Alpha project full content");
+        if (file.path === "projects/beta.md") return Promise.resolve("Beta project full content");
+        return Promise.resolve("Other content");
+      });
+
+      // SearchCore returns a chunk result from an unrelated note
+      retrieveMock.mockResolvedValueOnce({
+        results: [{ id: "notes/unrelated.md#0", score: 0.5, engine: "fulltext" }],
+        queryExpansion: {
+          queries: [],
+          salientTerms: ["#project"],
+          originalQuery: "#project",
+          expandedQueries: [],
+        },
+      });
+
+      const getUnrelatedChunk = (id: string) => {
+        if (id === "notes/unrelated.md#0") return "Unrelated chunk content";
+        return "";
+      };
+      mockChunkManager.getChunkTextSync.mockImplementation(getUnrelatedChunk);
+      mockChunkManager.getChunkText.mockImplementation((id: string) =>
+        Promise.resolve(getUnrelatedChunk(id))
+      );
+
+      mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+        if (path === "notes/unrelated.md") return untaggedFile;
+        return null;
+      });
+
+      const tagRetriever = new TieredLexicalRetriever(mockApp, {
+        minSimilarityScore: 0.1,
+        maxK: 30,
+        salientTerms: ["#project"],
+      });
+
+      const results = await tagRetriever.getRelevantDocuments("give me notes on #project");
+
+      // Both tagged files should be present as full notes
+      const alphaDoc = results.find((d) => d.metadata.path === "projects/alpha.md");
+      const betaDoc = results.find((d) => d.metadata.path === "projects/beta.md");
+
+      expect(alphaDoc).toBeDefined();
+      expect(alphaDoc!.metadata.includeInContext).toBe(true);
+      expect(alphaDoc!.metadata.score).toBe(1.0);
+      expect(alphaDoc!.metadata.source).toBe("tag-match");
+      expect(alphaDoc!.pageContent).toBe("Alpha project full content");
+
+      // #project/beta matches via hierarchical prefix (#project matches #project/beta)
+      expect(betaDoc).toBeDefined();
+      expect(betaDoc!.metadata.includeInContext).toBe(true);
+      expect(betaDoc!.pageContent).toBe("Beta project full content");
+
+      // Unrelated note should also be in results (from search)
+      const unrelatedDoc = results.find((d) => d.metadata.path === "notes/unrelated.md");
+      expect(unrelatedDoc).toBeDefined();
+
+      // Total: 2 tag matches + 1 search result
+      expect(results.length).toBe(3);
     });
   });
 

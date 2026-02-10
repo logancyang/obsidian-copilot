@@ -769,13 +769,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               if (expansion.originalQuery) addTerm(expansion.originalQuery);
               (expansion.salientTerms || []).forEach(addTerm);
               (expansion.expandedQueries || []).forEach(addTerm);
-              (expansion.expandedTerms || []).forEach(addTerm);
 
               preExpandedTerms = {
                 originalQuery: expansion.originalQuery,
                 salientTerms: expansion.salientTerms,
                 expandedQueries: expansion.expandedQueries,
-                expandedTerms: expansion.expandedTerms,
                 recallTerms,
               };
             } catch {

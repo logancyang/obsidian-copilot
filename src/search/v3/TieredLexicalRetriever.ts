@@ -5,7 +5,7 @@ import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import { App, TFile } from "obsidian";
+import { App, TFile, getAllTags } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { RETURN_ALL_LIMIT, SearchCore } from "./SearchCore";
 import { ExpandedQuery } from "./QueryExpander";
@@ -51,8 +51,6 @@ export class TieredLexicalRetriever extends BaseRetriever {
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number; // Not used in v3, kept for compatibility
-      returnAllTags?: boolean;
-      tagTerms?: string[];
       preExpandedQuery?: ExpandedQuery; // Pre-expanded query data to avoid double expansion
     }
   ) {
@@ -93,11 +91,6 @@ export class TieredLexicalRetriever extends BaseRetriever {
       const noteFiles = extractNoteFiles(query, this.app.vault);
       const noteTitles = noteFiles.map((file) => file.basename);
 
-      const tagTerms = this.resolveTagTerms(query);
-      if (this.options.returnAllTags && tagTerms.length > 0) {
-        return this.getAllTagDocuments(tagTerms, query, noteFiles);
-      }
-
       // Combine salient terms with note titles
       const enhancedSalientTerms = [...new Set([...this.options.salientTerms, ...noteTitles])];
 
@@ -112,28 +105,29 @@ export class TieredLexicalRetriever extends BaseRetriever {
       // Perform the tiered search
       const settings = getSettings();
       const retrieveResult = await this.searchCore.retrieve(query, {
-        maxResults: this.options.returnAllTags ? RETURN_ALL_LIMIT : this.options.maxK,
+        maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableLexicalBoosts: settings.enableLexicalBoosts,
-        returnAll: this.options.returnAllTags,
-        preExpandedQuery: this.options.preExpandedQuery, // Pass pre-expanded data to skip double expansion
+        preExpandedQuery: this.options.preExpandedQuery,
       });
       const searchResults = retrieveResult.results;
       this.lastQueryExpansion = retrieveResult.queryExpansion;
 
-      // Get title-matched notes that should always be included
+      // Get guaranteed-include documents: title matches ([[note]]) and tag matches (#hashtag)
       const titleMatches = await this.getTitleMatches(noteFiles);
+      const tagMatches = await this.getTagMatches(this.resolveTagTerms(query));
+      const guaranteedMatches = this.combineGuaranteedMatches(titleMatches, tagMatches);
 
       // Convert search results to Document format
       const searchDocuments = await this.convertToDocuments(searchResults);
 
       // Combine and deduplicate results
-      const combinedDocuments = this.combineResults(searchDocuments, titleMatches);
+      const combinedDocuments = this.combineResults(searchDocuments, guaranteedMatches);
 
       if (getSettings().debug) {
         logInfo("TieredLexicalRetriever: Search complete", {
           totalResults: combinedDocuments.length,
-          titleMatches: titleMatches.length,
+          guaranteedMatches: guaranteedMatches.length,
           searchResults: searchResults.length,
         });
       }
@@ -294,21 +288,14 @@ export class TieredLexicalRetriever extends BaseRetriever {
   private resolveTagTerms(query: string): string[] {
     const normalized = new Set<string>();
 
-    const explicit = this.options.tagTerms ?? [];
-    for (const term of explicit) {
+    // Try salient terms first (upstream may include #tags)
+    for (const term of this.options.salientTerms ?? []) {
       if (typeof term === "string" && term.startsWith("#")) {
         normalized.add(term.toLowerCase());
       }
     }
 
-    if (normalized.size === 0) {
-      for (const term of this.options.salientTerms ?? []) {
-        if (typeof term === "string" && term.startsWith("#")) {
-          normalized.add(term.toLowerCase());
-        }
-      }
-    }
-
+    // Fall back to extracting tags directly from the query text
     if (normalized.size === 0) {
       for (const tag of this.extractTagsFromQuery(query)) {
         normalized.add(tag);
@@ -350,29 +337,6 @@ export class TieredLexicalRetriever extends BaseRetriever {
     }
 
     return Array.from(normalized);
-  }
-
-  private async getAllTagDocuments(
-    tagTerms: string[],
-    originalQuery: string,
-    noteFiles: TFile[]
-  ): Promise<Document[]> {
-    const settings = getSettings();
-    const tagQuery = tagTerms.join(" ") || originalQuery;
-
-    const retrieveResult = await this.searchCore.retrieve(tagQuery, {
-      maxResults: RETURN_ALL_LIMIT,
-      candidateLimit: RETURN_ALL_LIMIT,
-      salientTerms: tagTerms,
-      enableLexicalBoosts: settings.enableLexicalBoosts,
-      returnAll: true,
-    });
-    const searchResults = retrieveResult.results;
-    this.lastQueryExpansion = retrieveResult.queryExpansion;
-
-    const titleMatches = await this.getTitleMatches(noteFiles);
-    const searchDocuments = await this.convertToDocuments(searchResults);
-    return this.combineResults(searchDocuments, titleMatches);
   }
 
   /**
@@ -443,6 +407,88 @@ export class TieredLexicalRetriever extends BaseRetriever {
     }
 
     return chunks;
+  }
+
+  /**
+   * Get documents for notes matching by tag via Obsidian's metadata cache.
+   * Returns full-note Documents with includeInContext: true so they are
+   * guaranteed to reach the LLM, regardless of search score.
+   *
+   * Supports hierarchical prefix matching: #project matches #project/alpha.
+   * @param tagTerms - Lowercase, hash-prefixed tag tokens to match
+   * @returns Array of full-note Documents for every file containing a matching tag
+   */
+  private async getTagMatches(tagTerms: string[]): Promise<Document[]> {
+    if (tagTerms.length === 0) return [];
+
+    const { inclusions, exclusions } = getMatchingPatterns();
+    const allFiles = this.app.vault.getMarkdownFiles();
+    const documents: Document[] = [];
+
+    for (const file of allFiles) {
+      if (!shouldIndexFile(file, inclusions, exclusions) || isInternalExcludedFile(file)) {
+        continue;
+      }
+
+      const cache = this.app.metadataCache.getFileCache(file);
+      if (!cache) continue;
+
+      const fileTags = getAllTags(cache) ?? [];
+      if (fileTags.length === 0) continue;
+
+      // Check if any file tag matches any search tag (case-insensitive, hierarchical prefix)
+      const hasMatch = fileTags.some((fileTag) => {
+        const normalizedFileTag = fileTag.toLowerCase();
+        return tagTerms.some(
+          (searchTag) =>
+            normalizedFileTag === searchTag || normalizedFileTag.startsWith(searchTag + "/")
+        );
+      });
+
+      if (!hasMatch) continue;
+
+      try {
+        const content = await this.app.vault.cachedRead(file);
+        documents.push(
+          new Document({
+            pageContent: content,
+            metadata: {
+              path: file.path,
+              title: file.basename,
+              mtime: file.stat.mtime,
+              ctime: file.stat.ctime,
+              tags: fileTags,
+              includeInContext: true,
+              score: 1.0,
+              rerank_score: 1.0,
+              source: "tag-match",
+            },
+          })
+        );
+      } catch (error) {
+        logWarn(`TieredLexicalRetriever: Failed to read tag-matched file ${file.path}`, error);
+      }
+    }
+
+    return documents;
+  }
+
+  /**
+   * Merge multiple sets of guaranteed-include documents, deduplicating by path.
+   * Earlier entries take priority.
+   */
+  private combineGuaranteedMatches(...sets: Document[][]): Document[] {
+    const seen = new Set<string>();
+    const result: Document[] = [];
+    for (const docs of sets) {
+      for (const doc of docs) {
+        if (!seen.has(doc.metadata.path)) {
+          seen.add(doc.metadata.path);
+          result.push(doc);
+        }
+      }
+    }
+    return result;
   }
 
   /**

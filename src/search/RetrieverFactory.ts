@@ -70,7 +70,7 @@ function normalizeOptions(options: RetrieverOptions): NormalizedRetrieverOptions
     salientTerms: options.salientTerms ?? [],
     timeRange: options.timeRange,
     textWeight: options.textWeight,
-    returnAll: hasTagTerms ? true : (options.returnAll ?? false),
+    returnAll: options.returnAll ?? false,
     useRerankerThreshold: options.useRerankerThreshold,
     returnAllTags: hasTagTerms,
     tagTerms,

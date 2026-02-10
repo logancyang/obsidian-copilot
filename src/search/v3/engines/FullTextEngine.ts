@@ -22,11 +22,6 @@ export class FullTextEngine {
   private static readonly MAX_ARRAY_ITEMS = 10; // Max items to process from arrays
   private static readonly MAX_EXTRACTION_DEPTH = 2; // Max recursion depth for property extraction
 
-  // Weighted query expansion constants
-  // Salient terms (from original query) dominate ranking, expanded terms provide small boost
-  private static readonly SALIENT_WEIGHT = 0.9; // 90% weight for original query terms
-  private static readonly EXPANDED_WEIGHT = 0.1; // 10% weight for expanded terms
-
   // Field weights for search scoring
   private static readonly FIELD_WEIGHTS = {
     title: 5,
@@ -397,43 +392,34 @@ export class FullTextEngine {
   }
 
   /**
-   * Search the ephemeral index using MiniSearch's native BM25+ scoring with weighted query expansion.
+   * Search the ephemeral index using MiniSearch's native BM25+ scoring.
    *
-   * Uses a two-phase scoring approach:
-   * 1. Primary score from salient terms (90% weight) - reflects original query intent
-   * 2. Secondary score from expanded terms (10% weight) - provides small recall boost
+   * Uses salient terms from the original query for scoring.
    *
-   * @param queries - Array of query strings [original, ...expanded] (expanded queries used for secondary scoring)
+   * @param queries - Array of query strings [original, ...expanded]
    * @param limit - Maximum results to return
    * @param salientTerms - Salient terms extracted from original query (primary scoring)
-   * @param originalQuery - The original user query (fallback for primary scoring)
-   * @param expandedTerms - LLM-generated related terms (secondary scoring for recall boost)
-   * @returns Array of NoteIdRank results sorted by weighted BM25 relevance
+   * @param originalQuery - The original user query (fallback for scoring)
+   * @returns Array of NoteIdRank results sorted by BM25 relevance
    */
   search(
     queries: string[],
     limit: number = 30,
     salientTerms: string[] = [],
-    originalQuery?: string,
-    expandedTerms: string[] = []
+    originalQuery?: string
   ): NoteIdRank[] {
     // Return empty results if index hasn't been created yet
     if (!this.index) {
       return [];
     }
 
-    // Build the primary scoring query from salient terms or original query
-    const primaryQuery =
+    // Build the scoring query from salient terms or original query
+    const searchQuery =
       salientTerms.length > 0 ? salientTerms.join(" ") : originalQuery || queries[0] || "";
 
-    if (!primaryQuery.trim()) {
+    if (!searchQuery.trim()) {
       return [];
     }
-
-    // Build secondary scoring query from expanded terms and expanded queries
-    const expandedQueries = queries.slice(1); // Skip original query
-    const secondaryQueryParts = [...expandedTerms, ...expandedQueries];
-    const secondaryQuery = secondaryQueryParts.join(" ").trim();
 
     const searchOptions = {
       boost: {
@@ -449,112 +435,26 @@ export class FullTextEngine {
     };
 
     try {
-      // Primary search with salient terms
-      const primaryResults = this.index.search(primaryQuery, searchOptions);
+      const results = this.index.search(searchQuery, searchOptions);
 
       logInfo(
-        `FullText: Primary search found ${primaryResults.length} results for "${primaryQuery.substring(0, 50)}..."`
+        `FullText: Search found ${results.length} results for "${searchQuery.substring(0, 50)}..."`
       );
 
-      // If no secondary query, return primary results directly
-      if (!secondaryQuery) {
-        return primaryResults.slice(0, limit).map((result) => ({
-          id: result.id as string,
-          score: result.score,
-          engine: "fulltext",
-          explanation: {
-            lexicalMatches: this.extractLexicalMatches(result),
-            baseScore: result.score,
-            finalScore: result.score,
-          },
-        }));
-      }
-
-      // Secondary search with expanded terms for recall boost
-      const secondaryResults = this.index.search(secondaryQuery, searchOptions);
-
-      logInfo(
-        `FullText: Secondary search found ${secondaryResults.length} results for expanded terms`
-      );
-
-      // Combine scores with weighted combination
-      const combined = this.combineWeightedScores(primaryResults, secondaryResults);
-
-      return combined.slice(0, limit);
-    } catch (error) {
-      logWarn(`FullText: Search failed for "${primaryQuery}": ${error}`);
-      return [];
-    }
-  }
-
-  /**
-   * Combine primary and secondary search results with weighted scoring.
-   * Primary results (salient terms) get 90% weight, secondary (expanded) get 10%.
-   *
-   * @param primaryResults - Results from salient term search
-   * @param secondaryResults - Results from expanded term search
-   * @returns Combined and sorted NoteIdRank results
-   */
-  private combineWeightedScores(
-    primaryResults: SearchResult[],
-    secondaryResults: SearchResult[]
-  ): NoteIdRank[] {
-    // Build a map of secondary scores for quick lookup
-    const secondaryScoreMap = new Map<string, { score: number; result: SearchResult }>();
-    for (const result of secondaryResults) {
-      secondaryScoreMap.set(result.id as string, { score: result.score, result });
-    }
-
-    // Track all seen IDs to include secondary-only results
-    const seenIds = new Set<string>();
-    const combined: NoteIdRank[] = [];
-
-    // Process primary results with weighted combination
-    for (const primary of primaryResults) {
-      const id = primary.id as string;
-      seenIds.add(id);
-
-      const secondary = secondaryScoreMap.get(id);
-      const primaryScore = primary.score * FullTextEngine.SALIENT_WEIGHT;
-      const secondaryScore = secondary ? secondary.score * FullTextEngine.EXPANDED_WEIGHT : 0;
-      const combinedScore = primaryScore + secondaryScore;
-
-      combined.push({
-        id,
-        score: combinedScore,
+      return results.slice(0, limit).map((result) => ({
+        id: result.id as string,
+        score: result.score,
         engine: "fulltext",
         explanation: {
-          lexicalMatches: this.extractLexicalMatches(primary),
-          baseScore: primary.score,
-          finalScore: combinedScore,
-          expandedBoost: secondaryScore > 0 ? secondaryScore : undefined,
+          lexicalMatches: this.extractLexicalMatches(result),
+          baseScore: result.score,
+          finalScore: result.score,
         },
-      });
+      }));
+    } catch (error) {
+      logWarn(`FullText: Search failed for "${searchQuery}": ${error}`);
+      return [];
     }
-
-    // Add secondary-only results (found via expansion but not salient terms)
-    // These get only the 10% expanded weight
-    for (const [id, { score, result }] of secondaryScoreMap) {
-      if (!seenIds.has(id)) {
-        const secondaryScore = score * FullTextEngine.EXPANDED_WEIGHT;
-        combined.push({
-          id,
-          score: secondaryScore,
-          engine: "fulltext",
-          explanation: {
-            lexicalMatches: this.extractLexicalMatches(result),
-            baseScore: 0, // No primary match
-            finalScore: secondaryScore,
-            expandedBoost: secondaryScore,
-          },
-        });
-      }
-    }
-
-    // Sort by combined score descending
-    combined.sort((a, b) => b.score - a.score);
-
-    return combined;
   }
 
   /**

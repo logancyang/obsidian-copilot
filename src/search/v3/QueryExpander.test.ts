@@ -32,7 +32,6 @@ describe("QueryExpander", () => {
         salientTerms: [],
         originalQuery: "",
         expandedQueries: [],
-        expandedTerms: [],
       });
     });
 
@@ -43,7 +42,6 @@ describe("QueryExpander", () => {
         salientTerms: [],
         originalQuery: "",
         expandedQueries: [],
-        expandedTerms: [],
       });
     });
 
@@ -239,32 +237,25 @@ describe("QueryExpander", () => {
     });
 
     it("should parse different response formats", async () => {
-      // Test with new XML format (salient vs expanded separation)
+      // Test with new XML format (salient section)
       mockChatModel.invoke.mockResolvedValue({
         content: `<salient>
 <term>test1</term>
 </salient>
 <queries>
 <query>xml variant</query>
-</queries>
-<expanded>
-<term>important</term>
-<term>keyword</term>
-</expanded>`,
+</queries>`,
       });
       let result = await expander.expand("test1");
       expect(result.queries).toContain("test1");
       expect(result.queries).toContain("xml variant");
       // salientTerms come from <salient> section (original query terms only)
       expect(result.salientTerms).toContain("test1");
-      // expandedTerms come from <expanded> section (for recall)
-      expect(result.expandedTerms).toContain("important");
-      expect(result.expandedTerms).toContain("keyword");
 
       // Clear cache for next test
       expander.clearCache();
 
-      // Test old <terms> format (backward compatibility - treats as expanded)
+      // Test old <terms> format (backward compatibility)
       mockChatModel.invoke.mockResolvedValue({
         content: `<queries>
 <query>old format variant</query>
@@ -279,9 +270,6 @@ describe("QueryExpander", () => {
       expect(result.queries).toContain("old format variant");
       // With old format, salientTerms fallback to extracting from original query
       expect(result.salientTerms).toContain("test2");
-      // Old <terms> go to expandedTerms
-      expect(result.expandedTerms).toContain("related");
-      expect(result.expandedTerms).toContain("term");
     });
 
     it("should validate terms and filter action verbs", async () => {

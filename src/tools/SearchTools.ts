@@ -19,7 +19,6 @@ export interface QueryExpansionInfo {
   originalQuery: string;
   salientTerms: string[]; // Terms from original query (used for ranking)
   expandedQueries: string[]; // Alternative phrasings (used for recall)
-  expandedTerms: string[]; // LLM-generated related terms (used for recall)
   recallTerms: string[]; // All terms combined that were used for recall
 }
 
@@ -32,7 +31,6 @@ function computeRecallTerms(expansion: {
   originalQuery: string;
   salientTerms: string[];
   expandedQueries: string[];
-  expandedTerms: string[];
 }): string[] {
   const seen = new Set<string>();
   const recallTerms: string[] = [];
@@ -49,13 +47,12 @@ function computeRecallTerms(expansion: {
     }
   };
 
-  // Add in priority order: original query, salient terms, expanded queries, expanded terms
+  // Add in priority order: original query, salient terms, expanded queries
   if (expansion.originalQuery && typeof expansion.originalQuery === "string") {
     addTerm(expansion.originalQuery);
   }
   (expansion.salientTerms || []).forEach(addTerm);
   (expansion.expandedQueries || []).forEach(addTerm);
-  (expansion.expandedTerms || []).forEach(addTerm);
 
   return recallTerms;
 }
@@ -89,7 +86,6 @@ const localSearchSchema = z.object({
       originalQuery: z.string(),
       salientTerms: z.array(z.string()),
       expandedQueries: z.array(z.string()),
-      expandedTerms: z.array(z.string()),
       recallTerms: z.array(z.string()),
     })
     .optional()
@@ -112,14 +108,12 @@ async function performLexicalSearch({
   preExpandedQuery?: QueryExpansionInfo;
   explicitReturnAll?: boolean;
 }) {
-  const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
   const returnAll = timeRange !== undefined;
-  const returnAllTags = tagTerms.length > 0;
-  const shouldReturnAll = returnAll || returnAllTags || explicitReturnAll;
+  const shouldReturnAll = returnAll || explicitReturnAll;
   const effectiveMaxK = shouldReturnAll ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
 
   logInfo(
-    `lexicalSearch returnAll: ${returnAll} (tags returnAll: ${returnAllTags}, explicit: ${explicitReturnAll}), forceLexical: ${forceLexical}`
+    `lexicalSearch returnAll: ${returnAll} (explicit: ${explicitReturnAll}), forceLexical: ${forceLexical}`
   );
 
   // Convert QueryExpansionInfo to ExpandedQuery format (adding queries field)
@@ -134,6 +128,9 @@ async function performLexicalSearch({
       }
     : undefined;
 
+  // Extract tag terms for self-host retriever (server-side tag filtering)
+  const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+
   const retrieverOptions = {
     minSimilarityScore: shouldReturnAll ? 0.0 : 0.1,
     maxK: effectiveMaxK,
@@ -142,8 +139,7 @@ async function performLexicalSearch({
     textWeight: TEXT_WEIGHT,
     returnAll,
     useRerankerThreshold: 0.5,
-    returnAllTags,
-    tagTerms,
+    tagTerms, // Used by SelfHostRetriever for server-side tag filtering
     preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
   };
 
@@ -172,7 +168,6 @@ async function performLexicalSearch({
         originalQuery: expansion.originalQuery,
         salientTerms: expansion.salientTerms,
         expandedQueries: expansion.expandedQueries,
-        expandedTerms: expansion.expandedTerms,
         recallTerms: computeRecallTerms(expansion),
       };
     }

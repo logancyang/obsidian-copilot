@@ -119,7 +119,6 @@ export interface QueryExpansionInfo {
   originalQuery: string;
   salientTerms: string[]; // Terms from original query (used for ranking)
   expandedQueries: string[]; // Alternative phrasings (used for recall)
-  expandedTerms: string[]; // LLM-generated related terms (used for recall)
   recallTerms: string[]; // All terms combined that were used for recall
 }
 

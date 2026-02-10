@@ -35,8 +35,10 @@ export class GrepScanner {
     const files = allFiles.filter((file) => shouldIndexFile(file, inclusions, exclusions));
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
-    // Normalize queries for case-insensitive search
-    const normalizedQueries = queries.map((q) => q.toLowerCase());
+    // Normalize queries for case-insensitive search, filtering out terms too short for meaningful grep
+    const normalizedQueries = queries
+      .map((q) => q.toLowerCase())
+      .filter((q) => this.isGrepWorthy(q));
 
     // PASS 1: Collect ALL path matches (fast - no file I/O)
     // Sort by match count to prioritize files matching more query terms
@@ -128,6 +130,29 @@ export class GrepScanner {
    */
   async grep(query: string, limit: number = 200): Promise<string[]> {
     return this.batchCachedReadGrep([query], limit);
+  }
+
+  /**
+   * Determines if a term is specific enough for grep matching.
+   * Short ASCII terms like "na" or "an" match too many file paths, causing performance issues.
+   * CJK characters are semantically dense, so shorter terms are acceptable.
+   *
+   * @param term - Lowercased search term
+   * @returns true if the term is worth including in grep queries
+   */
+  private isGrepWorthy(term: string): boolean {
+    if (!term || term.length === 0) {
+      return false;
+    }
+
+    // CJK characters are semantically dense — allow 2+ character terms
+    const cjkPattern = /[\u4e00-\u9fff\u3040-\u309f\u30a0-\u30ff\uac00-\ud7af]/;
+    if (cjkPattern.test(term)) {
+      return term.length >= 2;
+    }
+
+    // ASCII-only terms: require 3+ characters to avoid matching too many paths
+    return term.length >= 3;
   }
 
   /**
