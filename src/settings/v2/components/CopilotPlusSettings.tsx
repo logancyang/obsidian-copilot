@@ -36,24 +36,6 @@ export const CopilotPlusSettings: React.FC = () => {
   };
 
   /**
-   * Ensure self-host mode is validated before enabling dependent features.
-   *
-   * @returns True when self-host mode is ready.
-   */
-  const ensureSelfHostModeReady = async (): Promise<boolean> => {
-    if (settings.enableSelfHostMode) {
-      return true;
-    }
-    setIsValidatingSelfHost(true);
-    const isValid = await validateSelfHostMode();
-    setIsValidatingSelfHost(false);
-    if (!isValid) {
-      return false;
-    }
-    return true;
-  };
-
-  /**
    * Toggle Miyo-backed semantic search and trigger a full reindex when needed.
    *
    * @param enabled - Whether Miyo search should be enabled.
@@ -63,17 +45,7 @@ export const CopilotPlusSettings: React.FC = () => {
       return;
     }
 
-    if (enabled) {
-      const ready = await ensureSelfHostModeReady();
-      if (!ready) {
-        return;
-      }
-    }
-
     const confirmChange = async () => {
-      if (enabled && !settings.enableSelfHostMode) {
-        updateSetting("enableSelfHostMode", true);
-      }
       updateSetting("enableMiyoSearch", enabled);
 
       if (enabled && !settings.enableSemanticSearchV3) {
@@ -200,11 +172,11 @@ export const CopilotPlusSettings: React.FC = () => {
             disabled={!isSelfHostEligible || isValidatingSelfHost}
           />
 
-          {isSelfHostEligible && (
+          {settings.enableSelfHostMode && (
             <SettingItem
               type="switch"
               title="Enable Miyo Search"
-              description="Store your vault index in Miyo to let your favorite AI apps query your vault. Requires a running Miyo desktop app and will prompt you to force refresh the index so data is stored in Miyo."
+              description="Use your Miyo backend for semantic indexing and retrieval while preserving Search v3 lexical merging. Enabling this will prompt you to force refresh the index so data is stored in Miyo."
               checked={settings.enableMiyoSearch}
               onCheckedChange={handleMiyoSearchToggle}
             />

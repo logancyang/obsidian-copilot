@@ -437,6 +437,7 @@ export enum EmbeddingModelProviders {
   COPILOT_PLUS = "copilot-plus",
   COPILOT_PLUS_JINA = "copilot-plus-jina",
   SILICONFLOW = "siliconflow",
+  MIYO = "miyo",
 }
 
 export enum EmbeddingModels {
@@ -452,9 +453,18 @@ export enum EmbeddingModels {
   COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
   SILICONFLOW_QWEN3_EMBEDDING_0_6B = "Qwen/Qwen3-Embedding-0.6B",
   OPENROUTER_OPENAI_EMBEDDING_SMALL = "openai/text-embedding-3-small",
+  MIYO_JINA_EMBEDDINGS_V3 = "jina-embeddings-v3",
 }
 
 export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
+  {
+    name: EmbeddingModels.MIYO_JINA_EMBEDDINGS_V3,
+    provider: EmbeddingModelProviders.MIYO,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+    core: true,
+  },
   {
     name: EmbeddingModels.COPILOT_PLUS_SMALL,
     provider: EmbeddingModelProviders.COPILOT_PLUS,
@@ -553,6 +563,9 @@ export const NOMIC_EMBED_TEXT = "nomic-embed-text";
 // export const DISTILBERT_NLI = 'sentence-transformers/distilbert-base-nli-mean-tokens';
 // export const INSTRUCTOR_XL = 'hkunlp/instructor-xl'; // Inference API is off for this
 // export const MPNET_V2 = 'sentence-transformers/all-mpnet-base-v2'; // Inference API returns 400
+
+export const MIYO_EMBEDDING_MODEL_KEY =
+  EmbeddingModels.MIYO_JINA_EMBEDDINGS_V3 + "|" + EmbeddingModelProviders.MIYO;
 
 export type Provider = ChatModelProviders | EmbeddingModelProviders;
 
@@ -705,6 +718,13 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     label: "Copilot Plus",
     host: BREVILABS_MODELS_BASE_URL,
     curlBaseURL: BREVILABS_MODELS_BASE_URL,
+    keyManagementURL: "",
+    listModelURL: "",
+  },
+  [EmbeddingModelProviders.MIYO]: {
+    label: "Miyo",
+    host: "http://localhost",
+    curlBaseURL: "http://localhost",
     keyManagementURL: "",
     listModelURL: "",
   },
