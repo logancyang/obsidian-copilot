@@ -202,6 +202,20 @@ export function summarizeToolResult(
       return "Converted timestamp";
     case "convertTimeBetweenTimezones":
       return "Converted timezone";
+    case "obsidianDailyRead": {
+      const vault = args?.vault as string | undefined;
+      if (vault && vault.trim().length > 0) {
+        return `Loaded today's daily note from "${vault}"`;
+      }
+      return "Loaded today's daily note";
+    }
+    case "obsidianRandomRead": {
+      const vault = args?.vault as string | undefined;
+      if (vault && vault.trim().length > 0) {
+        return `Loaded a random note from "${vault}"`;
+      }
+      return "Loaded a random note";
+    }
     case "indexVault":
       return "Indexed vault";
     case "updateMemory":
@@ -323,6 +337,20 @@ export function summarizeToolCall(
       return "Converting timestamp";
     case "convertTimeBetweenTimezones":
       return "Converting timezone";
+    case "obsidianDailyRead": {
+      const vault = args?.vault as string | undefined;
+      if (vault && vault.trim().length > 0) {
+        return `Reading today's daily note from "${vault}"`;
+      }
+      return "Reading today's daily note";
+    }
+    case "obsidianRandomRead": {
+      const vault = args?.vault as string | undefined;
+      if (vault && vault.trim().length > 0) {
+        return `Reading a random note from "${vault}"`;
+      }
+      return "Reading a random note";
+    }
     case "indexVault":
       return "Indexing vault";
     case "updateMemory":
