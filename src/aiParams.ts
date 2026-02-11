@@ -59,6 +59,26 @@ export const projectContextLoadAtom = atom<ProjectContextLoadState>({
   total: [],
 });
 
+export interface IndexingProgressState {
+  isActive: boolean;
+  isPaused: boolean;
+  isCancelled: boolean;
+  indexedCount: number;
+  totalFiles: number;
+  errors: string[];
+  completionStatus: "none" | "success" | "cancelled" | "error";
+}
+
+export const indexingProgressAtom = atom<IndexingProgressState>({
+  isActive: false,
+  isPaused: false,
+  isCancelled: false,
+  indexedCount: 0,
+  totalFiles: 0,
+  errors: [],
+  completionStatus: "none",
+});
+
 const selectedTextContextsAtom = atom<SelectedTextContext[]>([]);
 
 export interface ProjectConfig {
@@ -307,6 +327,55 @@ export function subscribeToProjectContextLoadChange(
  */
 export function useProjectContextLoad() {
   return useAtom(projectContextLoadAtom, {
+    store: settingsStore,
+  });
+}
+
+/**
+ * Gets the indexing progress state from the atom.
+ */
+export function getIndexingProgressState(): Readonly<IndexingProgressState> {
+  return settingsStore.get(indexingProgressAtom);
+}
+
+/**
+ * Sets the indexing progress state in the atom.
+ */
+export function setIndexingProgressState(state: IndexingProgressState) {
+  settingsStore.set(indexingProgressAtom, state);
+}
+
+/**
+ * Resets the indexing progress state to the default (idle) state.
+ * Use when indexing completes with nothing to do (e.g. index already up to date).
+ */
+export function resetIndexingProgressState() {
+  settingsStore.set(indexingProgressAtom, {
+    isActive: false,
+    isPaused: false,
+    isCancelled: false,
+    indexedCount: 0,
+    totalFiles: 0,
+    errors: [],
+    completionStatus: "none",
+  });
+}
+
+/**
+ * Updates specific fields in the indexing progress state.
+ */
+export function updateIndexingProgressState(partial: Partial<IndexingProgressState>) {
+  settingsStore.set(indexingProgressAtom, (prev) => ({
+    ...prev,
+    ...partial,
+  }));
+}
+
+/**
+ * Hook to get the indexing progress state from the atom.
+ */
+export function useIndexingProgress() {
+  return useAtom(indexingProgressAtom, {
     store: settingsStore,
   });
 }

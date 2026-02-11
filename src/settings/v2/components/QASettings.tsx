@@ -22,7 +22,9 @@ export const QASettings: React.FC = () => {
       new RebuildIndexConfirmModal(app, async () => {
         updateSetting("embeddingModelKey", modelKey);
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+          userInitiated: true,
+        });
       }).open();
       return;
     }
@@ -55,7 +57,9 @@ export const QASettings: React.FC = () => {
                   if (checked) {
                     const VectorStoreManager = (await import("@/search/vectorStoreManager"))
                       .default;
-                    await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+                    await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+                      userInitiated: true,
+                    });
                   }
                 },
                 checked // true = enabling, false = disabling

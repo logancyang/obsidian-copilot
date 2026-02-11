@@ -6,6 +6,8 @@ import {
   removeSelectedTextContext,
   setCurrentProject,
   useChainType,
+  updateIndexingProgressState,
+  useIndexingProgress,
   useModelKey,
   useSelectedTextContexts,
 } from "@/aiParams";
@@ -20,6 +22,7 @@ import ChatInput from "@/components/chat-components/ChatInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
+import IndexingProgressCard from "@/components/IndexingProgressCard";
 import ProgressCard from "@/components/project/progress-card";
 import {
   ABORT_REASON,
@@ -123,6 +126,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   // null: keep default behavior; true: show; false: hide
   const [progressCardVisible, setProgressCardVisible] = useState<boolean | null>(null);
+  const [indexingCardVisible, setIndexingCardVisible] = useState<boolean | null>(null);
+  const [indexingState] = useIndexingProgress();
 
   // Track if component is mounted to prevent state updates after unmount
   const isMountedRef = useRef(false);
@@ -178,6 +183,47 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   useEffect(() => {
     setProgressCardVisible(null);
   }, [projectContextStatus]);
+
+  /**
+   * Whether to show the indexing progress card.
+   * Hidden in project mode (project card takes priority) and when user explicitly closed it.
+   */
+  const shouldShowIndexingCard = () => {
+    if (selectedChain === ChainType.PROJECT_CHAIN) return false;
+    if (indexingCardVisible === false) return false;
+    // Show when indexing is active or just completed (before auto-close)
+    return indexingState.isActive || indexingState.completionStatus !== "none";
+  };
+
+  // Allow the card to show whenever new indexing activity or completion is detected
+  useEffect(() => {
+    if (indexingState.isActive || indexingState.completionStatus !== "none") {
+      setIndexingCardVisible(null);
+    }
+  }, [indexingState.isActive, indexingState.completionStatus]);
+
+  const handleIndexingCardClose = useCallback(() => {
+    setIndexingCardVisible(false);
+    // Reset atom completion status so stale card doesn't reappear on remount
+    if (!indexingState.isActive) {
+      updateIndexingProgressState({ completionStatus: "none" });
+    }
+  }, [indexingState.isActive]);
+
+  const handleIndexingPause = useCallback(async () => {
+    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+    VectorStoreManager.getInstance().pauseIndexing();
+  }, []);
+
+  const handleIndexingResume = useCallback(async () => {
+    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+    VectorStoreManager.getInstance().resumeIndexing();
+  }, []);
+
+  const handleIndexingStop = useCallback(async () => {
+    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+    await VectorStoreManager.getInstance().cancelIndexing();
+  }, []);
 
   // Clear token count when chat is cleared or replaced (e.g., loading chat history)
   useEffect(() => {
@@ -831,6 +877,15 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               }}
             />
           </div>
+        ) : shouldShowIndexingCard() ? (
+          <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
+            <IndexingProgressCard
+              onClose={handleIndexingCardClose}
+              onPause={handleIndexingPause}
+              onResume={handleIndexingResume}
+              onStop={handleIndexingStop}
+            />
+          </div>
         ) : (
           <>
             <ChatControls
@@ -873,6 +928,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onRemoveSelectedText={handleRemoveSelectedText}
               showProgressCard={() => {
                 setProgressCardVisible(true);
+              }}
+              showIndexingCard={() => {
+                setIndexingCardVisible(true);
               }}
             />
           </>

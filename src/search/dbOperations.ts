@@ -725,7 +725,9 @@ export class DBOperations {
 
   /**
    * Check the integrity of the index by verifying all documents have proper embeddings.
-   * Any documents found to be missing embeddings will be marked for reindexing.
+   * Diagnostic only — logs warnings but does NOT mark files for re-indexing.
+   * (Marking files here caused phantom re-indexing cycles where the same files
+   * were re-indexed on every trigger despite having no actual changes.)
    */
   public async checkIndexIntegrity(): Promise<void> {
     if (!this.oramaDb) {
@@ -733,15 +735,14 @@ export class DBOperations {
     }
 
     try {
-      // Get all indexed files
       const indexedFiles = await this.getIndexedFiles();
+      const filesMissing: string[] = [];
 
-      // Check each file for embeddings
       for (let index = 0; index < indexedFiles.length; index += 1) {
         const filePath = indexedFiles[index];
-        const hasEmbeddings = await this.hasEmbeddings(filePath);
-        if (!hasEmbeddings) {
-          this.markFileMissingEmbeddings(filePath);
+        const hasEmb = await this.hasEmbeddings(filePath);
+        if (!hasEmb) {
+          filesMissing.push(filePath);
         }
 
         if ((index + 1) % INTEGRITY_CHECK_YIELD_INTERVAL === 0) {
@@ -753,9 +754,11 @@ export class DBOperations {
         await this.yieldToEventLoop();
       }
 
-      const missingEmbeddings = this.getFilesMissingEmbeddings();
-      if (missingEmbeddings.length > 0) {
-        logInfo("Files missing embeddings after integrity check:", missingEmbeddings.join(", "));
+      if (filesMissing.length > 0) {
+        logInfo(
+          `Integrity check: ${filesMissing.length} file(s) missing embeddings (diagnostic only, no re-index scheduled):`,
+          filesMissing.join(", ")
+        );
       } else {
         logInfo("Index integrity check completed. All documents have embeddings.");
       }

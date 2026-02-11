@@ -63,6 +63,7 @@ interface ChatInputProps {
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
+  showIndexingCard?: () => void;
 
   // Edit mode props
   editMode?: boolean;
@@ -103,6 +104,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
+  showIndexingCard,
   editMode = false,
   onEditSave,
   onEditCancel,
@@ -727,6 +729,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           contextWebTabs={mergedContextWebTabs}
           selectedTextContexts={selectedTextContexts}
           showProgressCard={showProgressCard}
+          showIndexingCard={showIndexingCard}
           lexicalEditorRef={lexicalEditorRef}
           onAddToContext={handleAddToContext}
           onRemoveFromContext={handleRemoveFromContext}

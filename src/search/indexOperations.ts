@@ -1,3 +1,9 @@
+import {
+  getIndexingProgressState,
+  resetIndexingProgressState,
+  setIndexingProgressState,
+  updateIndexingProgressState,
+} from "@/aiParams";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo } from "@/logger";
 import { RateLimiter } from "@/rateLimiter";
@@ -7,12 +13,7 @@ import { formatDateTime } from "@/utils";
 import { MD5 } from "crypto-js";
 import { App, Notice, TFile } from "obsidian";
 import type { SemanticIndexBackend } from "./indexBackend/SemanticIndexBackend";
-import {
-  extractAppIgnoreSettings,
-  getDecodedPatterns,
-  getMatchingPatterns,
-  shouldIndexFile,
-} from "./searchUtils";
+import { getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
 export interface IndexingState {
   isIndexingPaused: boolean;
@@ -20,8 +21,6 @@ export interface IndexingState {
   indexedCount: number;
   totalFilesToIndex: number;
   processedFiles: Set<string>;
-  currentIndexingNotice: Notice | null;
-  indexNoticeMessage: HTMLSpanElement | null;
 }
 
 export class IndexOperations {
@@ -35,8 +34,6 @@ export class IndexOperations {
     indexedCount: 0,
     totalFilesToIndex: 0,
     processedFiles: new Set(),
-    currentIndexingNotice: null,
-    indexNoticeMessage: null,
   };
 
   constructor(
@@ -59,13 +56,31 @@ export class IndexOperations {
     });
   }
 
-  public async indexVaultToVectorStore(overwrite?: boolean): Promise<number> {
+  public async indexVaultToVectorStore(
+    overwrite?: boolean,
+    options?: { userInitiated?: boolean }
+  ): Promise<number> {
     const errors: string[] = [];
+
+    // Reset any stale state from a previous run but do NOT set isActive yet —
+    // the card should only appear once we confirm there is actual work to do.
+    resetIndexingProgressState();
 
     try {
       const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
       if (!embeddingInstance) {
-        console.error("Embedding instance not found.");
+        logError("Embedding instance not found.");
+        setIndexingProgressState({
+          isActive: false,
+          isPaused: false,
+          isCancelled: false,
+          indexedCount: 0,
+          totalFiles: 0,
+          errors: [
+            "Embedding model not available. Please check your Copilot settings to make sure you have a working embedding model.",
+          ],
+          completionStatus: "error",
+        });
         return 0;
       }
 
@@ -88,12 +103,14 @@ export class IndexOperations {
 
       const files = await this.getFilesToIndex(overwrite);
       if (files.length === 0) {
-        new Notice("Copilot vault index is up-to-date.");
+        // For user-initiated actions, briefly show "Index Up to Date"
+        if (options?.userInitiated) {
+          updateIndexingProgressState({ completionStatus: "success" });
+        }
         return 0;
       }
 
       this.initializeIndexingState(files.length);
-      this.createIndexingNotice();
 
       // Clear the missing embeddings list before starting new indexing
       this.indexBackend.clearFilesMissingEmbeddings();
@@ -101,13 +118,26 @@ export class IndexOperations {
       // New: Prepare all chunks first
       const allChunks = await this.prepareAllChunks(files);
       if (allChunks.length === 0) {
-        new Notice("No valid content to index.");
+        // No valid content to index — silently reset so the card never appears
+        resetIndexingProgressState();
         return 0;
       }
 
+      // Check if user cancelled during chunk preparation
+      if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) {
+        updateIndexingProgressState({ isActive: false, completionStatus: "cancelled" });
+        return 0;
+      }
+
+      // Update totalFiles to reflect only files that produced chunks
+      // (some files may be empty or produce no valid content after chunking)
+      const filesWithChunks = new Set(allChunks.map((c) => c.fileInfo.path)).size;
+      this.state.totalFilesToIndex = filesWithChunks;
+      updateIndexingProgressState({ totalFiles: filesWithChunks });
+
       // Process chunks in batches
       for (let i = 0; i < allChunks.length; i += this.embeddingBatchSize) {
-        if (this.state.isIndexingCancelled) break;
+        if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) break;
         await this.handlePause();
 
         const batch = allChunks.slice(i, i + this.embeddingBatchSize);
@@ -160,7 +190,7 @@ export class IndexOperations {
 
           // Update progress after the batch
           this.state.indexedCount = this.state.processedFiles.size;
-          this.updateIndexingNoticeMessage();
+          updateIndexingProgressState({ indexedCount: this.state.indexedCount });
 
           // Calculate if we've crossed a checkpoint threshold
           const previousCheckpoint = Math.floor(
@@ -205,6 +235,12 @@ export class IndexOperations {
       return this.state.indexedCount;
     } catch (error) {
       this.handleError(error);
+      // Ensure atom is cleared so UI doesn't stay stuck on "Indexing..."
+      updateIndexingProgressState({
+        isActive: false,
+        completionStatus: "error",
+        errors: [error instanceof Error ? error.message : String(error)],
+      });
       return 0;
     }
   }
@@ -346,107 +382,44 @@ export class IndexOperations {
       indexedCount: 0,
       totalFilesToIndex: totalFiles,
       processedFiles: new Set(),
-      currentIndexingNotice: null,
-      indexNoticeMessage: null,
     };
-  }
-
-  private createIndexingNotice(): Notice {
-    const frag = document.createDocumentFragment();
-    const container = frag.createEl("div", { cls: "copilot-notice-container" });
-
-    this.state.indexNoticeMessage = container.createEl("div", { cls: "copilot-notice-message" });
-    this.updateIndexingNoticeMessage();
-
-    // Create button container for better layout
-    const buttonContainer = container.createEl("div", { cls: "copilot-notice-buttons" });
-
-    // Pause/Resume button
-    const pauseButton = buttonContainer.createEl("button");
-    pauseButton.textContent = "Pause";
-    pauseButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      event.preventDefault();
-      if (this.state.isIndexingPaused) {
-        this.resumeIndexing();
-        pauseButton.textContent = "Pause";
-      } else {
-        this.pauseIndexing();
-        pauseButton.textContent = "Resume";
-      }
+    setIndexingProgressState({
+      isActive: true,
+      isPaused: false,
+      isCancelled: false,
+      indexedCount: 0,
+      totalFiles,
+      errors: [],
+      completionStatus: "none",
     });
-
-    // Stop button
-    const stopButton = buttonContainer.createEl("button");
-    stopButton.textContent = "Stop";
-    stopButton.style.marginLeft = "8px";
-    stopButton.addEventListener("click", (event) => {
-      event.stopPropagation();
-      event.preventDefault();
-      this.cancelIndexing();
-    });
-
-    frag.appendChild(this.state.indexNoticeMessage);
-    frag.appendChild(buttonContainer);
-
-    this.state.currentIndexingNotice = new Notice(frag, 0);
-    return this.state.currentIndexingNotice;
   }
 
   private async handlePause(): Promise<void> {
+    // Sync pause state from atom (UI may have toggled it)
+    const atomState = getIndexingProgressState();
+    this.state.isIndexingPaused = atomState.isPaused;
+    this.state.isIndexingCancelled = atomState.isCancelled;
+
     if (this.state.isIndexingPaused) {
       while (this.state.isIndexingPaused && !this.state.isIndexingCancelled) {
         await new Promise((resolve) => setTimeout(resolve, 100));
+        // Re-read atom state each iteration
+        const current = getIndexingProgressState();
+        this.state.isIndexingPaused = current.isPaused;
+        this.state.isIndexingCancelled = current.isCancelled;
       }
 
       // After we exit the pause loop (meaning we've resumed), re-evaluate files
       if (!this.state.isIndexingCancelled) {
         const files = await this.getFilesToIndex();
         if (files.length === 0) {
-          // If no files to index after filter change, cancel the indexing
-          console.log("No files to index after filter change, stopping indexing");
+          logInfo("No files to index after filter change, stopping indexing");
           this.cancelIndexing();
-          new Notice("No files to index with current filters");
           return;
         }
         this.state.totalFilesToIndex = files.length;
-        console.log("Total files to index:", this.state.totalFilesToIndex);
-        console.log("Files to index:", files);
-        this.updateIndexingNoticeMessage();
+        updateIndexingProgressState({ totalFiles: files.length });
       }
-    }
-  }
-
-  private pauseIndexing(): void {
-    this.state.isIndexingPaused = true;
-  }
-
-  private resumeIndexing(): void {
-    this.state.isIndexingPaused = false;
-  }
-
-  private updateIndexingNoticeMessage(): void {
-    if (this.state.indexNoticeMessage) {
-      const status = this.state.isIndexingPaused ? " (Paused)" : "";
-      const messages = [
-        `Copilot is indexing your vault...`,
-        `${this.state.indexedCount}/${this.state.totalFilesToIndex} files processed${status}`,
-      ];
-
-      const settings = getSettings();
-
-      const inclusions = getDecodedPatterns(settings.qaInclusions);
-      if (inclusions.length > 0) {
-        messages.push(`Inclusions: ${inclusions.join(", ")}`);
-      }
-
-      const obsidianIgnoreFolders = extractAppIgnoreSettings(this.app);
-      const exclusions = [...obsidianIgnoreFolders, ...getDecodedPatterns(settings.qaExclusions)];
-      if (exclusions.length > 0) {
-        messages.push(`Exclusions: ${exclusions.join(", ")}`);
-      }
-
-      this.state.indexNoticeMessage.textContent = messages.join("\n");
     }
   }
 
@@ -499,11 +472,6 @@ export class IndexOperations {
       console.error("Fatal error during indexing:", error);
     }
 
-    // Hide any existing indexing notice
-    if (this.state.currentIndexingNotice) {
-      this.state.currentIndexingNotice.hide();
-    }
-
     // Handle json stringify string length error consistently
     if (this.isStringLengthError(error)) {
       new Notice(
@@ -529,20 +497,21 @@ export class IndexOperations {
   }
 
   private finalizeIndexing(errors: string[]): void {
-    if (this.state.currentIndexingNotice) {
-      this.state.currentIndexingNotice.hide();
-    }
-
-    if (this.state.isIndexingCancelled) {
-      new Notice(`Indexing cancelled`);
+    if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) {
+      updateIndexingProgressState({
+        isActive: false,
+        completionStatus: "cancelled",
+        errors,
+      });
       return;
     }
 
-    if (errors.length > 0) {
-      new Notice(`Indexing completed with ${errors.length} errors. Check console for details.`);
-    } else {
-      new Notice("Indexing completed successfully!");
-    }
+    updateIndexingProgressState({
+      isActive: false,
+      completionStatus: errors.length > 0 ? "error" : "success",
+      errors,
+      indexedCount: this.state.indexedCount,
+    });
   }
 
   public async reindexFile(file: TFile): Promise<void> {
@@ -596,14 +565,15 @@ export class IndexOperations {
   }
 
   public async cancelIndexing(): Promise<void> {
-    console.log("Indexing cancelled by user");
+    logInfo("Indexing cancelled by user");
     this.state.isIndexingCancelled = true;
+    updateIndexingProgressState({
+      isCancelled: true,
+      isActive: false,
+      completionStatus: "cancelled",
+    });
 
     // Add a small delay to ensure all state updates are processed
     await new Promise((resolve) => setTimeout(resolve, 100));
-
-    if (this.state.currentIndexingNotice) {
-      this.state.currentIndexingNotice.hide();
-    }
   }
 }

@@ -32,7 +32,7 @@ export async function getVectorLength(embeddingInstance: Embeddings | undefined)
   } catch (error) {
     console.error("Error getting vector length:", error);
     throw new CustomError(
-      "Failed to determine embedding vector length. Please check your embedding model settings."
+      "Failed to determine embedding vector length. Please check your Copilot settings to make sure you have a working embedding model."
     );
   }
 }
