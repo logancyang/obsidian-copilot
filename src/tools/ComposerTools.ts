@@ -4,8 +4,9 @@ import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
-import { ensureFolderExists } from "@/utils";
+import { ensureFolderExists, sanitizeFilePath } from "@/utils";
 import { getSettings } from "@/settings/model";
+import { logWarn } from "@/logger";
 
 async function getFile(file_path: string): Promise<TFile> {
   let file = app.vault.getAbstractFileByPath(file_path);
@@ -144,6 +145,17 @@ const writeToFileTool = createLangChainTool({
       `,
   schema: writeToFileSchema,
   func: async ({ path, content, confirmation = true }) => {
+    // Sanitize path to prevent ENAMETOOLONG errors on filesystems with 255-byte limits.
+    // Must happen here (not just in getFile) so show_preview also receives the sanitized path,
+    // since ApplyView uses state.path with its own getFile that doesn't sanitize.
+    const sanitizedPath = sanitizeFilePath(path);
+    if (sanitizedPath !== path) {
+      logWarn(
+        `Filename too long, truncated for filesystem compatibility: "${path}" → "${sanitizedPath}"`
+      );
+      path = sanitizedPath;
+    }
+
     // Convert object content to JSON string if needed
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
