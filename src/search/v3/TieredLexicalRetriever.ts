@@ -1,13 +1,12 @@
 import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { isInternalExcludedFile, shouldIndexFile, getMatchingPatterns } from "@/search/searchUtils";
 import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
-import { RETURN_ALL_LIMIT, SearchCore } from "./SearchCore";
+import { SearchCore } from "./SearchCore";
 import { ExpandedQuery } from "./QueryExpander";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
 let getChatModelManagerSingleton: (() => any) | null = null;
@@ -30,10 +29,12 @@ async function safeGetChatModel() {
  * 1. Grep scan for initial candidates
  * 2. Graph expansion to find related notes
  * 3. Full-text search with FlexSearch
- * 4. Optional semantic reranking (future)
  *
  * This retriever builds ephemeral indexes on-demand for each search,
  * ensuring always-fresh results without manual index management.
+ *
+ * Filter matching (title mentions, tag matches, time-range) is handled
+ * separately by FilterRetriever at the SearchTools orchestration layer.
  */
 export class TieredLexicalRetriever extends BaseRetriever {
   public lc_namespace = ["tiered_lexical_retriever"];
@@ -47,12 +48,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
       minSimilarityScore?: number;
       maxK: number;
       salientTerms: string[];
-      timeRange?: { startTime: number; endTime: number };
       textWeight?: number;
       returnAll?: boolean;
       useRerankerThreshold?: number; // Not used in v3, kept for compatibility
-      returnAllTags?: boolean;
-      tagTerms?: string[];
       preExpandedQuery?: ExpandedQuery; // Pre-expanded query data to avoid double expansion
     }
   ) {
@@ -74,6 +72,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
   /**
    * Main entry point for document retrieval, compatible with LangChain interface.
+   * Performs scored BM25+ search only. Filter matching (title/tag/time-range)
+   * is handled by FilterRetriever at the orchestration layer.
+   *
    * @param query - The search query
    * @param config - Optional callback configuration
    * @returns Array of Document objects with content and metadata
@@ -83,20 +84,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
     config?: BaseCallbackConfig
   ): Promise<Document[]> {
     try {
-      // If time range is specified, ONLY return time-relevant documents
-      if (this.options.timeRange) {
-        return this.getTimeRangeDocuments(query);
-      }
-
-      // Normal search flow when no time range
-      // Extract note TFiles wrapped in [[]] from the query
+      // Extract note TFiles wrapped in [[]] from the query for salient term enhancement
       const noteFiles = extractNoteFiles(query, this.app.vault);
       const noteTitles = noteFiles.map((file) => file.basename);
-
-      const tagTerms = this.resolveTagTerms(query);
-      if (this.options.returnAllTags && tagTerms.length > 0) {
-        return this.getAllTagDocuments(tagTerms, query, noteFiles);
-      }
 
       // Combine salient terms with note titles
       const enhancedSalientTerms = [...new Set([...this.options.salientTerms, ...noteTitles])];
@@ -112,33 +102,28 @@ export class TieredLexicalRetriever extends BaseRetriever {
       // Perform the tiered search
       const settings = getSettings();
       const retrieveResult = await this.searchCore.retrieve(query, {
-        maxResults: this.options.returnAllTags ? RETURN_ALL_LIMIT : this.options.maxK,
+        maxResults: this.options.maxK,
         salientTerms: enhancedSalientTerms,
         enableLexicalBoosts: settings.enableLexicalBoosts,
-        returnAll: this.options.returnAllTags,
-        preExpandedQuery: this.options.preExpandedQuery, // Pass pre-expanded data to skip double expansion
+        preExpandedQuery: this.options.preExpandedQuery,
       });
       const searchResults = retrieveResult.results;
       this.lastQueryExpansion = retrieveResult.queryExpansion;
 
-      // Get title-matched notes that should always be included
-      const titleMatches = await this.getTitleMatches(noteFiles);
-
       // Convert search results to Document format
       const searchDocuments = await this.convertToDocuments(searchResults);
 
-      // Combine and deduplicate results
-      const combinedDocuments = this.combineResults(searchDocuments, titleMatches);
+      // Sort by score descending, maintaining chunk order for same-note near-ties
+      const sortedDocuments = this.sortResults(searchDocuments);
 
       if (getSettings().debug) {
         logInfo("TieredLexicalRetriever: Search complete", {
-          totalResults: combinedDocuments.length,
-          titleMatches: titleMatches.length,
+          totalResults: sortedDocuments.length,
           searchResults: searchResults.length,
         });
       }
 
-      return combinedDocuments;
+      return sortedDocuments;
     } catch (error) {
       logWarn("TieredLexicalRetriever: Error during search", error);
       // Fallback to empty results on error
@@ -147,307 +132,8 @@ export class TieredLexicalRetriever extends BaseRetriever {
   }
 
   /**
-   * Get documents for time-based queries.
-   * ONLY returns daily notes and documents within the time range.
-   */
-  private async getTimeRangeDocuments(_query: string): Promise<Document[]> {
-    if (!this.options.timeRange) {
-      return [];
-    }
-
-    const { startTime, endTime } = this.options.timeRange;
-
-    // Generate daily note titles for the date range
-    const dailyNoteTitles = this.generateDailyNoteDateRange(startTime, endTime);
-
-    if (getSettings().debug) {
-      logInfo("TieredLexicalRetriever: Generated daily note titles", {
-        startTime: new Date(startTime).toISOString(),
-        endTime: new Date(endTime).toISOString(),
-        titlesCount: dailyNoteTitles.length,
-        firstTitle: dailyNoteTitles[0],
-        lastTitle: dailyNoteTitles[dailyNoteTitles.length - 1],
-      });
-    }
-
-    // Get QA exclusion/inclusion patterns for filtering
-    const { inclusions, exclusions } = getMatchingPatterns();
-
-    // Extract daily note files by exact title match
-    const dailyNoteQuery = dailyNoteTitles.join(", ");
-    const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter((f) =>
-      shouldIndexFile(f, inclusions, exclusions)
-    );
-
-    // Get documents for daily notes
-    const dailyNoteDocuments = await this.getTitleMatches(dailyNoteFiles);
-
-    // Mark all daily notes for inclusion in context
-    const dailyNotesWithContext = dailyNoteDocuments.map((doc) => {
-      doc.metadata.includeInContext = true;
-      return doc;
-    });
-
-    // For time-based queries, we DON'T run regular search
-    // Instead, find all documents modified within the time range
-    // Apply QA exclusion filter to respect user settings
-    const allFiles = this.app.vault
-      .getMarkdownFiles()
-      .filter((f) => shouldIndexFile(f, inclusions, exclusions));
-    const timeFilteredDocuments: Document[] = [];
-
-    // Limit the number of time-filtered documents to avoid overwhelming results
-    const maxTimeFilteredDocs = this.options.returnAll
-      ? RETURN_ALL_LIMIT
-      : Math.min(this.options.maxK, RETURN_ALL_LIMIT);
-
-    for (const file of allFiles) {
-      // Only include files modified within the time range
-      if (file.stat.mtime >= startTime && file.stat.mtime <= endTime) {
-        // Skip if already included as daily note
-        if (dailyNoteFiles.some((f) => f.path === file.path)) {
-          continue;
-        }
-
-        // Stop if we have enough documents
-        if (timeFilteredDocuments.length >= maxTimeFilteredDocs) {
-          break;
-        }
-
-        try {
-          const content = await this.app.vault.cachedRead(file);
-          const cache = this.app.metadataCache.getFileCache(file);
-
-          // Calculate score based on recency (more recent = higher score)
-          const daysSinceModified = (Date.now() - file.stat.mtime) / (1000 * 60 * 60 * 24);
-          const recencyScore = Math.max(0.3, Math.min(1.0, 1.0 - daysSinceModified / 30));
-
-          timeFilteredDocuments.push(
-            new Document({
-              pageContent: content,
-              metadata: {
-                path: file.path,
-                title: file.basename,
-                mtime: file.stat.mtime,
-                ctime: file.stat.ctime,
-                tags: cache?.tags?.map((t) => t.tag) || [],
-                includeInContext: true,
-                score: recencyScore,
-                rerank_score: recencyScore,
-                source: "time-filtered",
-              },
-            })
-          );
-        } catch (error) {
-          logWarn(`TieredLexicalRetriever: Failed to read file ${file.path}`, error);
-        }
-      }
-    }
-
-    // Combine and deduplicate
-    const documentMap = new Map<string, Document>();
-
-    // Add daily notes first (they have priority)
-    for (const doc of dailyNotesWithContext) {
-      documentMap.set(doc.metadata.path, doc);
-    }
-
-    // Add time-filtered documents
-    for (const doc of timeFilteredDocuments) {
-      if (!documentMap.has(doc.metadata.path)) {
-        documentMap.set(doc.metadata.path, {
-          ...doc,
-          metadata: {
-            ...doc.metadata,
-            includeInContext: true,
-          },
-        });
-      }
-    }
-
-    // Sort by score (daily notes get score 1.0, time-filtered by recency)
-    const results = Array.from(documentMap.values()).sort((a, b) => {
-      const scoreA = a.metadata.score || 0;
-      const scoreB = b.metadata.score || 0;
-      return scoreB - scoreA;
-    });
-
-    if (getSettings().debug) {
-      logInfo("TieredLexicalRetriever: Time range search complete", {
-        timeRange: this.options.timeRange,
-        dailyNotesFound: dailyNoteFiles.length,
-        timeFilteredDocs: timeFilteredDocuments.length,
-        totalResults: results.length,
-      });
-    }
-
-    return results;
-  }
-
-  /**
-   * Resolves tag terms used to trigger exhaustive tag retrieval.
-   * Prefers explicit options, falls back to salient terms, then raw query extraction.
-   *
-   * @param query - Original user query string
-   * @returns Array of normalized tag tokens (hash-prefixed, lowercase)
-   */
-  private resolveTagTerms(query: string): string[] {
-    const normalized = new Set<string>();
-
-    const explicit = this.options.tagTerms ?? [];
-    for (const term of explicit) {
-      if (typeof term === "string" && term.startsWith("#")) {
-        normalized.add(term.toLowerCase());
-      }
-    }
-
-    if (normalized.size === 0) {
-      for (const term of this.options.salientTerms ?? []) {
-        if (typeof term === "string" && term.startsWith("#")) {
-          normalized.add(term.toLowerCase());
-        }
-      }
-    }
-
-    if (normalized.size === 0) {
-      for (const tag of this.extractTagsFromQuery(query)) {
-        normalized.add(tag);
-      }
-    }
-
-    return Array.from(normalized);
-  }
-
-  /**
-   * Extracts hash-prefixed tags from a query string, returning lowercase tokens.
-   *
-   * @param query - Original user query
-   * @returns Array of detected tag tokens
-   */
-  private extractTagsFromQuery(query: string): string[] {
-    if (!query) {
-      return [];
-    }
-
-    let matches: RegExpMatchArray | null = null;
-    try {
-      matches = query.match(/#[\p{L}\p{N}_/-]+/gu);
-    } catch {
-      matches = query.match(/#[a-z0-9_/-]+/g);
-    }
-
-    if (!matches) {
-      return [];
-    }
-
-    const normalized = new Set<string>();
-    for (const raw of matches) {
-      const trimmed = raw.trim();
-      if (trimmed.length <= 1) {
-        continue;
-      }
-      normalized.add(trimmed.toLowerCase());
-    }
-
-    return Array.from(normalized);
-  }
-
-  private async getAllTagDocuments(
-    tagTerms: string[],
-    originalQuery: string,
-    noteFiles: TFile[]
-  ): Promise<Document[]> {
-    const settings = getSettings();
-    const tagQuery = tagTerms.join(" ") || originalQuery;
-
-    const retrieveResult = await this.searchCore.retrieve(tagQuery, {
-      maxResults: RETURN_ALL_LIMIT,
-      candidateLimit: RETURN_ALL_LIMIT,
-      salientTerms: tagTerms,
-      enableLexicalBoosts: settings.enableLexicalBoosts,
-      returnAll: true,
-    });
-    const searchResults = retrieveResult.results;
-    this.lastQueryExpansion = retrieveResult.queryExpansion;
-
-    const titleMatches = await this.getTitleMatches(noteFiles);
-    const searchDocuments = await this.convertToDocuments(searchResults);
-    return this.combineResults(searchDocuments, titleMatches);
-  }
-
-  /**
-   * Generate daily note titles for a date range.
-   * Returns titles in [[YYYY-MM-DD]] format.
-   */
-  private generateDailyNoteDateRange(startTime: number, endTime: number): string[] {
-    const dailyNotes: string[] = [];
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-
-    // Limit to 365 days for performance
-    const maxDays = 365;
-    const daysDiff = Math.ceil((endTime - startTime) / (1000 * 60 * 60 * 24));
-
-    if (daysDiff > maxDays) {
-      logWarn(
-        `TieredLexicalRetriever: Date range exceeds ${maxDays} days, limiting to recent ${maxDays} days`
-      );
-      start.setTime(end.getTime() - maxDays * 24 * 60 * 60 * 1000);
-    }
-
-    const current = new Date(start);
-    while (current <= end) {
-      // Use en-CA locale for YYYY-MM-DD format
-      dailyNotes.push(`[[${current.toLocaleDateString("en-CA")}]]`);
-      current.setDate(current.getDate() + 1);
-    }
-
-    return dailyNotes;
-  }
-
-  /**
-   * Get documents for notes matching by title (explicit [[]] mentions or time-based queries).
-   * These are always included in results regardless of search score.
-   */
-  private async getTitleMatches(noteFiles: TFile[]): Promise<Document[]> {
-    const chunks: Document[] = [];
-
-    for (const file of noteFiles) {
-      if (isInternalExcludedFile(file)) {
-        continue;
-      }
-      try {
-        const content = await this.app.vault.cachedRead(file);
-        const cache = this.app.metadataCache.getFileCache(file);
-
-        // Create a document for the entire note
-        chunks.push(
-          new Document({
-            pageContent: content,
-            metadata: {
-              path: file.path,
-              title: file.basename,
-              mtime: file.stat.mtime,
-              ctime: file.stat.ctime,
-              tags: cache?.tags?.map((t) => t.tag) || [],
-              includeInContext: true, // Always include title matches
-              score: 1.0, // Max score for title matches
-              rerank_score: 1.0,
-              source: "title-match",
-            },
-          })
-        );
-      } catch (error) {
-        logWarn(`TieredLexicalRetriever: Failed to read title-matched file ${file.path}`, error);
-      }
-    }
-
-    return chunks;
-  }
-
-  /**
    * Convert v3 search results to LangChain Document format.
-   * Now supports both chunk IDs (note_path#chunk_index) and note IDs
+   * Supports both chunk IDs (note_path#chunk_index) and note IDs.
    */
   private async convertToDocuments(
     searchResults: Array<{ id: string; score: number; engine?: string; explanation?: any }>
@@ -480,10 +166,10 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
           documents.push(
             new Document({
-              pageContent: chunkContent, // KEY CHANGE: chunk content, not full note
+              pageContent: chunkContent,
               metadata: {
-                path: notePath, // Note path for compatibility
-                chunkId: result.id, // Full chunk ID
+                path: notePath,
+                chunkId: result.id,
                 title: file.basename,
                 mtime: file.stat.mtime,
                 ctime: file.stat.ctime,
@@ -493,7 +179,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
                 engine: result.engine || "chunk-v3",
                 includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
                 explanation: result.explanation,
-                isChunk: true, // Flag to indicate this is chunk content
+                isChunk: true,
               },
             })
           );
@@ -509,7 +195,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
           documents.push(
             new Document({
-              pageContent: content, // Full note content (legacy)
+              pageContent: content,
               metadata: {
                 path: result.id,
                 title: file.basename,
@@ -521,7 +207,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
                 engine: result.engine || "v3",
                 includeInContext: result.score > (this.options.minSimilarityScore || 0.1),
                 explanation: result.explanation,
-                isChunk: false, // Flag to indicate this is full note content
+                isChunk: false,
               },
             })
           );
@@ -536,37 +222,13 @@ export class TieredLexicalRetriever extends BaseRetriever {
   }
 
   /**
-   * Combine search results with mentioned notes. Allow all relevant chunks regardless of source note.
+   * Sort documents by score descending, maintaining chunk order for same-note near-ties.
    */
-  private combineResults(searchDocuments: Document[], titleMatches: Document[]): Document[] {
-    const allDocuments: Document[] = [];
-
-    // Add title matches first (they have priority for inclusion)
-    allDocuments.push(...titleMatches);
-
-    // Add all search results (including multiple chunks from same note)
-    for (const doc of searchDocuments) {
-      // Check if this chunk is from a note that already has a title match
-      const hasExistingTitleMatch = titleMatches.some(
-        (titleDoc) => titleDoc.metadata.path === doc.metadata.path
-      );
-
-      if (hasExistingTitleMatch) {
-        // If there's a title match for this note, we don't need to add chunk results
-        // since the full note is already included via title match
-        continue;
-      }
-
-      // Add all chunk results (no per-note limits)
-      allDocuments.push(doc);
-    }
-
-    // Sort by score descending, but maintain chunk order within each note
-    return allDocuments.sort((a, b) => {
+  private sortResults(documents: Document[]): Document[] {
+    return documents.sort((a, b) => {
       const scoreA = a.metadata.score || 0;
       const scoreB = b.metadata.score || 0;
 
-      // If scores are significantly different, sort by score
       const scoreDiff = scoreB - scoreA;
       if (Math.abs(scoreDiff) > 0.01) {
         return scoreDiff;
@@ -576,10 +238,9 @@ export class TieredLexicalRetriever extends BaseRetriever {
       if (a.metadata.isChunk && b.metadata.isChunk && a.metadata.path === b.metadata.path) {
         const aChunkIndex = parseInt(a.metadata.chunkId?.split("#")[1] || "0");
         const bChunkIndex = parseInt(b.metadata.chunkId?.split("#")[1] || "0");
-        return aChunkIndex - bChunkIndex; // Ascending order for chunks within same note
+        return aChunkIndex - bChunkIndex;
       }
 
-      // Otherwise, maintain score order
       return scoreDiff;
     });
   }

@@ -71,7 +71,7 @@ jest.mock("./chunks", () => {
 
 import { SearchCore, selectDiverseTopK } from "./SearchCore";
 
-describe("SearchCore tag recall", () => {
+describe("SearchCore retrieve", () => {
   let mockApp: any;
 
   beforeEach(() => {
@@ -97,7 +97,6 @@ describe("SearchCore tag recall", () => {
       salientTerms: ["#projectalpha/phase1", "update"],
       originalQuery: "#ProjectAlpha/Phase1 update",
       expandedQueries: [],
-      expandedTerms: [],
     });
     batchCachedReadGrepMock.mockResolvedValue(["note.md"]);
 
@@ -114,7 +113,7 @@ describe("SearchCore tag recall", () => {
     };
   });
 
-  it("should surface hierarchy-aware recall terms for hash tags", async () => {
+  it("should pass queries and salient terms as recall queries", async () => {
     const searchCore = new SearchCore(mockApp as any);
 
     const retrieveResult = await searchCore.retrieve("#ProjectAlpha/Phase1 update");
@@ -122,44 +121,10 @@ describe("SearchCore tag recall", () => {
     expect(retrieveResult.results).toHaveLength(1);
     const recallQueries = searchMock.mock.calls[0][0] as string[];
 
+    // Recall queries should contain the expanded query and salient terms (lowercased)
     expect(recallQueries).toEqual(
-      expect.arrayContaining([
-        "#projectalpha/phase1",
-        "projectalpha/phase1",
-        "projectalpha",
-        "phase1",
-      ])
+      expect.arrayContaining(["#projectalpha/phase1 update", "#projectalpha/phase1", "update"])
     );
-
-    const grepQueries = batchCachedReadGrepMock.mock.calls[0][0] as string[];
-    expect(grepQueries).toEqual(
-      expect.arrayContaining(["projectalpha/phase1", "projectalpha", "phase1"])
-    );
-  });
-
-  it("should normalize recall queries for uppercase tag input", async () => {
-    const searchCore = new SearchCore(mockApp as any);
-
-    expandMock.mockResolvedValueOnce({
-      queries: ["#BP progress"],
-      salientTerms: ["#bp", "progress"],
-      originalQuery: "#BP progress",
-      expandedQueries: [],
-      expandedTerms: [],
-    });
-
-    batchCachedReadGrepMock.mockResolvedValueOnce(["bp-note.md"]);
-
-    await searchCore.retrieve("#BP progress");
-
-    const recallQueries = searchMock.mock.calls[0][0];
-    expect(recallQueries).toEqual(
-      expect.arrayContaining(["#bp progress", "#bp", "progress", "bp"])
-    );
-    expect(recallQueries.every((term: string) => term === term.toLowerCase())).toBe(true);
-
-    const grepQueries = batchCachedReadGrepMock.mock.calls[0][0];
-    expect(grepQueries.every((term: string) => term === term.toLowerCase())).toBe(true);
   });
 
   it("should bypass ceilings when returnAll is enabled", async () => {

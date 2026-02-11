@@ -1,483 +1,359 @@
-# Search v3: Chunk-Based Lexical Retrieval
+# Search v3: Chunk-Based Retrieval (Current Implementation)
 
-A high-performance, memory-bounded lexical search system for Obsidian that uses intelligent chunking to deliver precise, contextual results without content explosion. The search engine operates on individual chunks and returns consistent chunk IDs for result assembly. Semantic search is now handled separately by Orama integration.
+This document reflects the runtime behavior in the current codebase.
+Search v3 is the lexical retrieval core used by `TieredLexicalRetriever`, with optional semantic fusion via `MergedSemanticRetriever`.
 
-## Architecture Overview
+## High-Level Topology
 
 ```mermaid
 graph TD
-    A[User Query] --> B[QueryExpander<br/>salient + expanded terms]
-    B --> C[SearchCore<br/>pipeline orchestrator]
+    A[User query] --> B[RetrieverFactory]
+    A --> FR[FilterRetriever]
 
-    C --> D[Grep Scan<br/>recall up to 200 paths]
-    C --> E[ChunkManager<br/>heading-first chunks]
-    E --> F[MiniSearch Engine<br/>BM25+ scoring]
-    F --> G[Boosters<br/>folder / graph / tag bonus]
-    G --> H[Score Normalization]
-    H --> I[Deduplicate + order]
-    I --> J[[Final chunk results]]
+    FR --> FR1[Title matches - note mentions]
+    FR --> FR2[Tag matches - hashtag scan]
+    FR --> FR3[Time-range docs - daily notes + mtime]
 
-    style B fill:#e1f5fe
-    style C fill:#f3e5f5
-    style D fill:#fff3e0
-    style E fill:#ffecb3
-    style F fill:#ffe0b2
-    style G fill:#ede7f6
-    style H fill:#e0f7fa
-    style J fill:#dcedc8
+    B -->|default| C[TieredLexicalRetriever]
+    B -->|semantic enabled| D[MergedSemanticRetriever]
+    B -->|self-host valid| E[SelfHostRetriever]
+
+    C --> F[SearchCore]
+    F --> G[QueryExpander]
+    G --> H[Recall: GrepScanner]
+    H --> I[Candidate notes/chunks]
+    I --> J[Ranking: FullTextEngine BM25+]
+    J --> K[Post-ranking: Folder/Graph boosts]
+    K --> Q[Post-ranking: ScoreNormalizer + diverse top-K]
+    Q --> R[Lexical note/chunk ranks]
+    R --> L[LangChain Documents]
+
+    D --> C
+    D --> M[HybridRetriever]
+    R --> N[Lexical docs]
+    M --> O[Semantic docs]
+    N --> P[Merge + dedupe + blend]
+    O --> P
+    P --> L
+
+    FR1 --> MR[mergeFilterAndSearchResults]
+    FR2 --> MR
+    FR3 --> MR
+    L --> MR
+
+    MR --> |filterResults| XML1[filterResults XML section]
+    MR --> |searchResults| XML2[searchResults XML section]
+    XML1 --> LLM[LLM Context]
+    XML2 --> LLM
 ```
 
-## Recall vs Ranking: Core Design
+`FilterRetriever` runs at the `SearchTools` orchestration layer, parallel to the main search retriever.
+Its results bypass ALL downstream retriever processing (MergedSemanticRetriever top-K, score normalization, etc.).
+When `timeRange` is set, only FilterRetriever runs (no main retriever), preserving the time-range short-circuit behavior.
 
-The search system clearly separates **recall** (finding candidates) from **ranking** (scoring precision):
+## Doc Title/Tag Guarantee (In-Depth)
 
-```
-Original query: "find my piano notes"
+This section describes exactly how title/tag intent is carried through retrieval and into RAG context.
 
-FOR RECALL (finding candidate documents):
-├── Original query: "find my piano notes"
-├── Expanded queries: "piano lesson notes", "piano practice sheets"
-└── Expanded terms: music, sheet, practice, lesson
+### 1. Where guaranteed docs come from
 
-FOR RANKING (scoring/precision):
-└── Salient terms: piano, notes (from original query only, stopwords filtered)
-```
+- Title guarantee source:
+  - `FilterRetriever` extracts explicit `[[note]]` mentions from query text (`extractNoteFiles`).
+  - Those files are loaded as full-note documents via `getTitleMatches()`.
+- Tag guarantee source:
+  - Tag terms are resolved from hash-prefixed salient terms (or extracted from raw query as fallback).
+  - `getTagMatches()` scans markdown files and metadata tags (`getAllTags`) with hierarchical prefix matching:
+    - exact match: `#project/alpha == #project/alpha`
+    - prefix match: searching `#project` also matches `#project/alpha`
 
-**Key principle**: LLM expansion improves recall (finding more documents), but ranking uses only terms from the original query to maintain precision.
+### 2. What makes them "guaranteed"
 
-## Chunk ID Mapping and Result Assembly
+Guaranteed title/tag docs are emitted with:
 
-### How Chunk IDs Work
+- full-note `pageContent` (not chunk snippets)
+- `metadata.includeInContext = true`
+- `metadata.score = 1.0` and `metadata.rerank_score = 1.0`
+- `metadata.source = "title-match"` or `"tag-match"`
 
-The lexical search engine operates on individual chunks and returns consistent chunk IDs in the format `note_path#chunk_index` (e.g., `Piano Lessons/Lesson 4.md#0`, `Piano Lessons/Lesson 4.md#1`).
+Since `FilterRetriever` runs at the orchestration layer (not inside a retriever), these docs **cannot** be lost to downstream top-K slicing in `MergedSemanticRetriever` or score normalization.
 
-### Chunk-to-Text Mapping Process
+### 3. Merge and dedup at orchestration layer
 
-1. **ChunkManager.getChunkText()**: Maps chunk IDs back to their text content
+`SearchTools.performLexicalSearch()` performs:
 
-   ```typescript
-   // Example: "Piano Lessons/Lesson 4.md#1" → full chunk text with headers
-   const chunkText = chunkManager.getChunkText("Piano Lessons/Lesson 4.md#1");
-   ```
+1. `FilterRetriever.getRelevantDocuments()` — always runs
+2. Main retriever (if no timeRange) — `RetrieverFactory` selects lexical/semantic/self-host
+3. `mergeFilterAndSearchResults(filterDocs, searchDocs)`:
+   - Search docs from notes already covered by filter docs are dropped
+   - Filter docs are never removed
 
-2. **Search Result Assembly**:
-   - **Lexical Search**: Returns chunk IDs from MiniSearch index with lexical match explanations
-   - **Final Assembly**: ChunkManager retrieves chunk text for LLM context generation
+### 4. How they reach final RAG context
 
-### Benefits of Chunk Architecture
+After merging, docs are tagged with `isFilterResult: boolean` and `matchType`.
 
-- **Granular Context**: LLM receives specific chunk content, not entire notes
-- **Memory Efficiency**: Only relevant chunks loaded for generation
-- **Consistent Results**: Lexical engine returns consistent chunk ID format
-- **Scalable**: Handles large documents by breaking them into manageable pieces
+Then in `CopilotPlusChainRunner.prepareLocalSearchResult()`:
 
-## Key Features
+- Docs are split by `isFilterResult` flag
+- Filter docs get `<filterResults>` XML wrapper with `<matchType>` element
+- Search docs get `<searchResults>` XML wrapper with `<modified>` element
+- Both use continuous `<id>` numbering for consistent citations
+- If no filter results, falls back to unified `formatSearchResultsForLLM()`
 
-- **Memory-Bounded**: No persistent full-text index, everything ephemeral
-- **Progressive Refinement**: Fast grep → full-text lexical search
-- **Multilingual**: Supports English and CJK languages via custom tokenizer
-- **BM25+ Scoring**: Proper multi-term relevance scoring via MiniSearch
-- **Explainable**: Tracks why documents ranked highly
-- **Fault-Tolerant**: Graceful fallbacks at each stage
-- **Chunk-Based**: Operates on intelligent document chunks for precise context
-- **Recall/Ranking Separation**: Uses all terms for finding documents, only salient terms for scoring
+### 5. Scope of the guarantee
 
-## Example: Search Flow
+- **Strong guarantee**: Filter results bypass all retriever-level processing (top-K, scoring, normalization)
+- **Separate XML sections**: LLM can distinguish exact filter matches from relevance-scored search hits
+- **Dedup is one-directional**: Search results are deduped against filter paths, never the reverse
 
-**Query**: `"Need to deploy #project/alpha after fixing #mobile-app sync"`
+## Step-by-Step: Lexical Search Path
 
-### 1. Query Expansion
+### 1. Entry point and retriever selection
 
-The LLM extracts salient terms and generates expanded terms/queries:
+- `RetrieverFactory` priority order:
+  1. Self-host mode (`SelfHostRetriever`) if valid and backend available
+  2. Semantic mode (`MergedSemanticRetriever`) if `enableSemanticSearchV3` is true
+  3. Lexical mode (`TieredLexicalRetriever`) otherwise
+- `localSearch` forces lexical mode when:
+  - a valid `timeRange` is present, or
+  - any salient term starts with `#` (tag-focused query)
 
-```
-Input:  "Need to deploy #project/alpha after fixing #mobile-app sync"
+### 2. Query expansion (`SearchCore` -> `QueryExpander`)
 
-LLM Response:
-<salient>                           ← From original query (for ranking)
-<term>deploy</term>
-<term>sync</term>
-<term>#project/alpha</term>
-<term>#mobile-app</term>
-</salient>
-<queries>                           ← Alternative phrasings (for recall)
-<query>deploy project alpha</query>
-<query>mobile app sync fix</query>
-</queries>
-<expanded>                          ← Related terms (for recall only)
-<term>release</term>
-<term>synchronization</term>
-</expanded>
-```
+`SearchCore` expands the query unless `preExpandedQuery` is supplied.
 
-### 2. Grep Scan (L0)
+`ExpandedQuery` contract:
 
-Searches for all recall terms (original + expanded queries + expanded terms + salient terms):
-
-```
-Finds: ["projects/alpha/deploy.md", "projects/mobile/sync.md", "notes/release-checklist.md"]
-       (up to 200 candidates)
-```
-
-### 3. Chunking (L1)
-
-Heading-first intelligent chunking converts candidate notes into manageable pieces:
-
-```
-Input:  3 candidate notes ("projects/alpha/deploy.md", "projects/mobile/sync.md", "notes/release-checklist.md")
-Chunks: 7 chunks with size 800-2000 chars each
-Output: ["projects/alpha/deploy.md#0", "projects/alpha/deploy.md#1", "projects/mobile/sync.md#0", ...]
-```
-
-### 4. Full-Text Search Execution
-
-**MiniSearch with BM25+ scoring and weighted query expansion**:
-
-- **Primary scoring (90% weight)**: Salient terms from original query drive ranking
-- **Secondary scoring (10% weight)**: Expanded terms provide small recall boost
-- Field weights: Title (3x), Heading (2.5x), Path (1.5x), Tags (4x), Body (1x)
-
-**Weighted Query Expansion**: A safe, common IR strategy where expanded terms influence ranking by a small amount:
-
-```
-finalScore = 0.9 × salientScore + 0.1 × expandedScore
-```
-
-This approach:
-
-- Preserves original query intent (salient terms dominate)
-- Breaks ties between documents with equal salient matches
-- Gives secondary-only results (found via expansion) a small but non-zero score
-
-**Why BM25+?**: Documents matching more salient terms naturally score higher. A query "hk milk tea home recipe" will rank "HK Milk Tea - Home Recipe" highly because all 5 terms match in the title field (3x weight).
-
-### 5. Lexical Reranking (Boosting Stage)
-
-Applied to lexical results (when `enableLexicalBoosts: true`):
-
-- **Folder Boost**: Notes in folders with multiple matches (logarithmic, 1-1.5x)
-- **Graph Boost**: Notes linked to other results (1.0-1.15x, only for high-similarity results)
-- **Pure Relevance Mode**: When boosts disabled, provides keyword-only scoring without folder/graph influence
-
-### 6. Score Normalization
-
-Min-max normalization prevents auto-1.0 scores
-
-- `baseScore`: The raw BM25+ score after all boosts are applied
-- `finalScore`: The normalized score in [0.02, 0.98] range that users see
-
-### 7. Final Results
-
-```
-1. projects/alpha/deploy.md#0 (0.94) - Matched `#project/alpha` + "deploy", folder boost
-2. projects/mobile/sync.md#0 (0.46) - Matched `#mobile-app` + "sync", folder boost
-3. notes/release-checklist.md#1 (0.23) - Matched "deploy" and shared tags
-```
-
-## Core Components
-
-### SearchCore
-
-- Orchestrates the entire chunk-based search pipeline
-- Executes lexical search with intelligent chunking
-- Methods:
-  - `executeLexicalSearch()`: Chunks candidates, builds index, and searches
-  - `retrieve()`: Main entry point for search execution
-
-### ChunkManager
-
-- Converts notes into intelligent chunks using heading-first algorithm
-- Simple Map-based cache for performance
-- Memory-bounded chunking with configurable size limits
-- Methods:
-  - `getChunks()`: Creates chunks from note paths with size constraints
-  - `getChunkText()`: Retrieves chunk content by ID for LLM context
-
-### QueryExpander
-
-Generates three distinct outputs for recall vs ranking:
-
-```typescript
+```ts
 interface ExpandedQuery {
-  originalQuery: string; // "find my piano notes"
-  queries: string[]; // [original + expanded queries] for recall
-  salientTerms: string[]; // ["piano", "notes"] for ranking (from original only)
-  expandedTerms: string[]; // ["music", "sheet"] for recall only
-  expandedQueries: string[]; // ["piano lesson notes"] for recall only
+  queries: string[]; // [original, ...expandedQueries]
+  salientTerms: string[]; // terms from original query (ranking intent)
+  originalQuery: string;
+  expandedQueries: string[]; // alternative phrasings only
 }
 ```
 
-**LLM Prompt Design**:
+Current behavior:
 
-- `<salient>` section: Terms FROM the original query (stopwords filtered)
-- `<expanded>` section: NEW related terms (for recall only)
-- `<queries>` section: Alternative phrasings (for recall only)
+- SearchCore creates `QueryExpander` with `maxVariants: 3`
+  - max 4 total query strings (`original + 3 variants`)
+- QueryExpander prompt expects:
+  - `<salient>` with `<term>`
+  - `<queries>` with `<query>`
+- There is no separate `<expanded>` term list in the runtime parser.
+- Salient term filtering is mainly prompt-guided.
+- Structural term validation is code-based (`minTermLength = 2`, allowed character sets, tag formats).
+- Fallback mode (LLM unavailable/error/timeout):
+  - extracts terms from original query
+  - returns no expanded variants (`expandedQueries: []`)
+- Results are cached with LRU-like eviction (`cacheSize` default 100).
 
-Falls back to extracting terms from original query if LLM unavailable.
+### 3. Recall term assembly (`SearchCore`)
 
-### Grep Scanner
+Recall terms are built in this order and deduplicated/lowercased:
 
-- Fast substring search using Obsidian's `cachedRead`
-- Unified batching (30 files) for all platforms
-- Searches both phrases and individual terms
-- Path-first optimization for faster matching
+1. `expanded.queries` (includes original query string)
+2. `salientTerms` (plus any caller-provided salient terms)
 
-### MiniSearch Engine (Full-Text Engine)
+Tag matching is handled separately by `FilterRetriever` at the `SearchTools` orchestration layer, not through grep recall terms.
 
-- **BM25+ Scoring**: Proper multi-term relevance ranking (not position-based)
-- Ephemeral index built from chunks per-query
-- Custom `tokenizeMixed` tokenizer for ASCII words + CJK bigrams
-- Multi-field indexing with weights: title (3x), heading (2.5x), path (1.5x), tags (4x), body (1x)
-- **Frontmatter Property Indexing**: Extracts and indexes frontmatter property values
-  - Note-level metadata replicated across all chunks from that note
-  - Supports primitive values, arrays, and Date objects
-- Memory-efficient: chunk content retrieved from ChunkManager when needed
+### 4. Candidate recall (`GrepScanner`)
 
-### Folder & Graph Boost Calculators
+`GrepScanner.batchCachedReadGrep(recallQueries, limit)` uses two passes:
 
-**Folder Boost**: Rewards notes that share folders with other search results, scaled by relevance ratio.
+1. Path pass: score files by how many recall terms appear in path
+2. Content pass: fill remaining slots by content substring match
 
-- **Relevance Ratio**: `relevant_docs_in_folder / total_docs_in_folder`
-- **Requirements**:
-  - Minimum 2 relevant documents in folder (configurable)
-  - Minimum 40% relevance ratio (configurable)
-- **Formula**: `1 + (log2(count + 1) - 1) * sqrt(relevance_ratio)`, capped at 1.15x
-- **Example 1**: Searching "authentication" finds 3/5 notes in `nextjs/` folder (60% relevance) → 1.15x boost
-- **Example 2**: Finding 2/5 notes in folder (40% relevance) → 1.15x boost (meets threshold)
-- **Example 3**: Finding 3/10 notes in folder (30% relevance) → no boost (below 40% threshold)
-- **Purpose**: Only boosts truly coherent folders where a significant portion is relevant
+Noise controls in grep:
 
-**Graph Boost**: Rewards notes that link to other search results.
+- ASCII terms must be length >= 3
+- CJK terms must be length >= 2
 
-- **Intelligent Filtering**:
-  - Maximum 10 candidates analyzed (performance cap)
-  - Requires at least 2 candidates for meaningful connections
-- **Connection Types**:
-  - Backlinks: Notes that link TO this note (weight: 1.0)
-  - Co-citations: Notes cited by same sources (weight: 0.5)
-  - Shared tags: Notes with common tags (weight: 0.3)
-- **Boost Formula**: `1 + strength × log(1 + connectionScore)`, capped at 1.15x
-- **Example**: `auth-guide.md` links to `jwt-setup.md` → both get boosted
-- **Purpose**: Surfaces tightly connected knowledge networks while maintaining performance
+### 5. Full-text lexical ranking (`FullTextEngine`)
 
-Both boosts multiply existing scores after lexical search, helping related content rise together.
+From grep candidates, SearchCore builds an ephemeral MiniSearch index over chunks.
 
-### Score Normalizer
+Indexed fields:
 
-- Min-max normalization (default) or Z-score with tanh squashing
-- Prevents artificial 1.0 scores
-- Clips to [0.02, 0.98] range
-- Preserves explainability metadata
+- `title`
+- `heading`
+- `path`
+- `tags`
+- `body` (chunk content + extracted frontmatter primitive values)
 
-### External Semantic Search
+Field weights:
 
-- Semantic search is now handled by separate Orama integration
-- Provides vector-based similarity search capabilities
-- Operates independently of the v3 lexical search system
+- `title`: 5
+- `tags`: 4
+- `heading`: 2.5
+- `path`: 1.5
+- `body`: 1
 
-## Frontmatter and Chunk Architecture
+Search behavior:
 
-### How Note-Level Frontmatter Works with Chunk-Level Search
+- BM25+ scoring via MiniSearch
+- `combineWith: "OR"`
+- `prefix: true`
+- `fuzzy: false`
+- ranking query text is:
+  - `salientTerms.join(" ")` when salient terms exist
+  - otherwise `originalQuery` (or first query fallback)
 
-**The Challenge**: Frontmatter properties (like `author`, `tags`, `status`) are defined once per note, but our search operates on chunks within notes.
+Important: expanded queries increase candidate recall but are not directly used as the ranking query string.
 
-**The Solution**: Frontmatter replication with performance optimization:
+### 6. Post-ranking adjustments
 
-1. **Extraction Phase** (per note):
+After lexical ranking:
 
-   ```typescript
-   // Extract frontmatter once per note during chunk indexing
-   const frontmatter = cache?.frontmatter ?? {};
-   const propValues = this.extractPropertyValues(frontmatter);
-   // Cache the extracted values per note path
-   processedNotes.set(chunk.notePath, { tags, links, props: propValues });
-   ```
+- Optional folder boost (`enableLexicalBoosts`)
+- Optional graph boost (`enableLexicalBoosts`)
+- Score normalization (min-max in SearchCore configuration)
+- Note-diverse top-K selection (`selectDiverseTopK`)
 
-2. **Replication Phase** (per chunk):
+Folder boost defaults:
 
-   ```typescript
-   // Include frontmatter in each chunk's searchable body
-   const bodyWithProps = [chunk.content, ...noteMetadata.props].join(" ");
-   ```
+- min docs for boost: 2
+- min relevance ratio: 0.4
+- max boost factor: 1.15
+- formula: `1 + (log2(count + 1)) * sqrt(relevanceRatio)` with cap
 
-3. **Search Behavior**:
-   - Searching for `author: "John Doe"` finds ALL chunks from notes where `author` is "John Doe"
-   - Each chunk from that note becomes independently searchable by frontmatter properties
-   - Maintains chunk-level granularity while preserving note-level metadata searchability
+Graph boost effective SearchCore configuration:
 
-**Benefits**:
+- `maxCandidates: 20`
+- `boostStrength: 0.1`
+- `maxBoostMultiplier: 1.15`
+- connection score uses backlinks, co-citations, shared tags
+- formula: `1 + strength * log(1 + connectionScore)` with cap
 
-- ✅ **Complete Searchability**: Every frontmatter property is findable via any chunk
-- ✅ **Performance**: Per-note caching prevents redundant frontmatter extraction
-- ✅ **Consistency**: All chunks from same note have identical frontmatter properties
-- ✅ **Granular Results**: Can return specific chunks while preserving metadata context
+Score normalization in SearchCore:
 
-**Example**:
+- method: `minmax`
+- clip range: `[0.02, 0.98]`
 
-```
-Note: "project-notes.md"
-Frontmatter: { author: "Alice", status: "draft", priority: 1 }
-Chunks: ["project-notes.md#0", "project-notes.md#1", "project-notes.md#2"]
+### 7. Result conversion (`TieredLexicalRetriever`)
 
-Search: "Alice" → Finds all 3 chunks, each containing "Alice" in searchable content
-Search: "draft" → Finds all 3 chunks, each containing "draft" in searchable content
-Search: "priority 1" → Finds all 3 chunks, each containing "1" in searchable content
-```
+`TieredLexicalRetriever` stores `lastQueryExpansion` and converts chunk IDs to `Document`.
 
-## Data Model
+It now returns **only scored search results** — no title/tag/time-range handling.
+Filter matching is handled by `FilterRetriever` at the `SearchTools` orchestration layer.
 
-```typescript
-interface NoteIdRank {
-  id: string; // Chunk ID (note_path#chunk_index) or note path for legacy
-  score: number; // BM25+ relevance score [0-1]
-  engine?: string; // Source engine
-  explanation?: {
-    // Why it ranked high
-    lexicalMatches?: Array<{ field: string; query: string; weight: number }>;
-    semanticScore?: number;
-    folderBoost?: { folder: string; documentCount: number; boostFactor: number };
-    graphConnections?: {
-      backlinks: number;
-      coCitations: number;
-      sharedTags: number;
-      score: number;
-      boostMultiplier: number;
-    };
-    baseScore: number; // BM25+ score before normalization
-    finalScore: number; // Score after normalization (final 0-1 range score)
+### 8. Failure fallback
+
+If the main SearchCore pipeline throws, SearchCore falls back to simple grep-only ranking:
+
+- grep with the original query
+- score by position (`1 / (index + 1)`)
+- return empty results only if fallback also fails
+
+## Time-Range Flow (Special Path)
+
+When `timeRange` is provided, `SearchTools.performLexicalSearch()` runs only `FilterRetriever`:
+
+1. Generates daily-note titles in range (`[[YYYY-MM-DD]]`)
+2. Includes matching daily notes
+3. Adds all notes with `mtime` within range (up to limits)
+4. Ranks by recency score
+
+The main retriever is **not** created when timeRange is set. This path does not use query expansion/BM25 ranking.
+
+## Semantic Mode (`MergedSemanticRetriever`)
+
+When semantic search is enabled (and not forced lexical by tag/time), the system uses `MergedSemanticRetriever`.
+
+Current behavior:
+
+- runs lexical (`TieredLexicalRetriever`) and semantic (`HybridRetriever`) in parallel
+- dedupes on chunk/path-like stable key
+- lexical result wins on key collision
+- blends scores by source with current weights:
+  - lexical weight: `1.0`
+  - semantic weight: `1.0`
+- applies extra lexical tag-match boost:
+  - `TAG_MATCH_BOOST = 1.1`
+- writes blended score to `metadata.score` and `metadata.rerank_score`
+- returns top `maxK` (or `RETURN_ALL_LIMIT` in return-all mode)
+
+**Important**: `FilterRetriever` runs at the orchestration layer, so filter results are **not** subject to `MergedSemanticRetriever`'s top-K slicing.
+
+## Limits and Defaults
+
+### SearchCore limits
+
+- query length clamp: 1000 chars
+- `maxResults` default 30, range 1..100
+- `candidateLimit` default 200, range 10..1000
+- `RETURN_ALL_LIMIT`: 100
+- grep limit:
+  - normal: 200
+  - return-all: 100
+- full-text search limit:
+  - normal: `maxResults * 3`
+  - return-all: `100 * 3 = 300`
+
+Note: these return-all branches apply only when the caller sets `SearchOptions.returnAll = true`.
+`TieredLexicalRetriever` standard path currently governs result volume primarily via `maxK`.
+
+### QueryExpander limits
+
+- SearchCore-configured `maxVariants`: 3
+- QueryExpander default `maxVariants` (outside SearchCore): 2
+- min term length: 2
+- cache size default: 100
+
+## Recall vs Ranking (Current)
+
+| Stage              | Inputs used                               | Goal                              |
+| ------------------ | ----------------------------------------- | --------------------------------- |
+| Recall seed (grep) | `queries` + `salientTerms`                | Maximize candidate coverage       |
+| Full-text ranking  | `salientTerms` (fallback: original query) | Preserve original-query precision |
+| Boosting           | folder/graph signals                      | Surface coherent note clusters    |
+
+## Frontmatter and Tag Indexing
+
+Per note, metadata is extracted once and reused across chunks:
+
+- frontmatter primitive values are appended into chunk searchable body
+- tags are normalized to include:
+  - hashed and non-hashed forms
+  - hierarchical prefixes/segments for slash tags
+
+This lets chunk-level retrieval still reflect note-level metadata.
+
+## Data Contracts
+
+```ts
+interface SearchExplanation {
+  lexicalMatches?: Array<{ field: string; query: string; weight: number }>;
+  folderBoost?: {
+    folder: string;
+    documentCount: number;
+    totalDocsInFolder: number;
+    relevanceRatio: number;
+    boostFactor: number;
   };
+  graphBoost?: { connections: number; boostFactor: number };
+  baseScore: number;
+  finalScore: number;
 }
 
-interface Chunk {
-  id: string; // note_path#chunk_index
-  notePath: string; // original note path
-  chunkIndex: number; // 0-based chunk position
-  content: string; // chunk text with headers + frontmatter properties
-  title: string; // note title
-  heading: string; // section heading
-  mtime: number; // note modification time
+interface NoteIdRank {
+  id: string; // typically chunk id: note_path#chunk_index
+  score: number;
+  engine?: string;
+  explanation?: SearchExplanation;
 }
 
 interface ExpandedQuery {
-  originalQuery: string; // The user's original query
-  queries: string[]; // [original + expanded queries] for recall
-  salientTerms: string[]; // Terms from original query (for ranking)
-  expandedTerms: string[]; // LLM-generated related terms (for recall)
-  expandedQueries: string[]; // LLM-generated alternative queries (for recall)
+  queries: string[];
+  salientTerms: string[];
+  originalQuery: string;
+  expandedQueries: string[];
 }
 ```
 
-## Performance Characteristics
+## Important Implementation Notes
 
-- **Grep scan**: < 50ms for 1k files
-- **Chunking**: < 50ms for 500 candidates → ~1000 chunks
-- **MiniSearch build**: < 100ms for 1000 chunks (memory-bounded)
-- **BM25+ search**: Fast in-memory MiniSearch queries
-- **Total latency**: < 200ms P95 (chunking + lexical search)
-- **Memory peak**: < 20MB mobile, < 100MB desktop
-- **Memory split**: 35% chunk cache, 65% MiniSearch index
-
-## Configuration & Usage
-
-### Search Parameters
-
-- `maxResults`: Number of results to return (default: 30, max: 100)
-- `candidateLimit`: Max candidates for full-text (default: 500, range: 10-1000)
-- `salientTerms`: Additional terms to enhance the search (optional)
-- `enableLexicalBoosts`: Enable folder and graph boosts (default: true)
-
-### Plugin Settings
-
-- **Enable Lexical Boosts**: Toggle for folder and graph relevance boosts
-- **Chunk Configuration**:
-  - Chunk Size: 6000 characters (uses CHUNK_SIZE constant)
-  - All relevant chunks included from matching notes
-- **Graph Boost Configuration**:
-  - Max Candidates: 10 (performance cap)
-  - Boost Strength: 0.1 (connection influence)
-  - Max Boost Multiplier: 1.15x (prevents over-boosting)
-- **Memory Management**: RAM usage split between chunks (35%) and MiniSearch (65%)
-- **File Filtering**: Pattern-based inclusions and exclusions for search
-
-## Full Pipeline Overview
-
-```
-┌────────────┐         ┌──────────────────┐          ┌─────────────────────────┐
-│ User Query │───────▶│ QueryExpander    │─────────▶│ Salient + Expanded      │
-└────────────┘         └──────┬───────────┘          └────────┬──────────────────┘
-                               │ <salient> for ranking                │
-                               │ <expanded> for recall                │
-                               ▼                                      ▼
-┌──────────────────┐   ┌──────────────────┐          ┌─────────────────────────┐
-│ Grep (recall)    │◀──│ SearchCore       │─────────▶│ MiniSearch (BM25+ rank) │
-└──────┬───────────┘   └──────┬───────────┘          └────────┬──────────────────┘
-       │ candidate list        │ returnAll? cap=200                  │ BM25+ scores
-       ▼                       ▼                                      ▼
-┌──────────────────┐   ┌──────────────────┐          ┌─────────────────────────┐
-│ ChunkManager     │──▶│ MiniSearch Engine│─────────▶│ Scoring + Boosting      │
-└──────────────────┘   └──────┬───────────┘          └────────┬──────────────────┘
-                              │ index title/path/body/tags/props     │ folder/graph bonuses
-                              ▼                                      ▼
-                       ┌─────────────────────────┐         ┌─────────────────────────┐
-                       │ Dedup + Ordering        │────────▶│ Final Results (≤200)   │
-                       └─────────────────────────┘         └─────────────────────────┘
-```
-
-- **Query & tags**: Expansion keeps hash-prefixed terms exactly as typed (`#project/alpha`). Salient terms extracted from original query only.
-- **Recall**: Grep seeds the candidate list with original query + expanded queries + expanded terms + salient terms.
-- **Chunking**: Notes are split once through `ChunkManager`, and frontmatter properties/tags are copied to every chunk.
-- **Indexing**: MiniSearch indexes title, path, body, and the normalized tag/prop fields with field weights.
-- **Scoring**: MiniSearch's BM25+ algorithm scores documents based on salient terms only. Documents matching more terms score higher naturally.
-- **Return-all mode**: When a time range or tag query is detected, cap raised to 100 chunks (`RETURN_ALL_LIMIT`).
-
-**Example** — `#project/alpha bugfix`
-
-1. QueryExpander extracts salient terms: `#project/alpha`, `bugfix` (from original query)
-2. LLM may provide expanded terms: `fix`, `issue`, `patch` (for recall only)
-3. SearchCore runs grep with all terms, MiniSearch scores using only salient terms
-4. BM25+ naturally ranks documents with both `#project/alpha` and `bugfix` higher than those with only one term
-
-## Semantic + Lexical Fusion (Design)
-
-Semantic retrieval (HybridRetriever/Orama) is strong at paraphrase recall, while Search v3's TieredLexicalRetriever excels at deliberate keyword/tag matching. When the **Semantic Search** toggle is enabled we can fuse both without widening the retriever surface area.
-
-- **MergedSemanticRetriever**
-  - Implements the same `getRelevantDocuments()` API.
-  - Internally holds one `HybridRetriever` and one `TieredLexicalRetriever`, reusing the shared `ChunkManager` when possible.
-- **Execution Flow**
-  - Run both engines in parallel (`Promise.all` with shared abort handling).
-  - Annotate each returned `Document` with `metadata.source = "semantic"` or `"lexical"`.
-  - Dedupe by `chunkId`/`path`, preferring the lexical chunk when both engines surface the same slice.
-  - Blend scores using lightweight weights (e.g., lexical ×1.0, semantic ×0.7) and reuse existing tag bonuses so tagged hits stay on top.
-  - Write the blended score back to `metadata.score`/`metadata.rerank_score`, sort, and cap at `maxK`.
-- **Result Limits**
-  - When `returnAll` is **false**, request roughly `maxK` items from each engine, merge/dedupe, then truncate to `maxK`.
-  - When `returnAll` is **true**, propagate the widened ceiling (`RETURN_ALL_LIMIT`, 100) to both engines and keep the merged list at that size so tag/time queries still return every chunk Search v3 surfaced.
-- **Integration Points**
-  - Vault QA: when semantic search is on, instantiate `MergedSemanticRetriever`; otherwise keep TieredLexicalRetriever.
-  - `lexicalSearch` tool (and similar call sites) construct the merged retriever instead of branching on the toggle.
-- **Fallback Behaviour**
-  - With semantic search disabled nothing changes—the TieredLexicalRetriever path remains intact.
-
-This approach keeps callers unaware of the fusion mechanics while giving users semantic coverage plus Search v3's deterministic tag/keyword strength.
-
-### TODO
-
-- Investigate an adaptive fetch strategy that requests additional lexical/semantic batches only when the initial `maxK` from one engine leaves gaps, instead of always pulling `maxK * 2` from each.
-- Explore mutating metadata in place or deferring `Document` decoration to avoid cloning every chunk during merge, reducing object churn for large result sets.
-
-## Key Design Decisions
-
-1. **Lexical-Only Architecture**: Fast, reliable keyword-based search with intelligent boosting
-2. **MiniSearch with BM25+**: Proper multi-term relevance scoring (replaced FlexSearch's position-based scoring)
-3. **Recall vs Ranking Separation**: Expanded terms improve recall, salient terms (from original query) drive ranking
-4. **Heading-First Algorithm**: Preserves document structure while respecting size limits
-5. **No Persistent Full-Text Index**: Grep provides fast initial seeding, chunks built per-query
-6. **Ephemeral Everything**: Eliminates maintenance overhead
-7. **Memory-Efficient Indexing**: MiniSearch stores metadata only, chunk content retrieved when needed
-8. **Frontmatter Property Integration**: Extract note-level frontmatter once and replicate across all chunks for seamless search
-9. **Chunk Sequence Preservation**: Chunks from same note served in order for LLM context
-10. **Min-Max Normalization**: Prevents artificial perfect scores while preserving monotonicity
-11. **Explainable Rankings**: Track contributing factors for transparency including chunk-level details
-12. **Memory Budget Split**: Fixed 35%/65% allocation between chunk cache and MiniSearch index
-13. **Semantic Search Separation**: Semantic capabilities now handled by dedicated Orama integration
+- Older docs referenced 90/10 weighted query-expansion scoring. Current code does not do that.
+- Older docs referenced an `<expanded>` term section. Current parser uses `<salient>` and `<queries>` only.
+- Semantic fusion is implemented and active via `MergedSemanticRetriever` when enabled; it is not design-only.
+- `FilterRetriever` is a standalone class at `src/search/v3/FilterRetriever.ts`, not a LangChain `BaseRetriever` subclass.
+- `mergeFilterAndSearchResults` in `src/search/v3/mergeResults.ts` handles the dedup logic between filter and search results.

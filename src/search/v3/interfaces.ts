@@ -32,7 +32,6 @@ export interface SearchExplanation {
     connections: number;
     boostFactor: number;
   };
-  expandedBoost?: number; // score contribution from expanded terms (10% weight)
   baseScore: number; // score before boosts
   finalScore: number; // score after all adjustments
 }
@@ -62,6 +61,5 @@ export interface SearchOptions {
     queries: string[];
     salientTerms: string[];
     expandedQueries: string[];
-    expandedTerms: string[];
   };
 }

@@ -24,9 +24,7 @@ export interface SelfHostRetrieverOptions {
   returnAll?: boolean;
   /** Threshold for using reranker */
   useRerankerThreshold?: number;
-  /** Return all documents matching tags */
-  returnAllTags?: boolean;
-  /** Tag terms to filter by */
+  /** Tag terms to filter by (server-side tag filtering) */
   tagTerms?: string[];
 }
 
@@ -209,7 +207,7 @@ export class SelfHostRetriever extends BaseRetriever {
     }
 
     // Tag filter
-    if (this.options.returnAllTags && this.options.tagTerms && this.options.tagTerms.length > 0) {
+    if (this.options.tagTerms && this.options.tagTerms.length > 0) {
       filter.tags = { containsAny: this.options.tagTerms };
     }
 

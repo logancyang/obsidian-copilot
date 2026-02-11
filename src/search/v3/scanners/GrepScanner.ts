@@ -35,8 +35,10 @@ export class GrepScanner {
     const files = allFiles.filter((file) => shouldIndexFile(file, inclusions, exclusions));
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
-    // Normalize queries for case-insensitive search
-    const normalizedQueries = queries.map((q) => q.toLowerCase());
+    // Normalize queries for case-insensitive search, filtering out terms too short for meaningful grep
+    const normalizedQueries = queries
+      .map((q) => q.toLowerCase())
+      .filter((q) => this.isGrepWorthy(q));
 
     // PASS 1: Collect ALL path matches (fast - no file I/O)
     // Sort by match count to prioritize files matching more query terms
@@ -128,6 +130,22 @@ export class GrepScanner {
    */
   async grep(query: string, limit: number = 200): Promise<string[]> {
     return this.batchCachedReadGrep([query], limit);
+  }
+
+  /**
+   * Determines if a term is specific enough for grep matching.
+   * Single-character terms are always noise. For 2+ characters, CJK is always
+   * allowed and ASCII is allowed since short terms like "ai", "ml", "ui" are
+   * common meaningful searches. The real noise filter is single-char terms.
+   *
+   * @param term - Lowercased search term
+   * @returns true if the term is worth including in grep queries
+   */
+  private isGrepWorthy(term: string): boolean {
+    if (!term || term.length <= 1) {
+      return false;
+    }
+    return true;
   }
 
   /**

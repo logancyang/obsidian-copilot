@@ -227,7 +227,6 @@ export default class ChainManager {
               minSimilarityScore: 0.01,
               maxK: DEFAULT_MAX_SOURCE_CHUNKS,
               salientTerms: [],
-              timeRange: undefined,
               textWeight: undefined,
               returnAll: false,
               useRerankerThreshold: undefined,

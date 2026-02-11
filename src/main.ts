@@ -881,6 +881,17 @@ export default class CopilotPlugin extends Plugin {
 
   async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
     const settings = getSettings();
+
+    // Run FilterRetriever for guaranteed title/tag matches
+    const { FilterRetriever } = await import("@/search/v3/FilterRetriever");
+    const { mergeFilterAndSearchResults } = await import("@/search/v3/mergeResults");
+    const filterRetriever = new FilterRetriever(this.app, {
+      salientTerms: salientTerms,
+      maxK: 20,
+    });
+    const filterDocs = await filterRetriever.getRelevantDocuments(query);
+
+    // Run main retriever for scored results
     const retriever = settings.enableSemanticSearchV3
       ? new (await import("@/search/v3/MergedSemanticRetriever")).MergedSemanticRetriever(
           this.app,
@@ -897,13 +908,15 @@ export default class CopilotPlugin extends Plugin {
           maxK: 20,
           salientTerms: salientTerms,
           textWeight: textWeight,
-          timeRange: undefined,
           returnAll: false,
           useRerankerThreshold: undefined,
         });
 
-    const results = await retriever.getRelevantDocuments(query);
-    return results.map((doc) => ({
+    const searchDocs = await retriever.getRelevantDocuments(query);
+    const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
+    const allDocs = [...filterResults, ...searchResults];
+
+    return allDocs.map((doc) => ({
       content: doc.pageContent,
       metadata: doc.metadata,
     }));

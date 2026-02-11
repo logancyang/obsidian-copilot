@@ -8,6 +8,8 @@ import { getStandaloneQuestion } from "@/chainUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
+import { FilterRetriever } from "@/search/v3/FilterRetriever";
+import { mergeFilterAndSearchResults } from "@/search/v3/mergeResults";
 import { extractTagsFromQuery } from "@/search/v3/utils/tagUtils";
 import { getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
@@ -100,18 +102,33 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // Step 5: Create retriever based on semantic search setting
       const settings = getSettings();
 
-      // Create retriever using factory (handles priority: Self-hosted > Semantic > Lexical)
+      // Step 5a: Run FilterRetriever for guaranteed title/tag matches
+      const hasTagTerms = tags.length > 0;
+      const filterRetriever = new FilterRetriever(app, {
+        salientTerms: hasTagTerms ? [...tags] : [],
+        maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+        returnAll: hasTagTerms,
+      });
+      const filterDocs = await filterRetriever.getRelevantDocuments(standaloneQuestion);
+
+      // Step 5b: Create main retriever using factory (handles priority: Self-hosted > Semantic > Lexical)
       const retrieverResult = await RetrieverFactory.createRetriever(app, {
         minSimilarityScore: 0.01,
         maxK: DEFAULT_MAX_SOURCE_CHUNKS,
-        salientTerms: tags.length > 0 ? [...tags] : [],
+        salientTerms: hasTagTerms ? [...tags] : [],
         tagTerms: tags,
+        returnAll: hasTagTerms,
       });
       const retriever = retrieverResult.retriever;
       logInfo(`VaultQA: Using ${retrieverResult.type} retriever - ${retrieverResult.reason}`);
 
-      // Retrieve relevant documents
-      const retrievedDocs = await retriever.getRelevantDocuments(standaloneQuestion);
+      // Step 5c: Retrieve search results and merge with filter results
+      const searchDocs = await retriever.getRelevantDocuments(standaloneQuestion);
+      const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
+      // Cap total docs to prevent oversized prompts (filter results prioritized)
+      const merged = [...filterResults, ...searchResults];
+      const retrieverCapReached = merged.length > DEFAULT_MAX_SOURCE_CHUNKS;
+      const retrievedDocs = merged.slice(0, DEFAULT_MAX_SOURCE_CHUNKS);
 
       // Store retrieved documents for sources
       this.chainManager.storeRetrieverDocuments(retrievedDocs);
@@ -140,10 +157,15 @@ export class VaultQAChainRunner extends BaseChainRunner {
         }));
       const sourceCatalog = formatSourceCatalog(sourceEntries).join("\n");
 
+      const capNotice = retrieverCapReached
+        ? `\n\nIMPORTANT: The retrieval limit of ${DEFAULT_MAX_SOURCE_CHUNKS} documents was reached. ${merged.length - DEFAULT_MAX_SOURCE_CHUNKS} additional matching documents were omitted. Inform the user: "Note: The retrieval cap was reached — some matching documents were not included. Upgrade to Copilot Plus for more complete answers."`
+        : "";
+
       const qaInstructions =
         "\n\nAnswer the question based only on the following context:\n" +
         context +
-        getQACitationInstructions(sourceCatalog, settings.enableInlineCitations);
+        getQACitationInstructions(sourceCatalog, settings.enableInlineCitations) +
+        capNotice;
 
       // Build messages using envelope-based context construction
       logInfo("[VaultQA] Using envelope-based context construction with LayerToMessagesConverter");
