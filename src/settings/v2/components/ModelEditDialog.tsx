@@ -248,6 +248,32 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               </div>
             </FormField>
 
+            {/* Stream Usage Toggle for OpenAI-format providers */}
+            {(localModel.provider === ChatModelProviders.OPENAI_FORMAT ||
+              localModel.provider === ChatModelProviders.LM_STUDIO) && (
+              <FormField label="Stream Options">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <Checkbox
+                    id="stream-usage"
+                    checked={localModel.streamUsage || false}
+                    onCheckedChange={(checked) => handleLocalUpdate("streamUsage", checked)}
+                  />
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Enable if your provider supports stream_options for token usage tracking.
+                        Disable for providers that do not support it (e.g., Databricks, MLFlow).
+                      </div>
+                    }
+                  >
+                    <Label htmlFor="stream-usage" className="tw-cursor-pointer tw-text-sm">
+                      Stream Usage
+                    </Label>
+                  </HelpTooltip>
+                </div>
+              </FormField>
+            )}
+
             {/* Model Parameters Editor */}
             <ModelParametersEditor
               model={localModel}

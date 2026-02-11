@@ -298,6 +298,7 @@ export default class ChatModelManager {
       [ChatModelProviders.LM_STUDIO]: {
         modelName: modelName,
         apiKey: customModel.apiKey || "default-key",
+        streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
@@ -314,6 +315,7 @@ export default class ChatModelManager {
       [ChatModelProviders.OPENAI_FORMAT]: {
         modelName: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.openAIApiKey),
+        streamUsage: customModel.streamUsage ?? false,
         configuration: {
           baseURL: customModel.baseUrl,
           fetch: customModel.enableCors ? safeFetch : undefined,

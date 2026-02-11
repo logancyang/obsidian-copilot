@@ -691,6 +691,32 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 </div>
               </Label>
             </div>
+            {(model.provider === ChatModelProviders.OPENAI_FORMAT ||
+              model.provider === ChatModelProviders.LM_STUDIO) && (
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <Checkbox
+                  id="stream-usage"
+                  checked={model.streamUsage || false}
+                  onCheckedChange={(checked: boolean) =>
+                    setModel({ ...model, streamUsage: checked })
+                  }
+                />
+                <Label htmlFor="stream-usage" className="tw-cursor-pointer">
+                  <div className="tw-flex tw-items-center tw-gap-1">
+                    <span className="tw-text-sm">Stream Usage</span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-text-sm tw-text-muted">
+                          Enable if your provider supports stream_options for token usage tracking.
+                          Disable for providers that do not support it (e.g., Databricks, MLFlow).
+                        </div>
+                      }
+                      contentClassName="tw-max-w-96"
+                    />
+                  </div>
+                </Label>
+              </div>
+            )}
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
