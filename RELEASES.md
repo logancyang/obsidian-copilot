@@ -1,5 +1,26 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.1
+
+A patch release with search improvements and bug fixes.
+
+- **Improved vault search**: Better tag matching with hierarchical support (e.g. searching `#project` also matches `#project/alpha`) and a cleaner, faster search pipeline. (@loganyang)
+- **New in-chat indexing progress**: Indexing progress now shows as a card inside Copilot Chat with a progress bar and pause/resume/stop controls, instead of a popup notice. No more phantom re-indexing on mode switch. (@loganyang)
+
+### Bug Fixes
+
+- #2176 Fix ENAMETOOLONG error when Composer creates files with long names @logancyang
+- #2174 Fix insert/replace at cursor accidentally including agent reasoning blocks @logancyang
+- #2173 Fix phantom re-indexing on mode switch @logancyang
+- #2172 Fix search recall for tag queries and short terms @logancyang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.0 💪💪💪
 
 The first version of **Self-Host Mode** is finally here! You can simply toggle it on at the bottom of Plus settings, and **your reliance on the Copilot Plus backend is gone** (Believer required)!
