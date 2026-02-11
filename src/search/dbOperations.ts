@@ -725,9 +725,9 @@ export class DBOperations {
 
   /**
    * Check the integrity of the index by verifying all documents have proper embeddings.
-   * Diagnostic only — logs warnings but does NOT mark files for re-indexing.
-   * (Marking files here caused phantom re-indexing cycles where the same files
-   * were re-indexed on every trigger despite having no actual changes.)
+   * Files found missing embeddings are marked for retry so the next indexing run picks them up.
+   * (The phantom re-indexing issue is prevented by clearing the set at the start of each
+   * indexing run in indexOperations.ts, not by skipping the mark here.)
    */
   public async checkIndexIntegrity(): Promise<void> {
     if (!this.oramaDb) {
@@ -743,6 +743,7 @@ export class DBOperations {
         const hasEmb = await this.hasEmbeddings(filePath);
         if (!hasEmb) {
           filesMissing.push(filePath);
+          this.filesWithoutEmbeddings.add(filePath);
         }
 
         if ((index + 1) % INTEGRITY_CHECK_YIELD_INTERVAL === 0) {
@@ -756,7 +757,7 @@ export class DBOperations {
 
       if (filesMissing.length > 0) {
         logInfo(
-          `Integrity check: ${filesMissing.length} file(s) missing embeddings (diagnostic only, no re-index scheduled):`,
+          `Integrity check: ${filesMissing.length} file(s) missing embeddings, marked for re-indexing:`,
           filesMissing.join(", ")
         );
       } else {
