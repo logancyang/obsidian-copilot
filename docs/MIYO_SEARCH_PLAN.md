@@ -26,10 +26,13 @@ Integrate Miyo as the semantic index backend while **preserving Copilot’s exis
 
 ## Proposed Design
 
-### 1. Embedding Provider: Existing Configuration
+### 1. Embedding Provider: Miyo (Toggle-Controlled)
 
-- Continue to use the user-selected embedding model for chunking and query embeddings.
-- Miyo remains a vector storage and search backend; embeddings are generated client-side.
+- Add `EmbeddingModelProviders.MIYO` and an internal Miyo embedding model entry.
+- **Users do not select Miyo embeddings directly**. The Miyo toggle under self-host mode controls this automatically.
+- Implement using `CustomOpenAIEmbeddings` so Miyo’s embeddings are **OpenAI-compatible** (same request/response as Brevilabs embeddings).
+- Base URL should resolve to Miyo (self-host URL or discovery result). The embedding endpoint should be `POST /v1/embeddings` on that base URL.
+- When Miyo indexing is enabled, automatically switch the embedding model to the Miyo provider and restore the previous embedding model when disabled.
 
 ### 2. Index Backend Abstraction (Phase 1)
 
@@ -90,7 +93,7 @@ These hooks should call VectorStoreManager which delegates to the chosen backend
 ### 6. Service Discovery
 
 - Keep `MiyoServiceDiscovery` to resolve base URL from `service.json`.
-- Use discovery for **search** and **index management** endpoints.
+- Use discovery for **search**, **embeddings**, and **index management** endpoints.
 
 ### 7. Migration + Switching
 
@@ -110,10 +113,13 @@ These hooks should call VectorStoreManager which delegates to the chosen backend
 ### Phase 2: Add Miyo Backend
 
 - Implement Miyo index backend and retriever.
+- Enable Miyo embedding provider toggled by self-host + Miyo switch.
 - Wire collection naming per vault and hybrid search endpoint usage.
 
 ## Integration Points
 
+- `src/LLMProviders/embeddingManager.ts` (new provider `MIYO`)
+- `src/constants.ts` (provider enum + built-in model entry)
 - `src/search/indexBackend/*` (new backend abstraction)
 - `src/search/vectorStoreManager.ts` (backend selection)
 - `src/search/indexOperations.ts` (backend interface usage)
@@ -128,5 +134,6 @@ These hooks should call VectorStoreManager which delegates to the chosen backend
 
 ## Open Questions (Resolved)
 
+- Miyo embeddings are **not user-selectable**; the Miyo toggle controls them.
 - Miyo search should be **hybrid** (BM25 + vector).
 - Each vault is a **separate Miyo collection**.
