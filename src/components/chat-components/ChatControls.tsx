@@ -44,8 +44,9 @@ export async function refreshVaultIndex() {
     if (settings.enableSemanticSearchV3) {
       // Use VectorStoreManager for semantic search indexing
       const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
-      new Notice(`Semantic search index refreshed with ${count} documents.`);
+      await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+        userInitiated: true,
+      });
     } else {
       // V3 search builds indexes on demand
       new Notice("Lexical search builds indexes on demand. No manual indexing required.");
@@ -64,8 +65,7 @@ export async function forceReindexVault() {
     if (settings.enableSemanticSearchV3) {
       // Use VectorStoreManager for semantic search indexing
       const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
-      new Notice(`Semantic search index rebuilt with ${count} documents.`);
+      await VectorStoreManager.getInstance().indexVaultToVectorStore(true, { userInitiated: true });
     } else {
       // V3 search builds indexes on demand
       new Notice("Lexical search builds indexes on demand. No manual indexing required.");

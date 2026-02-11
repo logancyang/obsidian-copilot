@@ -294,7 +294,9 @@ export const RelevantNotes = memo(
           async () => {
             updateSetting("enableSemanticSearchV3", true);
             const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-            await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+            await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+              userInitiated: true,
+            });
             setRefresher(refresher + 1);
           },
           true // enabling
@@ -302,8 +304,9 @@ export const RelevantNotes = memo(
       } else {
         // Semantic search is on but index missing — build it
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
-        new Notice("Semantic search index built.");
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+          userInitiated: true,
+        });
         setRefresher(refresher + 1);
       }
     };

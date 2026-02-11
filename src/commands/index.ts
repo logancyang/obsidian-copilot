@@ -205,7 +205,9 @@ export function registerCommands(
       if (settings.enableSemanticSearchV3) {
         // Use VectorStoreManager for semantic search indexing
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+          userInitiated: true,
+        });
         new Notice(`Semantic search index refreshed with ${count} documents.`);
       } else {
         // V3 search builds indexes on demand
@@ -225,7 +227,9 @@ export function registerCommands(
       if (settings.enableSemanticSearchV3) {
         // Use VectorStoreManager for semantic search indexing
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+        const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
+          userInitiated: true,
+        });
         new Notice(`Semantic search index rebuilt with ${count} documents.`);
       } else {
         // V3 search builds indexes on demand

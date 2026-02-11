@@ -15,6 +15,7 @@ interface ChatControlsProps {
   contextWebTabs: WebTabContext[];
   selectedTextContexts?: SelectedTextContext[];
   showProgressCard: () => void;
+  showIndexingCard?: () => void;
   lexicalEditorRef?: React.RefObject<any>;
 
   // Unified handlers
@@ -33,6 +34,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   contextWebTabs,
   selectedTextContexts,
   showProgressCard,
+  showIndexingCard,
   lexicalEditorRef,
   onAddToContext,
   onRemoveFromContext,
@@ -62,6 +64,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       contextWebTabs={contextWebTabs}
       selectedTextContexts={selectedTextContexts}
       showProgressCard={showProgressCard}
+      showIndexingCard={showIndexingCard}
       onTypeaheadSelect={handleTypeaheadSelect}
       lexicalEditorRef={lexicalEditorRef}
     />
