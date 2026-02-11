@@ -1461,6 +1461,39 @@ export function truncateToByteLimit(str: string, byteLimit: number): string {
   return result;
 }
 
+/** Maximum filename (basename) length in bytes for most filesystems (ext4, NTFS, APFS). */
+const MAX_FILENAME_BYTES = 255;
+
+/**
+ * Sanitize a vault-relative file path by truncating the basename if it exceeds
+ * filesystem filename length limits. Preserves the file extension.
+ * @param filePath - Vault-relative file path
+ * @returns The sanitized path with basename truncated if necessary
+ */
+export function sanitizeFilePath(filePath: string): string {
+  const parts = filePath.split("/");
+  const basename = parts[parts.length - 1];
+
+  if (getUtf8ByteLength(basename) <= MAX_FILENAME_BYTES) {
+    return filePath;
+  }
+
+  const extIndex = basename.lastIndexOf(".");
+  const ext = extIndex >= 0 ? basename.substring(extIndex) : "";
+  const name = extIndex >= 0 ? basename.substring(0, extIndex) : basename;
+
+  const extBytes = getUtf8ByteLength(ext);
+  const availableBytes = MAX_FILENAME_BYTES - extBytes;
+
+  if (availableBytes <= 0) {
+    parts[parts.length - 1] = truncateToByteLimit(basename, MAX_FILENAME_BYTES);
+  } else {
+    parts[parts.length - 1] = truncateToByteLimit(name, availableBytes) + ext;
+  }
+
+  return parts.join("/");
+}
+
 /**
  * Opens a file in the workspace, reusing an existing tab if the file is already open.
  * @param file - The TFile to open
