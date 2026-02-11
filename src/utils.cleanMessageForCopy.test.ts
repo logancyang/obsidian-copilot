@@ -107,4 +107,24 @@ End`;
     const expected = "";
     expect(cleanMessageForCopy(input)).toBe(expected);
   });
+
+  it("should remove agent reasoning blocks", () => {
+    const input = `<!--AGENT_REASONING:complete:12:["Searching notes","Read 3 notes","Analyzing content"]-->Here is my response based on the analysis.`;
+    const expected = "Here is my response based on the analysis.";
+    expect(cleanMessageForCopy(input)).toBe(expected);
+  });
+
+  it("should remove agent reasoning blocks with surrounding content", () => {
+    const input = `Some intro text
+<!--AGENT_REASONING:collapsed:5:["Searching notes"]-->
+Here is the actual response.`;
+    const expected = "Some intro text\n\nHere is the actual response.";
+    expect(cleanMessageForCopy(input)).toBe(expected);
+  });
+
+  it("should handle agent reasoning blocks whose step summaries contain -->", () => {
+    const input = `<!--AGENT_REASONING:complete:8:["Step with --> inside"]-->Actual response.`;
+    const expected = "Actual response.";
+    expect(cleanMessageForCopy(input)).toBe(expected);
+  });
 });
