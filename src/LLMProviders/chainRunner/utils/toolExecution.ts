@@ -168,6 +168,8 @@ export function getToolDisplayName(toolName: string): string {
     indexTool: "index",
     writeToFile: "file editor",
     replaceInFile: "file editor",
+    obsidianDailyRead: "daily note reader",
+    obsidianRandomRead: "random note reader",
   };
 
   return displayNameMap[toolName] || toolName;
@@ -191,6 +193,8 @@ export function getToolEmoji(toolName: string): string {
     writeToFile: "✏️",
     replaceInFile: "🔄",
     readNote: "🔍",
+    obsidianDailyRead: "📅",
+    obsidianRandomRead: "🎲",
   };
 
   return emojiMap[toolName] || "🔧";
