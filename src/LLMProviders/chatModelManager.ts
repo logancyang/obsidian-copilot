@@ -32,7 +32,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
 import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatOllama } from "@langchain/ollama";
-import { ChatOpenAI } from "@langchain/openai";
+import { AzureChatOpenAI, ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
@@ -46,7 +46,7 @@ type ChatConstructorType = {
 
 const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
-  [ChatModelProviders.AZURE_OPENAI]: ChatOpenAI,
+  [ChatModelProviders.AZURE_OPENAI]: AzureChatOpenAI,
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
   [ChatModelProviders.COHEREAI]: ChatCohere,
   [ChatModelProviders.GOOGLE]: ChatGoogleGenerativeAI,
@@ -200,28 +200,16 @@ export default class ChatModelManager {
         }),
       },
       [ChatModelProviders.AZURE_OPENAI]: {
-        modelName:
+        model: modelName,
+        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiInstanceName:
+          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
+        azureOpenAIApiDeploymentName:
           customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
         configuration: {
-          baseURL:
-            customModel.baseUrl ||
-            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
-          defaultQuery: {
-            "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
-          },
-          defaultHeaders: {
-            "Content-Type": "application/json",
-            "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-          },
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        ...this.getOpenAISpecialConfig(
-          modelName,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature,
-          customModel
-        ),
       },
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
@@ -750,11 +738,11 @@ export default class ChatModelManager {
     const modelInfo = getModelInfo(model.name);
 
     // For GPT-5 models, automatically use Responses API for proper verbosity support
+    // Note: AzureChatOpenAI uses different API interface, so we exclude it from Responses API
     const constructorConfig: any = { ...modelConfig };
     if (
       modelInfo.isGPT5 &&
       (selectedModel.vendor === ChatModelProviders.OPENAI ||
-        selectedModel.vendor === ChatModelProviders.AZURE_OPENAI ||
         selectedModel.vendor === ChatModelProviders.OPENAI_FORMAT)
     ) {
       constructorConfig.useResponsesApi = true;
