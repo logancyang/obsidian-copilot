@@ -12,8 +12,6 @@ export interface MiyoUpsertDocument {
   path: string;
   title: string;
   content: string;
-  embedding: number[];
-  embedding_model: string;
   created_at: number;
   ctime: number;
   mtime: number;
@@ -91,13 +89,8 @@ export interface MiyoSearchResponse {
 }
 
 /**
- * Embedding payload for search requests.
+ * Search filters for Miyo queries.
  */
-export interface MiyoEmbeddingPayload {
-  model: string;
-  vector: number[];
-}
-
 export interface MiyoSearchFilter {
   field: string;
   gte?: number;
@@ -139,16 +132,16 @@ export class MiyoClient {
    * Upsert a batch of documents.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    * @param documents - Documents to upsert.
    * @returns Number of documents upserted.
    */
   public async upsertDocuments(
     baseUrl: string,
-    collectionName: string,
+    sourceId: string,
     documents: MiyoUpsertDocument[]
   ): Promise<number> {
-    const payload = { collection_name: collectionName, documents };
+    const payload = { source_id: sourceId, documents };
     const response = await this.requestJson<{ upserted: number }>(baseUrl, "/v0/index/upsert", {
       method: "POST",
       body: payload,
@@ -160,16 +153,12 @@ export class MiyoClient {
    * Delete documents by file path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    * @param path - File path to delete.
    * @returns Count of documents deleted.
    */
-  public async deleteByPath(
-    baseUrl: string,
-    collectionName: string,
-    path: string
-  ): Promise<number> {
-    const payload = { collection_name: collectionName, path };
+  public async deleteByPath(baseUrl: string, sourceId: string, path: string): Promise<number> {
+    const payload = { source_id: sourceId, path };
     const response = await this.requestJson<{ deleted?: number }>(baseUrl, "/v0/index/by_path", {
       method: "DELETE",
       body: payload,
@@ -178,13 +167,13 @@ export class MiyoClient {
   }
 
   /**
-   * Clear all indexed documents for a collection.
+   * Clear all indexed documents for a source.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    */
-  public async clearIndex(baseUrl: string, collectionName: string): Promise<void> {
-    const payload = { collection_name: collectionName };
+  public async clearIndex(baseUrl: string, sourceId: string): Promise<void> {
+    const payload = { source_id: sourceId };
     await this.requestJson(baseUrl, "/v0/index/clear", { method: "POST", body: payload });
   }
 
@@ -192,34 +181,34 @@ export class MiyoClient {
    * List indexed files with pagination.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    * @param offset - Offset for pagination.
    * @param limit - Page size.
    * @returns Indexed files response.
    */
   public async listFiles(
     baseUrl: string,
-    collectionName: string,
+    sourceId: string,
     offset: number,
     limit: number
   ): Promise<MiyoIndexedFilesResponse> {
     return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/index/files", {
       method: "GET",
-      query: { collection_name: collectionName, offset, limit },
+      query: { source_id: sourceId, offset, limit },
     });
   }
 
   /**
-   * Fetch index statistics for a collection.
+   * Fetch index statistics for a source.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    * @returns Index stats response.
    */
-  public async getStats(baseUrl: string, collectionName: string): Promise<MiyoIndexStatsResponse> {
+  public async getStats(baseUrl: string, sourceId: string): Promise<MiyoIndexStatsResponse> {
     return this.requestJson<MiyoIndexStatsResponse>(baseUrl, "/v0/index/stats", {
       method: "GET",
-      query: { collection_name: collectionName },
+      query: { source_id: sourceId },
     });
   }
 
@@ -227,18 +216,18 @@ export class MiyoClient {
    * Fetch all documents for a given path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    * @param path - File path to look up.
    * @returns Documents response.
    */
   public async getDocumentsByPath(
     baseUrl: string,
-    collectionName: string,
+    sourceId: string,
     path: string
   ): Promise<MiyoDocumentsResponse> {
     return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/index/documents", {
       method: "GET",
-      query: { collection_name: collectionName, path },
+      query: { source_id: sourceId, path },
     });
   }
 
@@ -246,53 +235,29 @@ export class MiyoClient {
    * Execute a hybrid search query.
    *
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
+   * @param sourceId - Vault-specific source id.
    * @param query - User query.
    * @param limit - Maximum number of results.
-   * @param embedding - Optional query embedding payload.
+   * @param filters - Optional search filters.
    * @returns Search response.
    */
   public async search(
     baseUrl: string,
-    collectionName: string,
+    sourceId: string,
     query: string,
     limit: number,
-    embedding?: MiyoEmbeddingPayload,
     filters?: MiyoSearchFilter[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      collection_name: collectionName,
+      source_id: sourceId,
       limit,
-      ...(embedding ? { embedding } : {}),
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
     if (getSettings().debug) {
       logInfo("Miyo search request:", { baseUrl, payload });
     }
     return this.requestJson<MiyoSearchResponse>(baseUrl, "/v0/search", {
-      method: "POST",
-      body: payload,
-    });
-  }
-
-  /**
-   * Execute a vector search query (optional endpoint).
-   *
-   * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault-specific collection name.
-   * @param embedding - Query embedding payload.
-   * @param limit - Maximum number of results.
-   * @returns Search response.
-   */
-  public async searchByVector(
-    baseUrl: string,
-    collectionName: string,
-    embedding: MiyoEmbeddingPayload,
-    limit: number
-  ): Promise<MiyoSearchResponse> {
-    const payload = { collection_name: collectionName, embedding, limit };
-    return this.requestJson<MiyoSearchResponse>(baseUrl, "/v0/search/vector", {
       method: "POST",
       body: payload,
     });

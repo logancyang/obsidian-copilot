@@ -3,14 +3,8 @@ import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import {
-  MiyoClient,
-  MiyoEmbeddingPayload,
-  MiyoSearchFilter,
-  MiyoSearchResult,
-} from "@/miyo/MiyoClient";
-import { getMiyoCollectionName } from "@/miyo/miyoUtils";
+import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
+import { getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
@@ -33,7 +27,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   public lc_namespace = ["miyo_semantic_retriever"];
 
   private client: MiyoClient;
-  private embeddingsManager: EmbeddingsManager;
   private readonly returnAll: boolean;
   private readonly maxK: number;
   private readonly minSimilarityScore: number;
@@ -50,7 +43,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   ) {
     super();
     this.client = new MiyoClient();
-    this.embeddingsManager = EmbeddingsManager.getInstance();
     this.returnAll = Boolean(options.returnAll);
     this.maxK = Math.max(1, options.maxK);
     this.minSimilarityScore = options.minSimilarityScore ?? 0.1;
@@ -88,7 +80,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     try {
       const baseUrl = await this.client.resolveBaseUrl(getSettings().selfHostUrl);
       const limit = this.returnAll ? RETURN_ALL_LIMIT : this.maxK;
-      const embedding = await this.buildQueryEmbedding(query);
       const filters = this.buildSearchFilters();
       if (getSettings().debug) {
         logInfo("MiyoSemanticRetriever: search params:", {
@@ -97,16 +88,14 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           maxK: this.maxK,
           minSimilarityScore: this.minSimilarityScore,
           returnAll: this.returnAll,
-          embeddingModel: embedding?.model,
           filters,
         });
       }
       const response = await this.client.search(
         baseUrl,
-        getMiyoCollectionName(this.app),
+        getMiyoSourceId(this.app),
         query,
         limit,
-        embedding,
         filters
       );
 
@@ -123,24 +112,6 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     } catch (error) {
       logWarn(`MiyoSemanticRetriever: search failed: ${error}`);
       return [];
-    }
-  }
-
-  /**
-   * Build a query embedding and resolve the embedding model name.
-   *
-   * @param query - Query text to embed.
-   * @returns Embedding vector and model name when available.
-   */
-  private async buildQueryEmbedding(query: string): Promise<MiyoEmbeddingPayload | undefined> {
-    try {
-      const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
-      const vector = await embeddingInstance.embedQuery(query);
-      const model = EmbeddingsManager.getModelName(embeddingInstance);
-      return { model, vector };
-    } catch (error) {
-      logWarn(`MiyoSemanticRetriever: failed to embed query: ${error}`);
-      return undefined;
     }
   }
 

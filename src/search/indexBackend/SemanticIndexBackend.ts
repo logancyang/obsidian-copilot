@@ -34,6 +34,11 @@ export interface SemanticIndexBackend {
   clearIndex(embeddingInstance: Embeddings | undefined): Promise<void>;
 
   /**
+   * Indicates whether the backend requires client-side embeddings.
+   */
+  requiresEmbeddings(): boolean;
+
+  /**
    * Insert or update a semantic document in the backend.
    */
   upsert(doc: SemanticIndexDocument): Promise<SemanticIndexDocument | undefined>;
@@ -76,7 +81,7 @@ export interface SemanticIndexBackend {
   /**
    * Check for embedding model changes and trigger required rebuilds.
    */
-  checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean>;
+  checkAndHandleEmbeddingModelChange(embeddingInstance?: Embeddings): Promise<boolean>;
 
   /**
    * Persist backend changes, if applicable.

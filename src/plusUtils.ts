@@ -56,15 +56,12 @@ const SELF_HOST_PERMANENT_VALIDATION_COUNT = 3;
 const SELF_HOST_ELIGIBLE_PLANS = ["believer", "supporter"];
 
 /**
- * Check if self-host mode is valid.
- * Requires license key + toggle enabled + (permanent validation OR within grace period).
+ * Check if self-host access is valid.
+ * Valid if: permanently validated (3+ successful checks) OR within 15-day grace period.
  */
-export function isSelfHostModeValid(): boolean {
+export function isSelfHostAccessValid(): boolean {
   const settings = getSettings();
-  if (!settings.plusLicenseKey) {
-    return false;
-  }
-  if (!settings.enableSelfHostMode || settings.selfHostModeValidatedAt == null) {
+  if (settings.selfHostModeValidatedAt == null) {
     return false;
   }
   // Permanently valid after 3 successful validations
@@ -73,6 +70,18 @@ export function isSelfHostModeValid(): boolean {
   }
   // Otherwise, check grace period
   return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+}
+
+/**
+ * Check if self-host mode is valid and enabled.
+ * Requires the toggle to be on and access to be within the grace period or permanently validated.
+ */
+export function isSelfHostModeValid(): boolean {
+  const settings = getSettings();
+  if (!settings.enableSelfHostMode) {
+    return false;
+  }
+  return isSelfHostAccessValid();
 }
 
 /** Check if the model key is a Copilot Plus model. */
@@ -273,7 +282,7 @@ export async function validateSelfHostMode(): Promise<boolean> {
  */
 export async function refreshSelfHostModeValidation(): Promise<void> {
   const settings = getSettings();
-  if (!settings.enableSelfHostMode) {
+  if (!settings.enableSelfHostMode && !settings.enableMiyoSearch) {
     return;
   }
 
@@ -309,6 +318,7 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
     } else {
       // User is no longer on an eligible plan, disable self-host mode
       updateSetting("enableSelfHostMode", false);
+      updateSetting("enableMiyoSearch", false);
       updateSetting("selfHostModeValidatedAt", null);
       updateSetting("selfHostValidationCount", 0);
       logInfo("Self-host mode disabled - user is no longer on an eligible plan");

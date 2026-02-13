@@ -29,9 +29,6 @@ export const CopilotPlusSettings: React.FC = () => {
       updateSetting("enableSelfHostMode", true);
     } else {
       updateSetting("enableSelfHostMode", false);
-      if (settings.enableMiyoSearch) {
-        updateSetting("enableMiyoSearch", false);
-      }
     }
   };
 
@@ -43,6 +40,15 @@ export const CopilotPlusSettings: React.FC = () => {
   const handleMiyoSearchToggle = async (enabled: boolean) => {
     if (enabled === settings.enableMiyoSearch) {
       return;
+    }
+
+    if (enabled) {
+      setIsValidatingSelfHost(true);
+      const isValid = await validateSelfHostMode();
+      setIsValidatingSelfHost(false);
+      if (!isValid) {
+        return;
+      }
     }
 
     const confirmChange = async () => {
@@ -134,52 +140,60 @@ export const CopilotPlusSettings: React.FC = () => {
             }}
           />
 
-          <div className="tw-flex tw-items-center tw-gap-1.5 tw-pt-4 tw-text-xl tw-font-semibold">
-            Self-Host Mode
-            <HelpTooltip content="Lifetime license required" />
-          </div>
-
-          <SettingItem
-            type="switch"
-            title="Enable Self-Host Mode"
-            description={
-              <div className="tw-flex tw-items-center tw-gap-1.5">
-                <span className="tw-leading-none">
-                  Use your own infrastructure for LLMs, embeddings (and local document understanding
-                  soon with our upcoming desktop app).
-                </span>
-                <HelpTooltip
-                  content={
-                    <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
-                      <div className="tw-text-sm tw-font-medium tw-text-accent">
-                        Self-Host Mode (Believer/Supporter only)
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        Connect to your own self-hosted backend (e.g., Miyo) for complete control
-                        over your AI infrastructure. This allows offline usage and custom model
-                        deployments.
-                      </div>
-                      <div className="tw-text-xs tw-text-muted">
-                        Requires re-validation every 15 days when online.
-                      </div>
-                    </div>
-                  }
-                />
+          {isSelfHostEligible && (
+            <>
+              <div className="tw-flex tw-items-center tw-gap-1.5 tw-pt-4 tw-text-xl tw-font-semibold">
+                Self-Host Mode
+                <HelpTooltip content="Lifetime license required" />
               </div>
-            }
-            checked={settings.enableSelfHostMode}
-            onCheckedChange={handleSelfHostModeToggle}
-            disabled={!isSelfHostEligible || isValidatingSelfHost}
-          />
 
-          {settings.enableSelfHostMode && (
-            <SettingItem
-              type="switch"
-              title="Enable Miyo Search"
-              description="Use your Miyo backend for semantic indexing and retrieval while preserving Search v3 lexical merging. Enabling this will prompt you to force refresh the index so data is stored in Miyo."
-              checked={settings.enableMiyoSearch}
-              onCheckedChange={handleMiyoSearchToggle}
-            />
+              <SettingItem
+                type="switch"
+                title="Enable Self-Host Mode"
+                description={
+                  <div className="tw-flex tw-items-center tw-gap-1.5">
+                    <span className="tw-leading-none">
+                      Use your own infrastructure for LLMs, embeddings (and local document
+                      understanding soon with our upcoming desktop app).
+                    </span>
+                    <HelpTooltip
+                      content={
+                        <div className="tw-flex tw-max-w-96 tw-flex-col tw-gap-2 tw-py-4">
+                          <div className="tw-text-sm tw-font-medium tw-text-accent">
+                            Self-Host Mode (Believer/Supporter only)
+                          </div>
+                          <div className="tw-text-xs tw-text-muted">
+                            Connect to your own self-hosted backend (e.g., Miyo) for complete
+                            control over your AI infrastructure. This allows offline usage and
+                            custom model deployments.
+                          </div>
+                          <div className="tw-text-xs tw-text-muted">
+                            Requires re-validation every 15 days when online.
+                          </div>
+                        </div>
+                      }
+                    />
+                  </div>
+                }
+                checked={settings.enableSelfHostMode}
+                onCheckedChange={handleSelfHostModeToggle}
+                disabled={isValidatingSelfHost}
+              />
+
+              <div className="tw-flex tw-items-center tw-gap-1.5 tw-pt-4 tw-text-xl tw-font-semibold">
+                Miyo Search
+                <HelpTooltip content="Lifetime license required" />
+              </div>
+
+              <SettingItem
+                type="switch"
+                title="Enable Miyo Search"
+                description="Use the Miyo desktop app for embeddings and semantic search to access your vault from your favorite AI apps. Enabling this will prompt you to force refresh the index so data is stored in Miyo."
+                checked={settings.enableMiyoSearch}
+                onCheckedChange={handleMiyoSearchToggle}
+                disabled={isValidatingSelfHost}
+              />
+            </>
           )}
         </div>
       </section>

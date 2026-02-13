@@ -1,17 +1,15 @@
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, Notice } from "obsidian";
 import { CustomError } from "@/error";
-import EmbeddingsManager from "@/LLMProviders/embeddingManager";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoUpsertDocument } from "@/miyo/MiyoClient";
-import { getMiyoCollectionName } from "@/miyo/miyoUtils";
+import { getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import type {
   SemanticIndexBackend,
   SemanticIndexDocument,
 } from "@/search/indexBackend/SemanticIndexBackend";
 import { getSettings } from "@/settings/model";
-import { areEmbeddingModelsSame } from "@/utils";
 
 /**
  * Miyo-backed implementation of the semantic index backend.
@@ -37,7 +35,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   public async initialize(_embeddingInstance: Embeddings | undefined): Promise<void> {
     try {
       const baseUrl = await this.getBaseUrl();
-      await this.client.getStats(baseUrl, this.getCollectionName());
+      await this.client.getStats(baseUrl, this.getSourceId());
     } catch (error) {
       logWarn(`Miyo backend initialization failed: ${error}`);
       new Notice("Failed to initialize Miyo backend. Check Miyo service discovery or URL.");
@@ -51,7 +49,16 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   public async clearIndex(_embeddingInstance: Embeddings | undefined): Promise<void> {
     const baseUrl = await this.getBaseUrl();
-    await this.client.clearIndex(baseUrl, this.getCollectionName());
+    await this.client.clearIndex(baseUrl, this.getSourceId());
+  }
+
+  /**
+   * Miyo handles embeddings internally.
+   *
+   * @returns False because Miyo does not require client-side embeddings.
+   */
+  public requiresEmbeddings(): boolean {
+    return false;
   }
 
   /**
@@ -76,10 +83,10 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
       return 0;
     }
     const baseUrl = await this.getBaseUrl();
-    const collectionName = this.getCollectionName();
-    this.logUpsertBatchRequested(docs, baseUrl, collectionName);
+    const sourceId = this.getSourceId();
+    this.logUpsertBatchRequested(docs, baseUrl, sourceId);
     const payloadDocs = docs.map((doc) => this.toMiyoDocument(doc));
-    const upserted = await this.client.upsertDocuments(baseUrl, collectionName, payloadDocs);
+    const upserted = await this.client.upsertDocuments(baseUrl, sourceId, payloadDocs);
     this.logUpsertBatchResult(docs.length, upserted);
     return upserted;
   }
@@ -91,7 +98,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   public async removeByPath(path: string): Promise<void> {
     const baseUrl = await this.getBaseUrl();
-    await this.client.deleteByPath(baseUrl, this.getCollectionName(), path);
+    await this.client.deleteByPath(baseUrl, this.getSourceId(), path);
   }
 
   /**
@@ -99,14 +106,14 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   public async getIndexedFiles(): Promise<string[]> {
     const baseUrl = await this.getBaseUrl();
-    const collectionName = this.getCollectionName();
+    const sourceId = this.getSourceId();
     const limit = 200;
     let offset = 0;
     let total = 0;
     const paths = new Set<string>();
 
     do {
-      const response = await this.client.listFiles(baseUrl, collectionName, offset, limit);
+      const response = await this.client.listFiles(baseUrl, sourceId, offset, limit);
       const files = response.files ?? [];
       files.forEach((file) => paths.add(file.path));
       total = response.total ?? paths.size;
@@ -155,7 +162,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   public async getDocumentsByPath(path: string): Promise<SemanticIndexDocument[]> {
     const baseUrl = await this.getBaseUrl();
-    const response = await this.client.getDocumentsByPath(baseUrl, this.getCollectionName(), path);
+    const response = await this.client.getDocumentsByPath(baseUrl, this.getSourceId(), path);
     const docs = response.documents ?? [];
     return docs.map((doc) => this.fromMiyoDocument(path, doc));
   }
@@ -163,30 +170,12 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   /**
    * Detect embedding model changes and indicate whether a rebuild is needed.
    *
-   * @param embeddingInstance - Current embeddings instance.
+   * @param _embeddingInstance - Current embeddings instance (unused for Miyo).
    * @returns True when a rebuild should occur.
    */
-  public async checkAndHandleEmbeddingModelChange(embeddingInstance: Embeddings): Promise<boolean> {
-    const stats = await this.getStatsSafely();
-    if (!stats || (stats.total_chunks ?? 0) === 0) {
-      return false;
-    }
-
-    const previousModel = stats.embedding_model;
-    if (!previousModel) {
-      logInfo("Miyo index has no recorded embedding model.");
-      return false;
-    }
-
-    const currentModel = EmbeddingsManager.getModelName(embeddingInstance);
-    if (!areEmbeddingModelsSame(previousModel, currentModel)) {
-      new Notice("New embedding model detected. Rebuilding Copilot index from scratch.");
-      logInfo(
-        `Detected change in embedding model from "${previousModel}" to "${currentModel}". Rebuild required.`
-      );
-      return true;
-    }
-
+  public async checkAndHandleEmbeddingModelChange(
+    _embeddingInstance?: Embeddings
+  ): Promise<boolean> {
     return false;
   }
 
@@ -231,11 +220,11 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
       logInfo("Miyo index: Paths to remove during garbage collection:", pathsToRemove.join(", "));
 
       const baseUrl = await this.getBaseUrl();
-      const collectionName = this.getCollectionName();
+      const sourceId = this.getSourceId();
       let deleted = 0;
 
       for (const path of pathsToRemove) {
-        deleted += await this.client.deleteByPath(baseUrl, collectionName, path);
+        deleted += await this.client.deleteByPath(baseUrl, sourceId, path);
       }
 
       return deleted;
@@ -293,12 +282,12 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   }
 
   /**
-   * Compute a stable collection name for the current vault.
+   * Compute the Miyo source id for the current vault.
    *
-   * @returns Collection name string.
+   * @returns Source id string.
    */
-  private getCollectionName(): string {
-    return getMiyoCollectionName(this.app);
+  private getSourceId(): string {
+    return getMiyoSourceId(this.app);
   }
 
   /**
@@ -306,14 +295,14 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    *
    * @param docs - Documents being upserted.
    * @param baseUrl - Miyo base URL.
-   * @param collectionName - Vault collection name.
+   * @param sourceId - Vault source id.
    */
   private logUpsertBatchRequested(
     docs: SemanticIndexDocument[],
     baseUrl: string,
-    collectionName: string
+    sourceId: string
   ): void {
-    logInfo(`Miyo upsert batch: ${docs.length} documents`, { baseUrl, collectionName });
+    logInfo(`Miyo upsert batch: ${docs.length} documents`, { baseUrl, sourceId });
     docs.forEach((doc) => {
       const chunkId = doc.metadata?.chunkId;
       const chunkSuffix =
@@ -344,7 +333,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   private async getStatsSafely() {
     try {
       const baseUrl = await this.getBaseUrl();
-      return await this.client.getStats(baseUrl, this.getCollectionName());
+      return await this.client.getStats(baseUrl, this.getSourceId());
     } catch (error) {
       logError(`Failed to fetch Miyo index stats: ${error}`);
       return null;
@@ -363,8 +352,6 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
       path: doc.path,
       title: doc.title,
       content: doc.content,
-      embedding: doc.embedding,
-      embedding_model: doc.embeddingModel,
       created_at: doc.created_at,
       ctime: doc.ctime,
       mtime: doc.mtime,

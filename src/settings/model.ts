@@ -554,9 +554,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
   settings.activeModels = mergeActiveModels(settings.activeModels, BUILTIN_CHAT_MODELS);
-  settings.activeEmbeddingModels = mergeActiveModels(
-    settings.activeEmbeddingModels,
-    BUILTIN_EMBEDDING_MODELS
+  settings.activeEmbeddingModels = filterUnsupportedEmbeddingModels(
+    mergeActiveModels(settings.activeEmbeddingModels, BUILTIN_EMBEDDING_MODELS)
   );
   return settings;
 }
@@ -610,4 +609,17 @@ function mergeActiveModels(
   });
 
   return Array.from(modelMap.values());
+}
+
+/**
+ * Remove embedding models that use unsupported providers.
+ *
+ * @param models - Embedding models to validate.
+ * @returns Filtered list containing only supported providers.
+ */
+function filterUnsupportedEmbeddingModels(models: CustomModel[]): CustomModel[] {
+  const supportedProviders = new Set(Object.values(EmbeddingModelProviders));
+  return models.filter((model) =>
+    supportedProviders.has(model.provider as EmbeddingModelProviders)
+  );
 }
