@@ -33,7 +33,8 @@ export function ContextBadgeWrapper({
         <span
           className={cn(
             "tw-flex tw-size-full tw-items-center tw-justify-center",
-            onRemove && "group-hover/badge:tw-invisible"
+            onRemove &&
+              "context-badge-icon-removable group-focus-within/badge:tw-invisible group-hover/badge:tw-invisible"
           )}
         >
           {icon}
@@ -41,10 +42,18 @@ export function ContextBadgeWrapper({
         {onRemove && (
           <div
             role="button"
-            className="tw-invisible tw-absolute tw-inset-0 tw-flex tw-cursor-pointer tw-items-center tw-justify-center tw-text-muted group-hover/badge:tw-visible"
+            tabIndex={0}
+            className="context-badge-close tw-invisible tw-absolute tw-inset-0 tw-flex tw-cursor-pointer tw-items-center tw-justify-center tw-text-muted group-focus-within/badge:tw-visible group-hover/badge:tw-visible"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onRemove();
+              }
             }}
             aria-label="Remove from context"
           >
