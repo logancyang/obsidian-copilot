@@ -1,7 +1,6 @@
 import React from "react";
-import { ExternalLink, FileText, Folder, Globe, Hash, X, CircleDashed } from "lucide-react";
+import { ExternalLink, FileText, Folder, Globe, Hash, CircleDashed } from "lucide-react";
 import { TFile } from "obsidian";
-import { Button } from "@/components/ui/button";
 import { TruncatedText } from "@/components/TruncatedText";
 import { getDomainFromUrl } from "@/utils";
 import { cn } from "@/lib/utils";
@@ -98,30 +97,18 @@ export function ContextActiveNoteBadge({
   const isCanvas = currentActiveFile.extension === "canvas";
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove} isClickable={!!onClick} onClick={onClick}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FileText className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-          {currentActiveFile.basename}
-        </TruncatedText>
-        <span className="tw-text-xs tw-text-faint">Current</span>
-        {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
-        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper
+      icon={<FileText className="tw-size-3" />}
+      onRemove={onRemove}
+      isClickable={!!onClick}
+      onClick={onClick}
+    >
+      <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+        {currentActiveFile.basename}
+      </TruncatedText>
+      <span className="tw-text-xs tw-text-faint">Current</span>
+      {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+      {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
     </ContextBadgeWrapper>
   );
 }
@@ -144,28 +131,16 @@ export function ContextActiveWebTabBadge({
   const tooltipContent = <div className="tw-text-left">{activeWebTab.url}</div>;
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove} isClickable={!!onClick} onClick={onClick}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FaviconOrGlobe faviconUrl={activeWebTab.faviconUrl} />
-        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-          {displayText}
-        </TruncatedText>
-        <span className="tw-text-xs tw-text-faint">Current</span>
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper
+      icon={<FaviconOrGlobe faviconUrl={activeWebTab.faviconUrl} />}
+      onRemove={onRemove}
+      isClickable={!!onClick}
+      onClick={onClick}
+    >
+      <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+        {displayText}
+      </TruncatedText>
+      <span className="tw-text-xs tw-text-faint">Current</span>
     </ContextBadgeWrapper>
   );
 }
@@ -176,53 +151,27 @@ export function ContextNoteBadge({ note, onRemove, onClick }: ContextNoteBadgePr
   const isCanvas = note.extension === "canvas";
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove} isClickable={!!onClick} onClick={onClick}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FileText className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-          {note.basename}
-        </TruncatedText>
-        {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
-        {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper
+      icon={<FileText className="tw-size-3" />}
+      onRemove={onRemove}
+      isClickable={!!onClick}
+      onClick={onClick}
+    >
+      <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+        {note.basename}
+      </TruncatedText>
+      {isPdf && <span className="tw-text-xs tw-text-faint">pdf</span>}
+      {isCanvas && <span className="tw-text-xs tw-text-faint">canvas</span>}
     </ContextBadgeWrapper>
   );
 }
 
 export function ContextUrlBadge({ url, onRemove }: ContextUrlBadgeProps) {
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <ExternalLink className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={url}>
-          {getDomainFromUrl(url)}
-        </TruncatedText>
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={onRemove}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper icon={<ExternalLink className="tw-size-3" />} onRemove={onRemove}>
+      <TruncatedText className="tw-max-w-40" tooltipContent={url}>
+        {getDomainFromUrl(url)}
+      </TruncatedText>
     </ContextBadgeWrapper>
   );
 }
@@ -240,35 +189,19 @@ export function ContextWebTabBadge({ webTab, onRemove, onClick }: ContextWebTabB
 
   return (
     <ContextBadgeWrapper
-      hasRemoveButton={!!onRemove}
+      icon={<FaviconOrGlobe faviconUrl={webTab.faviconUrl} isLoaded={isLoaded} />}
+      onRemove={onRemove}
       isClickable={!!onClick}
       onClick={onClick}
       className={cn(!isLoaded && "tw-opacity-60")}
     >
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FaviconOrGlobe faviconUrl={webTab.faviconUrl} isLoaded={isLoaded} />
-        <TruncatedText
-          className={cn("tw-max-w-40", !isLoaded && "tw-italic")}
-          tooltipContent={tooltipText}
-        >
-          {displayText}
-        </TruncatedText>
-        {!isLoaded && <span className="tw-text-xs tw-text-muted">(not loaded)</span>}
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={(e) => {
-            e.stopPropagation();
-            onRemove();
-          }}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+      <TruncatedText
+        className={cn("tw-max-w-40", !isLoaded && "tw-italic")}
+        tooltipContent={tooltipText}
+      >
+        {displayText}
+      </TruncatedText>
+      {!isLoaded && <span className="tw-text-xs tw-text-muted">(not loaded)</span>}
     </ContextBadgeWrapper>
   );
 }
@@ -278,48 +211,20 @@ export function ContextTagBadge({ tag, onRemove }: ContextTagBadgeProps) {
   const displayTag = tag.startsWith("#") ? tag.slice(1) : tag;
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <Hash className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={tag}>
-          {displayTag}
-        </TruncatedText>
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={onRemove}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper icon={<Hash className="tw-size-3" />} onRemove={onRemove}>
+      <TruncatedText className="tw-max-w-40" tooltipContent={tag}>
+        {displayTag}
+      </TruncatedText>
     </ContextBadgeWrapper>
   );
 }
 
 export function ContextFolderBadge({ folder, onRemove }: ContextFolderBadgeProps) {
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <Folder className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={folder} alwaysShowTooltip>
-          {folder}
-        </TruncatedText>
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={onRemove}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper icon={<Folder className="tw-size-3" />} onRemove={onRemove}>
+      <TruncatedText className="tw-max-w-40" tooltipContent={folder} alwaysShowTooltip>
+        {folder}
+      </TruncatedText>
     </ContextBadgeWrapper>
   );
 }
@@ -334,25 +239,14 @@ export function ContextSelectedTextBadge({
     const tooltipContent = <div className="tw-text-left">{selectedText.url}</div>;
 
     return (
-      <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
-        <div className="tw-flex tw-items-center tw-gap-1">
-          <FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />
-          <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-            {selectedText.title || domain}
-          </TruncatedText>
-          <span className="tw-text-xs tw-text-faint">Selection</span>
-        </div>
-        {onRemove && (
-          <Button
-            variant="ghost2"
-            size="fit"
-            onClick={onRemove}
-            aria-label="Remove from context"
-            className="tw-text-muted"
-          >
-            <X className="tw-size-4" />
-          </Button>
-        )}
+      <ContextBadgeWrapper
+        icon={<FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />}
+        onRemove={onRemove}
+      >
+        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+          {selectedText.title || domain}
+        </TruncatedText>
+        <span className="tw-text-xs tw-text-faint">Selection</span>
       </ContextBadgeWrapper>
     );
   }
@@ -370,25 +264,11 @@ export function ContextSelectedTextBadge({
   );
 
   return (
-    <ContextBadgeWrapper hasRemoveButton={!!onRemove}>
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FileText className="tw-size-3" />
-        <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
-          {selectedText.noteTitle}
-        </TruncatedText>
-        <span className="tw-text-xs tw-text-faint">{lineRange}</span>
-      </div>
-      {onRemove && (
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={onRemove}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      )}
+    <ContextBadgeWrapper icon={<FileText className="tw-size-3" />} onRemove={onRemove}>
+      <TruncatedText className="tw-max-w-40" tooltipContent={tooltipContent} alwaysShowTooltip>
+        {selectedText.noteTitle}
+      </TruncatedText>
+      <span className="tw-text-xs tw-text-faint">{lineRange}</span>
     </ContextBadgeWrapper>
   );
 }
