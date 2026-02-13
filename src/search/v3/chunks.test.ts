@@ -306,6 +306,146 @@ describe("ChunkManager", () => {
       });
     });
 
+    it("should merge a heading-only first chunk for the reported How to Do Great Work note", async () => {
+      const notePath = "long-whitespace-heavy.md";
+      const noteContent = `# 218 How to Do Great Work
+
+
+  
+ 
+ July 2023   
+  
+ If you collected lists of techniques for doing great work in a lot of different fields, what would the intersection look like? I decided to find out by making it.   
+  
+ Partly my goal was to create a guide that could be used by someone working in any field. But I was also curious about the shape of the intersection. And one thing this exercise shows is that it does have a definite shape; it's not just a point labelled "work hard."   
+  
+ The following recipe assumes you're very ambitious.   
+  
+ 
+  
+ 
+  
+ 
+  
+ 
+  
+ The first step is to decide what to work on. The work you choose needs to have three qualities: it has to be something you have a natural aptitude for, that you have a deep interest in, and that offers scope to do great work.   
+  
+ In practice you don't have to worry much about the third criterion. Ambitious people are if anything already too conservative about it. So all you need to do is find something you have an aptitude for and great interest in. [^1]   
+  
+ That sounds straightforward, but it's often quite difficult. When you're young you don't know what you're good at or what different kinds of work are like. Some kinds of work you end up doing may not even exist yet. So while some people know what they want to do at 14, most have to figure it out.   
+  
+ The way to figure out what to work on is by working. If you're not sure what to work on, guess. But pick something and get going. You'll probably guess wrong some of the time, but that's fine. It's good to know about multiple things; some of the biggest discoveries come from noticing connections between different fields.   
+  
+ Develop a habit of working on your own projects. Don't let "work" mean something other people tell you to do. If you do manage to do great work one day, it will probably be on a project of your own. It may be within some bigger project, but you'll be driving your part of it.   
+  
+ What should your projects be? Whatever seems to you excitingly ambitious. As you grow older and your taste in projects evolves, exciting and important will converge. At 7 it may seem excitingly ambitious to build huge things out of Lego, then at 14 to teach yourself calculus, till at 21 you're starting to explore unanswered questions in physics. But always preserve excitingness.   
+  
+ There's a kind of excited curiosity that's both the engine and the rudder of great work. It will not only drive you, but if you let it have its way, will also show you what to work on.   
+  
+ What are you excessively curious about -- curious to a degree that would bore most other people? That's what you're looking for.   
+  
+ Once you've found something you're excessively interested in, the next step is to learn enough about it to get you to one of the frontiers of knowledge. Knowledge expands fractally, and from a distance its edges look smooth, but once you learn enough to get close to one, they turn out to be full of gaps.   
+  
+ The next step is to notice them. This takes some skill, because your brain wants to ignore such gaps in order to make a simpler model of the world. Many discoveries have come from asking questions about things that everyone else took for granted. [^2]   
+  
+ If the answers seem strange, so much the better. Great work often has a tincture of strangeness. You see this from painting to math. It would be affected to try to manufacture it, but if it appears, embrace it.   
+  
+ Boldly chase outlier ideas, even if other people aren't interested in them -- in fact, especially if they aren't. If you're excited about some possibility that everyone else ignores, and you have enough expertise to say precisely what they're all overlooking, that's as good a bet as you'll find. [^3]   
+  
+ Four steps: choose a field, learn enough to get to the frontier, notice gaps, explore promising ones. This is how practically everyone who's done great work has done it, from painters to physicists.   
+  
+ Steps two and four will require hard work. It may not be possible to prove that you have to work hard to do great things, but the empirical evidence is on the scale of the evidence for mortality. That's why it's essential to work on something you're deeply interested in. Interest will drive you to work harder than mere diligence ever could.   
+  
+ The three most powerful motives are curiosity, delight, and the desire to do something impressive. Sometimes they converge, and that combination is the most powerful of all.   
+  
+ The big prize is to discover a new fractal bud. You notice a crack in the surface of knowledge, pry it open, and there's a whole world inside.   
+  
+ Let's talk a little more about the complicated business of figuring out what to work on. The main reason it's hard is that you can't tell what most kinds of work are like except by doing them. Which means the four steps overlap: you may have to work at something for years before you know how much you like it or how good you are at it. And in the meantime you're not doing, and thus not learning about, most other kinds of work. So in the worst case you choose late based on very incomplete information. [^4]   
+  
+ The nature of ambition exacerbates this problem. Ambition comes in two forms, one that precedes interest in the subject and one that grows out of it. Most people who do great work have a mix, and the more you have of the former, the harder it will be to decide what to do.   
+  
+ The educational systems in most countries pretend it's easy. They expect you to commit to a field long before you could know what it's really like. And as a result an ambitious person on an optimal trajectory will often read to the system as an instance of breakage.   
+  
+ It would be better if they at least admitted it -- if they admitted that the system not only can't do much to help you figure out what to work on, but is designed on the assumption that you'll somehow magically guess as a teenager. They don't tell you, but I will: when it comes to figuring out what to work on, you're on your own. Some people get lucky and do guess correctly, but the rest will find themselves scrambling diagonally across tracks laid down on the assumption that everyone does.   
+  
+ What should you do if you're young and ambitious but don't know what to work on? What you should _not_ do is drift along passively, assuming the problem will solve itself. You need to take action. But there is no systematic procedure you can follow. When you read biographies of people who've done great work, it's remarkable how much luck is involved. They discover what to work on as a result of a chance meeting, or by reading a book they happen to pick up. So you need to make yourself a big target for luck, and the way to do that is to be curious. Try lots of things, meet lots of people, read lots of books, ask lots of questions. [^5]   
+  
+ When in doubt, optimize for interestingness. Fields change as you learn more about them. What mathematicians do, for example, is very different from what you do in high school math classes. So you need to give different types of work a chance to show you what they're like. But a field should become _increasingly_ interesting as you learn more about it. If it doesn't, it's probably not for you.   
+  
+ The discoveries are out there, waiting to be made. Why not by you?
+
+* * *
+
+[^1]: I don't think you could give a precise definition of what counts as great work.
+[^2]: A lot of standup comedy is based on noticing anomalies in everyday life.
+[^3]: That second qualifier is critical.
+[^4]: Finding something to work on is not simply a matter of finding a match.
+[^5]: There are many reasons curious people are more likely to do great work.`;
+
+      mockApp.vault.cachedRead = jest.fn((file) =>
+        Promise.resolve(file.path === notePath ? noteContent : "")
+      );
+      mockApp.metadataCache.getFileCache = jest.fn((file) =>
+        file.path === notePath
+          ? {
+              headings: [
+                {
+                  heading: "218 How to Do Great Work",
+                  level: 1,
+                  position: { start: { offset: 0 } },
+                },
+              ],
+              frontmatter: null,
+            }
+          : { headings: [], frontmatter: null }
+      );
+
+      const chunks = await chunkManager.getChunks([notePath], {
+        ...defaultOptions,
+        maxChars: 6000,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks[0].content).toContain("# 218 How to Do Great Work");
+      expect(chunks[0].content).toContain(
+        "If you collected lists of techniques for doing great work"
+      );
+      expect(chunks[0].content.length).toBeGreaterThan(500);
+    });
+
+    it("should keep a heading-only chunk separate when merge would exceed maxChars", async () => {
+      const notePath = "heading-only-no-merge.md";
+      const noteContent = [
+        "# Heading",
+        "",
+        "This sentence is intentionally long so the second chunk is close to the configured chunk limit.",
+        "This sentence is intentionally long so the second chunk is close to the configured chunk limit.",
+        "This sentence is intentionally long so the second chunk is close to the configured chunk limit.",
+      ].join("\n\n");
+
+      mockApp.vault.cachedRead = jest.fn((file) =>
+        Promise.resolve(file.path === notePath ? noteContent : "")
+      );
+      mockApp.metadataCache.getFileCache = jest.fn((file) =>
+        file.path === notePath
+          ? {
+              headings: [{ heading: "Heading", level: 1, position: { start: { offset: 0 } } }],
+              frontmatter: null,
+            }
+          : { headings: [], frontmatter: null }
+      );
+
+      const chunks = await chunkManager.getChunks([notePath], {
+        ...defaultOptions,
+        maxChars: 90,
+      });
+
+      expect(chunks.length).toBeGreaterThan(1);
+      expect(chunks[0].content).toContain("# Heading");
+      expect(chunks[0].content).not.toContain("This sentence is intentionally long");
+    });
+
     it("should handle CJK characters correctly", async () => {
       const chunks = await chunkManager.getChunks(["chinese.md"], defaultOptions);
 
