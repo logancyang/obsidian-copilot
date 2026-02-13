@@ -1,6 +1,7 @@
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import type { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
