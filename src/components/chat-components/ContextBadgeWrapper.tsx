@@ -22,11 +22,23 @@ export function ContextBadgeWrapper({
   return (
     <Badge
       variant="default"
+      tabIndex={onRemove ? 0 : undefined}
       className={cn(
         "tw-group/badge tw-items-center tw-gap-1 tw-border tw-border-solid tw-border-border tw-py-1 tw-pl-1.5 tw-pr-2 tw-text-xs",
         isClickable && "tw-cursor-pointer hover:tw-bg-interactive-hover",
         className
       )}
+      onKeyDown={
+        onRemove
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.stopPropagation();
+                onRemove();
+              }
+            }
+          : undefined
+      }
       {...props}
     >
       <span className="tw-relative tw-size-4 tw-shrink-0">
@@ -41,21 +53,12 @@ export function ContextBadgeWrapper({
         </span>
         {onRemove && (
           <div
-            role="button"
-            tabIndex={0}
-            className="context-badge-close tw-invisible tw-absolute tw-inset-0 tw-flex tw-cursor-pointer tw-items-center tw-justify-center tw-text-muted group-focus-within/badge:tw-visible group-hover/badge:tw-visible"
+            aria-hidden="true"
+            className="context-badge-close tw-invisible tw-absolute tw-inset-0 tw-flex tw-items-center tw-justify-center tw-text-muted group-focus-within/badge:tw-visible group-hover/badge:tw-visible"
             onClick={(e) => {
               e.stopPropagation();
               onRemove();
             }}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                e.stopPropagation();
-                onRemove();
-              }
-            }}
-            aria-label="Remove from context"
           >
             <X className="tw-size-3" />
           </div>
