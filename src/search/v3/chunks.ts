@@ -419,17 +419,22 @@ export class ChunkManager {
           chunkHeader: header,
           appendChunkOverlapHeader: options.overlap > 0,
         });
+        const coalescedContents = this.coalesceTinySplitChunks(
+          docs.map((doc) => doc.pageContent),
+          header,
+          options.maxChars
+        );
 
-        docs.forEach((doc, index) => {
+        coalescedContents.forEach((chunkContent, index) => {
           const chunkIndex = startChunkIndex + index;
           const chunkId = this.generateChunkId(file.path, chunkIndex);
-          const contentHash = this.calculateContentHash(doc.pageContent);
+          const contentHash = this.calculateContentHash(chunkContent);
 
           chunks.push({
             id: chunkId,
             notePath: file.path,
             chunkIndex,
-            content: doc.pageContent,
+            content: chunkContent,
             contentHash,
             title,
             heading,
@@ -456,6 +461,86 @@ export class ChunkManager {
     }
 
     return chunks;
+  }
+
+  /**
+   * Merge tiny structural chunks (for example, heading-only splits) into neighbors
+   * when the merged content stays within the configured chunk size.
+   */
+  private coalesceTinySplitChunks(
+    chunkContents: string[],
+    header: string,
+    maxChars: number
+  ): string[] {
+    if (chunkContents.length <= 1) {
+      return chunkContents;
+    }
+
+    const merged = [...chunkContents];
+    let index = 0;
+
+    // Prefer forward merge so heading-only chunks are attached to subsequent body text.
+    while (index < merged.length - 1) {
+      if (this.isTinyStructuralChunk(merged[index], header)) {
+        const candidate = this.mergeChunkContents(merged[index], merged[index + 1], header);
+        if (candidate.length <= maxChars) {
+          merged.splice(index, 2, candidate);
+          continue;
+        }
+      }
+      index++;
+    }
+
+    // Handle rare trailing tiny chunk if it can be merged backward safely.
+    if (merged.length > 1) {
+      const lastIndex = merged.length - 1;
+      if (this.isTinyStructuralChunk(merged[lastIndex], header)) {
+        const candidate = this.mergeChunkContents(merged[lastIndex - 1], merged[lastIndex], header);
+        if (candidate.length <= maxChars) {
+          merged.splice(lastIndex - 1, 2, candidate);
+        }
+      }
+    }
+
+    return merged;
+  }
+
+  /**
+   * Identify tiny chunks that only carry structure (for example, an isolated heading line).
+   */
+  private isTinyStructuralChunk(chunkContent: string, header: string): boolean {
+    const body = this.stripChunkHeader(chunkContent, header).trim();
+    if (!body) {
+      return true;
+    }
+
+    const nonEmptyLines = body
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    return nonEmptyLines.length === 1 && /^#{1,6}\s+\S+/.test(nonEmptyLines[0]);
+  }
+
+  /**
+   * Merge two split chunks into a single chunk while keeping one chunk header.
+   */
+  private mergeChunkContents(primaryChunk: string, secondaryChunk: string, header: string): string {
+    const primaryBody = this.stripChunkHeader(primaryChunk, header).replace(/\s+$/, "");
+    const secondaryBody = this.stripChunkHeader(secondaryChunk, header).replace(/^\s+/, "");
+    const joiner = primaryBody && secondaryBody ? "\n\n" : "";
+
+    return `${header}${primaryBody}${joiner}${secondaryBody}`;
+  }
+
+  /**
+   * Remove the synthetic chunk header that is prepended before indexing split chunks.
+   */
+  private stripChunkHeader(chunkContent: string, header: string): string {
+    if (chunkContent.startsWith(header)) {
+      return chunkContent.slice(header.length);
+    }
+    return chunkContent;
   }
 
   /**
