@@ -4,7 +4,7 @@ import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
 import { logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { isSelfHostModeValid } from "@/plusUtils";
+import { isSelfHostAccessValid } from "@/plusUtils";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
 import { Notice, Platform, TFile } from "obsidian";
@@ -60,7 +60,10 @@ export default class VectorStoreManager {
       this.lastKnownSettings = { ...settings };
 
       // Handle path changes (enableIndexSync)
-      if (settings.enableIndexSync !== prevSettings?.enableIndexSync) {
+      if (
+        settings.enableIndexSync !== prevSettings?.enableIndexSync &&
+        this.activeBackendKey === "orama"
+      ) {
         const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
         await this.oramaBackend.reinitializeForIndexSyncChange(embeddingInstance);
       }
@@ -83,7 +86,9 @@ export default class VectorStoreManager {
       let retries = 3;
       while (retries > 0) {
         try {
-          const embeddingAPI = await this.embeddingsManager.getEmbeddingsAPI();
+          const embeddingAPI = this.indexBackend.requiresEmbeddings()
+            ? await this.embeddingsManager.getEmbeddingsAPI()
+            : undefined;
           await this.indexBackend.initialize(embeddingAPI);
           break;
         } catch (error) {
@@ -136,7 +141,10 @@ export default class VectorStoreManager {
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
-    await this.indexBackend.clearIndex(await this.embeddingsManager.getEmbeddingsAPI());
+    const embeddingAPI = this.indexBackend.requiresEmbeddings()
+      ? await this.embeddingsManager.getEmbeddingsAPI()
+      : undefined;
+    await this.indexBackend.clearIndex(embeddingAPI);
     notifyIndexChanged();
   }
 
@@ -199,12 +207,7 @@ export default class VectorStoreManager {
    * @returns True when Miyo should be the active backend.
    */
   private shouldUseMiyo(settings: CopilotSettings): boolean {
-    return (
-      settings.enableSelfHostMode &&
-      settings.enableMiyoSearch &&
-      settings.enableSemanticSearchV3 &&
-      isSelfHostModeValid()
-    );
+    return settings.enableMiyoSearch && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
   }
 
   /**
@@ -243,7 +246,9 @@ export default class VectorStoreManager {
     }
 
     if (settings.enableSemanticSearchV3) {
-      const embeddingAPI = await this.embeddingsManager.getEmbeddingsAPI();
+      const embeddingAPI = this.indexBackend.requiresEmbeddings()
+        ? await this.embeddingsManager.getEmbeddingsAPI()
+        : undefined;
       await this.indexBackend.initialize(embeddingAPI);
     }
 
