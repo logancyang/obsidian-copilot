@@ -138,7 +138,8 @@ export default class EmbeddingManager {
   }
 
   async getEmbeddingsAPI(): Promise<Embeddings> {
-    const { embeddingModelKey } = getSettings();
+    const settings = getSettings();
+    const embeddingModelKey = settings.embeddingModelKey;
 
     if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
       throw new CustomError(`No embedding model found for: ${embeddingModelKey}`);

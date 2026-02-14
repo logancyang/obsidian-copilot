@@ -39,6 +39,7 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        ...(this.customConfig.headers || {}),
       },
       body: JSON.stringify(requestBody),
     });
