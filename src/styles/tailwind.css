@@ -887,7 +887,10 @@ If your plugin does not need CSS, delete this file.
 /* use 'important' to prevent ob default css style from being third-party theme overridden */
 
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
-  padding-bottom: max(calc(var(--safe-area-inset-bottom, 0px) + var(--size-4-1)), var(--size-4-8)) !important;
+  padding-bottom: max(
+    calc(var(--safe-area-inset-bottom, 0px) + var(--size-4-1)),
+    var(--size-4-8)
+  ) !important;
 }
 
 /* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
@@ -905,7 +908,8 @@ body.is-mobile
     .workspace-leaf-content[data-type="copilot-chat-view"]
     .view-content {
     padding-bottom: calc(
-      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) + var(--size-4-1)
+      var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
+        var(--size-4-1)
     ) !important;
   }
 }
@@ -1264,6 +1268,16 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
 .tw-group:hover .quick-ask-resize-indicator-right::after,
 .tw-group:hover .quick-ask-resize-indicator-left::after {
   opacity: 1;
+}
+
+/* Touch devices: always show badge close button (no hover available) */
+@media (hover: none) {
+  .tw-group\/badge .context-badge-close {
+    visibility: visible;
+  }
+  .tw-group\/badge .context-badge-icon-removable {
+    visibility: hidden;
+  }
 }
 
 /* Gradient fade mask for truncated content */
