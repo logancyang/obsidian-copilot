@@ -1,5 +1,9 @@
+import { logInfo, logWarn } from "@/logger";
+import { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
+import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
@@ -8,34 +12,6 @@ import { TFile } from "obsidian";
 const MAX_K = 20;
 const ORIGINAL_WEIGHT = 0.7;
 const LINKS_WEIGHT = 0.3;
-
-/**
- * Gets the embeddings for the given note path.
- * @param notePath - The note path to get embeddings for.
- * @returns The embeddings for the given note path.
- */
-async function getNoteEmbeddings(notePath: string): Promise<number[][]> {
-  const debug = getSettings().debug;
-  const docs = await VectorStoreManager.getInstance().getDocumentsByPath(notePath);
-  if (docs.length === 0) {
-    if (debug) {
-      console.log("No hits found for note:", notePath);
-    }
-    return [];
-  }
-
-  const embeddings: number[][] = [];
-  for (const doc of docs) {
-    if (!doc?.embedding) {
-      if (debug) {
-        console.log("No embedding found for note:", notePath);
-      }
-      continue;
-    }
-    embeddings.push(doc.embedding);
-  }
-  return embeddings;
-}
 
 /**
  * Gets the highest score hits for each note and removes the current file path
@@ -61,58 +37,160 @@ function getHighestScoreHits(hits: Result<InternalTypedDocument<any>>[], current
 }
 
 /**
- * Calculates the similarity score for the given file path by searching with each
- * chunk embedding individually (no averaging) and aggregating results by max score.
- * @param db - The Orama database.
- * @param filePath - The file path to calculate similarity scores for.
- * @returns A map of note paths to their highest similarity scores.
+ * Normalize a score map to the top K entries, ordered by score descending.
+ *
+ * @param scoreMap - Map of path to score.
+ * @returns Capped map containing at most MAX_K entries.
  */
-async function calculateSimilarityScore({
-  db,
-  filePath,
-}: {
-  db: Orama<any>;
-  filePath: string;
-}): Promise<Map<string, number>> {
-  const debug = getSettings().debug;
-
-  const currentNoteEmbeddings = await getNoteEmbeddings(filePath);
-  if (currentNoteEmbeddings.length === 0) {
-    if (debug) {
-      console.log("No embeddings found for note:", filePath);
-    }
-    return new Map();
+function capToTopK(scoreMap: Map<string, number>): Map<string, number> {
+  if (scoreMap.size <= MAX_K) {
+    return scoreMap;
   }
 
-  // Search with EACH chunk embedding separately (no averaging)
-  // Use Promise.all() to parallelize searches for better performance
-  const searchPromises = currentNoteEmbeddings.map((embedding) =>
-    DBOperations.getDocsByEmbedding(db, embedding, {
-      limit: MAX_K,
-      similarity: 0, // No hard threshold - use top-K ranking
-    })
-  );
-
-  const searchResults = await Promise.all(searchPromises);
-
-  // Flatten all hits from all chunk searches
-  const allHits = searchResults.flat();
-
-  // Aggregate by taking max score per note path
-  const aggregatedHits = getHighestScoreHits(allHits, filePath);
-
-  // Cap to top MAX_K results to prevent unbounded growth from multi-chunk notes
-  if (aggregatedHits.size <= MAX_K) {
-    return aggregatedHits;
-  }
-
-  const topK = Array.from(aggregatedHits.entries())
+  const topK = Array.from(scoreMap.entries())
     .sort((a, b) => b[1] - a[1])
     .slice(0, MAX_K);
 
   return new Map(topK);
 }
 
+/**
+ * Return true when a semantic document has a usable embedding vector.
+ *
+ * @param doc - Semantic document candidate.
+ * @returns True when embedding data exists and is non-empty.
+ */
+function hasUsableEmbedding(doc: SemanticIndexDocument): boolean {
+  return Array.isArray(doc.embedding) && doc.embedding.length > 0;
+}
+
+/**
+ * Return true when the source note has non-empty chunk content.
+ *
+ * @param docs - Source note semantic chunks.
+ * @returns True when at least one chunk has content.
+ */
+function hasSourceChunkContent(docs: SemanticIndexDocument[]): boolean {
+  return docs.some((doc) => doc.content.trim().length > 0);
+}
+
+/**
+ * Calculate similarity scores using the legacy Orama vector path.
+ *
+ * @param db - The Orama database.
+ * @param filePath - The file path to calculate similarity scores for.
+ * @param currentNoteEmbeddings - Embedding vectors of the source note.
+ * @returns A map of note paths to their highest similarity scores.
+ */
+async function calculateSimilarityScoreFromOrama({
+  db,
+  filePath,
+  currentNoteEmbeddings,
+}: {
+  db: Orama<any>;
+  filePath: string;
+  currentNoteEmbeddings: number[][];
+}): Promise<Map<string, number>> {
+  const searchPromises = currentNoteEmbeddings.map((embedding) =>
+    DBOperations.getDocsByEmbedding(db, embedding, {
+      limit: MAX_K,
+      similarity: 0,
+    })
+  );
+  const searchResults = await Promise.all(searchPromises);
+  const allHits = searchResults.flat();
+  const aggregatedHits = getHighestScoreHits(allHits, filePath);
+  return capToTopK(aggregatedHits);
+}
+
+/**
+ * Calculate similarity scores using Miyo's related-note endpoint.
+ *
+ * @param filePath - Source note path.
+ * @returns Map of note paths to max similarity score.
+ */
+async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<string, number>> {
+  try {
+    const settings = getSettings();
+    const miyoClient = new MiyoClient();
+    const baseUrl = await miyoClient.resolveBaseUrl(settings.selfHostUrl);
+    const sourceId = getMiyoSourceId(app);
+    const response = await miyoClient.searchRelated(baseUrl, filePath, {
+      sourceId,
+      limit: MAX_K,
+    });
+    const similarityScoreMap = new Map<string, number>();
+    const results = response.results || [];
+
+    for (const result of results) {
+      if (result.path === filePath) {
+        continue;
+      }
+      if (typeof result.score !== "number" || Number.isNaN(result.score)) {
+        continue;
+      }
+      const existing = similarityScoreMap.get(result.path);
+      if (existing === undefined || result.score > existing) {
+        similarityScoreMap.set(result.path, result.score);
+      }
+    }
+
+    if (getSettings().debug) {
+      logInfo(
+        `RelevantNotes(Miyo): received ${results.length} chunks, collected ${similarityScoreMap.size} note scores`
+      );
+    }
+
+    return capToTopK(similarityScoreMap);
+  } catch (error) {
+    logWarn("RelevantNotes(Miyo): failed to compute similarity scores", error);
+    return new Map();
+  }
+}
+
+/**
+ * Calculate similarity scores by selecting the best available backend strategy.
+ *
+ * @param filePath - Source note path.
+ * @returns Map of note paths to max similarity score.
+ */
+async function calculateSimilarityScore(filePath: string): Promise<Map<string, number>> {
+  const currentNoteDocs = await VectorStoreManager.getInstance().getDocumentsByPath(filePath);
+  if (currentNoteDocs.length === 0) {
+    return new Map();
+  }
+
+  const currentNoteEmbeddings = currentNoteDocs
+    .filter((doc) => hasUsableEmbedding(doc))
+    .map((doc) => doc.embedding);
+
+  if (currentNoteEmbeddings.length > 0) {
+    try {
+      const db = await VectorStoreManager.getInstance().getDb();
+      return calculateSimilarityScoreFromOrama({
+        db,
+        filePath,
+        currentNoteEmbeddings,
+      });
+    } catch (error) {
+      logWarn("RelevantNotes(Orama): failed to compute similarity scores", error);
+      return new Map();
+    }
+  }
+
+  if (!hasSourceChunkContent(currentNoteDocs)) {
+    return new Map();
+  }
+
+  return calculateSimilarityScoreFromMiyo(filePath);
+}
+
+/**
+ * Build outgoing/backlink relationship flags for the source note.
+ *
+ * @param file - Source note file.
+ * @returns Map keyed by note path with link metadata.
+ */
 function getNoteLinks(file: TFile) {
   const resultMap = new Map<string, { links: boolean; backlinks: boolean }>();
   const linkedNotes = getLinkedNotes(file);
@@ -134,6 +212,13 @@ function getNoteLinks(file: TFile) {
   return resultMap;
 }
 
+/**
+ * Merge semantic similarity scores with note link heuristics.
+ *
+ * @param similarityScoreMap - Semantic score map.
+ * @param noteLinks - Outgoing/backlink flags map.
+ * @returns Combined score map used for ranking.
+ */
 function mergeScoreMaps(
   similarityScoreMap: Map<string, number>,
   noteLinks: Map<string, { links: boolean; backlinks: boolean }>
@@ -171,18 +256,17 @@ export type RelevantNoteEntry = {
     hasBacklinks: boolean;
   };
 };
+
 /**
  * Finds the relevant notes for the given file path.
- * @param db - The Orama database.
+ *
  * @param filePath - The file path to find relevant notes for.
  * @returns The relevant notes hits for the given file path. Empty array if no
  *   relevant notes are found or the index does not exist.
  */
 export async function findRelevantNotes({
-  db,
   filePath,
 }: {
-  db: Orama<any>;
   filePath: string;
 }): Promise<RelevantNoteEntry[]> {
   const file = app.vault.getAbstractFileByPath(filePath);
@@ -190,7 +274,7 @@ export async function findRelevantNotes({
     return [];
   }
 
-  const similarityScoreMap = await calculateSimilarityScore({ db, filePath });
+  const similarityScoreMap = await calculateSimilarityScore(filePath);
   const noteLinks = getNoteLinks(file);
   const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
   const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => {

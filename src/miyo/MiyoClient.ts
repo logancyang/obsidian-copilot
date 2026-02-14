@@ -89,6 +89,21 @@ export interface MiyoSearchResponse {
 }
 
 /**
+ * Minimal result item for related-note queries.
+ */
+export interface MiyoRelatedSearchResult {
+  path: string;
+  score: number;
+}
+
+/**
+ * Response for Miyo related-note search endpoint.
+ */
+export interface MiyoRelatedSearchResponse {
+  results: MiyoRelatedSearchResult[];
+}
+
+/**
  * Search filters for Miyo queries.
  */
 export interface MiyoSearchFilter {
@@ -258,6 +273,38 @@ export class MiyoClient {
       logInfo("Miyo search request:", { baseUrl, payload });
     }
     return this.requestJson<MiyoSearchResponse>(baseUrl, "/v0/search", {
+      method: "POST",
+      body: payload,
+    });
+  }
+
+  /**
+   * Execute related-notes search for a source note path.
+   *
+   * @param baseUrl - Miyo base URL.
+   * @param filePath - Source note path to find related notes for.
+   * @param options - Optional source id, result limit, and filters.
+   * @returns Search response in the same shape as /v0/search.
+   */
+  public async searchRelated(
+    baseUrl: string,
+    filePath: string,
+    options?: {
+      sourceId?: string;
+      limit?: number;
+      filters?: MiyoSearchFilter[];
+    }
+  ): Promise<MiyoRelatedSearchResponse> {
+    const payload = {
+      file_path: filePath,
+      ...(options?.sourceId ? { source_id: options.sourceId } : {}),
+      ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
+      ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
+    };
+    if (getSettings().debug) {
+      logInfo("Miyo related search request:", { baseUrl, payload });
+    }
+    return this.requestJson<MiyoRelatedSearchResponse>(baseUrl, "/v0/search/related", {
       method: "POST",
       body: payload,
     });
