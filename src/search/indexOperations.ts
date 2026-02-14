@@ -481,15 +481,8 @@ export class IndexOperations {
       return;
     }
 
-    // Show appropriate error notice
-    if (this.isRateLimitError(error)) {
-      return; // Don't show duplicate notices for rate limit errors
-    }
-
-    const message = filePath
-      ? `Error indexing file ${filePath}. Check console for details.`
-      : "Fatal error during indexing. Check console for details.";
-    new Notice(message);
+    // Errors are already logged to console above. Do not show Notice popups
+    // as they spam the user on every file event when the DB is not yet loaded.
   }
 
   private isRateLimitError(err: any): boolean {

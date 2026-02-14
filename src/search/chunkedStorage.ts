@@ -303,6 +303,14 @@ export class ChunkedStorage {
       mergedData.docs.docs = orderedDocs;
       mergedData.docs.count = Object.keys(orderedDocs).length;
 
+      // Rebuild internalDocumentIDStore to match orderedDocs positions.
+      // The original store may contain IDs for documents that were removed via
+      // upsert cycles. These "ghost" IDs cause position mismatches after load,
+      // where some user IDs point to wrong doc positions or undefined entries.
+      mergedData.internalDocumentIDStore.internalIdToId = Object.values(orderedDocs).map(
+        (doc: any) => (doc as any).id
+      );
+
       // Merge vectors from all chunks
       mergedData.index.vectorIndexes.embedding.vectors = Object.assign(
         {},

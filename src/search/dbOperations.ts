@@ -358,6 +358,7 @@ export class DBOperations {
       mtime: "number",
       tags: "string[]",
       extension: "string",
+      nchars: "number",
     };
   }
 
