@@ -7,6 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { cn } from "@/lib/utils";
+import { logWarn } from "@/logger";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
 import {
   findRelevantNotes,
@@ -37,18 +38,11 @@ function useRelevantNotes(refresher: number) {
   useEffect(() => {
     async function fetchNotes() {
       if (!activeFile?.path) return;
-      // Only show when semantic search is enabled and database is available
       try {
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const db = await VectorStoreManager.getInstance().getDb();
-        if (!db) {
-          setRelevantNotes([]);
-          return;
-        }
-        const notes = await findRelevantNotes({ db, filePath: activeFile.path });
+        const notes = await findRelevantNotes({ filePath: activeFile.path });
         setRelevantNotes(notes);
       } catch (error) {
-        console.warn("Failed to fetch relevant notes:", error);
+        logWarn("Failed to fetch relevant notes", error);
         setRelevantNotes([]);
       }
     }
