@@ -4,6 +4,7 @@ import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
+import { obsidianDailyReadTool, obsidianRandomReadTool } from "./ObsidianCliDailyTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import { createGetTagListTool } from "./TagTools";
 import {
@@ -168,6 +169,35 @@ Example: "what time is 6pm PT in Tokyo" (PT is UTC-8 or UTC-7, Tokyo is UTC+9) â
 Examples:
 - First chunk: notePath: "Projects/launch-plan.md" (chunkIndex omitted or 0)
 - Next chunk: notePath: "Projects/launch-plan.md", chunkIndex: 1`,
+    },
+  },
+  {
+    tool: obsidianDailyReadTool,
+    metadata: {
+      id: "obsidianDailyRead",
+      displayName: "Daily Note (CLI)",
+      description: "Read today's daily note using the official Obsidian CLI",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianDailyRead:
+- Use this tool when the user asks for today's daily note or asks to read the daily note content.
+- Prefer this tool over generic file browsing when the request is clearly about daily notes.
+- If the user names a specific vault, pass it using the vault parameter.
+- Do not use this tool for arbitrary non-daily note files; use readNote/getFileTree flow for those requests.`,
+    },
+  },
+  {
+    tool: obsidianRandomReadTool,
+    metadata: {
+      id: "obsidianRandomRead",
+      displayName: "Random Note (CLI)",
+      description: "Read a random note using the official Obsidian CLI",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianRandomRead:
+- Use this tool when the user explicitly asks for a random note or random note content.
+- If the user names a specific vault, pass it using the vault parameter.
+- Do not use this tool when the user asks for a specific note; use readNote/getFileTree flow for specific targets.`,
     },
   },
   {
