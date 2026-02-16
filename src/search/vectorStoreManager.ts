@@ -3,6 +3,7 @@
 import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
+import { logWarn } from "@/logger";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
 import { Notice, Platform, TFile } from "obsidian";
@@ -111,6 +112,12 @@ export default class VectorStoreManager {
     options?: { userInitiated?: boolean }
   ): Promise<number> {
     await this.waitForInitialization();
+
+    if (!getSettings().enableSemanticSearchV3) {
+      logWarn("indexVaultToVectorStore called with semantic search disabled, skipping.");
+      return 0;
+    }
+
     if (Platform.isMobile && getSettings().disableIndexOnMobile) {
       new Notice("Indexing is disabled on mobile devices");
       return 0;
