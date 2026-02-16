@@ -219,9 +219,6 @@ export class IndexOperations {
             break;
           }
         }
-
-        // Yield to main thread so the browser can process editor input events
-        await this.yieldToMainThread();
       }
 
       // Show completion notice before running integrity check
@@ -324,19 +321,9 @@ export class IndexOperations {
           });
         }
       }
-
-      // Yield to main thread between chunk preparation batches
-      await this.yieldToMainThread();
     }
 
     return allChunks;
-  }
-
-  /**
-   * Yields to the main thread so the browser can process pending input events and re-renders.
-   */
-  private yieldToMainThread(): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, 0));
   }
 
   private getDocHash(sourceDocument: string): string {
