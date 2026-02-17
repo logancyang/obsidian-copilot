@@ -347,22 +347,6 @@ export function setIndexingProgressState(state: IndexingProgressState) {
 }
 
 /**
- * Resets the indexing progress state to the default (idle) state.
- * Use when indexing completes with nothing to do (e.g. index already up to date).
- */
-export function resetIndexingProgressState() {
-  settingsStore.set(indexingProgressAtom, {
-    isActive: false,
-    isPaused: false,
-    isCancelled: false,
-    indexedCount: 0,
-    totalFiles: 0,
-    errors: [],
-    completionStatus: "none",
-  });
-}
-
-/**
  * Updates specific fields in the indexing progress state.
  */
 export function updateIndexingProgressState(partial: Partial<IndexingProgressState>) {
@@ -379,6 +363,31 @@ let _lastUpdateTime = 0;
 let _pendingCount = 0;
 let _throttleTimer: ReturnType<typeof setTimeout> | null = null;
 const THROTTLE_INTERVAL_MS = 500;
+
+/**
+ * Resets the indexing progress state to the default (idle) state.
+ * Use when indexing completes with nothing to do (e.g. index already up to date).
+ */
+export function resetIndexingProgressState() {
+  // Cancel any pending throttled indexing count write so a stale timer from a
+  // previous run cannot corrupt the freshly-reset state.
+  if (_throttleTimer !== null) {
+    clearTimeout(_throttleTimer);
+    _throttleTimer = null;
+  }
+  _lastUpdateTime = 0;
+  _pendingCount = 0;
+
+  settingsStore.set(indexingProgressAtom, {
+    isActive: false,
+    isPaused: false,
+    isCancelled: false,
+    indexedCount: 0,
+    totalFiles: 0,
+    errors: [],
+    completionStatus: "none",
+  });
+}
 
 /**
  * Throttled version of updateIndexingProgressState for indexedCount.
