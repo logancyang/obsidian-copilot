@@ -144,6 +144,27 @@ export class MiyoClient {
   }
 
   /**
+   * Check whether the Miyo backend is reachable.
+   *
+   * @param overrideUrl - Optional explicit base URL.
+   * @returns True when the health endpoint responds with status "ok".
+   */
+  public async isBackendAvailable(overrideUrl?: string): Promise<boolean> {
+    try {
+      const baseUrl = await this.resolveBaseUrl(overrideUrl);
+      const health = await this.requestJson<{ status?: string }>(baseUrl, "/v0/health", {
+        method: "GET",
+      });
+      return health?.status === "ok";
+    } catch (error) {
+      if (getSettings().debug) {
+        logWarn(`Miyo backend availability check failed: ${err2String(error)}`);
+      }
+      return false;
+    }
+  }
+
+  /**
    * Upsert a batch of documents.
    *
    * @param baseUrl - Miyo base URL.

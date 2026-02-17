@@ -1,10 +1,12 @@
+import React, { useState } from "react";
+import { Notice } from "obsidian";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
-import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
+import { MiyoClient } from "@/miyo/MiyoClient";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
 export const CopilotPlusSettings: React.FC = () => {
@@ -33,7 +35,7 @@ export const CopilotPlusSettings: React.FC = () => {
   };
 
   /**
-   * Toggle Miyo-backed semantic search and trigger a full reindex when needed.
+   * Toggle Miyo-backed semantic search and refresh the index when enabling.
    *
    * @param enabled - Whether Miyo search should be enabled.
    */
@@ -42,12 +44,27 @@ export const CopilotPlusSettings: React.FC = () => {
       return;
     }
 
+    if (!enabled) {
+      updateSetting("enableMiyoSearch", false);
+      return;
+    }
+
     if (enabled) {
       setIsValidatingSelfHost(true);
-      const isValid = await validateSelfHostMode();
-      setIsValidatingSelfHost(false);
-      if (!isValid) {
-        return;
+      try {
+        const miyoClient = new MiyoClient();
+        const isMiyoAvailable = await miyoClient.isBackendAvailable(settings.selfHostUrl);
+        if (!isMiyoAvailable) {
+          new Notice("Miyo app is not available. Please start the Miyo app and try again.");
+          return;
+        }
+
+        const isValid = await validateSelfHostMode();
+        if (!isValid) {
+          return;
+        }
+      } finally {
+        setIsValidatingSelfHost(false);
       }
     }
 
@@ -60,11 +77,18 @@ export const CopilotPlusSettings: React.FC = () => {
 
       if (settings.enableSemanticSearchV3 || enabled) {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(true);
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+          userInitiated: true,
+        });
       }
     };
 
-    new RebuildIndexConfirmModal(app, confirmChange).open();
+    new ConfirmModal(
+      app,
+      confirmChange,
+      "Enabling Miyo Search will refresh your vault index to store data in Miyo. Continue?",
+      "Refresh Index"
+    ).open();
   };
 
   return (
@@ -188,7 +212,7 @@ export const CopilotPlusSettings: React.FC = () => {
               <SettingItem
                 type="switch"
                 title="Enable Miyo Search"
-                description="Use the Miyo desktop app for embeddings and semantic search to access your vault from your favorite AI apps. Enabling this will prompt you to force refresh the index so data is stored in Miyo."
+                description="Use the Miyo desktop app for embeddings and semantic search to access your vault from your favorite AI apps. Enabling this will prompt you to refresh the index so data is stored in Miyo."
                 checked={settings.enableMiyoSearch}
                 onCheckedChange={handleMiyoSearchToggle}
                 disabled={isValidatingSelfHost}
