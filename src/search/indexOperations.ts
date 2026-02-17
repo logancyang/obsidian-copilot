@@ -1,11 +1,13 @@
 import {
+  flushIndexingCount,
   getIndexingProgressState,
   resetIndexingProgressState,
   setIndexingProgressState,
+  throttledUpdateIndexingCount,
   updateIndexingProgressState,
 } from "@/aiParams";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { RateLimiter } from "@/rateLimiter";
 import { ChunkManager, getSharedChunkManager } from "@/search/v3/chunks";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
@@ -60,6 +62,11 @@ export class IndexOperations {
     overwrite?: boolean,
     options?: { userInitiated?: boolean }
   ): Promise<number> {
+    if (!getSettings().enableSemanticSearchV3) {
+      logWarn("indexVaultToVectorStore called with semantic search disabled, skipping.");
+      return 0;
+    }
+
     const errors: string[] = [];
 
     // Reset any stale state from a previous run but do NOT set isActive yet —
@@ -188,9 +195,9 @@ export class IndexOperations {
             }
           }
 
-          // Update progress after the batch
+          // Update progress after the batch (throttled to reduce React re-renders)
           this.state.indexedCount = this.state.processedFiles.size;
-          updateIndexingProgressState({ indexedCount: this.state.indexedCount });
+          throttledUpdateIndexingCount(this.state.indexedCount);
 
           // Calculate if we've crossed a checkpoint threshold
           const previousCheckpoint = Math.floor(
@@ -497,6 +504,9 @@ export class IndexOperations {
   }
 
   private finalizeIndexing(errors: string[]): void {
+    // Flush any pending throttled count so the final value is displayed
+    flushIndexingCount();
+
     if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) {
       updateIndexingProgressState({
         isActive: false,

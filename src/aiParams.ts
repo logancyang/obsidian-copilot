@@ -347,10 +347,37 @@ export function setIndexingProgressState(state: IndexingProgressState) {
 }
 
 /**
+ * Updates specific fields in the indexing progress state.
+ */
+export function updateIndexingProgressState(partial: Partial<IndexingProgressState>) {
+  settingsStore.set(indexingProgressAtom, (prev) => ({
+    ...prev,
+    ...partial,
+  }));
+}
+
+// --- Throttled indexing count updater ---
+// Limits atom writes to at most once per 500ms during indexing to avoid
+// cascading React re-renders from frequent Jotai atom updates.
+let _lastUpdateTime = 0;
+let _pendingCount = 0;
+let _throttleTimer: ReturnType<typeof setTimeout> | null = null;
+const THROTTLE_INTERVAL_MS = 500;
+
+/**
  * Resets the indexing progress state to the default (idle) state.
  * Use when indexing completes with nothing to do (e.g. index already up to date).
  */
 export function resetIndexingProgressState() {
+  // Cancel any pending throttled indexing count write so a stale timer from a
+  // previous run cannot corrupt the freshly-reset state.
+  if (_throttleTimer !== null) {
+    clearTimeout(_throttleTimer);
+    _throttleTimer = null;
+  }
+  _lastUpdateTime = 0;
+  _pendingCount = 0;
+
   settingsStore.set(indexingProgressAtom, {
     isActive: false,
     isPaused: false,
@@ -363,13 +390,46 @@ export function resetIndexingProgressState() {
 }
 
 /**
- * Updates specific fields in the indexing progress state.
+ * Throttled version of updateIndexingProgressState for indexedCount.
+ * Limits atom writes to once per 500ms to reduce React re-renders.
  */
-export function updateIndexingProgressState(partial: Partial<IndexingProgressState>) {
-  settingsStore.set(indexingProgressAtom, (prev) => ({
-    ...prev,
-    ...partial,
-  }));
+export function throttledUpdateIndexingCount(indexedCount: number): void {
+  _pendingCount = indexedCount;
+  const now = Date.now();
+
+  if (now - _lastUpdateTime >= THROTTLE_INTERVAL_MS) {
+    // Enough time has passed — write immediately
+    _lastUpdateTime = now;
+    if (_throttleTimer !== null) {
+      clearTimeout(_throttleTimer);
+      _throttleTimer = null;
+    }
+    updateIndexingProgressState({ indexedCount: _pendingCount });
+  } else if (_throttleTimer === null) {
+    // Schedule a trailing write
+    _throttleTimer = setTimeout(
+      () => {
+        _lastUpdateTime = Date.now();
+        _throttleTimer = null;
+        updateIndexingProgressState({ indexedCount: _pendingCount });
+      },
+      THROTTLE_INTERVAL_MS - (now - _lastUpdateTime)
+    );
+  }
+}
+
+/**
+ * Forces an immediate write of the pending indexedCount.
+ * Call at indexing completion to ensure the final count is displayed.
+ */
+export function flushIndexingCount(): void {
+  if (_throttleTimer !== null) {
+    clearTimeout(_throttleTimer);
+    _throttleTimer = null;
+  }
+  updateIndexingProgressState({ indexedCount: _pendingCount });
+  _lastUpdateTime = 0;
+  _pendingCount = 0;
 }
 
 /**
