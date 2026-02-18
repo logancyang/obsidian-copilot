@@ -1,4 +1,4 @@
-import { type WebSearchResponse, type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
+import { type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
@@ -11,6 +11,12 @@ const SUPADATA_POLL_INTERVAL = 2000;
 /** Maximum time to wait for a Supadata async job (ms) */
 const SUPADATA_POLL_TIMEOUT = 60000;
 
+/** Clean web search result — no legacy Perplexity wrapper */
+export interface SelfHostWebSearchResult {
+  content: string;
+  citations: string[];
+}
+
 interface FirecrawlSearchResult {
   title?: string;
   description?: string;
@@ -19,9 +25,9 @@ interface FirecrawlSearchResult {
 
 /**
  * Web search via Firecrawl direct API (self-host mode).
- * Returns the same WebSearchResponse shape as BrevilabsClient.webSearch().
+ * Returns content + citations directly without the legacy Perplexity wrapper.
  */
-export async function selfHostWebSearch(query: string): Promise<WebSearchResponse> {
+export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearchResult> {
   const startTime = Date.now();
   const apiKey = await getDecryptedKey(getSettings().firecrawlApiKey);
 
@@ -58,13 +64,7 @@ export async function selfHostWebSearch(query: string): Promise<WebSearchRespons
   const elapsed = Date.now() - startTime;
   logInfo(`[selfHostWebSearch] ${results.length} results in ${elapsed}ms`);
 
-  return {
-    response: {
-      choices: [{ message: { content: contentParts.join("\n\n") } }],
-      citations,
-    },
-    elapsed_time_ms: elapsed,
-  };
+  return { content: contentParts.join("\n\n"), citations };
 }
 
 /**
