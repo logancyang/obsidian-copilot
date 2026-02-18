@@ -139,6 +139,10 @@ export interface CopilotSettings {
   selfHostUrl: string;
   /** API key for the self-host mode backend (if required) */
   selfHostApiKey: string;
+  /** Firecrawl API key for self-host web search */
+  firecrawlApiKey: string;
+  /** Supadata API key for self-host YouTube transcripts */
+  supadataApiKey: string;
   /** Enable lexical boosts (folder and graph) in search - default: true */
   enableLexicalBoosts: boolean;
   /**

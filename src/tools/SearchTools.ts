@@ -1,7 +1,9 @@
 import { getStandaloneQuestion } from "@/chainUtils";
 import { DEFAULT_MAX_SOURCE_CHUNKS, TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { selfHostWebSearch } from "@/LLMProviders/selfHostServices";
 import { logInfo } from "@/logger";
+import { isSelfHostModeValid } from "@/plusUtils";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { getSettings } from "@/settings/model";
 import { z } from "zod";
@@ -475,7 +477,10 @@ const webSearchTool = createLangChainTool({
       // Get standalone question considering chat history
       const standaloneQuestion = await getStandaloneQuestion(query, chatHistory);
 
-      const response = await BrevilabsClient.getInstance().webSearch(standaloneQuestion);
+      const response =
+        isSelfHostModeValid() && getSettings().firecrawlApiKey
+          ? await selfHostWebSearch(standaloneQuestion)
+          : await BrevilabsClient.getInstance().webSearch(standaloneQuestion);
       const citations = response.response.citations || [];
 
       // Return structured JSON response for consistency with other tools

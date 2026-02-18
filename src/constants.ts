@@ -909,6 +909,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   selfHostValidationCount: 0,
   selfHostUrl: "",
   selfHostApiKey: "",
+  firecrawlApiKey: "",
+  supadataApiKey: "",
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
   autonomousAgentMaxIterations: 4,

@@ -217,6 +217,52 @@ export const CopilotPlusSettings: React.FC = () => {
                 onCheckedChange={handleMiyoSearchToggle}
                 disabled={isValidatingSelfHost}
               />
+
+              {settings.enableSelfHostMode && (
+                <>
+                  <SettingItem
+                    type="password"
+                    title="Firecrawl API Key"
+                    description={
+                      <span>
+                        API key for web search via Firecrawl.{" "}
+                        <a
+                          href="https://firecrawl.link/logan-yang"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tw-text-accent"
+                        >
+                          Sign up &rarr;
+                        </a>
+                      </span>
+                    }
+                    value={settings.firecrawlApiKey}
+                    onChange={(value) => updateSetting("firecrawlApiKey", value)}
+                    placeholder="fc-..."
+                  />
+
+                  <SettingItem
+                    type="password"
+                    title="Supadata API Key"
+                    description={
+                      <span>
+                        API key for YouTube transcripts via Supadata.{" "}
+                        <a
+                          href="https://supadata.ai/?ref=obcopilot"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tw-text-accent"
+                        >
+                          Sign up &rarr;
+                        </a>
+                      </span>
+                    }
+                    value={settings.supadataApiKey}
+                    onChange={(value) => updateSetting("supadataApiKey", value)}
+                    placeholder="sd-..."
+                  />
+                </>
+              )}
             </>
           )}
         </div>
