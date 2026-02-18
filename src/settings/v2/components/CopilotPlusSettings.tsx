@@ -31,6 +31,7 @@ export const CopilotPlusSettings: React.FC = () => {
       updateSetting("enableSelfHostMode", true);
     } else {
       updateSetting("enableSelfHostMode", false);
+      updateSetting("enableMiyoSearch", false);
     }
   };
 
@@ -216,25 +217,67 @@ export const CopilotPlusSettings: React.FC = () => {
                   />
 
                   <SettingItem
-                    type="password"
-                    title="Firecrawl API Key"
-                    description={
-                      <span>
-                        API key for web search via Firecrawl.{" "}
-                        <a
-                          href="https://firecrawl.link/logan-yang"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="tw-text-accent"
-                        >
-                          Sign up &rarr;
-                        </a>
-                      </span>
+                    type="select"
+                    title="Web Search Provider"
+                    description="Choose which service to use for self-host web search."
+                    value={settings.selfHostSearchProvider}
+                    onChange={(value) =>
+                      updateSetting(
+                        "selfHostSearchProvider",
+                        value as "firecrawl" | "perplexity"
+                      )
                     }
-                    value={settings.firecrawlApiKey}
-                    onChange={(value) => updateSetting("firecrawlApiKey", value)}
-                    placeholder="fc-..."
+                    options={[
+                      { label: "Firecrawl (default)", value: "firecrawl" },
+                      { label: "Perplexity Sonar", value: "perplexity" },
+                    ]}
                   />
+
+                  {settings.selfHostSearchProvider === "firecrawl" && (
+                    <SettingItem
+                      type="password"
+                      title="Firecrawl API Key"
+                      description={
+                        <span>
+                          API key for web search via Firecrawl.{" "}
+                          <a
+                            href="https://firecrawl.link/logan-yang"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="tw-text-accent"
+                          >
+                            Sign up &rarr;
+                          </a>
+                        </span>
+                      }
+                      value={settings.firecrawlApiKey}
+                      onChange={(value) => updateSetting("firecrawlApiKey", value)}
+                      placeholder="fc-..."
+                    />
+                  )}
+
+                  {settings.selfHostSearchProvider === "perplexity" && (
+                    <SettingItem
+                      type="password"
+                      title="Perplexity API Key"
+                      description={
+                        <span>
+                          API key for web search via Perplexity Sonar.{" "}
+                          <a
+                            href="https://docs.perplexity.ai"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="tw-text-accent"
+                          >
+                            Get API key &rarr;
+                          </a>
+                        </span>
+                      }
+                      value={settings.perplexityApiKey}
+                      onChange={(value) => updateSetting("perplexityApiKey", value)}
+                      placeholder="pplx-..."
+                    />
+                  )}
 
                   <SettingItem
                     type="password"
