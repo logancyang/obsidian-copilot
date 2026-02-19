@@ -177,7 +177,7 @@ export class MiyoClient {
     sourceId: string,
     documents: MiyoUpsertDocument[]
   ): Promise<number> {
-    const payload = { source_id: sourceId, documents };
+    const payload = { vault: sourceId, documents };
     const response = await this.requestJson<{ upserted: number }>(baseUrl, "/v0/index/upsert", {
       method: "POST",
       body: payload,
@@ -194,7 +194,7 @@ export class MiyoClient {
    * @returns Count of documents deleted.
    */
   public async deleteByPath(baseUrl: string, sourceId: string, path: string): Promise<number> {
-    const payload = { source_id: sourceId, path };
+    const payload = { vault: sourceId, path };
     const response = await this.requestJson<{ deleted?: number }>(baseUrl, "/v0/index/by_path", {
       method: "DELETE",
       body: payload,
@@ -209,7 +209,7 @@ export class MiyoClient {
    * @param sourceId - Vault-specific source id.
    */
   public async clearIndex(baseUrl: string, sourceId: string): Promise<void> {
-    const payload = { source_id: sourceId };
+    const payload = { vault: sourceId };
     await this.requestJson(baseUrl, "/v0/index/clear", { method: "POST", body: payload });
   }
 
@@ -230,7 +230,7 @@ export class MiyoClient {
   ): Promise<MiyoIndexedFilesResponse> {
     return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/index/files", {
       method: "GET",
-      query: { source_id: sourceId, offset, limit },
+      query: { vault: sourceId, offset, limit },
     });
   }
 
@@ -244,7 +244,7 @@ export class MiyoClient {
   public async getStats(baseUrl: string, sourceId: string): Promise<MiyoIndexStatsResponse> {
     return this.requestJson<MiyoIndexStatsResponse>(baseUrl, "/v0/index/stats", {
       method: "GET",
-      query: { source_id: sourceId },
+      query: { vault: sourceId },
     });
   }
 
@@ -263,7 +263,7 @@ export class MiyoClient {
   ): Promise<MiyoDocumentsResponse> {
     return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/index/documents", {
       method: "GET",
-      query: { source_id: sourceId, path },
+      query: { vault: sourceId, path },
     });
   }
 
@@ -286,7 +286,7 @@ export class MiyoClient {
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      source_id: sourceId,
+      vault: sourceId,
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
@@ -318,7 +318,7 @@ export class MiyoClient {
   ): Promise<MiyoRelatedSearchResponse> {
     const payload = {
       file_path: filePath,
-      ...(options?.sourceId ? { source_id: options.sourceId } : {}),
+      ...(options?.sourceId ? { vault: options.sourceId } : {}),
       ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
       ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
     };
@@ -374,6 +374,13 @@ export class MiyoClient {
     }
 
     const body = options.body ? JSON.stringify(options.body) : undefined;
+    logInfo("Miyo request:", {
+      method: options.method,
+      url: url.toString(),
+      hasBody: Boolean(body),
+      ...(options.method === "POST" ? { postBody: options.body } : {}),
+    });
+
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,

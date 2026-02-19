@@ -12,6 +12,29 @@ import { TFile } from "obsidian";
 const MAX_K = 20;
 const ORIGINAL_WEIGHT = 0.7;
 const LINKS_WEIGHT = 0.3;
+const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
+
+/**
+ * Determine whether Miyo-backed relevant-note scoring should be used.
+ *
+ * @returns True when Miyo mode and self-host access validation are active.
+ */
+function shouldUseMiyoForRelevantNotes(): boolean {
+  const settings = getSettings();
+  if (!settings.enableMiyoSearch || !settings.enableSemanticSearchV3) {
+    return false;
+  }
+
+  if (settings.selfHostModeValidatedAt == null) {
+    return false;
+  }
+
+  if ((settings.selfHostValidationCount ?? 0) >= 3) {
+    return true;
+  }
+
+  return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+}
 
 /**
  * Gets the highest score hits for each note and removes the current file path
@@ -155,6 +178,10 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
  * @returns Map of note paths to max similarity score.
  */
 async function calculateSimilarityScore(filePath: string): Promise<Map<string, number>> {
+  if (shouldUseMiyoForRelevantNotes()) {
+    return calculateSimilarityScoreFromMiyo(filePath);
+  }
+
   const currentNoteDocs = await VectorStoreManager.getInstance().getDocumentsByPath(filePath);
   if (currentNoteDocs.length === 0) {
     return new Map();

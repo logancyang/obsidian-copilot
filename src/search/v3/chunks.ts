@@ -111,6 +111,8 @@ export class ChunkManager {
 
       const options = { ...DEFAULT_CHUNK_OPTIONS, ...opts };
       const allChunks: Chunk[] = [];
+      let skippedCacheCount = 0;
+      let skippedCacheBytes = 0;
 
       for (const notePath of validPaths) {
         // Check cache first using composite key (includes options)
@@ -140,12 +142,20 @@ export class ChunkManager {
               this.cache.set(cacheKey, chunks);
               this.memoryUsage += chunkBytes;
             } else {
-              logWarn(`ChunkManager: Skipping cache for ${notePath}, would exceed memory budget`);
+              skippedCacheCount += 1;
+              skippedCacheBytes += chunkBytes;
             }
           }
         }
 
         allChunks.push(...chunks);
+      }
+
+      if (skippedCacheCount > 0) {
+        const skippedMb = (skippedCacheBytes / 1024 / 1024).toFixed(1);
+        logInfo(
+          `ChunkManager: Cache budget reached, skipped caching ${skippedCacheCount} notes (${skippedMb}MB total)`
+        );
       }
 
       logInfo(
@@ -265,7 +275,7 @@ export class ChunkManager {
           this.cache.set(cacheKey, chunks);
           this.memoryUsage += chunkBytes;
         } else {
-          logWarn(
+          logInfo(
             `ChunkManager: Cannot cache regenerated chunks for ${notePath}, would exceed memory budget`
           );
         }

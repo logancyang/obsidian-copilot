@@ -87,6 +87,10 @@ describe("findRelevantNotes", () => {
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "",
+      enableMiyoSearch: false,
+      enableSemanticSearchV3: false,
+      selfHostModeValidatedAt: null,
+      selfHostValidationCount: 0,
     } as any);
     mockedGetLinkedNotes.mockReturnValue([]);
     mockedGetBacklinkedNotes.mockReturnValue([]);
@@ -166,6 +170,14 @@ describe("findRelevantNotes", () => {
   });
 
   it("uses Miyo related-note endpoint when source note chunks do not include embeddings", async () => {
+    mockedGetSettings.mockReturnValue({
+      debug: false,
+      selfHostUrl: "http://127.0.0.1:8742",
+      enableMiyoSearch: true,
+      enableSemanticSearchV3: true,
+      selfHostModeValidatedAt: Date.now(),
+      selfHostValidationCount: 0,
+    } as any);
     mockGetDocumentsByPath.mockResolvedValue([
       {
         id: "chunk-a",
@@ -197,6 +209,7 @@ describe("findRelevantNotes", () => {
       result.find((entry) => entry.document.path === "alpha.md")?.metadata.similarityScore
     ).toBe(0.6);
     expect(mockGetDb).not.toHaveBeenCalled();
+    expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
     expect(mockSearchRelated).toHaveBeenCalledTimes(1);
     expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "source.md", {
       sourceId: "test-source",
@@ -205,6 +218,14 @@ describe("findRelevantNotes", () => {
   });
 
   it("falls back to link-only relevance when Miyo related-note search fails", async () => {
+    mockedGetSettings.mockReturnValue({
+      debug: false,
+      selfHostUrl: "http://127.0.0.1:8742",
+      enableMiyoSearch: true,
+      enableSemanticSearchV3: true,
+      selfHostModeValidatedAt: Date.now(),
+      selfHostValidationCount: 0,
+    } as any);
     mockGetDocumentsByPath.mockResolvedValue([
       {
         id: "chunk-a",
@@ -223,5 +244,6 @@ describe("findRelevantNotes", () => {
     expect(result[0].document.path).toBe("linked-only.md");
     expect(result[0].metadata.similarityScore).toBeUndefined();
     expect(result[0].metadata.hasOutgoingLinks).toBe(true);
+    expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
   });
 });
