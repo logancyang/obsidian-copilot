@@ -6,6 +6,7 @@ import { z } from "zod";
 // Mock dependencies
 jest.mock("@/plusUtils", () => ({
   checkIsPlusUser: jest.fn(),
+  isSelfHostModeValid: jest.fn().mockReturnValue(false),
 }));
 
 jest.mock("@/logger", () => ({

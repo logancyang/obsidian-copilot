@@ -1,4 +1,7 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
+import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
+import { isSelfHostModeValid } from "@/plusUtils";
+import { getSettings } from "@/settings/model";
 import { extractAllYoutubeUrls } from "@/utils";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
@@ -53,7 +56,10 @@ const youtubeTranscriptionTool = createLangChainTool({
     const results = await Promise.all(
       urls.map(async (url) => {
         try {
-          const response = await BrevilabsClient.getInstance().youtube4llm(url);
+          const response =
+            isSelfHostModeValid() && getSettings().supadataApiKey
+              ? await selfHostYoutube4llm(url)
+              : await BrevilabsClient.getInstance().youtube4llm(url);
 
           // Check if transcript is empty
           if (!response.response.transcript) {

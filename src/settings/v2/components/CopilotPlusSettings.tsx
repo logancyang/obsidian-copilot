@@ -204,19 +204,60 @@ export const CopilotPlusSettings: React.FC = () => {
                 disabled={isValidatingSelfHost}
               />
 
-              <div className="tw-flex tw-items-center tw-gap-1.5 tw-pt-4 tw-text-xl tw-font-semibold">
-                Miyo Search
-                <HelpTooltip content="Lifetime license required" />
-              </div>
+              {settings.enableSelfHostMode && (
+                <>
+                  <SettingItem
+                    type="switch"
+                    title="Enable Miyo Search"
+                    description="Use Miyo as your local search engine and context hub — supports larger vaults than built-in Copilot search. Enabling this will prompt a one-time index refresh."
+                    checked={settings.enableMiyoSearch}
+                    onCheckedChange={handleMiyoSearchToggle}
+                    disabled={isValidatingSelfHost}
+                  />
 
-              <SettingItem
-                type="switch"
-                title="Enable Miyo Search"
-                description="Use the Miyo desktop app for embeddings and semantic search to access your vault from your favorite AI apps. Enabling this will prompt you to refresh the index so data is stored in Miyo."
-                checked={settings.enableMiyoSearch}
-                onCheckedChange={handleMiyoSearchToggle}
-                disabled={isValidatingSelfHost}
-              />
+                  <SettingItem
+                    type="password"
+                    title="Firecrawl API Key"
+                    description={
+                      <span>
+                        API key for web search via Firecrawl.{" "}
+                        <a
+                          href="https://firecrawl.link/logan-yang"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tw-text-accent"
+                        >
+                          Sign up &rarr;
+                        </a>
+                      </span>
+                    }
+                    value={settings.firecrawlApiKey}
+                    onChange={(value) => updateSetting("firecrawlApiKey", value)}
+                    placeholder="fc-..."
+                  />
+
+                  <SettingItem
+                    type="password"
+                    title="Supadata API Key"
+                    description={
+                      <span>
+                        API key for YouTube transcripts via Supadata.{" "}
+                        <a
+                          href="https://supadata.ai/?ref=obcopilot"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tw-text-accent"
+                        >
+                          Sign up &rarr;
+                        </a>
+                      </span>
+                    }
+                    value={settings.supadataApiKey}
+                    onChange={(value) => updateSetting("supadataApiKey", value)}
+                    placeholder="sd-..."
+                  />
+                </>
+              )}
             </>
           )}
         </div>
