@@ -204,22 +204,17 @@ export const CopilotPlusSettings: React.FC = () => {
                 disabled={isValidatingSelfHost}
               />
 
-              <div className="tw-flex tw-items-center tw-gap-1.5 tw-pt-4 tw-text-xl tw-font-semibold">
-                Miyo Search
-                <HelpTooltip content="Lifetime license required" />
-              </div>
-
-              <SettingItem
-                type="switch"
-                title="Enable Miyo Search"
-                description="Use the Miyo desktop app for embeddings and semantic search to access your vault from your favorite AI apps. Enabling this will prompt you to refresh the index so data is stored in Miyo."
-                checked={settings.enableMiyoSearch}
-                onCheckedChange={handleMiyoSearchToggle}
-                disabled={isValidatingSelfHost}
-              />
-
               {settings.enableSelfHostMode && (
                 <>
+                  <SettingItem
+                    type="switch"
+                    title="Enable Miyo Search"
+                    description="Use Miyo as your local search engine and context hub — supports larger vaults than built-in Copilot search. Enabling this will prompt a one-time index refresh."
+                    checked={settings.enableMiyoSearch}
+                    onCheckedChange={handleMiyoSearchToggle}
+                    disabled={isValidatingSelfHost}
+                  />
+
                   <SettingItem
                     type="password"
                     title="Firecrawl API Key"
