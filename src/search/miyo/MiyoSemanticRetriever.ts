@@ -197,7 +197,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     const explicitChunks: Document[] = [];
     for (const noteFile of noteFiles) {
       const response = await this.client.getDocumentsByPath(baseUrl, sourceId, noteFile.path);
-      response.documents.forEach((doc) => {
+      (response.documents ?? []).forEach((doc) => {
         explicitChunks.push(
           new Document({
             pageContent: doc.chunk_text ?? "",

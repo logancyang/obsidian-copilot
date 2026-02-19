@@ -306,14 +306,12 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
     sourceId: string
   ): void {
     logInfo(`Miyo upsert batch: ${docs.length} documents`, { baseUrl, sourceId });
-    if (getSettings().debug) {
-      docs.forEach((doc) => {
-        const chunkId = doc.metadata?.chunkId;
-        const chunkSuffix =
-          typeof chunkId === "string" && chunkId.length > 0 ? ` (chunkId: ${chunkId})` : "";
-        logInfo(`Miyo upsert document ${doc.id} @ ${doc.path}${chunkSuffix}`);
-      });
-    }
+    docs.forEach((doc) => {
+      const chunkId = doc.metadata?.chunkId;
+      const chunkSuffix =
+        typeof chunkId === "string" && chunkId.length > 0 ? ` (chunkId: ${chunkId})` : "";
+      logInfo(`Miyo upsert document ${doc.id} @ ${doc.path}${chunkSuffix}`);
+    });
   }
 
   /**
