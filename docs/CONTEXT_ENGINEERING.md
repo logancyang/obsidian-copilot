@@ -288,6 +288,13 @@ All four chain runners use the context envelope for LLM message construction. Ea
 
 ## Known Gaps
 
+### P0: No Token Budget Enforcement on Full Payload
+
+- The auto-compaction threshold (ContextCompactor) only checks L2+L3 size, not the full assembled payload.
+- L4 (chat history) is loaded and injected without any token budget, causing context window overflow for long conversations.
+- No mechanism queries or enforces the model's actual context window size.
+- See [TOKEN_BUDGET_ENFORCEMENT.md](./TOKEN_BUDGET_ENFORCEMENT.md) for detailed analysis and fix plan.
+
 ### P0: Persistence Parity Is Still Incomplete
 
 - Loaded chats do not rehydrate historical envelopes.
