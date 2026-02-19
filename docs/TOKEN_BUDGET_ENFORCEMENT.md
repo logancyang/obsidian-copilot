@@ -12,7 +12,7 @@
 
 ## Problem Statement
 
-The model proxy receives requests with token counts far exceeding the model's context window (e.g., 2.7M tokens sent to a 1M-token Vertex AI model). The plugin's auto-compaction system was expected to prevent this but fails because it only guards a subset of the total payload.
+The model proxy receives requests with token counts far exceeding the model's context window (e.g., 2.7M tokens sent to a 1M-token Vertex AI model). The plugin's auto-compaction system was expected to prevent this but fails because **no compaction mechanism checks the total assembled payload** — each compactor guards only its own subset.
 
 ```
 ContextWindowExceededError: The input token count (2769478)
@@ -23,7 +23,7 @@ exceeds the maximum number of tokens allowed (1048575).
 
 ## Current Compaction Architecture
 
-There are **three separate compaction mechanisms** in the plugin. None of them enforce a total token budget against the model's actual context window.
+There are **three separate compaction mechanisms** in the plugin. None of them enforce a total token budget against the `autoCompactThreshold` setting.
 
 ### 1. Turn-Time Context Compaction (ContextCompactor)
 
@@ -76,11 +76,39 @@ This compacts **only the tool-result portions** of assistant messages. The rest 
 
 ## Root Cause Analysis
 
-### The Unprotected Path: L4 Chat History
+### The Core Problem: No Total Payload Budget
 
-The critical gap is that **chat history (L4) is loaded and injected with no token budget**.
+The critical gap is **systemic**: no compaction mechanism checks the total assembled payload (L1+L2+L3+L4+L5) against any budget. Each compactor guards only its own subset, and no final safety net exists.
 
-`loadAndAddChatHistory()` in `src/LLMProviders/chainRunner/utils/chatHistoryUtils.ts:229-248`:
+### What L4 Actually Contains
+
+L4 (chat history) is often assumed to be the main token consumer, but investigation shows it is relatively well-controlled:
+
+- **User messages in L4** = bare L5 text only (no context XML). `BaseChainRunner.handleResponse()` extracts `l5Text` from the envelope and saves only that to memory.
+- **Assistant responses in L4** = compacted at save time by `ChatHistoryCompactor`, which strips tool result XML (`localSearch`, `readNote`, `note_context`, etc.).
+- **Agent-mode responses**: `AutonomousAgentChainRunner` saves only `loopResult.finalResponse` (the final answer), NOT the full reasoning/tool-call chain.
+
+L4 does grow with conversation length, but it is not unbounded — `BufferWindowMemory` limits it to `k = contextTurns * 2` messages (default: 30), and both user and assistant sides are relatively compact.
+
+### The Real Culprits: L1 and Unchecked Layer Accumulation
+
+The overflow happens because **multiple layers accumulate without any shared budget**:
+
+#### L1: Project Context Is Never Budgeted
+
+In Projects mode, `ChatManager.getSystemPromptForMessage()` concatenates all project files, web content, and YouTube transcripts into a `<project_context>` block inside L1. This can easily reach **hundreds of thousands of tokens** for large projects.
+
+L1 is **never compacted by any system** — no compactor even sees it.
+
+#### Compaction Threshold Is Blind to L1
+
+`ContextManager.processMessageContext()` uses a hardcoded `PROJECT_COMPACT_THRESHOLD = 1,000,000` tokens for Projects mode compaction. This threshold checks only L2+L3 size — it is completely blind to L1 (project context) size. It is set as if L2+L3 is the _entire_ budget, when in reality L1 may have already consumed most of the available context window.
+
+For non-project chains, `autoCompactThreshold` (default 128k) is used, but it also only checks L2+L3.
+
+#### L4: No Budget Awareness
+
+`loadAndAddChatHistory()` loads all history messages without checking how much token budget remains after L1+L2+L3+L5 are assembled:
 
 ```typescript
 export async function loadAndAddChatHistory(
@@ -93,15 +121,29 @@ export async function loadAndAddChatHistory(
 }
 ```
 
-The `BufferWindowMemory` is configured with `k = contextTurns * 2` (default: `15 * 2 = 30` messages). While the ChatHistoryCompactor trims tool results at save time, it does not limit:
+### How 2.7M Tokens Happen
 
-- User messages in history (which are just `displayText`, but can still be long)
-- Assistant response text outside of tool results
-- The cumulative size of all 30 messages
+In a Projects-mode conversation:
+
+```
+L1 (system + project_context):   ~500k tokens  ← UNBUDGETED, never compacted
+L2 (previous context, compacted):  ~20k tokens
+L3 (current turn context):         ~50k tokens
+                                   ─────────
+  ContextCompactor checks L2+L3:    70k < 1,000k threshold → NO compaction triggered
+                                   (threshold is blind to 500k in L1)
+
+L4 (15 turns of chat history):    ~200k tokens  ← loaded with no remaining budget check
+L5 (user message):                   ~2k tokens
+─────────────────────────────────────────────────
+TOTAL:                             ~772k tokens  → may exceed model's context window
+```
+
+In extreme cases (large projects + long conversations + heavy context attachments), totals can reach 2M+ tokens.
 
 ### All Chain Runners Are Affected
 
-All four chain runners call `loadAndAddChatHistory()` without any token budget:
+All chain runners call `loadAndAddChatHistory()` without any token budget:
 
 | Runner                     | File                                                         | Line |
 | -------------------------- | ------------------------------------------------------------ | ---- |
@@ -110,34 +152,15 @@ All four chain runners call `loadAndAddChatHistory()` without any token budget:
 | AutonomousAgentChainRunner | `src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts` | 597  |
 | VaultQAChainRunner         | `src/LLMProviders/chainRunner/VaultQAChainRunner.ts`         | 191  |
 
-### How 2.7M Tokens Happen
+### The `contextTurns` Setting Is a Poor Proxy
 
-In a typical agent conversation with context-heavy turns:
+`BufferWindowMemory` is configured with `k = contextTurns * 2` (default: 30 messages). This is a crude count-based limit that:
 
-```
-L1 (system + tool guidelines):    ~10k tokens
-L2 (previous context, compacted):  ~20k tokens
-L3 (current turn context):         ~50k tokens
-L4 (15 turns of chat history):   ~2,500k tokens  ← THE CULPRIT
-L5 (user message):                  ~2k tokens
-─────────────────────────────────────────────────
-TOTAL:                            ~2,582k tokens  → sent to 1M model
-```
+- Has no relation to actual token consumption
+- Cannot adapt to varying message sizes
+- Provides no guarantees about total payload size
 
-L4 can grow this large because:
-
-1. Agent-mode turns generate long assistant responses with tool call chains
-2. While tool _results_ are compacted at save time, the **assistant's reasoning text** between tool calls is stored verbatim
-3. With 15 turns of agent conversation, this easily reaches millions of tokens
-4. The ContextCompactor threshold check (L2+L3 only) never sees L4
-
-### Secondary Issue: No Model Context Window Awareness
-
-The plugin has no mechanism to query or enforce the model's actual context window size. The `autoCompactThreshold` setting (default 128k tokens) is a user-configured heuristic that:
-
-- Has no relation to the actual model's context window
-- Only applies to L2+L3, not the full payload
-- Cannot prevent overflow from L4
+A token-based budget for L4 makes `contextTurns` redundant.
 
 ---
 
@@ -145,50 +168,63 @@ The plugin has no mechanism to query or enforce the model's actual context windo
 
 ### Guiding Principles
 
-1. **Single enforcement point**: Token budget must be checked where all layers are assembled, not scattered across individual compactors.
-2. **Graceful degradation**: When over budget, drop the least-valuable content first (oldest history turns), then compact further if needed.
-3. **Backwards compatible**: Existing compaction systems remain; this adds a final safety net.
-4. **No LLM calls in the hot path**: Budget enforcement should use fast char-based estimation, not LLM summarization.
+1. **Model-agnostic**: The plugin supports many LLM providers. No model-specific context window logic. Use `autoCompactThreshold` (user-configurable) as the single total budget.
+2. **Single enforcement point**: Token budget must be checked where all layers are assembled, not scattered across individual compactors.
+3. **History guarantee**: The LLM must always see at least some recent chat history to resume conversation context, even when L1+L2+L3 consume most of the budget.
+4. **Graceful degradation**: When over budget, drop the least-valuable content first (oldest history turns), then compact further if needed.
+5. **Backwards compatible**: Existing compaction systems remain; this adds a final safety net.
+6. **No LLM calls in the hot path**: Budget enforcement should use fast char-based estimation (chars / 4), not LLM summarization.
 
-### Phase 1: Token Budget Guard at Message Assembly
+### Phase 1: Token Budget Guard (Critical Fix)
 
 **Goal**: Prevent over-budget payloads from ever reaching the LLM.
 
-#### 1.1 Add `getModelContextWindow()` to ChatModelManager
+#### 1.1 Make ContextManager L1-Aware
 
-Add a method that returns the current model's context window size in tokens. This can start with a hardcoded lookup table for known models (OpenAI, Anthropic, Google, etc.) and fall back to a conservative default (e.g., 128k tokens). Over time, this can be enhanced with dynamic model metadata from provider APIs.
+Currently `ContextManager.processMessageContext()` checks `(L2+L3).length > threshold * 4` where threshold is either `autoCompactThreshold` or `PROJECT_COMPACT_THRESHOLD`. Both are blind to L1 size.
 
-**File**: `src/LLMProviders/chatModelManager.ts`
+**Fix**: The compaction threshold for L2+L3 must account for L1:
 
-#### 1.2 Add `estimateTokenCount()` utility
+```
+effectiveThreshold = autoCompactThreshold - estimateTokens(L1)
+```
 
-A fast char-based token estimator (chars / 4) that works on the assembled message array. This already partially exists in the codebase (the `* 4` pattern in ContextManager) but should be extracted into a shared utility.
+This ensures that when L1 is large (e.g., Projects mode with many files), L2+L3 compaction triggers earlier, leaving room for L4 and L5.
 
-**File**: `src/utils/tokenEstimation.ts` (new)
+**Kill `PROJECT_COMPACT_THRESHOLD`** — it is a hardcoded 1M value that pretends L1 doesn't exist. Replace with the same `autoCompactThreshold - L1` formula for all chain types.
 
-#### 1.3 Add `enforceTokenBudget()` to `chatHistoryUtils.ts`
+**File**: `src/core/ContextManager.ts`
 
-Modify `loadAndAddChatHistory()` (or add a wrapper) that:
+#### 1.2 Add Token Budget to `loadAndAddChatHistory()`
 
-1. Estimates the token count of the assembled system message + current user message (L1+L2+L3+L5)
-2. Calculates remaining budget: `modelContextWindow - reservedForOutput - (L1+L2+L3+L5)`
-3. Loads chat history messages and drops oldest turns first until within budget
-4. Logs a warning when turns are dropped
+Add an optional `tokenBudget` parameter to `loadAndAddChatHistory()`. When provided:
+
+1. Load all history messages from `BufferWindowMemory`
+2. Estimate token count of each message (chars / 4)
+3. Drop oldest complete turns (user+assistant pairs) until cumulative total fits within budget
+4. Always keep at least the most recent turn (history guarantee)
+5. Log a warning when turns are dropped
 
 ```
 Token Budget Allocation:
-  modelContextWindow (e.g., 1,048,575)
-  - reservedForOutput (~4,096 for response generation)
-  - L1+L2 system message size
-  - L3+L5 user message size
+  autoCompactThreshold (e.g., 128,000 tokens)
+  - estimateTokens(L1)   system prompt + project context
+  - estimateTokens(L2)   previous context library
+  - estimateTokens(L3)   current turn context
+  - estimateTokens(L5)   user message
+  - reservedForOutput    (~4,096 for response generation)
   = remaining budget for L4 chat history
 ```
 
 **File**: `src/LLMProviders/chainRunner/utils/chatHistoryUtils.ts`
 
-#### 1.4 Update all chain runners
+#### 1.3 Update All Chain Runners
 
-Each of the four chain runners calls `loadAndAddChatHistory()`. Update these call sites to pass the model context window and the already-assembled non-L4 messages, so the budget can be calculated.
+Each chain runner calls `loadAndAddChatHistory()`. Update call sites to:
+
+1. Calculate the token size of already-assembled non-L4 messages (L1+L2+L3+L5)
+2. Compute `historyBudget = autoCompactThreshold - nonL4Tokens - outputReserve`
+3. Pass `historyBudget` to `loadAndAddChatHistory()`
 
 **Files**:
 
@@ -197,7 +233,20 @@ Each of the four chain runners calls `loadAndAddChatHistory()`. Update these cal
 - `src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts`
 - `src/LLMProviders/chainRunner/VaultQAChainRunner.ts`
 
-### Phase 2: Smarter History Trimming
+#### 1.4 Deprecate `contextTurns` Setting
+
+Token-based budget trimming makes the count-based `contextTurns` setting redundant.
+
+- Replace `BufferWindowMemory.k = contextTurns * 2` with a generous internal constant (e.g., `k = 100`)
+- The token budget in step 1.2 handles the actual trimming
+- Remove the "Conversation turns in context" slider from `ModelSettings.tsx`
+
+**Files**:
+
+- `src/LLMProviders/memoryManager.ts`
+- `src/settings/v2/components/ModelSettings.tsx`
+
+### Phase 2: Smarter History Trimming (Enhancement)
 
 **Goal**: When budget is tight, trim intelligently rather than just dropping oldest turns.
 
@@ -207,48 +256,30 @@ When over budget, apply in order:
 
 1. **Drop oldest complete turns** (user+assistant pairs) from L4
 2. **Truncate remaining long assistant responses** in L4 (keep first N chars)
-3. If _still_ over budget after L4 is empty, **re-compact L2+L3** with tighter thresholds
-4. If _still_ over budget (single turn with massive context), **warn user** and proceed with truncated context
+3. If _still_ over budget after L4 is minimized, **warn user** and proceed — the LLM will still see the most recent turn
 
-#### 2.2 Agent-mode special handling
-
-Agent-mode assistant responses contain interleaved reasoning + tool calls. When trimming these:
-
-- Prefer keeping the **final answer** portion (last text block)
-- Drop intermediate tool call/result blocks first
-- Keep the first tool call for context on what approach was taken
-
-### Phase 3: Settings & Observability
+### Phase 3: Observability (Enhancement)
 
 #### 3.1 Surface token usage to UI
 
 Add a debug/info display showing:
 
 - Estimated tokens per layer (L1, L2, L3, L4, L5)
-- Model context window
-- Whether any trimming occurred
-- How many history turns were dropped
+- Total vs. `autoCompactThreshold`
+- Whether any history turns were dropped
 
 This helps users understand why responses might miss context from earlier turns.
 
-#### 3.2 Relate `autoCompactThreshold` to model context window
-
-Currently `autoCompactThreshold` is an arbitrary number (default 128k). Consider:
-
-- Making it a percentage of the model's context window (e.g., 60%)
-- Auto-adjusting when the user switches models
-- Deprecating it in favor of the budget enforcement system
-
 ### Implementation Order
 
-| Step | Description                               | Files Changed        | Risk   |
-| ---- | ----------------------------------------- | -------------------- | ------ |
-| 1.1  | `getModelContextWindow()`                 | chatModelManager.ts  | Low    |
-| 1.2  | `estimateTokenCount()` utility            | new file             | Low    |
-| 1.3  | `enforceTokenBudget()` in history loading | chatHistoryUtils.ts  | Medium |
-| 1.4  | Update chain runner call sites            | 4 chain runner files | Medium |
-| 2.1  | Prioritized trimming                      | chatHistoryUtils.ts  | Medium |
-| 3.1  | Token usage debug display                 | UI components        | Low    |
+| Step | Description                               | Files Changed                   | Risk   |
+| ---- | ----------------------------------------- | ------------------------------- | ------ |
+| 1.1  | L1-aware compaction threshold             | ContextManager.ts               | Medium |
+| 1.2  | Token budget in `loadAndAddChatHistory()` | chatHistoryUtils.ts             | Medium |
+| 1.3  | Update chain runner call sites            | 4 chain runner files            | Medium |
+| 1.4  | Deprecate `contextTurns`                  | memoryManager.ts, ModelSettings | Low    |
+| 2.1  | Prioritized trimming                      | chatHistoryUtils.ts             | Low    |
+| 3.1  | Token usage debug display                 | UI components                   | Low    |
 
 Phase 1 (steps 1.1-1.4) is the **critical fix** that prevents the overflow. Phases 2-3 are improvements.
 

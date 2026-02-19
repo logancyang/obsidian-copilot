@@ -104,9 +104,9 @@ Loading chat history should preserve envelope quality (or deterministically reco
 ### L4 Memory Behavior
 
 - L4 (chat history) is injected by chain runners from LangChain `BufferWindowMemory`.
-- **Only `displayText` (raw user message) is saved to memory** — context artifacts are NOT included.
+- **Only L5 text (bare user message) is saved to memory** — context artifacts are NOT included. `BaseChainRunner.handleResponse()` extracts `l5Text` from the envelope, falling back to `originalMessage` or `message`.
 - This prevents duplication: context artifacts already live in L2/L3 via the envelope; baking them into L4 would cause triple-inclusion and waste tokens.
-- Assistant responses are saved as-is (or with tool-call formatting stripped).
+- Assistant responses are compacted at save time by `ChatHistoryCompactor` (strips tool result XML) before storage. Agent-mode responses save only the final answer, not the full reasoning/tool-call chain.
 
 ---
 
@@ -290,9 +290,11 @@ All four chain runners use the context envelope for LLM message construction. Ea
 
 ### P0: No Token Budget Enforcement on Full Payload
 
-- The auto-compaction threshold (ContextCompactor) only checks L2+L3 size, not the full assembled payload.
-- L4 (chat history) is loaded and injected without any token budget, causing context window overflow for long conversations.
-- No mechanism queries or enforces the model's actual context window size.
+- **No compaction mechanism checks the total assembled payload** (L1+L2+L3+L4+L5) against any budget. Each compactor guards only its own subset.
+- **L1 (project context) is never budgeted or compacted**: In Projects mode, all project files are concatenated verbatim into L1 with no size limit. This is often the largest single layer.
+- **Compaction threshold is blind to L1**: `ContextManager` checks L2+L3 against `autoCompactThreshold` (or hardcoded `PROJECT_COMPACT_THRESHOLD = 1M`), but L1 size is never subtracted. The threshold acts as if L2+L3 is the entire payload.
+- **L4 (chat history) has no remaining-budget awareness**: `loadAndAddChatHistory()` loads all history messages regardless of how much budget L1+L2+L3+L5 have already consumed.
+- **`contextTurns` is a crude count-based proxy**: `BufferWindowMemory.k = contextTurns * 2` limits by message count, not token size, providing no actual overflow protection.
 - See [TOKEN_BUDGET_ENFORCEMENT.md](./TOKEN_BUDGET_ENFORCEMENT.md) for detailed analysis and fix plan.
 
 ### P0: Persistence Parity Is Still Incomplete
