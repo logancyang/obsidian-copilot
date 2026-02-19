@@ -2,6 +2,8 @@
  * Utility functions for safely processing chat history from LangChain memory
  */
 
+import { logInfo } from "@/logger";
+
 export interface ProcessedMessage {
   role: "user" | "assistant";
   content: any; // string or MessageContent[]
@@ -233,15 +235,35 @@ export async function loadAndAddChatHistory(
   const memoryVariables = await memory.loadMemoryVariables({});
   const rawHistory = memoryVariables.history || [];
 
-  if (!rawHistory.length) {
-    return [];
-  }
-
-  const processedHistory = processRawChatHistory(rawHistory);
+  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory) : [];
 
   // Add history messages directly (already compacted at save time)
   for (const msg of processedHistory) {
     messages.push({ role: msg.role, content: msg.content });
+  }
+
+  // Log per-layer token estimates when payload is large (>3M chars ≈ 750k tokens).
+  // Only use string .length (O(1)) — skip non-string content entirely.
+  let systemChars = 0;
+  for (const m of messages) {
+    if (typeof m.content === "string" && m.role === "system") {
+      systemChars += m.content.length;
+    }
+  }
+  let historyChars = 0;
+  for (const m of processedHistory) {
+    if (typeof m.content === "string") {
+      historyChars += m.content.length;
+    }
+  }
+  const totalChars = systemChars + historyChars;
+  // ~500k tokens — log when approaching context window limits to help diagnose overflow reports
+  if (totalChars > 2_000_000) {
+    logInfo("[Token Budget] Large payload detected (excluding user message):", {
+      "L1+L2 (system)": `${Math.round(systemChars / 4000)}k tokens`,
+      "L4 (history)": `${Math.round(historyChars / 4000)}k tokens (${processedHistory.length} msgs)`,
+      total: `${Math.round(totalChars / 4000)}k tokens`,
+    });
   }
 
   return processedHistory;

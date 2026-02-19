@@ -27,6 +27,38 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 - `npm run test:integration` - Run integration tests (requires API keys)
 - Run single test: `npm test -- -t "test name"`
 
+### Obsidian CLI (Live Testing)
+
+The Obsidian desktop app includes a CLI for plugin development. Use the full path:
+
+```bash
+/Applications/Obsidian.app/Contents/MacOS/obsidian <command>
+```
+
+**Plugin reload** (after `npm run build`):
+
+```bash
+/Applications/Obsidian.app/Contents/MacOS/obsidian plugin:reload id=copilot
+```
+
+**Console debugging** (requires attaching debugger first):
+
+```bash
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:debug on
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:console limit=30
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:console level=error limit=10
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:errors
+```
+
+**Other useful dev commands**:
+
+- `dev:dom selector=<css>` — Query DOM elements
+- `dev:screenshot path=<file>` — Take a screenshot
+- `eval code=<js>` — Execute JS in the app context
+- `plugin:disable id=copilot` / `plugin:enable id=copilot`
+
+Run `obsidian help` for the full command list.
+
 ## High-Level Architecture
 
 ### Core Systems
@@ -282,10 +314,12 @@ The TODO.md should be:
 - **APAC**: `apac.anthropic.claude-sonnet-4-5-20250929-v1:0`
 
 ❌ **Avoid regional model IDs** (without prefix): `anthropic.claude-sonnet-4-5-20250929-v1:0`
+
 - These only work in specific regions and often fail
 - Not recommended for production use
 
 **References:**
+
 - [AWS Bedrock Cross-Region Inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)
 - [Supported Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html)
 
