@@ -291,7 +291,19 @@ export class ChatManager {
 
         // Only add project_context block if context exists
         if (context) {
-          result += `\n\n<project_context>\n${context}\n</project_context>`;
+          // TODO: Remove this temporary hard cap once proper token budget enforcement
+          // is implemented (see docs/TOKEN_BUDGET_ENFORCEMENT.md Phase 1).
+          // Hard cap to prevent total payload from exceeding model context windows.
+          // 600k tokens ≈ 2.4M chars leaves room for L2+L3+L4+L5 within ~1M total.
+          const MAX_PROJECT_CONTEXT_CHARS = 600_000 * 4;
+          let projectContext = context;
+          if (context.length > MAX_PROJECT_CONTEXT_CHARS) {
+            projectContext = context.substring(0, MAX_PROJECT_CONTEXT_CHARS);
+            logWarn(
+              `Project context truncated from ${Math.round(context.length / 4000)}k to ${Math.round(MAX_PROJECT_CONTEXT_CHARS / 4000)}k estimated tokens to stay within token budget`
+            );
+          }
+          result += `\n\n<project_context>\n${projectContext}\n</project_context>`;
         }
 
         return {
