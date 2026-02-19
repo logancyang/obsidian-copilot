@@ -14,7 +14,10 @@ import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
 import { MD5 } from "crypto-js";
 import { App, Notice, TFile } from "obsidian";
-import type { SemanticIndexBackend } from "./indexBackend/SemanticIndexBackend";
+import type {
+  SemanticIndexBackend,
+  SemanticIndexDocument,
+} from "./indexBackend/SemanticIndexBackend";
 import { getMatchingPatterns, shouldIndexFile } from "./searchUtils";
 
 export interface IndexingState {
@@ -74,8 +77,11 @@ export class IndexOperations {
     resetIndexingProgressState();
 
     try {
-      const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
-      if (!embeddingInstance) {
+      const requiresEmbeddings = this.indexBackend.requiresEmbeddings();
+      const embeddingInstance = requiresEmbeddings
+        ? await this.embeddingsManager.getEmbeddingsAPI()
+        : undefined;
+      if (requiresEmbeddings && !embeddingInstance) {
         logError("Embedding instance not found.");
         setIndexingProgressState({
           isActive: false,
@@ -92,8 +98,9 @@ export class IndexOperations {
       }
 
       // Check for model change first
-      const modelChanged =
-        await this.indexBackend.checkAndHandleEmbeddingModelChange(embeddingInstance);
+      const modelChanged = requiresEmbeddings
+        ? await this.indexBackend.checkAndHandleEmbeddingModelChange(embeddingInstance)
+        : false;
       if (modelChanged) {
         // If model changed, force a full reindex by setting overwrite to true
         overwrite = true;
@@ -123,7 +130,11 @@ export class IndexOperations {
       this.indexBackend.clearFilesMissingEmbeddings();
 
       // New: Prepare all chunks first
-      const allChunks = await this.prepareAllChunks(files);
+      const embeddingModel =
+        requiresEmbeddings && embeddingInstance
+          ? EmbeddingsManager.getModelName(embeddingInstance)
+          : "";
+      const allChunks = await this.prepareAllChunks(files, embeddingModel);
       if (allChunks.length === 0) {
         // No valid content to index — silently reset so the card never appears
         resetIndexingProgressState();
@@ -149,49 +160,81 @@ export class IndexOperations {
 
         const batch = allChunks.slice(i, i + this.embeddingBatchSize);
         try {
-          await this.rateLimiter.wait();
-          const embeddings = await embeddingInstance.embedDocuments(
-            batch.map((chunk) => chunk.content)
-          );
-
-          // Validate embeddings
-          if (!embeddings || embeddings.length !== batch.length) {
-            throw new Error(
-              `Embedding model returned ${embeddings?.length ?? 0} embeddings for ${batch.length} documents`
+          const docsToUpsert: Array<{ doc: SemanticIndexDocument; filePath: string }> = [];
+          if (requiresEmbeddings && embeddingInstance) {
+            await this.rateLimiter.wait();
+            const embeddings = await embeddingInstance.embedDocuments(
+              batch.map((chunk) => chunk.content)
             );
-          }
 
-          // Save batch to database
-          for (let j = 0; j < batch.length; j++) {
-            const chunk = batch[j];
-            const embedding = embeddings[j];
-
-            // Skip documents with invalid embeddings
-            if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
-              logError(`Invalid embedding for document ${chunk.fileInfo.path}: ${embedding}`);
-              this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
-              continue;
+            // Validate embeddings
+            if (!embeddings || embeddings.length !== batch.length) {
+              throw new Error(
+                `Embedding model returned ${embeddings?.length ?? 0} embeddings for ${batch.length} documents`
+              );
             }
 
-            try {
-              await this.indexBackend.upsert({
-                ...chunk.fileInfo,
-                id: this.getDocHash(chunk.content),
-                content: chunk.content,
-                embedding,
-                created_at: Date.now(),
-                nchars: chunk.content.length,
-              });
-              // Mark success for this file
-              this.state.processedFiles.add(chunk.fileInfo.path);
-            } catch (err) {
-              // Log error but continue processing other documents in batch
-              this.handleError(err, {
+            // Build batch payload
+            for (let j = 0; j < batch.length; j++) {
+              const chunk = batch[j];
+              const embedding = embeddings[j];
+
+              // Skip documents with invalid embeddings
+              if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
+                logError(`Invalid embedding for document ${chunk.fileInfo.path}: ${embedding}`);
+                this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
+                continue;
+              }
+
+              docsToUpsert.push({
+                doc: {
+                  ...(chunk.fileInfo as SemanticIndexDocument),
+                  id: this.getDocHash(chunk.content),
+                  content: chunk.content,
+                  embedding,
+                  created_at: Date.now(),
+                  nchars: chunk.content.length,
+                },
                 filePath: chunk.fileInfo.path,
-                errors,
               });
-              this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
-              continue;
+            }
+          } else {
+            for (const chunk of batch) {
+              docsToUpsert.push({
+                doc: {
+                  ...(chunk.fileInfo as SemanticIndexDocument),
+                  id: this.getDocHash(chunk.content),
+                  content: chunk.content,
+                  embedding: [],
+                  created_at: Date.now(),
+                  nchars: chunk.content.length,
+                },
+                filePath: chunk.fileInfo.path,
+              });
+            }
+          }
+
+          if (docsToUpsert.length > 0) {
+            try {
+              await this.indexBackend.upsertBatch(docsToUpsert.map((item) => item.doc));
+              docsToUpsert.forEach((item) => this.state.processedFiles.add(item.filePath));
+            } catch (error) {
+              logError("Batch upsert failed; falling back to per-document upserts.", error);
+              // Fall back to per-document upserts to isolate failures
+              for (const item of docsToUpsert) {
+                try {
+                  await this.indexBackend.upsert(item.doc);
+                  this.state.processedFiles.add(item.filePath);
+                } catch (innerErr) {
+                  this.handleError(innerErr, {
+                    filePath: item.filePath,
+                    errors,
+                  });
+                  if (requiresEmbeddings) {
+                    this.indexBackend.markFileMissingEmbeddings(item.filePath);
+                  }
+                }
+              }
             }
           }
 
@@ -256,21 +299,20 @@ export class IndexOperations {
    * Prepares chunks for all files using the shared ChunkManager for consistent chunking.
    * This ensures chunk IDs (note_path#chunk_index) are identical across semantic and lexical search.
    * Processes files in batches to bypass ChunkManager's 1000-file limit for search queries.
+   *
+   * @param files - Files to chunk for indexing.
+   * @param embeddingModel - Embedding model name (empty when embeddings are handled externally).
    */
-  private async prepareAllChunks(files: TFile[]): Promise<
+  private async prepareAllChunks(
+    files: TFile[],
+    embeddingModel: string
+  ): Promise<
     Array<{
       content: string;
       chunkId: string;
       fileInfo: any;
     }>
   > {
-    const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
-    if (!embeddingInstance) {
-      console.error("Embedding instance not found.");
-      return [];
-    }
-    const embeddingModel = EmbeddingsManager.getModelName(embeddingInstance);
-
     const allChunks: Array<{ content: string; chunkId: string; fileInfo: any }> = [];
 
     // Process files in batches to bypass ChunkManager's 1000-file limit
@@ -519,41 +561,63 @@ export class IndexOperations {
 
   public async reindexFile(file: TFile): Promise<void> {
     try {
-      const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
-      if (!embeddingInstance) {
+      const requiresEmbeddings = this.indexBackend.requiresEmbeddings();
+      const embeddingInstance = requiresEmbeddings
+        ? await this.embeddingsManager.getEmbeddingsAPI()
+        : undefined;
+      if (requiresEmbeddings && !embeddingInstance) {
         return;
       }
 
       await this.indexBackend.removeByPath(file.path);
 
       // Check for model change
-      const modelChanged =
-        await this.indexBackend.checkAndHandleEmbeddingModelChange(embeddingInstance);
-      if (modelChanged) {
-        await this.indexVaultToVectorStore(true);
-        return;
+      if (requiresEmbeddings && embeddingInstance) {
+        const modelChanged =
+          await this.indexBackend.checkAndHandleEmbeddingModelChange(embeddingInstance);
+        if (modelChanged) {
+          await this.indexVaultToVectorStore(true);
+          return;
+        }
       }
 
       // Reuse prepareAllChunks with a single file
-      const chunks = await this.prepareAllChunks([file]);
+      const embeddingModel =
+        requiresEmbeddings && embeddingInstance
+          ? EmbeddingsManager.getModelName(embeddingInstance)
+          : "";
+      const chunks = await this.prepareAllChunks([file], embeddingModel);
       if (chunks.length === 0) return;
 
-      // Process chunks
-      const embeddings = await embeddingInstance.embedDocuments(
-        chunks.map((chunk) => chunk.content)
-      );
+      if (requiresEmbeddings && embeddingInstance) {
+        // Process chunks with embeddings
+        const embeddings = await embeddingInstance.embedDocuments(
+          chunks.map((chunk) => chunk.content)
+        );
 
-      // Save to database
-      for (let i = 0; i < chunks.length; i++) {
-        const chunk = chunks[i];
-        await this.indexBackend.upsert({
-          ...chunk.fileInfo,
-          id: this.getDocHash(chunk.content),
-          content: chunk.content,
-          embedding: embeddings[i],
-          created_at: Date.now(),
-          nchars: chunk.content.length,
-        });
+        // Save to database
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i];
+          await this.indexBackend.upsert({
+            ...chunk.fileInfo,
+            id: this.getDocHash(chunk.content),
+            content: chunk.content,
+            embedding: embeddings[i],
+            created_at: Date.now(),
+            nchars: chunk.content.length,
+          });
+        }
+      } else {
+        for (const chunk of chunks) {
+          await this.indexBackend.upsert({
+            ...chunk.fileInfo,
+            id: this.getDocHash(chunk.content),
+            content: chunk.content,
+            embedding: [],
+            created_at: Date.now(),
+            nchars: chunk.content.length,
+          });
+        }
       }
 
       // Mark that we have unsaved changes instead of saving immediately

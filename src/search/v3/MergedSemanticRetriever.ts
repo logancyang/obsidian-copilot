@@ -1,6 +1,7 @@
 import { HybridRetriever } from "@/search/hybridRetriever";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
+import type { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
@@ -16,6 +17,9 @@ type RetrieverOptions = {
 };
 
 type SourceKind = "lexical" | "semantic";
+type SemanticRetriever = {
+  getRelevantDocuments: (query: string, config?: BaseCallbackConfig) => Promise<Document[]>;
+};
 
 /**
  * Merges semantic (vector-based) and lexical (Search v3) retrieval results into a single ranked list.
@@ -26,7 +30,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
   public lc_namespace = ["merged_semantic_retriever"];
 
   private lexicalRetriever: TieredLexicalRetriever;
-  private semanticRetriever: HybridRetriever;
+  private semanticRetriever: SemanticRetriever;
   private readonly originalMaxK: number;
   private readonly returnAll: boolean;
 
@@ -39,10 +43,12 @@ export class MergedSemanticRetriever extends BaseRetriever {
    *
    * @param app - Obsidian application instance
    * @param options - Retrieval options shared between semantic and lexical engines
+   * @param semanticRetriever - Optional semantic retriever override
    */
   constructor(
     private app: App,
-    private options: RetrieverOptions
+    private options: RetrieverOptions,
+    semanticRetriever?: SemanticRetriever
   ) {
     super();
     this.originalMaxK = Math.max(1, options.maxK);
@@ -64,15 +70,17 @@ export class MergedSemanticRetriever extends BaseRetriever {
       ? RETURN_ALL_LIMIT
       : Math.min(this.originalMaxK * 2, RETURN_ALL_LIMIT);
 
-    this.semanticRetriever = new HybridRetriever({
-      minSimilarityScore: options.minSimilarityScore ?? 0.1,
-      maxK: semanticMax,
-      salientTerms: options.salientTerms,
-      timeRange: options.timeRange,
-      textWeight: options.textWeight,
-      returnAll: this.returnAll,
-      useRerankerThreshold: options.useRerankerThreshold,
-    });
+    this.semanticRetriever =
+      semanticRetriever ||
+      new HybridRetriever({
+        minSimilarityScore: options.minSimilarityScore ?? 0.1,
+        maxK: semanticMax,
+        salientTerms: options.salientTerms,
+        timeRange: options.timeRange,
+        textWeight: options.textWeight,
+        returnAll: this.returnAll,
+        useRerankerThreshold: options.useRerankerThreshold,
+      });
   }
 
   /**

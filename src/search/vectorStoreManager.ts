@@ -2,12 +2,13 @@
 // for legacy Orama-based flows and should not be referenced by new code.
 import { updateIndexingProgressState } from "@/aiParams";
 import { CustomError } from "@/error";
+import { logInfo, logWarn } from "@/logger";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
-import { logWarn } from "@/logger";
+import { isSelfHostAccessValid } from "@/plusUtils";
 import { CopilotSettings, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { Orama } from "@orama/orama";
 import { Notice, Platform, TFile } from "obsidian";
-import type { DBOperations } from "./dbOperations";
+import { MiyoIndexBackend } from "./indexBackend/MiyoIndexBackend";
 import { OramaIndexBackend } from "./indexBackend/OramaIndexBackend";
 import type {
   SemanticIndexBackend,
@@ -26,11 +27,15 @@ export default class VectorStoreManager {
   private embeddingsManager: EmbeddingsManager;
   private indexBackend: SemanticIndexBackend;
   private oramaBackend: OramaIndexBackend;
+  private miyoBackend: MiyoIndexBackend;
+  private activeBackendKey: "orama" | "miyo";
 
   private constructor() {
     this.embeddingsManager = EmbeddingsManager.getInstance();
     this.oramaBackend = new OramaIndexBackend(app);
-    this.indexBackend = this.oramaBackend;
+    this.miyoBackend = new MiyoIndexBackend(app);
+    this.activeBackendKey = this.getBackendKey(getSettings());
+    this.indexBackend = this.activeBackendKey === "miyo" ? this.miyoBackend : this.oramaBackend;
     this.indexOps = new IndexOperations(app, this.indexBackend, this.embeddingsManager);
     this.eventHandler = new IndexEventHandler(app, this.indexOps, this.indexBackend);
 
@@ -55,10 +60,15 @@ export default class VectorStoreManager {
       this.lastKnownSettings = { ...settings };
 
       // Handle path changes (enableIndexSync)
-      if (settings.enableIndexSync !== prevSettings?.enableIndexSync) {
+      if (
+        settings.enableIndexSync !== prevSettings?.enableIndexSync &&
+        this.activeBackendKey === "orama"
+      ) {
         const embeddingInstance = await this.embeddingsManager.getEmbeddingsAPI();
         await this.oramaBackend.reinitializeForIndexSyncChange(embeddingInstance);
       }
+
+      await this.refreshBackend(settings, prevSettings);
     };
 
     subscribeToSettingsChange(() => {
@@ -76,7 +86,9 @@ export default class VectorStoreManager {
       let retries = 3;
       while (retries > 0) {
         try {
-          const embeddingAPI = await this.embeddingsManager.getEmbeddingsAPI();
+          const embeddingAPI = this.indexBackend.requiresEmbeddings()
+            ? await this.embeddingsManager.getEmbeddingsAPI()
+            : undefined;
           await this.indexBackend.initialize(embeddingAPI);
           break;
         } catch (error) {
@@ -129,7 +141,10 @@ export default class VectorStoreManager {
 
   public async clearIndex(): Promise<void> {
     await this.waitForInitialization();
-    await this.indexBackend.clearIndex(await this.embeddingsManager.getEmbeddingsAPI());
+    const embeddingAPI = this.indexBackend.requiresEmbeddings()
+      ? await this.embeddingsManager.getEmbeddingsAPI()
+      : undefined;
+    await this.indexBackend.clearIndex(embeddingAPI);
     notifyIndexChanged();
   }
 
@@ -185,14 +200,70 @@ export default class VectorStoreManager {
     await this.indexOps.cancelIndexing();
   }
 
+  /**
+   * Determine whether Miyo-backed indexing should be used.
+   *
+   * @param settings - Current Copilot settings.
+   * @returns True when Miyo should be the active backend.
+   */
+  private shouldUseMiyo(settings: CopilotSettings): boolean {
+    return settings.enableMiyoSearch && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
+  }
+
+  /**
+   * Compute the backend key for current settings.
+   *
+   * @param settings - Copilot settings to evaluate.
+   * @returns Backend key string.
+   */
+  private getBackendKey(settings: CopilotSettings): "orama" | "miyo" {
+    return this.shouldUseMiyo(settings) ? "miyo" : "orama";
+  }
+
+  /**
+   * Refresh the active backend when relevant settings change.
+   *
+   * @param settings - Latest settings.
+   * @param prevSettings - Previous settings snapshot.
+   */
+  private async refreshBackend(
+    settings: CopilotSettings,
+    prevSettings?: CopilotSettings
+  ): Promise<void> {
+    const nextBackendKey = this.getBackendKey(settings);
+    if (nextBackendKey === this.activeBackendKey) {
+      return;
+    }
+
+    this.activeBackendKey = nextBackendKey;
+    this.indexBackend = nextBackendKey === "miyo" ? this.miyoBackend : this.oramaBackend;
+    this.indexOps = new IndexOperations(app, this.indexBackend, this.embeddingsManager);
+    this.eventHandler.cleanup();
+    this.eventHandler = new IndexEventHandler(app, this.indexOps, this.indexBackend);
+
+    if (getSettings().debug) {
+      logInfo(`VectorStoreManager: switched backend to ${nextBackendKey}`);
+    }
+
+    if (settings.enableSemanticSearchV3) {
+      const embeddingAPI = this.indexBackend.requiresEmbeddings()
+        ? await this.embeddingsManager.getEmbeddingsAPI()
+        : undefined;
+      await this.indexBackend.initialize(embeddingAPI);
+    }
+
+    if (
+      prevSettings &&
+      settings.enableSemanticSearchV3 &&
+      settings.enableMiyoSearch !== prevSettings.enableMiyoSearch
+    ) {
+      logInfo("VectorStoreManager: Miyo backend toggled; reindex recommended.");
+    }
+  }
+
   public onunload(): void {
     this.eventHandler.cleanup();
     this.indexBackend.onunload();
-  }
-
-  public async getDbOps(): Promise<DBOperations> {
-    await this.waitForInitialization();
-    return this.oramaBackend.getDbOperations();
   }
 
   public async getDb(): Promise<Orama<any>> {

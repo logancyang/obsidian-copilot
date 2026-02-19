@@ -7,7 +7,9 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { cn } from "@/lib/utils";
+import { logWarn } from "@/logger";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
+import type { CopilotSettings } from "@/settings/model";
 import {
   findRelevantNotes,
   getSimilarityCategory,
@@ -27,6 +29,30 @@ import {
 import { Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
 
+const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
+
+/**
+ * Return true when Miyo-backed semantic index is expected to be active.
+ *
+ * @param settings - Current Copilot settings object.
+ * @returns True when Miyo mode and self-host validation are active.
+ */
+function shouldUseMiyoIndex(settings: CopilotSettings): boolean {
+  if (!settings.enableMiyoSearch || !settings.enableSemanticSearchV3) {
+    return false;
+  }
+
+  if (settings.selfHostModeValidatedAt == null) {
+    return false;
+  }
+
+  if ((settings.selfHostValidationCount ?? 0) >= 3) {
+    return true;
+  }
+
+  return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+}
+
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
   const [signalTick, setSignalTick] = useState(0);
@@ -37,18 +63,11 @@ function useRelevantNotes(refresher: number) {
   useEffect(() => {
     async function fetchNotes() {
       if (!activeFile?.path) return;
-      // Only show when semantic search is enabled and database is available
       try {
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        const db = await VectorStoreManager.getInstance().getDb();
-        if (!db) {
-          setRelevantNotes([]);
-          return;
-        }
-        const notes = await findRelevantNotes({ db, filePath: activeFile.path });
+        const notes = await findRelevantNotes({ filePath: activeFile.path });
         setRelevantNotes(notes);
       } catch (error) {
-        console.warn("Failed to fetch relevant notes:", error);
+        logWarn("Failed to fetch relevant notes", error);
         setRelevantNotes([]);
       }
     }
@@ -71,6 +90,16 @@ function useHasIndex(notePath: string, refresher: number) {
     async function fetchHasIndex() {
       try {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        const { getSettings } = await import("@/settings/model");
+        const settings = getSettings();
+        const shouldUseMiyo = shouldUseMiyoIndex(settings);
+
+        if (shouldUseMiyo) {
+          const isEmpty = await VectorStoreManager.getInstance().isIndexEmpty();
+          setHasIndex(!isEmpty);
+          return;
+        }
+
         const has = await VectorStoreManager.getInstance().hasIndex(notePath);
         setHasIndex(has);
       } catch {

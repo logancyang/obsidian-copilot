@@ -94,7 +94,11 @@ export function formatSearchResultsForLLM(searchResults: any[]): string {
       const title = doc.title || "Untitled";
       const path = doc.path || "";
       // Optional stable source id if provided by caller; fallback to order
-      const sourceId = (doc as any).__sourceId || (doc as any).source_id || idx + 1;
+      const sourceId =
+        (doc as any).__sourceId ||
+        (doc as any).collection_name ||
+        (doc as any).source_id ||
+        idx + 1;
 
       // Safely handle mtime - check validity before converting
       let modified: string | null = null;

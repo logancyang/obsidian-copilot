@@ -129,6 +129,8 @@ export interface CopilotSettings {
   enableSemanticSearchV3: boolean;
   /** Enable self-host mode (e.g., Miyo) - uses self-hosted services for search, LLMs, OCR, etc. */
   enableSelfHostMode: boolean;
+  /** Enable Miyo-backed indexing and semantic search when self-host mode is active */
+  enableMiyoSearch: boolean;
   /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
   selfHostModeValidatedAt: number | null;
   /** Count of successful periodic validations (3 = permanently valid) */
@@ -189,10 +191,29 @@ export const settingsStore = createStore();
 export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
 
 /**
+ * Resolve a valid embedding model key for the current settings.
+ *
+ * @param settings - Current Copilot settings.
+ * @returns A valid embedding model key.
+ */
+function resolveEmbeddingModelKey(settings: CopilotSettings): string {
+  const activeEmbeddingModelKeys = new Set(
+    (settings.activeEmbeddingModels || []).map((model) => getModelKeyFromModel(model))
+  );
+
+  if (settings.embeddingModelKey && activeEmbeddingModelKeys.has(settings.embeddingModelKey)) {
+    return settings.embeddingModelKey;
+  }
+
+  return DEFAULT_SETTINGS.embeddingModelKey;
+}
+
+/**
  * Sets the settings in the atom.
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+  newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
   settingsStore.set(settingsAtom, newSettings);
 }
 
@@ -378,6 +399,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.generateAIChatTitleOnSave = DEFAULT_SETTINGS.generateAIChatTitleOnSave;
   }
 
+  // Ensure enableMiyoSearch has a default value
+  if (typeof sanitizedSettings.enableMiyoSearch !== "boolean") {
+    sanitizedSettings.enableMiyoSearch = DEFAULT_SETTINGS.enableMiyoSearch;
+  }
+
   // Ensure passMarkdownImages has a default value
   if (typeof sanitizedSettings.passMarkdownImages !== "boolean") {
     sanitizedSettings.passMarkdownImages = DEFAULT_SETTINGS.passMarkdownImages;
@@ -528,9 +554,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
   settings.activeModels = mergeActiveModels(settings.activeModels, BUILTIN_CHAT_MODELS);
-  settings.activeEmbeddingModels = mergeActiveModels(
-    settings.activeEmbeddingModels,
-    BUILTIN_EMBEDDING_MODELS
+  settings.activeEmbeddingModels = filterUnsupportedEmbeddingModels(
+    mergeActiveModels(settings.activeEmbeddingModels, BUILTIN_EMBEDDING_MODELS)
   );
   return settings;
 }
@@ -584,4 +609,17 @@ function mergeActiveModels(
   });
 
   return Array.from(modelMap.values());
+}
+
+/**
+ * Remove embedding models that use unsupported providers.
+ *
+ * @param models - Embedding models to validate.
+ * @returns Filtered list containing only supported providers.
+ */
+function filterUnsupportedEmbeddingModels(models: CustomModel[]): CustomModel[] {
+  const supportedProviders = new Set(Object.values(EmbeddingModelProviders));
+  return models.filter((model) =>
+    supportedProviders.has(model.provider as EmbeddingModelProviders)
+  );
 }
