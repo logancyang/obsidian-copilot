@@ -6,7 +6,6 @@ import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
 import { getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
-import VectorStoreManager from "@/search/vectorStoreManager";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { extractNoteFiles } from "@/utils";
 
@@ -190,22 +189,27 @@ export class MiyoSemanticRetriever extends BaseRetriever {
    * @returns Array of explicit note chunks.
    */
   private async getExplicitChunks(noteFiles: TFile[]): Promise<Document[]> {
+    if (noteFiles.length === 0) {
+      return [];
+    }
+    const baseUrl = await this.client.resolveBaseUrl(getSettings().selfHostUrl);
+    const sourceId = getMiyoSourceId(this.app);
     const explicitChunks: Document[] = [];
     for (const noteFile of noteFiles) {
-      const docs = await VectorStoreManager.getInstance().getDocumentsByPath(noteFile.path);
-      docs.forEach((doc) => {
+      const response = await this.client.getDocumentsByPath(baseUrl, sourceId, noteFile.path);
+      response.documents.forEach((doc) => {
         explicitChunks.push(
           new Document({
-            pageContent: doc.content,
+            pageContent: doc.chunk_text ?? "",
             metadata: {
-              ...doc.metadata,
+              ...(doc.metadata ?? {}),
               score: 1,
               path: doc.path,
               mtime: doc.mtime,
               ctime: doc.ctime,
               title: doc.title,
               id: doc.id,
-              embeddingModel: doc.embeddingModel,
+              embeddingModel: doc.embedding_model,
               tags: doc.tags,
               extension: doc.extension,
               created_at: doc.created_at,

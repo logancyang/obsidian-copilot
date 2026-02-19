@@ -6,13 +6,13 @@ import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
+import { isSelfHostAccessValid } from "@/plusUtils";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { TFile } from "obsidian";
 
 const MAX_K = 20;
 const ORIGINAL_WEIGHT = 0.7;
 const LINKS_WEIGHT = 0.3;
-const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
 
 /**
  * Determine whether Miyo-backed relevant-note scoring should be used.
@@ -21,19 +21,7 @@ const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
   const settings = getSettings();
-  if (!settings.enableMiyo || !settings.enableSemanticSearchV3) {
-    return false;
-  }
-
-  if (settings.selfHostModeValidatedAt == null) {
-    return false;
-  }
-
-  if ((settings.selfHostValidationCount ?? 0) >= 3) {
-    return true;
-  }
-
-  return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
+  return settings.enableMiyoSearch && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
 }
 
 /**

@@ -51,23 +51,21 @@ export const CopilotPlusSettings: React.FC = () => {
       return;
     }
 
-    if (enabled) {
-      setIsValidatingSelfHost(true);
-      try {
-        const miyoClient = new MiyoClient();
-        const isMiyoAvailable = await miyoClient.isBackendAvailable(settings.selfHostUrl);
-        if (!isMiyoAvailable) {
-          new Notice("Miyo app is not available. Please start the Miyo app and try again.");
-          return;
-        }
-
-        const isValid = await validateSelfHostMode();
-        if (!isValid) {
-          return;
-        }
-      } finally {
-        setIsValidatingSelfHost(false);
+    setIsValidatingSelfHost(true);
+    try {
+      const miyoClient = new MiyoClient();
+      const isMiyoAvailable = await miyoClient.isBackendAvailable(settings.selfHostUrl);
+      if (!isMiyoAvailable) {
+        new Notice("Miyo app is not available. Please start the Miyo app and try again.");
+        return;
       }
+
+      const isValid = await validateSelfHostMode();
+      if (!isValid) {
+        return;
+      }
+    } finally {
+      setIsValidatingSelfHost(false);
     }
 
     const confirmChange = async () => {

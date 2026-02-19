@@ -109,14 +109,17 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
     const sourceId = this.getSourceId();
     const limit = 200;
     let offset = 0;
-    let total = 0;
+    let total: number | null = null;
     const paths = new Set<string>();
 
     do {
       const response = await this.client.listFiles(baseUrl, sourceId, offset, limit);
       const files = response.files ?? [];
       files.forEach((file) => paths.add(file.path));
-      total = response.total ?? paths.size;
+      // Read total only from the first response to avoid drift from concurrent indexing.
+      if (total === null) {
+        total = response.total ?? files.length;
+      }
       offset += files.length;
       if (files.length === 0) {
         break;
@@ -303,12 +306,14 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
     sourceId: string
   ): void {
     logInfo(`Miyo upsert batch: ${docs.length} documents`, { baseUrl, sourceId });
-    docs.forEach((doc) => {
-      const chunkId = doc.metadata?.chunkId;
-      const chunkSuffix =
-        typeof chunkId === "string" && chunkId.length > 0 ? ` (chunkId: ${chunkId})` : "";
-      logInfo(`Miyo upsert document ${doc.id} @ ${doc.path}${chunkSuffix}`);
-    });
+    if (getSettings().debug) {
+      docs.forEach((doc) => {
+        const chunkId = doc.metadata?.chunkId;
+        const chunkSuffix =
+          typeof chunkId === "string" && chunkId.length > 0 ? ` (chunkId: ${chunkId})` : "";
+        logInfo(`Miyo upsert document ${doc.id} @ ${doc.path}${chunkSuffix}`);
+      });
+    }
   }
 
   /**
@@ -388,7 +393,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
     }
   ): SemanticIndexDocument {
     const content = doc.chunk_text ?? "";
-    const metadata = doc.metadata ?? {};
+    const metadata = { ...(doc.metadata ?? {}) };
     if (!metadata.chunkId && doc.chunk_index !== undefined) {
       metadata.chunkId = `${doc.path || fallbackPath}#${doc.chunk_index}`;
     }
