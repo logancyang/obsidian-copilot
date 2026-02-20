@@ -1,7 +1,7 @@
 import { getStandaloneQuestion } from "@/chainUtils";
 import { DEFAULT_MAX_SOURCE_CHUNKS, TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
-import { selfHostWebSearch } from "@/LLMProviders/selfHostServices";
+import { hasSelfHostSearchKey, selfHostWebSearch } from "@/LLMProviders/selfHostServices";
 import { logInfo } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
@@ -480,7 +480,7 @@ const webSearchTool = createLangChainTool({
       let webContent: string;
       let citations: string[];
 
-      if (isSelfHostModeValid() && getSettings().firecrawlApiKey) {
+      if (isSelfHostModeValid() && hasSelfHostSearchKey()) {
         const result = await selfHostWebSearch(standaloneQuestion);
         webContent = result.content;
         citations = result.citations;
