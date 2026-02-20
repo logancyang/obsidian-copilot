@@ -4,8 +4,11 @@ import {
   Twitter4llmResponse,
   Url4llmResponse,
 } from "@/LLMProviders/brevilabsClient";
+import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
 import { logError } from "@/logger";
+import { isSelfHostModeValid } from "@/plusUtils";
+import { getSettings } from "@/settings/model";
 
 export interface MentionData {
   type: string;
@@ -58,7 +61,10 @@ export class Mention {
 
   async processYoutubeUrl(url: string): Promise<{ transcript: string; error?: string }> {
     try {
-      const response = await this.brevilabsClient.youtube4llm(url);
+      const response =
+        isSelfHostModeValid() && getSettings().supadataApiKey
+          ? await selfHostYoutube4llm(url)
+          : await this.brevilabsClient.youtube4llm(url);
       return { transcript: response.response.transcript };
     } catch (error) {
       const msg = err2String(error);
@@ -107,7 +113,9 @@ export class Mention {
 
       // Check if it's a YouTube URL
       if (isYoutubeUrl(url)) {
-        if (!this.mentions.has(url)) {
+        const cached = this.mentions.get(url);
+        // Retry if not cached or if the previous attempt failed
+        if (!cached || cached.error) {
           const processed = await this.processYoutubeUrl(url);
           this.mentions.set(url, {
             type: "youtube",
@@ -121,7 +129,8 @@ export class Mention {
 
       // Check if it's a Twitter/X URL
       if (isTwitterUrl(url)) {
-        if (!this.mentions.has(url)) {
+        const cached = this.mentions.get(url);
+        if (!cached || cached.error) {
           const processed = await this.processTwitterUrl(url);
           this.mentions.set(url, {
             type: "twitter",
@@ -134,7 +143,8 @@ export class Mention {
       }
 
       // Regular URL
-      if (!this.mentions.has(url)) {
+      const cachedUrl = this.mentions.get(url);
+      if (!cachedUrl || cachedUrl.error) {
         const processed = await this.processUrl(url);
         this.mentions.set(url, {
           type: "url",

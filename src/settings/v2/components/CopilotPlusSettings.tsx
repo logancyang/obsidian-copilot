@@ -1,12 +1,12 @@
-import React, { useState } from "react";
-import { Notice } from "obsidian";
-import { Badge } from "@/components/ui/badge";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { Notice } from "obsidian";
+import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
 export const CopilotPlusSettings: React.FC = () => {

@@ -139,8 +139,12 @@ export interface CopilotSettings {
   selfHostUrl: string;
   /** API key for the self-host mode backend (if required) */
   selfHostApiKey: string;
+  /** Which provider to use for self-host web search */
+  selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
   firecrawlApiKey: string;
+  /** Perplexity API key for self-host web search via Sonar */
+  perplexityApiKey: string;
   /** Supadata API key for self-host YouTube transcripts */
   supadataApiKey: string;
   /** Enable lexical boosts (folder and graph) in search - default: true */
@@ -406,6 +410,16 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableMiyoSearch has a default value
   if (typeof sanitizedSettings.enableMiyoSearch !== "boolean") {
     sanitizedSettings.enableMiyoSearch = DEFAULT_SETTINGS.enableMiyoSearch;
+  }
+
+  // Ensure selfHostSearchProvider is a valid value
+  const validSearchProviders = ["firecrawl", "perplexity"] as const;
+  if (
+    !validSearchProviders.includes(
+      sanitizedSettings.selfHostSearchProvider as (typeof validSearchProviders)[number]
+    )
+  ) {
+    sanitizedSettings.selfHostSearchProvider = DEFAULT_SETTINGS.selfHostSearchProvider;
   }
 
   // Ensure passMarkdownImages has a default value
