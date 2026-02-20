@@ -2,6 +2,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
+import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -70,6 +71,10 @@ export const CopilotPlusSettings: React.FC = () => {
     }
 
     const confirmChange = async () => {
+      if (enabled && settings.embeddingBatchSize !== DEFAULT_SETTINGS.embeddingBatchSize) {
+        updateSetting("embeddingBatchSize", DEFAULT_SETTINGS.embeddingBatchSize);
+      }
+
       updateSetting("enableMiyoSearch", enabled);
 
       if (enabled && !settings.enableSemanticSearchV3) {
@@ -87,7 +92,7 @@ export const CopilotPlusSettings: React.FC = () => {
     new ConfirmModal(
       app,
       confirmChange,
-      "Enabling Miyo Search will refresh your vault index to store data in Miyo. Continue?",
+      `Enabling Miyo Search will refresh your vault index to store data in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. If your hardware is strong, you can increase this later in QA settings. Continue?`,
       "Refresh Index"
     ).open();
   };
@@ -222,10 +227,7 @@ export const CopilotPlusSettings: React.FC = () => {
                     description="Choose which service to use for self-host web search."
                     value={settings.selfHostSearchProvider}
                     onChange={(value) =>
-                      updateSetting(
-                        "selfHostSearchProvider",
-                        value as "firecrawl" | "perplexity"
-                      )
+                      updateSetting("selfHostSearchProvider", value as "firecrawl" | "perplexity")
                     }
                     options={[
                       { label: "Firecrawl (default)", value: "firecrawl" },
