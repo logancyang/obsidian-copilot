@@ -475,8 +475,11 @@ export class IndexOperations {
           this.cancelIndexing();
           return;
         }
-        this.state.totalFilesToIndex = files.length;
-        updateIndexingProgressState({ totalFiles: files.length });
+        // Keep progress denominator consistent after resume:
+        // total = already processed in this run + files still needing indexing.
+        const adjustedTotalFiles = Math.max(this.state.indexedCount + files.length, 1);
+        this.state.totalFilesToIndex = adjustedTotalFiles;
+        updateIndexingProgressState({ totalFiles: adjustedTotalFiles });
       }
     }
   }
