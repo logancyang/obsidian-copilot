@@ -46,19 +46,24 @@ export class IndexOperations {
     private indexBackend: SemanticIndexBackend,
     private embeddingsManager: EmbeddingsManager
   ) {
-    const settings = getSettings();
-    this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
-    this.embeddingBatchSize = settings.embeddingBatchSize;
-    this.checkpointInterval = 8 * this.embeddingBatchSize;
+    this.refreshRuntimeIndexingConfig();
     this.chunkManager = getSharedChunkManager(app);
 
     // Subscribe to settings changes
     subscribeToSettingsChange(async () => {
-      const settings = getSettings();
-      this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
-      this.embeddingBatchSize = settings.embeddingBatchSize;
-      this.checkpointInterval = 8 * this.embeddingBatchSize;
+      this.refreshRuntimeIndexingConfig();
     });
+  }
+
+  /**
+   * Refresh runtime indexing controls from latest settings.
+   * Keeps long-running indexing jobs in sync with updated rate/batch configuration.
+   */
+  private refreshRuntimeIndexingConfig(): void {
+    const settings = getSettings();
+    this.rateLimiter = new RateLimiter(settings.embeddingRequestsPerMin);
+    this.embeddingBatchSize = Math.max(1, settings.embeddingBatchSize);
+    this.checkpointInterval = 8 * this.embeddingBatchSize;
   }
 
   public async indexVaultToVectorStore(
@@ -153,8 +158,9 @@ export class IndexOperations {
       this.state.totalFilesToIndex = filesWithChunks;
       updateIndexingProgressState({ totalFiles: filesWithChunks });
 
-      // Process chunks in batches
-      for (let i = 0; i < allChunks.length; i += this.embeddingBatchSize) {
+      // Process chunks in dynamic batches so runtime config updates (pause/resume) apply immediately.
+      let i = 0;
+      while (i < allChunks.length) {
         if (this.state.isIndexingCancelled || getIndexingProgressState().isCancelled) break;
         await this.handlePause();
 
@@ -262,6 +268,8 @@ export class IndexOperations {
             break;
           }
         }
+
+        i += batch.length;
       }
 
       // Show completion notice before running integrity check
@@ -460,6 +468,7 @@ export class IndexOperations {
 
       // After we exit the pause loop (meaning we've resumed), re-evaluate files
       if (!this.state.isIndexingCancelled) {
+        this.refreshRuntimeIndexingConfig();
         const files = await this.getFilesToIndex();
         if (files.length === 0) {
           logInfo("No files to index after filter change, stopping indexing");
