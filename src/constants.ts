@@ -905,6 +905,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableSemanticSearchV3: false,
   enableSelfHostMode: false,
   enableMiyoSearch: false,
+  enableMiyoDocumentParsing: false,
   selfHostModeValidatedAt: null,
   selfHostValidationCount: 0,
   selfHostUrl: "",
