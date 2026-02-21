@@ -131,8 +131,6 @@ export interface CopilotSettings {
   enableSelfHostMode: boolean;
   /** Enable Miyo-backed indexing and semantic search when self-host mode is active */
   enableMiyoSearch: boolean;
-  /** Enable Miyo parse-doc for PDF parsing in non-project mode */
-  enableMiyoDocumentParsing: boolean;
   /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
   selfHostModeValidatedAt: number | null;
   /** Count of successful periodic validations (3 = permanently valid) */
@@ -412,11 +410,6 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableMiyoSearch has a default value
   if (typeof sanitizedSettings.enableMiyoSearch !== "boolean") {
     sanitizedSettings.enableMiyoSearch = DEFAULT_SETTINGS.enableMiyoSearch;
-  }
-
-  // Ensure enableMiyoDocumentParsing has a default value
-  if (typeof sanitizedSettings.enableMiyoDocumentParsing !== "boolean") {
-    sanitizedSettings.enableMiyoDocumentParsing = DEFAULT_SETTINGS.enableMiyoDocumentParsing;
   }
 
   // Ensure selfHostSearchProvider is a valid value

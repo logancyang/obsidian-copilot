@@ -32,7 +32,6 @@ export const CopilotPlusSettings: React.FC = () => {
     } else {
       updateSetting("enableSelfHostMode", false);
       updateSetting("enableMiyoSearch", false);
-      updateSetting("enableMiyoDocumentParsing", false);
     }
   };
 
@@ -210,21 +209,10 @@ export const CopilotPlusSettings: React.FC = () => {
                 <>
                   <SettingItem
                     type="switch"
-                    title="Enable Miyo Search"
-                    description="Use Miyo as your local search engine and context hub — supports larger vaults than built-in Copilot search. Enabling this will prompt a one-time index refresh."
+                    title="Enable Miyo"
+                    description="Use Miyo as your local search, PDF parsing, and context hub. Enabling this will prompt a one-time index refresh."
                     checked={settings.enableMiyoSearch}
                     onCheckedChange={handleMiyoSearchToggle}
-                    disabled={isValidatingSelfHost}
-                  />
-
-                  <SettingItem
-                    type="switch"
-                    title="Enable Miyo Document Parsing"
-                    description="Use Miyo for document parsing in Copilot Plus. Currently PDF-only support; additional document formats are coming soon."
-                    checked={settings.enableMiyoDocumentParsing}
-                    onCheckedChange={(checked) =>
-                      updateSetting("enableMiyoDocumentParsing", checked)
-                    }
                     disabled={isValidatingSelfHost}
                   />
 

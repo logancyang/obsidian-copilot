@@ -58,7 +58,7 @@ class SelfHostPdfParser {
    */
   public async parsePdf(file: TFile, vault: Vault): Promise<string | null> {
     const settings = getSettings();
-    if (!settings.enableMiyoDocumentParsing || file.extension.toLowerCase() !== "pdf") {
+    if (!settings.enableMiyoSearch || file.extension.toLowerCase() !== "pdf") {
       return null;
     }
 
@@ -124,7 +124,7 @@ export class PDFParser implements FileParser {
       const settings = getSettings();
       if (
         isSelfHostModeValid() &&
-        settings.enableMiyoDocumentParsing &&
+        settings.enableMiyoSearch &&
         file.extension.toLowerCase() === "pdf"
       ) {
         const selfHostPdfContent = await this.selfHostPdfParser.parsePdf(file, vault);
@@ -136,12 +136,8 @@ export class PDFParser implements FileParser {
           return selfHostPdfContent;
         }
 
-        logError(`[PDFParser] Miyo document parsing enabled but parse-doc failed for ${file.path}`);
+        logError(`[PDFParser] Miyo enabled but parse-doc failed for ${file.path}`);
         return `[Error: Could not extract content from PDF ${file.basename}]`;
-      } else {
-        logInfo(`isSelfHostModeValid: ${isSelfHostModeValid()}`);
-        logInfo(`settings.enableMiyoDocumentParsing: ${settings.enableMiyoDocumentParsing}`);
-        logInfo(`file.extension: ${file.extension}`);
       }
 
       // If not in cache, read the file and call the API
