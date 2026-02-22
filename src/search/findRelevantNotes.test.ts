@@ -178,7 +178,7 @@ describe("findRelevantNotes", () => {
     expect(mockSearchRelated).not.toHaveBeenCalled();
   });
 
-  it("uses Miyo when shouldUseMiyoForRelevantNotes is true (enableMiyoSearch=true and valid self-host)", async () => {
+  it("uses Miyo when shouldUseMiyoForRelevantNotes is true (enableMiyo=true and valid self-host)", async () => {
     mockedIsSelfHostAccessValid.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
@@ -226,12 +226,12 @@ describe("findRelevantNotes", () => {
   });
 
   it("falls back to Miyo when Orama docs exist but have no embeddings and have content", async () => {
-    // enableMiyoSearch=false ensures shouldUseMiyoForRelevantNotes() returns false,
+    // enableMiyo=false ensures shouldUseMiyoForRelevantNotes() returns false,
     // so the no-embeddings fallback path (line 212 of findRelevantNotes.ts) is exercised.
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "http://127.0.0.1:8742",
-      enableMiyoSearch: false,
+      enableMiyo: false,
       enableSemanticSearchV3: true,
     } as any);
     mockGetDocumentsByPath.mockResolvedValue([

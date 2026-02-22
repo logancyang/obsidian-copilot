@@ -21,7 +21,7 @@ const LINKS_WEIGHT = 0.3;
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
   const settings = getSettings();
-  return settings.enableMiyoSearch && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
+  return settings.enableMiyo && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
 }
 
 /**
