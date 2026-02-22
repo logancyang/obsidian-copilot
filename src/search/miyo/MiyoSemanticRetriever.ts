@@ -1,13 +1,12 @@
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
 import { BaseRetriever } from "@langchain/core/retrievers";
-import { App, TFile } from "obsidian";
+import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
 import { getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
-import { extractNoteFiles } from "@/utils";
 
 type MiyoSemanticRetrieverOptions = {
   minSimilarityScore?: number;
@@ -48,7 +47,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   }
 
   /**
-   * Retrieve relevant documents by querying Miyo and merging explicit note chunks.
+   * Retrieve relevant documents by querying Miyo semantic search only.
+   * Path/title/tag reads are handled upstream by FilterRetriever orchestration.
    *
    * @param query - User query string.
    * @param _config - Optional LangChain callback configuration.
@@ -58,15 +58,14 @@ export class MiyoSemanticRetriever extends BaseRetriever {
     query: string,
     _config?: BaseCallbackConfig
   ): Promise<Document[]> {
-    const explicitChunks = await this.getExplicitChunks(extractNoteFiles(query, this.app.vault));
     const searchChunks = await this.searchMiyo(query);
-    const mergedChunks = this.mergeResults(explicitChunks, searchChunks);
+    const dedupedChunks = this.deduplicateResults(searchChunks);
 
     if (getSettings().debug) {
-      this.logDebugInfo(query, explicitChunks, searchChunks, mergedChunks);
+      this.logDebugInfo(query, searchChunks, dedupedChunks);
     }
 
-    return mergedChunks;
+    return dedupedChunks;
   }
 
   /**
@@ -183,54 +182,12 @@ export class MiyoSemanticRetriever extends BaseRetriever {
   }
 
   /**
-   * Build explicit note chunks for notes referenced in the query.
+   * Deduplicate semantic results by stable document identity.
    *
-   * @param noteFiles - Note files referenced in the query.
-   * @returns Array of explicit note chunks.
-   */
-  private async getExplicitChunks(noteFiles: TFile[]): Promise<Document[]> {
-    if (noteFiles.length === 0) {
-      return [];
-    }
-    const baseUrl = await this.client.resolveBaseUrl(getSettings().selfHostUrl);
-    const sourceId = getMiyoSourceId(this.app);
-    const explicitChunks: Document[] = [];
-    for (const noteFile of noteFiles) {
-      const response = await this.client.getDocumentsByPath(baseUrl, sourceId, noteFile.path);
-      (response.documents ?? []).forEach((doc) => {
-        explicitChunks.push(
-          new Document({
-            pageContent: doc.chunk_text ?? "",
-            metadata: {
-              ...(doc.metadata ?? {}),
-              score: 1,
-              path: doc.path,
-              mtime: doc.mtime,
-              ctime: doc.ctime,
-              title: doc.title,
-              id: doc.id,
-              embeddingModel: doc.embedding_model,
-              tags: doc.tags,
-              extension: doc.extension,
-              created_at: doc.created_at,
-              nchars: doc.nchars,
-              chunkId: doc.metadata?.chunkId,
-            },
-          })
-        );
-      });
-    }
-    return explicitChunks;
-  }
-
-  /**
-   * Merge explicit chunks with semantic results, deduplicating by chunk identity.
-   *
-   * @param explicitChunks - Explicit note chunks.
    * @param semanticChunks - Miyo search results.
-   * @returns Combined list of Documents.
+   * @returns Deduplicated semantic Documents.
    */
-  private mergeResults(explicitChunks: Document[], semanticChunks: Document[]): Document[] {
+  private deduplicateResults(semanticChunks: Document[]): Document[] {
     const combined = new Map<string, Document>();
     const insert = (doc: Document) => {
       const key = this.getDocumentKey(doc);
@@ -239,12 +196,11 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       }
     };
 
-    explicitChunks.forEach(insert);
     semanticChunks.forEach(insert);
 
-    if (getSettings().debug) {
+    if (getSettings().debug && combined.size !== semanticChunks.length) {
       logInfo(
-        `MiyoSemanticRetriever: merged ${semanticChunks.length} results with ${explicitChunks.length} explicit chunks`
+        `MiyoSemanticRetriever: deduplicated semantic results from ${semanticChunks.length} to ${combined.size}`
       );
     }
 
@@ -255,21 +211,14 @@ export class MiyoSemanticRetriever extends BaseRetriever {
    * Log debug information to mirror Orama hybrid retriever output.
    *
    * @param query - User query string.
-   * @param explicitChunks - Explicit note chunks.
    * @param semanticChunks - Semantic search chunks.
-   * @param mergedChunks - Combined results.
+   * @param dedupedChunks - Deduplicated results.
    */
-  private logDebugInfo(
-    query: string,
-    explicitChunks: Document[],
-    semanticChunks: Document[],
-    mergedChunks: Document[]
-  ): void {
+  private logDebugInfo(query: string, semanticChunks: Document[], dedupedChunks: Document[]): void {
     logInfo("*** MIYO SEMANTIC RETRIEVER DEBUG INFO: ***");
     logInfo("Query: ", query);
-    logInfo("Explicit Chunks: ", explicitChunks);
-    logInfo("Miyo Chunks: ", semanticChunks);
-    logInfo("Combined Chunks: ", mergedChunks);
+    logInfo("Semantic Chunks: ", semanticChunks);
+    logInfo("Deduplicated Chunks: ", dedupedChunks);
 
     const maxSemanticScore = semanticChunks.reduce((max, chunk) => {
       const score = chunk.metadata?.score;
