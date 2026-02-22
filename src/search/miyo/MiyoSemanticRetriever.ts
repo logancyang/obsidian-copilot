@@ -147,11 +147,13 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       metadata.chunkId ||
       (result.chunk_index !== undefined ? `${result.path}#${result.chunk_index}` : undefined);
 
+    const score = typeof result.score === "number" ? result.score.toFixed(2) : "?";
     return new Document({
       pageContent: result.chunk_text ?? "",
       metadata: {
         ...metadata,
         score: result.score,
+        explanation: `miyo ${score}`,
         path: result.path,
         mtime: result.mtime,
         ctime: result.ctime,

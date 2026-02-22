@@ -32,7 +32,7 @@ export const CopilotPlusSettings: React.FC = () => {
       updateSetting("enableSelfHostMode", true);
     } else {
       updateSetting("enableSelfHostMode", false);
-      updateSetting("enableMiyoSearch", false);
+      updateSetting("enableMiyo", false);
     }
   };
 
@@ -42,12 +42,12 @@ export const CopilotPlusSettings: React.FC = () => {
    * @param enabled - Whether Miyo search should be enabled.
    */
   const handleMiyoSearchToggle = async (enabled: boolean) => {
-    if (enabled === settings.enableMiyoSearch) {
+    if (enabled === settings.enableMiyo) {
       return;
     }
 
     if (!enabled) {
-      updateSetting("enableMiyoSearch", false);
+      updateSetting("enableMiyo", false);
       return;
     }
 
@@ -75,7 +75,7 @@ export const CopilotPlusSettings: React.FC = () => {
         updateSetting("embeddingBatchSize", DEFAULT_SETTINGS.embeddingBatchSize);
       }
 
-      updateSetting("enableMiyoSearch", enabled);
+      updateSetting("enableMiyo", enabled);
 
       if (enabled && !settings.enableSemanticSearchV3) {
         updateSetting("enableSemanticSearchV3", true);
@@ -216,7 +216,7 @@ export const CopilotPlusSettings: React.FC = () => {
                     type="switch"
                     title="Enable Miyo"
                     description="Use Miyo as your local search, PDF parsing, and context hub. Enabling this will prompt a one-time index refresh."
-                    checked={settings.enableMiyoSearch}
+                    checked={settings.enableMiyo}
                     onCheckedChange={handleMiyoSearchToggle}
                     disabled={isValidatingSelfHost}
                   />

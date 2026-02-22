@@ -58,7 +58,7 @@ class SelfHostPdfParser {
    */
   public async parsePdf(file: TFile, vault: Vault): Promise<string | null> {
     const settings = getSettings();
-    if (!settings.enableMiyoSearch || file.extension.toLowerCase() !== "pdf") {
+    if (!settings.enableMiyo || file.extension.toLowerCase() !== "pdf") {
       return null;
     }
 
@@ -122,11 +122,7 @@ export class PDFParser implements FileParser {
       }
 
       const settings = getSettings();
-      if (
-        isSelfHostModeValid() &&
-        settings.enableMiyoSearch &&
-        file.extension.toLowerCase() === "pdf"
-      ) {
+      if (isSelfHostModeValid() && settings.enableMiyo && file.extension.toLowerCase() === "pdf") {
         const selfHostPdfContent = await this.selfHostPdfParser.parsePdf(file, vault);
         if (selfHostPdfContent !== null) {
           await this.pdfCache.set(file, {

@@ -143,12 +143,8 @@ export class RetrieverFactory {
 
     // Miyo-backed semantic search (self-host mode + Miyo enabled)
     if (RetrieverFactory.shouldUseMiyo(currentSettings)) {
-      const semanticRetriever = RetrieverFactory.createMiyoSemanticRetriever(
-        app,
-        normalizedOptions
-      );
-      const retriever = new MergedSemanticRetriever(app, normalizedOptions, semanticRetriever);
-      logInfo("RetrieverFactory: Using MergedSemanticRetriever with Miyo semantic backend");
+      const retriever = RetrieverFactory.createMiyoRetriever(app, options);
+      logInfo("RetrieverFactory: Using MiyoSemanticRetriever (standalone)");
       return {
         retriever,
         type: "semantic",
@@ -241,16 +237,14 @@ export class RetrieverFactory {
    * @param options - Retriever configuration options
    * @returns The semantic retriever
    */
-  static createSemanticRetriever(app: App, options: RetrieverOptions): MergedSemanticRetriever {
-    const normalizedOptions = normalizeOptions(options);
+  static createSemanticRetriever(
+    app: App,
+    options: RetrieverOptions
+  ): MergedSemanticRetriever | MiyoSemanticRetriever {
     if (RetrieverFactory.shouldUseMiyo(getSettings())) {
-      const semanticRetriever = RetrieverFactory.createMiyoSemanticRetriever(
-        app,
-        normalizedOptions
-      );
-      return new MergedSemanticRetriever(app, normalizedOptions, semanticRetriever);
+      return RetrieverFactory.createMiyoRetriever(app, options);
     }
-    return new MergedSemanticRetriever(app, normalizedOptions);
+    return new MergedSemanticRetriever(app, normalizeOptions(options));
   }
 
   /**
@@ -329,23 +323,31 @@ export class RetrieverFactory {
    * @returns True when Miyo should be used for semantic retrieval.
    */
   private static shouldUseMiyo(settings: CopilotSettings): boolean {
-    return settings.enableMiyoSearch && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
+    return settings.enableMiyo && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
   }
 
   /**
-   * Create a Miyo semantic retriever with the same effective limits as HybridRetriever.
+   * Check whether Miyo search is currently active based on live settings.
+   *
+   * @returns True when Miyo is the active search backend.
+   */
+  static isMiyoActive(): boolean {
+    return RetrieverFactory.shouldUseMiyo(getSettings());
+  }
+
+  /**
+   * Create a standalone Miyo retriever (no local lexical merge).
+   * Use this when Miyo should be the sole search backend.
    *
    * @param app - Obsidian app instance.
-   * @param options - Normalized retriever options.
+   * @param options - Retriever configuration options.
    * @returns Miyo semantic retriever instance.
    */
-  private static createMiyoSemanticRetriever(
-    app: App,
-    options: NormalizedRetrieverOptions
-  ): MiyoSemanticRetriever {
-    const semanticMax = options.returnAll
+  static createMiyoRetriever(app: App, options: RetrieverOptions): MiyoSemanticRetriever {
+    const normalized = normalizeOptions(options);
+    const semanticMax = normalized.returnAll
       ? RETURN_ALL_LIMIT
-      : Math.min(options.maxK * 2, RETURN_ALL_LIMIT);
-    return new MiyoSemanticRetriever(app, { ...options, maxK: semanticMax });
+      : Math.min(normalized.maxK * 2, RETURN_ALL_LIMIT);
+    return new MiyoSemanticRetriever(app, { ...normalized, maxK: semanticMax });
   }
 }

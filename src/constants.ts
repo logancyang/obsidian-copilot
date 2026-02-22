@@ -904,7 +904,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableCustomPromptTemplating: true,
   enableSemanticSearchV3: false,
   enableSelfHostMode: false,
-  enableMiyoSearch: false,
+  enableMiyo: false,
   selfHostModeValidatedAt: null,
   selfHostValidationCount: 0,
   selfHostUrl: "",

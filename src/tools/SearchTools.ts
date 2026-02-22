@@ -376,6 +376,75 @@ function validateTimeRange(timeRange?: {
   return { startTime, endTime };
 }
 
+/**
+ * Run Miyo search: FilterRetriever (local tag/title) + MiyoSemanticRetriever (server-side).
+ * Miyo replaces local lexical/semantic search entirely.
+ */
+async function performMiyoSearch({
+  query,
+  salientTerms,
+  returnAll = false,
+}: {
+  query: string;
+  salientTerms: string[];
+  returnAll?: boolean;
+}) {
+  const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+  const useExpandedLimits = returnAll || tagTerms.length > 0;
+  const effectiveMaxK = useExpandedLimits ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
+
+  // FilterRetriever for local tag/title matches
+  const filterRetriever = new FilterRetriever(app, {
+    salientTerms,
+    maxK: effectiveMaxK,
+    returnAll: useExpandedLimits,
+  });
+  const filterDocs = await filterRetriever.getRelevantDocuments(query);
+
+  // Miyo retriever for server-side semantic search (no local lexical merge)
+  const miyoRetriever = RetrieverFactory.createMiyoRetriever(app, {
+    minSimilarityScore: useExpandedLimits ? 0.0 : 0.1,
+    maxK: effectiveMaxK,
+    salientTerms,
+    textWeight: TEXT_WEIGHT,
+    returnAll: useExpandedLimits,
+    useRerankerThreshold: 0.5,
+    tagTerms,
+  });
+  const miyoDocs = await miyoRetriever.getRelevantDocuments(query);
+
+  logInfo(
+    `miyoSearch: ${filterDocs.length} filter + ${miyoDocs.length} miyo docs for query: "${query}"`
+  );
+
+  // Merge: filter results first, then Miyo results (deduped)
+  const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, miyoDocs);
+
+  const mapDoc = (doc: import("@langchain/core/documents").Document, isFilter: boolean) => ({
+    title: doc.metadata.title || "Untitled",
+    content: doc.pageContent,
+    path: doc.metadata.path || "",
+    score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
+    rerank_score: doc.metadata.rerank_score ?? doc.metadata.score ?? 0,
+    includeInContext: doc.metadata.includeInContext ?? true,
+    source: doc.metadata.source,
+    mtime: doc.metadata.mtime ?? null,
+    ctime: doc.metadata.ctime ?? null,
+    chunkId: (doc.metadata as any).chunkId ?? null,
+    isChunk: (doc.metadata as any).isChunk ?? false,
+    explanation: doc.metadata.explanation ?? null,
+    isFilterResult: isFilter,
+    matchType: isFilter ? doc.metadata.source || "filter" : (undefined as string | undefined),
+  });
+
+  const allDocs = [
+    ...filterResults.map((doc) => mapDoc(doc, true)),
+    ...searchResults.map((doc) => mapDoc(doc, false)),
+  ].slice(0, effectiveMaxK);
+
+  return { type: "local_search", documents: allDocs };
+}
+
 // Smart wrapper that uses RetrieverFactory for unified retriever selection
 const localSearchTool = createLangChainTool({
   name: "localSearch",
@@ -385,6 +454,12 @@ const localSearchTool = createLangChainTool({
   func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll, _preExpandedQuery }) => {
     // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
     const timeRange = validateTimeRange(rawTimeRange);
+
+    // Miyo handles search server-side — use separate path (no local lexical search)
+    if (RetrieverFactory.isMiyoActive()) {
+      logInfo("localSearch: Using Miyo search path");
+      return await performMiyoSearch({ query, salientTerms, returnAll: returnAll === true });
+    }
 
     const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
     const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;

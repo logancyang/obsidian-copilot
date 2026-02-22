@@ -13,7 +13,7 @@ import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 
 export const QASettings: React.FC = () => {
   const settings = useSettingsValue();
-  const isMiyoSearchActive = settings.enableMiyoSearch;
+  const isMiyoSearchActive = settings.enableMiyo;
   const visibleEmbeddingModels = settings.activeEmbeddingModels;
 
   const handleSetDefaultEmbeddingModel = async (modelKey: string) => {
@@ -56,8 +56,8 @@ export const QASettings: React.FC = () => {
                 app,
                 async () => {
                   updateSetting("enableSemanticSearchV3", checked);
-                  if (!checked && settings.enableMiyoSearch) {
-                    updateSetting("enableMiyoSearch", false);
+                  if (!checked && settings.enableMiyo) {
+                    updateSetting("enableMiyo", false);
                   }
                   if (checked) {
                     const VectorStoreManager = (await import("@/search/vectorStoreManager"))
