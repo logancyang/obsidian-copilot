@@ -502,9 +502,8 @@ export function registerCommands(
       return;
     }
 
-    const { getWebViewerService } = await import(
-      "@/services/webViewerService/webViewerServiceSingleton"
-    );
+    const { getWebViewerService } =
+      await import("@/services/webViewerService/webViewerServiceSingleton");
 
     try {
       const service = getWebViewerService(plugin.app);
