@@ -282,7 +282,7 @@ export async function validateSelfHostMode(): Promise<boolean> {
  */
 export async function refreshSelfHostModeValidation(): Promise<void> {
   const settings = getSettings();
-  if (!settings.enableSelfHostMode && !settings.enableMiyoSearch) {
+  if (!settings.enableSelfHostMode && !settings.enableMiyo) {
     return;
   }
 
@@ -318,7 +318,7 @@ export async function refreshSelfHostModeValidation(): Promise<void> {
     } else {
       // User is no longer on an eligible plan, disable self-host mode
       updateSetting("enableSelfHostMode", false);
-      updateSetting("enableMiyoSearch", false);
+      updateSetting("enableMiyo", false);
       updateSetting("selfHostModeValidatedAt", null);
       updateSetting("selfHostValidationCount", 0);
       logInfo("Self-host mode disabled - user is no longer on an eligible plan");

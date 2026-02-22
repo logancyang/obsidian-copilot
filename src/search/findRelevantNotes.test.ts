@@ -87,7 +87,7 @@ describe("findRelevantNotes", () => {
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "",
-      enableMiyoSearch: false,
+      enableMiyo: false,
       enableSemanticSearchV3: false,
       selfHostModeValidatedAt: null,
       selfHostValidationCount: 0,
@@ -173,7 +173,7 @@ describe("findRelevantNotes", () => {
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "http://127.0.0.1:8742",
-      enableMiyoSearch: true,
+      enableMiyo: true,
       enableSemanticSearchV3: true,
       selfHostModeValidatedAt: Date.now(),
       selfHostValidationCount: 0,
@@ -221,7 +221,7 @@ describe("findRelevantNotes", () => {
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "http://127.0.0.1:8742",
-      enableMiyoSearch: true,
+      enableMiyo: true,
       enableSemanticSearchV3: true,
       selfHostModeValidatedAt: Date.now(),
       selfHostValidationCount: 0,

@@ -207,7 +207,7 @@ export default class VectorStoreManager {
    * @returns True when Miyo should be the active backend.
    */
   private shouldUseMiyo(settings: CopilotSettings): boolean {
-    return settings.enableMiyoSearch && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
+    return settings.enableMiyo && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
   }
 
   /**
@@ -255,7 +255,7 @@ export default class VectorStoreManager {
     if (
       prevSettings &&
       settings.enableSemanticSearchV3 &&
-      settings.enableMiyoSearch !== prevSettings.enableMiyoSearch
+      settings.enableMiyo !== prevSettings.enableMiyo
     ) {
       logInfo("VectorStoreManager: Miyo backend toggled; reindex recommended.");
     }

@@ -21,7 +21,7 @@ const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
   const settings = getSettings();
-  if (!settings.enableMiyoSearch || !settings.enableSemanticSearchV3) {
+  if (!settings.enableMiyo || !settings.enableSemanticSearchV3) {
     return false;
   }
 

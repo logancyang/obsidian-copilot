@@ -130,7 +130,7 @@ export interface CopilotSettings {
   /** Enable self-host mode (e.g., Miyo) - uses self-hosted services for search, LLMs, OCR, etc. */
   enableSelfHostMode: boolean;
   /** Enable Miyo-backed indexing and semantic search when self-host mode is active */
-  enableMiyoSearch: boolean;
+  enableMiyo: boolean;
   /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
   selfHostModeValidatedAt: number | null;
   /** Count of successful periodic validations (3 = permanently valid) */
@@ -407,9 +407,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.generateAIChatTitleOnSave = DEFAULT_SETTINGS.generateAIChatTitleOnSave;
   }
 
-  // Ensure enableMiyoSearch has a default value
-  if (typeof sanitizedSettings.enableMiyoSearch !== "boolean") {
-    sanitizedSettings.enableMiyoSearch = DEFAULT_SETTINGS.enableMiyoSearch;
+  // Ensure enableMiyo has a default value
+  if (typeof sanitizedSettings.enableMiyo !== "boolean") {
+    sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
   }
 
   // Ensure selfHostSearchProvider is a valid value
