@@ -147,8 +147,17 @@ export class RetrieverFactory {
         app,
         normalizedOptions
       );
-      const retriever = new MergedSemanticRetriever(app, normalizedOptions, semanticRetriever);
-      logInfo("RetrieverFactory: Using MergedSemanticRetriever with Miyo semantic backend");
+      // skipLexical=true: FTS is disabled when Miyo is active; FilterRetriever at the
+      // orchestration layer still handles guaranteed title/tag/time-range matches.
+      const retriever = new MergedSemanticRetriever(
+        app,
+        normalizedOptions,
+        semanticRetriever,
+        true
+      );
+      logInfo(
+        "RetrieverFactory: Using MergedSemanticRetriever with Miyo semantic backend (FTS disabled)"
+      );
       return {
         retriever,
         type: "semantic",
@@ -248,7 +257,8 @@ export class RetrieverFactory {
         app,
         normalizedOptions
       );
-      return new MergedSemanticRetriever(app, normalizedOptions, semanticRetriever);
+      // skipLexical=true: FTS is disabled when Miyo is active.
+      return new MergedSemanticRetriever(app, normalizedOptions, semanticRetriever, true);
     }
     return new MergedSemanticRetriever(app, normalizedOptions);
   }

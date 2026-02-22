@@ -44,11 +44,15 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * @param app - Obsidian application instance
    * @param options - Retrieval options shared between semantic and lexical engines
    * @param semanticRetriever - Optional semantic retriever override
+   * @param skipLexical - When true, skip the lexical (FTS) retriever and only use semantic results.
+   *   Use this when Miyo search is active — FilterRetriever at the orchestration layer still
+   *   handles guaranteed title/tag/time-range matches.
    */
   constructor(
     private app: App,
     private options: RetrieverOptions,
-    semanticRetriever?: SemanticRetriever
+    semanticRetriever?: SemanticRetriever,
+    private readonly skipLexical = false
   ) {
     super();
     this.originalMaxK = Math.max(1, options.maxK);
@@ -85,11 +89,21 @@ export class MergedSemanticRetriever extends BaseRetriever {
 
   /**
    * Retrieves relevant documents by combining semantic and lexical matches.
+   * When skipLexical is true (i.e., Miyo is active), only the semantic retriever is used —
+   * guaranteed title/tag/time-range matches are handled by FilterRetriever at the orchestration
+   * layer.
    *
    * @param query - User query string
    * @returns Array of merged and ranked Documents
    */
   public async getRelevantDocuments(query: string): Promise<Document[]> {
+    const limit = this.returnAll ? RETURN_ALL_LIMIT : this.originalMaxK;
+
+    if (this.skipLexical) {
+      const semanticDocs = await this.semanticRetriever.getRelevantDocuments(query);
+      return semanticDocs.slice(0, limit);
+    }
+
     const [lexicalDocs, semanticDocs] = await Promise.all([
       this.lexicalRetriever.getRelevantDocuments(query),
       this.semanticRetriever.getRelevantDocuments(query),
@@ -109,7 +123,6 @@ export class MergedSemanticRetriever extends BaseRetriever {
       (a, b) => (b.metadata?.score ?? 0) - (a.metadata?.score ?? 0)
     );
 
-    const limit = this.returnAll ? RETURN_ALL_LIMIT : this.originalMaxK;
     return mergedResults.slice(0, limit);
   }
 
