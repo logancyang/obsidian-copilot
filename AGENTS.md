@@ -191,6 +191,7 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
   - `logWarn()` for warnings
   - `logError()` for errors
 - Import from logger: `import { logInfo, logWarn, logError } from "@/logger"`
+- These utilities already respect the debug flag internally — never wrap them in `if (getSettings().debug)`
 
 ## Testing Guidelines
 
