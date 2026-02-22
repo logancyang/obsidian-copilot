@@ -357,13 +357,14 @@ export class MiyoClient {
   }
 
   /**
-   * Build request headers, including optional auth.
+   * Build request headers, including auth when configured.
+   * Both `Authorization: Bearer` and `X-API-Key` are sent for compatibility
+   * with different Miyo server configurations.
    *
-   * @param apiKeyOverride - Optional API key override.
    * @returns Headers object for requestUrl.
    */
-  private buildHeaders(apiKeyOverride?: string): Record<string, string> {
-    const apiKey = apiKeyOverride ?? getSettings().selfHostApiKey;
+  private buildHeaders(): Record<string, string> {
+    const apiKey = getSettings().selfHostApiKey;
     const headers: Record<string, string> = {};
     if (apiKey) {
       headers.Authorization = `Bearer ${apiKey}`;
@@ -403,7 +404,7 @@ export class MiyoClient {
       method: options.method,
       url: url.toString(),
       hasBody: Boolean(body),
-      ...(options.method === "POST" ? { postBody: options.body } : {}),
+      ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
     });
 
     const response = await requestUrl({

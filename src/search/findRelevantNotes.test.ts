@@ -4,6 +4,7 @@ import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
+import { isSelfHostAccessValid } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 
 jest.mock("@/noteUtils", () => ({
@@ -50,6 +51,10 @@ jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoSourceId: jest.fn(),
 }));
 
+jest.mock("@/plusUtils", () => ({
+  isSelfHostAccessValid: jest.fn(),
+}));
+
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
   logWarn: jest.fn(),
@@ -69,6 +74,9 @@ function createMarkdownFile(path: string): TFile {
 
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
+  const mockedIsSelfHostAccessValid = isSelfHostAccessValid as jest.MockedFunction<
+    typeof isSelfHostAccessValid
+  >;
   const mockedGetLinkedNotes = getLinkedNotes as jest.MockedFunction<typeof getLinkedNotes>;
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
@@ -84,6 +92,7 @@ describe("findRelevantNotes", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockedIsSelfHostAccessValid.mockReturnValue(false);
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "",
@@ -169,14 +178,13 @@ describe("findRelevantNotes", () => {
     expect(mockSearchRelated).not.toHaveBeenCalled();
   });
 
-  it("uses Miyo related-note endpoint when source note chunks do not include embeddings", async () => {
+  it("uses Miyo when shouldUseMiyoForRelevantNotes is true (enableMiyo=true and valid self-host)", async () => {
+    mockedIsSelfHostAccessValid.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "http://127.0.0.1:8742",
       enableMiyo: true,
       enableSemanticSearchV3: true,
-      selfHostModeValidatedAt: Date.now(),
-      selfHostValidationCount: 0,
     } as any);
     mockGetDocumentsByPath.mockResolvedValue([
       {
@@ -217,14 +225,42 @@ describe("findRelevantNotes", () => {
     });
   });
 
+  it("falls back to Miyo when Orama docs exist but have no embeddings and have content", async () => {
+    // enableMiyo=false ensures shouldUseMiyoForRelevantNotes() returns false,
+    // so the no-embeddings fallback path (line 212 of findRelevantNotes.ts) is exercised.
+    mockedGetSettings.mockReturnValue({
+      debug: false,
+      selfHostUrl: "http://127.0.0.1:8742",
+      enableMiyo: false,
+      enableSemanticSearchV3: true,
+    } as any);
+    mockGetDocumentsByPath.mockResolvedValue([
+      { id: "chunk-a", path: "source.md", content: "source chunk content", embedding: [] },
+    ]);
+    mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
+    mockSearchRelated.mockResolvedValue({
+      results: [
+        { id: "a-1", path: "alpha.md", score: 0.75, chunk_text: "alpha chunk" },
+        { id: "self", path: "source.md", score: 0.99, chunk_text: "self" },
+      ],
+    });
+
+    const result = await findRelevantNotes({ filePath: "source.md" });
+
+    expect(result.map((e) => e.document.path)).toEqual(["alpha.md"]);
+    expect(result[0].metadata.similarityScore).toBe(0.75);
+    // Orama path not taken (no embeddings); Miyo called as fallback
+    expect(mockGetDocsByEmbedding).not.toHaveBeenCalled();
+    expect(mockSearchRelated).toHaveBeenCalledTimes(1);
+  });
+
   it("falls back to link-only relevance when Miyo related-note search fails", async () => {
+    mockedIsSelfHostAccessValid.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       selfHostUrl: "http://127.0.0.1:8742",
       enableMiyo: true,
       enableSemanticSearchV3: true,
-      selfHostModeValidatedAt: Date.now(),
-      selfHostValidationCount: 0,
     } as any);
     mockGetDocumentsByPath.mockResolvedValue([
       {

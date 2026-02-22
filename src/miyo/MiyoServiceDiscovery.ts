@@ -91,6 +91,9 @@ export class MiyoServiceDiscovery {
     }
     const osModule = nodeRequire("os") as { homedir: () => string };
     const pathModule = nodeRequire("path") as { join: (...parts: string[]) => string };
+    // TODO: Add Windows (AppData/Local/Miyo) and Linux (~/.config/Miyo) paths when
+    // Miyo ships on those platforms. The Platform.isDesktopApp guard above prevents
+    // crashes on non-desktop, but doesn't distinguish between macOS/Windows/Linux.
     return pathModule.join(
       osModule.homedir(),
       "Library",
