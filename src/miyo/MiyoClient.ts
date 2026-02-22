@@ -104,6 +104,17 @@ export interface MiyoRelatedSearchResponse {
 }
 
 /**
+ * Response for Miyo document parsing endpoint.
+ */
+export interface MiyoParseDocResponse {
+  text: string;
+  format: string;
+  source_path: string;
+  title?: string;
+  page_count?: number;
+}
+
+/**
  * Search filters for Miyo queries.
  */
 export interface MiyoSearchFilter {
@@ -328,6 +339,20 @@ export class MiyoClient {
     return this.requestJson<MiyoRelatedSearchResponse>(baseUrl, "/v0/search/related", {
       method: "POST",
       body: payload,
+    });
+  }
+
+  /**
+   * Parse a local document via Miyo.
+   *
+   * @param baseUrl - Miyo base URL.
+   * @param path - Absolute local file path.
+   * @returns Parsed document response.
+   */
+  public async parseDoc(baseUrl: string, path: string): Promise<MiyoParseDocResponse> {
+    return this.requestJson<MiyoParseDocResponse>(baseUrl, "/v0/parse-doc", {
+      method: "POST",
+      body: { path },
     });
   }
 

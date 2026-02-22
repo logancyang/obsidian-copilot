@@ -2,14 +2,92 @@ import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { ProjectConfig } from "@/aiParams";
 import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
+import { MiyoClient } from "@/miyo/MiyoClient";
+import { isSelfHostModeValid } from "@/plusUtils";
+import { getSettings } from "@/settings/model";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
-import { Notice, TFile, Vault } from "obsidian";
+import { FileSystemAdapter, Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
 
 interface FileParser {
   supportedExtensions: string[];
   parseFile: (file: TFile, vault: Vault) => Promise<string>;
+}
+
+/**
+ * Resolve absolute file path for a vault file when supported by the adapter.
+ *
+ * @param file - Target file.
+ * @param vault - Obsidian vault instance.
+ * @returns Absolute file path or null when unavailable.
+ */
+function resolveAbsoluteFilePath(file: TFile, vault: Vault): string | null {
+  const adapter = vault.adapter;
+  if (adapter instanceof FileSystemAdapter) {
+    return adapter.getFullPath(file.path);
+  }
+
+  const adapterAny = adapter as unknown as { getFullPath?: (normalizedPath: string) => string };
+  if (typeof adapterAny.getFullPath === "function") {
+    return adapterAny.getFullPath(file.path);
+  }
+
+  return null;
+}
+
+/**
+ * Self-host PDF parser bridge using Miyo parse-doc endpoint.
+ */
+class SelfHostPdfParser {
+  private miyoClient: MiyoClient;
+
+  /**
+   * Create a new self-host PDF parser.
+   */
+  constructor() {
+    this.miyoClient = new MiyoClient();
+  }
+
+  /**
+   * Parse a PDF via Miyo when self-host mode is active.
+   *
+   * @param file - PDF file to parse.
+   * @param vault - Obsidian vault instance.
+   * @returns Parsed text when successful, otherwise null.
+   */
+  public async parsePdf(file: TFile, vault: Vault): Promise<string | null> {
+    const settings = getSettings();
+    if (!settings.enableMiyoSearch || file.extension.toLowerCase() !== "pdf") {
+      return null;
+    }
+
+    const absolutePath = resolveAbsoluteFilePath(file, vault);
+    if (!absolutePath) {
+      logWarn(
+        `[SelfHostPdfParser] Could not resolve absolute path for ${file.path}; cannot call Miyo parse-doc`
+      );
+      return null;
+    }
+
+    try {
+      const baseUrl = await this.miyoClient.resolveBaseUrl(settings.selfHostUrl);
+      const response = await this.miyoClient.parseDoc(baseUrl, absolutePath);
+      if (typeof response.text !== "string" || response.text.trim().length === 0) {
+        throw new Error("Miyo parse-doc returned empty text");
+      }
+
+      logInfo(`[SelfHostPdfParser] Parsed PDF via Miyo: ${file.path}`);
+      return response.text;
+    } catch (error) {
+      logWarn(
+        `[SelfHostPdfParser] Failed to parse ${file.path} via Miyo parse-doc: ${
+          error instanceof Error ? error.message : String(error)
+        }`
+      );
+      return null;
+    }
+  }
 }
 
 export class MarkdownParser implements FileParser {
@@ -24,10 +102,12 @@ export class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
   private brevilabsClient: BrevilabsClient;
   private pdfCache: PDFCache;
+  private selfHostPdfParser: SelfHostPdfParser;
 
   constructor(brevilabsClient: BrevilabsClient) {
     this.brevilabsClient = brevilabsClient;
     this.pdfCache = PDFCache.getInstance();
+    this.selfHostPdfParser = new SelfHostPdfParser();
   }
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
@@ -39,6 +119,25 @@ export class PDFParser implements FileParser {
       if (cachedResponse) {
         logInfo("Using cached PDF content for:", file.path);
         return cachedResponse.response;
+      }
+
+      const settings = getSettings();
+      if (
+        isSelfHostModeValid() &&
+        settings.enableMiyoSearch &&
+        file.extension.toLowerCase() === "pdf"
+      ) {
+        const selfHostPdfContent = await this.selfHostPdfParser.parsePdf(file, vault);
+        if (selfHostPdfContent !== null) {
+          await this.pdfCache.set(file, {
+            response: selfHostPdfContent,
+            elapsed_time_ms: 0,
+          });
+          return selfHostPdfContent;
+        }
+
+        logError(`[PDFParser] Miyo enabled but parse-doc failed for ${file.path}`);
+        return `[Error: Could not extract content from PDF ${file.basename}]`;
       }
 
       // If not in cache, read the file and call the API
