@@ -46,7 +46,7 @@ function createMockNodeRequire(
   config: MiyoServiceConfig,
   options?: {
     readFileError?: Error;
-    readFileByPath?: Record<string, string | Error>;
+    readFileByPath?: Record<string, string | Error | Array<string | Error>>;
     env?: Record<string, string | undefined>;
   }
 ): {
@@ -56,11 +56,14 @@ function createMockNodeRequire(
   const pathJoin = jest.fn((first: string, ...rest: string[]) => [first, ...rest].join("/"));
   const readFile = jest.fn(async (_path: string, _encoding: string) => {
     const pathOverride = options?.readFileByPath?.[_path];
-    if (pathOverride instanceof Error) {
-      throw pathOverride;
+    const resolvedOverride = Array.isArray(pathOverride)
+      ? (pathOverride.shift() ?? pathOverride[pathOverride.length - 1])
+      : pathOverride;
+    if (resolvedOverride instanceof Error) {
+      throw resolvedOverride;
     }
-    if (typeof pathOverride === "string") {
-      return pathOverride;
+    if (typeof resolvedOverride === "string") {
+      return resolvedOverride;
     }
     if (options?.readFileError) {
       throw options.readFileError;
@@ -196,6 +199,37 @@ describe("MiyoServiceDiscovery", () => {
 
     expect(baseUrl).toBe("http://127.0.0.1:8742");
     expect(modules.readFile).toHaveBeenCalledWith("/home/test/.config/Miyo/service.json", "utf8");
+  });
+
+  it("does not cache localhost fallback when discovery file appears later", async () => {
+    const missingFileError = Object.assign(new Error("not found"), { code: "ENOENT" });
+    const discoveredConfig: MiyoServiceConfig = {
+      host: "127.0.0.1",
+      port: 9000,
+      pid: 999,
+    };
+    const { nodeRequire, modules } = createMockNodeRequire(
+      "linux",
+      "/home/test",
+      discoveredConfig,
+      {
+        readFileByPath: {
+          "/home/test/.config/Miyo/service.json": [
+            missingFileError,
+            JSON.stringify(discoveredConfig),
+          ],
+        },
+      }
+    );
+    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+
+    const discovery = MiyoServiceDiscovery.getInstance();
+    const firstBaseUrl = await discovery.resolveBaseUrl();
+    const secondBaseUrl = await discovery.resolveBaseUrl();
+
+    expect(firstBaseUrl).toBe("http://127.0.0.1:8742");
+    expect(secondBaseUrl).toBe("http://127.0.0.1:9000");
+    expect(modules.readFile).toHaveBeenCalledTimes(2);
   });
 
   it("checks Roaming path on Windows when Local path is missing", async () => {

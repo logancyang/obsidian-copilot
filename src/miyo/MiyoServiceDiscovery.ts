@@ -62,7 +62,7 @@ export class MiyoServiceDiscovery {
     const serviceConfig = await this.readServiceConfig();
     if (serviceConfig === "missing") {
       const fallbackBaseUrl = this.getDefaultBaseUrl();
-      this.cachedBaseUrl = fallbackBaseUrl;
+      this.cachedBaseUrl = null;
       if (getSettings().debug) {
         logInfo(`Miyo service discovery file missing; using fallback ${fallbackBaseUrl}`);
       }
