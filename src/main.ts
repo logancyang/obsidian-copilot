@@ -58,7 +58,6 @@ import {
   Platform,
   Plugin,
   TFile,
-  TFolder,
   WorkspaceLeaf,
 } from "obsidian";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -68,6 +67,7 @@ import {
   extractChatTitle,
 } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
+import { listMarkdownFiles, patchFrontmatter, resolveFileByPath } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface
@@ -633,13 +633,8 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async getChatHistoryFiles(): Promise<TFile[]> {
-    const folder = this.app.vault.getAbstractFileByPath(getSettings().defaultSaveFolder);
-    if (!(folder instanceof TFolder)) {
-      return [];
-    }
-
-    const files = this.app.vault.getMarkdownFiles();
-    const folderFiles = files.filter((file) => file.path.startsWith(folder.path));
+    const folderFiles = await listMarkdownFiles(this.app, getSettings().defaultSaveFolder);
+    if (folderFiles.length === 0) return [];
 
     // Get current project ID if in a project
     const currentProject = getCurrentProject();
@@ -704,26 +699,29 @@ export default class CopilotPlugin extends Plugin {
         return;
       }
 
-      if (!this.app.fileManager?.processFrontMatter) {
-        return;
-      }
-
       let persistedAtMs = timestampToPersist;
 
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        // Monotonic protection: ensure we never write an older timestamp
-        const existingValue = Number(frontmatter.lastAccessedAt);
-        const existingAtMs =
-          Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
+      if (
+        this.app.fileManager?.processFrontMatter &&
+        this.app.vault.getAbstractFileByPath(file.path) != null
+      ) {
+        await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
+          // Monotonic protection: ensure we never write an older timestamp
+          const existingValue = Number(frontmatter.lastAccessedAt);
+          const existingAtMs =
+            Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
 
-        persistedAtMs = Math.max(existingAtMs, timestampToPersist);
+          persistedAtMs = Math.max(existingAtMs, timestampToPersist);
 
-        if (existingAtMs === persistedAtMs) {
-          return;
-        }
+          if (existingAtMs === persistedAtMs) {
+            return;
+          }
 
-        frontmatter.lastAccessedAt = persistedAtMs;
-      });
+          frontmatter.lastAccessedAt = persistedAtMs;
+        });
+      } else {
+        await patchFrontmatter(this.app, file.path, { lastAccessedAt: persistedAtMs });
+      }
 
       // Mark persistence successful for throttling purposes
       this.chatHistoryLastAccessedAtManager.markPersisted(file.path, persistedAtMs);
@@ -766,8 +764,8 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadChatById(fileId: string): Promise<void> {
-    const file = this.app.vault.getAbstractFileByPath(fileId);
-    if (file instanceof TFile) {
+    const file = await resolveFileByPath(this.app, fileId);
+    if (file) {
       await this.loadChatHistory(file);
     } else {
       throw new Error("Chat file not found.");
@@ -778,6 +776,10 @@ export default class CopilotPlugin extends Plugin {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
       await this.app.workspace.getLeaf(true).openFile(file);
+    } else if (await this.app.vault.adapter.exists(fileId)) {
+      new Notice(
+        "Cannot open source files from hidden directories. To open chat notes in the editor, save them to a non-hidden folder in settings."
+      );
     } else {
       throw new Error("Chat file not found.");
     }
@@ -813,6 +815,9 @@ export default class CopilotPlugin extends Plugin {
       });
 
       new Notice("Chat title updated.");
+    } else if (await resolveFileByPath(this.app, fileId)) {
+      await patchFrontmatter(this.app, fileId, { topic: newTitle.trim() });
+      new Notice("Chat title updated.");
     } else {
       throw new Error("Chat file not found.");
     }
@@ -822,6 +827,9 @@ export default class CopilotPlugin extends Plugin {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
       await this.app.vault.delete(file);
+      new Notice("Chat deleted.");
+    } else if (await this.app.vault.adapter.exists(fileId)) {
+      await this.app.vault.adapter.remove(fileId);
       new Notice("Chat deleted.");
     } else {
       throw new Error("Chat file not found.");
