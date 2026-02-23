@@ -181,8 +181,8 @@ export const CopilotPlusSettings: React.FC = () => {
                 description={
                   <div className="tw-flex tw-items-center tw-gap-1.5">
                     <span className="tw-leading-none">
-                      Use your own infrastructure for LLMs, embeddings (and local document
-                      understanding soon with our upcoming desktop app).
+                      Use your own infrastructure for LLMs, embeddings and local document
+                      understanding with our desktop app Miyo.
                     </span>
                     <HelpTooltip
                       content={
