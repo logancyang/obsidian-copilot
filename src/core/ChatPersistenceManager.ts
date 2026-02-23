@@ -12,7 +12,13 @@ import {
   getUtf8ByteLength,
   truncateToByteLimit,
 } from "@/utils";
-import { App, Notice, TFile, TFolder } from "obsidian";
+import {
+  isInVaultCache,
+  listMarkdownFiles,
+  patchFrontmatter,
+  readFrontmatterViaAdapter,
+} from "@/utils/vaultAdapterUtils";
+import { App, Notice, TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
@@ -64,8 +70,22 @@ export class ChatPersistenceManager {
       const existingFrontmatter = existingFile
         ? this.app.metadataCache.getFileCache(existingFile)?.frontmatter
         : undefined;
-      let existingTopic = existingFrontmatter?.topic;
-      const existingLastAccessedAt = existingFrontmatter?.lastAccessedAt;
+
+      let existingTopic: string | undefined = existingFrontmatter?.topic;
+      let existingLastAccessedAt: number | undefined = existingFrontmatter?.lastAccessedAt;
+
+      // For hidden directory files, metadataCache returns null — read frontmatter via adapter
+      if (existingFile && !existingFrontmatter) {
+        try {
+          const adapterFm = await readFrontmatterViaAdapter(this.app, existingFile.path);
+          if (adapterFm) {
+            if (adapterFm.topic) existingTopic = adapterFm.topic;
+            if (adapterFm.lastAccessedAt) existingLastAccessedAt = Number(adapterFm.lastAccessedAt);
+          }
+        } catch {
+          // Ignore — proceed without preserved frontmatter
+        }
+      }
 
       const preferredFileName = existingFile
         ? existingFile.path
@@ -80,12 +100,28 @@ export class ChatPersistenceManager {
       );
       let targetFile: TFile | null = existingFile;
 
-      if (existingFile) {
-        // If the file exists, update its content
+      // Check if existingFile is a real vault file (not a synthetic object for hidden dirs)
+      const existingFileIsReal =
+        existingFile != null && isInVaultCache(this.app, existingFile.path);
+
+      if (existingFile && existingFileIsReal) {
+        // If the file exists in the vault cache, update via vault API
         await this.app.vault.modify(existingFile, noteContent);
         logInfo(`[ChatPersistenceManager] Updated existing chat file: ${existingFile.path}`);
+      } else if (
+        !isInVaultCache(this.app, preferredFileName) &&
+        (await this.app.vault.adapter.exists(preferredFileName))
+      ) {
+        // File exists on disk but not in the vault cache.
+        // This happens when the save folder is a hidden directory (path starting with '.')
+        // because Obsidian's metadata cache does not index hidden paths.
+        await this.app.vault.adapter.write(preferredFileName, noteContent);
+        new Notice("Existing chat note found - updating it now.");
+        logInfo(
+          `[ChatPersistenceManager] Updated existing chat file via adapter: ${preferredFileName}`
+        );
       } else {
-        // If the file doesn't exist, create a new one
+        // File doesn't exist, create a new one
         try {
           targetFile = await this.app.vault.create(preferredFileName, noteContent);
           new Notice(`Chat saved as note: ${preferredFileName}`);
@@ -115,7 +151,12 @@ export class ChatPersistenceManager {
                 `[ChatPersistenceManager] Resolved save conflict by updating existing chat file: ${conflictFile.path}`
               );
             } else {
-              throw error;
+              // File exists on disk but not in vault cache (hidden directory)
+              await this.app.vault.adapter.write(preferredFileName, noteContent);
+              new Notice("Existing chat note found - updating it now.");
+              logInfo(
+                `[ChatPersistenceManager] Resolved save conflict via adapter: ${preferredFileName}`
+              );
             }
           } else if (this.isNameTooLongError(error)) {
             // Single fallback: minimal guaranteed-to-work filename with project prefix
@@ -154,7 +195,12 @@ export class ChatPersistenceManager {
                     `[ChatPersistenceManager] Resolved fallback save conflict by updating existing chat file: ${conflictFile.path}`
                   );
                 } else {
-                  throw fallbackError;
+                  // File exists on disk but not in vault cache (hidden directory)
+                  await this.app.vault.adapter.write(fallbackName, noteContent);
+                  new Notice("Existing chat note found - updating it now.");
+                  logInfo(
+                    `[ChatPersistenceManager] Resolved fallback save conflict via adapter: ${fallbackName}`
+                  );
                 }
               } else {
                 throw fallbackError;
@@ -178,7 +224,13 @@ export class ChatPersistenceManager {
    */
   async loadChat(file: TFile): Promise<ChatMessage[]> {
     try {
-      const content = await this.app.vault.read(file);
+      let content: string;
+      try {
+        content = await this.app.vault.read(file);
+      } catch {
+        // Fallback for hidden directory files not indexed by Obsidian
+        content = await this.app.vault.adapter.read(file.path);
+      }
       const messages = this.parseChatContent(content);
       logInfo(`[ChatPersistenceManager] Loaded ${messages.length} messages from ${file.path}`);
       return messages;
@@ -194,13 +246,8 @@ export class ChatPersistenceManager {
    */
   async getChatHistoryFiles(): Promise<TFile[]> {
     const settings = getSettings();
-    const folder = this.app.vault.getAbstractFileByPath(settings.defaultSaveFolder);
-    if (!(folder instanceof TFolder)) {
-      return [];
-    }
-
-    const files = this.app.vault.getMarkdownFiles();
-    const folderFiles = files.filter((file) => file.path.startsWith(folder.path));
+    const folderFiles = await listMarkdownFiles(this.app, settings.defaultSaveFolder);
+    if (folderFiles.length === 0) return [];
 
     // Get current project ID if in a project
     const currentProject = getCurrentProject();
@@ -481,12 +528,24 @@ export class ChatPersistenceManager {
     const files = await this.getChatHistoryFiles();
 
     for (const file of files) {
-      const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+      // Try metadata cache first (works for non-hidden directories)
+      let epochValue: unknown = this.app.metadataCache.getFileCache(file)?.frontmatter?.epoch;
+
+      // Fallback for hidden directory files: read frontmatter via adapter
+      if (epochValue === undefined) {
+        try {
+          const adapterFm = await readFrontmatterViaAdapter(this.app, file.path);
+          if (adapterFm?.epoch) epochValue = Number(adapterFm.epoch);
+        } catch {
+          continue;
+        }
+      }
+
       const frontmatterEpoch =
-        typeof frontmatter?.epoch === "number"
-          ? frontmatter.epoch
-          : typeof frontmatter?.epoch === "string"
-            ? Number(frontmatter.epoch)
+        typeof epochValue === "number"
+          ? epochValue
+          : typeof epochValue === "string"
+            ? Number(epochValue)
             : undefined;
       if (
         typeof frontmatterEpoch === "number" &&
@@ -708,19 +767,7 @@ ${chatContent}`;
    */
   private async applyTopicToFrontmatter(file: TFile, topic: string): Promise<void> {
     try {
-      if (!this.app.fileManager?.processFrontMatter) {
-        return;
-      }
-
-      const sanitizedTopic = topic.trim();
-
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        if (frontmatter.topic === sanitizedTopic) {
-          return;
-        }
-        frontmatter.topic = sanitizedTopic;
-      });
-
+      await patchFrontmatter(this.app, file.path, { topic: topic.trim() });
       logInfo(`[ChatPersistenceManager] Applied AI topic to chat file: ${file.path}`);
     } catch (error) {
       logError("[ChatPersistenceManager] Error applying AI topic to file:", error);

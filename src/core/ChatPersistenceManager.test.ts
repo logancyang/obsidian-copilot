@@ -97,6 +97,13 @@ describe("ChatPersistenceManager", () => {
         modify: jest.fn(),
         read: jest.fn(),
         getMarkdownFiles: jest.fn().mockReturnValue([]), // Default: no files
+        adapter: {
+          exists: jest.fn().mockResolvedValue(false),
+          read: jest.fn().mockResolvedValue(""),
+          write: jest.fn().mockResolvedValue(undefined),
+          list: jest.fn().mockResolvedValue({ files: [], folders: [] }),
+          stat: jest.fn().mockResolvedValue({ ctime: Date.now(), mtime: Date.now(), size: 0 }),
+        },
       },
       metadataCache: {
         getFileCache: jest.fn(),
@@ -374,6 +381,7 @@ Nature's quiet song`);
         path: "test-folder/Summarize_weather_data@20240923_221800.md",
       } as unknown as TFile;
       mockApp.vault.create.mockResolvedValue(mockFile);
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(mockFile);
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
       const frontmatterState: Record<string, unknown> = {};
       mockApp.fileManager.processFrontMatter.mockImplementation(
@@ -839,6 +847,7 @@ Nature's quiet song`);
       mockApp.metadataCache.getFileCache.mockReturnValue({
         frontmatter: { epoch: "1695513480000" },
       });
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
 
       await persistenceManager.saveChat("gpt-4");
 
@@ -951,6 +960,44 @@ Nature's quiet song`);
       );
       expect(mockApp.vault.create).toHaveBeenCalledTimes(1);
       expect(Notice).toHaveBeenCalledWith("Existing chat note found - updating it now.");
+
+      getFilesSpy.mockRestore();
+    });
+  });
+
+  describe("hidden directory support", () => {
+    it("should save via adapter when file exists on disk but not in vault cache", async () => {
+      const messages: ChatMessage[] = [
+        {
+          id: "1",
+          message: "Hello",
+          sender: USER_SENDER,
+          timestamp: {
+            epoch: 1695513480000,
+            display: "2024/09/23 22:18:00",
+            fileName: "2024_09_23_221800",
+          },
+          isVisible: true,
+        },
+      ];
+
+      const getFilesSpy = jest
+        .spyOn(persistenceManager, "getChatHistoryFiles")
+        .mockResolvedValue([]);
+
+      mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
+
+      // findFileByEpoch returns null, but file exists on disk (hidden dir)
+      mockApp.vault.adapter.exists.mockResolvedValue(true);
+
+      await persistenceManager.saveChat("gpt-4");
+
+      // Should write via adapter, not vault.create
+      expect(mockApp.vault.adapter.write).toHaveBeenCalledWith(
+        expect.stringContaining("test-folder/"),
+        expect.stringContaining("**user**: Hello")
+      );
+      expect(mockApp.vault.create).not.toHaveBeenCalled();
 
       getFilesSpy.mockRestore();
     });
@@ -1498,6 +1545,7 @@ tags:
           lastAccessedAt: 1700000000000, // Existing lastAccessedAt
         },
       });
+      mockApp.vault.getAbstractFileByPath.mockReturnValue(existingFile);
 
       await persistenceManager.saveChat("gpt-4");
 
