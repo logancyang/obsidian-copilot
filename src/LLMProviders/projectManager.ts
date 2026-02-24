@@ -17,7 +17,7 @@ import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getSettings, subscribeToSettingsChange, updateSetting } from "@/settings/model";
-import { FileParserManager } from "@/tools/FileParserManager";
+import { FileParserManager, saveConvertedDocOutput } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
@@ -810,6 +810,9 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
 
     let processedNonMdCount = 0;
 
+    // TODO: Add batch progress feedback (e.g. Notice or status bar update) so users
+    // know how many files remain. Consider bounded concurrency (e.g. p-limit) instead
+    // of sequential processing for faster throughput on large vaults.
     for (const file of nonMarkdownFiles) {
       const filePath = file.path;
       if (this.fileParserManager.supportsExtension(file.extension)) {
@@ -820,6 +823,8 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
               filePath
             );
             if (existingContent) {
+              // Export cached content when the output folder is enabled
+              await saveConvertedDocOutput(file, existingContent, this.app.vault);
               processedNonMdCount++;
             } else {
               logInfo(

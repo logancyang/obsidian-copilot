@@ -122,6 +122,19 @@ export const CopilotPlusSettings: React.FC = () => {
             </>
           )}
 
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Document Processor</div>
+
+          <SettingItem
+            type="text"
+            title="Store converted markdown at"
+            description="When PDFs and other documents are processed, the converted markdown is saved to this folder. Leave empty to skip saving."
+            value={settings.convertedDocOutputFolder}
+            onChange={(value) => {
+              updateSetting("convertedDocOutputFolder", value);
+            }}
+            placeholder="e.g. copilot/converteddocs"
+          />
+
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory (experimental)</div>
 
           <SettingItem

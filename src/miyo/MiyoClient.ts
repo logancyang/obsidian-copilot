@@ -409,6 +409,9 @@ export class MiyoClient {
       ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
     });
 
+    // TODO: Add a configurable timeout for large file parsing (e.g. big PDFs).
+    // Obsidian's requestUrl does not expose a timeout option, so consider using
+    // AbortController or a wrapper with Promise.race to prevent indefinite hangs.
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,
