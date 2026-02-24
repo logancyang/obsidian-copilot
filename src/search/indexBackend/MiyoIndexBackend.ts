@@ -1,7 +1,7 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Embeddings } from "@langchain/core/embeddings";
 import { App, Notice } from "obsidian";
-import { CustomError } from "@/error";
+import { CustomError, UserCancelledError } from "@/error";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoUpsertDocument } from "@/miyo/MiyoClient";
 import { getMiyoSourceId } from "@/miyo/miyoUtils";
@@ -50,19 +50,23 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    * @param _embeddingInstance - Embeddings instance (unused for Miyo clear).
    */
   public async clearIndex(_embeddingInstance: Embeddings | undefined): Promise<void> {
-    await new Promise<void>((resolve) => {
+    await new Promise<void>((resolve, reject) => {
       new ConfirmModal(
         this.app,
         async () => {
-          const baseUrl = await this.getBaseUrl();
-          await this.client.clearIndex(baseUrl, this.getSourceId());
-          resolve();
+          try {
+            const baseUrl = await this.getBaseUrl();
+            await this.client.clearIndex(baseUrl, this.getSourceId());
+            resolve();
+          } catch (e) {
+            reject(e);
+          }
         },
         "This will permanently delete all indexed documents from the Miyo semantic search index for this vault. This action cannot be undone.\n\nAre you sure you want to clear the entire index?",
         "Clear Semantic Index",
         "Clear Index",
         "Cancel",
-        resolve
+        () => reject(new UserCancelledError())
       ).open();
     });
   }

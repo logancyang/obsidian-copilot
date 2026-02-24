@@ -1,6 +1,7 @@
 import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
+import { UserCancelledError } from "@/error";
 import { logError } from "@/logger";
 import {
   clearRecordedPromptPayload,
@@ -179,8 +180,10 @@ export function registerCommands(
       await VectorStoreManager.getInstance().clearIndex();
       new Notice("Cleared local Copilot semantic index.");
     } catch (err) {
-      logError("Error clearing semantic index:", err);
-      new Notice("Failed to clear semantic index.");
+      if (!(err instanceof UserCancelledError)) {
+        logError("Error clearing semantic index:", err);
+        new Notice("Failed to clear semantic index.");
+      }
     }
   });
 
