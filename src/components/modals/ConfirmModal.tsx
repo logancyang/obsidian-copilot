@@ -37,6 +37,7 @@ function ConfirmModalContent({
 
 export class ConfirmModal extends Modal {
   private root: Root;
+  private confirmed = false;
 
   constructor(
     app: App,
@@ -44,7 +45,8 @@ export class ConfirmModal extends Modal {
     private content: string,
     title: string,
     private confirmButtonText: string = "Continue",
-    private cancelButtonText: string = "Cancel"
+    private cancelButtonText: string = "Cancel",
+    private onCancel?: () => void
   ) {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
@@ -57,6 +59,7 @@ export class ConfirmModal extends Modal {
     this.root = createRoot(contentEl);
 
     const handleConfirm = () => {
+      this.confirmed = true;
       this.onConfirm();
       this.close();
     };
@@ -77,6 +80,9 @@ export class ConfirmModal extends Modal {
   }
 
   onClose() {
+    if (!this.confirmed) {
+      this.onCancel?.();
+    }
     this.root.unmount();
   }
 }
