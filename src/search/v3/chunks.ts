@@ -2,6 +2,7 @@ import { logInfo, logWarn } from "@/logger";
 import { CHUNK_SIZE } from "@/constants";
 import { App, TFile } from "obsidian";
 import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { MemoryManager } from "./utils/MemoryManager";
 
 /**
  * Chunk interface for unified search system
@@ -558,7 +559,7 @@ export class ChunkManager {
    */
   private calculateChunkBytes(chunks: Chunk[]): number {
     return chunks.reduce((total, chunk) => {
-      return total + Buffer.byteLength(chunk.content, "utf8");
+      return total + MemoryManager.getByteSize(chunk.content);
     }, 0);
   }
 
