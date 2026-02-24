@@ -241,6 +241,17 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 - Test files adjacent to implementation (`.test.ts`)
 - Use `@testing-library/react` for component testing
 
+### Avoiding Deep Dependency Chains in Tests
+
+This codebase has deep transitive import chains (e.g. a utility → cache → searchUtils → embeddingManager → brevilabsClient → plusUtils → Modal). Importing any module in this chain from a test requires mocking the entire tree, which is brittle and verbose.
+
+**Rules for new code:**
+
+1. **Pass data, not services** — If a function only needs a string (like `outputFolder`), accept it as a parameter. Don't give it access to the entire settings singleton.
+2. **Singletons at the edges only** — `getSettings()`, `PDFCache.getInstance()`, `BrevilabsClient.getInstance()` should only be called in top-level orchestration (constructors, main entry points). Inner functions receive what they need as parameters.
+3. **Pure logic in leaf modules** — Extract testable logic into small files with minimal imports. The orchestration file (which has heavy imports) calls the leaf function and passes in the dependencies. See `src/tools/convertedDocOutput.ts` as an example.
+4. **Litmus test before writing a function** — "Can I test this by calling it directly with plain arguments?" If the answer is no because of an import, that dependency should be a parameter instead.
+
 ## Development Session Planning
 
 ### Using TODO.md for Session Management

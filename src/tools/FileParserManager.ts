@@ -6,6 +6,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/convertedDocOutput";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
 import { FileSystemAdapter, Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
@@ -13,6 +14,18 @@ import { CanvasLoader } from "./CanvasLoader";
 interface FileParser {
   supportedExtensions: string[];
   parseFile: (file: TFile, vault: Vault) => Promise<string>;
+}
+
+/**
+ * Thin wrapper that reads the output folder from settings and delegates to the pure function.
+ */
+export async function saveConvertedDocOutput(
+  file: TFile,
+  content: string,
+  vault: Vault
+): Promise<void> {
+  const outputFolder = getSettings().convertedDocOutputFolder ?? "";
+  await saveConvertedDocOutputCore(file, content, vault, outputFolder);
 }
 
 /**
@@ -36,6 +49,9 @@ function resolveAbsoluteFilePath(file: TFile, vault: Vault): string | null {
   return null;
 }
 
+/** Result from SelfHostPdfParser: null = not applicable, { content } = success, { error } = tried and failed. */
+type MiyoParseResult = { content: string } | { error: string } | null;
+
 /**
  * Self-host PDF parser bridge using Miyo parse-doc endpoint.
  */
@@ -54,9 +70,9 @@ class SelfHostPdfParser {
    *
    * @param file - PDF file to parse.
    * @param vault - Obsidian vault instance.
-   * @returns Parsed text when successful, otherwise null.
+   * @returns Content on success, error reason on failure, or null when not applicable.
    */
-  public async parsePdf(file: TFile, vault: Vault): Promise<string | null> {
+  public async parsePdf(file: TFile, vault: Vault): Promise<MiyoParseResult> {
     const settings = getSettings();
     if (!settings.enableMiyo || file.extension.toLowerCase() !== "pdf") {
       return null;
@@ -64,28 +80,22 @@ class SelfHostPdfParser {
 
     const absolutePath = resolveAbsoluteFilePath(file, vault);
     if (!absolutePath) {
-      logWarn(
-        `[SelfHostPdfParser] Could not resolve absolute path for ${file.path}; cannot call Miyo parse-doc`
-      );
-      return null;
+      return { error: "Could not resolve absolute file path for Miyo parse-doc" };
     }
 
     try {
       const baseUrl = await this.miyoClient.resolveBaseUrl(settings.selfHostUrl);
       const response = await this.miyoClient.parseDoc(baseUrl, absolutePath);
       if (typeof response.text !== "string" || response.text.trim().length === 0) {
-        throw new Error("Miyo parse-doc returned empty text");
+        return { error: "Miyo parse-doc returned empty text" };
       }
 
       logInfo(`[SelfHostPdfParser] Parsed PDF via Miyo: ${file.path}`);
-      return response.text;
+      return { content: response.text };
     } catch (error) {
-      logWarn(
-        `[SelfHostPdfParser] Failed to parse ${file.path} via Miyo parse-doc: ${
-          error instanceof Error ? error.message : String(error)
-        }`
-      );
-      return null;
+      const reason = error instanceof Error ? error.message : String(error);
+      logWarn(`[SelfHostPdfParser] Failed to parse ${file.path} via Miyo parse-doc: ${reason}`);
+      return { error: reason };
     }
   }
 }
@@ -118,22 +128,28 @@ export class PDFParser implements FileParser {
       const cachedResponse = await this.pdfCache.get(file);
       if (cachedResponse) {
         logInfo("Using cached PDF content for:", file.path);
+        // Ensure output file exists even on cache hit (user may have just enabled the setting)
+        await saveConvertedDocOutput(file, cachedResponse.response, vault);
         return cachedResponse.response;
       }
 
       const settings = getSettings();
       if (isSelfHostModeValid() && settings.enableMiyo && file.extension.toLowerCase() === "pdf") {
-        const selfHostPdfContent = await this.selfHostPdfParser.parsePdf(file, vault);
-        if (selfHostPdfContent !== null) {
+        const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
+        if (miyoResult && "content" in miyoResult) {
           await this.pdfCache.set(file, {
-            response: selfHostPdfContent,
+            response: miyoResult.content,
             elapsed_time_ms: 0,
           });
-          return selfHostPdfContent;
+          await saveConvertedDocOutput(file, miyoResult.content, vault);
+          return miyoResult.content;
         }
 
-        logError(`[PDFParser] Miyo enabled but parse-doc failed for ${file.path}`);
-        return `[Error: Could not extract content from PDF ${file.basename}]`;
+        if (miyoResult && "error" in miyoResult) {
+          // Self-host mode: do NOT fall back to cloud API to preserve privacy.
+          logWarn(`[PDFParser] Miyo parse failed for ${file.path}: ${miyoResult.error}`);
+          return `[Error: Could not extract content from PDF ${file.basename}. ${miyoResult.error}]`;
+        }
       }
 
       // If not in cache, read the file and call the API
@@ -141,6 +157,7 @@ export class PDFParser implements FileParser {
       logInfo("Calling pdf4llm API for:", file.path);
       const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
       await this.pdfCache.set(file, pdf4llmResponse);
+      await saveConvertedDocOutput(file, pdf4llmResponse.response, vault);
       return pdf4llmResponse.response;
     } catch (error) {
       logError(`Error extracting content from PDF ${file.path}:`, error);
@@ -281,6 +298,7 @@ export class Docs4LLMParser implements FileParser {
   ];
   private brevilabsClient: BrevilabsClient;
   private projectContextCache: ProjectContextCache;
+  private selfHostPdfParser: SelfHostPdfParser;
   private currentProject: ProjectConfig | null;
   private static lastRateLimitNoticeTime: number = 0;
 
@@ -291,6 +309,7 @@ export class Docs4LLMParser implements FileParser {
   constructor(brevilabsClient: BrevilabsClient, project: ProjectConfig | null = null) {
     this.brevilabsClient = brevilabsClient;
     this.projectContextCache = ProjectContextCache.getInstance();
+    this.selfHostPdfParser = new SelfHostPdfParser();
     this.currentProject = project;
   }
 
@@ -313,11 +332,39 @@ export class Docs4LLMParser implements FileParser {
         logInfo(
           `[Docs4LLMParser] Project ${this.currentProject.name}: Using cached content for: ${file.path}`
         );
+        // Ensure output file exists even on cache hit (user may have just enabled the setting)
+        await saveConvertedDocOutput(file, cachedContent, vault);
         return cachedContent;
       }
       logInfo(
         `[Docs4LLMParser] Project ${this.currentProject.name}: Cache miss for: ${file.path}. Proceeding to API call.`
       );
+
+      // For PDFs, try Miyo first when self-host mode is active
+      if (
+        isSelfHostModeValid() &&
+        getSettings().enableMiyo &&
+        file.extension.toLowerCase() === "pdf"
+      ) {
+        const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
+        if (miyoResult && "content" in miyoResult) {
+          await this.projectContextCache.setFileContext(
+            this.currentProject,
+            file.path,
+            miyoResult.content
+          );
+          await saveConvertedDocOutput(file, miyoResult.content, vault);
+          logInfo(
+            `[Docs4LLMParser] Project ${this.currentProject.name}: Parsed PDF via Miyo: ${file.path}`
+          );
+          return miyoResult.content;
+        }
+        if (miyoResult && "error" in miyoResult) {
+          // Self-host mode: do NOT fall back to cloud API to preserve privacy.
+          // Throw so executeWithProcessTracking marks this file as failed/retriable.
+          throw new Error(`Miyo failed to parse ${file.basename}: ${miyoResult.error}`);
+        }
+      }
 
       const binaryContent = await vault.readBinary(file);
 
@@ -366,6 +413,7 @@ export class Docs4LLMParser implements FileParser {
 
       // Cache the converted content
       await this.projectContextCache.setFileContext(this.currentProject, file.path, content);
+      await saveConvertedDocOutput(file, content, vault);
 
       logInfo(
         `[Docs4LLMParser] Project ${this.currentProject.name}: Successfully processed and cached: ${file.path}`
@@ -423,18 +471,13 @@ class DocxParser implements FileParser {
 
 export class FileParserManager {
   private parsers: Map<string, FileParser> = new Map();
-  private isProjectMode: boolean;
-  private currentProject: ProjectConfig | null;
 
   constructor(
     brevilabsClient: BrevilabsClient,
-    vault: Vault,
+    _vault: Vault,
     isProjectMode: boolean = false,
     project: ProjectConfig | null = null
   ) {
-    this.isProjectMode = isProjectMode;
-    this.currentProject = project;
-
     // Register parsers
     this.registerParser(new MarkdownParser());
 

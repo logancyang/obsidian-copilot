@@ -193,6 +193,8 @@ export interface CopilotSettings {
   defaultSystemPromptTitle: string;
   /** Token threshold for auto-compacting large context (range: 64k-1M tokens, default: 128000) */
   autoCompactThreshold: number;
+  /** Folder where converted document markdown files are saved */
+  convertedDocOutputFolder: string;
 }
 
 export const settingsStore = createStore();
