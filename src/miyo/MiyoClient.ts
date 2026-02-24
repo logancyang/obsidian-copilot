@@ -166,11 +166,13 @@ export class MiyoClient {
       const health = await this.requestJson<{ status?: string }>(baseUrl, "/v0/health", {
         method: "GET",
       });
-      return health?.status === "ok";
-    } catch (error) {
-      if (getSettings().debug) {
-        logWarn(`Miyo backend availability check failed: ${err2String(error)}`);
+      if (health?.status !== "ok") {
+        logWarn(`Miyo health check failed: status="${health?.status ?? "unknown"}"`);
+        return false;
       }
+      return true;
+    } catch (error) {
+      logWarn(`Miyo backend availability check failed: ${err2String(error)}`);
       return false;
     }
   }
