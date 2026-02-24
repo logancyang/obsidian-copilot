@@ -1,5 +1,45 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.3 🚀🚀🚀
+
+A quick fix for **Miyo on Windows**, **converted doc output**, and **CORS fixes**.
+
+- 🖥️ **Cross-platform Miyo service discovery** — Miyo now works on **Windows** (Local + Roaming AppData fallback) (@wenzhengjiang)
+- 📂 **Configurable output folder for converted docs** — New setting "Store converted markdown at" lets you save PDF/doc conversions as `.md` files in your vault. Great for reviewing what Copilot parsed and let Miyo index them for search! Enable it under Document Processor (Copilot settings -> Plus). (@logancyang)
+- 🛠️ **Fix: CORS errors on license & API calls** — Resolved intermittent CORS failures by routing BrevilabsClient through Obsidian's native request layer. If you saw license validation errors, this should fix it. (@logancyang)
+- 🩺 **Fix: Miyo health check logging** — Non-"ok" health statuses (e.g. "degraded") are now properly logged instead of failing silently, making troubleshooting much easier. (@wenzhengjiang)
+- 📝 Minor: Fixed broken FAQ link in README (@somethingSTRANGE), updated Miyo messaging from "upcoming" to "our desktop app" (@logancyang)
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
+# Copilot for Obsidian - Release v3.2.2 🚀🚀🚀
+
+**Miyo** - our new desktop app has landed!!! **Self-Host Mode** gets even more powerful! This release brings a powerful semantic search engine running on your desktop (Miyo), self-host web search & YouTube support, and major indexing stability improvements.
+
+- 🧠 **Miyo Integration** — A brand new semantic index backend for smarter, faster search! (thanks to months of hard work by @wenzhengjiang 🔥🔥🔥)
+  - ✨ **Backend + retriever integration**: Miyo powers a next-gen retrieval pipeline for Copilot.
+  - 📄 **Document parsing & PDF support**: Miyo document parsing with built-in PDF parse-doc integration.
+  - 🔒 **Privacy, dedup & architecture hardening**: Comprehensive review findings addressed for a production-ready Miyo experience.
+- 🌐 **Self-Host Web Search & YouTube** — Bring your own **Firecrawl**/**Perplexity** for web search and **Supadata** for YouTube processing, fully self-hosted! No more reliance on external services for these features. (@logancyang)
+- 💡 gemini-3 preview models no longer throw "This model does not support images" for image inputs (@logancyang)
+- 🥷 Support saving chat in hidden folders (@logancyang)
+- 🎨 **Improved badge UI**: Close button moved to a clean left icon overlay on hover, addressing our user feedback. (@zeroliu)
+- ⚡ **`streamUsage` config** for 3rd-party OpenAI-format providers — enables token usage tracking for compatible providers. (@wotan-allfather)
+
+Some latest models are added to the builtin model list such as gemini 3.1 pro, don't forget to click "Refresh Built-in Models" to get them!
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.1
 
 A patch release with search improvements and bug fixes.
