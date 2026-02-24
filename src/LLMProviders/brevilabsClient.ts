@@ -4,6 +4,7 @@ import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
+import { safeFetchNoThrow } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 
 export interface RerankResponse {
@@ -115,15 +116,16 @@ export class BrevilabsClient {
         url.searchParams.append(key, value as string);
       });
     }
-    const response = await fetch(url.toString(), {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "X-Client-Version": this.pluginVersion,
+    };
+    if (!excludeAuthHeader) {
+      headers.Authorization = `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`;
+    }
+    const response = await safeFetchNoThrow(url.toString(), {
       method,
-      headers: {
-        "Content-Type": "application/json",
-        ...(!excludeAuthHeader && {
-          Authorization: `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`,
-        }),
-        "X-Client-Version": this.pluginVersion,
-      },
+      headers,
       ...(method === "POST" && { body: JSON.stringify(body) }),
     });
     const data = await response.json();
