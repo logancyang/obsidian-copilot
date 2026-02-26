@@ -4,7 +4,7 @@ import { processPrompt } from "@/commands/customCommandUtils";
 import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";
 import { compactXmlBlock, getL2RefetchInstruction } from "@/context/L2ContextCompactor";
-import { CONTEXT_BLOCK_TYPES, detectBlockTag } from "@/context/contextBlockRegistry";
+import { CONTEXT_BLOCK_TYPES } from "@/context/contextBlockRegistry";
 import { parseContextIntoSegments } from "@/context/parseContextSegments";
 import {
   PromptContextEnvelope,
@@ -409,7 +409,13 @@ export class ContextManager {
         if (i >= mostRecentCompactedIndex) {
           for (const segment of l3Layer.segments || []) {
             if (segment.content) {
+              // compactSegmentForL2 handles per-block filtering of non-recoverable
+              // (ephemeral) blocks like selected_text / web_selected_text, so they
+              // don't persist into L2 and shadow the current turn's fresh context.
               const compacted = this.compactSegmentForL2(segment.content);
+              if (!compacted.trim()) {
+                continue;
+              }
               // Deduplicate by segment ID: later turns overwrite earlier ones
               if (!l2SegmentMap.has(segment.id)) {
                 l2SegmentOrder.push(segment.id);
@@ -441,8 +447,10 @@ export class ContextManager {
     // Build the L2 context string in insertion order (deduplicated)
     const l2Content = l2SegmentOrder.map((id) => l2SegmentMap.get(id)!).join("\n");
 
-    // Append re-fetch instruction if there's any L2 content with prior_context blocks
-    const hasCompactedContent = l2Content.includes("<prior_context ");
+    // Reason: Match only compactor-produced <prior_context source="..."> blocks.
+    // Requiring the source= attribute avoids false-positives from <prior_context_note>
+    // and literal XML examples in unescaped user note content.
+    const hasCompactedContent = /<prior_context\s+source=/.test(l2Content);
     const l2Context = hasCompactedContent
       ? l2Content + "\n\n" + getL2RefetchInstruction()
       : l2Content;
@@ -693,43 +701,55 @@ export class ContextManager {
   /**
    * Compact an L3 segment's content for inclusion in L2 (previous turn context).
    *
-   * Large content is compacted by extracting structure (headings) and previews
-   * from each section. Small content and selected text are kept verbatim.
-   * A single re-fetch instruction is appended at the L2 level (not per-block).
-   *
-   * Handles multiple concatenated XML blocks of different types (e.g., web_tab_context
-   * mixed with youtube_video_context) by finding and compacting each block independently.
+   * Uses a single-pass approach: matches all top-level registered blocks and
+   * decides per-block whether to strip, compact, or pass through. This avoids
+   * penetrating into nested content (e.g. literal `<selected_text>` inside a
+   * note's `<content>`). Inter-block text and unknown tags pass through untouched.
    *
    * @param content - The segment content (one or more XML blocks)
-   * @returns Compacted content for L2
+   * @returns Compacted content for L2, or empty string if all blocks were filtered
    */
   private compactSegmentForL2(content: string): string {
-    // Build a regex that matches any known block type
-    const blockTags = CONTEXT_BLOCK_TYPES.map((bt) => bt.tag).join("|");
-    const allBlocksRegex = new RegExp(`<(${blockTags})[^>]*>[\\s\\S]*?</\\1>`, "g");
+    // Reason: Build a single regex matching all known top-level block types plus
+    // compaction artifacts (prior_context / prior_context_note). Each match is
+    // handled as a whole unit, so nested literal tags inside <content> are never
+    // independently targeted.
+    const allTags = [
+      ...CONTEXT_BLOCK_TYPES.map((bt) => bt.tag),
+      "prior_context",
+      "prior_context_note",
+    ].join("|");
+    const blockRegex = new RegExp(`<(${allTags})(\\s[^>]*)?>[\\s\\S]*?</\\1>`, "g");
 
-    const blocks = content.match(allBlocksRegex);
+    const result = content.replace(blockRegex, (block, tag) => {
+      // Non-recoverable blocks (selected_text, web_selected_text) are turn-scoped
+      // and must not persist into L2.
+      const blockType = CONTEXT_BLOCK_TYPES.find((bt) => bt.tag === tag);
+      if (blockType && !blockType.recoverable) {
+        return "";
+      }
 
-    if (!blocks || blocks.length === 0) {
-      // No recognized XML blocks, return as-is
-      return content;
-    }
+      // prior_context_note is appended once at the L2 level by the caller,
+      // so embedded copies are stripped to avoid duplicates.
+      if (tag === "prior_context_note") {
+        return "";
+      }
 
-    if (blocks.length === 1) {
-      // Single block - detect type and compact
-      const blockType = detectBlockTag(blocks[0]);
-      if (!blockType) return content;
-      return compactXmlBlock(blocks[0], blockType);
-    }
+      // prior_context blocks pass through unchanged (already compacted).
+      if (tag === "prior_context") {
+        return block;
+      }
 
-    // Multiple blocks found - compact each one independently
-    const compactedBlocks = blocks.map((block) => {
-      const blockType = detectBlockTag(block);
-      if (!blockType) return block;
-      return compactXmlBlock(block, blockType);
+      // Recoverable registered blocks get compacted.
+      if (blockType) {
+        return compactXmlBlock(block, tag);
+      }
+
+      // Unknown tags pass through unchanged.
+      return block;
     });
 
-    return compactedBlocks.join("\n\n");
+    return result.trim();
   }
 }
 
