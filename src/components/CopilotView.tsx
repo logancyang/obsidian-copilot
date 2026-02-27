@@ -63,6 +63,17 @@ export default class CopilotView extends ItemView {
     this.renderView(handleSaveAsNote, updateUserMessageHistory);
     this.setupMobileKeyboardObserver();
     this.setupDrawerHideObserver();
+
+    // Reason: The view can move between containers (e.g. editor tab → drawer)
+    // without onOpen firing again. Re-bind the drawer observer on layout changes
+    // so it always watches the correct drawer element.
+    // Deferred to next frame so the current observer can catch in-flight class mutations
+    // before we disconnect and rebind.
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        requestAnimationFrame(() => this.setupDrawerHideObserver());
+      })
+    );
   }
 
   /**
@@ -127,17 +138,13 @@ export default class CopilotView extends ItemView {
     const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
     if (!drawer) return;
 
-    // Reason: Track previous state so we only fire once on the visible → hidden transition,
-    // not on every class mutation while the drawer remains hidden.
     let wasHidden = drawer.classList.contains("is-hidden");
 
     this.drawerHideObserver = new MutationObserver(() => {
       const isHidden = drawer.classList.contains("is-hidden");
       if (isHidden && !wasHidden) {
         // Reason: Radix's dismissable-layer listens for Escape in capture phase on
-        // document, so this will close the topmost open Radix layer. In practice this
-        // is safe because the back-button transition only fires when the user is leaving
-        // the drawer, and no other Radix layers should be open at that moment.
+        // document, so this will close the topmost open Radix layer.
         this.containerEl.dispatchEvent(
           new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
         );
