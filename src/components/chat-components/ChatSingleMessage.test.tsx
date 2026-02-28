@@ -41,7 +41,10 @@ jest.mock("obsidian", () => {
     MarkdownRenderer: {
       renderMarkdown,
     },
-    Component: class {},
+    Component: class {
+      load() {}
+      unload() {}
+    },
     MarkdownView: class {},
     TFile: class {},
     App: class {},
