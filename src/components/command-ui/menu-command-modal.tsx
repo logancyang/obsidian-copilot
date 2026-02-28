@@ -1,5 +1,7 @@
 import * as React from "react";
+import { useEffect, useRef } from "react";
 import { Send } from "lucide-react";
+import { Platform } from "obsidian";
 import { DraggableModal } from "./draggable-modal";
 import { CommandLabel } from "./command-label";
 import { SelectedContent } from "./selected-content";
@@ -97,6 +99,47 @@ export function MenuCommandModal({
   const isEditable =
     contentState.type === "result" && !contentState.isStreaming && !!onEditableContentChange;
 
+  // Ref to an element inside this modal, used to resolve ownerDocument and scope shortcuts
+  const innerRef = useRef<HTMLDivElement>(null);
+
+  // Keyboard shortcuts: Ctrl+Enter → Replace, Ctrl+Shift+Enter → Insert
+  // Mirrors DraggableModal's Escape handling: uses ownerDocument for popout windows,
+  // and scopes to the focused modal to avoid firing across multiple open modals.
+  useEffect(() => {
+    if (!open) return;
+
+    const modalEl = innerRef.current?.closest<HTMLElement>('[data-copilot-draggable-modal="true"]');
+    const ownerDocument = modalEl?.ownerDocument ?? document;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Only handle when result is ready and not busy
+      if (actionState !== "result") return;
+
+      const modKey = Platform.isMacOS ? e.metaKey : e.ctrlKey;
+      if (e.key !== "Enter" || !modKey) return;
+
+      // Scope to focused modal: only handle if active element is inside this modal.
+      // Avoid `instanceof Element` — it fails cross-realm (popout windows have their own Element).
+      const activeEl = ownerDocument.activeElement;
+      if (modalEl && (!activeEl || !modalEl.contains(activeEl))) return;
+
+      if (e.shiftKey) {
+        // Ctrl/Cmd + Shift + Enter → Insert
+        e.preventDefault();
+        e.stopPropagation();
+        onInsert?.();
+      } else {
+        // Ctrl/Cmd + Enter → Replace
+        e.preventDefault();
+        e.stopPropagation();
+        onReplace?.();
+      }
+    };
+
+    ownerDocument.addEventListener("keydown", handleKeyDown);
+    return () => ownerDocument.removeEventListener("keydown", handleKeyDown);
+  }, [open, actionState, onInsert, onReplace]);
+
   // Conditionally show ContentArea based on hideContentAreaOnIdle prop
   const showContentArea = hideContentAreaOnIdle ? contentState.type !== "idle" : true;
 
@@ -149,7 +192,10 @@ export function MenuCommandModal({
       />
 
       {/* Bottom Toolbar - flex-none */}
-      <div className="tw-flex tw-flex-none tw-items-center tw-justify-between tw-border-t tw-border-border tw-px-4 tw-py-3">
+      <div
+        ref={innerRef}
+        className="tw-flex tw-flex-none tw-items-center tw-justify-between tw-border-t tw-border-border tw-px-4 tw-py-3"
+      >
         <div className="tw-flex tw-items-center tw-gap-3">
           <ModelSelector
             size="sm"
