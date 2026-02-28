@@ -18,6 +18,7 @@ export default class CopilotView extends ItemView {
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private keyboardObserver: MutationObserver | null = null;
+  private drawerHideObserver: MutationObserver | null = null;
   private lastDrawerEl: HTMLElement | null = null;
   eventTarget: EventTarget;
 
@@ -61,6 +62,18 @@ export default class CopilotView extends ItemView {
 
     this.renderView(handleSaveAsNote, updateUserMessageHistory);
     this.setupMobileKeyboardObserver();
+    this.setupDrawerHideObserver();
+
+    // Reason: The view can move between containers (e.g. editor tab → drawer)
+    // without onOpen firing again. Re-bind the drawer observer on layout changes
+    // so it always watches the correct drawer element.
+    // Deferred to next frame so the current observer can catch in-flight class mutations
+    // before we disconnect and rebind.
+    this.registerEvent(
+      this.app.workspace.on("layout-change", () => {
+        requestAnimationFrame(() => this.setupDrawerHideObserver());
+      })
+    );
   }
 
   /**
@@ -106,6 +119,43 @@ export default class CopilotView extends ItemView {
 
     // Reason: Sync initial state in case keyboard is already open when view opens
     syncKeyboardClass();
+  }
+
+  /**
+   * Close any open Radix popovers when the mobile drawer hides.
+   *
+   * Reason: Radix popovers are portaled to document.body. When the user presses
+   * the mobile back button, Obsidian hides the drawer (adds `is-hidden` class)
+   * but the popover stays open and jumps to (0,0) because its anchor disappears.
+   * Dispatching Escape on the container lets Radix's dismissable-layer close
+   * popovers whose triggers live inside this view, without affecting unrelated UI.
+   */
+  private setupDrawerHideObserver(): void {
+    if (!Platform.isMobile) return;
+
+    this.drawerHideObserver?.disconnect();
+
+    const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+    if (!drawer) return;
+
+    let wasHidden = drawer.classList.contains("is-hidden");
+
+    this.drawerHideObserver = new MutationObserver(() => {
+      const isHidden = drawer.classList.contains("is-hidden");
+      if (isHidden && !wasHidden) {
+        // Reason: Radix's dismissable-layer listens for Escape in capture phase on
+        // document, so this will close the topmost open Radix layer.
+        this.containerEl.dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true })
+        );
+      }
+      wasHidden = isHidden;
+    });
+
+    this.drawerHideObserver.observe(drawer, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
   }
 
   private renderView(
@@ -154,6 +204,8 @@ export default class CopilotView extends ItemView {
   async onClose(): Promise<void> {
     this.keyboardObserver?.disconnect();
     this.keyboardObserver = null;
+    this.drawerHideObserver?.disconnect();
+    this.drawerHideObserver = null;
     // Reason: Clean up the class on the tracked drawer element when the view is closed.
     // Use lastDrawerEl instead of querying closest(), because the view may have already
     // been detached from the drawer DOM by the time onClose fires.
