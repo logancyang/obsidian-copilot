@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { TFile, MarkdownView, App } from "obsidian";
 import { z } from "zod";
 import { logInfo, logWarn } from "@/logger";
 import { createLangChainTool } from "./createLangChainTool";
@@ -215,9 +215,30 @@ async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
   return { type: "not_found" };
 }
 
+/**
+ * Reads file content with editor-first strategy: checks all open markdown
+ * editors for the file, returns fresh editor content if found, otherwise
+ * falls back to vault.read() (not cachedRead) to avoid stale data.
+ *
+ * @param app - The Obsidian App instance
+ * @param file - The file to read
+ * @returns The file content (from editor if open, else from vault)
+ */
+async function getAccurateFileContent(app: App, file: TFile): Promise<string> {
+  // Scan all open markdown leaves to find editor content first
+  const leaves = app.workspace.getLeavesOfType("markdown");
+  for (const leaf of leaves) {
+    if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) {
+      return (leaf.view as MarkdownView).editor.getValue();
+    }
+  }
+  // File not in any open editor - read from vault (not cached)
+  return await app.vault.read(file);
+}
+
 async function readNoteText(file: TFile): Promise<string> {
   try {
-    return await app.vault.cachedRead(file);
+    return await getAccurateFileContent(app, file);
   } catch (error) {
     logWarn(`readNote: failed to read ${file.path}`, error);
     return "";

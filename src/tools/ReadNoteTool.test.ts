@@ -1,6 +1,8 @@
 import { StructuredTool } from "@langchain/core/tools";
 
 const mockCachedRead = jest.fn();
+const mockVaultRead = jest.fn();
+const mockMarkdownViewEditor = jest.fn();
 
 // Helper to invoke tool and parse JSON result
 const invokeReadNoteTool = async (tool: StructuredTool, args: any) => {
@@ -21,9 +23,16 @@ class MockTFile {
   }
 }
 
-jest.mock("obsidian", () => ({
-  TFile: MockTFile,
-}));
+jest.mock("obsidian", () => {
+  class MarkdownView {
+    constructor(public editor: any, public file: any) {}
+  }
+  
+  return {
+    TFile: MockTFile,
+    MarkdownView,
+  };
+});
 
 describe("readNoteTool", () => {
   let readNoteTool: StructuredTool;
@@ -31,6 +40,11 @@ describe("readNoteTool", () => {
   let getAbstractFileByPathMock: jest.Mock;
   let getMarkdownFilesMock: jest.Mock;
   let getFirstLinkpathDestMock: jest.Mock;
+
+  // Helper to set up mock markdown leaves for editor-based tests
+  const setupMockLeaves = (leaves: any[]) => {
+    (global.app as any).__mockMarkdownLeaves = leaves;
+  };
 
   beforeEach(async () => {
     jest.resetModules();
@@ -41,22 +55,33 @@ describe("readNoteTool", () => {
     getFirstLinkpathDestMock = jest.fn().mockReturnValue(null);
     mockCachedRead.mockReset();
     mockCachedRead.mockResolvedValue("");
+    mockVaultRead.mockReset();
+    mockVaultRead.mockResolvedValue("");
 
     global.app = {
       vault: {
         getAbstractFileByPath: getAbstractFileByPathMock,
         getMarkdownFiles: getMarkdownFilesMock,
         cachedRead: mockCachedRead,
+        read: mockVaultRead,
       },
       metadataCache: {
         getFileCache: jest.fn(),
         getFirstLinkpathDest: getFirstLinkpathDestMock,
       },
       workspace: {
-        getLeavesOfType: jest.fn().mockReturnValue([]),
+        getLeavesOfType: jest.fn((type: string) => {
+          if (type === "markdown") {
+            return (global.app as any).__mockMarkdownLeaves || [];
+          }
+          return [];
+        }),
         getActiveFile: jest.fn().mockReturnValue(null),
       },
+      __mockMarkdownLeaves: [] as any[],
     } as any;
+
+    setupMockLeaves([]);
 
     ({ readNoteTool } = await import("./NoteTools"));
   });
@@ -64,6 +89,10 @@ describe("readNoteTool", () => {
   afterEach(() => {
     global.app = originalApp;
   });
+
+
+
+
 
   it("returns the first chunk with follow-up metadata", async () => {
     const notePath = "Notes/test.md";
@@ -313,4 +342,95 @@ describe("readNoteTool", () => {
     expect(result.notePath).toBe(targetFile.path);
     expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
   });
+  it("reads from editor when file is open in active editor", async () => {
+    const notePath = "Notes/test.md";
+    const file = new MockTFile(notePath);
+    const editorContent = "Editor content - fresh";
+    getAbstractFileByPathMock.mockReturnValue(file);
+    mockVaultRead.mockResolvedValue("Stale vault content");
+
+    // Mock MarkdownView with editor
+    const { MarkdownView } = require("obsidian");
+    const mockMarkdownView = new MarkdownView(
+      { getValue: jest.fn().mockReturnValue(editorContent) },
+      file
+    );
+    (global.app.workspace.getLeavesOfType as jest.Mock).mockReturnValue([
+      { view: mockMarkdownView },
+    ]);
+
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
+
+    expect(result.content).toContain(editorContent);
+    expect(mockVaultRead).not.toHaveBeenCalled();
+  });
+
+  it("reads from vault when file is NOT open in any editor", async () => {
+    const notePath = "Notes/closed.md";
+    const file = new MockTFile(notePath);
+    const vaultContent = "Content from vault read";
+    getAbstractFileByPathMock.mockReturnValue(file);
+    mockVaultRead.mockResolvedValue(vaultContent);
+    (global.app.workspace.getLeavesOfType as jest.Mock).mockReturnValue([]);
+
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
+
+    expect(result.content).toContain(vaultContent);
+    expect(mockVaultRead).toHaveBeenCalledWith(file);
+  });
+
+  it("reads from editor in non-active split pane", async () => {
+    const notePath = "Notes/split.md";
+    const file = new MockTFile(notePath);
+    const editorContent = "Content from split pane editor";
+    getAbstractFileByPathMock.mockReturnValue(file);
+    mockVaultRead.mockResolvedValue("Should not be used");
+
+    // Mock multiple leaves with file in non-active pane
+    const { MarkdownView } = require("obsidian");
+    const mockMarkdownView = new MarkdownView(
+      { getValue: jest.fn().mockReturnValue(editorContent) },
+      file
+    );
+    const otherLeaf = { view: { file: new MockTFile("Other/file.md") } };
+    (global.app.workspace.getLeavesOfType as jest.Mock).mockReturnValue([
+      otherLeaf,
+      { view: mockMarkdownView },
+    ]);
+
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
+
+    expect(result.content).toContain(editorContent);
+    expect(mockVaultRead).not.toHaveBeenCalled();
+  });
+
+  it("matches correct editor by file path when multiple files open", async () => {
+    const notePath = "Notes/target.md";
+    const targetFile = new MockTFile(notePath);
+    const targetContent = "Content of target file";
+    getAbstractFileByPathMock.mockReturnValue(targetFile);
+    mockVaultRead.mockResolvedValue("Should not be used");
+
+    // Mock multiple leaves with different files
+    const { MarkdownView } = require("obsidian");
+    const targetMarkdownView = new MarkdownView(
+      { getValue: jest.fn().mockReturnValue(targetContent) },
+      targetFile
+    );
+    const otherFile = new MockTFile("Notes/other.md");
+    const otherMarkdownView = new MarkdownView(
+      { getValue: jest.fn().mockReturnValue("Other content") },
+      otherFile
+    );
+    (global.app.workspace.getLeavesOfType as jest.Mock).mockReturnValue([
+      { view: otherMarkdownView },
+      { view: targetMarkdownView },
+    ]);
+
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
+
+    expect(result.content).toContain(targetContent);
+    expect(mockVaultRead).not.toHaveBeenCalled();
+});
+
 });
