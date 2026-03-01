@@ -167,15 +167,28 @@ const writeToFileTool = createLangChainTool({
       try {
         const file = await getFile(path);
         await app.vault.modify(file, contentString);
-        return {
-          result: "accepted" as ApplyViewResult,
-          message:
-            "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
-        };
+        
+        // Post-write verification
+        await new Promise(resolve => setTimeout(resolve, 200));
+        const verifyContent = await app.vault.read(file);
+        
+        if (verifyContent.trim() === contentString.trim()) {
+          return {
+            result: "accepted" as ApplyViewResult,
+            message:
+              "WRITE_VERIFIED: File successfully updated. Do not read the file again to verify — this tool has already verified the write. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
+          };
+        } else {
+          return {
+            result: "failed" as ApplyViewResult,
+            message:
+              "WRITE_FAILED: Content mismatch detected after write. The file content on disk does not match the requested update. Inform the user of the failure.",
+          };
+        }
       } catch (error: any) {
         return {
           result: "failed" as ApplyViewResult,
-          message: `Error writing to file without preview: ${error?.message || error}`,
+          message: `Error writing to file: ${error?.message || error}`,
         };
       }
     }
@@ -329,11 +342,24 @@ const replaceInFileTool = createLangChainTool({
         // Bypass preview and apply changes directly
         try {
           await app.vault.modify(file, modifiedContent);
-          return {
-            result: "accepted" as ApplyViewResult,
-            blocksApplied: changesApplied,
-            message: `Applied ${changesApplied} SEARCH/REPLACE block(s) without preview. Do not call this tool again to modify this file in response to the current user request.`,
-          };
+          
+          // Post-write verification (EXACT comparison - no trim)
+          await new Promise(resolve => setTimeout(resolve, 200));
+          const verifyContent = await app.vault.read(file);
+          
+          if (verifyContent === modifiedContent) {
+            return {
+              result: "accepted" as ApplyViewResult,
+              blocksApplied: changesApplied,
+              message: `WRITE_VERIFIED: Applied ${changesApplied} SEARCH/REPLACE block(s) and verified. Do not read the file again to verify — this tool has already verified the write. Do not call this tool again to modify this file in response to the current user request.`,
+            };
+          } else {
+            return {
+              result: "failed" as ApplyViewResult,
+              blocksApplied: changesApplied,
+              message: "WRITE_FAILED: Content mismatch detected after applying SEARCH/REPLACE blocks. The file may not have been updated correctly. Inform the user of the failure.",
+            };
+          }
         } catch (error: any) {
           return {
             result: "failed" as ApplyViewResult,
