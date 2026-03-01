@@ -2,7 +2,6 @@ import { StructuredTool } from "@langchain/core/tools";
 
 const mockCachedRead = jest.fn();
 const mockVaultRead = jest.fn();
-const mockMarkdownViewEditor = jest.fn();
 
 // Helper to invoke tool and parse JSON result
 const invokeReadNoteTool = async (tool: StructuredTool, args: any) => {
@@ -33,6 +32,8 @@ jest.mock("obsidian", () => {
     MarkdownView,
   };
 });
+
+// Get reference to mocked MarkdownView - moved inside tests to avoid resetModules issue
 
 describe("readNoteTool", () => {
   let readNoteTool: StructuredTool;
@@ -343,6 +344,9 @@ describe("readNoteTool", () => {
     expect(mockVaultRead).toHaveBeenCalledWith(targetFile);
   });
   it("reads from editor when file is open in active editor", async () => {
+    // Get MarkdownView from mocked module inside test to avoid resetModules issue
+    const { MarkdownView } = jest.requireMock("obsidian");
+    
     const notePath = "Notes/test.md";
     const file = new MockTFile(notePath);
     const editorContent = "Editor content - fresh";
@@ -350,7 +354,6 @@ describe("readNoteTool", () => {
     mockVaultRead.mockResolvedValue("Stale vault content");
 
     // Mock MarkdownView with editor
-    const { MarkdownView } = require("obsidian");
     const mockMarkdownView = new MarkdownView(
       { getValue: jest.fn().mockReturnValue(editorContent) },
       file
@@ -380,6 +383,9 @@ describe("readNoteTool", () => {
   });
 
   it("reads from editor in non-active split pane", async () => {
+    // Get MarkdownView from mocked module inside test to avoid resetModules issue
+    const { MarkdownView } = jest.requireMock("obsidian");
+    
     const notePath = "Notes/split.md";
     const file = new MockTFile(notePath);
     const editorContent = "Content from split pane editor";
@@ -387,7 +393,6 @@ describe("readNoteTool", () => {
     mockVaultRead.mockResolvedValue("Should not be used");
 
     // Mock multiple leaves with file in non-active pane
-    const { MarkdownView } = require("obsidian");
     const mockMarkdownView = new MarkdownView(
       { getValue: jest.fn().mockReturnValue(editorContent) },
       file
@@ -405,6 +410,9 @@ describe("readNoteTool", () => {
   });
 
   it("matches correct editor by file path when multiple files open", async () => {
+    // Get MarkdownView from mocked module inside test to avoid resetModules issue
+    const { MarkdownView } = jest.requireMock("obsidian");
+    
     const notePath = "Notes/target.md";
     const targetFile = new MockTFile(notePath);
     const targetContent = "Content of target file";
@@ -412,7 +420,6 @@ describe("readNoteTool", () => {
     mockVaultRead.mockResolvedValue("Should not be used");
 
     // Mock multiple leaves with different files
-    const { MarkdownView } = require("obsidian");
     const targetMarkdownView = new MarkdownView(
       { getValue: jest.fn().mockReturnValue(targetContent) },
       targetFile
@@ -431,6 +438,6 @@ describe("readNoteTool", () => {
 
     expect(result.content).toContain(targetContent);
     expect(mockVaultRead).not.toHaveBeenCalled();
-});
+  });
 
 });
