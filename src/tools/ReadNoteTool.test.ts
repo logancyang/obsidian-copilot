@@ -409,6 +409,27 @@ describe("readNoteTool", () => {
     expect(mockVaultRead).not.toHaveBeenCalled();
   });
 
+  it("falls back to vault.read when file is open in reading mode (editor undefined)", async () => {
+    const { MarkdownView } = jest.requireMock("obsidian");
+    
+    const notePath = "Notes/reading.md";
+    const file = new MockTFile(notePath);
+    const vaultContent = "Content from vault read";
+    getAbstractFileByPathMock.mockReturnValue(file);
+    mockVaultRead.mockResolvedValue(vaultContent);
+
+    // Mock MarkdownView with editor=undefined (reading mode)
+    const mockMarkdownView = new MarkdownView(undefined, file);
+    (global.app.workspace.getLeavesOfType as jest.Mock).mockReturnValue([
+      { view: mockMarkdownView },
+    ]);
+
+    const result = await invokeReadNoteTool(readNoteTool, { notePath });
+
+    expect(result.content).toContain(vaultContent);
+    expect(mockVaultRead).toHaveBeenCalledWith(file);
+  });
+
   it("matches correct editor by file path when multiple files open", async () => {
     // Get MarkdownView from mocked module inside test to avoid resetModules issue
     const { MarkdownView } = jest.requireMock("obsidian");

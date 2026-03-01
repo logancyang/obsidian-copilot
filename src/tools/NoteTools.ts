@@ -228,8 +228,12 @@ async function getAccurateFileContent(app: App, file: TFile): Promise<string> {
   // Scan all open markdown leaves to find editor content first
   const leaves = app.workspace.getLeavesOfType("markdown");
   for (const leaf of leaves) {
-    if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) {
-      return (leaf.view as MarkdownView).editor.getValue();
+    if (
+      leaf.view instanceof MarkdownView &&
+      leaf.view.file?.path === file.path &&
+      leaf.view.editor
+    ) {
+      return leaf.view.editor.getValue();
     }
   }
   // File not in any open editor - read from vault (not cached)
