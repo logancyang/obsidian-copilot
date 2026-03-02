@@ -59,11 +59,6 @@ export const CopilotPlusSettings: React.FC = () => {
         new Notice("Miyo app is not available. Please start the Miyo app and try again.");
         return;
       }
-
-      const isValid = await validateSelfHostMode();
-      if (!isValid) {
-        return;
-      }
     } finally {
       setIsValidatingSelfHost(false);
     }
