@@ -1,7 +1,6 @@
 import { logFileManager } from "@/logFileManager";
 import { FileCache } from "@/cache/fileCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
-import { UserCancelledError } from "@/error";
 import { logError } from "@/logger";
 import {
   clearRecordedPromptPayload,
@@ -18,6 +17,7 @@ import {
   appendIncludeNoteContextPlaceholders,
 } from "@/commands/quickCommandPrompts";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { ApplyCustomCommandModal } from "@/components/modals/ApplyCustomCommandModal";
 import { YoutubeTranscriptModal } from "@/components/modals/YoutubeTranscriptModal";
 import { checkIsPlusUser } from "@/plusUtils";
@@ -175,15 +175,25 @@ export function registerCommands(
   });
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
+    const confirmed = await new Promise<boolean>((resolve) => {
+      new ConfirmModal(
+        plugin.app,
+        () => resolve(true),
+        "This will permanently delete all indexed documents from the Copilot semantic search index for this vault. This action cannot be undone.\n\nAre you sure you want to clear the entire index?",
+        "Clear Semantic Index",
+        "Clear Index",
+        "Cancel",
+        () => resolve(false)
+      ).open();
+    });
+    if (!confirmed) return;
     try {
       const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
       await VectorStoreManager.getInstance().clearIndex();
       new Notice("Cleared local Copilot semantic index.");
     } catch (err) {
-      if (!(err instanceof UserCancelledError)) {
-        logError("Error clearing semantic index:", err);
-        new Notice("Failed to clear semantic index.");
-      }
+      logError("Error clearing semantic index:", err);
+      new Notice("Failed to clear semantic index.");
     }
   });
 
@@ -223,6 +233,18 @@ export function registerCommands(
   });
 
   addCommand(plugin, COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX, async () => {
+    const confirmed = await new Promise<boolean>((resolve) => {
+      new ConfirmModal(
+        plugin.app,
+        () => resolve(true),
+        "This will delete and rebuild your entire vault index from scratch. This operation cannot be undone. Are you sure you want to proceed?",
+        "Force Reindex Vault",
+        "Continue",
+        "Cancel",
+        () => resolve(false)
+      ).open();
+    });
+    if (!confirmed) return;
     try {
       const { getSettings } = await import("@/settings/model");
       const settings = getSettings();
