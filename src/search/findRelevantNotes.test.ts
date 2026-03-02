@@ -49,6 +49,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
 
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoSourceId: jest.fn(),
+  getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
 
 jest.mock("@/plusUtils", () => ({
@@ -95,7 +96,7 @@ describe("findRelevantNotes", () => {
     mockedIsSelfHostAccessValid.mockReturnValue(false);
     mockedGetSettings.mockReturnValue({
       debug: false,
-      selfHostUrl: "",
+      miyoServerUrl: "",
       enableMiyo: false,
       enableSemanticSearchV3: false,
       selfHostModeValidatedAt: null,
@@ -182,7 +183,7 @@ describe("findRelevantNotes", () => {
     mockedIsSelfHostAccessValid.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
-      selfHostUrl: "http://127.0.0.1:8742",
+      miyoServerUrl: "http://127.0.0.1:8742",
       enableMiyo: true,
       enableSemanticSearchV3: true,
     } as any);
@@ -230,7 +231,7 @@ describe("findRelevantNotes", () => {
     // so the no-embeddings fallback path (line 212 of findRelevantNotes.ts) is exercised.
     mockedGetSettings.mockReturnValue({
       debug: false,
-      selfHostUrl: "http://127.0.0.1:8742",
+      miyoServerUrl: "http://127.0.0.1:8742",
       enableMiyo: false,
       enableSemanticSearchV3: true,
     } as any);
@@ -258,7 +259,7 @@ describe("findRelevantNotes", () => {
     mockedIsSelfHostAccessValid.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
-      selfHostUrl: "http://127.0.0.1:8742",
+      miyoServerUrl: "http://127.0.0.1:8742",
       enableMiyo: true,
       enableSemanticSearchV3: true,
     } as any);
