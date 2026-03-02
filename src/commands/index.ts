@@ -175,11 +175,16 @@ export function registerCommands(
   });
 
   addCommand(plugin, COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX, async () => {
+    const { getSettings } = await import("@/settings/model");
+    const isMiyoEnabled = getSettings().enableMiyo;
+    const clearMessage = isMiyoEnabled
+      ? "This will permanently delete all indexes of this vault from Miyo. This action cannot be undone.\n\nAre you sure you want to proceed?"
+      : "This will permanently delete all document indexes in Copilot. This action cannot be undone.\n\nAre you sure you want to proceed?";
     const confirmed = await new Promise<boolean>((resolve) => {
       new ConfirmModal(
         plugin.app,
         () => resolve(true),
-        "This will permanently delete all indexed documents from the Copilot semantic search index for this vault. This action cannot be undone.\n\nAre you sure you want to clear the entire index?",
+        clearMessage,
         "Clear Semantic Index",
         "Clear Index",
         "Cancel",
