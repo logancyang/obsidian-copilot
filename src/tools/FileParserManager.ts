@@ -4,6 +4,7 @@ import { PDFCache } from "@/cache/pdfCache";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
@@ -71,7 +72,7 @@ class SelfHostPdfParser {
     }
 
     try {
-      const baseUrl = await this.miyoClient.resolveBaseUrl(settings.selfHostUrl);
+      const baseUrl = await this.miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
       const response = await this.miyoClient.parseDoc(baseUrl, absolutePath);
       if (typeof response.text !== "string" || response.text.trim().length === 0) {
         throw new Error("Miyo parse-doc returned empty text");

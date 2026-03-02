@@ -4,6 +4,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
+import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
@@ -54,7 +55,7 @@ export const CopilotPlusSettings: React.FC = () => {
     setIsValidatingSelfHost(true);
     try {
       const miyoClient = new MiyoClient();
-      const isMiyoAvailable = await miyoClient.isBackendAvailable(settings.selfHostUrl);
+      const isMiyoAvailable = await miyoClient.isBackendAvailable(getMiyoCustomUrl(settings));
       if (!isMiyoAvailable) {
         new Notice("Miyo app is not available. Please start the Miyo app and try again.");
         return;
@@ -210,6 +211,15 @@ export const CopilotPlusSettings: React.FC = () => {
 
               {settings.enableSelfHostMode && (
                 <>
+                  <SettingItem
+                    type="text"
+                    title="Custom Miyo Server URL (Optional)"
+                    description="For advanced users only. Set this if Miyo is running on a remote machine. Leave blank to use automatic local service discovery."
+                    value={settings.miyoServerUrl || ""}
+                    onChange={(value) => updateSetting("miyoServerUrl", value)}
+                    placeholder="http://127.0.0.1:8742"
+                  />
+
                   <SettingItem
                     type="switch"
                     title="Enable Miyo"
