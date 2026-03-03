@@ -670,7 +670,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
         <div className="tw-flex tw-flex-col tw-gap-3 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
           {/* CORS 和 CURL */}
-          <div className="tw-flex tw-items-center tw-gap-3">
+          <div className="tw-flex tw-flex-wrap tw-items-center tw-gap-3 sm:tw-flex-1">
             <div className="tw-flex tw-items-center tw-gap-2">
               <Checkbox
                 id="enable-cors"
@@ -738,7 +738,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           </div>
 
           {/* 主要操作区：Test 和 Add Model */}
-          <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+          <div className="tw-flex tw-shrink-0 tw-items-center tw-justify-end tw-gap-2">
             {verifyStatus === "success" && <CheckCircle2 className="tw-size-5 tw-text-success" />}
             {verifyStatus === "failed" && <XCircle className="tw-size-5 tw-text-error" />}
             <TooltipProvider>

@@ -1,4 +1,5 @@
 import * as React from "react";
+import { Platform } from "obsidian";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -43,10 +44,19 @@ export function ActionButtons({
       {/* Insert/Replace buttons on result */}
       {state === "result" && showInsertReplace && (
         <>
-          <Button size="sm" variant="secondary" onClick={onInsert}>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={onInsert}
+            title={`Insert below selection (${Platform.isMacOS ? "⌘" : "Ctrl"}+Shift+Enter)`}
+          >
             Insert
           </Button>
-          <Button size="sm" onClick={onReplace}>
+          <Button
+            size="sm"
+            onClick={onReplace}
+            title={`Replace selection (${Platform.isMacOS ? "⌘" : "Ctrl"}+Enter)`}
+          >
             Replace
           </Button>
         </>
