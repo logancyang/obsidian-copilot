@@ -59,11 +59,6 @@ export const CopilotPlusSettings: React.FC = () => {
         new Notice("Miyo app is not available. Please start the Miyo app and try again.");
         return;
       }
-
-      const isValid = await validateSelfHostMode();
-      if (!isValid) {
-        return;
-      }
     } finally {
       setIsValidatingSelfHost(false);
     }
@@ -121,6 +116,19 @@ export const CopilotPlusSettings: React.FC = () => {
               <ToolSettingsSection />
             </>
           )}
+
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Document Processor</div>
+
+          <SettingItem
+            type="text"
+            title="Store converted markdown at"
+            description="When PDFs and other documents are processed, the converted markdown is saved to this folder. Leave empty to skip saving."
+            value={settings.convertedDocOutputFolder}
+            onChange={(value) => {
+              updateSetting("convertedDocOutputFolder", value);
+            }}
+            placeholder="e.g. copilot/converteddocs"
+          />
 
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Memory (experimental)</div>
 

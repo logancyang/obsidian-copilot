@@ -166,11 +166,13 @@ export class MiyoClient {
       const health = await this.requestJson<{ status?: string }>(baseUrl, "/v0/health", {
         method: "GET",
       });
-      return health?.status === "ok";
-    } catch (error) {
-      if (getSettings().debug) {
-        logWarn(`Miyo backend availability check failed: ${err2String(error)}`);
+      if (health?.status !== "ok") {
+        logWarn(`Miyo health check failed: status="${health?.status ?? "unknown"}"`);
+        return false;
       }
+      return true;
+    } catch (error) {
+      logWarn(`Miyo backend availability check failed: ${err2String(error)}`);
       return false;
     }
   }
@@ -407,6 +409,9 @@ export class MiyoClient {
       ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
     });
 
+    // TODO: Add a configurable timeout for large file parsing (e.g. big PDFs).
+    // Obsidian's requestUrl does not expose a timeout option, so consider using
+    // AbortController or a wrapper with Promise.race to prevent indefinite hangs.
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,

@@ -179,7 +179,7 @@ export class FullTextEngine {
     for (let i = 0; i < chunks.length; i++) {
       const chunk = chunks[i];
 
-      const contentSize = Buffer.byteLength(chunk.content, "utf8");
+      const contentSize = MemoryManager.getByteSize(chunk.content);
       if (!this.memoryManager.canAddContent(contentSize)) {
         logInfo(`FullTextEngine: Memory limit reached at ${indexed} chunks`);
         break;

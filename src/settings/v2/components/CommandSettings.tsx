@@ -2,7 +2,7 @@ import React, { useMemo, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { useCustomCommands } from "@/commands/state";
 import { MobileCard, MobileCardDropdownAction } from "@/components/ui/mobile-card";
-import { Copy, GripVertical, Lightbulb, PenLine, Plus, Trash2 } from "lucide-react";
+import { CopyPlus, GripVertical, Lightbulb, PenLine, Plus, Trash2 } from "lucide-react";
 
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -71,8 +71,8 @@ const MobileCommandCard: React.FC<{
       onClick: handleEdit,
     },
     {
-      icon: <Copy className="tw-size-4" />,
-      label: "Copy",
+      icon: <CopyPlus className="tw-size-4" />,
+      label: "Duplicate",
       onClick: onCopy,
     },
     {
@@ -254,8 +254,13 @@ const SortableTableRow: React.FC<{
           >
             <PenLine className="tw-size-4" />
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => onCopy(command)} title="Copy command">
-            <Copy className="tw-size-4" />
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onCopy(command)}
+            title="Duplicate command"
+          >
+            <CopyPlus className="tw-size-4" />
           </Button>
           <Button
             variant="ghost"
@@ -332,8 +337,8 @@ export const CommandSettings: React.FC = () => {
         autoOrder: false,
       });
     } catch (error) {
-      logError("Failed to copy command:", error);
-      new Notice("Failed to copy command. Please try again.");
+      logError("Failed to duplicate command:", error);
+      new Notice("Failed to duplicate command. Please try again.");
     }
   };
 

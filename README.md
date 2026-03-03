@@ -60,7 +60,7 @@ This is the future we believe in. If you share this vision, please support this 
   - [Free User](#free-user)
   - [Copilot Plus/Believer](#copilot-plusbeliever)
 - [Need Help?](#need-help)
-- [FAQ](#️faq)
+- [FAQ](#faq)
 
 ## Copilot V3 is a New Era 🔥
 
