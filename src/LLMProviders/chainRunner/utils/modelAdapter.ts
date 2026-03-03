@@ -556,7 +556,6 @@ When the user mentions "my notes" or "my vault", use the localSearch tool.
 2. DO NOT ask clarifying questions about search terms
 3. DO NOT wait for permission to use tools
 4. Use tools based on the user's request
-5. ALWAYS produce substantive response content after reasoning - never return empty
 
 🚨 CRITICAL: SEQUENTIAL vs PARALLEL TOOL CALLS 🚨
 
