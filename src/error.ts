@@ -49,3 +49,15 @@ export class MissingModelKeyError extends Error {
     Object.setPrototypeOf(this, MissingModelKeyError.prototype);
   }
 }
+
+/**
+ * Thrown when a user explicitly cancels a modal dialog.
+ * Callers can catch this to distinguish cancellation from actual errors.
+ */
+export class UserCancelledError extends Error {
+  constructor() {
+    super("User cancelled");
+    this.name = "UserCancelledError";
+    Object.setPrototypeOf(this, UserCancelledError.prototype);
+  }
+}
