@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -66,9 +66,11 @@ export function ChatHistoryPopover({
 
   /**
    * Reset display count only when the popover opens or when the search query changes.
+   * Uses useLayoutEffect so the reset runs synchronously before the browser paints,
+   * preventing a one-frame render spike with the stale large displayCount.
    * Guarded by `if (open)` to avoid a wasted state update when the popover closes.
    */
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (open) setDisplayCount(PAGE_SIZE);
   }, [open, searchQuery]);
 
