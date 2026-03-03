@@ -3,7 +3,7 @@ import { App, Notice } from "obsidian";
 import { CustomError } from "@/error";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoUpsertDocument } from "@/miyo/MiyoClient";
-import { getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoSourceId } from "@/miyo/miyoUtils";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import type {
   SemanticIndexBackend,
@@ -280,7 +280,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    * @returns Base URL string.
    */
   private async getBaseUrl(): Promise<string> {
-    const overrideUrl = getSettings().selfHostUrl;
+    const overrideUrl = getMiyoCustomUrl(getSettings());
     return this.client.resolveBaseUrl(overrideUrl);
   }
 
