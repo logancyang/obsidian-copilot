@@ -681,8 +681,21 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         messages.push(aiMessage);
 
-        // Final response is ONLY this iteration's content, not accumulated intermediate content
-        const finalContent = content;
+        // Detect empty response: no content and no tool calls (issue #2233)
+        // This can happen when models return only thinking/reasoning content that gets filtered
+        let finalContent = content;
+        if (!finalContent || finalContent.trim() === "") {
+          logWarn(
+            "[Agent] Model returned no content and no tool calls. " +
+              "This may indicate the model produced only reasoning/thinking tokens."
+          );
+          // Provide actionable error message instead of silent empty response
+          finalContent =
+            "The model did not produce a response. This can happen when:\n" +
+            "- The model's reasoning was filtered but no answer was generated\n" +
+            "- The model encountered an issue during response generation\n\n" +
+            "Please try again or switch to a different model.";
+        }
         const reasoningBlock = this.buildReasoningBlockMarkup();
 
         // Stream the final response progressively for better UX

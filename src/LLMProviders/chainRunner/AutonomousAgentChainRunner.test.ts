@@ -9,6 +9,108 @@ import { createToolCallMarker } from "./utils/toolCallParser";
  * (e.g., "localSearch-1234567890-abc123"), causing React to fail when unmounting
  * DOM nodes because the IDs didn't match.
  */
+
+/**
+ * Test suite for agent loop empty response detection (Issue #2233)
+ *
+ * This test suite addresses the bug where Gemini 3.1 Pro Preview agent loop
+ * would stop with only a reasoning marker and no user-visible output.
+ * The fix detects when the model returns no content and no tool calls,
+ * and provides an actionable error message instead of silently returning empty.
+ */
+describe("AutonomousAgentChainRunner - Empty Response Detection", () => {
+  /**
+   * Helper function that mimics the empty response detection logic
+   * from runReActLoop in AutonomousAgentChainRunner.ts
+   */
+  const detectAndHandleEmptyResponse = (
+    content: string,
+    toolCallsLength: number
+  ): { isEmpty: boolean; finalContent: string } => {
+    // No tool calls = final response
+    if (toolCallsLength === 0) {
+      let finalContent = content;
+      if (!finalContent || finalContent.trim() === "") {
+        // Empty response detected - provide error message
+        finalContent =
+          "The model did not produce a response. This can happen when:\n" +
+          "- The model's reasoning was filtered but no answer was generated\n" +
+          "- The model encountered an issue during response generation\n\n" +
+          "Please try again or switch to a different model.";
+        return { isEmpty: true, finalContent };
+      }
+      return { isEmpty: false, finalContent };
+    }
+    return { isEmpty: false, finalContent: content };
+  };
+
+  describe("Empty content with no tool calls", () => {
+    it("should detect empty string as empty response", () => {
+      const result = detectAndHandleEmptyResponse("", 0);
+      expect(result.isEmpty).toBe(true);
+      expect(result.finalContent).toContain("model did not produce a response");
+    });
+
+    it("should detect whitespace-only string as empty response", () => {
+      const result = detectAndHandleEmptyResponse("   \n\t  ", 0);
+      expect(result.isEmpty).toBe(true);
+      expect(result.finalContent).toContain("model did not produce a response");
+    });
+
+    it("should detect undefined content as empty response", () => {
+      const result = detectAndHandleEmptyResponse(undefined as unknown as string, 0);
+      expect(result.isEmpty).toBe(true);
+      expect(result.finalContent).toContain("model did not produce a response");
+    });
+  });
+
+  describe("Valid content with no tool calls", () => {
+    it("should not modify valid content", () => {
+      const validContent = "Here is your answer based on the search results.";
+      const result = detectAndHandleEmptyResponse(validContent, 0);
+      expect(result.isEmpty).toBe(false);
+      expect(result.finalContent).toBe(validContent);
+    });
+
+    it("should not modify content with leading/trailing whitespace", () => {
+      const contentWithWhitespace = "  Valid response content  ";
+      const result = detectAndHandleEmptyResponse(contentWithWhitespace, 0);
+      expect(result.isEmpty).toBe(false);
+      expect(result.finalContent).toBe(contentWithWhitespace);
+    });
+  });
+
+  describe("Tool calls present", () => {
+    it("should not trigger empty detection when tool calls exist", () => {
+      // Even if content is empty, having tool calls means loop continues
+      const result = detectAndHandleEmptyResponse("", 1);
+      expect(result.isEmpty).toBe(false);
+      expect(result.finalContent).toBe("");
+    });
+
+    it("should preserve empty content when tool calls exist", () => {
+      const result = detectAndHandleEmptyResponse("", 3);
+      expect(result.isEmpty).toBe(false);
+      // Content stays empty because we continue to tool execution
+      expect(result.finalContent).toBe("");
+    });
+  });
+
+  describe("Error message content", () => {
+    it("should include actionable guidance in error message", () => {
+      const result = detectAndHandleEmptyResponse("", 0);
+      expect(result.finalContent).toContain("try again");
+      expect(result.finalContent).toContain("different model");
+    });
+
+    it("should explain possible causes in error message", () => {
+      const result = detectAndHandleEmptyResponse("", 0);
+      expect(result.finalContent).toContain("reasoning was filtered");
+      expect(result.finalContent).toContain("response generation");
+    });
+  });
+});
+
 describe("AutonomousAgentChainRunner - Tool Call ID Generation", () => {
   describe("Tool Call ID Uniqueness", () => {
     /**
