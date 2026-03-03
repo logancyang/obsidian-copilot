@@ -756,6 +756,7 @@ ${chatContent}`;
           return;
         }
         await this.applyTopicToFrontmatter(file, topic);
+        await this.renameFileToMatchTopic(file, topic);
       } catch (error) {
         logError("[ChatPersistenceManager] Error during async topic generation:", error);
       }
@@ -798,5 +799,29 @@ ${chatContent}`;
     }
     const message = error instanceof Error ? error.message : String(error);
     return message.toLowerCase().includes("already exists");
+  }
+
+  /**
+   * Rename a note file to match its finalized frontmatter topic
+   */
+  async renameFileToMatchTopic(file: TFile, topic: string): Promise<void> {
+    if (!file || !topic) return;
+
+    const cache = this.app.metadataCache.getFileCache(file);
+    const epoch = cache?.frontmatter?.epoch;
+    if (!epoch) {
+      return;
+    }
+
+    const messages = this.messageRepo.getDisplayMessages();
+    const newPath = this.generateFileName(messages, epoch, topic);
+
+    if (file.path === newPath) {
+      return;
+    }
+
+    await this.app.fileManager.renameFile(file, newPath);
+
+    return;
   }
 }
