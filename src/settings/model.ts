@@ -588,6 +588,27 @@ export function getModelKeyFromModel(model: CustomModel): string {
   return `${model.name}|${model.provider}`;
 }
 
+/**
+ * Removes deprecated capability values from a model's capabilities array.
+ * This handles migration from older settings that may contain removed capabilities.
+ */
+function sanitizeModelCapabilities(model: CustomModel): CustomModel {
+  if (!model.capabilities || model.capabilities.length === 0) {
+    return model;
+  }
+  // Filter out deprecated "websearch" capability (cast to string[] since old settings may contain it)
+  const sanitizedCapabilities = (model.capabilities as string[]).filter(
+    (cap) => cap !== "websearch"
+  );
+  return {
+    ...model,
+    capabilities:
+      sanitizedCapabilities.length > 0
+        ? (sanitizedCapabilities as typeof model.capabilities)
+        : undefined,
+  };
+}
+
 function mergeActiveModels(
   existingActiveModels: CustomModel[],
   builtInModels: CustomModel[]
@@ -628,7 +649,8 @@ function mergeActiveModels(
     }
   });
 
-  return Array.from(modelMap.values());
+  // Sanitize capabilities to remove deprecated values
+  return Array.from(modelMap.values()).map(sanitizeModelCapabilities);
 }
 
 /**

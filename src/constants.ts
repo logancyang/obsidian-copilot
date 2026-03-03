@@ -224,13 +224,11 @@ export enum ChatModelProviders {
 export enum ModelCapability {
   REASONING = "reasoning",
   VISION = "vision",
-  WEB_SEARCH = "websearch",
 }
 
 export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
   reasoning: "This model supports general reasoning tasks.",
   vision: "This model supports image inputs.",
-  websearch: "This model can access the internet.",
 };
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [

@@ -36,7 +36,6 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Copy,
   Eye,
-  Globe,
   GripVertical,
   Lightbulb,
   LucideProps,
@@ -74,18 +73,9 @@ const CAPABILITY_ICONS: Record<
     color: "tw-text-model-capabilities-green",
     tooltip: MODEL_CAPABILITIES.vision,
   },
-  [ModelCapability.WEB_SEARCH]: {
-    icon: Globe,
-    color: "tw-text-model-capabilities-blue",
-    tooltip: MODEL_CAPABILITIES.websearch,
-  },
 } as const;
 
-const CAPABILITY_ORDER = [
-  ModelCapability.REASONING,
-  ModelCapability.VISION,
-  ModelCapability.WEB_SEARCH,
-] as const;
+const CAPABILITY_ORDER = [ModelCapability.REASONING, ModelCapability.VISION] as const;
 
 interface ModelTableHeaderProps {
   title: string;

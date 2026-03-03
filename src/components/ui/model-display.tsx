@@ -1,7 +1,7 @@
 import React from "react";
 import { CustomModel } from "@/aiParams";
 import { getProviderLabel } from "@/utils";
-import { Lightbulb, Eye, Globe } from "lucide-react";
+import { Lightbulb, Eye } from "lucide-react";
 import { ModelCapability } from "@/constants";
 
 interface ModelDisplayProps {
@@ -37,14 +37,6 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
                 <Eye
                   key={index}
                   className="tw-text-model-capabilities-green"
-                  style={{ width: iconSize, height: iconSize }}
-                />
-              );
-            case ModelCapability.WEB_SEARCH:
-              return (
-                <Globe
-                  key={index}
-                  className="tw-text-model-capabilities-blue"
                   style={{ width: iconSize, height: iconSize }}
                 />
               );
@@ -87,8 +79,6 @@ export const getModelDisplayWithIcons = (model: CustomModel): string => {
             return "Reasoning";
           case ModelCapability.VISION:
             return "Vision";
-          case ModelCapability.WEB_SEARCH:
-            return "Websearch";
           default:
             return "";
         }
