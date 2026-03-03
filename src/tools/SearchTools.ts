@@ -77,8 +77,12 @@ const localSearchSchema = z.object({
     .optional()
     .describe("Optional time range filter. Use epoch milliseconds from getTimeRangeMs result."),
   returnAll: z
-    .boolean()
-    .optional()
+    .preprocess((val) => {
+      if (typeof val === "string") {
+        return val.toLowerCase() === "true";
+      }
+      return val;
+    }, z.boolean().optional())
     .describe(
       "Set to true when the user wants ALL matching notes, not just the best few. " +
         "Use for requests like 'find all my X', 'list every Y', 'show me all my Z', " +
