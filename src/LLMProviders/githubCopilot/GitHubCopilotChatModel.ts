@@ -1,245 +1,313 @@
-import {
-  BaseChatModel,
-  type BaseChatModelParams,
-} from "@langchain/core/language_models/chat_models";
-import {
-  AIMessage,
-  AIMessageChunk,
-  type BaseMessage,
-  type MessageContent,
-} from "@langchain/core/messages";
-import { type ChatResult, ChatGeneration, ChatGenerationChunk } from "@langchain/core/outputs";
+import { type BaseChatModelParams } from "@langchain/core/language_models/chat_models";
+import type { BaseMessage, MessageContent } from "@langchain/core/messages";
+import { AIMessageChunk } from "@langchain/core/messages";
+import { ChatGenerationChunk } from "@langchain/core/outputs";
 import { type CallbackManagerForLLMRun } from "@langchain/core/callbacks/manager";
-import { GitHubCopilotProvider } from "./GitHubCopilotProvider";
+import {
+  ChatOpenAICompletions,
+  convertCompletionsDeltaToBaseMessageChunk,
+  convertMessagesToCompletionsMessageParams,
+} from "@langchain/openai";
+import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
 import { extractTextFromChunk } from "@/utils";
 import type { FetchImplementation } from "@/utils";
 
 // Approximate characters per token for English text
 const CHARS_PER_TOKEN = 4;
 
+/**
+ * Normalize delta.content to a string.
+ *
+ * Reason: GitHub Copilot proxies multiple model families (Claude, GPT, etc.).
+ * Claude models may return streaming delta.content as an array of content parts
+ * (e.g., `[{type: "text", text: "..."}]`) instead of a plain string.
+ * ChatOpenAICompletions' `_streamResponseChunks` skips chunks with non-string
+ * content, causing all text to be silently dropped. This normalizer ensures
+ * content is always a string before it reaches that check.
+ */
+function normalizeDeltaContent(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (content == null) return "";
+  if (Array.isArray(content)) {
+    return content
+      .map((part) => {
+        if (typeof part === "string") return part;
+        if (part && typeof part === "object" && typeof part.text === "string") {
+          return part.text;
+        }
+        return "";
+      })
+      .join("");
+  }
+  if (typeof content === "object" && typeof (content as any).text === "string") {
+    return (content as any).text;
+  }
+  return "";
+}
+
 export interface GitHubCopilotChatModelParams extends BaseChatModelParams {
   modelName: string;
   streaming?: boolean;
-  /** Custom fetch implementation for CORS bypass (e.g., safeFetch on mobile platforms) */
+  /** Custom fetch implementation for CORS bypass (e.g., safeFetchNoThrow on mobile) */
   fetchImplementation?: FetchImplementation;
+  // ChatOpenAI-compatible fields
+  apiKey?: string;
+  configuration?: Record<string, unknown>;
+  temperature?: number;
+  maxTokens?: number;
+  topP?: number;
+  frequencyPenalty?: number;
+  maxRetries?: number;
+  maxConcurrency?: number;
+  [key: string]: any;
 }
 
 /**
- * LangChain BaseChatModel implementation for GitHub Copilot
+ * GitHub Copilot ChatModel built on top of ChatOpenAICompletions.
+ *
+ * Reason: We extend ChatOpenAICompletions instead of ChatOpenAI because:
+ * 1. ChatOpenAI routes between Completions API and Responses API internally.
+ *    GitHub Copilot only supports the Chat Completions API endpoint.
+ * 2. ChatOpenAICompletions provides `bindTools()` (via BaseChatOpenAI),
+ *    `_streamResponseChunks`, and streaming infrastructure directly — no
+ *    routing indirection.
+ *
+ * Authentication (dynamic Copilot token refresh) and Copilot-specific headers
+ * are injected via `configuration.fetch` using GitHubCopilotProvider's lifecycle.
  */
-export class GitHubCopilotChatModel extends BaseChatModel {
+export class GitHubCopilotChatModel extends ChatOpenAICompletions {
   lc_serializable = false;
   lc_namespace = ["langchain", "chat_models", "github_copilot"];
 
-  private provider: GitHubCopilotProvider;
-  modelName: string;
-  streaming: boolean;
-  /** Fetch implementation to use - custom implementation for CORS bypass, native fetch otherwise */
-  private fetchImpl: FetchImplementation;
+  /**
+   * Build a fetch wrapper that injects a valid Copilot token and custom headers
+   * on every request, with automatic 401 retry after token refresh.
+   *
+   * @param provider - GitHubCopilotProvider singleton for token management
+   * @param baseFetch - Underlying fetch implementation (native or CORS-safe)
+   * @returns A fetch-compatible function with Copilot auth injected
+   */
+  private static buildAuthedFetch(
+    provider: GitHubCopilotProvider,
+    baseFetch: FetchImplementation
+  ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
+    return async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+      // Reason: FetchImplementation expects string, but OpenAI SDK may pass Request or URL
+      const url =
+        typeof input === "string" ? input : input instanceof Request ? input.url : input.toString();
 
-  constructor(fields: GitHubCopilotChatModelParams) {
-    super(fields);
-    this.provider = GitHubCopilotProvider.getInstance();
-    this.modelName = fields.modelName;
-    this.streaming = fields.streaming ?? true;
-    // Use provided fetch implementation or default to native fetch
-    this.fetchImpl = fields.fetchImplementation ?? fetch;
+      const doRequest = async (token: string): Promise<Response> => {
+        const copilotHeaders = provider.buildCopilotRequestHeaders(token);
+        const mergedHeaders = new Headers(init.headers);
+        // Copilot headers take precedence (especially Authorization)
+        for (const [key, value] of Object.entries(copilotHeaders)) {
+          mergedHeaders.set(key, value);
+        }
+
+        return baseFetch(url, { ...init, headers: mergedHeaders });
+      };
+
+      let token = await provider.getValidCopilotToken();
+      let response = await doRequest(token);
+
+      // 401/403: invalidate cached token and retry once with a fresh one
+      if (response.status === 401 || response.status === 403) {
+        try {
+          await response.body?.cancel();
+        } catch {
+          // Ignore cancellation errors — body may already be closed
+        }
+        provider.invalidateCopilotToken();
+        token = await provider.getValidCopilotToken();
+        response = await doRequest(token);
+      }
+
+      return response;
+    };
   }
 
-  _llmType(): string {
+  /**
+   * Create a Copilot-backed ChatOpenAICompletions instance.
+   * Wires up dynamic token refresh and Copilot headers via a custom fetch wrapper.
+   */
+  constructor(fields: GitHubCopilotChatModelParams) {
+    const { fetchImplementation, configuration, apiKey, ...rest } = fields;
+
+    const provider = GitHubCopilotProvider.getInstance();
+    const baseFetch = fetchImplementation ?? (configuration?.fetch as FetchImplementation) ?? fetch;
+    const authedFetch = GitHubCopilotChatModel.buildAuthedFetch(provider, baseFetch);
+
+    super({
+      ...rest,
+      // ChatOpenAICompletions requires an apiKey but Copilot tokens are dynamic;
+      // real Authorization is injected in the fetch wrapper above.
+      apiKey: apiKey || "copilot-dynamic-token",
+      // Reason: Copilot API may not support stream_options.include_usage,
+      // which ChatOpenAI sends by default. Disable to avoid potential 400 errors.
+      streamUsage: false,
+      configuration: {
+        ...(configuration ?? {}),
+        // Reason: OpenAI SDK appends "/chat/completions" to baseURL automatically
+        baseURL: (configuration?.baseURL as string) ?? COPILOT_API_BASE,
+        fetch: authedFetch,
+      },
+    });
+  }
+
+  /** LangChain model type identifier. */
+  override _llmType(): string {
     return "github-copilot";
   }
 
   /**
-   * Convert LangChain message type to OpenAI role.
-   * Note: Copilot API may not support tool/function roles, so we normalize them to user.
-   */
-  private convertMessageType(messageType: string): string {
-    switch (messageType) {
-      case "human":
-        return "user";
-      case "ai":
-        return "assistant";
-      case "system":
-        return "system";
-      case "tool":
-      case "function":
-        // Copilot API may not support these roles, normalize to user
-        return "user";
-      case "generic":
-      default:
-        return "user";
-    }
-  }
-
-  /**
-   * Convert LangChain messages to Copilot API format.
-   */
-  private toCopilotMessages(messages: BaseMessage[]): Array<{ role: string; content: string }> {
-    return messages.map((m) => ({
-      role: this.convertMessageType(m._getType()),
-      content: extractTextFromChunk(m.content),
-    }));
-  }
-
-  /**
-   * Generate chat completion
-   */
-  async _generate(
-    messages: BaseMessage[],
-    options: this["ParsedCallOptions"],
-    _runManager?: CallbackManagerForLLMRun
-  ): Promise<ChatResult> {
-    const chatMessages = this.toCopilotMessages(messages);
-
-    // Call Copilot API with fetchImpl for CORS detection parity with other providers
-    const response = await this.provider.sendChatMessage(chatMessages, {
-      model: this.modelName,
-      fetchImpl: this.fetchImpl,
-      signal: options?.signal,
-    });
-    const choice = response.choices?.[0];
-    const content = choice?.message?.content || "";
-    const finishReason = choice?.finish_reason;
-
-    // Map token usage to camelCase format expected by the project
-    const tokenUsage = response.usage
-      ? {
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          totalTokens: response.usage.total_tokens,
-        }
-      : undefined;
-
-    // Build response_metadata for truncation detection and token usage extraction
-    const responseMetadata = {
-      finish_reason: finishReason,
-      tokenUsage,
-      model: response.model,
-    };
-
-    const generation: ChatGeneration = {
-      text: content,
-      message: new AIMessage({
-        content,
-        response_metadata: responseMetadata,
-      }),
-      generationInfo: { finish_reason: finishReason },
-    };
-
-    return {
-      generations: [generation],
-      llmOutput: {
-        tokenUsage,
-      },
-    };
-  }
-
-  /**
-   * Stream chat completion chunks.
-   * If streaming is disabled, yields a single chunk from _generate.
-   * If streaming fails, the error is propagated (no silent fallback).
+   * Override streaming to fix two Copilot-specific issues with delta processing:
+   *
+   * 1. Missing role: Copilot API (especially when proxying Claude models) may omit
+   *    `delta.role` from streaming chunks. The converter only creates AIMessageChunk
+   *    (with tool_call_chunks) for role="assistant". Without it, chunks fall through
+   *    to ChatMessageChunk which lacks tool_call_chunks, breaking Agent mode tool
+   *    calling entirely.
+   *
+   * 2. Non-string content: Claude models may return delta.content as an array of
+   *    content parts. The parent skips chunks where `typeof content !== "string"`,
+   *    silently dropping all text.
+   *
+   * Reason: We override `_streamResponseChunks` instead of the deprecated
+   * `_convertCompletionsDeltaToBaseMessageChunk` method. This uses the public
+   * `convertCompletionsDeltaToBaseMessageChunk` function directly, which is the
+   * officially supported API for delta conversion.
+   *
+   * Note: This method mirrors @langchain/openai@1.2.2
+   * (dist/chat_models/completions.js:140-211) with two Copilot-specific patches.
+   * Re-diff when upgrading @langchain/openai.
    */
   override async *_streamResponseChunks(
     messages: BaseMessage[],
     options: this["ParsedCallOptions"],
     runManager?: CallbackManagerForLLMRun
   ): AsyncGenerator<ChatGenerationChunk> {
-    // If streaming is disabled, use _generate and yield as single chunk
-    if (!this.streaming) {
-      const result = await this._generate(messages, options, runManager);
-      const generation = result.generations[0];
-      if (!generation) return;
+    const messagesMapped = convertMessagesToCompletionsMessageParams({
+      messages,
+      model: this.model,
+    });
+    const params = {
+      ...this.invocationParams(options, { streaming: true }),
+      messages: messagesMapped,
+      stream: true as const,
+    };
 
-      const messageChunk = new AIMessageChunk({
-        content: generation.text,
-        response_metadata: generation.message.response_metadata,
-      });
+    let defaultRole: string | undefined;
+    const streamIterable = await this.completionWithRetry(params, options);
+    let usage: any;
 
-      const generationChunk = new ChatGenerationChunk({
-        message: messageChunk,
-        text: generation.text,
-        generationInfo: generation.generationInfo,
-      });
+    for await (const data of streamIterable) {
+      const choice = (data as any)?.choices?.[0];
+      if ((data as any).usage) usage = (data as any).usage;
+      if (!choice) continue;
 
-      if (runManager && generation.text) {
-        await runManager.handleLLMNewToken(generation.text);
+      const { delta } = choice;
+      if (!delta) continue;
+
+      // Reason: Copilot API omits delta.role when proxying Claude models.
+      // The converter uses `delta.role ?? defaultRole` to determine message type.
+      // If both are undefined, it falls through to ChatMessageChunk (no tool_call_chunks).
+      // Model responses are always from the assistant role, so defaulting here is safe.
+      const effectiveRole = delta.role ?? defaultRole ?? "assistant";
+      if (!delta.role) {
+        delta.role = effectiveRole;
       }
 
-      yield generationChunk;
-      return;
-    }
+      // Reason: Normalize content before conversion. Claude models may return
+      // delta.content as an array of content parts which the converter doesn't handle.
+      delta.content = normalizeDeltaContent(delta.content);
 
-    const chatMessages = this.toCopilotMessages(messages);
-    let yieldedUsableChunk = false;
+      const chunk = convertCompletionsDeltaToBaseMessageChunk({
+        delta,
+        rawResponse: data as any,
+        includeRawResponse: (this as any).__includeRawResponse,
+        defaultRole: effectiveRole as any,
+      });
+      defaultRole = delta.role ?? defaultRole;
 
-    // Stream directly, no fallback - errors are propagated to caller
-    for await (const chunk of this.provider.sendChatMessageStream(chatMessages, {
-      model: this.modelName,
-      signal: options?.signal,
-      fetchImpl: this.fetchImpl,
-    })) {
-      const choice = chunk.choices?.[0];
-      const content = choice?.delta?.content || "";
+      const newTokenIndices = {
+        prompt: options.promptIndex ?? 0,
+        completion: choice.index ?? 0,
+      };
 
-      // Don't skip chunks with usage or finish_reason even if content is empty
-      const hasMetadata = choice?.finish_reason || chunk.usage || choice?.delta?.role;
-      if (!content && !hasMetadata) {
+      if (typeof chunk.content !== "string") {
         continue;
       }
 
-      // Build response_metadata for the chunk
-      const responseMetadata: Record<string, unknown> = {};
-      if (choice?.finish_reason) {
-        responseMetadata.finish_reason = choice.finish_reason;
+      const generationInfo: Record<string, any> = { ...newTokenIndices };
+      if (choice.finish_reason != null) {
+        generationInfo.finish_reason = choice.finish_reason;
+        generationInfo.system_fingerprint = (data as any).system_fingerprint;
+        generationInfo.model_name = (data as any).model;
+        generationInfo.service_tier = (data as any).service_tier;
       }
-      if (choice?.delta?.role) {
-        responseMetadata.role = choice.delta.role;
-      }
-      if (chunk.usage) {
-        responseMetadata.tokenUsage = {
-          promptTokens: chunk.usage.prompt_tokens,
-          completionTokens: chunk.usage.completion_tokens,
-          totalTokens: chunk.usage.total_tokens,
-        };
-      }
-      if (chunk.model) {
-        responseMetadata.model = chunk.model;
-      }
-
-      const messageChunk = new AIMessageChunk({
-        content,
-        response_metadata: Object.keys(responseMetadata).length > 0 ? responseMetadata : undefined,
-      });
+      if (this.logprobs) generationInfo.logprobs = choice.logprobs;
 
       const generationChunk = new ChatGenerationChunk({
-        message: messageChunk,
-        text: content,
-        generationInfo: choice?.finish_reason ? { finish_reason: choice.finish_reason } : undefined,
+        message: chunk,
+        text: chunk.content,
+        generationInfo,
       });
-
-      // Notify run manager of new token
-      if (runManager && content) {
-        await runManager.handleLLMNewToken(content);
-      }
-
-      yieldedUsableChunk = true;
       yield generationChunk;
-    }
-
-    // Detect silent failures where Provider yielded chunks but none were usable by ChatModel.
-    // Provider's check catches "no JSON at all", this catches "JSON but no usable content".
-    if (!yieldedUsableChunk) {
-      throw new Error(
-        "GitHub Copilot streaming produced no usable chunks (no content, finish_reason, or usage)"
+      await runManager?.handleLLMNewToken(
+        generationChunk.text ?? "",
+        newTokenIndices,
+        undefined,
+        undefined,
+        undefined,
+        { chunk: generationChunk }
       );
     }
+
+    // Yield usage metadata chunk if available
+    if (usage) {
+      const inputTokenDetails: Record<string, number> = {};
+      if (usage.prompt_tokens_details?.audio_tokens != null) {
+        inputTokenDetails.audio = usage.prompt_tokens_details.audio_tokens;
+      }
+      if (usage.prompt_tokens_details?.cached_tokens != null) {
+        inputTokenDetails.cache_read = usage.prompt_tokens_details.cached_tokens;
+      }
+      const outputTokenDetails: Record<string, number> = {};
+      if (usage.completion_tokens_details?.audio_tokens != null) {
+        outputTokenDetails.audio = usage.completion_tokens_details.audio_tokens;
+      }
+      if (usage.completion_tokens_details?.reasoning_tokens != null) {
+        outputTokenDetails.reasoning = usage.completion_tokens_details.reasoning_tokens;
+      }
+      const usageChunk = new ChatGenerationChunk({
+        message: new AIMessageChunk({
+          content: "",
+          response_metadata: { usage: { ...usage } },
+          usage_metadata: {
+            input_tokens: usage.prompt_tokens,
+            output_tokens: usage.completion_tokens,
+            total_tokens: usage.total_tokens,
+            ...(Object.keys(inputTokenDetails).length > 0 && {
+              input_token_details: inputTokenDetails,
+            }),
+            ...(Object.keys(outputTokenDetails).length > 0 && {
+              output_token_details: outputTokenDetails,
+            }),
+          },
+        }),
+        text: "",
+      });
+      yield usageChunk;
+    }
+
+    if (options.signal?.aborted) throw new Error("AbortError");
   }
 
   /**
-   * Simple token estimation based on character count
+   * Simple token estimation based on character count.
+   * Kept as a safe fallback for direct usage outside ChatModelManager.
    */
-  async getNumTokens(content: MessageContent): Promise<number> {
+  override async getNumTokens(content: MessageContent): Promise<number> {
     const text = extractTextFromChunk(content);
     if (!text) return 0;
     return Math.ceil(text.length / CHARS_PER_TOKEN);

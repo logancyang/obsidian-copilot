@@ -16,7 +16,7 @@ const CLIENT_ID = "Iv1.b507a08c87ecfe98";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
-const COPILOT_API_BASE = "https://api.githubcopilot.com";
+export const COPILOT_API_BASE = "https://api.githubcopilot.com";
 const CHAT_COMPLETIONS_URL = `${COPILOT_API_BASE}/chat/completions`;
 const MODELS_URL = `${COPILOT_API_BASE}/models`;
 
@@ -828,6 +828,24 @@ export class GitHubCopilotProvider {
       githubCopilotToken: "",
       githubCopilotTokenExpiresAt: 0,
     });
+  }
+
+  /**
+   * Build headers required for GitHub Copilot API requests.
+   * Public wrapper around the private buildCopilotHeaders method,
+   * exposed for use by ChatOpenAI-based models that inject auth via configuration.fetch.
+   */
+  buildCopilotRequestHeaders(token: string): Record<string, string> {
+    return this.buildCopilotHeaders(token);
+  }
+
+  /**
+   * Invalidate the cached Copilot token so the next request forces a refresh.
+   * Public wrapper around clearCopilotToken, used by the fetch wrapper
+   * to implement "401 → refresh token → retry once" logic.
+   */
+  invalidateCopilotToken(): void {
+    this.clearCopilotToken();
   }
 
   /**
