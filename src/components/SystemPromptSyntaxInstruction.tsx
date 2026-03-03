@@ -8,12 +8,13 @@ export function SystemPromptSyntaxInstruction() {
   return (
     <ul className="tw-m-0 tw-px-4 tw-text-sm">
       <li>
-        <span className="tw-font-medium tw-text-accent">{`{activeNote}`}</span> represents the
-        active note.
+        <span className="tw-font-medium tw-text-accent">{`{[[Note Title]]}`}</span> includes a
+        note&apos;s content. Note: bare <span className="tw-font-medium">{`[[Note Title]]`}</span>{" "}
+        without curly braces will NOT include the note content.
       </li>
       <li>
-        <span className="tw-font-medium tw-text-accent">{`{[[Note Title]]}`}</span> represents a
-        note.
+        <span className="tw-font-medium tw-text-accent">{`{activeNote}`}</span> represents the
+        active note.
       </li>
       <li>
         <span className="tw-font-medium tw-text-accent">{`{#tag1, #tag2}`}</span> represents ALL
