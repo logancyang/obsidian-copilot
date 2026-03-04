@@ -2,26 +2,42 @@
 
 # Copilot for Obsidian - Release v3.2.4
 
-A patch release with **Gemini stability fixes**, **Miyo improvements**, **mobile polish**, and a bunch of quality-of-life updates across the board.
+A patch release with **Gemini stability fixes**, **Miyo improvements**, and **mobile/UI polish**.
 
-- 🛠️ **Fix: Gemini streaming crash** — Upgraded the Google Generative AI library to resolve a crash during streaming responses. If Gemini was cutting out on you, this should fix it! (@logancyang)
-- 🛠️ **Fix: Gemini agent loop silently stopping** — The agent no longer gets stuck mid-loop when using Gemini models. (@logancyang)
-- 🛠️ **Fix: "Connection error" for Copilot Plus users** — Resolved TLS certificate errors that caused connection failures on some systems by routing requests through Obsidian's native layer. (@logancyang)
-- 🧠 **Custom Miyo server URL** — You can now point Miyo at a remote server for distributed setups. Configure it in the Miyo settings. (@wenzhengjiang)
-- 🧠 **Miyo index clear confirmation** — A confirmation dialog now appears before clearing your Miyo index, so you won't accidentally wipe it. (@wenzhengjiang)
-- 🧠 **Miyo enable flow improvement** — Skips a redundant eligibility check when enabling Miyo for a smoother experience. (@wenzhengjiang)
-- 📱 **Mobile: floating layers now close properly** — Radix UI portaled layers (dropdowns, popovers) no longer linger when the mobile drawer hides. (@Emt-lin)
-- 📊 **Chat panel table rendering fix** — Tables in chat now render correctly and no longer conflict with third-party plugins. (@Emt-lin)
-- 🧹 **Fix: stale selected text in follow-up messages** — Previously selected text no longer bleeds into later messages where it doesn't belong. (@Emt-lin)
-- ⌨️ **Fix: Ctrl+Enter shortcut in command modal** — The text-replacement shortcut works again in the Copilot command modal. (@logancyang)
-- 📝 **Fix: system prompt reset** — You can now properly reset the default system prompt back to the built-in one. (@logancyang)
-- 💡 **Fix: system prompt template syntax hints** — Clearer hints for template variable syntax in the system prompt editor. (@logancyang)
-- 🔧 **Fix: Qwen 3.5 localSearch compatibility** — String booleans are now normalized so local search works correctly with Qwen models. (@logancyang)
-- 🎨 **Fix: custom model button crowding** — The "Add Custom Chat Model" action button no longer overlaps other elements. (@logancyang)
-- 📜 **Infinite scroll in chat history** — Chat history now loads progressively as you scroll instead of rendering everything at once. Much snappier for long histories! (@logancyang)
-- 🤖 **Automated release workflow** — New CI pipeline that automatically creates GitHub releases when version PRs are merged. (@logancyang)
-- 📂 **User-facing documentation** — Added docs to help users get started and understand features. (@logancyang)
-- 🧪 **Improved web tabs test coverage** — Better test coverage for context web tab parsing. (@somethingSTRANGE)
+- 🛠️ **Gemini fixes** — Fixed streaming crash and agent loop silently stopping mid-conversation. If Gemini was cutting out on you, this should fix it! (@logancyang)
+- 🛠️ **Fix: "Connection error" for Copilot Plus users** — Resolved TLS certificate errors that caused connection failures on some systems. (@logancyang)
+- 🧠 **Miyo improvements** — Custom server URL for remote setups, confirmation dialog before clearing index, and smoother enable flow. (@wenzhengjiang)
+- 📱 **Mobile & UI fixes** — Floating layers close properly on mobile, tables render correctly in chat, and stale selected text no longer bleeds into follow-up messages. (@Emt-lin)
+- ⚡ **Infinite scroll in chat history** — Chat history now loads progressively as you scroll. Much snappier for long histories! (@logancyang)
+- 🔧 **Misc fixes** — System prompt reset, template syntax hints, Qwen 3.5 search compatibility, Ctrl+Enter shortcut, custom model button layout. (@logancyang)
+- 📝 Minor: User-facing documentation added (@logancyang), improved web tabs test coverage (@somethingSTRANGE)
+
+More details in the changelog:
+
+### Improvements
+
+- #2251 Add infinite scroll pagination to ChatHistoryPopover @logancyang
+- #2229 Add custom Miyo server URL setting for remote deployments @wenzhengjiang
+- #2211 Add confirmation dialog before clearing Miyo index @wenzhengjiang
+- #2256 Add automated release workflow on PR merge @logancyang
+- #2254 Add user-facing documentation @logancyang
+- #2252 Rename docs to designdocs and nest todo folder @logancyang
+- #2239 Improve test coverage for context webTabs parsing @somethingSTRANGE
+
+### Bug Fixes
+
+- #2255 Fix: use safeFetch for Copilot Plus to bypass browser TLS errors @logancyang
+- #2249 Fix: upgrade @langchain/google-genai to fix Gemini streaming crash @logancyang
+- #2247 Fix: prevent silent agent loop termination with Gemini @logancyang
+- #2246 Fix: allow resetting default system prompt to built-in @logancyang
+- #2245 Fix: improve system prompt template syntax hints @logancyang
+- #2243 Fix: normalize string booleans in localSearch schema for Qwen 3.5 @logancyang
+- #2234 Fix: Add Custom Chat Model action button crowding @logancyang
+- #2228 Fix: skip redundant eligibility check when enabling Miyo @wenzhengjiang
+- #2226 Fix: chat panel table rendering and third-party plugin compatibility @Emt-lin
+- #2223 Fix: close Radix portaled layers when mobile drawer hides @Emt-lin
+- #2222 Fix: exclude non-recoverable segments from L2 promotion @Emt-lin
+- #2220 Fix: restore Ctrl+Enter text-replacement shortcut in command modal @logancyang
 
 ## Troubleshoot
 
