@@ -1,5 +1,51 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.4
+
+A patch release with **Gemini stability fixes**, **Miyo improvements**, and **mobile/UI polish**.
+
+- 🛠️ **Gemini fixes** — Fixed streaming crash and agent loop silently stopping mid-conversation. If Gemini was cutting out on you, this should fix it! (@logancyang)
+- 🛠️ **Fix: "Connection error" for Copilot Plus users** — Resolved TLS certificate errors that caused connection failures on some systems. (@logancyang)
+- 🧠 **Miyo improvements** — Custom server URL for remote setups, confirmation dialog before clearing index, and smoother enable flow. (@wenzhengjiang)
+- 📱 **Mobile & UI fixes** — Floating layers close properly on mobile, tables render correctly in chat, and stale selected text no longer bleeds into follow-up messages. (@Emt-lin)
+- ⚡ **Infinite scroll in chat history** — Chat history now loads progressively as you scroll. Much snappier for long histories! (@logancyang)
+- 🔧 **Misc fixes** — System prompt reset, template syntax hints, Qwen 3.5 search compatibility, Ctrl+Enter shortcut, custom model button layout. (@logancyang)
+- 📝 Minor: User-facing documentation added (@logancyang), improved web tabs test coverage (@somethingSTRANGE)
+
+More details in the changelog:
+
+### Improvements
+
+- #2251 Add infinite scroll pagination to ChatHistoryPopover @logancyang
+- #2229 Add custom Miyo server URL setting for remote deployments @wenzhengjiang
+- #2211 Add confirmation dialog before clearing Miyo index @wenzhengjiang
+- #2256 Add automated release workflow on PR merge @logancyang
+- #2254 Add user-facing documentation @logancyang
+- #2252 Rename docs to designdocs and nest todo folder @logancyang
+- #2239 Improve test coverage for context webTabs parsing @somethingSTRANGE
+
+### Bug Fixes
+
+- #2255 Fix: use safeFetch for Copilot Plus to bypass browser TLS errors @logancyang
+- #2249 Fix: upgrade @langchain/google-genai to fix Gemini streaming crash @logancyang
+- #2247 Fix: prevent silent agent loop termination with Gemini @logancyang
+- #2246 Fix: allow resetting default system prompt to built-in @logancyang
+- #2245 Fix: improve system prompt template syntax hints @logancyang
+- #2243 Fix: normalize string booleans in localSearch schema for Qwen 3.5 @logancyang
+- #2234 Fix: Add Custom Chat Model action button crowding @logancyang
+- #2228 Fix: skip redundant eligibility check when enabling Miyo @wenzhengjiang
+- #2226 Fix: chat panel table rendering and third-party plugin compatibility @Emt-lin
+- #2223 Fix: close Radix portaled layers when mobile drawer hides @Emt-lin
+- #2222 Fix: exclude non-recoverable segments from L2 promotion @Emt-lin
+- #2220 Fix: restore Ctrl+Enter text-replacement shortcut in command modal @logancyang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.3 🚀🚀🚀
 
 A quick fix for **Miyo on Windows**, **converted doc output**, and **CORS fixes**.
