@@ -1,3 +1,4 @@
+import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
@@ -360,18 +361,27 @@ export class MiyoClient {
 
   /**
    * Build request headers, including auth when configured.
-   * Both `Authorization: Bearer` and `X-API-Key` are sent for compatibility
-   * with different Miyo server configurations.
+   * `Authorization` uses the Copilot Plus license key, while `X-API-Key`
+   * remains available for self-hosted Miyo server compatibility.
    *
    * @returns Headers object for requestUrl.
    */
-  private buildHeaders(): Record<string, string> {
-    const apiKey = getSettings().selfHostApiKey;
+  private async buildHeaders(): Promise<Record<string, string>> {
+    const settings = getSettings();
     const headers: Record<string, string> = {};
+
+    const licenseKey = settings.plusLicenseKey
+      ? await getDecryptedKey(settings.plusLicenseKey)
+      : "";
+    if (licenseKey) {
+      headers.Authorization = `Bearer ${licenseKey}`;
+    }
+
+    const apiKey = settings.selfHostApiKey ? await getDecryptedKey(settings.selfHostApiKey) : "";
     if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
       headers["X-API-Key"] = apiKey;
     }
+
     return headers;
   }
 
@@ -412,10 +422,11 @@ export class MiyoClient {
     // TODO: Add a configurable timeout for large file parsing (e.g. big PDFs).
     // Obsidian's requestUrl does not expose a timeout option, so consider using
     // AbortController or a wrapper with Promise.race to prevent indefinite hangs.
+    const headers = await this.buildHeaders();
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,
-      headers: this.buildHeaders(),
+      headers,
       contentType: body ? "application/json" : undefined,
       body,
       throw: false,
