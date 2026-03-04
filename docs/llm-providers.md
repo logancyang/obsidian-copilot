@@ -1,6 +1,6 @@
 # LLM Providers
 
-Copilot supports 16+ AI providers. You can use cloud-based services that require API keys, or run models locally on your own machine. This guide explains how to set up each provider.
+Copilot includes 16 built-in AI providers, and you can add an unlimited number of additional models as long as they are OpenAI-compatible. You can use cloud-based services that require API keys, or run models locally on your own machine. This guide explains how to set up each provider.
 
 ---
 
