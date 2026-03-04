@@ -53,10 +53,12 @@ Find the last release tag:
 git describe --tags --abbrev=0
 ```
 
-List all merged PRs since that tag:
+List all merged PRs since that tag (paginate to avoid missing entries if there are many):
 ```bash
-gh pr list --state merged --base master --search "merged:>YYYY-MM-DD" --json number,title,author,labels --limit 100
+gh pr list --state merged --base master --search "merged:>YYYY-MM-DD" --json number,title,author,labels --limit 500
 ```
+
+If the output is exactly 500 entries, there may be more — repeat with an earlier `--search` cutoff or use `--limit 1000` and re-run.
 
 Use the tag date as the cutoff. You can get it with:
 ```bash
@@ -103,7 +105,7 @@ Prepend the new release entry at the top of `RELEASES.md`, right after the `# Re
 
 Stage all changed files:
 ```bash
-git add package.json manifest.json versions.json RELEASES.md
+git add package.json package-lock.json manifest.json versions.json RELEASES.md
 ```
 
 Commit with message: `release: vX.Y.Z`
