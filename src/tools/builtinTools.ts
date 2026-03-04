@@ -347,7 +347,8 @@ export function registerCliTools(): void {
 - daily:append — append text to the end of today's daily note. Requires content parameter.
 - daily:prepend — prepend text to the beginning of today's daily note. Requires content parameter.
 - daily:path — get the vault-relative file path of today's daily note (useful for follow-up readNote calls).
-- To create today's daily note from a template: use obsidianTemplates template:read to get the template content, then daily:prepend to write it if daily:read returns empty or an error.
+- daily:append and daily:prepend auto-create the daily note if it doesn't exist.
+- To create today's daily note from a template: first use obsidianTemplates with 'templates' to list available templates and identify the daily note template, then use 'template:read' with the template name to get the resolved content (with variables like {{date}} expanded), then use daily:prepend to populate the new note.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
@@ -429,10 +430,9 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianTemplates:
-- Use to discover available templates or inspect template content before creating notes.
-- templates: list all available template names in the vault.
-- template:read: read a template's content (with variable placeholders resolved). Requires name parameter.
-- Use obsidianDailyNote with command "daily" to create today's daily note from its configured template.`,
+- Use 'templates' to list all available templates when you need to find the right template for a task.
+- Use 'template:read' with a template name to get its content with variables resolved. Requires name parameter.
+- This is useful for creating daily notes from templates — read the template first, then use obsidianDailyNote's daily:prepend to populate the note.`,
     },
   });
 }
