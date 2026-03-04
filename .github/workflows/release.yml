@@ -110,14 +110,17 @@ jobs:
           fi
 
       # ── Step 9: Create GitHub Release ────────────────────────────────────────
-      # gh release create automatically creates the git tag on the merge commit.
+      # --target pins the tag to the exact merge commit SHA so concurrent
+      # merges cannot cause the release tag to point at a different commit.
       # Artifacts: main.js, manifest.json, styles.css
       - name: Create GitHub Release
         if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
         env:
           VERSION: ${{ steps.semver.outputs.version }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
         run: |
           gh release create "$VERSION" \
+            --target "$MERGE_SHA" \
             --title "$VERSION" \
             --notes-file /tmp/release-notes.md \
             main.js \
