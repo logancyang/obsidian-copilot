@@ -347,7 +347,7 @@ export default class ChatModelManager {
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         configuration: {
           baseURL: BREVILABS_MODELS_BASE_URL,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: safeFetch,
         },
       },
       [ChatModelProviders.MISTRAL]: {
