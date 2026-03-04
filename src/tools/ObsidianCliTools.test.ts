@@ -1,0 +1,400 @@
+import {
+  obsidianDailyNoteTool,
+  obsidianLinksTool,
+  obsidianPropertiesTool,
+  obsidianTasksTool,
+} from "./ObsidianCliTools";
+import { runObsidianCliCommand } from "@/services/obsidianCli/ObsidianCliClient";
+
+jest.mock("@/services/obsidianCli/ObsidianCliClient", () => ({
+  runObsidianCliCommand: jest.fn(),
+}));
+
+const mockedRunCommand = runObsidianCliCommand as jest.MockedFunction<typeof runObsidianCliCommand>;
+
+type CliResult = {
+  command: string;
+  args: string[];
+  binary: string;
+  attemptedBinaries: string[];
+  ok: boolean;
+  stdout: string;
+  stderr: string;
+  exitCode: number | null;
+  errorCode: string | number | null;
+  signal: string | null;
+  durationMs: number;
+};
+
+function buildSuccessResult(command: string, stdout: string): CliResult {
+  return {
+    command,
+    args: [command],
+    binary: "obsidian",
+    attemptedBinaries: ["obsidian"],
+    ok: true,
+    stdout,
+    stderr: "",
+    exitCode: 0,
+    errorCode: null,
+    signal: null,
+    durationMs: 10,
+  };
+}
+
+function buildFailedResult(
+  command: string,
+  errorCode: string,
+  stderr: string,
+  exitCode: number | null = null
+): CliResult {
+  return {
+    command,
+    args: [command],
+    binary: "obsidian",
+    attemptedBinaries: [
+      "obsidian",
+      "/Applications/Obsidian.app/Contents/MacOS/obsidian",
+      "/Applications/Obsidian.app/Contents/MacOS/Obsidian",
+    ],
+    ok: false,
+    stdout: "",
+    stderr,
+    exitCode,
+    errorCode,
+    signal: null,
+    durationMs: 10,
+  };
+}
+
+beforeEach(() => {
+  jest.clearAllMocks();
+});
+
+// ---------------------------------------------------------------------------
+// obsidianDailyNote
+// ---------------------------------------------------------------------------
+
+describe("obsidianDailyNoteTool", () => {
+  test("daily:read returns note content payload", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("daily:read", "# 2026-03-03\n\nToday's tasks...")
+    );
+
+    const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily:read" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_daily_note");
+    expect(parsed.command).toBe("daily:read");
+    expect(parsed.vault).toBeNull();
+    expect(parsed.content).toBe("# 2026-03-03\n\nToday's tasks...");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily:read",
+      vault: undefined,
+      params: {},
+    });
+  });
+
+  test("daily:path returns path payload", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily:path", "Daily/2026-03-03.md"));
+
+    const response = await (obsidianDailyNoteTool as any).invoke({
+      command: "daily:path",
+      vault: "Work",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_daily_note");
+    expect(parsed.command).toBe("daily:path");
+    expect(parsed.vault).toBe("Work");
+    expect(parsed.content).toBe("Daily/2026-03-03.md");
+  });
+
+  test("daily:append passes content and inline params", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily:append", ""));
+
+    await (obsidianDailyNoteTool as any).invoke({
+      command: "daily:append",
+      content: "- New task",
+      inline: false,
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily:append",
+      vault: undefined,
+      params: { content: "- New task", inline: false },
+    });
+  });
+
+  test("daily:prepend passes content param", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily:prepend", ""));
+
+    await (obsidianDailyNoteTool as any).invoke({
+      command: "daily:prepend",
+      content: "## Morning",
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily:prepend",
+      vault: undefined,
+      params: { content: "## Morning" },
+    });
+  });
+
+  test("daily:append throws when content is missing", async () => {
+    await expect(
+      (obsidianDailyNoteTool as any).invoke({ command: "daily:append" })
+    ).rejects.toThrow("content is required for daily:append");
+  });
+
+  test("daily:prepend throws when content is missing", async () => {
+    await expect(
+      (obsidianDailyNoteTool as any).invoke({ command: "daily:prepend" })
+    ).rejects.toThrow("content is required for daily:prepend");
+  });
+
+  test("throws on CLI failure with stderr message", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildFailedResult("daily:read", "EFAIL", "Daily note plugin not enabled", 1)
+    );
+
+    await expect(
+      (obsidianDailyNoteTool as any).invoke({ command: "daily:read" })
+    ).rejects.toThrow("Daily note plugin not enabled");
+  });
+
+  test("throws ENOENT failure with actionable message", async () => {
+    mockedRunCommand.mockResolvedValue(buildFailedResult("daily:read", "ENOENT", ""));
+
+    await expect(
+      (obsidianDailyNoteTool as any).invoke({ command: "daily:read" })
+    ).rejects.toThrow("CLI binary not found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// obsidianProperties
+// ---------------------------------------------------------------------------
+
+describe("obsidianPropertiesTool", () => {
+  test("properties vault-wide returns property list", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("properties", "aliases\nauthor\ndate\ntags")
+    );
+
+    const response = await (obsidianPropertiesTool as any).invoke({ command: "properties" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_properties");
+    expect(parsed.command).toBe("properties");
+    expect(parsed.content).toBe("aliases\nauthor\ndate\ntags");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "properties",
+      vault: undefined,
+      params: {},
+    });
+  });
+
+  test("properties passes file and counts params", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("properties", "tags: false\ntitle: My Note")
+    );
+
+    await (obsidianPropertiesTool as any).invoke({
+      command: "properties",
+      file: "My Note",
+      counts: true,
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "properties",
+      vault: undefined,
+      params: { file: "My Note", counts: true },
+    });
+  });
+
+  test("property:read returns single property value", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("property:read", "project, review"));
+
+    const response = await (obsidianPropertiesTool as any).invoke({
+      command: "property:read",
+      name: "tags",
+      file: "My Note",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.content).toBe("project, review");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "property:read",
+      vault: undefined,
+      params: { name: "tags", file: "My Note" },
+    });
+  });
+
+  test("property:read throws when name is missing", async () => {
+    await expect(
+      (obsidianPropertiesTool as any).invoke({ command: "property:read" })
+    ).rejects.toThrow("name is required for property:read");
+  });
+
+  test("throws on CLI failure with error code message", async () => {
+    // When error code is present, it takes precedence over exit code in error message
+    mockedRunCommand.mockResolvedValue(buildFailedResult("properties", "EFAIL", "", 1));
+
+    await expect(
+      (obsidianPropertiesTool as any).invoke({ command: "properties" })
+    ).rejects.toThrow("error code EFAIL");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// obsidianTasks
+// ---------------------------------------------------------------------------
+
+describe("obsidianTasksTool", () => {
+  test("tasks returns task list", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("tasks", "- [ ] Review PR #2181\n- [x] Write tests")
+    );
+
+    const response = await (obsidianTasksTool as any).invoke({ command: "tasks" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_tasks");
+    expect(parsed.command).toBe("tasks");
+    expect(parsed.content).toBe("- [ ] Review PR #2181\n- [x] Write tests");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "tasks",
+      vault: undefined,
+      params: {},
+    });
+  });
+
+  test("tasks passes all filter params", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("tasks", "- [ ] Task A"));
+
+    await (obsidianTasksTool as any).invoke({
+      command: "tasks",
+      file: "Project Plan",
+      todo: true,
+      verbose: true,
+      vault: "Work",
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "tasks",
+      vault: "Work",
+      params: { file: "Project Plan", todo: true, verbose: true },
+    });
+  });
+
+  test("tasks with daily flag", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("tasks", "- [ ] Daily task"));
+
+    await (obsidianTasksTool as any).invoke({ command: "tasks", daily: true });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "tasks",
+      vault: undefined,
+      params: { daily: true },
+    });
+  });
+
+  test("throws on CLI failure with stderr", async () => {
+    mockedRunCommand.mockResolvedValue(buildFailedResult("tasks", "ENOENT", ""));
+
+    await expect((obsidianTasksTool as any).invoke({ command: "tasks" })).rejects.toThrow(
+      "CLI binary not found"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// obsidianLinks
+// ---------------------------------------------------------------------------
+
+describe("obsidianLinksTool", () => {
+  test("backlinks returns source file list", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("backlinks", "Projects/roadmap.md\nDaily/2026-03-01.md")
+    );
+
+    const response = await (obsidianLinksTool as any).invoke({
+      command: "backlinks",
+      file: "My Note",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_links");
+    expect(parsed.command).toBe("backlinks");
+    expect(parsed.content).toBe("Projects/roadmap.md\nDaily/2026-03-01.md");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "backlinks",
+      vault: undefined,
+      params: { file: "My Note" },
+    });
+  });
+
+  test("links returns outgoing link list", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("links", "Ideas/brainstorm.md\nProjects/roadmap.md")
+    );
+
+    await (obsidianLinksTool as any).invoke({ command: "links", path: "Notes/note.md" });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "links",
+      vault: undefined,
+      params: { path: "Notes/note.md" },
+    });
+  });
+
+  test("orphans returns file list", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("orphans", "Inbox/draft.md\nAttic/old.md"));
+
+    const response = await (obsidianLinksTool as any).invoke({ command: "orphans" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.content).toBe("Inbox/draft.md\nAttic/old.md");
+  });
+
+  test("unresolved passes counts and verbose params", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("unresolved", "Missing Note\t5\nOld Reference\t2")
+    );
+
+    await (obsidianLinksTool as any).invoke({
+      command: "unresolved",
+      counts: true,
+      verbose: false,
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "unresolved",
+      vault: undefined,
+      params: { counts: true, verbose: false },
+    });
+  });
+
+  test("backlinks with total flag", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("backlinks", "4"));
+
+    await (obsidianLinksTool as any).invoke({ command: "backlinks", file: "Note", total: true });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "backlinks",
+      vault: undefined,
+      params: { file: "Note", total: true },
+    });
+  });
+
+  test("throws on CLI failure with stderr message", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildFailedResult("backlinks", "EFAIL", 'Error: File "note.md" not found.', 1)
+    );
+
+    await expect(
+      (obsidianLinksTool as any).invoke({ command: "backlinks", file: "note" })
+    ).rejects.toThrow('File "note.md" not found.');
+  });
+});

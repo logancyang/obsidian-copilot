@@ -4,7 +4,13 @@ import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
-import { obsidianDailyReadTool, obsidianRandomReadTool } from "./ObsidianCliDailyTools";
+import { obsidianRandomReadTool } from "./ObsidianCliDailyTools";
+import {
+  obsidianDailyNoteTool,
+  obsidianLinksTool,
+  obsidianPropertiesTool,
+  obsidianTasksTool,
+} from "./ObsidianCliTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import { createGetTagListTool } from "./TagTools";
 import {
@@ -325,18 +331,22 @@ export function registerCliTools(): void {
   const registry = ToolRegistry.getInstance();
 
   registry.register({
-    tool: obsidianDailyReadTool,
+    tool: obsidianDailyNoteTool,
     metadata: {
-      id: "obsidianDailyRead",
-      displayName: "Daily Note (CLI)",
-      description: "Read today's daily note using the official Obsidian CLI",
+      id: "obsidianDailyNote",
+      displayName: "Obsidian CLI: Daily Note (Experimental)",
+      description: "Read, append, or prepend to today's daily note, or get its path",
       category: "file",
       requiresVault: true,
-      customPromptInstructions: `For obsidianDailyRead:
-- Use this tool when the user asks for today's daily note or asks to read the daily note content.
-- Prefer this tool over generic file browsing when the request is clearly about daily notes.
-- If the user names a specific vault, pass it using the vault parameter.
-- Do not use this tool for arbitrary non-daily note files; use readNote/getFileTree flow for those requests.`,
+      customPromptInstructions: `For obsidianDailyNote:
+- Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
+- Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
+- daily:read — read today's daily note content.
+- daily:append — append text to the end of today's daily note. Requires content parameter.
+- daily:prepend — prepend text to the beginning of today's daily note. Requires content parameter.
+- daily:path — get the vault-relative file path of today's daily note (useful for follow-up readNote calls).
+- For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
+- If the user names a specific vault, pass it using the vault parameter.`,
     },
   });
 
@@ -344,14 +354,66 @@ export function registerCliTools(): void {
     tool: obsidianRandomReadTool,
     metadata: {
       id: "obsidianRandomRead",
-      displayName: "Random Note (CLI)",
+      displayName: "Obsidian CLI: Random Note (Experimental)",
       description: "Read a random note using the official Obsidian CLI",
       category: "file",
       requiresVault: true,
       customPromptInstructions: `For obsidianRandomRead:
-- Use this tool when the user explicitly asks for a random note or random note content.
+- Use when the user explicitly asks for a random note or random note content.
 - If the user names a specific vault, pass it using the vault parameter.
-- Do not use this tool when the user asks for a specific note; use readNote/getFileTree flow for specific targets.`,
+- Do not use when the user asks for a specific note; use readNote/getFileTree for specific targets.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianPropertiesTool,
+    metadata: {
+      id: "obsidianProperties",
+      displayName: "Obsidian CLI: Properties (Experimental)",
+      description: "Read frontmatter properties from notes or list all property names in the vault",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianProperties:
+- Use to inspect frontmatter properties across the vault or within a specific note.
+- properties (no file/path): list all property names used vault-wide. Add counts=true for occurrence counts.
+- properties with file= or path=: list that note's key-value property pairs.
+- property:read: read a single property value from a specific note. Requires name parameter.
+- Do not use for full note content — use readNote for that.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianTasksTool,
+    metadata: {
+      id: "obsidianTasks",
+      displayName: "Obsidian CLI: Tasks (Experimental)",
+      description: "List tasks across the vault with filters for status, file, and daily note",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianTasks:
+- Use to list and filter tasks across the vault.
+- todo=true: show only incomplete tasks. done=true: show only completed tasks.
+- daily=true: show tasks from today's daily note only.
+- verbose=true: group tasks by file with line numbers.
+- total=true: return only the task count.
+- file= or path=: limit to a specific note.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianLinksTool,
+    metadata: {
+      id: "obsidianLinks",
+      displayName: "Obsidian CLI: Links (Experimental)",
+      description: "Query the vault link graph: backlinks, outgoing links, orphans, unresolved",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianLinks:
+- Use to explore the vault's link graph.
+- backlinks: list notes that link TO a given file. Use file= or path= to target a note.
+- links: list outgoing links FROM a given file. Use file= or path= to target a note.
+- orphans: list all notes with no incoming links. Use total=true for just the count.
+- unresolved: list wikilinks that don't resolve to any existing file. Use counts=true for occurrence counts, verbose=true to see source files.`,
     },
   });
 }
