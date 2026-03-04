@@ -60,7 +60,7 @@ export const ToolSettingsSection: React.FC = () => {
         return (
           <div
             key="cli"
-            className="tw-flex tw-flex-col tw-gap-2 tw-rounded-md tw-border tw-border-border tw-p-3"
+            className="tw-flex tw-flex-col tw-gap-2 tw-rounded-md tw-border tw-border-border tw-pb-3"
           >
             <SettingItem
               type="switch"
@@ -69,7 +69,7 @@ export const ToolSettingsSection: React.FC = () => {
               checked={allEnabled}
               onCheckedChange={(checked) => handleCliMasterToggle(checked, configurableInCategory)}
             />
-            <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-1 tw-border-l tw-border-border tw-pl-3">
+            <div className="tw-ml-4 tw-flex tw-flex-col tw-gap-1 tw-border-l tw-border-border tw-px-3">
               {configurableInCategory.map(({ metadata }) => (
                 <div key={metadata.id} className="tw-flex tw-flex-col">
                   <span className="tw-text-xs tw-font-medium tw-text-normal">
