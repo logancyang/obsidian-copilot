@@ -59,11 +59,15 @@ export const obsidianDailyNoteTool = createLangChainTool({
 
     if (!result.ok) throwCliFailure(result);
 
+    // Preserve raw stdout for read commands — trimming may alter meaningful Markdown whitespace.
+    // Non-read commands (append, prepend, path) return short status strings where trimming is safe.
+    const content = command === "daily:read" ? result.stdout : result.stdout.trim();
+
     return {
       type: "obsidian_cli_daily_note",
       command: result.command,
       vault: vault ?? null,
-      content: result.stdout.trim(),
+      content,
       durationMs: result.durationMs,
     };
   },
