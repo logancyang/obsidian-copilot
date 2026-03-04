@@ -1,7 +1,7 @@
 # Obsidian CLI Integration Design (MVP)
 
-**Date:** 2026-02-11  
-**Status:** Draft  
+**Date:** 2026-02-11
+**Status:** Draft — Experimental, Desktop-Only
 **Scope:** Copilot plugin tooling (`AutonomousAgent` + `Copilot Plus` tool execution path)
 
 ## 1. Problem Statement
@@ -21,6 +21,25 @@ Obsidian now ships an official CLI (early access). Copilot already has a mature 
 2. No mobile support (CLI is desktop-oriented).
 3. No prompt/system-prompt rewrites beyond normal tool metadata guidance.
 4. No dependency on interactive TUI mode in agent flows.
+
+## 3a. Platform Policy
+
+These tools are **desktop-only** and **experimental**.
+
+- On mobile platforms, CLI tools are **not registered** in the `ToolRegistry` and are completely invisible to the user — they do not appear in tool settings, tool lists, agent reasoning, or any UI surface.
+- Registration is gated by `Platform.isDesktopApp` in `initializeBuiltinTools()`. The runtime guard in `ObsidianCliClient.runObsidianCliCommand()` provides defense-in-depth but is not the primary gating mechanism.
+- The Obsidian CLI requires `child_process.execFile`, which is only available in the desktop Electron renderer.
+
+## 3b. Design Rationale — CLI Shell-Out vs Internal API
+
+The CLI shell-out approach was chosen because:
+
+1. **Breadth without cost**: The CLI exposes a large and growing command surface. Reimplementing each command via internal Obsidian APIs (`app.vault`, `app.metadataCache`, etc.) would require significant per-command development and maintenance effort.
+2. **Forward compatibility**: New CLI commands become available to the tool system without code changes — only the allowlist needs updating.
+3. **Safety**: `execFile` (not shell) with strict argument serialization prevents injection. A command allowlist and mutation gating limit blast radius.
+4. **Incremental adoption**: The versioned tier system (v0 → v1 → v2) allows cautious rollout, starting with read-only commands.
+
+Internal API tools remain the right choice for operations that need deep integration (e.g., frontmatter processing via `app.fileManager.processFrontMatter()`). The CLI approach is complementary, not a replacement.
 
 ## 4. Current Architecture Fit
 

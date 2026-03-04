@@ -1,5 +1,5 @@
 import { getSettings } from "@/settings/model";
-import { Vault } from "obsidian";
+import { Platform, Vault } from "obsidian";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { updateMemoryTool } from "./memoryTools";
@@ -172,35 +172,6 @@ Examples:
     },
   },
   {
-    tool: obsidianDailyReadTool,
-    metadata: {
-      id: "obsidianDailyRead",
-      displayName: "Daily Note (CLI)",
-      description: "Read today's daily note using the official Obsidian CLI",
-      category: "file",
-      requiresVault: true,
-      customPromptInstructions: `For obsidianDailyRead:
-- Use this tool when the user asks for today's daily note or asks to read the daily note content.
-- Prefer this tool over generic file browsing when the request is clearly about daily notes.
-- If the user names a specific vault, pass it using the vault parameter.
-- Do not use this tool for arbitrary non-daily note files; use readNote/getFileTree flow for those requests.`,
-    },
-  },
-  {
-    tool: obsidianRandomReadTool,
-    metadata: {
-      id: "obsidianRandomRead",
-      displayName: "Random Note (CLI)",
-      description: "Read a random note using the official Obsidian CLI",
-      category: "file",
-      requiresVault: true,
-      customPromptInstructions: `For obsidianRandomRead:
-- Use this tool when the user explicitly asks for a random note or random note content.
-- If the user names a specific vault, pass it using the vault parameter.
-- Do not use this tool when the user asks for a specific note; use readNote/getFileTree flow for specific targets.`,
-    },
-  },
-  {
     tool: writeToFileTool,
     metadata: {
       id: "writeToFile",
@@ -347,6 +318,45 @@ Example: statement: "I'm studying Japanese and I'm preparing for JLPT N3"`,
 }
 
 /**
+ * Register desktop-only Obsidian CLI tools.
+ * These tools are completely invisible on mobile — not registered, not shown in any UI.
+ */
+export function registerCliTools(): void {
+  const registry = ToolRegistry.getInstance();
+
+  registry.register({
+    tool: obsidianDailyReadTool,
+    metadata: {
+      id: "obsidianDailyRead",
+      displayName: "Daily Note (CLI)",
+      description: "Read today's daily note using the official Obsidian CLI",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianDailyRead:
+- Use this tool when the user asks for today's daily note or asks to read the daily note content.
+- Prefer this tool over generic file browsing when the request is clearly about daily notes.
+- If the user names a specific vault, pass it using the vault parameter.
+- Do not use this tool for arbitrary non-daily note files; use readNote/getFileTree flow for those requests.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianRandomReadTool,
+    metadata: {
+      id: "obsidianRandomRead",
+      displayName: "Random Note (CLI)",
+      description: "Read a random note using the official Obsidian CLI",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianRandomRead:
+- Use this tool when the user explicitly asks for a random note or random note content.
+- If the user names a specific vault, pass it using the vault parameter.
+- Do not use this tool when the user asks for a specific note; use readNote/getFileTree flow for specific targets.`,
+    },
+  });
+}
+
+/**
  * Initialize all built-in tools in the registry.
  * This function registers tool definitions, not user preferences.
  * User-enabled tools are filtered dynamically when retrieved.
@@ -383,6 +393,11 @@ export function initializeBuiltinTools(vault?: Vault): void {
     // Register memory tool if saved memory is enabled
     if (settings.enableSavedMemory) {
       registerMemoryTool();
+    }
+
+    // Register desktop-only CLI tools (invisible on mobile)
+    if (Platform.isDesktopApp) {
+      registerCliTools();
     }
   }
 }
