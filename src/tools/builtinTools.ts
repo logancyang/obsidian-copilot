@@ -335,9 +335,9 @@ export function registerCliTools(): void {
     tool: obsidianDailyNoteTool,
     metadata: {
       id: "obsidianDailyNote",
-      displayName: "Obsidian CLI: Daily Note (Experimental)",
+      displayName: "Daily Note",
       description: "Read, append, or prepend to today's daily note, or get its path",
-      category: "file",
+      category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianDailyNote:
 - Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
@@ -355,9 +355,9 @@ export function registerCliTools(): void {
     tool: obsidianRandomReadTool,
     metadata: {
       id: "obsidianRandomRead",
-      displayName: "Obsidian CLI: Random Note (Experimental)",
+      displayName: "Random Note",
       description: "Read a random note using the official Obsidian CLI",
-      category: "file",
+      category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianRandomRead:
 - Use when the user explicitly asks for a random note or random note content.
@@ -370,9 +370,9 @@ export function registerCliTools(): void {
     tool: obsidianPropertiesTool,
     metadata: {
       id: "obsidianProperties",
-      displayName: "Obsidian CLI: Properties (Experimental)",
+      displayName: "Properties",
       description: "Read frontmatter properties from notes or list all property names in the vault",
-      category: "file",
+      category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianProperties:
 - Use to inspect frontmatter properties across the vault or within a specific note.
@@ -387,9 +387,9 @@ export function registerCliTools(): void {
     tool: obsidianTasksTool,
     metadata: {
       id: "obsidianTasks",
-      displayName: "Obsidian CLI: Tasks (Experimental)",
+      displayName: "Tasks",
       description: "List tasks across the vault with filters for status, file, and daily note",
-      category: "file",
+      category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianTasks:
 - Use to list and filter tasks across the vault.
@@ -405,9 +405,9 @@ export function registerCliTools(): void {
     tool: obsidianLinksTool,
     metadata: {
       id: "obsidianLinks",
-      displayName: "Obsidian CLI: Links (Experimental)",
+      displayName: "Links",
       description: "Query the vault link graph: backlinks, outgoing links, orphans, unresolved",
-      category: "file",
+      category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianLinks:
 - Use to explore the vault's link graph.

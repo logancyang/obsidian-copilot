@@ -3,6 +3,16 @@ import { runObsidianCliCommand } from "@/services/obsidianCli/ObsidianCliClient"
 import { throwCliFailure } from "@/services/obsidianCli/cliErrors";
 import { createLangChainTool } from "./createLangChainTool";
 
+/**
+ * Build CLI params from a tool args object, excluding `command` and `vault`.
+ * Filters out undefined values so only explicitly provided params are sent.
+ */
+function buildCliParams(args: Record<string, unknown>): Record<string, string | boolean> {
+  return Object.fromEntries(
+    Object.entries(args).filter(([k, v]) => k !== "command" && k !== "vault" && v !== undefined)
+  ) as Record<string, string | boolean>;
+}
+
 // ---------------------------------------------------------------------------
 // obsidianDailyNote — daily note category tool (v1)
 // ---------------------------------------------------------------------------
@@ -38,15 +48,13 @@ export const obsidianDailyNoteTool = createLangChainTool({
   description:
     "Read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
   schema: dailyNoteSchema,
-  func: async ({ command, content, inline, vault }) => {
-    if ((command === "daily:append" || command === "daily:prepend") && !content) {
+  func: async (args) => {
+    const { command, vault } = args;
+    if ((command === "daily:append" || command === "daily:prepend") && !args.content) {
       throw new Error(`content is required for ${command}`);
     }
 
-    const params: Record<string, string | boolean> = {};
-    if (content !== undefined) params.content = content;
-    if (inline !== undefined) params.inline = inline;
-
+    const params = buildCliParams(args as Record<string, unknown>);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -103,19 +111,13 @@ export const obsidianPropertiesTool = createLangChainTool({
   description:
     "Read frontmatter properties from your vault via the official Obsidian CLI: list all property names used vault-wide, or read specific property values from a note.",
   schema: propertiesSchema,
-  func: async ({ command, name, file, path, counts, sort, total, vault }) => {
-    if (command === "property:read" && !name) {
+  func: async (args) => {
+    const { command, vault } = args;
+    if (command === "property:read" && !args.name) {
       throw new Error("name is required for property:read");
     }
 
-    const params: Record<string, string | boolean> = {};
-    if (name !== undefined) params.name = name;
-    if (file !== undefined) params.file = file;
-    if (path !== undefined) params.path = path;
-    if (counts !== undefined) params.counts = counts;
-    if (sort !== undefined) params.sort = sort;
-    if (total !== undefined) params.total = total;
-
+    const params = buildCliParams(args as Record<string, unknown>);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -162,17 +164,9 @@ export const obsidianTasksTool = createLangChainTool({
   description:
     "List tasks across your vault via the official Obsidian CLI with filters for completion status, file, daily note, and more.",
   schema: tasksSchema,
-  func: async ({ command, file, path, todo, done, status, daily, verbose, total, vault }) => {
-    const params: Record<string, string | boolean> = {};
-    if (file !== undefined) params.file = file;
-    if (path !== undefined) params.path = path;
-    if (todo !== undefined) params.todo = todo;
-    if (done !== undefined) params.done = done;
-    if (status !== undefined) params.status = status;
-    if (daily !== undefined) params.daily = daily;
-    if (verbose !== undefined) params.verbose = verbose;
-    if (total !== undefined) params.total = total;
-
+  func: async (args) => {
+    const { command, vault } = args;
+    const params = buildCliParams(args as Record<string, unknown>);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -233,15 +227,9 @@ export const obsidianLinksTool = createLangChainTool({
   description:
     "Query the vault link graph via the official Obsidian CLI: list backlinks to a file, outgoing links from a file, orphaned notes with no incoming links, or unresolved wikilinks.",
   schema: linksSchema,
-  func: async ({ command, file, path, counts, verbose, total, all, vault }) => {
-    const params: Record<string, string | boolean> = {};
-    if (file !== undefined) params.file = file;
-    if (path !== undefined) params.path = path;
-    if (counts !== undefined) params.counts = counts;
-    if (verbose !== undefined) params.verbose = verbose;
-    if (total !== undefined) params.total = total;
-    if (all !== undefined) params.all = all;
-
+  func: async (args) => {
+    const { command, vault } = args;
+    const params = buildCliParams(args as Record<string, unknown>);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
