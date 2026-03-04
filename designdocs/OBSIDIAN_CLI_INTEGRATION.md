@@ -71,24 +71,23 @@ Instead of one tool per CLI command (~100 commands = too many tools) or one gene
 | `obsidianDailyRead` | `daily:read` | Read-only. Dedicated tool for v0 simplicity. |
 | `obsidianRandomRead` | `random:read` | Read-only. Dedicated tool for v0 simplicity. |
 
-### v1 (Next — ~14 commands across 5 tools)
+### v1 (Next — ~15 commands across 5 tools)
 
 | Tool | Commands | Notes |
 |------|----------|-------|
-| **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy) |
+| **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy). Subsumes v0 `obsidianDailyRead`. |
 | **obsidianProperties** | `properties`, `property:read`, `property:set`, `property:remove` | `property:set` and `property:remove` require light confirmation |
 | **obsidianTasks** | `tasks`, `task` (toggle/done/todo/status) | `task` mutations require light confirmation |
-| **obsidianFiles** | `read`, `random:read` | Read-only. Subsumes v0 `obsidianRandomRead`. |
+| **obsidianRandomRead** | `random:read` | Read-only. Standalone tool (single command). Continues from v0. |
 | **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
 
-### v2 (Future — ~8 commands across 4 tools)
+### v2 (Future — ~7 commands across 3 tools)
 
 | Tool | Commands | Notes |
 |------|----------|-------|
 | **obsidianTemplates** | `templates`, `template:read` | Read-only. `template:insert` deferred (requires active file context). |
 | **obsidianBases** | `bases`, `base:views`, `base:query` | Read-only. `base:create` deferred to later phase. |
 | **obsidianBookmarks** | `bookmarks`, `bookmark` | `bookmark` (add) gated by mutation setting |
-| **obsidianTags** | `tags`, `tag` | Read-only |
 
 ### Excluded from Tool System
 
@@ -103,7 +102,9 @@ The following CLI commands are **not exposed** to the AI agent:
 | System commands | `reload`, `restart`, `version`, `vault`, `vaults` | Not useful for agent workflows |
 | Developer tools | `eval`, `dev:*`, `devtools` | Arbitrary code execution risk |
 | Niche metadata | `aliases`, `wordcount`, `recents`, `hotkeys`, `commands` | Low AI synergy |
-| Search | `search`, `search:context`, `search:open` | Redundant with Copilot's existing keyword + semantic search |
+| Search | `search`, `search:context`, `search:open` | Redundant with Copilot's existing keyword + semantic search (`localSearch`) |
+| File read | `read` | Redundant with Copilot's existing `readNote` tool (see Tool Disambiguation) |
+| Tag listing | `tags` | Redundant with Copilot's existing `getTagList` tool (see Tool Disambiguation) |
 | Arbitrary file writes | `append`, `prepend`, `create` | File modifications beyond daily notes should go through the existing Composer tool (`writeToFile`/`replaceInFile`) |
 
 ### Write Operations Policy
@@ -114,6 +115,23 @@ The following CLI commands are **not exposed** to the AI agent:
 | **Arbitrary file append/prepend** | Excluded — use Composer tool | File modifications beyond daily notes need the Composer diff/preview UX for safety |
 | **Property set/remove** | Light confirmation in chat before executing | Metadata changes are reversible but should be intentional |
 | **Task toggle/status** | Light confirmation in chat before executing | Status changes are reversible but should be intentional |
+
+### Tool Disambiguation
+
+CLI tools are **complementary** to existing internal tools, not replacements. Several CLI commands were evaluated and intentionally excluded because Copilot already has superior internal implementations:
+
+| CLI Command | Existing Internal Tool | Why Internal Wins |
+|-------------|----------------------|-------------------|
+| `read` | `readNote` | In-process (`app.vault.cachedRead`), 200-line chunking, multi-strategy path resolution (wikilink, basename, partial match), linked notes extraction, mtime metadata. CLI `read` spawns a process, returns raw text, and requires exact paths. |
+| `tags` | `getTagList` | In-process (`app.metadataCache`), structured JSON with occurrence counts, frontmatter/inline breakdown, progressive size limiting (500KB cap), configurable `maxEntries`. CLI `tags` returns unstructured text with no filtering. |
+| `search`, `search:context` | `localSearch` | Hybrid keyword + semantic search with BM25, query expansion, reranking, time range filtering, tag-aware retrieval. CLI search is basic text matching. |
+| `append`, `prepend`, `create` | `writeToFile` / `replaceInFile` | Composer diff/preview UX for safety, line-ending normalization, SEARCH/REPLACE blocks, auto-accept setting. Exception: `daily:append`/`daily:prepend` use CLI directly (low-risk, append-only). |
+
+**Prompt instruction guidelines for CLI tools:**
+
+- Each CLI tool's `customPromptInstructions` must include explicit disambiguation guidance directing the LLM to the correct tool.
+- Example: "Use `readNote` for reading specific notes by path. Use `obsidianDailyNote` for daily note operations (read, append, prepend). Use `obsidianRandomRead` for picking a random note."
+- When an existing internal tool and a CLI tool could both handle a request, the internal tool should be preferred unless the CLI tool provides unique capability (e.g., daily note path resolution, random note selection, backlink traversal).
 
 ## 6. Implementation Design
 
@@ -188,14 +206,15 @@ Manual validation:
 
 ### Phase 2: v1 expansion
 
-- Refactor v0 tools into category-based tools (`obsidianDailyNote`, `obsidianFiles`, etc.).
+- Refactor v0 `obsidianDailyRead` into category-based `obsidianDailyNote` (read, append, prepend, path).
+- Keep `obsidianRandomRead` as standalone tool (single command).
 - Add `obsidianProperties`, `obsidianTasks`, `obsidianLinks` tools.
 - Implement mutation gating via `obsidianCliAllowMutations` setting.
-- Add per-tool command allowlists.
+- Add per-tool command allowlists and prompt disambiguation guidance.
 
 ### Phase 3: v2 expansion
 
-- Add `obsidianTemplates`, `obsidianBases`, `obsidianBookmarks`, `obsidianTags` tools.
+- Add `obsidianTemplates`, `obsidianBases`, `obsidianBookmarks` tools.
 - Start with read/query-only commands, expand to mutations with explicit confirmation controls.
 
 ## 10. Risks and Mitigations
