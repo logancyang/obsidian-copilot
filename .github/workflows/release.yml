@@ -1,0 +1,108 @@
+# Release workflow: triggered when a PR targeting master is merged and its title
+# is a strict semver string (e.g. "3.2.3"). The PR title becomes the release tag
+# and title; the PR body becomes the release notes.
+#
+# Non-semver PR titles (feature PRs, bug fixes, etc.) are silently ignored —
+# the workflow runs but exits early without creating a release.
+
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+
+jobs:
+  release:
+    # Only proceed when the PR was actually merged (not just closed/abandoned).
+    if: github.event.pull_request.merged == true
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # required to create GitHub releases and tags
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      # ── Step 1: Validate that the PR title is a strict semver ──────────────
+      # Exits without error when the title is not semver so non-release PRs
+      # pass silently. Sets outputs.version and outputs.is_release for
+      # downstream steps.
+      - name: Validate semver PR title
+        id: semver
+        run: |
+          VERSION="${{ github.event.pull_request.title }}"
+          if echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "PR title '$VERSION' is a valid semver — proceeding with release."
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "PR title '$VERSION' is not strict semver (X.Y.Z) — skipping release."
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Step 2: Checkout the merge commit on master ─────────────────────────
+      - name: Checkout
+        if: steps.semver.outputs.is_release == 'true'
+        uses: actions/checkout@v4
+        with:
+          # Check out the HEAD of master (the merge commit) so that
+          # manifest.json reflects what was just merged.
+          ref: master
+
+      # ── Step 3: Verify PR title version matches manifest.json ───────────────
+      - name: Verify version matches manifest.json
+        if: steps.semver.outputs.is_release == 'true'
+        run: |
+          VERSION="${{ steps.semver.outputs.version }}"
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "Version mismatch: PR title='$VERSION', manifest.json='$MANIFEST_VERSION'"
+            exit 1
+          fi
+          echo "Version check passed: $VERSION"
+
+      # ── Step 4: Set up Node.js ───────────────────────────────────────────────
+      - name: Setup Node.js 22.x
+        if: steps.semver.outputs.is_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      # ── Step 5: Install dependencies ────────────────────────────────────────
+      - name: Install dependencies
+        if: steps.semver.outputs.is_release == 'true'
+        run: npm ci
+
+      # ── Step 6: Build the plugin ─────────────────────────────────────────────
+      - name: Build
+        if: steps.semver.outputs.is_release == 'true'
+        run: npm run build
+
+      # ── Step 7: Write PR body to a file (avoids shell injection) ─────────────
+      # Using an environment variable to pass the PR body prevents special
+      # characters (backticks, quotes, dollar signs, etc.) from being
+      # interpreted by the shell.
+      - name: Write release notes to file
+        if: steps.semver.outputs.is_release == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > /tmp/release-notes.md
+
+      # ── Step 8: Create GitHub Release ────────────────────────────────────────
+      # gh release create automatically creates the git tag on the merge commit.
+      # Artifacts: main.js, manifest.json, styles.css
+      - name: Create GitHub Release
+        if: steps.semver.outputs.is_release == 'true'
+        run: |
+          VERSION="${{ steps.semver.outputs.version }}"
+          gh release create "$VERSION" \
+            --title "$VERSION" \
+            --notes-file /tmp/release-notes.md \
+            main.js \
+            manifest.json \
+            styles.css
