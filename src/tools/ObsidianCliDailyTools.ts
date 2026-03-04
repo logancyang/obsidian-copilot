@@ -39,7 +39,7 @@ export const obsidianDailyReadTool = createLangChainTool({
       type: "obsidian_cli_daily_read",
       command: result.command,
       vault: vault || null,
-      content: result.stdout.trim(),
+      content: result.stdout,
       durationMs: result.durationMs,
     };
   },
@@ -77,7 +77,7 @@ export const obsidianRandomReadTool = createLangChainTool({
       type: "obsidian_cli_random_read",
       command: result.command,
       vault: vault || null,
-      content: result.stdout.trim(),
+      content: result.stdout,
       durationMs: result.durationMs,
     };
   },
