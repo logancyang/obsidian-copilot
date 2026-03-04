@@ -1,3 +1,4 @@
+import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
@@ -360,18 +361,21 @@ export class MiyoClient {
 
   /**
    * Build request headers, including auth when configured.
-   * Both `Authorization: Bearer` and `X-API-Key` are sent for compatibility
-   * with different Miyo server configurations.
+   * `Authorization` uses the Copilot Plus license key.
    *
    * @returns Headers object for requestUrl.
    */
-  private buildHeaders(): Record<string, string> {
-    const apiKey = getSettings().selfHostApiKey;
+  private async buildHeaders(): Promise<Record<string, string>> {
+    const settings = getSettings();
     const headers: Record<string, string> = {};
-    if (apiKey) {
-      headers.Authorization = `Bearer ${apiKey}`;
-      headers["X-API-Key"] = apiKey;
+
+    const licenseKey = settings.plusLicenseKey
+      ? await getDecryptedKey(settings.plusLicenseKey)
+      : "";
+    if (licenseKey) {
+      headers.Authorization = `Bearer ${licenseKey}`;
     }
+
     return headers;
   }
 
@@ -402,10 +406,12 @@ export class MiyoClient {
     }
 
     const body = options.body ? JSON.stringify(options.body) : undefined;
+    const headers = await this.buildHeaders();
     logInfo("Miyo request:", {
       method: options.method,
       url: url.toString(),
       hasBody: Boolean(body),
+      hasAuthorizationHeader: Boolean(headers.Authorization),
       ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
     });
 
@@ -415,7 +421,7 @@ export class MiyoClient {
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,
-      headers: this.buildHeaders(),
+      headers,
       contentType: body ? "application/json" : undefined,
       body,
       throw: false,
