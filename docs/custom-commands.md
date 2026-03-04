@@ -46,7 +46,7 @@ Inside your prompt, you can use variables that get replaced with real content wh
 
 | Variable | What it inserts |
 |---|---|
-| `{}` | The text currently selected in the editor |
+| `{}` or `{selected_text}` | The text currently selected in the editor |
 | `{activeNote}` | The full content of the currently active note |
 | `{[[Note Title]]}` | The content of a specific note by title |
 | `{FolderPath}` | All notes within a specific folder |
@@ -71,7 +71,7 @@ Compare my notes on {[[Product Roadmap]]} and {[[Competitor Analysis]]} and iden
 
 **Example — acting on selected text:**
 ```
-Rewrite this in a more formal tone: {}
+Rewrite this in a more formal tone: {selected_text}
 ```
 
 Variable substitution must be enabled in **Settings → Copilot → Command → Enable custom prompt templating** (on by default).

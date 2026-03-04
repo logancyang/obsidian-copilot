@@ -100,7 +100,7 @@ Go to the project selector to manage your projects:
 
 - **Sort**: Projects can be sorted by most recently used or alphabetically
 - **Edit**: Click the edit icon to change a project's settings
-- **Delete**: Remove a project (its chat history is also cleared)
+- **Delete**: Remove the project entry from the list (saved conversation files in your vault are not deleted)
 
 Sort strategy: **Settings → Copilot → Basic → Project list sort strategy**
 
