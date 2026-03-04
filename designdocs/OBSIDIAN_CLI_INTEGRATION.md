@@ -71,20 +71,26 @@ Instead of one tool per CLI command (~100 commands = too many tools) or one gene
 | `obsidianDailyRead` | `daily:read` | Read-only. Dedicated tool for v0 simplicity. |
 | `obsidianRandomRead` | `random:read` | Read-only. Dedicated tool for v0 simplicity. |
 
-### v1 (Next — ~15 commands across 5 tools)
+### v1 (Next — 12 commands across 5 tools)
+
+All v1 tools are **read-only or direct-execution** (no confirmation UX required).
 
 | Tool | Commands | Notes |
 |------|----------|-------|
 | **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy). Subsumes v0 `obsidianDailyRead`. |
-| **obsidianProperties** | `properties`, `property:read`, `property:set`, `property:remove` | `property:set` and `property:remove` require light confirmation |
-| **obsidianTasks** | `tasks`, `task` (toggle/done/todo/status) | `task` mutations require light confirmation |
+| **obsidianProperties** | `properties`, `property:read` | Read-only. Write commands (`property:set`, `property:remove`) deferred to v2. |
+| **obsidianTasks** | `tasks` | Read-only (task listing). Write command (`task` toggle/status) deferred to v2. |
 | **obsidianRandomRead** | `random:read` | Read-only. Standalone tool (single command). Continues from v0. |
 | **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
 
-### v2 (Future — ~7 commands across 3 tools)
+### v2 (Future — ~10 commands: 3 mutations on existing tools + 3 new tools)
+
+v2 introduces **confirmation-required mutations** on existing v1 tools and adds new tool categories.
 
 | Tool | Commands | Notes |
 |------|----------|-------|
+| **obsidianProperties** _(v1 extension)_ | `property:set`, `property:remove` | Light confirmation in chat before executing. Extends v1 read-only tool. |
+| **obsidianTasks** _(v1 extension)_ | `task` (toggle/done/todo/status) | Light confirmation in chat before executing. Extends v1 read-only tool. |
 | **obsidianTemplates** | `templates`, `template:read` | Read-only. `template:insert` deferred (requires active file context). |
 | **obsidianBases** | `bases`, `base:views`, `base:query` | Read-only. `base:create` deferred to later phase. |
 | **obsidianBookmarks** | `bookmarks`, `bookmark` | `bookmark` (add) gated by mutation setting |
@@ -109,12 +115,12 @@ The following CLI commands are **not exposed** to the AI agent:
 
 ### Write Operations Policy
 
-| Operation | Execution model | Rationale |
-|-----------|----------------|-----------|
-| **Daily note append/prepend** | Direct execution, show result in chat response | User explicitly asked for the action; daily notes are append-only by nature and low-risk |
-| **Arbitrary file append/prepend** | Excluded — use Composer tool | File modifications beyond daily notes need the Composer diff/preview UX for safety |
-| **Property set/remove** | Light confirmation in chat before executing | Metadata changes are reversible but should be intentional |
-| **Task toggle/status** | Light confirmation in chat before executing | Status changes are reversible but should be intentional |
+| Operation | Execution model | Tier | Rationale |
+|-----------|----------------|------|-----------|
+| **Daily note append/prepend** | Direct execution, show result in chat response | v1 | User explicitly asked for the action; daily notes are append-only by nature and low-risk |
+| **Arbitrary file append/prepend** | Excluded — use Composer tool | — | File modifications beyond daily notes need the Composer diff/preview UX for safety |
+| **Property set/remove** | Light confirmation in chat before executing | v2 | Metadata changes are reversible but should be intentional; deferred to validate read-only tools first |
+| **Task toggle/status** | Light confirmation in chat before executing | v2 | Status changes are reversible but should be intentional; deferred to validate read-only tools first |
 
 ### Tool Disambiguation
 
@@ -208,14 +214,15 @@ Manual validation:
 
 - Refactor v0 `obsidianDailyRead` into category-based `obsidianDailyNote` (read, append, prepend, path).
 - Keep `obsidianRandomRead` as standalone tool (single command).
-- Add `obsidianProperties`, `obsidianTasks`, `obsidianLinks` tools.
-- Implement mutation gating via `obsidianCliAllowMutations` setting.
+- Add `obsidianProperties` (read-only), `obsidianTasks` (read-only), `obsidianLinks` tools.
+- All v1 tools are read-only or direct-execution — no confirmation UX needed.
 - Add per-tool command allowlists and prompt disambiguation guidance.
 
 ### Phase 3: v2 expansion
 
-- Add `obsidianTemplates`, `obsidianBases`, `obsidianBookmarks` tools.
-- Start with read/query-only commands, expand to mutations with explicit confirmation controls.
+- Add confirmation-required mutations to existing v1 tools: `property:set`, `property:remove`, `task` toggle/status.
+- Implement mutation gating via `obsidianCliAllowMutations` setting and light confirmation UX.
+- Add new tool categories: `obsidianTemplates`, `obsidianBases`, `obsidianBookmarks`.
 
 ## 10. Risks and Mitigations
 
