@@ -341,13 +341,13 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianDailyNote:
-- Use for all daily note operations: creating, reading content, appending text, prepending text, or getting the file path.
+- Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
 - Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
-- daily — create/open today's daily note from the configured template if it doesn't exist yet. Use this when the user asks to "create my daily note" or "set up today's note".
 - daily:read — read today's daily note content.
 - daily:append — append text to the end of today's daily note. Requires content parameter.
 - daily:prepend — prepend text to the beginning of today's daily note. Requires content parameter.
 - daily:path — get the vault-relative file path of today's daily note (useful for follow-up readNote calls).
+- To create today's daily note from a template: use obsidianTemplates template:read to get the template content, then daily:prepend to write it if daily:read returns empty or an error.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },

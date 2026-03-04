@@ -206,7 +206,6 @@ export function summarizeToolResult(
       const command = args?.command as string | undefined;
       const vault = args?.vault as string | undefined;
       const vaultSuffix = vault && vault.trim().length > 0 ? ` from "${vault}"` : "";
-      if (command === "daily") return `Created today's daily note${vaultSuffix}`;
       if (command === "daily:append") return `Appended to daily note${vaultSuffix}`;
       if (command === "daily:prepend") return `Prepended to daily note${vaultSuffix}`;
       if (command === "daily:path") return `Got daily note path${vaultSuffix}`;
@@ -370,7 +369,6 @@ export function summarizeToolCall(
       const command = args?.command as string | undefined;
       const vault = args?.vault as string | undefined;
       const vaultSuffix = vault && vault.trim().length > 0 ? ` from "${vault}"` : "";
-      if (command === "daily") return `Creating today's daily note${vaultSuffix}`;
       if (command === "daily:append") return `Appending to daily note${vaultSuffix}`;
       if (command === "daily:prepend") return `Prepending to daily note${vaultSuffix}`;
       if (command === "daily:path") return `Getting daily note path${vaultSuffix}`;

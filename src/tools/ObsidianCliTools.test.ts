@@ -164,34 +164,6 @@ describe("obsidianDailyNoteTool", () => {
     ).rejects.toThrow("Daily note plugin not enabled");
   });
 
-  test("daily creates today's daily note from template", async () => {
-    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
-
-    const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily" });
-    const parsed = JSON.parse(response);
-
-    expect(parsed.type).toBe("obsidian_cli_daily_note");
-    expect(parsed.command).toBe("daily");
-    expect(parsed.vault).toBeNull();
-    expect(mockedRunCommand).toHaveBeenCalledWith({
-      command: "daily",
-      vault: undefined,
-      params: {},
-    });
-  });
-
-  test("daily passes vault param", async () => {
-    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
-
-    await (obsidianDailyNoteTool as any).invoke({ command: "daily", vault: "Work" });
-
-    expect(mockedRunCommand).toHaveBeenCalledWith({
-      command: "daily",
-      vault: "Work",
-      params: {},
-    });
-  });
-
   test("throws ENOENT failure with actionable message", async () => {
     mockedRunCommand.mockResolvedValue(buildFailedResult("daily:read", "ENOENT", ""));
 
