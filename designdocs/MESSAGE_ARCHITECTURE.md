@@ -729,8 +729,8 @@ console.log({
 
 ### Documentation
 
-- `docs/CONTEXT_ENGINEERING.md` - Layered context system design and L2 auto-promotion details
-- `docs/MESSAGE_ARCHITECTURE.md` - This document (message management architecture)
+- `designdocs/CONTEXT_ENGINEERING.md` - Layered context system design and L2 auto-promotion details
+- `designdocs/MESSAGE_ARCHITECTURE.md` - This document (message management architecture)
 
 ### Core Implementation
 

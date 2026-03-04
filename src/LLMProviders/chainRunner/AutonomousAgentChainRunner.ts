@@ -26,6 +26,7 @@ import {
   createToolResultMessage,
   generateToolCallId,
   buildToolCallsFromChunks,
+  accumulateToolCallChunk,
   ToolCallChunk,
 } from "./utils/nativeToolCalling";
 
@@ -681,8 +682,23 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         messages.push(aiMessage);
 
-        // Final response is ONLY this iteration's content, not accumulated intermediate content
-        const finalContent = content;
+        // Detect empty response: no content and no tool calls (issue #2233)
+        // This can happen when:
+        // 1. Tool calls were silently dropped (e.g. Gemini name extraction bug)
+        // 2. Model returned only thinking/reasoning content that gets filtered
+        let finalContent = content;
+        if (!finalContent || finalContent.trim() === "") {
+          const rawToolCallChunks = (aiMessage as any).tool_call_chunks ?? [];
+          logWarn(
+            `[Agent] Empty response detected (iteration ${iteration}). ` +
+              `Content length: ${content?.length ?? 0}, ` +
+              `tool_call_chunks from model: ${rawToolCallChunks.length}, ` +
+              `parsed tool_calls: ${toolCalls.length}. ` +
+              `This may indicate tool calls were dropped or the model produced only thinking tokens.`
+          );
+          finalContent =
+            "The model did not produce a response. Please try again or switch to a different model.";
+        }
         const reasoningBlock = this.buildReasoningBlockMarkup();
 
         // Stream the final response progressively for better UX
@@ -926,12 +942,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         const tcChunks = chunk.tool_call_chunks;
         if (tcChunks && Array.isArray(tcChunks)) {
           for (const tc of tcChunks) {
-            const idx = tc.index ?? 0;
-            const existing = toolCallChunks.get(idx) || { name: "", args: "" };
-            if (tc.id) existing.id = tc.id;
-            if (tc.name) existing.name += tc.name;
-            if (tc.args) existing.args += tc.args;
-            toolCallChunks.set(idx, existing);
+            accumulateToolCallChunk(toolCallChunks, tc);
           }
         }
 

@@ -141,7 +141,7 @@ Run `obsidian help` for the full command list.
 
 ## Message Management Architecture
 
-For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE.md`](./docs/MESSAGE_ARCHITECTURE.md).
+For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE.md`](./designdocs/MESSAGE_ARCHITECTURE.md).
 
 ### Core Classes and Flow
 
@@ -310,8 +310,15 @@ The TODO.md should be:
 - Settings are versioned - migrations may be needed
 - Local model support available via Ollama/LM Studio
 - Rate limiting is implemented for all API calls
-- For technical debt and known issues, see [`TECHDEBT.md`](./docs/TECHDEBT.md)
+- For technical debt and known issues, see [`TECHDEBT.md`](./designdocs/todo/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
+
+## User-Facing Documentation
+
+- **When modifying user-facing behavior** (new features, changed settings, removed functionality), **update the corresponding doc in `docs/`**. The doc filenames match their topics (e.g., `llm-providers.md` for provider changes, `agent-mode-and-tools.md` for tool changes).
+- Docs are written for non-technical users — no source code references, explain behavior and concepts.
+- If a change affects multiple docs, update all of them.
+- If you're unsure which doc to update, check `docs/index.md` for the full list with descriptions.
 
 ### AWS Bedrock Usage
 

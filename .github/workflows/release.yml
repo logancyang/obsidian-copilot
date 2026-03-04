@@ -1,0 +1,128 @@
+# Release workflow: triggered when a PR targeting master is merged and its title
+# is a strict semver string (e.g. "3.2.3"). The PR title becomes the release tag
+# and title; the PR body becomes the release notes.
+#
+# Non-semver PR titles (feature PRs, bug fixes, etc.) are silently ignored —
+# the workflow runs but exits early without creating a release.
+
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches:
+      - master
+
+jobs:
+  release:
+    # Only proceed when the PR was actually merged (not just closed/abandoned).
+    if: github.event.pull_request.merged == true
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write  # required to create GitHub releases and tags
+
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      # ── Step 1: Validate that the PR title is a strict semver ──────────────
+      # Exits without error when the title is not semver so non-release PRs
+      # pass silently. Sets outputs.version and outputs.is_release for
+      # downstream steps.
+      - name: Validate semver PR title
+        id: semver
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          if echo "$PR_TITLE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "PR title '$PR_TITLE' is a valid semver — proceeding with release."
+            echo "version=$PR_TITLE" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "PR title '$PR_TITLE' is not strict semver (X.Y.Z) — skipping release."
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Step 2: Checkout the merge commit on master ─────────────────────────
+      - name: Checkout
+        if: steps.semver.outputs.is_release == 'true'
+        uses: actions/checkout@v4
+        with:
+          # Pin to the exact merge commit SHA so concurrent PRs merging to
+          # master don't cause this workflow to build the wrong code.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
+
+      # ── Step 3: Verify PR title version matches manifest.json ───────────────
+      - name: Verify version matches manifest.json
+        if: steps.semver.outputs.is_release == 'true'
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+        run: |
+          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "Version mismatch: PR title='$VERSION', manifest.json='$MANIFEST_VERSION'"
+            exit 1
+          fi
+          echo "Version check passed: $VERSION"
+
+      # ── Step 4: Set up Node.js ───────────────────────────────────────────────
+      - name: Setup Node.js 22.x
+        if: steps.semver.outputs.is_release == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+
+      # ── Step 5: Install dependencies ────────────────────────────────────────
+      - name: Install dependencies
+        if: steps.semver.outputs.is_release == 'true'
+        run: npm ci
+
+      # ── Step 6: Build the plugin ─────────────────────────────────────────────
+      - name: Build
+        if: steps.semver.outputs.is_release == 'true'
+        run: npm run build
+
+      # ── Step 7: Write PR body to a file (avoids shell injection) ─────────────
+      # Using an environment variable to pass the PR body prevents special
+      # characters (backticks, quotes, dollar signs, etc.) from being
+      # interpreted by the shell.
+      - name: Write release notes to file
+        if: steps.semver.outputs.is_release == 'true'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: printf '%s' "$PR_BODY" > /tmp/release-notes.md
+
+      # ── Step 8: Check if release already exists (idempotency guard) ─────────
+      - name: Check if release already exists
+        if: steps.semver.outputs.is_release == 'true'
+        id: check_existing
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+        run: |
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            echo "::warning::Release $VERSION already exists — skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Step 9: Create GitHub Release ────────────────────────────────────────
+      # --target pins the tag to the exact merge commit SHA so concurrent
+      # merges cannot cause the release tag to point at a different commit.
+      # Artifacts: main.js, manifest.json, styles.css
+      - name: Create GitHub Release
+        if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+        run: |
+          gh release create "$VERSION" \
+            --target "$MERGE_SHA" \
+            --title "$VERSION" \
+            --notes-file /tmp/release-notes.md \
+            main.js \
+            manifest.json \
+            styles.css

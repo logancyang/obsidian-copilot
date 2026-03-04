@@ -89,6 +89,44 @@ export function generateToolCallId(): string {
 }
 
 /**
+ * Raw tool call chunk as received from LangChain streaming.
+ * Different providers structure these differently:
+ * - OpenAI: { index, id, name, args }
+ * - Gemini (@langchain/google-genai): { index, id, functionCall: { name, args } }
+ */
+export interface RawToolCallChunk {
+  index?: number;
+  id?: string;
+  name?: string;
+  args?: string;
+  /** Gemini-specific: tool name is nested inside functionCall */
+  functionCall?: { name?: string; args?: Record<string, unknown> };
+}
+
+/**
+ * Accumulate a raw streaming tool call chunk into the chunk map.
+ * Handles provider differences: Gemini nests name inside `functionCall.name`
+ * while OpenAI puts it at the top level.
+ *
+ * @param toolCallChunks - Map to accumulate into (mutated in place)
+ * @param rawChunk - Raw chunk from LangChain streaming
+ */
+export function accumulateToolCallChunk(
+  toolCallChunks: Map<number, ToolCallChunk>,
+  rawChunk: RawToolCallChunk
+): void {
+  const idx = rawChunk.index ?? 0;
+  const existing = toolCallChunks.get(idx) || { name: "", args: "" };
+  if (rawChunk.id) existing.id = rawChunk.id;
+  // Gemini's @langchain/google-genai nests name inside functionCall
+  // instead of at the top level. Fall back to functionCall.name.
+  const chunkName = rawChunk.name ?? rawChunk.functionCall?.name;
+  if (chunkName) existing.name += chunkName;
+  if (rawChunk.args) existing.args += rawChunk.args;
+  toolCallChunks.set(idx, existing);
+}
+
+/**
  * Build accumulated tool calls from streaming chunks.
  * Call this after streaming is complete to get final tool calls.
  *
