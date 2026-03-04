@@ -1,5 +1,6 @@
 import { getSettings } from "@/settings/model";
-import { Platform, Vault } from "obsidian";
+import { Vault } from "obsidian";
+import { isDesktopRuntime } from "@/services/obsidianCli/ObsidianCliClient";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { updateMemoryTool } from "./memoryTools";
@@ -458,7 +459,7 @@ export function initializeBuiltinTools(vault?: Vault): void {
     }
 
     // Register desktop-only CLI tools (invisible on mobile)
-    if (Platform.isDesktopApp) {
+    if (isDesktopRuntime()) {
       registerCliTools();
     }
   }

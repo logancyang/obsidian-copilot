@@ -118,7 +118,7 @@ interface ProcessContainer {
  *
  * @returns True when running in desktop runtime.
  */
-function isDesktopRuntime(): boolean {
+export function isDesktopRuntime(): boolean {
   const platform = Platform as unknown as { isDesktopApp?: boolean; isDesktop?: boolean };
   return Boolean(platform.isDesktopApp ?? platform.isDesktop);
 }
@@ -194,8 +194,8 @@ function resolveBinaryCandidates(explicitBinary?: string): string[] {
   }
 
   const candidates = [
-    DEFAULT_OBSIDIAN_CLI_BINARY,
     ...getCliBinaryCandidatesFromEnv(),
+    DEFAULT_OBSIDIAN_CLI_BINARY,
     ...OBSIDIAN_CLI_MACOS_FALLBACK_BINARIES,
   ];
 
