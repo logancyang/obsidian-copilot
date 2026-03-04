@@ -23,11 +23,11 @@ Lexical search finds notes that contain the exact words you used. It's fast, req
 
 Semantic search finds notes that are conceptually related, even if they don't share exact words.
 
-- **Used in**: Copilot Plus mode, and in Vault QA when enabled
+- **Used in**: Vault QA and Copilot Plus modes — but **disabled by default**. You must explicitly enable it.
 - **How it works**: Converts your notes into numerical vectors (using an embedding model), then finds notes whose vectors are closest to your query
 - **Strengths**: Finds notes by concept and meaning, great for "fuzzy" recall
 - **Cost**: Requires embedding API calls (costs money for paid embedding models)
-- **Enable**: **Settings → Copilot → QA → Enable Semantic Search** (disabled by default)
+- **Enable**: **Settings → Copilot → QA → Enable Semantic Search** — turn this on to activate semantic search
 
 ---
 
@@ -142,7 +142,7 @@ How many text chunks to send per API request. Default is 16. Larger batches are 
 
 ### Partitions
 
-The index is stored in partitions for efficiency. In semantic search v3, partitions are managed automatically (one partition per 150 MB of data). No manual configuration needed.
+The index is split into partitions to handle large vaults. You can control the number of partitions in **Settings → Copilot → QA → Number of Partitions**. If you have a large vault, increase this value to avoid index errors.
 
 > **If you hit a "RangeError: invalid string length" error**: This means your vault is too large for a single partition. Increase the number of partitions in QA settings. A good rule of thumb is that the first partition file (found in `.obsidian/`) should be under ~400 MB.
 
