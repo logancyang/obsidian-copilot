@@ -3,6 +3,7 @@ import {
   obsidianLinksTool,
   obsidianPropertiesTool,
   obsidianTasksTool,
+  obsidianTemplatesTool,
 } from "./ObsidianCliTools";
 import { runObsidianCliCommand } from "@/services/obsidianCli/ObsidianCliClient";
 
@@ -161,6 +162,34 @@ describe("obsidianDailyNoteTool", () => {
     await expect(
       (obsidianDailyNoteTool as any).invoke({ command: "daily:read" })
     ).rejects.toThrow("Daily note plugin not enabled");
+  });
+
+  test("daily creates today's daily note from template", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
+
+    const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_daily_note");
+    expect(parsed.command).toBe("daily");
+    expect(parsed.vault).toBeNull();
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily",
+      vault: undefined,
+      params: {},
+    });
+  });
+
+  test("daily passes vault param", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
+
+    await (obsidianDailyNoteTool as any).invoke({ command: "daily", vault: "Work" });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily",
+      vault: "Work",
+      params: {},
+    });
   });
 
   test("throws ENOENT failure with actionable message", async () => {
@@ -396,5 +425,87 @@ describe("obsidianLinksTool", () => {
     await expect(
       (obsidianLinksTool as any).invoke({ command: "backlinks", file: "note" })
     ).rejects.toThrow('File "note.md" not found.');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// obsidianTemplates
+// ---------------------------------------------------------------------------
+
+describe("obsidianTemplatesTool", () => {
+  test("templates returns list of template names", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("templates", "Daily Note\nMeeting Notes\nProject Plan")
+    );
+
+    const response = await (obsidianTemplatesTool as any).invoke({ command: "templates" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_templates");
+    expect(parsed.command).toBe("templates");
+    expect(parsed.vault).toBeNull();
+    expect(parsed.content).toBe("Daily Note\nMeeting Notes\nProject Plan");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "templates",
+      vault: undefined,
+      params: {},
+    });
+  });
+
+  test("templates passes vault param", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("templates", "Daily Note"));
+
+    await (obsidianTemplatesTool as any).invoke({ command: "templates", vault: "Work" });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "templates",
+      vault: "Work",
+      params: {},
+    });
+  });
+
+  test("template:read returns template content", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("template:read", "# {{date}}\n\n## Tasks\n- [ ] ")
+    );
+
+    const response = await (obsidianTemplatesTool as any).invoke({
+      command: "template:read",
+      name: "Daily Note",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_templates");
+    expect(parsed.command).toBe("template:read");
+    expect(parsed.content).toBe("# {{date}}\n\n## Tasks\n- [ ]");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "template:read",
+      vault: undefined,
+      params: { name: "Daily Note" },
+    });
+  });
+
+  test("template:read throws when name is missing", async () => {
+    await expect(
+      (obsidianTemplatesTool as any).invoke({ command: "template:read" })
+    ).rejects.toThrow("name is required for template:read");
+  });
+
+  test("throws on CLI failure with stderr message", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildFailedResult("templates", "EFAIL", "Templates plugin not enabled", 1)
+    );
+
+    await expect(
+      (obsidianTemplatesTool as any).invoke({ command: "templates" })
+    ).rejects.toThrow("Templates plugin not enabled");
+  });
+
+  test("throws ENOENT failure with actionable message", async () => {
+    mockedRunCommand.mockResolvedValue(buildFailedResult("templates", "ENOENT", ""));
+
+    await expect(
+      (obsidianTemplatesTool as any).invoke({ command: "templates" })
+    ).rejects.toThrow("CLI binary not found");
   });
 });

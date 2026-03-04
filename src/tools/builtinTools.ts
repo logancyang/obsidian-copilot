@@ -11,6 +11,7 @@ import {
   obsidianLinksTool,
   obsidianPropertiesTool,
   obsidianTasksTool,
+  obsidianTemplatesTool,
 } from "./ObsidianCliTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import { createGetTagListTool } from "./TagTools";
@@ -340,8 +341,9 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianDailyNote:
-- Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
+- Use for all daily note operations: creating, reading content, appending text, prepending text, or getting the file path.
 - Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
+- daily — create/open today's daily note from the configured template if it doesn't exist yet. Use this when the user asks to "create my daily note" or "set up today's note".
 - daily:read — read today's daily note content.
 - daily:append — append text to the end of today's daily note. Requires content parameter.
 - daily:prepend — prepend text to the beginning of today's daily note. Requires content parameter.
@@ -415,6 +417,22 @@ export function registerCliTools(): void {
 - links: list outgoing links FROM a given file. Use file= or path= to target a note.
 - orphans: list all notes with no incoming links. Use total=true for just the count.
 - unresolved: list wikilinks that don't resolve to any existing file. Use counts=true for occurrence counts, verbose=true to see source files.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianTemplatesTool,
+    metadata: {
+      id: "obsidianTemplates",
+      displayName: "Templates",
+      description: "List available templates or read template content",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianTemplates:
+- Use to discover available templates or inspect template content before creating notes.
+- templates: list all available template names in the vault.
+- template:read: read a template's content (with variable placeholders resolved). Requires name parameter.
+- Use obsidianDailyNote with command "daily" to create today's daily note from its configured template.`,
     },
   });
 }

@@ -206,6 +206,7 @@ export function summarizeToolResult(
       const command = args?.command as string | undefined;
       const vault = args?.vault as string | undefined;
       const vaultSuffix = vault && vault.trim().length > 0 ? ` from "${vault}"` : "";
+      if (command === "daily") return `Created today's daily note${vaultSuffix}`;
       if (command === "daily:append") return `Appended to daily note${vaultSuffix}`;
       if (command === "daily:prepend") return `Prepended to daily note${vaultSuffix}`;
       if (command === "daily:path") return `Got daily note path${vaultSuffix}`;
@@ -235,6 +236,14 @@ export function summarizeToolResult(
       if (command === "orphans") return "Listed orphaned notes";
       if (command === "unresolved") return "Listed unresolved links";
       return "Queried link graph";
+    }
+    case "obsidianTemplates": {
+      const command = args?.command as string | undefined;
+      if (command === "template:read") {
+        const name = args?.name as string | undefined;
+        return name ? `Read template "${name}"` : "Read template";
+      }
+      return "Listed templates";
     }
     case "indexVault":
       return "Indexed vault";
@@ -361,6 +370,7 @@ export function summarizeToolCall(
       const command = args?.command as string | undefined;
       const vault = args?.vault as string | undefined;
       const vaultSuffix = vault && vault.trim().length > 0 ? ` from "${vault}"` : "";
+      if (command === "daily") return `Creating today's daily note${vaultSuffix}`;
       if (command === "daily:append") return `Appending to daily note${vaultSuffix}`;
       if (command === "daily:prepend") return `Prepending to daily note${vaultSuffix}`;
       if (command === "daily:path") return `Getting daily note path${vaultSuffix}`;
@@ -390,6 +400,14 @@ export function summarizeToolCall(
       if (command === "orphans") return "Listing orphaned notes";
       if (command === "unresolved") return "Listing unresolved links";
       return "Querying link graph";
+    }
+    case "obsidianTemplates": {
+      const command = args?.command as string | undefined;
+      if (command === "template:read") {
+        const name = args?.name as string | undefined;
+        return name ? `Reading template "${name}"` : "Reading template";
+      }
+      return "Listing templates";
     }
     case "indexVault":
       return "Indexing vault";

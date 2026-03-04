@@ -71,19 +71,20 @@ Instead of one tool per CLI command (~100 commands = too many tools) or one gene
 | `obsidianDailyRead` | `daily:read` | Read-only. Dedicated tool for v0 simplicity. |
 | `obsidianRandomRead` | `random:read` | Read-only. Dedicated tool for v0 simplicity. |
 
-### v1 (Next — 12 commands across 5 tools)
+### v1 (Current — 14 commands across 7 tools)
 
 All v1 tools are **read-only or direct-execution** (no confirmation UX required).
 
 | Tool | Commands | Notes |
 |------|----------|-------|
-| **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy). Subsumes v0 `obsidianDailyRead`. |
+| **obsidianDailyNote** | `daily`, `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | `daily` creates from template if missing. Append/prepend execute directly (see Write Operations Policy). Subsumes v0 `obsidianDailyRead`. |
 | **obsidianProperties** | `properties`, `property:read` | Read-only. Write commands (`property:set`, `property:remove`) deferred to v2. |
 | **obsidianTasks** | `tasks` | Read-only (task listing). Write command (`task` toggle/status) deferred to v2. |
 | **obsidianRandomRead** | `random:read` | Read-only. Standalone tool (single command). Continues from v0. |
 | **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
+| **obsidianTemplates** | `templates`, `template:read` | Read-only. `template:insert` deferred (requires active file context). Moved from v2. |
 
-### v2 (Future — ~10 commands: 3 mutations on existing tools + 3 new tools)
+### v2 (Future — ~9 commands: 3 mutations on existing tools + 2 new tools)
 
 v2 introduces **confirmation-required mutations** on existing v1 tools and adds new tool categories.
 
@@ -91,7 +92,6 @@ v2 introduces **confirmation-required mutations** on existing v1 tools and adds 
 |------|----------|-------|
 | **obsidianProperties** _(v1 extension)_ | `property:set`, `property:remove` | Light confirmation in chat before executing. Extends v1 read-only tool. |
 | **obsidianTasks** _(v1 extension)_ | `task` (toggle/done/todo/status) | Light confirmation in chat before executing. Extends v1 read-only tool. |
-| **obsidianTemplates** | `templates`, `template:read` | Read-only. `template:insert` deferred (requires active file context). |
 | **obsidianBases** | `bases`, `base:views`, `base:query` | Read-only. `base:create` deferred to later phase. |
 | **obsidianBookmarks** | `bookmarks`, `bookmark` | `bookmark` (add) gated by mutation setting |
 
@@ -261,6 +261,22 @@ All commands are invoked as `obsidian <command> [params...]`. Output is **plain 
 Global parameter available on all commands: `vault=<name>` (targets a specific vault; omit for default).
 
 ### A.1 `obsidianDailyNote` — Daily Note Operations
+
+#### `daily`
+
+Create/open today's daily note. Creates from the configured daily note template if the note doesn't exist yet.
+
+```
+obsidian daily
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| _(none)_ | | No parameters. Opens today's daily note, creating it from template if missing. |
+
+**Output**: Empty on success. Use `daily:read` afterwards to read the created content.
+
+---
 
 #### `daily:read`
 
@@ -612,7 +628,58 @@ Old Project Reference	Archive/cleanup.md
 
 ---
 
-### A.6 Error Responses
+### A.6 `obsidianTemplates` — Template Listing and Reading
+
+#### `templates`
+
+List all available template names in the configured templates folder.
+
+```
+obsidian templates
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| _(none)_ | | No parameters. Lists all template names. |
+
+**Output**: One template name per line.
+
+```
+Daily Note
+Meeting Notes
+Project Plan
+Weekly Review
+```
+
+---
+
+#### `template:read`
+
+Read a template's content with variable placeholders resolved.
+
+```
+obsidian template:read name="Daily Note"
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `name=<name>` | Yes | Template name (as returned by `templates`). |
+
+**Output**: Full markdown content of the template.
+
+```
+# {{date}}
+
+## Tasks
+- [ ]
+
+## Notes
+
+```
+
+---
+
+### A.7 Error Responses
 
 All commands return consistent error formats:
 

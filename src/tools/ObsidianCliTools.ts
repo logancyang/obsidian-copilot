@@ -19,9 +19,9 @@ function buildCliParams(args: Record<string, unknown>): Record<string, string | 
 
 const dailyNoteSchema = z.object({
   command: z
-    .enum(["daily:read", "daily:append", "daily:prepend", "daily:path"])
+    .enum(["daily", "daily:read", "daily:append", "daily:prepend", "daily:path"])
     .describe(
-      "daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
+      "daily — create/open today's daily note (creates from template if missing). daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
     ),
   content: z
     .string()
@@ -46,7 +46,7 @@ const dailyNoteSchema = z.object({
 export const obsidianDailyNoteTool = createLangChainTool({
   name: "obsidianDailyNote",
   description:
-    "Read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
+    "Create/open, read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
   schema: dailyNoteSchema,
   func: async (args) => {
     const { command, vault } = args;
@@ -60,8 +60,10 @@ export const obsidianDailyNoteTool = createLangChainTool({
     if (!result.ok) throwCliFailure(result);
 
     // Preserve raw stdout for read commands — trimming may alter meaningful Markdown whitespace.
-    // Non-read commands (append, prepend, path) return short status strings where trimming is safe.
-    const content = command === "daily:read" ? result.stdout : result.stdout.trim();
+    // daily:read and daily (which may return content) keep raw stdout; others trim.
+    const content = command === "daily:read" || command === "daily"
+      ? result.stdout
+      : result.stdout.trim();
 
     return {
       type: "obsidian_cli_daily_note",
@@ -240,6 +242,56 @@ export const obsidianLinksTool = createLangChainTool({
 
     return {
       type: "obsidian_cli_links",
+      command: result.command,
+      vault: vault ?? null,
+      content: result.stdout.trim(),
+      durationMs: result.durationMs,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// obsidianTemplates — template listing and reading (v1, read-only)
+// ---------------------------------------------------------------------------
+
+const templatesSchema = z.object({
+  command: z
+    .enum(["templates", "template:read"])
+    .describe(
+      "templates — list all available template names. template:read — read a template's content with variable resolution."
+    ),
+  name: z
+    .string()
+    .optional()
+    .describe("Template name to read. Required for template:read."),
+  vault: z
+    .string()
+    .optional()
+    .describe("Optional vault name to target. Omit to use the active vault."),
+});
+
+/**
+ * Tool for listing and reading templates via the official Obsidian CLI.
+ * Supports listing available templates and reading template content.
+ */
+export const obsidianTemplatesTool = createLangChainTool({
+  name: "obsidianTemplates",
+  description:
+    "List available templates or read template content via the official Obsidian CLI. Use before creating notes to find the right template.",
+  schema: templatesSchema,
+  func: async (args) => {
+    const { command, vault } = args;
+    if (command === "template:read" && !args.name) {
+      throw new Error("name is required for template:read");
+    }
+
+    const params = buildCliParams(args as Record<string, unknown>);
+    const result = await runObsidianCliCommand({ command, vault, params });
+
+    if (!result.ok) throwCliFailure(result);
+
+    return {
+      type: "obsidian_cli_templates",
       command: result.command,
       vault: vault ?? null,
       content: result.stdout.trim(),
