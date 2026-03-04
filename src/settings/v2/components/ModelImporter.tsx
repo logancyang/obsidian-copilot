@@ -32,6 +32,31 @@ interface ModelImporterProps {
 }
 
 /**
+ * Render a verification message with Markdown links converted to <a> elements.
+ * policy.terms uses the format: `[text](url)` which we parse into anchor tags.
+ */
+function renderVerificationMessage(message: string): React.ReactNode {
+  // Split message into paragraphs on double newlines
+  const paragraphs = message.split(/\n\n+/);
+  return paragraphs.map((paragraph, i) => {
+    // Convert [text](url) to <a> elements within each paragraph
+    const parts = paragraph.split(/(\[[^\]]+\]\([^)]+\))/g);
+    const nodes = parts.map((part, j) => {
+      const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
+      if (match) {
+        return (
+          <a key={j} href={match[2]} target="_blank" rel="noopener noreferrer" className="tw-underline">
+            {match[1]}
+          </a>
+        );
+      }
+      return part;
+    });
+    return <p key={i} className={i > 0 ? "tw-mt-1" : ""}>{nodes}</p>;
+  });
+}
+
+/**
  * Reusable component for selecting and adding models from a provider
  */
 export function ModelImporter({
@@ -47,6 +72,7 @@ export function ModelImporter({
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState<StandardModel | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [verificationMessage, setVerificationMessage] = useState<string | null>(null);
 
   // Use ref to track loading state to avoid stale closure in useCallback
   const loadingRef = useRef(false);
@@ -86,6 +112,7 @@ export function ModelImporter({
     setModels(null);
     setSelectedModel(null);
     setError(null);
+    setVerificationMessage(null);
   }, [provider, credentialVersion]);
 
   // Auto-load models when expanded and ready
@@ -102,6 +129,7 @@ export function ModelImporter({
     }
 
     setVerifying(true);
+    setVerificationMessage(null);
 
     try {
       const result = await verifyAndAddModel(
@@ -112,6 +140,7 @@ export function ModelImporter({
 
       if (result.alreadyExists) {
         if (result.verificationFailed) {
+          setVerificationMessage(result.verificationError ?? null);
           new Notice(
             `Model ${selectedModel.name} already exists (verification failed: ${result.verificationError})`,
             10000
@@ -122,7 +151,6 @@ export function ModelImporter({
           );
         }
       } else {
-        // Add the model
         const customModel = buildCustomModel({
           id: selectedModel.id,
           name: selectedModel.name,
@@ -132,6 +160,7 @@ export function ModelImporter({
         updateSetting("activeModels", updatedModels);
 
         if (result.verificationFailed) {
+          setVerificationMessage(result.verificationError ?? null);
           new Notice(
             `Model ${selectedModel.name} added (verification failed: ${result.verificationError})`,
             10000
@@ -172,6 +201,7 @@ export function ModelImporter({
                 const model = models?.find((m) => m.id === value);
                 if (model) {
                   setSelectedModel(model);
+                  setVerificationMessage(null);
                 }
               }}
               onClick={() => {
@@ -204,6 +234,11 @@ export function ModelImporter({
           )}
           {models === null && !loading && !error && (
             <div className="tw-p-1 tw-text-muted">Click to load available models.</div>
+          )}
+          {verificationMessage && (
+            <div className="tw-mt-2 tw-rounded-md tw-border tw-border-border tw-p-2 tw-text-error tw-bg-modifier-error/10">
+              {renderVerificationMessage(verificationMessage)}
+            </div>
           )}
         </div>
       </div>

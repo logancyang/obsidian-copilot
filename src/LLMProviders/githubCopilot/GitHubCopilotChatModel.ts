@@ -87,8 +87,14 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
       // but we extract the URL defensively to avoid silent failures.
       // Note: If a future SDK version passes Request objects, this wrapper would
       // need to clone the Request to preserve method/body/headers and support retry.
+      // Reason: Guard `typeof Request` to avoid ReferenceError in environments
+      // where the Request global may not exist (e.g., some Obsidian mobile runtimes).
       const url =
-        typeof input === "string" ? input : input instanceof Request ? input.url : input.toString();
+        typeof input === "string"
+          ? input
+          : typeof Request !== "undefined" && input instanceof Request
+            ? input.url
+            : input.toString();
 
       const doRequest = async (token: string): Promise<Response> => {
         const copilotHeaders = provider.buildCopilotRequestHeaders(token);

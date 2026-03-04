@@ -151,6 +151,21 @@ export async function verifyAndAddModel(
     } catch (error) {
       verificationFailed = true;
       verificationError = err2String(error);
+
+      // For GitHub Copilot models, a "not supported" 400 typically means the user
+      // hasn't enabled this model on their GitHub settings page. Append the policy
+      // terms (which include an activation link) to guide the user.
+      if (
+        customModel.provider === ChatModelProviders.GITHUB_COPILOT &&
+        verificationError.toLowerCase().includes("not supported")
+      ) {
+        // Reason: policy cache is keyed by model.id, not customModel.name (display name)
+        const terms = GitHubCopilotProvider.getInstance().getPolicyTerms(model.id);
+        if (terms) {
+          verificationError += `\n\n${terms}`;
+        }
+      }
+
       logError("Model verification failed:", error);
     }
   }

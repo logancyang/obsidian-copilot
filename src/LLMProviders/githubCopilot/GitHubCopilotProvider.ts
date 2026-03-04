@@ -81,6 +81,12 @@ export class GitHubCopilotProvider {
   private refreshPromise: Promise<string> | null = null;
   private refreshAttempts = 0;
   /**
+   * Cache of model policy terms keyed by model ID.
+   * Populated after each listModels() call. Used to surface helpful
+   * "enable this model" guidance when a 400 "not supported" error occurs.
+   */
+  private modelPolicyTermsCache = new Map<string, string>();
+  /**
    * Auth generation counter - incremented on reset to invalidate in-flight operations.
    * This prevents race conditions where an async operation completes after resetAuth()
    * and accidentally writes back tokens.
@@ -441,10 +447,12 @@ export class GitHubCopilotProvider {
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
-      "User-Agent": "GitHubCopilotChat/0.22.2024092501",
-      "Editor-Version": "vscode/1.95.1",
+      "User-Agent": "GitHubCopilotChat/0.38.2026022001",
+      "Editor-Version": "vscode/1.110.0",
+      "Editor-Plugin-Version": "copilot-chat/0.38.2026022001",
       "Copilot-Integration-Id": "vscode-chat",
       "Openai-Intent": "conversation-panel",
+      "X-GitHub-Api-Version": "2025-05-01",
     };
   }
 
@@ -467,6 +475,7 @@ export class GitHubCopilotProvider {
     this.abortPolling(); // This will abort any ongoing polling operations
     this.refreshPromise = null;
     this.refreshAttempts = 0;
+    this.modelPolicyTermsCache.clear();
     setSettings({
       githubCopilotAccessToken: "",
       githubCopilotToken: "",
@@ -483,9 +492,11 @@ export class GitHubCopilotProvider {
         url: MODELS_URL,
         method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "Copilot-Integration-Id": "vscode-chat",
+          ...this.buildCopilotHeaders(token),
+          Accept: "application/json",
+          // Reason: VSCode Copilot uses "model-access" intent when listing models,
+          // which may return additional fields (billing, is_chat_default, etc.)
+          "Openai-Intent": "model-access",
         },
         throw: false,
       });
@@ -505,7 +516,26 @@ export class GitHubCopilotProvider {
       throw new Error(`Failed to list models: ${res.status}`);
     }
 
-    return this.getRequestUrlJson(res) as GitHubCopilotModelResponse;
+    const result = this.getRequestUrlJson(res) as GitHubCopilotModelResponse;
+
+    // Cache policy terms for each model so they can be surfaced in error messages.
+    this.modelPolicyTermsCache.clear();
+    result.data?.forEach((model) => {
+      if (model.policy?.terms) {
+        this.modelPolicyTermsCache.set(model.id, model.policy.terms);
+      }
+    });
+
+    return result;
+  }
+
+  /**
+   * Get the policy terms for a model, if available.
+   * Returns the human-readable guidance text (may include Markdown links)
+   * that explains how the user can enable the model on GitHub's settings page.
+   */
+  getPolicyTerms(modelId: string): string | undefined {
+    return this.modelPolicyTermsCache.get(modelId);
   }
 
   /**

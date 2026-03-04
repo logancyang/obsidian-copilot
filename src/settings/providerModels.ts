@@ -373,10 +373,26 @@ export interface GitHubCopilotModel {
   model_picker_enabled?: boolean;
   model_picker_category?: string;
   preview?: boolean;
+  /** Whether this model is the default for chat. */
+  is_chat_default?: boolean;
+  /** Whether this model is the fallback when premium requests are exhausted. */
+  is_chat_fallback?: boolean;
+  /** Billing info for premium model differentiation. May be absent for legacy models. */
+  billing?: {
+    is_premium: boolean;
+    multiplier: number;
+    restricted_to?: string[];
+  };
+  /** Model availability policy. `state: "disabled"` means user must enable via GitHub settings. */
+  policy?: {
+    state: string;
+    terms?: string;
+  };
   capabilities?: {
     family?: string;
     type?: string;
   };
+  supported_endpoints?: string[];
 }
 
 // Response type mapping
