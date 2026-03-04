@@ -49,9 +49,9 @@ jobs:
         if: steps.semver.outputs.is_release == 'true'
         uses: actions/checkout@v4
         with:
-          # Check out the HEAD of master (the merge commit) so that
-          # manifest.json reflects what was just merged.
-          ref: master
+          # Pin to the exact merge commit SHA so concurrent PRs merging to
+          # master don't cause this workflow to build the wrong code.
+          ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       # ── Step 3: Verify PR title version matches manifest.json ───────────────
       - name: Verify version matches manifest.json
