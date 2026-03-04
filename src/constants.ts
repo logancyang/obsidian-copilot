@@ -909,7 +909,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   selfHostModeValidatedAt: null,
   selfHostValidationCount: 0,
   selfHostUrl: "",
-  selfHostApiKey: "",
   miyoServerUrl: "",
   selfHostSearchProvider: "firecrawl",
   firecrawlApiKey: "",

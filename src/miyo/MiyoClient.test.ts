@@ -36,7 +36,6 @@ describe("MiyoClient.parseDoc", () => {
     jest.clearAllMocks();
     mockedGetSettings.mockReturnValue({
       plusLicenseKey: "plus-test-license",
-      selfHostApiKey: "self-host-test-key",
       debug: false,
     } as any);
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
@@ -74,7 +73,6 @@ describe("MiyoClient.parseDoc", () => {
         method: "POST",
         headers: {
           Authorization: "Bearer plus-test-license",
-          "X-API-Key": "self-host-test-key",
         },
         contentType: "application/json",
         body: JSON.stringify({ path: "/tmp/sample.pdf" }),

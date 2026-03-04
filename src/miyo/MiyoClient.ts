@@ -361,8 +361,7 @@ export class MiyoClient {
 
   /**
    * Build request headers, including auth when configured.
-   * `Authorization` uses the Copilot Plus license key, while `X-API-Key`
-   * remains available for self-hosted Miyo server compatibility.
+   * `Authorization` uses the Copilot Plus license key.
    *
    * @returns Headers object for requestUrl.
    */
@@ -375,11 +374,6 @@ export class MiyoClient {
       : "";
     if (licenseKey) {
       headers.Authorization = `Bearer ${licenseKey}`;
-    }
-
-    const apiKey = settings.selfHostApiKey ? await getDecryptedKey(settings.selfHostApiKey) : "";
-    if (apiKey) {
-      headers["X-API-Key"] = apiKey;
     }
 
     return headers;
