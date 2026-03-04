@@ -71,14 +71,14 @@ Instead of one tool per CLI command (~100 commands = too many tools) or one gene
 | `obsidianDailyRead` | `daily:read` | Read-only. Dedicated tool for v0 simplicity. |
 | `obsidianRandomRead` | `random:read` | Read-only. Dedicated tool for v0 simplicity. |
 
-### v1 (Next — ~16 commands across 5 tools)
+### v1 (Next — ~14 commands across 5 tools)
 
 | Tool | Commands | Notes |
 |------|----------|-------|
-| **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Mutation commands (`append`, `prepend`) gated by `obsidianCliAllowMutations` |
-| **obsidianProperties** | `properties`, `property:read`, `property:set`, `property:remove` | `property:set` and `property:remove` gated by mutation setting |
-| **obsidianTasks** | `tasks`, `task` (toggle/done/todo/status) | `task` mutations gated |
-| **obsidianFiles** | `read`, `append`, `prepend`, `random:read` | `append`/`prepend` gated. Subsumes v0 `obsidianRandomRead`. |
+| **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy) |
+| **obsidianProperties** | `properties`, `property:read`, `property:set`, `property:remove` | `property:set` and `property:remove` require light confirmation |
+| **obsidianTasks** | `tasks`, `task` (toggle/done/todo/status) | `task` mutations require light confirmation |
+| **obsidianFiles** | `read`, `random:read` | Read-only. Subsumes v0 `obsidianRandomRead`. |
 | **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
 
 ### v2 (Future — ~8 commands across 4 tools)
@@ -104,6 +104,16 @@ The following CLI commands are **not exposed** to the AI agent:
 | Developer tools | `eval`, `dev:*`, `devtools` | Arbitrary code execution risk |
 | Niche metadata | `aliases`, `wordcount`, `recents`, `hotkeys`, `commands` | Low AI synergy |
 | Search | `search`, `search:context`, `search:open` | Redundant with Copilot's existing keyword + semantic search |
+| Arbitrary file writes | `append`, `prepend`, `create` | File modifications beyond daily notes should go through the existing Composer tool (`writeToFile`/`replaceInFile`) |
+
+### Write Operations Policy
+
+| Operation | Execution model | Rationale |
+|-----------|----------------|-----------|
+| **Daily note append/prepend** | Direct execution, show result in chat response | User explicitly asked for the action; daily notes are append-only by nature and low-risk |
+| **Arbitrary file append/prepend** | Excluded — use Composer tool | File modifications beyond daily notes need the Composer diff/preview UX for safety |
+| **Property set/remove** | Light confirmation in chat before executing | Metadata changes are reversible but should be intentional |
+| **Task toggle/status** | Light confirmation in chat before executing | Status changes are reversible but should be intentional |
 
 ## 6. Implementation Design
 
