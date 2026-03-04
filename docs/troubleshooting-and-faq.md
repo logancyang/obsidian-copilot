@@ -217,7 +217,7 @@ Copilot itself doesn't store your notes on any server. However, when you send a 
 
 The memory system stores data in your vault locally. Chat history is saved as markdown files in your vault. Nothing is stored on Copilot's servers unless you use Copilot Plus cloud features.
 
-**For maximum privacy**: Google Gemini's paid API (the basis for copilot-plus-flash) does not use API request data to train its models. For complete local privacy, consider using Ollama or LM Studio with a local model — nothing leaves your machine. Self-host mode (Believer plan) is planned for even greater privacy control.
+**For maximum privacy**: Google Gemini's paid API (the basis for copilot-plus-flash) does not use API request data to train its models. For complete local privacy, consider using Ollama or LM Studio with a local model — nothing leaves your machine. Self-host mode is available now for lifetime license holders — see [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) for details.
 
 ### Can I reference a specific note in chat?
 
