@@ -466,8 +466,8 @@ This suite replaces the need for manual multi-turn chat testing in the UI and pr
 
 ### Related Docs
 
-- `docs/MESSAGE_ARCHITECTURE.md`
-- `docs/TOOLS.md`
-- `docs/NATIVE_TOOL_CALLING_MIGRATION.md`
-- `docs/TECHDEBT.md`
+- `designdocs/MESSAGE_ARCHITECTURE.md`
+- `designdocs/TOOLS.md`
+- `designdocs/NATIVE_TOOL_CALLING_MIGRATION.md`
+- `designdocs/todo/TECHDEBT.md`
 - `TODO.md`

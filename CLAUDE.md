@@ -141,7 +141,7 @@ Run `obsidian help` for the full command list.
 
 ## Message Management Architecture
 
-For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE.md`](./docs/MESSAGE_ARCHITECTURE.md).
+For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE.md`](./designdocs/MESSAGE_ARCHITECTURE.md).
 
 ### Core Classes and Flow
 
@@ -310,7 +310,7 @@ The TODO.md should be:
 - Settings are versioned - migrations may be needed
 - Local model support available via Ollama/LM Studio
 - Rate limiting is implemented for all API calls
-- For technical debt and known issues, see [`TECHDEBT.md`](./docs/TECHDEBT.md)
+- For technical debt and known issues, see [`TECHDEBT.md`](./designdocs/todo/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
 
 ### AWS Bedrock Usage
