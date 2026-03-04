@@ -313,6 +313,13 @@ The TODO.md should be:
 - For technical debt and known issues, see [`TECHDEBT.md`](./designdocs/todo/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
 
+## User-Facing Documentation
+
+- **When modifying user-facing behavior** (new features, changed settings, removed functionality), **update the corresponding doc in `docs/`**. The doc filenames match their topics (e.g., `llm-providers.md` for provider changes, `agent-mode-and-tools.md` for tool changes).
+- Docs are written for non-technical users — no source code references, explain behavior and concepts.
+- If a change affects multiple docs, update all of them.
+- If you're unsure which doc to update, check `docs/index.md` for the full list with descriptions.
+
 ### AWS Bedrock Usage
 
 **IMPORTANT**: When using AWS Bedrock, always use **cross-region inference profile IDs** for better reliability and availability:
