@@ -2,6 +2,8 @@
 
 Projects are focused AI workspaces. Each project has its own model, system prompt, context sources, and completely isolated chat history. Use projects to keep separate AI conversations per client, topic, or area of work.
 
+Projects support **50+ file types** beyond markdown, including PDFs, Word documents, PowerPoint, Excel, images, and more — making them ideal for analyzing large or diverse document collections.
+
 > **Note**: Projects is an alpha feature. It may have rough edges and is subject to change.
 
 ---

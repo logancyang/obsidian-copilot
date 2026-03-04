@@ -107,6 +107,14 @@ Use the command palette: **Add web selection to chat context**
 
 Works similarly but captures selected text from the Web Viewer. Available on desktop only.
 
+### Adding a PDF as Context (Copilot Plus)
+
+Click the **+ Add context** button above the chat input to attach a PDF file. The PDF is converted to text and included as context for your message.
+
+### Adding an Image as Context
+
+Drag an image directly into the chat input box, or click the **image button** in the bottom-right corner of the chat input. The image is sent to the AI if your selected model supports **Vision** capability.
+
 ---
 
 ## Context Indicators

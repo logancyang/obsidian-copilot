@@ -32,6 +32,32 @@ Type your message in the input box at the bottom of the chat panel and press **E
 
 While the AI is generating a response, a **Stop** button appears. Click it to interrupt the stream at any time.
 
+### Referencing Notes Inline
+
+You can mention specific notes directly in your message using double-bracket syntax:
+
+```
+[[Note Title]]
+```
+
+Copilot adds the note's content to your message as context in the background. This is different from @-mentions — it's typed directly in your message text.
+
+### User Message Buttons
+
+Each message you send has action buttons that appear on hover:
+- **Edit** — Modify your prompt. Press Enter to re-send the edited message to the AI.
+- **Copy** — Copy the message text to clipboard
+- **Delete** — Remove this message from the conversation
+
+### AI Message Buttons
+
+Each AI response has action buttons:
+- **Insert at cursor** — Insert the AI's response at your cursor position in the active note
+- **Replace at cursor** — Replace the selected text in your note with the AI's response
+- **Copy** — Copy the response to clipboard
+- **Regenerate** — Ask the AI to generate a new response to the same message
+- **Delete** — Remove this response from the conversation
+
 ---
 
 ## Chat History
@@ -101,6 +127,16 @@ When auto-compact triggers, you'll see a "Compacting" indicator in the chat. The
 ## Suggested Prompts
 
 When starting a new chat, Copilot may show suggested prompts based on your active note or previous conversations. You can enable or disable this in Settings → Basic → **Show suggested prompts**.
+
+## Relevant Notes
+
+Copilot can display a list of notes related to your currently active note in the chat panel. This helps surface notes you might want to reference without manually searching.
+
+Enable in **Settings → Copilot → Basic → Relevant Notes** (on by default).
+
+## Saving a Chat Manually
+
+If autosave is off, or you want to save mid-conversation, click the **Save Chat as Note** button above the chat input box. This saves the current conversation to your configured save folder.
 
 ---
 

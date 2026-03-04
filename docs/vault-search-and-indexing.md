@@ -91,6 +91,14 @@ For troubleshooting:
 
 Control which notes are included in semantic search.
 
+### Cost Estimation Before Indexing
+
+Before indexing a large vault with a paid embedding model, estimate the cost first:
+
+**Command palette → Count total tokens in your vault**
+
+This shows the total token count across your vault, which you can use to estimate embedding API costs. Embedding costs are generally low, but worth checking for very large vaults.
+
 ### Exclusions
 
 **Settings → Copilot → QA → Exclusions**
@@ -103,6 +111,8 @@ Comma-separated list of patterns. Notes matching these patterns are excluded. Su
 - Note titles: `My Secret Note` — excludes that specific note
 
 Example: `private, Work/Confidential, #private` excludes the private folder, a specific work folder, and all notes tagged #private.
+
+> **Note**: Tag matching works with tags in the note's **properties (frontmatter)**, not inline tags within the note body.
 
 The `copilot` folder is always excluded automatically (it contains the plugin's own files).
 
@@ -133,6 +143,8 @@ How many text chunks to send per API request. Default is 16. Larger batches are 
 ### Partitions
 
 The index is stored in partitions for efficiency. In semantic search v3, partitions are managed automatically (one partition per 150 MB of data). No manual configuration needed.
+
+> **If you hit a "RangeError: invalid string length" error**: This means your vault is too large for a single partition. Increase the number of partitions in QA settings. A good rule of thumb is that the first partition file (found in `.obsidian/`) should be under ~400 MB.
 
 ---
 

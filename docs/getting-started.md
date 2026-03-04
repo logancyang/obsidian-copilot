@@ -110,6 +110,36 @@ By default, **Enter** sends a message and **Shift+Enter** adds a new line. You c
 
 ---
 
+---
+
+## Glossary
+
+**LLM (Large Language Model)**
+The AI "brain" behind Copilot — a model trained on vast text to understand and generate human language, powering chat, summarization, and writing assistance.
+
+**API (Application Programming Interface)**
+A way for Copilot to communicate with external AI services. You provide an API key, which is like a password that lets Copilot use a provider's AI models on your behalf. Note: an OpenAI API key is *different* from a ChatGPT Plus subscription — you don't need ChatGPT Plus to use Copilot.
+
+**API Key**
+A secret token from an AI provider that authorizes Copilot to make requests. Most providers require you to have a billing account with a positive balance.
+
+**Token**
+A small unit of text (roughly ¾ of a word) that AI models process. Tokens measure how much text the AI can handle at once and relate to usage costs.
+
+**Context Window**
+The amount of text the AI can consider at one time when generating a response. A larger context window means the AI can use more of your notes or conversation history.
+
+**Embeddings**
+A method of converting text into numbers that capture meaning. Embeddings let the AI find notes that are conceptually related, even if they don't share exact words.
+
+**RAG (Retrieval-Augmented Generation)**
+A technique that enhances AI responses by first searching for relevant notes, then generating an answer based on both your query and the retrieved content. This is how Vault QA works.
+
+**Vector Store / Index**
+A database that stores your notes as mathematical vectors (embeddings) so they can be searched by meaning. Think of it as a smart index that understands the context of your notes, not just their keywords.
+
+---
+
 ## Next Steps
 
 - [Chat Interface](chat-interface.md) — Learn about modes, history, and settings

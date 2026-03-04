@@ -21,7 +21,7 @@ Copilot Plus is a subscription that enables:
 
 ### Setting Up Copilot Plus
 
-1. Get a license key from the Copilot Plus page
+1. Get a license key from your dashboard at **https://www.obsidiancopilot.com/en/dashboard**
 2. Go to **Settings → Copilot → Basic** (or the Plus banner in the settings)
 3. Enter your license key in the **Copilot Plus License Key** field
 4. Features unlock automatically

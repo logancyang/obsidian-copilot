@@ -46,21 +46,32 @@ Inside your prompt, you can use variables that get replaced with real content wh
 
 | Variable | What it inserts |
 |---|---|
-| `{selected text}` | The text currently selected in the editor |
+| `{}` | The text currently selected in the editor |
 | `{activeNote}` | The full content of the currently active note |
 | `{[[Note Title]]}` | The content of a specific note by title |
-| `{#tag1, #tag2}` | The contents of all notes with the given tags |
+| `{FolderPath}` | All notes within a specific folder |
+| `{#tag1, #tag2}` | All notes with any of the specified tags |
 
-**Example prompt using variables:**
+> **Important**: Tags in `{#tag1, #tag2}` must be in the note's **properties (frontmatter)**, not inline tags within the note body.
+
+**Example — quiz generator using two variables:**
 ```
-Summarize the following note and extract all action items:
+Come up with multiple choice questions using {activeNote}, and follow
+the format of {[[Quiz Template]]} to start a quiz session.
 
-{activeNote}
+Ask one question at a time, stop and wait for the user.
+After the user answers, provide the correct answer and explanation.
+Repeat until the user says STOP.
 ```
 
-**Example using a referenced note:**
+**Example — comparison using specific notes:**
 ```
 Compare my notes on {[[Product Roadmap]]} and {[[Competitor Analysis]]} and identify gaps.
+```
+
+**Example — acting on selected text:**
+```
+Rewrite this in a more formal tone: {}
 ```
 
 Variable substitution must be enabled in **Settings → Copilot → Command → Enable custom prompt templating** (on by default).

@@ -4,6 +4,17 @@ This guide covers common errors, provider-specific issues, performance problems,
 
 ---
 
+## First Steps for Any Issue
+
+Before diving into specific fixes, try these steps first:
+
+1. **Check you're on the latest version** of Copilot in Community Plugins
+2. **Disable other plugins** temporarily to rule out conflicts
+3. **Enable Debug Mode** in Settings → Copilot → Advanced → Debug Mode
+4. **Open the developer console**: `Cmd+Option+I` on Mac, `Ctrl+Shift+I` on Windows
+
+---
+
 ## Common Errors
 
 ### "API key not set" or "No API key configured"
@@ -42,6 +53,27 @@ This guide covers common errors, provider-specific issues, performance problems,
 1. Make sure you have an embedding model configured with a valid API key (**Settings → Copilot → QA → Embedding Model**)
 2. Run **Command palette → Index (refresh) vault**
 3. Wait for indexing to complete
+
+### "RangeError: invalid string length"
+
+**Cause**: Your vault is too large for a single index partition.
+
+**Fix**: Increase the number of partitions in **Settings → Copilot → QA → Partitions**. A good target is keeping the first index file under ~400 MB (check the `.obsidian/` folder for `copilot-index` files and their sizes).
+
+### Response Gets Cut Off
+
+**Cause**: The AI's response hit the Max Tokens limit.
+
+**Fix**: Increase **Max Tokens** in Settings → Copilot → Model (or the per-session gear icon). Default is 6,000 tokens.
+
+### Notes Not Found in Search
+
+Even after indexing, relevant notes aren't being returned? Try:
+1. Switch to **Copilot Plus** mode and use `@vault` for more powerful search
+2. Try the **multilingual embedding model** for non-English notes
+3. Review your QA inclusions/exclusions to confirm the notes aren't filtered out
+4. Run **List all indexed files** (debug command) to verify the notes are indexed
+5. Run **Force reindex vault** for a clean rebuild
 
 ### "Non-markdown files are only available in Copilot Plus"
 
@@ -184,6 +216,28 @@ For reporting bugs:
 Copilot itself doesn't store your notes on any server. However, when you send a message, the content (including any context from your notes) is sent to the AI provider you've configured (OpenAI, Anthropic, etc.) via their API. Each provider has its own privacy policy. Your notes are not sent anywhere until you actively use the chat.
 
 The memory system stores data in your vault locally. Chat history is saved as markdown files in your vault. Nothing is stored on Copilot's servers unless you use Copilot Plus cloud features.
+
+**For maximum privacy**: Google Gemini's paid API (the basis for copilot-plus-flash) does not use API request data to train its models. For complete local privacy, consider using Ollama or LM Studio with a local model — nothing leaves your machine. Self-host mode (Believer plan) is planned for even greater privacy control.
+
+### Can I reference a specific note in chat?
+
+Yes — use `[[Note Title]]` syntax directly in your message. Copilot adds that note's content as context in the background. You can also use @-mentions. See [Context and Mentions](context-and-mentions.md) for the full list of ways to add context.
+
+### How do I make Copilot always reply in English?
+
+Go to **Settings → Copilot → Advanced → Default System Prompt**, create a custom prompt, and add "Always respond in English." as an instruction. See [System Prompts](system-prompts.md).
+
+### Can Copilot understand images in my notes?
+
+Yes, but only with models that have **Vision** capability (shown by a vision icon in the model list). Make sure:
+1. You're using a vision-capable model
+2. **Settings → Copilot → Basic → Pass markdown images to AI** is enabled
+
+### Why can't Copilot read my PDF?
+
+- Large PDFs (over 10 MB) should be converted to markdown first
+- In Copilot Plus mode, use **+ Add context** to attach a PDF — it will be converted automatically
+- For large PDF collections, **Projects mode** is better suited (supports PDF as context natively)
 
 ### Can I use Copilot offline?
 

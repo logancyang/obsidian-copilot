@@ -89,7 +89,7 @@ Searches the internet for current information.
 #### Write to File
 Creates a new note or overwrites an existing one entirely.
 
-- **Trigger**: Automatically for "create a note" requests, or explicitly with `@composer`
+- **Trigger**: Automatically for "create a note" requests, or explicitly with `@composer` (available in both Copilot Plus and Projects mode)
 - **Behavior**: Shows a preview of the content before writing. You can review and accept or reject the change.
 - **Auto-accept**: Enable **Settings → Copilot → Plus → Auto-accept edits** to skip the preview
 
@@ -157,6 +157,7 @@ You can choose your preferred diff view in **Settings → Copilot → Plus → D
 Review the proposed change and click:
 - **Accept** — Apply the change to your note
 - **Reject** — Discard without making any changes
+- **Revert** — Undo a change that was already accepted
 
 ### Auto-Accept Edits
 
