@@ -71,14 +71,14 @@ Instead of one tool per CLI command (~100 commands = too many tools) or one gene
 | `obsidianDailyRead` | `daily:read` | Read-only. Dedicated tool for v0 simplicity. |
 | `obsidianRandomRead` | `random:read` | Read-only. Dedicated tool for v0 simplicity. |
 
-### v1 (Next — ~18 commands across 5 tools)
+### v1 (Next — ~16 commands across 5 tools)
 
 | Tool | Commands | Notes |
 |------|----------|-------|
 | **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Mutation commands (`append`, `prepend`) gated by `obsidianCliAllowMutations` |
 | **obsidianProperties** | `properties`, `property:read`, `property:set`, `property:remove` | `property:set` and `property:remove` gated by mutation setting |
 | **obsidianTasks** | `tasks`, `task` (toggle/done/todo/status) | `task` mutations gated |
-| **obsidianFiles** | `read`, `append`, `prepend`, `search`, `search:context`, `random:read` | `append`/`prepend` gated. Subsumes v0 `obsidianRandomRead`. |
+| **obsidianFiles** | `read`, `append`, `prepend`, `random:read` | `append`/`prepend` gated. Subsumes v0 `obsidianRandomRead`. |
 | **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
 
 ### v2 (Future — ~8 commands across 4 tools)
@@ -103,6 +103,7 @@ The following CLI commands are **not exposed** to the AI agent:
 | System commands | `reload`, `restart`, `version`, `vault`, `vaults` | Not useful for agent workflows |
 | Developer tools | `eval`, `dev:*`, `devtools` | Arbitrary code execution risk |
 | Niche metadata | `aliases`, `wordcount`, `recents`, `hotkeys`, `commands` | Low AI synergy |
+| Search | `search`, `search:context`, `search:open` | Redundant with Copilot's existing keyword + semantic search |
 
 ## 6. Implementation Design
 
