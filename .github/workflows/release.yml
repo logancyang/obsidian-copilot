@@ -33,14 +33,15 @@ jobs:
       # downstream steps.
       - name: Validate semver PR title
         id: semver
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
-          VERSION="${{ github.event.pull_request.title }}"
-          if echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "PR title '$VERSION' is a valid semver — proceeding with release."
-            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if echo "$PR_TITLE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "PR title '$PR_TITLE' is a valid semver — proceeding with release."
+            echo "version=$PR_TITLE" >> "$GITHUB_OUTPUT"
             echo "is_release=true" >> "$GITHUB_OUTPUT"
           else
-            echo "PR title '$VERSION' is not strict semver (X.Y.Z) — skipping release."
+            echo "PR title '$PR_TITLE' is not strict semver (X.Y.Z) — skipping release."
             echo "is_release=false" >> "$GITHUB_OUTPUT"
           fi
 
@@ -56,8 +57,9 @@ jobs:
       # ── Step 3: Verify PR title version matches manifest.json ───────────────
       - name: Verify version matches manifest.json
         if: steps.semver.outputs.is_release == 'true'
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
         run: |
-          VERSION="${{ steps.semver.outputs.version }}"
           MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
           if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
             echo "Version mismatch: PR title='$VERSION', manifest.json='$MANIFEST_VERSION'"
@@ -93,13 +95,28 @@ jobs:
           PR_BODY: ${{ github.event.pull_request.body }}
         run: printf '%s' "$PR_BODY" > /tmp/release-notes.md
 
-      # ── Step 8: Create GitHub Release ────────────────────────────────────────
+      # ── Step 8: Check if release already exists (idempotency guard) ─────────
+      - name: Check if release already exists
+        if: steps.semver.outputs.is_release == 'true'
+        id: check_existing
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
+        run: |
+          if gh release view "$VERSION" > /dev/null 2>&1; then
+            echo "::warning::Release $VERSION already exists — skipping."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # ── Step 9: Create GitHub Release ────────────────────────────────────────
       # gh release create automatically creates the git tag on the merge commit.
       # Artifacts: main.js, manifest.json, styles.css
       - name: Create GitHub Release
-        if: steps.semver.outputs.is_release == 'true'
+        if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
+        env:
+          VERSION: ${{ steps.semver.outputs.version }}
         run: |
-          VERSION="${{ steps.semver.outputs.version }}"
           gh release create "$VERSION" \
             --title "$VERSION" \
             --notes-file /tmp/release-notes.md \
