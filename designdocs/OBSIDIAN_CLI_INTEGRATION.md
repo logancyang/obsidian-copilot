@@ -235,7 +235,391 @@ Manual validation:
 
 ## 11. Open Questions
 
-1. Should `obsidianCli` be exposed in standard tool settings for all users, or hidden behind a feature flag first?
-2. Do we want a dedicated category for CLI-backed tools?
-3. Should we prefer existing internal tools over CLI for certain operations (for consistency/performance)?
-4. What minimum CLI version should be required for initial support?
+### Resolved
+
+1. ~~Should `obsidianCli` be exposed in standard tool settings for all users, or hidden behind a feature flag first?~~
+   **Resolved**: CLI tools are registered in `ToolRegistry` like any other tool, gated by `Platform.isDesktopApp`. No separate feature flag — they appear in tool settings on desktop, invisible on mobile.
+
+2. ~~Do we want a dedicated category for CLI-backed tools?~~
+   **Resolved**: No dedicated category. CLI tools use category `"file"` alongside existing file tools. They are distinguished by their `id` prefix (`obsidian*`) and `displayName` suffix `(CLI)`.
+
+3. ~~Should we prefer existing internal tools over CLI for certain operations (for consistency/performance)?~~
+   **Resolved**: Yes. Internal tools are preferred when they exist. See Tool Disambiguation section — `readNote` over CLI `read`, `getTagList` over CLI `tags`, `localSearch` over CLI `search`, Composer over CLI file writes. CLI tools are only used for capabilities without an internal equivalent.
+
+### Open
+
+1. What minimum CLI version should be required for initial support?
+2. How should the agent reliably choose between similar tools when both could handle a request? For example, `daily:append`/`daily:prepend` vs the Composer tool (`writeToFile`/`replaceInFile`) when the user says "add something to my daily note." Current approach is prompt-instruction disambiguation, but this depends on LLM adherence to instructions. Alternatives: remove overlapping commands entirely, or add runtime routing that intercepts and redirects.
+3. Can we reliably resolve the Obsidian CLI binary path across platforms? Current approach: try `obsidian` on PATH → env vars (`OBSIDIAN_CLI_BINARY`, `OBSIDIAN_CLI_PATH`) → macOS fallback paths (`/Applications/Obsidian.app/Contents/MacOS/obsidian`). Windows and Linux fallback paths are not yet implemented. If the CLI is not on PATH and no env var is set, the tool fails. Should we add a settings field for manual path override, or auto-detect from known install locations per platform?
+
+---
+
+## Appendix A: V1 CLI Command Reference
+
+All commands are invoked as `obsidian <command> [params...]`. Output is **plain text** (no `format=json`) — LLMs consume text natively without the token overhead of JSON structure.
+
+Global parameter available on all commands: `vault=<name>` (targets a specific vault; omit for default).
+
+### A.1 `obsidianDailyNote` — Daily Note Operations
+
+#### `daily:read`
+
+Read today's daily note content.
+
+```
+obsidian daily:read
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| _(none)_ | | No parameters. Reads the daily note for today. |
+
+**Output**: Full markdown content of today's daily note. Empty string if no daily note exists.
+
+```
+# 2026-03-03
+
+## Tasks
+- [ ] Review PR #2181
+- [x] Update design doc
+
+## Notes
+Meeting with Alice about CLI integration...
+```
+
+#### `daily:path`
+
+Get the vault-relative file path of today's daily note.
+
+```
+obsidian daily:path
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| _(none)_ | | No parameters. |
+
+**Output**: Single line — the vault-relative path.
+
+```
+2026-03-03.md
+```
+
+This is the only way to discover the daily note path without knowing the user's daily note folder/date format configuration.
+
+#### `daily:append`
+
+Append content to the end of today's daily note. Creates the daily note if it doesn't exist.
+
+```
+obsidian daily:append content="- Meeting with Alice at 3pm"
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `content=<text>` | Yes | Text to append. |
+| `inline` | No | Boolean flag. Append without a leading newline. |
+
+**Output**: Empty on success. The content is added at the end of the file.
+
+**Note**: `open` and `paneType` parameters are accepted by the CLI but are not passed by the tool (UI-only, no value for agent).
+
+#### `daily:prepend`
+
+Prepend content to the beginning of today's daily note (after frontmatter). Creates the daily note if it doesn't exist.
+
+```
+obsidian daily:prepend content="## Morning Standup"
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `content=<text>` | Yes | Text to prepend. |
+| `inline` | No | Boolean flag. Prepend without a trailing newline. |
+
+**Output**: Empty on success.
+
+---
+
+### A.2 `obsidianProperties` — Note Property Access
+
+#### `properties`
+
+List frontmatter properties. Can operate vault-wide or on a specific note.
+
+**Vault-wide** (list all property names used across the vault):
+
+```
+obsidian properties
+```
+
+```
+aliases
+author
+cssclasses
+date
+tags
+title
+```
+
+**For a specific note** (list that note's property key-value pairs):
+
+```
+obsidian properties file="Rewrite as tweet"
+```
+
+```
+copilot-command-context-menu-enabled: false
+copilot-command-slash-enabled: false
+copilot-command-context-menu-order: 90
+copilot-command-model-key: ""
+copilot-command-last-used: 0
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `file=<name>` | No | Target file by name (without extension). |
+| `path=<path>` | No | Target file by vault-relative path. |
+| `name=<name>` | No | Get count for a specific property name (vault-wide mode). |
+| `counts` | No | Include occurrence counts (vault-wide mode). |
+| `sort=count` | No | Sort by count instead of name (vault-wide mode). |
+| `total` | No | Return only the property count. |
+
+**Output (vault-wide)**: One property name per line, alphabetically sorted by default. With `counts`, format is `name: count`. With `total`, a single number.
+
+**Output (per-file)**: `key: value` pairs, one per line (YAML-like).
+
+#### `property:read`
+
+Read a single property value from a specific note.
+
+```
+obsidian property:read name="tags" file="My Note"
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `name=<name>` | Yes | Property name to read. |
+| `file=<name>` | No | Target file by name. |
+| `path=<path>` | No | Target file by vault-relative path. |
+
+**Output**: The raw property value. For arrays, comma-separated. For strings, the plain value.
+
+```
+90
+```
+
+---
+
+### A.3 `obsidianTasks` — Task Listing
+
+#### `tasks`
+
+List tasks across the vault with filtering options.
+
+```
+obsidian tasks todo
+obsidian tasks file="Project Plan" verbose
+obsidian tasks daily
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `file=<name>` | No | Filter by file name. |
+| `path=<path>` | No | Filter by file path. |
+| `todo` | No | Show only incomplete tasks. |
+| `done` | No | Show only completed tasks. |
+| `status="<char>"` | No | Filter by status character (e.g., `status="/"` for in-progress). |
+| `daily` | No | Show tasks from today's daily note. |
+| `verbose` | No | Group tasks by file with line numbers. |
+| `total` | No | Return only the task count. |
+
+**Output (default text)**: One task per line, markdown checkbox format.
+
+```
+- [ ] Review PR #2181
+- [ ] Update design doc
+- [x] Write CLI client tests
+```
+
+**Output (verbose)**: Tasks grouped under file headings with line numbers.
+
+```
+Projects/launch-plan.md
+  L12: - [ ] Review PR #2181
+  L15: - [x] Write CLI client tests
+
+Daily/2026-03-03.md
+  L8: - [ ] Update design doc
+```
+
+**Output (total)**: Single number.
+
+```
+3
+```
+
+**Empty result**: `No tasks found.`
+
+---
+
+### A.4 `obsidianRandomRead` — Random Note
+
+#### `random:read`
+
+Read a randomly selected markdown note from the vault.
+
+```
+obsidian random:read
+obsidian random:read folder="Ideas"
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `folder=<path>` | No | Limit selection to a specific folder. |
+
+**Output**: Full markdown content of the randomly selected note. A different note is returned each invocation.
+
+**Empty result**: `No markdown files found.` (when folder is empty or doesn't exist).
+
+---
+
+### A.5 `obsidianLinks` — Link Graph Queries
+
+#### `backlinks`
+
+List notes that link TO a given file (incoming links).
+
+```
+obsidian backlinks file="My Note"
+obsidian backlinks path="Projects/plan.md" counts
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `file=<name>` | No | Target file by name. |
+| `path=<path>` | No | Target file by vault-relative path. |
+| `counts` | No | Include link counts per source file. |
+| `total` | No | Return only the backlink count. |
+
+**Output (default TSV)**: One source file per line.
+
+```
+Projects/roadmap.md
+Daily/2026-03-01.md
+```
+
+**Output (counts)**: Source file with link count.
+
+```
+Projects/roadmap.md	3
+Daily/2026-03-01.md	1
+```
+
+**Output (total)**: Single number.
+
+**Empty result**: `No backlinks found.`
+
+#### `links`
+
+List outgoing links FROM a given file.
+
+```
+obsidian links file="My Note"
+obsidian links path="Projects/plan.md" total
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `file=<name>` | No | Source file by name. |
+| `path=<path>` | No | Source file by vault-relative path. |
+| `total` | No | Return only the link count. |
+
+**Output**: One link target per line.
+
+```
+Projects/roadmap.md
+Ideas/brainstorm.md
+```
+
+**Empty result**: `No links found.`
+
+#### `orphans`
+
+List files with no incoming links (not linked from any other note).
+
+```
+obsidian orphans
+obsidian orphans total
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `total` | No | Return only the orphan count. |
+| `all` | No | Include non-markdown files (images, PDFs, etc.). |
+
+**Output**: One file path per line.
+
+```
+2026-03-03.md
+BOT/DailyAIDigest/2026-02-26-Daily-AI-Digest.md
+copilot/copilot-conversations/hello@20260302_145233.md
+DemoCanvas.canvas
+```
+
+**Output (total)**: Single number (e.g., `84`).
+
+#### `unresolved`
+
+List wikilinks that don't resolve to any existing file in the vault.
+
+```
+obsidian unresolved
+obsidian unresolved counts verbose
+obsidian unresolved total
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `counts` | No | Include how many times each unresolved link appears. |
+| `verbose` | No | Include source file for each unresolved link. |
+| `total` | No | Return only the unresolved link count. |
+
+**Output (default TSV)**: One unresolved link target per line.
+
+```
+Nonexistent Note
+Old Project Reference
+meeting-notes-2025
+```
+
+**Output (counts)**: Link target with occurrence count.
+
+```
+Nonexistent Note	5
+Old Project Reference	2
+```
+
+**Output (verbose)**: Link target with source files.
+
+```
+Nonexistent Note	Projects/roadmap.md
+Nonexistent Note	Daily/2026-03-01.md
+Old Project Reference	Archive/cleanup.md
+```
+
+**Output (total)**: Single number (e.g., `771`).
+
+---
+
+### A.6 Error Responses
+
+All commands return consistent error formats:
+
+| Condition | Output |
+|-----------|--------|
+| File not found | `Error: File "path/to/file.md" not found.` |
+| Missing required param | `Error: Missing required parameter: name=<name>` with usage line |
+| No results | Command-specific empty message (e.g., `No tasks found.`, `No backlinks found.`, `No links found.`) |
+| CLI binary not found | Process error code `ENOENT` — handled by `ObsidianCliClient` fallback resolution |
+| Timeout | Process killed after `timeoutMs` — handled by `ObsidianCliClient` |
