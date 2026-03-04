@@ -1,5 +1,35 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.4
+
+A patch release with **Gemini stability fixes**, **Miyo improvements**, **mobile polish**, and a bunch of quality-of-life updates across the board.
+
+- 🛠️ **Fix: Gemini streaming crash** — Upgraded the Google Generative AI library to resolve a crash during streaming responses. If Gemini was cutting out on you, this should fix it! (@logancyang)
+- 🛠️ **Fix: Gemini agent loop silently stopping** — The agent no longer gets stuck mid-loop when using Gemini models. (@logancyang)
+- 🛠️ **Fix: "Connection error" for Copilot Plus users** — Resolved TLS certificate errors that caused connection failures on some systems by routing requests through Obsidian's native layer. (@logancyang)
+- 🧠 **Custom Miyo server URL** — You can now point Miyo at a remote server for distributed setups. Configure it in the Miyo settings. (@wenzhengjiang)
+- 🧠 **Miyo index clear confirmation** — A confirmation dialog now appears before clearing your Miyo index, so you won't accidentally wipe it. (@wenzhengjiang)
+- 🧠 **Miyo enable flow improvement** — Skips a redundant eligibility check when enabling Miyo for a smoother experience. (@wenzhengjiang)
+- 📱 **Mobile: floating layers now close properly** — Radix UI portaled layers (dropdowns, popovers) no longer linger when the mobile drawer hides. (@Emt-lin)
+- 📊 **Chat panel table rendering fix** — Tables in chat now render correctly and no longer conflict with third-party plugins. (@Emt-lin)
+- 🧹 **Fix: stale selected text in follow-up messages** — Previously selected text no longer bleeds into later messages where it doesn't belong. (@Emt-lin)
+- ⌨️ **Fix: Ctrl+Enter shortcut in command modal** — The text-replacement shortcut works again in the Copilot command modal. (@logancyang)
+- 📝 **Fix: system prompt reset** — You can now properly reset the default system prompt back to the built-in one. (@logancyang)
+- 💡 **Fix: system prompt template syntax hints** — Clearer hints for template variable syntax in the system prompt editor. (@logancyang)
+- 🔧 **Fix: Qwen 3.5 localSearch compatibility** — String booleans are now normalized so local search works correctly with Qwen models. (@logancyang)
+- 🎨 **Fix: custom model button crowding** — The "Add Custom Chat Model" action button no longer overlaps other elements. (@logancyang)
+- 📜 **Infinite scroll in chat history** — Chat history now loads progressively as you scroll instead of rendering everything at once. Much snappier for long histories! (@logancyang)
+- 🤖 **Automated release workflow** — New CI pipeline that automatically creates GitHub releases when version PRs are merged. (@logancyang)
+- 📂 **User-facing documentation** — Added docs to help users get started and understand features. (@logancyang)
+- 🧪 **Improved web tabs test coverage** — Better test coverage for context web tab parsing. (@somethingSTRANGE)
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.3 🚀🚀🚀
 
 A quick fix for **Miyo on Windows**, **converted doc output**, and **CORS fixes**.
