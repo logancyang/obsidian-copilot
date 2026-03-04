@@ -70,6 +70,8 @@ Lists all tags in your vault with usage statistics. Useful for tag reorganizatio
 #### Update Memory
 Saves information to your memory when you explicitly ask the AI to remember something. See [Copilot Plus and Self-Host](copilot-plus-and-self-host.md#memory-system) for details.
 
+> **Requires**: **Settings → Copilot → Plus → Reference Saved Memories** must be enabled. If this setting is off, the tool is not registered and memory commands will not work.
+
 ### Configurable Tools
 
 These tools can be individually enabled or disabled in **Settings → Copilot → Plus → Tool Settings**:

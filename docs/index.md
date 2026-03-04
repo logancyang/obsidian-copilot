@@ -13,7 +13,7 @@ Welcome to the official documentation for **Copilot for Obsidian**, an AI-powere
 | [Context and Mentions](context-and-mentions.md) | Active note context, @-mentions, URLs, tags, and the web viewer |
 | [Custom Commands](custom-commands.md) | Creating and using preset prompts, template variables, Quick Command, Quick Ask |
 | [Vault Search and Indexing](vault-search-and-indexing.md) | Lexical search, semantic search, index management, exclusions |
-| [Agent Mode and Tools](agent-mode-and-tools.md) | Autonomous agent, all 11 tools, file editing, web search |
+| [Agent Mode and Tools](agent-mode-and-tools.md) | Autonomous agent, all 13 tools, file editing, web search |
 | [Projects](projects.md) | Focused workspaces with isolated context, model, and chat history |
 | [System Prompts](system-prompts.md) | Customizing AI behavior with built-in and custom system prompts |
 | [Copilot Plus and Self-Host](copilot-plus-and-self-host.md) | Copilot Plus features, memory system, self-host mode, Miyo |
