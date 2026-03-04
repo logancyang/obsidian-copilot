@@ -406,17 +406,18 @@ export class MiyoClient {
     }
 
     const body = options.body ? JSON.stringify(options.body) : undefined;
+    const headers = await this.buildHeaders();
     logInfo("Miyo request:", {
       method: options.method,
       url: url.toString(),
       hasBody: Boolean(body),
+      hasAuthorizationHeader: Boolean(headers.Authorization),
       ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
     });
 
     // TODO: Add a configurable timeout for large file parsing (e.g. big PDFs).
     // Obsidian's requestUrl does not expose a timeout option, so consider using
     // AbortController or a wrapper with Promise.race to prevent indefinite hangs.
-    const headers = await this.buildHeaders();
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,

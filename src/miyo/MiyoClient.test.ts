@@ -1,3 +1,4 @@
+import { logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
@@ -31,6 +32,7 @@ describe("MiyoClient.parseDoc", () => {
   const mockedRequestUrl = requestUrl as jest.MockedFunction<typeof requestUrl>;
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
   const mockedGetInstance = MiyoServiceDiscovery.getInstance as unknown as jest.Mock;
+  const mockedLogInfo = logInfo as jest.MockedFunction<typeof logInfo>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -76,6 +78,14 @@ describe("MiyoClient.parseDoc", () => {
         },
         contentType: "application/json",
         body: JSON.stringify({ path: "/tmp/sample.pdf" }),
+      })
+    );
+    expect(mockedLogInfo).toHaveBeenCalledWith(
+      "Miyo request:",
+      expect.objectContaining({
+        method: "POST",
+        url: "http://127.0.0.1:8742/v0/parse-doc",
+        hasAuthorizationHeader: true,
       })
     );
   });
