@@ -91,7 +91,7 @@ export class ChatPersistenceManager {
 
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(messages, firstMessageEpoch, existingTopic, currentProject);
+        : this.generateFileName(currentProject, messages, firstMessageEpoch, existingTopic);
 
       const noteContent = this.generateNoteContent(
         chatContent,
@@ -213,7 +213,7 @@ export class ChatPersistenceManager {
         }
       }
 
-      this.generateTopicAsyncIfNeeded(messages, targetFile, existingTopic, currentProject);
+      this.generateTopicAsyncIfNeeded(currentProject, targetFile, messages, existingTopic);
     } catch (error) {
       logError("[ChatPersistenceManager] Error saving chat:", error);
       new Notice("Failed to save chat as note. Check console for details.");
@@ -615,16 +615,16 @@ ${conversationSummary}`;
 
   /**
    * Generate a file name for the chat.
+   * @param project - The project context for the filename prefix.
    * @param messages - The conversation messages used to derive the topic.
    * @param firstMessageEpoch - Epoch timestamp of the first message in the chat.
    * @param topic - Optional pre-computed topic to use for the filename.
-   * @param project - Optional project context for the filename prefix.
    */
   private generateFileName(
+    project: ProjectConfig | null,
     messages: ChatMessage[],
     firstMessageEpoch: number,
-    topic?: string,
-    project?: ProjectConfig | null
+    topic?: string
   ): string {
     const settings = getSettings();
     const formattedDateTime = formatDateTime(new Date(firstMessageEpoch));
@@ -659,8 +659,8 @@ ${conversationSummary}`;
     // Parse the custom format and replace variables
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
 
-    // Prefix from input project, global project, or empty if none
-    const currentProject = project ?? getCurrentProject(); // fallback to global if nothing provided
+    // Prefix from an input project, global project, or empty if none
+    const currentProject = project === undefined ? getCurrentProject() : project;
     const filePrefix = currentProject ? `${currentProject.id}__` : "";
 
     // Calculate fixed components in bytes
@@ -742,10 +742,10 @@ ${chatContent}`;
    * Trigger asynchronous topic generation and apply it to the saved note once available
    */
   private generateTopicAsyncIfNeeded(
-    messages: ChatMessage[],
+    project: ProjectConfig | null,
     file: TFile | null,
-    existingTopic?: string,
-    project?: ProjectConfig | null
+    messages: ChatMessage[],
+    existingTopic?: string
   ): void {
     const settings = getSettings();
 
@@ -760,7 +760,7 @@ ${chatContent}`;
           return;
         }
         await this.applyTopicToFrontmatter(file, topic);
-        await this.renameFileToMatchTopic(file, topic, project);
+        await this.renameFileToMatchTopic(project, file, topic);
       } catch (error) {
         logError("[ChatPersistenceManager] Error during async topic generation:", error);
       }
@@ -809,9 +809,9 @@ ${chatContent}`;
    * Rename a note file to match its finalized frontmatter topic
    */
   async renameFileToMatchTopic(
+    project: ProjectConfig | null,
     file: TFile,
-    topic: string,
-    project?: ProjectConfig | null
+    topic: string
   ): Promise<void> {
     if (!file || !topic) return;
 
@@ -837,7 +837,7 @@ ${chatContent}`;
     }
 
     const messages = this.messageRepo.getDisplayMessages();
-    const newPath = this.generateFileName(messages, epoch, topic, project);
+    const newPath = this.generateFileName(project, messages, epoch, topic);
 
     if (file.path === newPath) {
       return;
