@@ -1,9 +1,7 @@
 import { getSettings, setSettings } from "@/settings/model";
 import { getDecryptedKey } from "@/encryptionService";
 import { GitHubCopilotModelResponse } from "@/settings/providerModels";
-import type { FetchImplementation } from "@/utils";
 import { requestUrl, type RequestUrlResponse } from "obsidian";
-import { createParser, type ParsedEvent, type ReconnectInterval } from "eventsource-parser";
 import { AuthCancelledError } from "./errors";
 
 /**
@@ -16,8 +14,7 @@ const CLIENT_ID = "Iv1.b507a08c87ecfe98";
 const DEVICE_CODE_URL = "https://github.com/login/device/code";
 const ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token";
 const COPILOT_TOKEN_URL = "https://api.github.com/copilot_internal/v2/token";
-const COPILOT_API_BASE = "https://api.githubcopilot.com";
-const CHAT_COMPLETIONS_URL = `${COPILOT_API_BASE}/chat/completions`;
+export const COPILOT_API_BASE = "https://api.githubcopilot.com";
 const MODELS_URL = `${COPILOT_API_BASE}/models`;
 
 // Token refresh buffer: refresh 1 minute before expiration
@@ -26,13 +23,6 @@ const TOKEN_REFRESH_BUFFER_MS = 60 * 1000;
 const DEFAULT_TOKEN_EXPIRATION_MS = 60 * 60 * 1000;
 // Maximum refresh attempts before giving up
 const MAX_REFRESH_ATTEMPTS = 3;
-
-// Common HTTP status error messages for Copilot API
-const HTTP_STATUS_MESSAGES: Record<number, string> = {
-  401: "Authentication failed - token may be expired",
-  403: "Access denied - check your Copilot subscription",
-  429: "Rate limited - please wait before retrying",
-};
 
 interface GitHubDeviceCodeApiResponse {
   device_code?: string;
@@ -72,61 +62,14 @@ export interface CopilotAuthState {
   error?: string;
 }
 
-export interface CopilotChatResponse {
-  choices: Array<{
-    message: { role: string; content: string };
-    finish_reason: string;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-    prompt_tokens_details?: {
-      cached_tokens: number;
-    };
-  };
-  model?: string;
-  created?: number;
-  id?: string;
-}
-
-export interface CopilotStreamChunk {
-  choices: Array<{
-    index: number;
-    delta: {
-      content?: string | null;
-      role?: string;
-    };
-    finish_reason?: string | null;
-  }>;
-  usage?: {
-    prompt_tokens: number;
-    completion_tokens: number;
-    total_tokens: number;
-  };
-  model?: string;
-  created?: number;
-  id?: string;
-}
-
-/**
- * Options for Copilot API requests.
- * Using an options object instead of positional parameters for consistency and extensibility.
- */
-export interface CopilotRequestOptions {
-  /** Model name (default: "gpt-4o") */
-  model?: string;
-  /** AbortSignal for cancellation/timeout. NOTE: Not honored when using safeFetch (CORS bypass). */
-  signal?: AbortSignal;
-  /** Custom fetch implementation (e.g., safeFetch for CORS bypass on mobile platforms) */
-  fetchImpl?: FetchImplementation;
-}
-
 /**
  * GitHubCopilotProvider handles:
  * - GitHub OAuth device code flow
  * - Token management (access token + copilot token)
- * - Chat API calls
+ * - Model listing
+ *
+ * Chat completions are handled by GitHubCopilotChatModel (extends ChatOpenAICompletions),
+ * which uses this provider for token lifecycle via buildCopilotRequestHeaders/getValidCopilotToken.
  *
  * WARNING: This uses GitHub Copilot's internal API which is not officially
  * supported for third-party applications. Use at your own risk.
@@ -137,6 +80,12 @@ export class GitHubCopilotProvider {
   private abortController: AbortController | null = null;
   private refreshPromise: Promise<string> | null = null;
   private refreshAttempts = 0;
+  /**
+   * Cache of model policy terms keyed by model ID.
+   * Populated after each listModels() call. Used to surface helpful
+   * "enable this model" guidance when a 400 "not supported" error occurs.
+   */
+  private modelPolicyTermsCache = new Map<string, string>();
   /**
    * Auth generation counter - incremented on reset to invalidate in-flight operations.
    * This prevents race conditions where an async operation completes after resetAuth()
@@ -498,266 +447,13 @@ export class GitHubCopilotProvider {
     return {
       "Content-Type": "application/json",
       Authorization: `Bearer ${token}`,
-      "User-Agent": "GitHubCopilotChat/0.22.2024092501",
-      "Editor-Version": "vscode/1.95.1",
+      "User-Agent": "GitHubCopilotChat/0.38.2026022001",
+      "Editor-Version": "vscode/1.110.0",
+      "Editor-Plugin-Version": "copilot-chat/0.38.2026022001",
       "Copilot-Integration-Id": "vscode-chat",
       "Openai-Intent": "conversation-panel",
+      "X-GitHub-Api-Version": "2025-05-01",
     };
-  }
-
-  /**
-   * Execute a fetch request with automatic 401 retry.
-   * On 401, clears cached Copilot token and retries once with a fresh token.
-   * @param doRequest - Function that performs the actual request given a token
-   * @returns The response from the successful request
-   */
-  private async executeWithTokenRetry(
-    doRequest: (token: string) => Promise<Response>
-  ): Promise<Response> {
-    let token = await this.getValidCopilotToken();
-    let response = await doRequest(token);
-
-    // 401: clear cached token and retry once
-    if (response.status === 401) {
-      try {
-        await response.body?.cancel();
-      } catch {
-        // Ignore cancellation errors - body may already be closed
-      }
-      this.clearCopilotToken();
-      token = await this.getValidCopilotToken();
-      response = await doRequest(token);
-    }
-
-    return response;
-  }
-
-  /**
-   * Send chat message to Copilot API.
-   * Uses fetch API for parity with other providers and to surface CORS issues during ping validation.
-   * @param messages - Chat messages
-   * @param options - Request options (model, signal, fetchImpl)
-   */
-  async sendChatMessage(
-    messages: Array<{ role: string; content: string }>,
-    options: CopilotRequestOptions = {}
-  ): Promise<CopilotChatResponse> {
-    const { model = "gpt-4o", signal, fetchImpl } = options;
-    // Use provided fetch implementation or default to native fetch
-    const fetchImplementation = fetchImpl ?? fetch;
-
-    const response = await this.executeWithTokenRetry((token) =>
-      fetchImplementation(CHAT_COMPLETIONS_URL, {
-        method: "POST",
-        headers: {
-          ...this.buildCopilotHeaders(token),
-          Accept: "application/json",
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: false,
-        }),
-        signal,
-      })
-    );
-
-    const responseText = await response.text();
-    let data: unknown = null;
-    if (responseText) {
-      try {
-        data = JSON.parse(responseText);
-      } catch {
-        data = responseText;
-      }
-    }
-
-    if (!response.ok) {
-      let errorDetail = "";
-      if (data && typeof data === "object") {
-        const record = data as Record<string, unknown>;
-        const nestedError = record.error;
-        if (nestedError && typeof nestedError === "object") {
-          const nestedRecord = nestedError as Record<string, unknown>;
-          if (typeof nestedRecord.message === "string") {
-            errorDetail = nestedRecord.message;
-          }
-        }
-        if (!errorDetail && typeof record.message === "string") {
-          errorDetail = record.message;
-        }
-        if (!errorDetail) {
-          try {
-            errorDetail = JSON.stringify(data);
-          } catch {
-            errorDetail = "";
-          }
-        }
-      } else if (typeof data === "string") {
-        errorDetail = data;
-      }
-
-      const baseMessage =
-        HTTP_STATUS_MESSAGES[response.status] || `Request failed: ${response.status}`;
-      throw new Error(errorDetail ? `${baseMessage}: ${errorDetail}` : baseMessage);
-    }
-
-    // Validate response structure
-    if (
-      !data ||
-      typeof data !== "object" ||
-      !Array.isArray((data as Record<string, unknown>).choices)
-    ) {
-      throw new Error("Invalid response from Copilot API: missing choices array");
-    }
-
-    return data as CopilotChatResponse;
-  }
-
-  /**
-   * Send chat message to Copilot API with streaming response.
-   * Uses fetch API for true streaming support.
-   * @param messages - Chat messages
-   * @param options - Request options (model, signal, fetchImpl)
-   */
-  async *sendChatMessageStream(
-    messages: Array<{ role: string; content: string }>,
-    options: CopilotRequestOptions = {}
-  ): AsyncGenerator<CopilotStreamChunk> {
-    const { model = "gpt-4o", signal, fetchImpl } = options;
-    // Use provided fetch implementation or default to native fetch
-    const fetchImplementation = fetchImpl ?? fetch;
-
-    const response = await this.executeWithTokenRetry((token) =>
-      fetchImplementation(CHAT_COMPLETIONS_URL, {
-        method: "POST",
-        headers: {
-          ...this.buildCopilotHeaders(token),
-          Accept: "text/event-stream",
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          stream: true,
-        }),
-        signal,
-      })
-    );
-
-    if (!response.ok) {
-      const errorText = await response.text();
-      const baseMessage =
-        HTTP_STATUS_MESSAGES[response.status] || `Request failed: ${response.status}`;
-      throw new Error(errorText ? `${baseMessage}: ${errorText}` : baseMessage);
-    }
-
-    // Verify response is SSE format
-    // Reason: safeFetch (based on requestUrl) may not return accurate content-type headers,
-    // so we relax the validation to also accept empty content-type or application/json
-    const contentType = response.headers.get("content-type") || "";
-    if (
-      contentType &&
-      !contentType.includes("text/event-stream") &&
-      !contentType.includes("application/json")
-    ) {
-      throw new Error(`Expected text/event-stream but received ${contentType}`);
-    }
-
-    if (!response.body) {
-      throw new Error("Response body is not available for streaming");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-
-    // Declare chunkQueue before parser to avoid use-before-define issues
-    const chunkQueue: CopilotStreamChunk[] = [];
-    let receivedDone = false;
-    let yieldedChunks = 0;
-    let rawResponsePreview = ""; // For diagnostics if no chunks are produced
-
-    // Use eventsource-parser for robust SSE parsing
-    const parser = createParser((event: ParsedEvent | ReconnectInterval) => {
-      if (event.type !== "event") {
-        return;
-      }
-
-      const data = event.data;
-      if (data === "[DONE]") {
-        receivedDone = true;
-        return;
-      }
-
-      try {
-        const chunk = JSON.parse(data) as CopilotStreamChunk;
-        // Store chunk in a queue to be yielded
-        chunkQueue.push(chunk);
-      } catch {
-        // Skip invalid JSON
-      }
-    });
-
-    try {
-      while (true) {
-        // Exit early if we received [DONE]
-        if (receivedDone) break;
-
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        // Feed data to parser
-        const text = decoder.decode(value, { stream: true });
-        // Capture first 500 chars for diagnostics if streaming fails
-        if (rawResponsePreview.length < 500) {
-          rawResponsePreview += text.slice(0, 500 - rawResponsePreview.length);
-        }
-        parser.feed(text);
-
-        // Yield all queued chunks
-        while (chunkQueue.length > 0) {
-          const chunk = chunkQueue.shift();
-          if (chunk) {
-            yieldedChunks++;
-            yield chunk;
-          }
-        }
-      }
-
-      // Flush decoder at the end
-      const finalText = decoder.decode();
-      if (finalText) {
-        if (rawResponsePreview.length < 500) {
-          rawResponsePreview += finalText.slice(0, 500 - rawResponsePreview.length);
-        }
-        parser.feed(finalText);
-        while (chunkQueue.length > 0) {
-          const chunk = chunkQueue.shift();
-          if (chunk) {
-            yieldedChunks++;
-            yield chunk;
-          }
-        }
-      }
-
-      // Detect silent failures where streaming completed but produced no chunks
-      if (yieldedChunks === 0) {
-        const preview = rawResponsePreview.slice(0, 200);
-        throw new Error(
-          `GitHub Copilot streaming produced no chunks. ` +
-            `Content-Type: ${contentType || "(empty)"}, ` +
-            `Response preview: ${preview || "(empty)"}`
-        );
-      }
-    } finally {
-      // Cancel the reader to abort any pending reads, then release the lock
-      // Wrap in try-catch to avoid overwriting the original error (e.g., AbortError)
-      try {
-        await reader.cancel();
-      } catch {
-        // Ignore cancellation errors - stream may already be closed
-      }
-      reader.releaseLock();
-    }
   }
 
   /**
@@ -779,6 +475,7 @@ export class GitHubCopilotProvider {
     this.abortPolling(); // This will abort any ongoing polling operations
     this.refreshPromise = null;
     this.refreshAttempts = 0;
+    this.modelPolicyTermsCache.clear();
     setSettings({
       githubCopilotAccessToken: "",
       githubCopilotToken: "",
@@ -795,9 +492,11 @@ export class GitHubCopilotProvider {
         url: MODELS_URL,
         method: "GET",
         headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "Copilot-Integration-Id": "vscode-chat",
+          ...this.buildCopilotHeaders(token),
+          Accept: "application/json",
+          // Reason: VSCode Copilot uses "model-access" intent when listing models,
+          // which may return additional fields (billing, is_chat_default, etc.)
+          "Openai-Intent": "model-access",
         },
         throw: false,
       });
@@ -817,7 +516,26 @@ export class GitHubCopilotProvider {
       throw new Error(`Failed to list models: ${res.status}`);
     }
 
-    return this.getRequestUrlJson(res) as GitHubCopilotModelResponse;
+    const result = this.getRequestUrlJson(res) as GitHubCopilotModelResponse;
+
+    // Cache policy terms for each model so they can be surfaced in error messages.
+    this.modelPolicyTermsCache.clear();
+    result.data?.forEach((model) => {
+      if (model.policy?.terms) {
+        this.modelPolicyTermsCache.set(model.id, model.policy.terms);
+      }
+    });
+
+    return result;
+  }
+
+  /**
+   * Get the policy terms for a model, if available.
+   * Returns the human-readable guidance text (may include Markdown links)
+   * that explains how the user can enable the model on GitHub's settings page.
+   */
+  getPolicyTerms(modelId: string): string | undefined {
+    return this.modelPolicyTermsCache.get(modelId);
   }
 
   /**
@@ -828,6 +546,24 @@ export class GitHubCopilotProvider {
       githubCopilotToken: "",
       githubCopilotTokenExpiresAt: 0,
     });
+  }
+
+  /**
+   * Build headers required for GitHub Copilot API requests.
+   * Public wrapper around the private buildCopilotHeaders method,
+   * exposed for use by ChatOpenAI-based models that inject auth via configuration.fetch.
+   */
+  buildCopilotRequestHeaders(token: string): Record<string, string> {
+    return this.buildCopilotHeaders(token);
+  }
+
+  /**
+   * Invalidate the cached Copilot token so the next request forces a refresh.
+   * Public wrapper around clearCopilotToken, used by the fetch wrapper
+   * to implement "401 → refresh token → retry once" logic.
+   */
+  invalidateCopilotToken(): void {
+    this.clearCopilotToken();
   }
 
   /**
