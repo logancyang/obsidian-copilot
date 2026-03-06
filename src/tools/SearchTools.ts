@@ -388,34 +388,41 @@ async function performMiyoSearch({
   query,
   salientTerms,
   returnAll = false,
+  timeRange,
 }: {
   query: string;
   salientTerms: string[];
   returnAll?: boolean;
+  timeRange?: { startTime: number; endTime: number };
 }) {
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-  const useExpandedLimits = returnAll || tagTerms.length > 0;
+  const useExpandedLimits = returnAll || timeRange !== undefined || tagTerms.length > 0;
   const effectiveMaxK = useExpandedLimits ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
 
-  // FilterRetriever for local tag/title matches
+  // FilterRetriever for local tag/title/time-range matches
   const filterRetriever = new FilterRetriever(app, {
     salientTerms,
+    timeRange,
     maxK: effectiveMaxK,
     returnAll: useExpandedLimits,
   });
   const filterDocs = await filterRetriever.getRelevantDocuments(query);
 
-  // Miyo retriever for server-side semantic search (no local lexical merge)
-  const miyoRetriever = RetrieverFactory.createMiyoRetriever(app, {
-    minSimilarityScore: useExpandedLimits ? 0.0 : 0.1,
-    maxK: effectiveMaxK,
-    salientTerms,
-    textWeight: TEXT_WEIGHT,
-    returnAll: useExpandedLimits,
-    useRerankerThreshold: 0.5,
-    tagTerms,
-  });
-  const miyoDocs = await miyoRetriever.getRelevantDocuments(query);
+  // When timeRange is set, filter results are the complete set — skip Miyo search
+  // (mirrors the non-Miyo path where main retriever is skipped for time-range queries)
+  let miyoDocs: import("@langchain/core/documents").Document[] = [];
+  if (!filterRetriever.hasTimeRange()) {
+    const miyoRetriever = RetrieverFactory.createMiyoRetriever(app, {
+      minSimilarityScore: useExpandedLimits ? 0.0 : 0.1,
+      maxK: effectiveMaxK,
+      salientTerms,
+      textWeight: TEXT_WEIGHT,
+      returnAll: useExpandedLimits,
+      useRerankerThreshold: 0.5,
+      tagTerms,
+    });
+    miyoDocs = await miyoRetriever.getRelevantDocuments(query);
+  }
 
   logInfo(
     `miyoSearch: ${filterDocs.length} filter + ${miyoDocs.length} miyo docs for query: "${query}"`
@@ -462,7 +469,12 @@ const localSearchTool = createLangChainTool({
     // Miyo handles search server-side — use separate path (no local lexical search)
     if (RetrieverFactory.isMiyoActive()) {
       logInfo("localSearch: Using Miyo search path");
-      return await performMiyoSearch({ query, salientTerms, returnAll: returnAll === true });
+      return await performMiyoSearch({
+        query,
+        salientTerms,
+        returnAll: returnAll === true,
+        timeRange,
+      });
     }
 
     const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
