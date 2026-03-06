@@ -302,10 +302,13 @@ const basesSchema = z.object({
   file: z
     .string()
     .optional()
+    .describe("Target Base file by name (without extension). Used for base:views and base:query."),
+  path: z
+    .string()
+    .optional()
     .describe(
-      "Target Base file by name (without extension). Required for base:views and base:query."
+      "Target Base file by vault-relative path. Alternative to file= for base:views and base:query."
     ),
-  path: z.string().optional().describe("Target Base file by vault-relative path."),
   view: z.string().optional().describe("View name to query. For base:query only."),
   format: z
     .string()
