@@ -83,6 +83,7 @@ All v1 tools are **read-only or direct-execution** (no confirmation UX required)
 | **obsidianRandomRead** | `random:read` | Read-only. Standalone tool (single command). Continues from v0. |
 | **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
 | **obsidianTemplates** | `templates`, `template:read` | Read-only. `template:insert` deferred (requires active file context). Moved from v2. |
+| **obsidianBases** | `bases`, `base:views`, `base:query` | All read-only |
 
 ### v2 (Future — ~9 commands: 3 mutations on existing tools + 2 new tools)
 
@@ -92,7 +93,6 @@ v2 introduces **confirmation-required mutations** on existing v1 tools and adds 
 |------|----------|-------|
 | **obsidianProperties** _(v1 extension)_ | `property:set`, `property:remove` | Light confirmation in chat before executing. Extends v1 read-only tool. |
 | **obsidianTasks** _(v1 extension)_ | `task` (toggle/done/todo/status) | Light confirmation in chat before executing. Extends v1 read-only tool. |
-| **obsidianBases** | `bases`, `base:views`, `base:query` | Read-only. `base:create` deferred to later phase. |
 | **obsidianBookmarks** | `bookmarks`, `bookmark` | `bookmark` (add) gated by mutation setting |
 
 ### Excluded from Tool System
@@ -663,7 +663,88 @@ obsidian template:read name="Daily Note"
 
 ---
 
-### A.7 Error Responses
+### A.7 `obsidianBases` — Base Database Queries
+
+#### `bases`
+
+List all Base (database) files in the vault.
+
+```
+obsidian bases
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `total` | No | Return only the count of Base files. |
+
+**Output**: One Base file per line.
+
+```
+Contacts.base
+Projects.base
+Tasks.base
+```
+
+**Output (total)**: Single number.
+
+#### `base:views`
+
+List views defined in a Base file.
+
+```
+obsidian base:views file="Projects"
+obsidian base:views path="Databases/Projects.base"
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `file=<name>` | No* | Target Base file by name (without extension). |
+| `path=<path>` | No* | Target Base file by vault-relative path. |
+
+\* One of `file` or `path` is required.
+
+**Output**: One view name per line.
+
+```
+All Items
+By Status
+Kanban
+```
+
+#### `base:query`
+
+Query data from a Base view.
+
+```
+obsidian base:query file="Projects" view="All Items"
+obsidian base:query path="Databases/Projects.base" format=csv
+```
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `file=<name>` | No* | Target Base file by name (without extension). |
+| `path=<path>` | No* | Target Base file by vault-relative path. |
+| `view=<name>` | No | View name to query. Omit for default view. |
+| `format=<fmt>` | No | Output format (e.g., `csv`). Omit for default text. |
+| `total` | No | Return only the row count. |
+
+\* One of `file` or `path` is required.
+
+**Output (default text)**: Tabular data, one row per line.
+
+**Output (csv)**: CSV-formatted data.
+
+```
+Name,Status
+Alpha,Active
+Beta,Done
+```
+
+**Output (total)**: Single number.
+
+---
+
+### A.8 Error Responses
 
 All commands return consistent error formats:
 

@@ -195,10 +195,7 @@ const linksSchema = z.object({
     .describe(
       "backlinks — list notes that link TO a given file. links — list outgoing links FROM a file. orphans — list files with no incoming links. unresolved — list wikilinks that don't resolve to any file."
     ),
-  file: z
-    .string()
-    .optional()
-    .describe("Target file by name (for backlinks and links commands)."),
+  file: z.string().optional().describe("Target file by name (for backlinks and links commands)."),
   path: z
     .string()
     .optional()
@@ -207,10 +204,7 @@ const linksSchema = z.object({
     .boolean()
     .optional()
     .describe("Include link counts per source file (for backlinks and unresolved)."),
-  verbose: z
-    .boolean()
-    .optional()
-    .describe("Include source file for each entry (for unresolved)."),
+  verbose: z.boolean().optional().describe("Include source file for each entry (for unresolved)."),
   total: z.boolean().optional().describe("Return only the count."),
   all: z
     .boolean()
@@ -258,10 +252,7 @@ const templatesSchema = z.object({
     .describe(
       "templates — list all available template names. template:read — read a template's content with variable resolution."
     ),
-  name: z
-    .string()
-    .optional()
-    .describe("Template name to read. Required for template:read."),
+  name: z.string().optional().describe("Template name to read. Required for template:read."),
   vault: z
     .string()
     .optional()
@@ -290,6 +281,65 @@ export const obsidianTemplatesTool = createLangChainTool({
 
     return {
       type: "obsidian_cli_templates",
+      command: result.command,
+      vault: vault ?? null,
+      content: result.stdout.trim(),
+      durationMs: result.durationMs,
+    };
+  },
+});
+
+// ---------------------------------------------------------------------------
+// obsidianBases — Base database queries (read-only)
+// ---------------------------------------------------------------------------
+
+const basesSchema = z.object({
+  command: z
+    .enum(["bases", "base:views", "base:query"])
+    .describe(
+      "bases — list all Base files in the vault. base:views — list views defined in a Base file. base:query — query data from a Base view."
+    ),
+  file: z
+    .string()
+    .optional()
+    .describe(
+      "Target Base file by name (without extension). Required for base:views and base:query."
+    ),
+  path: z.string().optional().describe("Target Base file by vault-relative path."),
+  view: z.string().optional().describe("View name to query. For base:query only."),
+  format: z
+    .string()
+    .optional()
+    .describe("Output format for base:query (e.g., 'csv'). Omit for default text output."),
+  total: z.boolean().optional().describe("Return only the count."),
+  vault: z
+    .string()
+    .optional()
+    .describe("Optional vault name to target. Omit to use the active vault."),
+});
+
+/**
+ * Tool for querying Obsidian Base (database) files via the official Obsidian CLI.
+ * Supports listing bases, listing views, and querying data from views.
+ */
+export const obsidianBasesTool = createLangChainTool({
+  name: "obsidianBases",
+  description:
+    "Query Obsidian Base (database) files via the official Obsidian CLI: list all bases, list views in a base, or query data from a base view. Read-only.",
+  schema: basesSchema,
+  func: async (args) => {
+    const { command, vault } = args;
+    if ((command === "base:views" || command === "base:query") && !args.file && !args.path) {
+      throw new Error(`file or path is required for ${command}`);
+    }
+
+    const params = buildCliParams(args as Record<string, unknown>);
+    const result = await runObsidianCliCommand({ command, vault, params });
+
+    if (!result.ok) throwCliFailure(result);
+
+    return {
+      type: "obsidian_cli_bases",
       command: result.command,
       vault: vault ?? null,
       content: result.stdout.trim(),

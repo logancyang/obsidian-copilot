@@ -1,4 +1,5 @@
 import {
+  obsidianBasesTool,
   obsidianDailyNoteTool,
   obsidianLinksTool,
   obsidianPropertiesTool,
@@ -159,17 +160,17 @@ describe("obsidianDailyNoteTool", () => {
       buildFailedResult("daily:read", "EFAIL", "Daily note plugin not enabled", 1)
     );
 
-    await expect(
-      (obsidianDailyNoteTool as any).invoke({ command: "daily:read" })
-    ).rejects.toThrow("Daily note plugin not enabled");
+    await expect((obsidianDailyNoteTool as any).invoke({ command: "daily:read" })).rejects.toThrow(
+      "Daily note plugin not enabled"
+    );
   });
 
   test("throws ENOENT failure with actionable message", async () => {
     mockedRunCommand.mockResolvedValue(buildFailedResult("daily:read", "ENOENT", ""));
 
-    await expect(
-      (obsidianDailyNoteTool as any).invoke({ command: "daily:read" })
-    ).rejects.toThrow("CLI binary not found");
+    await expect((obsidianDailyNoteTool as any).invoke({ command: "daily:read" })).rejects.toThrow(
+      "CLI binary not found"
+    );
   });
 });
 
@@ -242,9 +243,9 @@ describe("obsidianPropertiesTool", () => {
     // When error code is present, it takes precedence over exit code in error message
     mockedRunCommand.mockResolvedValue(buildFailedResult("properties", "EFAIL", "", 1));
 
-    await expect(
-      (obsidianPropertiesTool as any).invoke({ command: "properties" })
-    ).rejects.toThrow("error code EFAIL");
+    await expect((obsidianPropertiesTool as any).invoke({ command: "properties" })).rejects.toThrow(
+      "error code EFAIL"
+    );
   });
 });
 
@@ -351,7 +352,9 @@ describe("obsidianLinksTool", () => {
   });
 
   test("orphans returns file list", async () => {
-    mockedRunCommand.mockResolvedValue(buildSuccessResult("orphans", "Inbox/draft.md\nAttic/old.md"));
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("orphans", "Inbox/draft.md\nAttic/old.md")
+    );
 
     const response = await (obsidianLinksTool as any).invoke({ command: "orphans" });
     const parsed = JSON.parse(response);
@@ -468,16 +471,143 @@ describe("obsidianTemplatesTool", () => {
       buildFailedResult("templates", "EFAIL", "Templates plugin not enabled", 1)
     );
 
-    await expect(
-      (obsidianTemplatesTool as any).invoke({ command: "templates" })
-    ).rejects.toThrow("Templates plugin not enabled");
+    await expect((obsidianTemplatesTool as any).invoke({ command: "templates" })).rejects.toThrow(
+      "Templates plugin not enabled"
+    );
   });
 
   test("throws ENOENT failure with actionable message", async () => {
     mockedRunCommand.mockResolvedValue(buildFailedResult("templates", "ENOENT", ""));
 
-    await expect(
-      (obsidianTemplatesTool as any).invoke({ command: "templates" })
-    ).rejects.toThrow("CLI binary not found");
+    await expect((obsidianTemplatesTool as any).invoke({ command: "templates" })).rejects.toThrow(
+      "CLI binary not found"
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// obsidianBases
+// ---------------------------------------------------------------------------
+
+describe("obsidianBasesTool", () => {
+  test("bases lists base files", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("bases", "Contacts.base\nProjects.base\nTasks.base")
+    );
+
+    const response = await (obsidianBasesTool as any).invoke({ command: "bases" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_bases");
+    expect(parsed.command).toBe("bases");
+    expect(parsed.vault).toBeNull();
+    expect(parsed.content).toBe("Contacts.base\nProjects.base\nTasks.base");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "bases",
+      vault: undefined,
+      params: {},
+    });
+  });
+
+  test("base:views passes file param", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("base:views", "All Items\nBy Status\nKanban")
+    );
+
+    const response = await (obsidianBasesTool as any).invoke({
+      command: "base:views",
+      file: "Projects",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_bases");
+    expect(parsed.content).toBe("All Items\nBy Status\nKanban");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:views",
+      vault: undefined,
+      params: { file: "Projects" },
+    });
+  });
+
+  test("base:views passes path param", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("base:views", "Default View"));
+
+    await (obsidianBasesTool as any).invoke({
+      command: "base:views",
+      path: "Databases/Projects.base",
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:views",
+      vault: undefined,
+      params: { path: "Databases/Projects.base" },
+    });
+  });
+
+  test("base:query passes file, view, and format params", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("base:query", "Name,Status\nAlpha,Active\nBeta,Done")
+    );
+
+    const response = await (obsidianBasesTool as any).invoke({
+      command: "base:query",
+      file: "Projects",
+      view: "All Items",
+      format: "csv",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.content).toBe("Name,Status\nAlpha,Active\nBeta,Done");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:query",
+      vault: undefined,
+      params: { file: "Projects", view: "All Items", format: "csv" },
+    });
+  });
+
+  test("base:query with total flag", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("base:query", "42"));
+
+    await (obsidianBasesTool as any).invoke({
+      command: "base:query",
+      file: "Contacts",
+      total: true,
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:query",
+      vault: undefined,
+      params: { file: "Contacts", total: true },
+    });
+  });
+
+  test("base:views throws when file and path are both missing", async () => {
+    await expect((obsidianBasesTool as any).invoke({ command: "base:views" })).rejects.toThrow(
+      "file or path is required for base:views"
+    );
+  });
+
+  test("base:query throws when file and path are both missing", async () => {
+    await expect((obsidianBasesTool as any).invoke({ command: "base:query" })).rejects.toThrow(
+      "file or path is required for base:query"
+    );
+  });
+
+  test("throws on CLI failure with stderr message", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildFailedResult("bases", "EFAIL", "Bases plugin not enabled", 1)
+    );
+
+    await expect((obsidianBasesTool as any).invoke({ command: "bases" })).rejects.toThrow(
+      "Bases plugin not enabled"
+    );
+  });
+
+  test("throws ENOENT failure with actionable message", async () => {
+    mockedRunCommand.mockResolvedValue(buildFailedResult("bases", "ENOENT", ""));
+
+    await expect((obsidianBasesTool as any).invoke({ command: "bases" })).rejects.toThrow(
+      "CLI binary not found"
+    );
   });
 });

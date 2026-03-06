@@ -174,6 +174,7 @@ export function getToolDisplayName(toolName: string): string {
     obsidianTasks: "tasks (CLI)",
     obsidianLinks: "links (CLI)",
     obsidianTemplates: "templates (CLI)",
+    obsidianBases: "bases (CLI)",
   };
 
   return displayNameMap[toolName] || toolName;
@@ -203,6 +204,7 @@ export function getToolEmoji(toolName: string): string {
     obsidianTasks: "✅",
     obsidianLinks: "🔗",
     obsidianTemplates: "📄",
+    obsidianBases: "🗄️",
   };
 
   return emojiMap[toolName] || "🔧";
