@@ -1,9 +1,18 @@
 import { getSettings } from "@/settings/model";
 import { Vault } from "obsidian";
+import { isDesktopRuntime } from "@/services/obsidianCli/ObsidianCliClient";
 import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
+import { obsidianRandomReadTool } from "./ObsidianCliDailyTools";
+import {
+  obsidianDailyNoteTool,
+  obsidianLinksTool,
+  obsidianPropertiesTool,
+  obsidianTasksTool,
+  obsidianTemplatesTool,
+} from "./ObsidianCliTools";
 import { localSearchTool, webSearchTool } from "./SearchTools";
 import { createGetTagListTool } from "./TagTools";
 import {
@@ -317,6 +326,118 @@ Example: statement: "I'm studying Japanese and I'm preparing for JLPT N3"`,
 }
 
 /**
+ * Register desktop-only Obsidian CLI tools.
+ * These tools are completely invisible on mobile — not registered, not shown in any UI.
+ */
+export function registerCliTools(): void {
+  const registry = ToolRegistry.getInstance();
+
+  registry.register({
+    tool: obsidianDailyNoteTool,
+    metadata: {
+      id: "obsidianDailyNote",
+      displayName: "Daily Note",
+      description: "Read, append, or prepend to today's daily note, or get its path",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianDailyNote:
+- Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
+- Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
+- daily:read — read today's daily note content.
+- daily:append — append text to the end of today's daily note. Requires content parameter.
+- daily:prepend — prepend text to the beginning of today's daily note. Requires content parameter.
+- daily:path — get the vault-relative file path of today's daily note (useful for follow-up readNote calls).
+- daily:append and daily:prepend auto-create the daily note if it doesn't exist.
+- To create today's daily note from a template: first use obsidianTemplates with 'templates' to list available templates and identify the daily note template, then use 'template:read' with the template name to get the resolved content (with variables like {{date}} expanded), then use daily:prepend to populate the new note.
+- For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
+- If the user names a specific vault, pass it using the vault parameter.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianRandomReadTool,
+    metadata: {
+      id: "obsidianRandomRead",
+      displayName: "Random Note",
+      description: "Read a random note using the official Obsidian CLI",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianRandomRead:
+- Use when the user explicitly asks for a random note or random note content.
+- If the user names a specific vault, pass it using the vault parameter.
+- Do not use when the user asks for a specific note; use readNote/getFileTree for specific targets.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianPropertiesTool,
+    metadata: {
+      id: "obsidianProperties",
+      displayName: "Properties",
+      description: "Read frontmatter properties from notes or list all property names in the vault",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianProperties:
+- Use to inspect frontmatter properties across the vault or within a specific note.
+- properties (no file/path): list all property names used vault-wide. Add counts=true for occurrence counts.
+- properties with file= or path=: list that note's key-value property pairs.
+- property:read: read a single property value from a specific note. Requires name parameter.
+- Do not use for full note content — use readNote for that.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianTasksTool,
+    metadata: {
+      id: "obsidianTasks",
+      displayName: "Tasks",
+      description: "List tasks across the vault with filters for status, file, and daily note",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianTasks:
+- Use to list and filter tasks across the vault.
+- todo=true: show only incomplete tasks. done=true: show only completed tasks.
+- daily=true: show tasks from today's daily note only.
+- verbose=true: group tasks by file with line numbers.
+- total=true: return only the task count.
+- file= or path=: limit to a specific note.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianLinksTool,
+    metadata: {
+      id: "obsidianLinks",
+      displayName: "Links",
+      description: "Query the vault link graph: backlinks, outgoing links, orphans, unresolved",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianLinks:
+- Use to explore the vault's link graph.
+- backlinks: list notes that link TO a given file. Use file= or path= to target a note.
+- links: list outgoing links FROM a given file. Use file= or path= to target a note.
+- orphans: list all notes with no incoming links. Use total=true for just the count.
+- unresolved: list wikilinks that don't resolve to any existing file. Use counts=true for occurrence counts, verbose=true to see source files.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianTemplatesTool,
+    metadata: {
+      id: "obsidianTemplates",
+      displayName: "Templates",
+      description: "List available templates or read template content",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianTemplates:
+- Use 'templates' to list all available templates when you need to find the right template for a task.
+- Use 'template:read' with a template name to get its content with variables resolved. Requires name parameter.
+- This is useful for creating daily notes from templates — read the template first, then use obsidianDailyNote's daily:prepend to populate the note.`,
+    },
+  });
+}
+
+/**
  * Initialize all built-in tools in the registry.
  * This function registers tool definitions, not user preferences.
  * User-enabled tools are filtered dynamically when retrieved.
@@ -353,6 +474,11 @@ export function initializeBuiltinTools(vault?: Vault): void {
     // Register memory tool if saved memory is enabled
     if (settings.enableSavedMemory) {
       registerMemoryTool();
+    }
+
+    // Register desktop-only CLI tools (invisible on mobile)
+    if (isDesktopRuntime()) {
+      registerCliTools();
     }
   }
 }
