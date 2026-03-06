@@ -244,6 +244,12 @@ export function summarizeToolResult(
       }
       return "Listed templates";
     }
+    case "obsidianBases": {
+      const command = args?.command as string | undefined;
+      if (command === "base:views") return "Listed base views";
+      if (command === "base:query") return "Queried base data";
+      return "Listed bases";
+    }
     case "indexVault":
       return "Indexed vault";
     case "updateMemory":
@@ -406,6 +412,12 @@ export function summarizeToolCall(
         return name ? `Reading template "${name}"` : "Reading template";
       }
       return "Listing templates";
+    }
+    case "obsidianBases": {
+      const command = args?.command as string | undefined;
+      if (command === "base:views") return "Listing base views";
+      if (command === "base:query") return "Querying base data";
+      return "Listing bases";
     }
     case "indexVault":
       return "Indexing vault";

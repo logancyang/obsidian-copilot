@@ -7,6 +7,7 @@ import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
 import { obsidianRandomReadTool } from "./ObsidianCliDailyTools";
 import {
+  obsidianBasesTool,
   obsidianDailyNoteTool,
   obsidianLinksTool,
   obsidianPropertiesTool,
@@ -433,6 +434,23 @@ export function registerCliTools(): void {
 - Use 'templates' to list all available templates when you need to find the right template for a task.
 - Use 'template:read' with a template name to get its content with variables resolved. Requires name parameter.
 - This is useful for creating daily notes from templates — read the template first, then use obsidianDailyNote's daily:prepend to populate the note.`,
+    },
+  });
+
+  registry.register({
+    tool: obsidianBasesTool,
+    metadata: {
+      id: "obsidianBases",
+      displayName: "Bases",
+      description: "List Base files, views, or query data from Obsidian Bases",
+      category: "cli",
+      requiresVault: true,
+      customPromptInstructions: `For obsidianBases:
+- Use to explore structured data in Obsidian Base (database) files.
+- bases: list all Base files in the vault. Use total=true for just the count.
+- base:views: list the views defined in a Base file. Requires file= or path=.
+- base:query: query data from a specific Base view. Requires file= or path=, optionally view= and format=.
+- This is read-only — no data modification.`,
     },
   });
 }
