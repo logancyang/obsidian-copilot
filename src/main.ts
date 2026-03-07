@@ -539,7 +539,7 @@ export default class CopilotPlugin extends Plugin {
         if (selection) return selection;
         // Default to the entire active file if no selection
         const activeFile = this.app.workspace.getActiveFile();
-        return activeFile ? this.app.vault.cachedRead(activeFile) : "";
+        return activeFile ? this.app.vault.read(activeFile) : "";
       },
       replaceSelection: activeView?.editor?.replaceSelection.bind(activeView.editor) || (() => {}),
     } as Partial<Editor> as Editor;

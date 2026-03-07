@@ -1,6 +1,6 @@
 import { StructuredTool } from "@langchain/core/tools";
 
-const mockCachedRead = jest.fn();
+const mockRead = jest.fn();
 
 // Helper to invoke tool and parse JSON result
 const invokeReadNoteTool = async (tool: StructuredTool, args: any) => {
@@ -39,14 +39,14 @@ describe("readNoteTool", () => {
     getAbstractFileByPathMock = jest.fn();
     getMarkdownFilesMock = jest.fn().mockReturnValue([]);
     getFirstLinkpathDestMock = jest.fn().mockReturnValue(null);
-    mockCachedRead.mockReset();
-    mockCachedRead.mockResolvedValue("");
+    mockRead.mockReset();
+    mockRead.mockResolvedValue("");
 
     global.app = {
       vault: {
         getAbstractFileByPath: getAbstractFileByPathMock,
         getMarkdownFiles: getMarkdownFilesMock,
-        cachedRead: mockCachedRead,
+        read: mockRead,
       },
       metadataCache: {
         getFileCache: jest.fn(),
@@ -69,7 +69,7 @@ describe("readNoteTool", () => {
     const notePath = "Notes/test.md";
     const file = new MockTFile(notePath);
     getAbstractFileByPathMock.mockReturnValue(file);
-    mockCachedRead.mockResolvedValue(["## Heading", "Line 1", "Line 2"].join("\n"));
+    mockRead.mockResolvedValue(["## Heading", "Line 1", "Line 2"].join("\n"));
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
@@ -85,7 +85,7 @@ describe("readNoteTool", () => {
     getAbstractFileByPathMock.mockReturnValue(file);
 
     const lines = Array.from({ length: 210 }, (_, i) => `Line ${i + 1}`);
-    mockCachedRead.mockResolvedValue(lines.join("\n"));
+    mockRead.mockResolvedValue(lines.join("\n"));
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex: 1 });
 
@@ -99,7 +99,7 @@ describe("readNoteTool", () => {
     getAbstractFileByPathMock.mockReturnValue(file);
 
     const lines = Array.from({ length: 205 }, (_, i) => `Line ${i + 1}`);
-    mockCachedRead.mockResolvedValue(lines.join("\n"));
+    mockRead.mockResolvedValue(lines.join("\n"));
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex: "1" as any });
 
@@ -118,7 +118,7 @@ describe("readNoteTool", () => {
       status: "not_found",
       message: 'Note "Notes/missing.md" was not found or is not a readable file.',
     });
-    expect(mockCachedRead).not.toHaveBeenCalled();
+    expect(mockRead).not.toHaveBeenCalled();
   });
 
   it("returns not_found for section-only wiki link targets", async () => {
@@ -134,7 +134,7 @@ describe("readNoteTool", () => {
       status: "not_found",
       message: 'Note "[[#Setup]]" was not found or is not a readable file.',
     });
-    expect(mockCachedRead).not.toHaveBeenCalled();
+    expect(mockRead).not.toHaveBeenCalled();
   });
 
   it("returns not_found for empty wiki link targets", async () => {
@@ -150,7 +150,7 @@ describe("readNoteTool", () => {
       status: "not_found",
       message: 'Note "[[]]" was not found or is not a readable file.',
     });
-    expect(mockCachedRead).not.toHaveBeenCalled();
+    expect(mockRead).not.toHaveBeenCalled();
   });
 
   it("returns invalid_path when notePath starts with a leading slash", async () => {
@@ -162,7 +162,7 @@ describe("readNoteTool", () => {
       message: "Provide the note path relative to the vault root without a leading slash.",
     });
     expect(getAbstractFileByPathMock).not.toHaveBeenCalled();
-    expect(mockCachedRead).not.toHaveBeenCalled();
+    expect(mockRead).not.toHaveBeenCalled();
   });
 
   it("surfaces linked note candidates including duplicate basenames", async () => {
@@ -176,7 +176,7 @@ describe("readNoteTool", () => {
       link === "Project Plan" ? candidatePrimary : null
     );
     getMarkdownFilesMock.mockReturnValue([candidatePrimary, candidateDuplicate, file]);
-    mockCachedRead.mockResolvedValue("Intro [[Project Plan]] details");
+    mockRead.mockResolvedValue("Intro [[Project Plan]] details");
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
@@ -203,7 +203,7 @@ describe("readNoteTool", () => {
       link === "Docs/Guide" ? guideFile : null
     );
     getMarkdownFilesMock.mockReturnValue([guideFile, file]);
-    mockCachedRead.mockResolvedValue("See [[Docs/Guide#Setup|Quick Start]] for steps.");
+    mockRead.mockResolvedValue("See [[Docs/Guide#Setup|Quick Start]] for steps.");
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath });
 
@@ -231,13 +231,13 @@ describe("readNoteTool", () => {
       return null;
     });
 
-    mockCachedRead.mockResolvedValue("Content");
+    mockRead.mockResolvedValue("Content");
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath: rawPath });
 
     expect(result.notePath).toBe(file.path);
     expect(result.chunkIndex).toBe(0);
-    expect(mockCachedRead).toHaveBeenCalledWith(file);
+    expect(mockRead).toHaveBeenCalledWith(file);
   });
 
   it("resolves wiki-linked notes via metadata without active note context", async () => {
@@ -251,12 +251,12 @@ describe("readNoteTool", () => {
       }
       return null;
     });
-    mockCachedRead.mockResolvedValue("Content");
+    mockRead.mockResolvedValue("Content");
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result.notePath).toBe(targetFile.path);
-    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+    expect(mockRead).toHaveBeenCalledWith(targetFile);
     expect(getFirstLinkpathDestMock).toHaveBeenCalledWith(requestedPath, "");
   });
 
@@ -267,12 +267,12 @@ describe("readNoteTool", () => {
     getAbstractFileByPathMock.mockReturnValue(null);
     getFirstLinkpathDestMock.mockReturnValue(null);
     getMarkdownFilesMock.mockReturnValue([targetFile]);
-    mockCachedRead.mockResolvedValue("Content");
+    mockRead.mockResolvedValue("Content");
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result.notePath).toBe(targetFile.path);
-    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+    expect(mockRead).toHaveBeenCalledWith(targetFile);
   });
 
   it("returns not_unique when multiple notes share the same title", async () => {
@@ -295,7 +295,7 @@ describe("readNoteTool", () => {
         { path: archiveFile.path, title: archiveFile.basename },
       ],
     });
-    expect(mockCachedRead).not.toHaveBeenCalled();
+    expect(mockRead).not.toHaveBeenCalled();
   });
 
   it("matches a unique partial path when multiple basenames exist", async () => {
@@ -306,11 +306,11 @@ describe("readNoteTool", () => {
     getAbstractFileByPathMock.mockReturnValue(null);
     getFirstLinkpathDestMock.mockReturnValue(null);
     getMarkdownFilesMock.mockReturnValue([targetFile, duplicateFile]);
-    mockCachedRead.mockResolvedValue("Content");
+    mockRead.mockResolvedValue("Content");
 
     const result = await invokeReadNoteTool(readNoteTool, { notePath: requestedPath });
 
     expect(result.notePath).toBe(targetFile.path);
-    expect(mockCachedRead).toHaveBeenCalledWith(targetFile);
+    expect(mockRead).toHaveBeenCalledWith(targetFile);
   });
 });
