@@ -54,7 +54,7 @@ export class CanvasLoader {
       nodes.map(async (n) => {
         if (n.type === "file" && n.file) {
           const file = this.vault.getAbstractFileByPath(n.file);
-          const md = file instanceof TFile ? await this.vault.cachedRead(file) : "";
+          const md = file instanceof TFile ? await this.vault.read(file) : "";
           return { ...n, content: md };
         }
         if (n.type === "text") return { ...n, content: n.text ?? "" };

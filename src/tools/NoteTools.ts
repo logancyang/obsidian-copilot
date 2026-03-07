@@ -217,7 +217,7 @@ async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
 
 async function readNoteText(file: TFile): Promise<string> {
   try {
-    return await app.vault.cachedRead(file);
+    return await app.vault.read(file);
   } catch (error) {
     logWarn(`readNote: failed to read ${file.path}`, error);
     return "";
