@@ -9,7 +9,6 @@ import { getSettings } from "@/settings/model";
 import { z } from "zod";
 import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecution";
 import { createLangChainTool } from "./createLangChainTool";
-import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { FilterRetriever } from "@/search/v3/FilterRetriever";
@@ -76,19 +75,6 @@ const localSearchSchema = z.object({
     })
     .optional()
     .describe("Optional time range filter. Use epoch milliseconds from getTimeRangeMs result."),
-  returnAll: z
-    .preprocess((val) => {
-      if (typeof val === "string") {
-        return val.toLowerCase() === "true";
-      }
-      return val;
-    }, z.boolean().optional())
-    .describe(
-      "Set to true when the user wants ALL matching notes, not just the best few. " +
-        "Use for requests like 'find all my X', 'list every Y', 'show me all my Z', " +
-        "'how many notes about W'. Returns up to 100 results instead of default 30. " +
-        "Leave false/undefined for normal questions."
-    ),
   _preExpandedQuery: z
     .object({
       originalQuery: z.string(),
@@ -107,26 +93,19 @@ async function performLexicalSearch({
   salientTerms,
   forceLexical = false,
   preExpandedQuery,
-  returnAll = false,
 }: {
   timeRange?: { startTime: number; endTime: number };
   query: string;
   salientTerms: string[];
   forceLexical?: boolean;
   preExpandedQuery?: QueryExpansionInfo;
-  /** Caller-requested return-all (from LLM tool schema). Combined with implicit triggers. */
-  returnAll?: boolean;
 }) {
   // Extract tag terms for self-host retriever (server-side tag filtering)
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
 
-  // Time-range and tag-focused queries always use expanded result limits
-  const useExpandedLimits = returnAll || timeRange !== undefined || tagTerms.length > 0;
-  const effectiveMaxK = useExpandedLimits ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
+  const effectiveMaxK = DEFAULT_MAX_SOURCE_CHUNKS;
 
-  logInfo(
-    `lexicalSearch useExpandedLimits: ${useExpandedLimits} (timeRange: ${!!timeRange}, tags: ${tagTerms.length > 0}, explicit: ${returnAll}), forceLexical: ${forceLexical}`
-  );
+  logInfo(`lexicalSearch effectiveMaxK: ${effectiveMaxK}, forceLexical: ${forceLexical}`);
 
   // Convert QueryExpansionInfo to ExpandedQuery format (adding queries field)
   const convertedPreExpansion = preExpandedQuery
@@ -145,7 +124,6 @@ async function performLexicalSearch({
     salientTerms,
     timeRange,
     maxK: effectiveMaxK,
-    returnAll: useExpandedLimits,
   });
 
   const filterDocs = await filterRetriever.getRelevantDocuments(query);
@@ -158,11 +136,10 @@ async function performLexicalSearch({
 
   if (!filterRetriever.hasTimeRange()) {
     const retrieverOptions = {
-      minSimilarityScore: useExpandedLimits ? 0.0 : 0.1,
+      minSimilarityScore: 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       textWeight: TEXT_WEIGHT,
-      returnAll: useExpandedLimits,
       useRerankerThreshold: 0.5,
       tagTerms, // Used by SelfHostRetriever for server-side tag filtering
       preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
@@ -260,13 +237,12 @@ const lexicalSearchTool = createLangChainTool({
   name: "lexicalSearch",
   description: "Search for notes using lexical/keyword-based search",
   schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
     const timeRange = validateTimeRange(rawTimeRange);
     return await performLexicalSearch({
       timeRange,
       query,
       salientTerms,
-      returnAll: returnAll === true,
     });
   },
 });
@@ -276,28 +252,20 @@ const semanticSearchTool = createLangChainTool({
   name: "semanticSearch",
   description: "Search for notes using semantic/meaning-based search with embeddings",
   schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
     const timeRange = validateTimeRange(rawTimeRange);
 
-    // Time-range and tag-focused queries always use expanded result limits
-    const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-    const useExpandedLimits = returnAll === true || timeRange !== undefined || tagTerms.length > 0;
-    const effectiveMaxK = useExpandedLimits
-      ? Math.max(DEFAULT_MAX_SOURCE_CHUNKS, 200)
-      : DEFAULT_MAX_SOURCE_CHUNKS;
+    const effectiveMaxK = DEFAULT_MAX_SOURCE_CHUNKS;
 
-    logInfo(
-      `semanticSearch useExpandedLimits: ${useExpandedLimits} (timeRange: ${!!timeRange}, tags: ${tagTerms.length > 0}, explicit: ${returnAll === true})`
-    );
+    logInfo(`semanticSearch effectiveMaxK: ${effectiveMaxK}`);
 
     // Always use HybridRetriever for semantic search
     const retriever = new (await import("@/search/hybridRetriever")).HybridRetriever({
-      minSimilarityScore: useExpandedLimits ? 0.0 : 0.1,
+      minSimilarityScore: 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       timeRange,
       textWeight: TEXT_WEIGHT,
-      returnAll: useExpandedLimits,
       useRerankerThreshold: 0.5,
     });
 
@@ -387,24 +355,20 @@ function validateTimeRange(timeRange?: {
 async function performMiyoSearch({
   query,
   salientTerms,
-  returnAll = false,
   timeRange,
 }: {
   query: string;
   salientTerms: string[];
-  returnAll?: boolean;
   timeRange?: { startTime: number; endTime: number };
 }) {
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-  const useExpandedLimits = returnAll || timeRange !== undefined || tagTerms.length > 0;
-  const effectiveMaxK = useExpandedLimits ? RETURN_ALL_LIMIT : DEFAULT_MAX_SOURCE_CHUNKS;
+  const effectiveMaxK = DEFAULT_MAX_SOURCE_CHUNKS;
 
   // FilterRetriever for local tag/title/time-range matches
   const filterRetriever = new FilterRetriever(app, {
     salientTerms,
     timeRange,
     maxK: effectiveMaxK,
-    returnAll: useExpandedLimits,
   });
   const filterDocs = await filterRetriever.getRelevantDocuments(query);
 
@@ -413,11 +377,10 @@ async function performMiyoSearch({
   let miyoDocs: import("@langchain/core/documents").Document[] = [];
   if (!filterRetriever.hasTimeRange()) {
     const miyoRetriever = RetrieverFactory.createMiyoRetriever(app, {
-      minSimilarityScore: useExpandedLimits ? 0.0 : 0.1,
+      minSimilarityScore: 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       textWeight: TEXT_WEIGHT,
-      returnAll: useExpandedLimits,
       useRerankerThreshold: 0.5,
       tagTerms,
     });
@@ -462,7 +425,7 @@ const localSearchTool = createLangChainTool({
   description:
     "Search for notes in the vault based on query, salient terms, and optional time range",
   schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms, returnAll, _preExpandedQuery }) => {
+  func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
     // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
     const timeRange = validateTimeRange(rawTimeRange);
 
@@ -472,7 +435,6 @@ const localSearchTool = createLangChainTool({
       return await performMiyoSearch({
         query,
         salientTerms,
-        returnAll: returnAll === true,
         timeRange,
       });
     }
@@ -490,7 +452,6 @@ const localSearchTool = createLangChainTool({
         salientTerms,
         forceLexical: true,
         preExpandedQuery: _preExpandedQuery,
-        returnAll: returnAll === true,
       });
     }
 
@@ -504,7 +465,6 @@ const localSearchTool = createLangChainTool({
       query,
       salientTerms,
       preExpandedQuery: _preExpandedQuery,
-      returnAll: returnAll === true,
     });
   },
 });
