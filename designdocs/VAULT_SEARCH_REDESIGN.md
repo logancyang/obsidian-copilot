@@ -11,7 +11,7 @@ The current `localSearch` tool handles too many concerns in a single call:
 1. **Time-range filtering** (metadata)
 2. **Tag matching** (metadata)
 3. **Title matching** (metadata)
-4. **Content search** via lexical, semantic, or Miyo backends
+4. **Content search** via lexical or Miyo backends
 
 These responsibilities are interleaved in complex ways. The `performLexicalSearch` function runs a `FilterRetriever` for metadata matches, then conditionally runs a content retriever, then merges the two result sets. The `performMiyoSearch` function duplicates much of this logic but handles the Miyo code path differently.
 
@@ -50,11 +50,8 @@ const vaultFindSchema = z.object({
   titlePattern: z.string().optional()
     .describe("Filter by title substring match (case-insensitive)"),
 
-  sortBy: z.enum(["mtime", "ctime", "title"]).optional()
-    .describe("Sort results. Defaults to 'mtime' (most recently modified first)"),
-
-  limit: z.number().optional()
-    .describe("Max results to return. Defaults to 50"),
+  // sortBy: hardcoded to 'mtime' (most recently modified first) — not agent-facing
+  // limit: hardcoded to 200 — not agent-facing (no content returned, so high limit is cheap)
 });
 ```
 
@@ -69,7 +66,6 @@ interface VaultFindResult {
     ctime: number;       // Created (epoch ms)
     size: number;        // File size in bytes
     tags: string[];      // All tags (frontmatter + inline)
-    headings: string[];  // H1-H3 headings from metadataCache
   }>;
   totalMatched: number;  // Total files matching filters (before limit)
 }
@@ -77,8 +73,8 @@ interface VaultFindResult {
 
 **Implementation notes:**
 - Built on top of `FilterRetriever` logic but returns metadata objects, not full `Document` objects with content
-- Headings come from `app.metadataCache.getFileCache(file)?.headings` - free, no file read needed
-- Tags come from `getAllTags(cache)` - also free from metadataCache
+- Tags come from `getAllTags(cache)` - free from metadataCache
+- Sort hardcoded to `mtime` (most recently modified first), limit hardcoded to 200. Since no content is returned, results are cheap — no need to expose these as agent-facing params.
 - Respects `shouldIndexFile` and `isInternalExcludedFile` exclusion rules
 - No dependency on any search backend (Miyo, semantic, lexical)
 
@@ -86,7 +82,7 @@ interface VaultFindResult {
 
 **Purpose:** Search file contents for a topic. Returns matching passages with relevance scores.
 
-**Delegates to the best available backend:** Miyo when active, otherwise local semantic or lexical (via `RetrieverFactory`).
+**Delegates to the best available backend:** Miyo when active, otherwise local lexical. Semantic search is deprecated and will be removed.
 
 **Schema:**
 
@@ -95,14 +91,15 @@ const vaultSearchSchema = z.object({
   query: z.string().min(1)
     .describe("The search query to find relevant content in notes"),
 
-  salientTerms: z.array(z.string())
-    .describe("Keywords extracted from the user's query for BM25 matching. Must be from original query."),
-
   paths: z.array(z.string()).optional()
-    .describe("Optional list of file paths to scope search to (from vaultFind results). Max 30 paths."),
+    .describe("Optional list of file paths to scope search to (from vaultFind results)"),
 
-  returnAll: z.boolean().optional()
-    .describe("Set true for exhaustive search ('find all my X'). Returns up to 100 results."),
+  // salientTerms: REMOVED from agent-facing schema. The tool extracts keywords
+  // internally via TieredLexicalRetriever query expansion. Exposing this to the
+  // agent was error-prone (stopword handling, language preservation, # prefixes).
+
+  // returnAll: REMOVED. Default result count is sufficient (30-50). The agent
+  // narrows scope with vaultFind paths if it needs more targeted results.
 });
 ```
 
@@ -128,11 +125,12 @@ interface VaultSearchResult {
 
 **Implementation notes:**
 - **No metadata filtering logic.** No timeRange, no tags, no folder filtering. Pure content search.
-- Delegates to `RetrieverFactory` which handles Miyo > Semantic > Lexical priority
+- Delegates to `RetrieverFactory` which handles Miyo > Lexical priority (semantic search is deprecated)
+- **Salient terms extracted internally.** The tool extracts keywords from the `query` using the existing `TieredLexicalRetriever` query expansion logic. Not exposed to the agent.
 - The `paths` parameter is implemented as:
-  - For Miyo: sent as a path filter to the API (if supported), otherwise post-filter
+  - **For Miyo: paths MUST be sent as a filter to the Miyo API.** Miyo must support path-scoped search. This is a required API capability, not optional.
   - For local retrievers: pre-filter the file set before search
-- Capped at 30 paths in the `paths` array. If more files need searching, the agent should narrow scope
+- **No cap on `paths` array.** Paths are just strings — cheap to send. The search backend still returns top-K results, so paths only scope the search, they don't inflate context.
 - Inherits existing query expansion, deduplication, and CiC formatting logic
 
 ### Tool 3: `readNote` (unchanged)
@@ -161,7 +159,7 @@ Unix: grep -r "machine learning" ./vault
 ```
 
 ```
-Agent: vaultSearch(query="machine learning", salientTerms=["machine", "learning"])
+Agent: vaultSearch(query="machine learning")
      → Present matching passages
 ```
 
@@ -174,7 +172,7 @@ Unix: find ./vault -mtime -7 | xargs grep "person A"
 ```
 Agent: getTimeRangeMs("last week")
      → vaultFind(timeRange={...})
-     → vaultSearch(query="person A", salientTerms=["person", "A"], paths=[...from vaultFind...])
+     → vaultSearch(query="person A", paths=[...from vaultFind...])
 ```
 
 ### 4. "Notes tagged #meeting from this month" - Combined metadata filters
@@ -210,7 +208,7 @@ Unix: find ./vault -mtime range + grep "budgeting"
 ```
 Agent: getTimeRangeMs("January 2026")
      → vaultFind(timeRange={...})
-     → vaultSearch(query="budgeting", salientTerms=["budgeting"], paths=[...])
+     → vaultSearch(query="budgeting", paths=[...])
 ```
 
 ### 7. "Everything about AI in my Research folder" - Folder scoping + content
@@ -221,7 +219,7 @@ Unix: grep -r "AI" ./Research
 
 ```
 Agent: vaultFind(folder="Research")
-     → vaultSearch(query="AI", salientTerms=["AI"], paths=[...])
+     → vaultSearch(query="AI", paths=[...])
 ```
 
 ### 8. "Compare what I wrote about React vs Vue" - Parallel content searches
@@ -231,8 +229,8 @@ Unix: grep -r "React" ./vault ; grep -r "Vue" ./vault
 ```
 
 ```
-Agent: vaultSearch(query="React", salientTerms=["React"])
-     + vaultSearch(query="Vue", salientTerms=["Vue"])   (parallel)
+Agent: vaultSearch(query="React")
+     + vaultSearch(query="Vue")   (parallel)
      → Compare results
 ```
 
@@ -244,7 +242,7 @@ Unix: find by tag #meeting | grep "John"
 
 ```
 Agent: vaultFind(tags=["#meeting"])
-     → vaultSearch(query="John", salientTerms=["John"], paths=[...])
+     → vaultSearch(query="John", paths=[...])
 ```
 
 ### 10. "What's in my daily note from yesterday?" - Find then read
@@ -268,7 +266,7 @@ Unix: find ./Q3Meetings -name "*.md" -mtime -7 | xargs grep "budget"
 ```
 Agent: getTimeRangeMs("last week")
      → vaultFind(timeRange={...}, folder="Q3Meetings")
-     → vaultSearch(query="budget discussions", salientTerms=["budget", "discussions"], paths=[...from vaultFind...])
+     → vaultSearch(query="budget discussions", paths=[...from vaultFind...])
      → Summarize matching passages
 ```
 
@@ -282,7 +280,7 @@ These instructions replace the current `localSearch` custom prompt instructions:
 ## Vault Tools
 
 vaultFind - List files by metadata (time, tags, folder, title).
-  Returns: path, title, mtime, tags, headings. No file content.
+  Returns: path, title, mtime, tags. No file content.
   Use when: you need to know WHICH files exist.
 
 vaultSearch - Search inside file contents for a topic.
@@ -301,11 +299,10 @@ readNote - Read full content of one note (chunked).
 
 ## Rules
 - For time-based queries, always call getTimeRangeMs FIRST, then pass the result to vaultFind
-- salientTerms must be extracted from the user's original query - never invent terms
-- Preserve the original language - do NOT translate terms to English
+- Preserve the original language - do NOT translate search terms to English
 - Tags must include '#' prefix: ["#meeting"], not ["meeting"]
 - When vaultFind returns many files and you need content, use vaultSearch with paths to narrow scope
-- For "find all" requests, use vaultFind to count/list, then vaultSearch with paths if content needed
+- If vaultFind returns 0 results, try broadening filters or use vaultSearch without paths
 ```
 
 ## Migration Plan
@@ -315,7 +312,7 @@ readNote - Read full content of one note (chunked).
 | Current | New | Notes |
 |---------|-----|-------|
 | `localSearch` tool | `vaultFind` + `vaultSearch` | Monolith split into two focused tools |
-| `semanticSearch` tool | Absorbed into `vaultSearch` | Backend selection handled internally |
+| `semanticSearch` tool | Deprecated and removed | Semantic search is being retired |
 | `lexicalSearch` tool | Absorbed into `vaultSearch` | Backend selection handled internally |
 | `FilterRetriever` in search path | Powers `vaultFind` | Returns metadata instead of full documents |
 | `performLexicalSearch()` | `vaultSearch` internals | Simplified - no filter merging |
@@ -330,9 +327,8 @@ readNote - Read full content of one note (chunked).
 | `getTimeRangeMs` | Unchanged - time expression parsing |
 | `webSearch` | Unchanged - internet search |
 | `indexVault` | Unchanged - index management |
-| `RetrieverFactory` | Still handles Miyo > Semantic > Lexical priority for `vaultSearch` |
+| `RetrieverFactory` | Still handles Miyo > Lexical priority for `vaultSearch` |
 | `TieredLexicalRetriever` | Backend for `vaultSearch` when lexical mode active |
-| `MergedSemanticRetriever` | Backend for `vaultSearch` when semantic mode active |
 | `MiyoSemanticRetriever` | Backend for `vaultSearch` when Miyo active |
 
 ### Backwards Compatibility
@@ -346,7 +342,7 @@ readNote - Read full content of one note (chunked).
 
 Add a settings migration that:
 1. If `autonomousAgentEnabledToolIds` contains `"localSearch"`, replace it with `["vaultFind", "vaultSearch"]`
-2. Remove `"semanticSearch"` and `"lexicalSearch"` if present (absorbed into `vaultSearch`)
+2. Remove `"semanticSearch"` (deprecated) and `"lexicalSearch"` (absorbed into `vaultSearch`) if present
 
 ## Implementation Notes
 
@@ -356,18 +352,18 @@ Add a settings migration that:
 
 2. **`vaultSearch` never filters by metadata.** It only searches content. If you need time-scoped content search, you do `vaultFind(timeRange) → vaultSearch(paths)`. The `paths` parameter is the only way to scope a content search to a subset of files.
 
-3. **The `paths` parameter caps at 30.** This is a pragmatic limit. If `vaultFind` returns more than 30 files, the agent should either narrow scope with tighter filters or work in batches. The agent manages its own context budget.
+3. **No cap on the `paths` parameter.** Paths are just strings — cheap to send. The search backend returns top-K results regardless, so paths only scope the search without inflating context.
 
 4. **No Node.js `fs` dependency.** Everything uses Obsidian's vault API for mobile compatibility. `vaultFind` uses `app.vault.getMarkdownFiles()`, `app.metadataCache`, etc.
 
 5. **Content budget is the agent's responsibility.** The tools provide data; the agent decides how much to consume:
    - Small set (10 or fewer files): `readNote` each, then synthesize
-   - Medium set (10-30): `vaultSearch` with paths to pull most relevant passages
-   - Large set (30+): Agent narrows scope or processes in batches
+   - Medium set (10-50): `vaultSearch` with paths to pull most relevant passages
+   - Large set (50+): Agent narrows scope with tighter `vaultFind` filters, or passes all paths to `vaultSearch` (which returns top-K regardless)
 
 6. **Both tools use `createLangChainTool()`.** Registered in `ToolRegistry` with appropriate categories. `vaultFind` is category `"search"`, `vaultSearch` is category `"search"`.
 
-7. **`vaultSearch` preserves query expansion.** The `TieredLexicalRetriever` query expansion logic (salient terms, expanded queries, recall terms) is preserved in `vaultSearch` for the reasoning block.
+7. **`vaultSearch` handles query expansion internally.** The `TieredLexicalRetriever` query expansion logic (salient terms, expanded queries, recall terms) runs inside the tool — not exposed to the agent. The agent only provides `query`.
 
 ### File Changes
 
@@ -394,17 +390,26 @@ Add a settings migration that:
 5. Update tests - new tests for `vaultFind` and `vaultSearch`, remove old `localSearch` tests
 6. Update CiC formatting if needed - ensure `vaultSearch` results integrate with existing citation/source rendering
 
+## Resolved Design Decisions
+
+1. **`vaultFind` uses substring title matching only.** No regex — substring is simpler and sufficient.
+
+2. **`vaultSearch` has NO metadata parameters.** No `folder`, no `timeRange`, no `tags`. Keeping `vaultSearch` pure (content only) is the whole point of the split. The agent composes `vaultFind → vaultSearch(paths)` for scoped content search.
+
+3. **`vaultSearch` + Miyo: paths MUST be sent as an API filter.** Miyo must support path-scoped search as a required capability. Post-filtering is not acceptable — it silently drops relevant results when top-K doesn't overlap with the specified paths.
+
+4. **`vaultFind` returns NO content preview and NO headings.** Metadata only: path, title, mtime, ctime, size, tags. This keeps results cheap and maximizes the useful limit (200 files).
+
+5. **`salientTerms` removed from agent-facing schema.** The tool extracts keywords internally via `TieredLexicalRetriever` query expansion. Exposing this to the agent was error-prone.
+
+6. **`sortBy`, `limit` removed from agent-facing schema.** Hardcoded to `mtime` sort, limit 200. Since no content is returned, high limits are cheap.
+
+7. **No cap on `paths` parameter.** Paths are strings — cheap to send. Search backend returns top-K regardless.
+
+8. **`returnAll` removed from agent-facing schema.** Default result count is sufficient. Agent narrows scope with `vaultFind` paths for more targeted results.
+
+9. **Semantic search is deprecated.** Only lexical + Miyo backends remain. `semanticSearch` tool is removed, not absorbed.
+
 ## Open Questions
 
-1. **Should `vaultFind` support regex title matching or just substring?** Substring is simpler and sufficient for most cases. Regex adds complexity for marginal benefit.
-
-2. **Should `vaultSearch` accept a `folder` shortcut parameter?** Currently the design says "use `paths` from `vaultFind`", but a `folder` parameter on `vaultSearch` could skip the two-step flow for simple cases like "search in Research folder". Counterargument: keeping `vaultSearch` pure (no metadata logic) is the whole point.
-
-3. **How should `vaultSearch` handle the `paths` parameter for Miyo?** Options:
-   - Send paths to Miyo API as a filter (requires API support)
-   - Post-filter Miyo results by path membership (simpler, may miss relevant results)
-   - Pre-filter the query to only include file names (loses generality)
-
-4. **Should `vaultFind` include a `content` preview (first N characters)?** This would let the agent make better decisions about which files to read, but adds file I/O cost. Headings from metadataCache may be sufficient.
-
-5. **Migration UX:** Should we show a one-time notice to users that `localSearch` has been replaced? Or just silently migrate the settings?
+1. **Migration UX:** Should we show a one-time notice to users that `localSearch` has been replaced? Or just silently migrate the settings?
