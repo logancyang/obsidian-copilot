@@ -347,7 +347,7 @@ export default class ChatModelManager {
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
         configuration: {
           baseURL: BREVILABS_MODELS_BASE_URL,
-          fetch: customModel.enableCors ? safeFetch : undefined,
+          fetch: safeFetch,
         },
       },
       [ChatModelProviders.MISTRAL]: {
@@ -370,6 +370,8 @@ export default class ChatModelManager {
         // This doesn't throw on HTTP errors so 401 retry logic works correctly.
         // WARNING: AbortSignal/timeout will NOT work when enableCors is true
         // because Obsidian's requestUrl doesn't support cancellation.
+        // Reason: fetchImplementation is passed to the authed fetch wrapper inside
+        // GitHubCopilotChatModel, which injects Copilot token and headers per request.
         fetchImplementation: customModel.enableCors ? safeFetchNoThrow : undefined,
       },
     };

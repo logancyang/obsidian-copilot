@@ -538,6 +538,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       // Create a new Component instance if it doesn't exist
       if (!componentRef.current) {
         componentRef.current = new Component();
+        componentRef.current.load();
       }
 
       // Capture open states of collapsible sections before re-rendering

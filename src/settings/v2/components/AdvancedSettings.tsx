@@ -22,7 +22,6 @@ export const AdvancedSettings: React.FC = () => {
   const displayValue = defaultPromptExists ? settings.defaultSystemPromptTitle : "";
 
   const handleSelectChange = (value: string) => {
-    if (!value) return; // Prevent setting empty value
     updateSetting("defaultSystemPromptTitle", value);
   };
 
@@ -54,14 +53,16 @@ export const AdvancedSettings: React.FC = () => {
             <ObsidianNativeSelect
               value={displayValue}
               onChange={(e) => handleSelectChange(e.target.value)}
-              options={prompts.map((prompt) => ({
-                label:
-                  prompt.title === settings.defaultSystemPromptTitle
-                    ? `${prompt.title} (Default)`
-                    : prompt.title,
-                value: prompt.title,
-              }))}
-              placeholder="Select system prompt"
+              options={[
+                { label: "None (use built-in prompt)", value: "" },
+                ...prompts.map((prompt) => ({
+                  label:
+                    prompt.title === settings.defaultSystemPromptTitle
+                      ? `${prompt.title} (Default)`
+                      : prompt.title,
+                  value: prompt.title,
+                })),
+              ]}
               containerClassName="tw-flex-1"
             />
             <Button

@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ArrowUpRight, Check, Edit2, MessageCircle, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +10,9 @@ import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { sortByStrategy } from "@/utils/recentUsageManager";
 import { Platform } from "obsidian";
+
+/** Number of chat history items loaded per page. */
+const PAGE_SIZE = 50;
 
 export interface ChatHistoryItem {
   id: string;
@@ -40,6 +43,9 @@ export function ChatHistoryPopover({
   const [editingTitle, setEditingTitle] = useState("");
   const [open, setOpen] = useState(false);
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMobile = Platform.isMobile;
   const settings = useSettingsValue();
 
@@ -58,6 +64,64 @@ export function ChatHistoryPopover({
     });
   }, [filteredHistory, settings.chatHistorySortStrategy]);
 
+  /**
+   * Reset display count only when the popover opens or when the search query changes.
+   * Uses useLayoutEffect so the reset runs synchronously before the browser paints,
+   * preventing a one-frame render spike with the stale large displayCount.
+   * Guarded by `if (open)` to avoid a wasted state update when the popover closes.
+   */
+  useLayoutEffect(() => {
+    if (open) setDisplayCount(PAGE_SIZE);
+  }, [open, searchQuery]);
+
+  /**
+   * The subset of sorted history visible to the user based on the current page.
+   * Grows by PAGE_SIZE each time the sentinel enters the viewport.
+   */
+  const paginatedHistory = useMemo(
+    () => sortedHistory.slice(0, displayCount),
+    [sortedHistory, displayCount]
+  );
+
+  /**
+   * Stable ref holding the latest pagination state so the IntersectionObserver
+   * callback can read current values without re-creating the observer on every render.
+   * Updated via effect to avoid writing to a ref during render.
+   */
+  const paginationStateRef = useRef({ displayCount: PAGE_SIZE, totalCount: 0 });
+  useEffect(() => {
+    paginationStateRef.current = { displayCount, totalCount: sortedHistory.length };
+  }, [displayCount, sortedHistory.length]);
+
+  /**
+   * Callback ref for the sentinel element. Using a callback ref (instead of useRef +
+   * useEffect) ensures the IntersectionObserver is attached only after the sentinel
+   * actually mounts — the sentinel lives inside PopoverContent, which Radix only
+   * renders when `open` is true. A plain useEffect with [] would receive a null ref
+   * on component mount (before the popover opens) and never re-run.
+   */
+  const sentinelCallbackRef = useCallback((node: HTMLDivElement | null) => {
+    if (observerRef.current) {
+      observerRef.current.disconnect();
+      observerRef.current = null;
+    }
+    if (!node) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          const { displayCount: current, totalCount } = paginationStateRef.current;
+          if (current < totalCount) {
+            setDisplayCount((prev) => Math.min(prev + PAGE_SIZE, totalCount));
+          }
+        }
+      },
+      { threshold: 0.1 }
+    );
+    observer.observe(node);
+    observerRef.current = observer;
+  }, []);
+
   const groupedHistory = useMemo(() => {
     const sortStrategy = settings.chatHistorySortStrategy;
 
@@ -67,7 +131,7 @@ export function ChatHistoryPopover({
         {
           key: "All",
           label: "All",
-          chats: sortedHistory,
+          chats: paginatedHistory,
           priority: 0,
         },
       ];
@@ -82,7 +146,7 @@ export function ChatHistoryPopover({
     const groupMap = new Map<string, ChatHistoryItem[]>();
     const now = new Date();
 
-    sortedHistory.forEach((chat) => {
+    paginatedHistory.forEach((chat) => {
       // Use lastAccessedAt for "recent" strategy, createdAt for "created" strategy
       const referenceDate = sortStrategy === "recent" ? chat.lastAccessedAt : chat.createdAt;
       const diffTime = now.getTime() - referenceDate.getTime();
@@ -123,7 +187,7 @@ export function ChatHistoryPopover({
 
     // Sort by priority, ensuring Today is at the top.
     return groups.sort((a, b) => a.priority - b.priority);
-  }, [settings.chatHistorySortStrategy, sortedHistory]);
+  }, [settings.chatHistorySortStrategy, paginatedHistory]);
 
   const handleStartEdit = (id: string, currentTitle: string) => {
     setEditingId(id);
@@ -154,6 +218,15 @@ export function ChatHistoryPopover({
     setEditingTitle("");
   };
 
+  /** Clean up any pending auto-cancel timeout when the component unmounts. */
+  useEffect(() => {
+    return () => {
+      if (deleteTimeoutRef.current) {
+        clearTimeout(deleteTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleDelete = async (id: string) => {
     if (confirmDeleteId === id) {
       // Confirmed deletion - execute the actual delete
@@ -166,11 +239,15 @@ export function ChatHistoryPopover({
         setConfirmDeleteId(null);
       }
     } else {
-      // First click - show confirmation
+      // First click - show confirmation; clear any previous pending timeout first
+      if (deleteTimeoutRef.current) {
+        clearTimeout(deleteTimeoutRef.current);
+      }
       setConfirmDeleteId(id);
       // Auto-cancel confirmation after 3 seconds
-      setTimeout(() => {
+      deleteTimeoutRef.current = setTimeout(() => {
         setConfirmDeleteId(null);
+        deleteTimeoutRef.current = null;
       }, 3000);
     }
   };
@@ -202,37 +279,48 @@ export function ChatHistoryPopover({
                   {searchQuery ? "No matching chat history found." : "No chat history"}
                 </div>
               ) : (
-                groupedHistory.map((group) => (
-                  <div
-                    key={group.key}
-                    className="tw-mb-3 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-border tw-pb-2"
-                    style={{ borderBottomStyle: "solid" }}
-                  >
-                    <div className="tw-mb-2 tw-px-2 tw-text-xs tw-font-medium tw-tracking-wider tw-text-muted">
-                      {group.label}
+                <>
+                  {groupedHistory.map((group) => (
+                    <div
+                      key={group.key}
+                      className="tw-mb-3 tw-border-x-[0px] tw-border-b tw-border-t-[0px] tw-border-border tw-pb-2"
+                      style={{ borderBottomStyle: "solid" }}
+                    >
+                      <div className="tw-mb-2 tw-px-2 tw-text-xs tw-font-medium tw-tracking-wider tw-text-muted">
+                        {group.label}
+                      </div>
+                      <div className="tw-space-y-1">
+                        {group.chats.map((chat) => (
+                          <ChatHistoryItem
+                            key={chat.id}
+                            chat={chat}
+                            isEditing={editingId === chat.id}
+                            editingTitle={editingTitle}
+                            onEditingTitleChange={setEditingTitle}
+                            onStartEdit={handleStartEdit}
+                            onSaveEdit={handleSaveEdit}
+                            onCancelEdit={handleCancelEdit}
+                            onDelete={handleDelete}
+                            onCancelDelete={handleCancelDelete}
+                            onLoadChat={handleLoadChat}
+                            onOpenSourceFile={onOpenSourceFile}
+                            isMobile={isMobile}
+                            confirmDeleteId={confirmDeleteId}
+                          />
+                        ))}
+                      </div>
                     </div>
-                    <div className="tw-space-y-1">
-                      {group.chats.map((chat) => (
-                        <ChatHistoryItem
-                          key={chat.id}
-                          chat={chat}
-                          isEditing={editingId === chat.id}
-                          editingTitle={editingTitle}
-                          onEditingTitleChange={setEditingTitle}
-                          onStartEdit={handleStartEdit}
-                          onSaveEdit={handleSaveEdit}
-                          onCancelEdit={handleCancelEdit}
-                          onDelete={handleDelete}
-                          onCancelDelete={handleCancelDelete}
-                          onLoadChat={handleLoadChat}
-                          onOpenSourceFile={onOpenSourceFile}
-                          isMobile={isMobile}
-                          confirmDeleteId={confirmDeleteId}
-                        />
-                      ))}
+                  ))}
+
+                  {/* Sentinel element for IntersectionObserver — triggers the next page load */}
+                  <div ref={sentinelCallbackRef} className="tw-h-1" />
+
+                  {displayCount < sortedHistory.length ? (
+                    <div className="tw-py-2 tw-text-center tw-text-xs tw-text-muted">
+                      Showing {displayCount} of {sortedHistory.length} — scroll for more
                     </div>
-                  </div>
-                ))
+                  ) : null}
+                </>
               )}
             </div>
           </ScrollArea>

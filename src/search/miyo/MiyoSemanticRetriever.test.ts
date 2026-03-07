@@ -13,6 +13,7 @@ jest.mock("@/settings/model", () => ({
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoSourceId: jest.fn(),
+  getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: jest.fn().mockImplementation(() => ({
@@ -43,7 +44,7 @@ describe("MiyoSemanticRetriever", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     (getSettings as jest.Mock).mockReturnValue({
-      selfHostUrl: "http://miyo.local",
+      miyoServerUrl: "http://miyo.local",
       debug: false,
     });
     (getMiyoSourceId as jest.Mock).mockReturnValue("vault-source");

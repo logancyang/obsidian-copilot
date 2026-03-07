@@ -202,6 +202,54 @@ export function summarizeToolResult(
       return "Converted timestamp";
     case "convertTimeBetweenTimezones":
       return "Converted timezone";
+    case "obsidianDailyNote": {
+      const command = args?.command as string | undefined;
+      const vault = args?.vault as string | undefined;
+      const vaultSuffix = vault && vault.trim().length > 0 ? ` from "${vault}"` : "";
+      if (command === "daily:append") return `Appended to daily note${vaultSuffix}`;
+      if (command === "daily:prepend") return `Prepended to daily note${vaultSuffix}`;
+      if (command === "daily:path") return `Got daily note path${vaultSuffix}`;
+      return `Loaded today's daily note${vaultSuffix}`;
+    }
+    case "obsidianRandomRead": {
+      const vault = args?.vault as string | undefined;
+      if (vault && vault.trim().length > 0) {
+        return `Loaded a random note from "${vault}"`;
+      }
+      return "Loaded a random note";
+    }
+    case "obsidianProperties": {
+      const command = args?.command as string | undefined;
+      if (command === "property:read") {
+        const name = args?.name as string | undefined;
+        return name ? `Read property "${name}"` : "Read property";
+      }
+      return "Listed vault properties";
+    }
+    case "obsidianTasks":
+      return "Listed vault tasks";
+    case "obsidianLinks": {
+      const command = args?.command as string | undefined;
+      if (command === "backlinks") return "Listed backlinks";
+      if (command === "links") return "Listed outgoing links";
+      if (command === "orphans") return "Listed orphaned notes";
+      if (command === "unresolved") return "Listed unresolved links";
+      return "Queried link graph";
+    }
+    case "obsidianTemplates": {
+      const command = args?.command as string | undefined;
+      if (command === "template:read") {
+        const name = args?.name as string | undefined;
+        return name ? `Read template "${name}"` : "Read template";
+      }
+      return "Listed templates";
+    }
+    case "obsidianBases": {
+      const command = args?.command as string | undefined;
+      if (command === "base:views") return "Listed base views";
+      if (command === "base:query") return "Queried base data";
+      return "Listed bases";
+    }
     case "indexVault":
       return "Indexed vault";
     case "updateMemory":
@@ -323,6 +371,54 @@ export function summarizeToolCall(
       return "Converting timestamp";
     case "convertTimeBetweenTimezones":
       return "Converting timezone";
+    case "obsidianDailyNote": {
+      const command = args?.command as string | undefined;
+      const vault = args?.vault as string | undefined;
+      const vaultSuffix = vault && vault.trim().length > 0 ? ` from "${vault}"` : "";
+      if (command === "daily:append") return `Appending to daily note${vaultSuffix}`;
+      if (command === "daily:prepend") return `Prepending to daily note${vaultSuffix}`;
+      if (command === "daily:path") return `Getting daily note path${vaultSuffix}`;
+      return `Reading today's daily note${vaultSuffix}`;
+    }
+    case "obsidianRandomRead": {
+      const vault = args?.vault as string | undefined;
+      if (vault && vault.trim().length > 0) {
+        return `Reading a random note from "${vault}"`;
+      }
+      return "Reading a random note";
+    }
+    case "obsidianProperties": {
+      const command = args?.command as string | undefined;
+      if (command === "property:read") {
+        const name = args?.name as string | undefined;
+        return name ? `Reading property "${name}"` : "Reading property";
+      }
+      return "Listing vault properties";
+    }
+    case "obsidianTasks":
+      return "Listing vault tasks";
+    case "obsidianLinks": {
+      const command = args?.command as string | undefined;
+      if (command === "backlinks") return "Listing backlinks";
+      if (command === "links") return "Listing outgoing links";
+      if (command === "orphans") return "Listing orphaned notes";
+      if (command === "unresolved") return "Listing unresolved links";
+      return "Querying link graph";
+    }
+    case "obsidianTemplates": {
+      const command = args?.command as string | undefined;
+      if (command === "template:read") {
+        const name = args?.name as string | undefined;
+        return name ? `Reading template "${name}"` : "Reading template";
+      }
+      return "Listing templates";
+    }
+    case "obsidianBases": {
+      const command = args?.command as string | undefined;
+      if (command === "base:views") return "Listing base views";
+      if (command === "base:query") return "Querying base data";
+      return "Listing bases";
+    }
     case "indexVault":
       return "Indexing vault";
     case "updateMemory":

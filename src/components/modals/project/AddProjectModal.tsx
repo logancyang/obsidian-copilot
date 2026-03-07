@@ -9,6 +9,7 @@ import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { SettingSlider } from "@/components/ui/setting-slider";
 import { Textarea } from "@/components/ui/textarea";
 import { DEFAULT_MODEL_SETTING } from "@/constants";
+import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxInstruction";
 import { getDecodedPatterns } from "@/search/searchUtils";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String, randomUUID } from "@/utils";
@@ -196,10 +197,12 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
           label="Project System Prompt"
           description="Custom instructions for how the AI should behave in this project context"
         >
+          <SystemPromptSyntaxInstruction />
           <Textarea
             value={formData.systemPrompt}
             onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
             onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
+            placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
             className="tw-min-h-32"
           />
         </FormField>

@@ -1112,6 +1112,26 @@ ${formattedContent}`;
             urls: ["https://typescriptlang.org"],
             tags: ["programming", "typescript"],
             folders: ["docs/"],
+            webTabs: [
+              {
+                url: "https://example.com/",
+                title: "Example Domain",
+                faviconUrl: "https://example.com/favicon.ico",
+                isLoaded: true,
+              },
+              {
+                url: "https://lucide.dev/",
+                title: "Lucide",
+                faviconUrl: "https://lucide.dev/favicon.ico",
+                isActive: true,
+              },
+              {
+                url: "https://obsidian.md/",
+                title: "Obsidian - Sharpen your thinking",
+                faviconUrl: "https://obsidian.md/favicon.ico",
+                isLoaded: true,
+              },
+            ],
           },
         },
         {
@@ -1151,7 +1171,7 @@ ${formattedContent}`;
       expect(parsedMessages[0].message).toBe(originalMessages[0].message);
       expect(parsedMessages[0].sender).toBe(originalMessages[0].sender);
 
-      // Verify context is preserved
+      // Verify context is preserved (Tags, Folders, WebTabs are optional in type)
       expect(parsedMessages[0].context).toBeDefined();
       expect(parsedMessages[0].context.notes).toHaveLength(1);
       expect(parsedMessages[0].context.notes[0].basename).toBe("typescript-guide.md");
@@ -1160,8 +1180,12 @@ ${formattedContent}`;
       expect(parsedMessages[0].context.tags).toEqual(["programming", "typescript"]);
       expect(parsedMessages[0].context.folders).toHaveLength(1);
       expect(parsedMessages[0].context.folders[0]).toBe("docs/");
+      expect(parsedMessages[0].context.webTabs).toHaveLength(3);
+      expect(parsedMessages[0].context.webTabs[0].url).toBe("https://example.com/");
+      expect(parsedMessages[0].context.webTabs[1].url).toBe("https://lucide.dev/");
+      expect(parsedMessages[0].context.webTabs[2].url).toBe("https://obsidian.md/");
 
-      // Second message should not have context
+      // Verify the second message has no context
       expect(parsedMessages[1].context).toBeUndefined();
     });
 

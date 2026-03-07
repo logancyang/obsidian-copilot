@@ -379,8 +379,20 @@ If your plugin does not need CSS, delete this file.
 }
 
 .message-content table {
+  border-collapse: collapse;
   margin-top: 15px;
   margin-bottom: 15px;
+}
+
+.message-content th,
+.message-content td {
+  padding: var(--size-2-2) var(--size-4-2);
+  border: var(--table-border-width) solid var(--table-border-color);
+}
+
+.message-content th {
+  font-weight: var(--table-header-weight);
+  background-color: var(--table-header-background);
 }
 
 /* Style for inline code */

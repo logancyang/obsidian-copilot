@@ -147,7 +147,7 @@ function SystemPromptAddModalContent({
         <div className="tw-relative">
           <Textarea
             id="content"
-            placeholder="Enter your system prompt here..."
+            placeholder="Enter your system prompt here... Use {[[Note Name]]} to include note contents."
             value={prompt.content}
             onChange={(e) => handleUpdate("content", e.target.value)}
             rows={10}

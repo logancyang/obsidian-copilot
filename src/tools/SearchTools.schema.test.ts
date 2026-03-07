@@ -100,6 +100,13 @@ describe("SearchTools Schema Validation", () => {
       const result = localSearchSchema.safeParse(invalidInput);
       expect(result.success).toBe(false);
     });
+
+    test("ignores unknown fields like returnAll", () => {
+      const input = { query: "find all notes", salientTerms: ["notes"], returnAll: true };
+      const result = localSearchSchema.safeParse(input);
+      // Schema strips unknown fields but still parses successfully
+      expect(result.success).toBe(true);
+    });
   });
 
   describe("webSearchTool schema", () => {

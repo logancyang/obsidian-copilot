@@ -1,258 +1,262 @@
-import { createToolCallMarker } from "./utils/toolCallParser";
+import {
+  buildToolCallsFromChunks,
+  accumulateToolCallChunk,
+  ToolCallChunk,
+} from "./utils/nativeToolCalling";
 
 /**
- * Test suite for AutonomousAgentChainRunner tool call ID handling
+ * Test suite for Gemini tool call name extraction fix (Issue #2233)
  *
- * This test suite specifically addresses the bug where temporary tool call IDs
- * (e.g., "temporary-tool-call-id-localSearch-0") were created during streaming,
- * but then the code tried to find them using unique timestamp-based IDs
- * (e.g., "localSearch-1234567890-abc123"), causing React to fail when unmounting
- * DOM nodes because the IDs didn't match.
+ * Root cause: Gemini's @langchain/google-genai nests tool call names inside
+ * `functionCall.name` instead of at the top level `name` property. Without
+ * the fallback, all Gemini tool call names are empty, causing
+ * buildToolCallsFromChunks to skip them → treated as "no tool calls" →
+ * empty response since thinking tokens were filtered.
  */
-describe("AutonomousAgentChainRunner - Tool Call ID Generation", () => {
-  describe("Tool Call ID Uniqueness", () => {
-    /**
-     * Test that tool call IDs are unique across multiple tool calls
-     * This prevents React from getting confused when mounting/unmounting components
-     */
-    it("should generate unique IDs for multiple tool calls", () => {
-      const toolName = "localSearch";
-      const ids: string[] = [];
+describe("accumulateToolCallChunk", () => {
+  describe("OpenAI-format chunks (top-level name)", () => {
+    it("should accumulate name from top-level tc.name", () => {
+      const chunks = new Map<number, ToolCallChunk>();
 
-      // Generate multiple IDs
-      for (let i = 0; i < 10; i++) {
-        const id = `${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-        ids.push(id);
-      }
-
-      // Check that all IDs are unique
-      const uniqueIds = new Set(ids);
-      expect(uniqueIds.size).toBe(ids.length);
-    });
-
-    /**
-     * Test that tool call IDs have the correct format
-     * Format: {toolName}-{timestamp}-{random}
-     */
-    it("should generate IDs with correct format", () => {
-      const toolName = "localSearch";
-      const id = `${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-      // Verify format: toolName-timestamp-random
-      const parts = id.split("-");
-      expect(parts.length).toBeGreaterThanOrEqual(3);
-      expect(parts[0]).toBe(toolName);
-      expect(Number.isNaN(Number(parts[1]))).toBe(false); // timestamp should be a number
-      expect(parts[2].length).toBeGreaterThan(0); // random part should exist
-    });
-
-    /**
-     * Test that tool call IDs for different tools are distinct
-     */
-    it("should generate distinct IDs for different tool types", () => {
-      const tools = ["localSearch", "readNote", "webSearch"];
-      const ids = tools.map(
-        (tool) => `${tool}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`
-      );
-
-      // All IDs should start with their respective tool name
-      tools.forEach((tool, index) => {
-        expect(ids[index].startsWith(tool)).toBe(true);
+      accumulateToolCallChunk(chunks, {
+        index: 0,
+        id: "call_123",
+        name: "localSearch",
+        args: '{"query":',
+      });
+      accumulateToolCallChunk(chunks, {
+        index: 0,
+        args: '"test"}',
       });
 
-      // All IDs should be unique
-      const uniqueIds = new Set(ids);
-      expect(uniqueIds.size).toBe(ids.length);
+      const result = chunks.get(0)!;
+      expect(result.name).toBe("localSearch");
+      expect(result.id).toBe("call_123");
+      expect(result.args).toBe('{"query":"test"}');
+    });
+
+    it("should handle multiple concurrent tool calls", () => {
+      const chunks = new Map<number, ToolCallChunk>();
+
+      accumulateToolCallChunk(chunks, { index: 0, name: "localSearch", args: '{"q":"a"}' });
+      accumulateToolCallChunk(chunks, { index: 1, name: "readNote", args: '{"path":"b"}' });
+
+      expect(chunks.get(0)!.name).toBe("localSearch");
+      expect(chunks.get(1)!.name).toBe("readNote");
     });
   });
 
-  describe("Temporary vs Final Tool Call ID", () => {
-    /**
-     * Test the temporary ID generation function used during streaming
-     * This is the ID format that should be used for initial tool call markers
-     */
-    it("should generate temporary IDs with consistent format", () => {
-      const getTemporaryToolCallId = (toolName: string, index: number): string => {
-        return `temporary-tool-call-id-${toolName}-${index}`;
-      };
+  describe("Gemini-format chunks (name in functionCall)", () => {
+    it("should extract name from functionCall.name when top-level name is missing", () => {
+      const chunks = new Map<number, ToolCallChunk>();
 
-      const tempId1 = getTemporaryToolCallId("localSearch", 0);
-      const tempId2 = getTemporaryToolCallId("localSearch", 1);
-      const tempId3 = getTemporaryToolCallId("readNote", 0);
-
-      expect(tempId1).toBe("temporary-tool-call-id-localSearch-0");
-      expect(tempId2).toBe("temporary-tool-call-id-localSearch-1");
-      expect(tempId3).toBe("temporary-tool-call-id-readNote-0");
-    });
-
-    /**
-     * Test that temporary IDs should be replaced with unique IDs during execution
-     * This ensures that React components are properly identified for unmounting
-     */
-    it("should use unique IDs during tool execution, not temporary IDs", () => {
-      const toolName = "localSearch";
-      const toolIndex = 0;
-
-      // During streaming, we use temporary IDs
-      const tempId = `temporary-tool-call-id-${toolName}-${toolIndex}`;
-
-      // During execution, we should generate unique IDs
-      const uniqueId = `${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-      // The unique ID should NOT match the temporary ID format
-      expect(uniqueId).not.toMatch(/^temporary-tool-call-id-/);
-      expect(uniqueId).toContain(toolName);
-      expect(uniqueId).not.toBe(tempId);
-    });
-
-    /**
-     * Test that tool call markers can be created with both temporary and unique IDs
-     */
-    it("should create tool call markers with unique IDs", () => {
-      const toolName = "localSearch";
-      const uniqueId = `${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-      const marker = createToolCallMarker(
-        uniqueId,
-        toolName,
-        "Vault Search",
-        "🔍",
-        "Searching your vault...",
-        true,
-        "",
-        ""
-      );
-
-      // Verify the marker contains the unique ID
-      expect(marker).toContain(uniqueId);
-      expect(marker).toContain(toolName);
-    });
-  });
-
-  describe("Tool Call ID Map", () => {
-    /**
-     * Test that the toolCallIdMap correctly tracks tool call IDs by index
-     * This is critical for finding the right DOM element to update/unmount
-     */
-    it("should maintain a map of tool call indices to IDs", () => {
-      const toolCallIdMap = new Map<number, string>();
-
-      // Simulate tool execution loop
-      const toolCalls = [
-        { name: "localSearch", index: 0 },
-        { name: "readNote", index: 1 },
-        { name: "localSearch", index: 2 },
-      ];
-
-      toolCalls.forEach((toolCall) => {
-        const uniqueId = `${toolCall.name}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-        toolCallIdMap.set(toolCall.index, uniqueId);
+      // Gemini sends chunks with functionCall.name instead of top-level name
+      accumulateToolCallChunk(chunks, {
+        index: 0,
+        id: "call_456",
+        functionCall: { name: "localSearch" },
+        args: '{"query":"test"}',
       });
 
-      // Verify the map has correct entries
-      expect(toolCallIdMap.size).toBe(3);
-      expect(toolCallIdMap.get(0)).toBeDefined();
-      expect(toolCallIdMap.get(1)).toBeDefined();
-      expect(toolCallIdMap.get(2)).toBeDefined();
-
-      // Verify IDs are unique
-      const ids = Array.from(toolCallIdMap.values());
-      const uniqueIds = new Set(ids);
-      expect(uniqueIds.size).toBe(ids.length);
+      const result = chunks.get(0)!;
+      expect(result.name).toBe("localSearch");
+      expect(result.id).toBe("call_456");
+      expect(result.args).toBe('{"query":"test"}');
     });
 
-    /**
-     * Test that the same tool called multiple times gets different IDs
-     */
-    it("should assign different IDs to the same tool called multiple times", () => {
-      const toolCallIdMap = new Map<number, string>();
-      const toolName = "localSearch";
+    it("should handle multiple Gemini tool calls", () => {
+      const chunks = new Map<number, ToolCallChunk>();
 
-      // Call the same tool 3 times
-      for (let i = 0; i < 3; i++) {
-        const uniqueId = `${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-        toolCallIdMap.set(i, uniqueId);
-      }
+      accumulateToolCallChunk(chunks, {
+        index: 0,
+        functionCall: { name: "localSearch" },
+        args: '{"query":"piano"}',
+      });
+      accumulateToolCallChunk(chunks, {
+        index: 1,
+        functionCall: { name: "readNote" },
+        args: '{"path":"notes/music.md"}',
+      });
 
-      // All IDs should be different
-      const id0 = toolCallIdMap.get(0);
-      const id1 = toolCallIdMap.get(1);
-      const id2 = toolCallIdMap.get(2);
+      expect(chunks.get(0)!.name).toBe("localSearch");
+      expect(chunks.get(1)!.name).toBe("readNote");
+    });
 
-      expect(id0).toBeDefined();
-      expect(id1).toBeDefined();
-      expect(id2).toBeDefined();
-      expect(id0).not.toBe(id1);
-      expect(id1).not.toBe(id2);
-      expect(id0).not.toBe(id2);
+    it("should prefer top-level name over functionCall.name", () => {
+      const chunks = new Map<number, ToolCallChunk>();
+
+      accumulateToolCallChunk(chunks, {
+        index: 0,
+        name: "topLevel",
+        functionCall: { name: "nested" },
+        args: "{}",
+      });
+
+      // Top-level name takes priority via nullish coalescing (??)
+      expect(chunks.get(0)!.name).toBe("topLevel");
     });
   });
 
-  describe("Regression Test for React Unmounting Bug", () => {
-    /**
-     * This test specifically addresses the bug where temporary IDs were used during
-     * streaming, but unique IDs were used during execution, causing React to fail
-     * when trying to unmount components.
-     *
-     * The fix ensures that:
-     * 1. Temporary IDs are used during streaming to create initial markers
-     * 2. Unique IDs are generated during execution
-     * 3. The temporary markers are found and replaced with unique ID markers
-     */
-    it("should correctly handle ID transition from temporary to unique", () => {
-      const getTemporaryToolCallId = (toolName: string, index: number): string => {
-        return `temporary-tool-call-id-${toolName}-${index}`;
-      };
+  describe("Edge cases", () => {
+    it("should default index to 0 when not provided", () => {
+      const chunks = new Map<number, ToolCallChunk>();
 
-      const toolName = "localSearch";
-      const toolIndex = 0;
+      accumulateToolCallChunk(chunks, { name: "localSearch", args: "{}" });
 
-      // Step 1: During streaming, create a temporary ID
-      const tempId = getTemporaryToolCallId(toolName, toolIndex);
-      const currentIterationToolCallMessages: string[] = [];
-
-      // Create a temporary marker
-      const tempMarker = createToolCallMarker(
-        tempId,
-        toolName,
-        "Vault Search",
-        "🔍",
-        "",
-        true,
-        "",
-        ""
-      );
-      currentIterationToolCallMessages.push(tempMarker);
-
-      // Step 2: During execution, generate a unique ID
-      const uniqueId = `${toolName}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`;
-
-      // Step 3: Find and replace the temporary marker
-      const existingIndex = currentIterationToolCallMessages.findIndex((msg) =>
-        msg.includes(tempId)
-      );
-
-      expect(existingIndex).toBe(0); // Should find the temporary marker
-
-      // Replace with unique ID marker
-      const uniqueMarker = createToolCallMarker(
-        uniqueId,
-        toolName,
-        "Vault Search",
-        "🔍",
-        "Searching your vault...",
-        true,
-        "",
-        ""
-      );
-      currentIterationToolCallMessages[existingIndex] = uniqueMarker;
-
-      // Step 4: Verify the replacement
-      expect(currentIterationToolCallMessages[0]).toContain(uniqueId);
-      expect(currentIterationToolCallMessages[0]).not.toContain(tempId);
-
-      // Step 5: Verify the unique ID doesn't match temporary format
-      expect(uniqueId).not.toMatch(/^temporary-tool-call-id-/);
+      expect(chunks.has(0)).toBe(true);
+      expect(chunks.get(0)!.name).toBe("localSearch");
     });
+
+    it("should handle chunk with no name at all", () => {
+      const chunks = new Map<number, ToolCallChunk>();
+
+      accumulateToolCallChunk(chunks, { index: 0, args: '{"query":"test"}' });
+
+      expect(chunks.get(0)!.name).toBe("");
+      expect(chunks.get(0)!.args).toBe('{"query":"test"}');
+    });
+
+    it("should accumulate args across multiple chunks", () => {
+      const chunks = new Map<number, ToolCallChunk>();
+
+      accumulateToolCallChunk(chunks, { index: 0, name: "localSearch", args: '{"qu' });
+      accumulateToolCallChunk(chunks, { index: 0, args: 'ery":' });
+      accumulateToolCallChunk(chunks, { index: 0, args: '"test"}' });
+
+      expect(chunks.get(0)!.args).toBe('{"query":"test"}');
+    });
+  });
+});
+
+describe("buildToolCallsFromChunks", () => {
+  it("should build tool calls from properly accumulated chunks", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+    chunks.set(0, { id: "call_1", name: "localSearch", args: '{"query":"test"}' });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("localSearch");
+    expect(result[0].args).toEqual({ query: "test" });
+    expect(result[0].id).toBe("call_1");
+  });
+
+  it("should skip chunks with no name (the bug this fix addresses)", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+    // This is what happened before the fix: Gemini chunks had no name
+    // because the accumulator didn't check functionCall.name
+    chunks.set(0, { name: "", args: '{"query":"test"}' });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    // Empty name → skipped → no tool calls → treated as final response
+    expect(result).toHaveLength(0);
+  });
+
+  it("should handle multiple tool calls", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+    chunks.set(0, { id: "call_1", name: "localSearch", args: '{"query":"piano"}' });
+    chunks.set(1, { id: "call_2", name: "readNote", args: '{"path":"notes/music.md"}' });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(2);
+    expect(result[0].name).toBe("localSearch");
+    expect(result[1].name).toBe("readNote");
+  });
+
+  it("should generate an ID when chunk has no id", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+    chunks.set(0, { name: "localSearch", args: '{"query":"test"}' });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].id).toMatch(/^call_/);
+  });
+
+  it("should handle malformed JSON args gracefully", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+    chunks.set(0, { name: "localSearch", args: "not valid json" });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("localSearch");
+    expect(result[0].args).toEqual({});
+  });
+
+  it("should handle empty args", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+    chunks.set(0, { name: "localSearch", args: "" });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].args).toEqual({});
+  });
+});
+
+describe("End-to-end: Gemini streaming → buildToolCallsFromChunks", () => {
+  it("should correctly process Gemini-format chunks through the full pipeline", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+
+    // Simulate Gemini streaming: name comes via functionCall, not top-level
+    accumulateToolCallChunk(chunks, {
+      index: 0,
+      id: "call_gemini_1",
+      functionCall: { name: "localSearch" },
+      args: '{"query":"piano notes"}',
+    });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("localSearch");
+    expect(result[0].args).toEqual({ query: "piano notes" });
+  });
+
+  it("should correctly process OpenAI-format chunks through the full pipeline", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+
+    // Simulate OpenAI streaming: name at top level
+    accumulateToolCallChunk(chunks, {
+      index: 0,
+      id: "call_openai_1",
+      name: "localSearch",
+      args: '{"query":"piano notes"}',
+    });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe("localSearch");
+    expect(result[0].args).toEqual({ query: "piano notes" });
+  });
+
+  it("should handle sequential Gemini tool calls (the failing scenario)", () => {
+    const chunks = new Map<number, ToolCallChunk>();
+
+    // This is the exact scenario that was failing:
+    // Gemini 3.1 Pro returns 2 sequential tool calls, but names were dropped
+    accumulateToolCallChunk(chunks, {
+      index: 0,
+      id: "call_g1",
+      functionCall: { name: "localSearch" },
+      args: '{"query":"search term"}',
+    });
+    accumulateToolCallChunk(chunks, {
+      index: 1,
+      id: "call_g2",
+      functionCall: { name: "readNote" },
+      args: '{"path":"some/note.md"}',
+    });
+
+    const result = buildToolCallsFromChunks(chunks);
+
+    // Both tool calls should be preserved — before the fix, both were dropped
+    expect(result).toHaveLength(2);
+    expect(result[0].name).toBe("localSearch");
+    expect(result[1].name).toBe("readNote");
   });
 });

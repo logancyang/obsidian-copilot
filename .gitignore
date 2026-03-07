@@ -27,6 +27,7 @@ data.json
 
 # Claude configuration
 .claude/settings.local.json
+.claude/worktrees/
 
 # Development session tracking
 TODO.md
