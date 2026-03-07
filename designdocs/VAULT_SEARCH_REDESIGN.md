@@ -259,6 +259,21 @@ Agent: getTimeRangeMs("yesterday")
      → readNote(path=...)
 ```
 
+### 11. "Summarize the budget discussions in my meeting notes from last week under Q3Meetings" - Time + folder + content search
+
+```
+Unix: find ./Q3Meetings -name "*.md" -mtime -7 | xargs grep "budget"
+```
+
+```
+Agent: getTimeRangeMs("last week")
+     → vaultFind(timeRange={...}, folder="Q3Meetings")
+     → vaultSearch(query="budget discussions", salientTerms=["budget", "discussions"], paths=[...from vaultFind...])
+     → Summarize matching passages
+```
+
+This is the most complex composition pattern — it combines time filtering, folder scoping, AND content search in three distinct steps. With the old monolithic `localSearch`, all three dimensions would be packed into a single call, which is exactly the pattern that caused #2267.
+
 ## Agent Instructions
 
 These instructions replace the current `localSearch` custom prompt instructions:
