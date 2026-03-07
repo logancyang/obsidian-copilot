@@ -19,14 +19,6 @@ describe("SearchTools Schema Validation", () => {
         })
         .optional()
         .describe("Time range for search"),
-      returnAll: z
-        .preprocess((val) => {
-          if (typeof val === "string") {
-            return val.toLowerCase() === "true";
-          }
-          return val;
-        }, z.boolean().optional())
-        .describe("Return all matching notes"),
     });
 
     test("validates correct input structure", () => {
@@ -109,67 +101,11 @@ describe("SearchTools Schema Validation", () => {
       expect(result.success).toBe(false);
     });
 
-    test("accepts boolean returnAll: true", () => {
+    test("ignores unknown fields like returnAll", () => {
       const input = { query: "find all notes", salientTerms: ["notes"], returnAll: true };
       const result = localSearchSchema.safeParse(input);
+      // Schema strips unknown fields but still parses successfully
       expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBe(true);
-      }
-    });
-
-    test("accepts boolean returnAll: false", () => {
-      const input = { query: "find notes", salientTerms: ["notes"], returnAll: false };
-      const result = localSearchSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBe(false);
-      }
-    });
-
-    test("coerces string 'True' to boolean true", () => {
-      const input = { query: "find all notes", salientTerms: ["notes"], returnAll: "True" };
-      const result = localSearchSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBe(true);
-      }
-    });
-
-    test("coerces string 'true' to boolean true", () => {
-      const input = { query: "find all notes", salientTerms: ["notes"], returnAll: "true" };
-      const result = localSearchSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBe(true);
-      }
-    });
-
-    test("coerces string 'FALSE' to boolean false", () => {
-      const input = { query: "find notes", salientTerms: ["notes"], returnAll: "FALSE" };
-      const result = localSearchSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBe(false);
-      }
-    });
-
-    test("coerces string 'False' to boolean false", () => {
-      const input = { query: "find notes", salientTerms: ["notes"], returnAll: "False" };
-      const result = localSearchSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBe(false);
-      }
-    });
-
-    test("accepts omitted returnAll (optional)", () => {
-      const input = { query: "find notes", salientTerms: ["notes"] };
-      const result = localSearchSchema.safeParse(input);
-      expect(result.success).toBe(true);
-      if (result.success) {
-        expect(result.data.returnAll).toBeUndefined();
-      }
     });
   });
 

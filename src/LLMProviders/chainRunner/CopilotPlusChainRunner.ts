@@ -104,7 +104,7 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
   private async planToolCalls(
     userMessage: string,
     chatModel: BaseChatModel
-  ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[]; returnAll: boolean }> {
+  ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[] }> {
     const availableTools = this.getAvailableToolsForPlanning();
 
     // Check if model supports native tool calling
@@ -113,7 +113,6 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
       return {
         toolCalls: [],
         salientTerms: this.extractSalientTermsFromQuery(userMessage),
-        returnAll: false,
       };
     }
 
@@ -134,10 +133,7 @@ After analyzing, extract key search terms from the user's message that would be 
 - Preserve the EXACT words and language from the user's message (works for any language)
 - Exclude time expressions (those are handled by tools)
 
-Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]
-
-If the user wants ALL matching notes (e.g., "find all my X", "list every Y", "show me all Z", "how many notes about W"), output: [RETURN_ALL: true]
-Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
+Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     // Create planning request
     const planningMessages = [
@@ -165,11 +161,8 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
 
     logInfo("[CopilotPlus] Native tool calls:", nativeToolCalls.length);
 
-    // Extract salient terms and returnAll intent from response text
-    const { salientTerms, returnAll } = this.extractPlanningFieldsFromResponse(
-      responseText,
-      userMessage
-    );
+    // Extract salient terms from response text
+    const { salientTerms } = this.extractPlanningFieldsFromResponse(responseText, userMessage);
 
     // Convert native tool calls to executor format
     const toolCalls: ToolCallWithExecutor[] = [];
@@ -186,16 +179,16 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
       }
     }
 
-    return { toolCalls, salientTerms, returnAll };
+    return { toolCalls, salientTerms };
   }
 
   /**
-   * Extract salient terms and returnAll intent from model response.
+   * Extract salient terms from model response.
    */
   private extractPlanningFieldsFromResponse(
     responseText: string,
     originalQuery: string
-  ): { salientTerms: string[]; returnAll: boolean } {
+  ): { salientTerms: string[] } {
     // Extract salient terms from [SALIENT_TERMS: ...] format
     let salientTerms: string[];
     const termsMatch = responseText.match(/\[SALIENT_TERMS:\s*([^\]]+?)\s*\]/i);
@@ -209,12 +202,7 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
       salientTerms = this.extractSalientTermsFromQuery(originalQuery);
     }
 
-    // Extract returnAll from [RETURN_ALL: true/false] format
-    // Allow optional whitespace/newlines around the value and before closing bracket
-    const returnAllMatch = responseText.match(/\[RETURN_ALL:\s*(true|false)\s*\]/i);
-    const returnAll = returnAllMatch ? returnAllMatch[1].toLowerCase() === "true" : false;
-
-    return { salientTerms, returnAll };
+    return { salientTerms };
   }
 
   /**
@@ -237,7 +225,7 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
   private async processAtCommands(
     userMessage: string,
     existingToolCalls: ToolCallWithExecutor[],
-    context: { salientTerms: string[]; timeRange?: any; returnAll?: boolean }
+    context: { salientTerms: string[]; timeRange?: any }
   ): Promise<ToolCallWithExecutor[]> {
     const message = userMessage.toLowerCase();
     const cleanQuery = this.removeAtCommands(userMessage);
@@ -254,7 +242,6 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
             query: cleanQuery,
             salientTerms: context.salientTerms,
             timeRange: context.timeRange,
-            returnAll: context.returnAll === true ? true : undefined,
           },
         });
       }
@@ -817,11 +804,10 @@ Otherwise omit RETURN_ALL or output: [RETURN_ALL: false]`;
         });
 
         // Process @commands - this may add localSearch, webSearch, or updateMemory
-        // Pass timeRange and returnAll in context so @vault commands can use them
+        // Pass timeRange in context so @vault commands can use them
         toolCalls = await this.processAtCommands(messageForAnalysis, filteredToolCalls, {
           salientTerms: planningResult.salientTerms,
           timeRange,
-          returnAll: planningResult.returnAll,
         });
       } catch (error: any) {
         return this.handleResponse(
