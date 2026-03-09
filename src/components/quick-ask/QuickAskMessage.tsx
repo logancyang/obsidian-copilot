@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { getErrorMessage, type ReplaceInvalidReason } from "@/editor/replaceGuard";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
+import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import type { QuickAskMessage } from "./types";
 
 interface QuickAskMessageProps {
@@ -66,7 +67,8 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
       const sourcePath = filePathSnapshot ?? "";
 
       try {
-        await MarkdownRenderer.renderMarkdown(message.content, targetEl, sourcePath, plugin);
+        const preprocessed = preprocessAIResponse(message.content);
+        await MarkdownRenderer.renderMarkdown(preprocessed, targetEl, sourcePath, plugin);
       } catch (error) {
         logError("Failed to render markdown:", error);
 
@@ -93,7 +95,7 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
   if (message.role === "user") {
     return (
       <div className="tw-max-w-[85%] tw-self-end tw-rounded-lg tw-rounded-br-sm tw-bg-interactive-accent tw-px-3 tw-py-2 tw-text-on-accent">
-        <div className="tw-whitespace-pre-wrap tw-break-words tw-text-sm">{message.content}</div>
+        <div data-quick-ask-selectable className="tw-whitespace-pre-wrap tw-break-words tw-text-sm">{message.content}</div>
       </div>
     );
   }
@@ -102,7 +104,7 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
   if (isStreaming) {
     return (
       <div className="tw-max-w-[95%] tw-self-start tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
-        <div className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-normal">
+        <div data-quick-ask-selectable className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-normal">
           {message.content}
           <span className="tw-animate-pulse tw-text-accent">▊</span>
         </div>
@@ -121,6 +123,7 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
       <div className="tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
         <div
           ref={contentRef}
+          data-quick-ask-selectable
           className="tw-text-sm [&.markdown-rendered]:tw-text-sm [&_code]:tw-text-xs [&_p]:tw-my-1 [&_pre]:tw-my-2"
         />
       </div>

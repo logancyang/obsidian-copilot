@@ -100,8 +100,8 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
       if (!input.trim()) return;
 
       // Add user message immediately for responsive UI
-      // Reason: selectedText is now shown separately via SelectedContent component,
-      // so displayContent no longer embeds <selected_text> XML tags.
+      // Reason: selectedText context is handled by the prompt processing pipeline,
+      // so displayContent does not embed <selected_text> XML tags.
       const userMessage: QuickAskMessage = {
         id: uuidv4(),
         role: "user",

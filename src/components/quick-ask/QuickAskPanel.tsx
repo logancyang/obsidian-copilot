@@ -20,7 +20,6 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { useQuickAskSession } from "./useQuickAskSession";
 import { QuickAskMessageComponent } from "./QuickAskMessage";
 import { QuickAskInput } from "./QuickAskInput";
-import { SelectedContent } from "@/components/command-ui";
 // TODO: Uncomment when Edit/Edit-Direct modes are implemented
 // import { ModeSelector } from "./ModeSelector";
 // import { modeRegistry } from "./modeRegistry";
@@ -305,9 +304,6 @@ export function QuickAskPanel({
           <X className="tw-size-4" />
         </Button>
       </div>
-
-      {/* Selected text preview - shown below header when text is selected */}
-      <SelectedContent content={selectedText.trim()} className="tw-mt-3 tw-px-3" />
 
       {/* Chat area - shown above input when there are messages (like YOLO) */}
       {hasMessages && (

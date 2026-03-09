@@ -4,7 +4,6 @@ import { Send } from "lucide-react";
 import { Platform } from "obsidian";
 import { DraggableModal } from "./draggable-modal";
 import { CommandLabel } from "./command-label";
-import { SelectedContent } from "./selected-content";
 import { ContentArea, type ContentState } from "./content-area";
 import { FollowUpInput } from "./follow-up-input";
 import { ModelSelector } from "@/components/ui/ModelSelector";
@@ -19,7 +18,6 @@ interface MenuCommandModalProps {
   /** Icon to display. Pass null to hide icon, undefined for default icon. */
   commandIcon?: React.ReactNode | null;
   commandLabel: string;
-  selectedText: string;
   contentState: ContentState;
   /** Editable content value (used when content is editable) */
   editableContent?: string;
@@ -33,6 +31,7 @@ interface MenuCommandModalProps {
   /** Callback when model changes */
   onSelectModel: (modelKey: string) => void;
   onStop?: () => void;
+  onCopy?: () => void;
   onInsert?: () => void;
   onReplace?: () => void;
   /** Initial position for the modal (defaults to center of screen) */
@@ -45,13 +44,14 @@ interface MenuCommandModalProps {
   includeNoteContext?: boolean;
   /** Callback when include note context changes */
   onIncludeNoteContextChange?: (checked: boolean) => void;
+  /** Optional callback to render markdown content (enables preview mode in ContentArea) */
+  renderMarkdown?: (content: string, el: HTMLElement) => Promise<void>;
 }
 
 /**
  * Modal for executing menu commands (e.g., Summarize, Translate).
  * Layout:
  * - Command label (flex-none)
- * - Selected content with hover expand (flex-none)
  * - Content area for AI response (flex-1, min-h: 160px)
  * - Follow-up input (flex-none)
  * - Bottom toolbar with model selector and action buttons (flex-none)
@@ -61,7 +61,6 @@ export function MenuCommandModal({
   onClose,
   commandIcon,
   commandLabel,
-  selectedText,
   contentState,
   editableContent,
   onEditableContentChange,
@@ -71,6 +70,7 @@ export function MenuCommandModal({
   selectedModel,
   onSelectModel,
   onStop,
+  onCopy,
   onInsert,
   onReplace,
   initialPosition,
@@ -78,6 +78,7 @@ export function MenuCommandModal({
   hideContentAreaOnIdle = false,
   includeNoteContext,
   onIncludeNoteContextChange,
+  renderMarkdown,
 }: MenuCommandModalProps) {
   // P0 Fix: Treat streaming as "loading" state to show Stop button
   const actionState =
@@ -162,9 +163,6 @@ export function MenuCommandModal({
         className="tw-border-b tw-border-border"
       />
 
-      {/* Selected Content - flex-none, hover to expand */}
-      <SelectedContent content={selectedText} />
-
       {/* Content Area - flex-1, editable when result is ready */}
       {showContentArea && (
         <ContentArea
@@ -174,6 +172,7 @@ export function MenuCommandModal({
           onChange={onEditableContentChange}
           disableAutoGrow={resizable}
           minHeight={resizable ? "0px" : undefined}
+          renderMarkdown={renderMarkdown}
         />
       )}
 
@@ -240,6 +239,7 @@ export function MenuCommandModal({
           <ActionButtons
             state={actionState}
             onStop={onStop}
+            onCopy={onCopy}
             onInsert={onInsert}
             onReplace={onReplace}
           />
