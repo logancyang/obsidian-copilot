@@ -817,6 +817,33 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
 
+/**
+ * Icons for commands displayed in the mobile toolbar.
+ * Uses Lucide icon names supported by Obsidian.
+ */
+export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
+  [COMMAND_IDS.NEW_CHAT]: "message-square-plus",
+  [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "message-square",
+  [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "message-square",
+  [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "history",
+  [COMMAND_IDS.TRIGGER_QUICK_COMMAND]: "terminal-square",
+  [COMMAND_IDS.TRIGGER_QUICK_ASK]: "sparkles",
+  [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "text-cursor-input",
+  [COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT]: "globe",
+  [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "plus-circle",
+  [COMMAND_IDS.APPLY_CUSTOM_COMMAND]: "play-circle",
+  [COMMAND_IDS.INDEX_VAULT_TO_COPILOT_INDEX]: "refresh-cw",
+  [COMMAND_IDS.FORCE_REINDEX_VAULT_TO_COPILOT_INDEX]: "rotate-cw",
+  [COMMAND_IDS.CLEAR_LOCAL_COPILOT_INDEX]: "trash-2",
+  [COMMAND_IDS.CLEAR_COPILOT_CACHE]: "eraser",
+  [COMMAND_IDS.GARBAGE_COLLECT_COPILOT_INDEX]: "filter-x",
+  [COMMAND_IDS.COUNT_TOTAL_VAULT_TOKENS]: "calculator",
+  [COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION]: "hash",
+  [COMMAND_IDS.OPEN_LOG_FILE]: "file-text",
+  [COMMAND_IDS.CLEAR_LOG_FILE]: "file-x",
+  [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "youtube",
+};
+
 export const RESTRICTION_MESSAGES = {
   NON_MARKDOWN_FILES_RESTRICTED:
     "Non-markdown files are only available in Copilot Plus mode. Please upgrade to access this file type.",
