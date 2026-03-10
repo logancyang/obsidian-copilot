@@ -2,7 +2,13 @@ import React from "react";
 import { CustomModel } from "@/aiParams";
 import { FormField } from "@/components/ui/form-field";
 import { ParameterControl } from "@/components/ui/parameter-controls";
-import { DEFAULT_MODEL_SETTING, ModelCapability, ReasoningEffort } from "@/constants";
+import {
+  ChatModelProviders,
+  DEFAULT_MODEL_SETTING,
+  DEFAULT_OLLAMA_NUM_CTX,
+  ModelCapability,
+  ReasoningEffort,
+} from "@/constants";
 import { CopilotSettings } from "@/settings/model";
 import {
   getDefaultReasoningEffort,
@@ -19,6 +25,7 @@ const PARAM_RANGES = {
   topP: { min: 0, max: 1, step: 0.05, default: 0.9 },
   frequencyPenalty: { min: 0, max: 2, step: 0.05, default: 0 },
   maxTokens: { min: 100, max: 128000, step: 100, default: DEFAULT_MODEL_SETTING.MAX_TOKENS },
+  numCtx: { min: 0, max: DEFAULT_OLLAMA_NUM_CTX, step: 1024, default: DEFAULT_OLLAMA_NUM_CTX },
 };
 
 interface ModelParametersEditorProps {
@@ -40,11 +47,16 @@ export function ModelParametersEditor({
   onReset,
   showTokenLimit = true,
 }: ModelParametersEditorProps) {
+  const isOllamaModel = model.provider === ChatModelProviders.OLLAMA;
+
   // Parameter values: model.xxx ?? settings.xxx
   const temperature = model.temperature ?? settings.temperature;
   const maxTokens = model.maxTokens ?? settings.maxTokens;
   const topP = model.topP;
   const frequencyPenalty = model.frequencyPenalty;
+  // Reason: Ollama defaults to a small num_ctx (2048), so we default to 131072
+  // for backward compatibility. Users can adjust via slider.
+  const numCtx = isOllamaModel ? (model.numCtx ?? PARAM_RANGES.numCtx.default) : model.numCtx;
   const reasoningEffort = model.reasoningEffort;
   const verbosity = model.verbosity;
 
@@ -54,7 +66,7 @@ export function ModelParametersEditor({
       model.name.startsWith("o3") ||
       model.name.startsWith("o4") ||
       model.name.startsWith("gpt-5")) &&
-    model.provider === "openai";
+    model.provider === ChatModelProviders.OPENAI;
 
   // Check if model has REASONING capability enabled
   const hasReasoningCapability = model.capabilities?.includes(ModelCapability.REASONING) ?? false;
@@ -62,10 +74,11 @@ export function ModelParametersEditor({
   // Show reasoning effort for: OpenAI reasoning models, OpenRouter, LM Studio, or any model with REASONING capability
   const showReasoningEffort =
     isOpenAIReasoningModel ||
-    model.provider === "openrouterai" ||
+    model.provider === ChatModelProviders.OPENROUTERAI ||
     model.provider === "lm_studio" ||
+    model.provider === ChatModelProviders.LM_STUDIO ||
     hasReasoningCapability;
-  const showVerbosity = model.name.startsWith("gpt-5") && model.provider === "openai";
+  const showVerbosity = model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
 
   return (
     <div className="tw-space-y-4">
@@ -91,6 +104,35 @@ export function ModelParametersEditor({
                 <em>
                   This number plus the length of your prompt (input tokens) must be smaller than the
                   context window of the model.
+                </em>
+              </>
+            }
+          />
+        </FormField>
+      )}
+
+      {/* num_ctx - Ollama only */}
+      {isOllamaModel && (
+        <FormField>
+          <ParameterControl
+            type="slider"
+            optional={false}
+            label="num_ctx"
+            value={numCtx}
+            onChange={(value) => onChange("numCtx", value)}
+            min={PARAM_RANGES.numCtx.min}
+            max={PARAM_RANGES.numCtx.max}
+            step={PARAM_RANGES.numCtx.step}
+            defaultValue={PARAM_RANGES.numCtx.default}
+            helpText={
+              <>
+                <p>
+                  The <code>num_ctx</code> parameter sent to Ollama. Controls how many tokens the
+                  model can use as context. Default is {DEFAULT_OLLAMA_NUM_CTX}.
+                </p>
+                <em>
+                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will
+                  cap this at the model&apos;s actual maximum.
                 </em>
               </>
             }

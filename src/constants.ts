@@ -167,6 +167,10 @@ export const DEFAULT_MODEL_SETTING = {
   VERBOSITY: Verbosity.MEDIUM,
 } as const;
 
+// Reason: Ollama defaults to a small context window (2048). We override to 131072
+// for backward compatibility (PR #2147), configurable via UI (#2275).
+export const DEFAULT_OLLAMA_NUM_CTX = 131072;
+
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
   GPT_5_2 = "gpt-5.2",
