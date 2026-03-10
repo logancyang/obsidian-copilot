@@ -382,19 +382,40 @@ export function getExtensionPattern(extension: string): string {
 
 /**
  * Get a list of internal Copilot file paths that must be excluded from searches.
- * Currently includes the rolling log file path (e.g., "copilot/copilot-log.md").
+ * Includes the rolling log file path (e.g., "copilot/copilot-log.md").
  */
 export function getInternalExcludePaths(): string[] {
   return [logFileManager.getLogPath()];
 }
 
 /**
+ * Get a list of internal Copilot folder prefixes that must be excluded from searches.
+ * Any file whose path starts with one of these prefixes is considered internal.
+ */
+export function getInternalExcludeFolderPrefixes(): string[] {
+  const settings = getSettings();
+  const projectsFolder = (settings.projectsFolder || "").trim();
+  if (projectsFolder) {
+    // Reason: normalize to forward slashes, collapse duplicates, strip trailing slash,
+    // then append exactly one "/" for prefix matching. Mirrors normalizePath behavior
+    // without depending on Obsidian runtime (needed for testability).
+    const normalized = projectsFolder.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
+    return [`${normalized}/`];
+  }
+  return [];
+}
+
+/**
  * Check whether a file path is an internal Copilot file that should be excluded from searches.
+ * Checks both exact path matches (log file) and folder prefix matches (projects folder).
  * @param filePath - Full path to the file in the vault
  */
 export function isInternalExcludedPath(filePath: string): boolean {
   const excludes = new Set(getInternalExcludePaths());
-  return excludes.has(filePath);
+  if (excludes.has(filePath)) return true;
+  // Reason: exclude all files under internal folders (e.g. projectsFolder) to prevent
+  // project.md configs and unsupported/ backups from polluting search/context indexing.
+  return getInternalExcludeFolderPrefixes().some((prefix) => filePath.startsWith(prefix));
 }
 
 /**

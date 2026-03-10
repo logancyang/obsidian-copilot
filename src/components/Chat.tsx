@@ -42,7 +42,9 @@ import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/pro
 import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
 import { useIsPlusUser } from "@/plusUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { useProjects } from "@/projects/state";
+import { useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
@@ -78,6 +80,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   chatInput,
 }) => {
   const settings = useSettingsValue();
+  const projects = useProjects();
   const eventTarget = useContext(EventTargetContext);
 
   const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
@@ -557,71 +560,36 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   }, [onSaveChat, handleSaveAsNote]);
 
   const handleAddProject = useCallback(
-    (project: ProjectConfig) => {
-      const currentProjects = settings.projectList || [];
-      const existingIndex = currentProjects.findIndex((p) => p.name === project.name);
+    async (project: ProjectConfig) => {
+      const manager = ProjectFileManager.getInstance(plugin.app.vault);
+      await manager.createProject(project);
+      new Notice(`${project.name} added successfully`);
 
-      if (existingIndex >= 0) {
-        throw new Error(`Project "${project.name}" already exists, please use a different name`);
-      }
-
-      const newProjectList = [...currentProjects, project];
-      updateSetting("projectList", newProjectList);
-
-      // Check if this project is now the current project
+      // Reason: reload is best-effort — the project is already saved, so a reload failure
+      // must not surface as a "save failed" error to the modal (which would cause retries
+      // and duplicate-id errors). reloadCurrentProject() handles its own error notices.
       const currentProject = getCurrentProject();
       if (currentProject?.id === project.id) {
-        // Reload the project context for the newly added project
-        reloadCurrentProject()
-          .then(() => {
-            new Notice(`${project.name} added and context loaded`);
-          })
-          .catch((error: Error) => {
-            logError("Error loading project context:", error);
-            new Notice(`${project.name} added but context loading failed`);
-          });
-      } else {
-        new Notice(`${project.name} added successfully`);
+        void reloadCurrentProject();
       }
-
-      return true;
     },
-    [settings.projectList]
+    [plugin.app.vault]
   );
 
   const handleEditProject = useCallback(
-    (originP: ProjectConfig, updateP: ProjectConfig) => {
-      const currentProjects = settings.projectList || [];
-      const existingProject = currentProjects.find((p) => p.name === originP.name);
+    async (originP: ProjectConfig, updateP: ProjectConfig) => {
+      const manager = ProjectFileManager.getInstance(plugin.app.vault);
+      await manager.updateProject(originP.id, updateP);
+      new Notice(`${originP.name} updated successfully`);
 
-      if (!existingProject) {
-        throw new Error(`Project "${originP.name}" does not exist`);
-      }
-
-      const newProjectList = currentProjects.map((p) => (p.name === originP.name ? updateP : p));
-      updateSetting("projectList", newProjectList);
-
-      // If this is the current project, update the current project atom
+      // Reason: same best-effort pattern as handleAddProject — project is already saved.
       const currentProject = getCurrentProject();
       if (currentProject?.id === originP.id) {
         setCurrentProject(updateP);
-
-        // Reload the project context
-        reloadCurrentProject()
-          .then(() => {
-            new Notice(`${originP.name} updated and context reloaded`);
-          })
-          .catch((error: Error) => {
-            logError("Error reloading project context:", error);
-            new Notice(`${originP.name} updated but context reload failed`);
-          });
-      } else {
-        new Notice(`${originP.name} updated successfully`);
+        void reloadCurrentProject();
       }
-
-      return true;
     },
-    [settings.projectList]
+    [plugin.app.vault]
   );
 
   const handleRemoveSelectedText = useCallback(
@@ -955,7 +923,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           {selectedChain === ChainType.PROJECT_CHAIN && (
             <div className={`${selectedChain === ChainType.PROJECT_CHAIN ? "tw-z-modal" : ""}`}>
               <ProjectList
-                projects={settings.projectList || []}
+                projects={projects}
                 defaultOpen={true}
                 app={app}
                 plugin={plugin}

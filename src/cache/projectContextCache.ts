@@ -2,7 +2,7 @@ import { ProjectConfig } from "@/aiParams";
 import { FileCache } from "@/cache/fileCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { getSettings } from "@/settings/model";
+import { getCachedProjects } from "@/projects/state";
 import { MD5 } from "crypto-js";
 import { TAbstractFile, TFile, Vault } from "obsidian";
 import debounce from "lodash.debounce";
@@ -94,8 +94,7 @@ export class ProjectContextCache {
         return;
       }
 
-      const settings = getSettings();
-      const projects = settings.projectList || [];
+      const projects = getCachedProjects();
 
       // Check each project to see if the file matches its patterns
       for (const project of projects) {
@@ -609,8 +608,7 @@ export class ProjectContextCache {
     filePath: string
   ): Promise<{ cacheKey: string; content: string } | null> {
     try {
-      const settings = getSettings();
-      const projects = settings.projectList || [];
+      const projects = getCachedProjects();
 
       if (projects.length === 0) {
         return null;

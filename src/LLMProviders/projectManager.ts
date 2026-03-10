@@ -1,8 +1,10 @@
 import {
   FailedItem,
   getChainType,
+  getCurrentProject,
   isProjectMode,
   ProjectConfig,
+  setCurrentProject,
   setProjectLoading,
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
@@ -16,7 +18,10 @@ import { logError, logInfo, logWarn } from "@/logger";
 import CopilotPlugin from "@/main";
 import { Mention } from "@/mentions/Mention";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
-import { getSettings, subscribeToSettingsChange, updateSetting } from "@/settings/model";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { getCachedProjects, subscribeToProjectRecords } from "@/projects/state";
+import { ProjectFileRecord } from "@/projects/type";
+import { getSettings } from "@/settings/model";
 import { FileParserManager, saveConvertedDocOutput } from "@/tools/FileParserManager";
 import { err2String } from "@/utils";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
@@ -35,7 +40,7 @@ export default class ProjectManager {
   private readonly projectContextCache: ProjectContextCache;
   private fileParserManager: FileParserManager;
   private loadTracker: ProjectLoadTracker;
-  private readonly projectUsageTimestampsManager = new RecentUsageManager<string>();
+  private projectRecordsUnsubscriber?: () => void;
 
   private constructor(app: App, plugin: CopilotPlugin) {
     this.app = app;
@@ -77,16 +82,19 @@ export default class ProjectManager {
       await this.switchProject(project);
     });
 
-    // Subscribe to settings changes to monitor projectList changes
+    // Subscribe to project cache changes to monitor project modifications
     this.setupProjectListChangeMonitor();
   }
 
-  private setupProjectListChangeMonitor() {
-    subscribeToSettingsChange(async (prev, next) => {
-      if (!prev || !next) return;
+  private previousProjectRecords: ProjectFileRecord[] = [];
 
-      const prevProjects = prev.projectList || [];
-      const nextProjects = next.projectList || [];
+  private setupProjectListChangeMonitor() {
+    this.previousProjectRecords = [];
+    this.projectRecordsUnsubscriber?.();
+    this.projectRecordsUnsubscriber = subscribeToProjectRecords((nextRecords) => {
+      const prevProjects = this.previousProjectRecords.map((r) => r.project);
+      const nextProjects = nextRecords.map((r) => r.project);
+      this.previousProjectRecords = nextRecords;
 
       // Find modified projects
       for (const nextProject of nextProjects) {
@@ -95,15 +103,31 @@ export default class ProjectManager {
           // Check if project configuration has changed (ignoring UsageTimestamps)
           if (this.hasMeaningfulProjectConfigChange(prevProject, nextProject)) {
             // Compare project configuration changes and selectively update cache
-            await this.compareAndUpdateCache(prevProject, nextProject);
+            void this.compareAndUpdateCache(prevProject, nextProject).catch((err) =>
+              logError("[ProjectManager] compareAndUpdateCache failed", err)
+            );
 
             // If this is the current project, reload its context and recreate chain
-            if (this.currentProjectId === nextProject.id) {
-              await Promise.all([
+            // Reason: also check getCurrentProject()?.id to avoid overwriting the atom
+            // during a switchProject() transition (where currentProjectId is still the old id
+            // but the atom has already been updated to the new project).
+            if (
+              this.currentProjectId === nextProject.id &&
+              getCurrentProject()?.id === nextProject.id
+            ) {
+              // Reason: keep aiParams.getCurrentProject() fresh so PromptManager/ChainManager
+              // observe updated systemPrompt and modelConfigs when vault files change.
+              setCurrentProject(nextProject);
+              void Promise.all([
                 this.loadProjectContext(nextProject, true),
                 // Recreate chain to pick up new system prompt
                 this.getCurrentChainManager().createChainWithNewModel(),
-              ]);
+              ]).catch((error) => {
+                logError(
+                  `[Projects] Failed to refresh current project after config change id=${nextProject.id}`,
+                  error
+                );
+              });
             }
           }
         }
@@ -140,38 +164,12 @@ export default class ProjectManager {
   }
 
   /**
-   * Touch the project's usage timestamp in settings with throttled persistence.
-   * Memory is always updated immediately (for UI sorting), but settings writes are throttled.
+   * Touch the project's usage timestamp with throttled persistence.
+   * Delegates to ProjectFileManager for vault file writes.
    */
   private touchProjectUsageTimestamps(project: ProjectConfig): void {
-    // Always update memory for immediate UI feedback
-    this.projectUsageTimestampsManager.touch(project.id);
-
-    // Check if we should persist to settings (throttled)
-    const currentProjects = getSettings().projectList || [];
-    const persistedProject = currentProjects.find((p) => p.id === project.id);
-    if (!persistedProject) {
-      return;
-    }
-
-    const timestampToPersist = this.projectUsageTimestampsManager.shouldPersist(
-      project.id,
-      persistedProject.UsageTimestamps
-    );
-
-    if (timestampToPersist === null) {
-      return;
-    }
-
-    updateSetting(
-      "projectList",
-      currentProjects.map((p) =>
-        p.id === project.id ? { ...p, UsageTimestamps: timestampToPersist } : p
-      )
-    );
-
-    // Mark persistence successful for throttling purposes
-    this.projectUsageTimestampsManager.markPersisted(project.id, timestampToPersist);
+    const manager = ProjectFileManager.getInstance(this.app.vault);
+    void manager.touchProjectLastUsed(project.id);
   }
 
   /**
@@ -179,10 +177,19 @@ export default class ProjectManager {
    * This allows UI components to use in-memory values for immediate feedback.
    */
   public getProjectUsageTimestampsManager(): RecentUsageManager<string> {
-    return this.projectUsageTimestampsManager;
+    return ProjectFileManager.getInstance(this.app.vault).getProjectUsageTimestampsManager();
   }
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {
+    // Reason: setCurrentProject(updatedConfig) fires this callback even for same-id updates
+    // (e.g. when vault file content changes). Skip early to avoid loading-state churn.
+    if (project && this.currentProjectId === project.id) {
+      return;
+    }
+    if (!project && this.currentProjectId === null) {
+      return;
+    }
+
     try {
       // Clear all project context loading states
       this.loadTracker.clearAllLoadStates();
@@ -203,9 +210,6 @@ export default class ProjectManager {
 
       // else
       const projectId = project.id;
-      if (this.currentProjectId === projectId) {
-        return;
-      }
 
       await this.saveCurrentProjectMessage();
       this.currentProjectId = projectId; // ensure set currentProjectId
@@ -369,7 +373,7 @@ export default class ProjectManager {
   }
 
   public async getProjectContext(projectId: string): Promise<string | null> {
-    const project = getSettings().projectList.find((p) => p.id === projectId);
+    const project = getCachedProjects().find((p) => p.id === projectId);
     if (!project) {
       logWarn(`[getProjectContext] Project not found for ID: ${projectId}`);
       return null;
@@ -867,7 +871,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
         return;
       }
 
-      const project = getSettings().projectList.find((p) => p.id === this.currentProjectId);
+      const project = getCachedProjects().find((p) => p.id === this.currentProjectId);
       if (!project) {
         logError(`[retryFailedItem] Current project not found: ${this.currentProjectId}`);
         return;
@@ -991,6 +995,8 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
   }
 
   public onunload(): void {
+    this.projectRecordsUnsubscriber?.();
+    this.projectRecordsUnsubscriber = undefined;
     this.projectContextCache.cleanup();
   }
 }

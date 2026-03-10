@@ -17,11 +17,12 @@ import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
+import { ProjectRegister } from "@/projects/projectRegister";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo, logWarn } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
@@ -81,6 +82,7 @@ export default class CopilotPlugin extends Plugin {
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   systemPromptRegister: SystemPromptRegister;
+  projectRegister: ProjectRegister;
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
@@ -203,6 +205,13 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.systemPromptRegister = new SystemPromptRegister(this, this.app.vault);
+    this.projectRegister = new ProjectRegister(this.app.vault);
+
+    // Reason: initialize projects early (before onLayoutReady) so the cache is populated
+    // before UI code tries to read it. Async, non-blocking.
+    void this.projectRegister.initialize().catch((error) => {
+      logError("[Projects] ProjectRegister initialization failed", error);
+    });
 
     this.app.workspace.onLayoutReady(() => {
       // Initialize custom commands
@@ -239,6 +248,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister.cleanup();
     this.systemPromptRegister.cleanup();
+    this.projectRegister.cleanup();
     this.settingsUnsubscriber?.();
 
     // Cleanup selection handler

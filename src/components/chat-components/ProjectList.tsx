@@ -14,8 +14,9 @@ import {
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { cn } from "@/lib/utils";
-import { logError } from "@/logger";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { logError, logWarn } from "@/logger";
+import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { useSettingsValue } from "@/settings/model";
 import { RecentUsageManager, sortByStrategy } from "@/utils/recentUsageManager";
 import {
   ChevronDown,
@@ -166,8 +167,8 @@ export const ProjectList = memo(
     defaultOpen?: boolean;
     app: App;
     plugin?: any; // CopilotPlugin, optional for backwards compatibility
-    onProjectAdded: (project: ProjectConfig) => void;
-    onEditProject: (originP: ProjectConfig, updateP: ProjectConfig) => void;
+    onProjectAdded: (project: ProjectConfig) => Promise<void>;
+    onEditProject: (originP: ProjectConfig, updateP: ProjectConfig) => Promise<void>;
     hasMessages?: boolean;
     showChatUI: (v: boolean) => void;
     onClose: () => void;
@@ -179,6 +180,20 @@ export const ProjectList = memo(
     const [searchQuery, setSearchQuery] = useState("");
     const chatInput = useChatInput();
     const settings = useSettingsValue();
+
+    // Safety net: if the selected project disappears from the list (delete/move/duplicate-id),
+    // clear UI selection to avoid pointing to a non-existent project.
+    useEffect(() => {
+      if (!selectedProject) return;
+      const stillExists = projects.some((p) => p.id === selectedProject.id);
+      if (!stillExists) {
+        setSelectedProject(null);
+        setShowChatInput(false);
+        setIsOpen(true);
+        showChatUI(false);
+        setCurrentProject(null);
+      }
+    }, [projects, selectedProject, showChatUI]);
 
     // Get the project usage manager for subscription
     const projectUsageTimestampsManager =
@@ -229,7 +244,7 @@ export const ProjectList = memo(
 
     const handleAddProject = () => {
       const modal = new AddProjectModal(app, async (project: ProjectConfig) => {
-        onProjectAdded(project);
+        await onProjectAdded(project);
       });
       modal.open();
     };
@@ -238,8 +253,8 @@ export const ProjectList = memo(
       const modal = new AddProjectModal(
         app,
         async (updatedProject: ProjectConfig) => {
-          onEditProject(originP, updatedProject);
-          if (selectedProject && selectedProject.name === originP.name) {
+          await onEditProject(originP, updatedProject);
+          if (selectedProject && selectedProject.id === originP.id) {
             setSelectedProject(updatedProject);
           }
         },
@@ -248,18 +263,20 @@ export const ProjectList = memo(
       modal.open();
     };
 
-    const handleDeleteProject = (project: ProjectConfig) => {
-      const currentProjects = projects || [];
-      const newProjectList = currentProjects.filter((p) => p.name !== project.name);
-
-      // If the deleted project is currently selected, close it
-      if (selectedProject?.name === project.name) {
-        enableOrDisableProject(false);
+    const handleDeleteProject = async (project: ProjectConfig) => {
+      const manager = ProjectFileManager.getInstance(app.vault);
+      try {
+        await manager.deleteProject(project.id);
+        // Reason: only clear UI selection after delete succeeds to avoid stale state on failure
+        if (selectedProject?.id === project.id) {
+          enableOrDisableProject(false);
+        }
+        new Notice(`Project "${project.name}" deleted successfully`);
+      } catch (error) {
+        logError("[Projects] Failed to delete project", error);
+        const message = error instanceof Error ? error.message : String(error);
+        new Notice(`Failed to delete project: ${message}`);
       }
-
-      // Update the project list in settings
-      updateSetting("projectList", newProjectList);
-      new Notice(`Project "${project.name}" deleted successfully`);
     };
 
     const enableOrDisableProject = (enable: boolean, project?: ProjectConfig) => {
@@ -272,7 +289,7 @@ export const ProjectList = memo(
         return;
       } else {
         if (!project) {
-          logError("Must be exist one project.");
+          logWarn("[Projects] No project provided for context loading");
           return;
         }
         setSelectedProject(project);
@@ -302,9 +319,9 @@ export const ProjectList = memo(
                 <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
                   <span className="tw-font-semibold tw-text-normal">Projects</span>
                   <Select
-                    value={selectedProject.name}
+                    value={selectedProject.id}
                     onValueChange={(value) => {
-                      const project = sortedProjects.find((p) => p.name === value);
+                      const project = sortedProjects.find((p) => p.id === value);
                       if (project) {
                         handleLoadContext(project);
                       }
@@ -321,8 +338,8 @@ export const ProjectList = memo(
                     <SelectContent className="tw-truncate">
                       {sortedProjects.map((project) => (
                         <SelectItem
-                          key={project.name}
-                          value={project.name}
+                          key={project.id}
+                          value={project.id}
                           className="tw-flex tw-items-center tw-gap-2"
                         >
                           <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
@@ -428,7 +445,7 @@ export const ProjectList = memo(
                       <div className="tw-flex tw-flex-col tw-gap-2 @2xl:tw-grid @2xl:tw-grid-cols-2 @4xl:tw-grid-cols-3">
                         {filteredProjects.map((project) => (
                           <ProjectItem
-                            key={project.name}
+                            key={project.id}
                             project={project}
                             loadContext={handleLoadContext}
                             onEdit={handleEditProject}
