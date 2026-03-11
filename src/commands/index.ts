@@ -29,7 +29,7 @@ import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { COMMAND_IDS, COMMAND_NAMES, CommandId } from "../constants";
+import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "../constants";
 import { setSelectedTextContexts } from "@/aiParams";
 
 /**
@@ -39,6 +39,7 @@ export function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () =>
   plugin.addCommand({
     id,
     name: COMMAND_NAMES[id],
+    icon: COMMAND_ICONS[id],
     callback,
   });
 }
@@ -54,6 +55,7 @@ function addEditorCommand(
   plugin.addCommand({
     id,
     name: COMMAND_NAMES[id],
+    icon: COMMAND_ICONS[id],
     editorCallback: callback,
   });
 }
@@ -69,6 +71,7 @@ export function addCheckCommand(
   plugin.addCommand({
     id,
     name: COMMAND_NAMES[id],
+    icon: COMMAND_ICONS[id],
     checkCallback: callback,
   });
 }

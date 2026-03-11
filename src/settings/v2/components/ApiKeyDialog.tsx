@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { PasswordInput } from "@/components/ui/password-input";
 import { ProviderSettingsKeyMap, SettingKeyProviders } from "@/constants";
-import { updateSetting } from "@/settings/model";
+import { updateSetting, useSettingsValue } from "@/settings/model";
 import { GitHubCopilotAuth } from "@/settings/v2/components/GitHubCopilotAuth";
 import { LocalServicesSection } from "@/settings/v2/components/LocalServicesSection";
 import { ModelImporter } from "@/settings/v2/components/ModelImporter";
@@ -24,6 +24,8 @@ interface ProviderKeyItem {
 }
 
 function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps) {
+  // Subscribe to settings changes so the component re-renders when API keys are updated
+  useSettingsValue();
   const [expandedProvider, setExpandedProvider] = useState<SettingKeyProviders | null>(null);
 
   useEffect(() => {

@@ -7,8 +7,9 @@ import { logError, logWarn } from "@/logger";
 import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
 import type { EditorView } from "@codemirror/view";
 import { PenLine } from "lucide-react";
-import { App, Notice, MarkdownView } from "obsidian";
+import { App, Component, MarkdownRenderer, Notice, MarkdownView } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { createRoot, Root } from "react-dom/client";
 import { CustomCommand } from "@/commands/type";
 import { useSettingsValue, updateSetting } from "@/settings/model";
@@ -116,6 +117,37 @@ function CustomCommandChatModalContent({
     return () => {
       isMountedRef.current = false;
     };
+  }, []);
+
+  // Reason: Create Component synchronously so renderMarkdown is available
+  // on the first render (child effects run before parent effects).
+  const obsidianComponentRef = useRef<Component | null>(null);
+  if (!obsidianComponentRef.current) {
+    const comp = new Component();
+    comp.load();
+    obsidianComponentRef.current = comp;
+  }
+  useEffect(() => {
+    return () => {
+      obsidianComponentRef.current?.unload();
+      obsidianComponentRef.current = null;
+    };
+  }, []);
+
+  // Reason: Snapshot file path at mount time for stable Markdown link resolution.
+  // Using dynamic getActiveFile() would resolve links against whichever note
+  // the user switches to after opening the modal.
+  const filePathSnapshotRef = useRef(app.workspace.getActiveFile()?.path ?? "");
+
+  /**
+   * Renders markdown content into a DOM element using Obsidian's MarkdownRenderer.
+   * Passed to ContentArea to enable preview mode for completed results.
+   */
+  const renderMarkdown = useCallback(async (content: string, el: HTMLElement) => {
+    const comp = obsidianComponentRef.current;
+    if (!comp) return;
+    const preprocessed = preprocessAIResponse(content);
+    await MarkdownRenderer.renderMarkdown(preprocessed, el, filePathSnapshotRef.current, comp);
   }, []);
 
   // State
@@ -378,6 +410,18 @@ function CustomCommandChatModalContent({
     lastInputPromptRef.current = "";
   }, [stopStreaming, getLatestStreamingText]);
 
+  const handleCopy = useCallback(async () => {
+    const text = editedText || finalText || streamingText;
+    if (!text) return;
+    const cleaned = cleanMessageForCopy(text);
+    try {
+      await navigator.clipboard.writeText(cleaned);
+      new Notice("Copied to clipboard");
+    } catch {
+      new Notice("Failed to copy to clipboard");
+    }
+  }, [editedText, finalText, streamingText]);
+
   const handleInsert = () => {
     const text = editedText || finalText || streamingText;
     if (text) onInsert(text);
@@ -394,7 +438,6 @@ function CustomCommandChatModalContent({
       onClose={onClose}
       commandIcon={behavior.commandIcon}
       commandLabel={behavior.commandLabel}
-      selectedText={originalText}
       contentState={contentState}
       editableContent={editedText}
       onEditableContentChange={setEditedText}
@@ -404,6 +447,7 @@ function CustomCommandChatModalContent({
       selectedModel={selectedModelKey}
       onSelectModel={handleModelChange}
       onStop={handleStop}
+      onCopy={handleCopy}
       onInsert={handleInsert}
       onReplace={handleReplace}
       initialPosition={initialPosition}
@@ -413,6 +457,7 @@ function CustomCommandChatModalContent({
       onIncludeNoteContextChange={
         behavior.showIncludeNoteContext ? handleIncludeNoteContextChange : undefined
       }
+      renderMarkdown={renderMarkdown}
     />
   );
 }

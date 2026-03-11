@@ -34,6 +34,7 @@ import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReaso
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
+import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
@@ -248,30 +249,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const activeFile = app.workspace.getActiveFile();
       const sourcePath = activeFile ? activeFile.path : "";
 
-      /**
-       * Escapes dataview code blocks to prevent execution in AI responses.
-       * Converts ```dataview to ```text and ```dataviewjs to ```javascript
-       * so they display as static code examples instead of executing queries.
-       */
-      const escapeDataviewCodeBlocks = (text: string): string => {
-        // Replace ```dataview (with optional whitespace before newline/end)
-        text = text.replace(/```dataview(\s*(?:\n|$))/g, "```text$1");
-        // Replace ```dataviewjs (with optional whitespace before newline/end)
-        text = text.replace(/```dataviewjs(\s*(?:\n|$))/g, "```javascript$1");
-        return text;
-      };
-
-      /**
-       * Escapes tasks code blocks to prevent execution in AI responses.
-       * Converts ```tasks to ```text so they display as static code examples
-       * instead of executing task queries.
-       */
-      const escapeTasksCodeBlocks = (text: string): string => {
-        // Replace ```tasks (with optional whitespace before newline/end)
-        text = text.replace(/```tasks(\s*(?:\n|$))/g, "```text$1");
-        return text;
-      };
-
       const processCollapsibleSection = (
         content: string,
         tagName: string,
@@ -394,22 +371,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           .join("");
       };
 
-      // Escape dataview code blocks first to prevent execution
-      const dataviewEscaped = escapeDataviewCodeBlocks(content);
-
-      // Escape tasks code blocks to prevent execution
-      const tasksEscaped = escapeTasksCodeBlocks(dataviewEscaped);
-
-      // Process LaTeX
-      const latexProcessed = tasksEscaped
-        .replace(/\\\[\s*/g, "$$")
-        .replace(/\s*\\\]/g, "$$")
-        .replace(/\\\(\s*/g, "$")
-        .replace(/\s*\\\)/g, "$");
+      // Common AI response preprocessing (LaTeX, dataview/tasks escaping)
+      const commonProcessed = preprocessAIResponse(content);
 
       // Process only Obsidian internal images (starting with ![[)
       const noteImageProcessed = replaceLinks(
-        latexProcessed,
+        commonProcessed,
         /!\[\[(.*?)]]/g,
         (file) => `![](${app.vault.getResourcePath(file)})`
       );

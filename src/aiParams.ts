@@ -150,6 +150,9 @@ export interface CustomModel {
   topP?: number;
   frequencyPenalty?: number;
 
+  // Ollama specific fields
+  numCtx?: number;
+
   projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;

@@ -1205,6 +1205,16 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
   outline: none !important;
 }
 
+/* Reason: The overlay is mounted inside CM6 editor DOM, which has its own
+   selection handling that prevents normal text selection in child elements.
+   Only target message text containers (marked with data-quick-ask-selectable)
+   to avoid overriding user-select on buttons and other interactive controls. */
+.copilot-quick-ask-overlay [data-quick-ask-selectable],
+.copilot-quick-ask-overlay [data-quick-ask-selectable] * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
 .copilot-quick-ask-overlay-root {
   position: absolute;
   top: 0;

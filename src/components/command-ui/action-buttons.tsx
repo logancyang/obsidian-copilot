@@ -8,6 +8,7 @@ type ActionState = "idle" | "loading" | "result";
 interface ActionButtonsProps {
   state: ActionState;
   onStop?: () => void;
+  onCopy?: () => void;
   onInsert?: () => void;
   onReplace?: () => void;
   onSubmit?: () => void;
@@ -24,6 +25,7 @@ interface ActionButtonsProps {
 export function ActionButtons({
   state,
   onStop,
+  onCopy,
   onInsert,
   onReplace,
   onSubmit,
@@ -41,9 +43,19 @@ export function ActionButtons({
         </Button>
       )}
 
-      {/* Insert/Replace buttons on result */}
+      {/* Copy/Insert/Replace buttons on result */}
       {state === "result" && showInsertReplace && (
         <>
+          {onCopy && (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onCopy}
+              title="Copy to clipboard"
+            >
+              Copy
+            </Button>
+          )}
           <Button
             size="sm"
             variant="secondary"
