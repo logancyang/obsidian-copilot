@@ -71,9 +71,14 @@ export class QuickAskOverlay {
   // Reason: Track whether the user has intentionally resized the height
   // (vs width-only resize which shouldn't remove the chat area max-height).
   private hasUserResizedHeight = false;
-  // Anchor position
-  private pos: number | null = null;
-  private fallbackPos: number | null = null;
+  // Anchor positions (dual-anchor model for flip logic)
+  private bottomAnchorPos: number | null = null;
+  private topAnchorPos: number | null = null;
+  /** Focus anchor — selection.head for horizontal placement in reverse selections */
+  private focusAnchorPos: number | null = null;
+  // Reason: Side lock prevents flipping between above/below during streaming output.
+  // Only reset on scroll, resize, or anchor visibility changes — not on content height changes.
+  private placementSide: "below" | "above" | null = null;
 
   // Resize interaction state
   private isResizing = false;
@@ -89,12 +94,14 @@ export class QuickAskOverlay {
 
   /**
    * Mounts the overlay at the specified anchor positions.
-   * @param pos - Primary anchor position (typically selection head)
-   * @param fallbackPos - Fallback anchor position (typically selection anchor)
+   * @param bottomAnchorPos - Bottom anchor (normalized selection.to) for "place below"
+   * @param topAnchorPos - Top anchor (selection.from) for "place above" flip target
    */
-  mount(pos: number, fallbackPos?: number | null): void {
-    this.pos = pos;
-    this.fallbackPos = typeof fallbackPos === "number" ? fallbackPos : null;
+  mount(bottomAnchorPos: number, topAnchorPos?: number | null, focusAnchorPos?: number | null): void {
+    this.bottomAnchorPos = bottomAnchorPos;
+    this.topAnchorPos = typeof topAnchorPos === "number" ? topAnchorPos : null;
+    this.focusAnchorPos = typeof focusAnchorPos === "number" ? focusAnchorPos : null;
+    this.placementSide = null;
     QuickAskOverlay.currentInstance = this;
     this.mountOverlay();
     this.setupGlobalListeners();
@@ -161,24 +168,39 @@ export class QuickAskOverlay {
       QuickAskOverlay.overlayRoot = null;
       host?.classList.remove("copilot-quick-ask-overlay-host");
     }
-    this.pos = null;
-    this.fallbackPos = null;
+    this.bottomAnchorPos = null;
+    this.topAnchorPos = null;
+    this.focusAnchorPos = null;
+    this.placementSide = null;
     this.ownerDocument = null;
     this.ownerWindow = null;
   }
 
   /**
-   * Updates the anchor position.
+   * Updates the anchor positions and recalculates panel placement.
+   * Called by quickAskExtension on document changes (positions remapped via mapPos).
    */
-  updatePosition(pos?: number, fallbackPos?: number | null): void {
-    if (typeof pos === "number") {
-      this.pos = pos;
+  updatePosition(
+    bottomAnchorPos?: number,
+    topAnchorPos?: number | null,
+    focusAnchorPos?: number | null
+  ): void {
+    if (typeof bottomAnchorPos === "number") {
+      this.bottomAnchorPos = bottomAnchorPos;
     }
-    if (typeof fallbackPos === "number") {
-      this.fallbackPos = fallbackPos;
-    } else if (fallbackPos === null) {
-      this.fallbackPos = null;
+    if (typeof topAnchorPos === "number") {
+      this.topAnchorPos = topAnchorPos;
+    } else if (topAnchorPos === null) {
+      this.topAnchorPos = null;
     }
+    if (typeof focusAnchorPos === "number") {
+      this.focusAnchorPos = focusAnchorPos;
+    } else if (focusAnchorPos === null) {
+      this.focusAnchorPos = null;
+    }
+    // Reason: Doc changes may shift anchor visibility, so reset side lock
+    // to allow re-evaluation of above/below placement.
+    this.placementSide = null;
     this.schedulePositionUpdate();
   }
 
@@ -317,12 +339,20 @@ export class QuickAskOverlay {
     this.root = createRoot(overlayContainer);
     this.renderPanel();
 
-    // Setup scroll listeners
-    const handleScroll = () => this.schedulePositionUpdate();
+    // Reason: Reset side lock on scroll/resize so placement is re-evaluated
+    // when anchor visibility may have changed. Without this, the panel could
+    // stay locked to "above" even after scrolling makes "below" viable.
+    const handleScroll = () => {
+      this.placementSide = null;
+      this.schedulePositionUpdate();
+    };
     win.addEventListener("scroll", handleScroll, true);
     this.cleanupCallbacks.push(() => win.removeEventListener("scroll", handleScroll, true));
 
-    const handleResize = () => this.schedulePositionUpdate();
+    const handleResize = () => {
+      this.placementSide = null;
+      this.schedulePositionUpdate();
+    };
     win.addEventListener("resize", handleResize);
     this.cleanupCallbacks.push(() => win.removeEventListener("resize", handleResize));
 
@@ -337,7 +367,10 @@ export class QuickAskOverlay {
     // overlayContainer — its height changes during AI streaming would trigger
     // position recalculation and cause the panel to jump up/down.
     if (typeof ResizeObserver !== "undefined") {
-      this.resizeObserver = new ResizeObserver(() => this.schedulePositionUpdate());
+      this.resizeObserver = new ResizeObserver(() => {
+        this.placementSide = null;
+        this.schedulePositionUpdate();
+      });
       if (scrollDom) this.resizeObserver.observe(scrollDom);
     }
   }
@@ -388,28 +421,106 @@ export class QuickAskOverlay {
   }
 
   /**
-   * Try selection head first, then anchor - use whichever is visible.
-   * If neither is visible, return null so the caller can fall back to centering.
+   * Resolves visibility of both anchor positions independently.
+   * Returns separate rects for bottom and top anchors so the caller can
+   * decide placement based on available space at each end of the selection.
    */
-  private resolveVisibleAnchorRect(
+  private resolveVisibleAnchors(
     hostRect: DOMRect,
     scrollRect: DOMRect | undefined
-  ): AnchorRect | null {
+  ): { bottomRect: AnchorRect | null; topRect: AnchorRect | null; focusRect: AnchorRect | null } {
     const visibleRect = scrollRect ?? hostRect;
-    const positionsToTry: Array<number | null> = [this.pos, this.fallbackPos];
 
-    for (const pos of positionsToTry) {
-      if (typeof pos !== "number") continue;
+    const getVisibleRect = (pos: number | null): AnchorRect | null => {
+      if (typeof pos !== "number") return null;
       const coords = this.options.view.coordsAtPos(pos) as AnchorRect | null;
-      if (!coords) continue;
-      if (this.isAnchorRectVisible(coords, visibleRect)) return coords;
+      if (!coords) return null;
+      return this.isAnchorRectVisible(coords, visibleRect) ? coords : null;
+    };
+
+    return {
+      bottomRect: getVisibleRect(this.bottomAnchorPos),
+      topRect: getVisibleRect(this.topAnchorPos),
+      focusRect: getVisibleRect(this.focusAnchorPos),
+    };
+  }
+
+  /**
+   * Determines vertical placement (below or above) using dual-anchor flip logic.
+   * Implements side lock to prevent flipping during streaming output.
+   */
+  private computeVerticalPlacement(
+    bottomRect: AnchorRect | null,
+    topRect: AnchorRect | null,
+    hostRect: DOMRect,
+    visibleTop: number,
+    visibleBottom: number,
+    visibleHeight: number,
+    heightForClamp: number,
+    minTop: number
+  ): number {
+    let top: number;
+
+    // Reason: Side lock — if a previous placement was chosen and the relevant anchor
+    // is still visible, reuse that side. This prevents flipping during streaming output
+    // when the panel grows taller. The lock is reset on scroll, resize, or doc changes.
+    if (this.placementSide === "below" && bottomRect) {
+      top = bottomRect.bottom - hostRect.top + PANEL_OFFSET_Y;
+    } else if (this.placementSide === "above" && topRect) {
+      top = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
+    } else if (bottomRect) {
+      const belowY = bottomRect.bottom - hostRect.top + PANEL_OFFSET_Y;
+      const spaceBelow = visibleBottom - (bottomRect.bottom - hostRect.top) - PANEL_OFFSET_Y;
+
+      if (spaceBelow >= heightForClamp + PANEL_MARGIN) {
+        top = belowY;
+        this.placementSide = "below";
+      } else if (topRect) {
+        const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
+        const spaceAbove = (topRect.top - hostRect.top) - PANEL_OFFSET_Y - visibleTop;
+
+        if (spaceAbove >= heightForClamp + PANEL_MARGIN) {
+          top = aboveY;
+          this.placementSide = "above";
+        } else {
+          // Neither side has enough space: center in visible area
+          // Reason: Consistent with other fallback branches and Quick Command behavior.
+          top = visibleTop + (visibleHeight - heightForClamp) / 2;
+          this.placementSide = null;
+        }
+      } else {
+        // Only bottom visible, not enough space below: center in visible area
+        // Reason: Flipping above would place panel inside the invisible selection.
+        top = visibleTop + (visibleHeight - heightForClamp) / 2;
+        this.placementSide = null;
+      }
+    } else if (topRect) {
+      // Bottom anchor not visible (selection extends below viewport): place above topRect
+      const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
+      const spaceAbove = (topRect.top - hostRect.top) - PANEL_OFFSET_Y - visibleTop;
+
+      if (spaceAbove >= heightForClamp + PANEL_MARGIN) {
+        top = aboveY;
+        this.placementSide = "above";
+      } else {
+        // Not enough space above either: center in visible area
+        top = visibleTop + (visibleHeight - heightForClamp) / 2;
+        this.placementSide = null;
+      }
+    } else {
+      // Neither anchor visible: center in viewport
+      top = visibleTop + (visibleHeight - heightForClamp) / 2;
+      this.placementSide = null;
     }
 
-    return null;
+    // Clamp top to keep panel within visible viewport
+    const maxTop = visibleBottom - PANEL_MARGIN - heightForClamp;
+    const effectiveMaxTop = Math.max(minTop, maxTop);
+    return Math.max(minTop, Math.min(top, effectiveMaxTop));
   }
 
   private updateOverlayPosition(): void {
-    if (!this.overlayContainer || this.pos === null) return;
+    if (!this.overlayContainer || this.bottomAnchorPos === null) return;
 
     // If panel has been dragged, use drag position
     if (this.dragPosition) {
@@ -427,8 +538,8 @@ export class QuickAskOverlay {
     const sizer = scrollDom?.querySelector(".cm-sizer");
     const sizerRect = sizer?.getBoundingClientRect();
 
-    // Try to find a visible anchor position (head first, then anchor)
-    const anchorRect = this.resolveVisibleAnchorRect(hostRect, scrollRect);
+    // Resolve both anchor rects independently
+    const { bottomRect, topRect, focusRect } = this.resolveVisibleAnchors(hostRect, scrollRect);
 
     // Calculate panel dimensions using constants
     const defaultWidth = Math.min(
@@ -449,10 +560,38 @@ export class QuickAskOverlay {
       sizerRect?.width ?? scrollRect?.width ?? viewportWidth - PANEL_MARGIN * 2;
     const contentRight = contentLeft + editorContentWidth;
 
-    // Calculate left position: anchor to selection if visible, otherwise center
-    let left = anchorRect
-      ? anchorRect.left - hostRect.left
-      : contentLeft + (editorContentWidth - panelWidth) / 2;
+    // --- Visual multi-line detection ---
+    // Reason: Multiline selections center on the editor to avoid edge-snapping on
+    // reverse selections and soft-wrapped content, matching CustomCommandChatModal behavior.
+    const isCursor =
+      this.topAnchorPos !== null &&
+      this.bottomAnchorPos !== null &&
+      this.topAnchorPos === this.bottomAnchorPos;
+    const topCoords =
+      typeof this.topAnchorPos === "number"
+        ? this.options.view.coordsAtPos(this.topAnchorPos)
+        : null;
+    const bottomCoords =
+      typeof this.bottomAnchorPos === "number"
+        ? this.options.view.coordsAtPos(this.bottomAnchorPos)
+        : null;
+    const caretHeight = Math.min(
+      (topCoords?.bottom ?? 0) - (topCoords?.top ?? 0),
+      (bottomCoords?.bottom ?? 0) - (bottomCoords?.top ?? 0)
+    );
+    const isVisualMultiLine =
+      !isCursor &&
+      !!topCoords &&
+      !!bottomCoords &&
+      Math.abs(topCoords.top - bottomCoords.top) > Math.max(caretHeight / 2, 2);
+
+    // Horizontal placement: center multiline on editor, otherwise anchor at focus end
+    const horizontalAnchor = focusRect ?? bottomRect ?? topRect;
+    let left = isVisualMultiLine
+      ? contentLeft + (editorContentWidth - panelWidth) / 2
+      : horizontalAnchor
+        ? horizontalAnchor.left - hostRect.left
+        : contentLeft + (editorContentWidth - panelWidth) / 2;
     left = Math.min(left, contentRight - panelWidth);
     left = Math.max(left, contentLeft);
     left = Math.min(left, viewportWidth - PANEL_MARGIN - panelWidth);
@@ -464,7 +603,7 @@ export class QuickAskOverlay {
     const visibleHeight = visibleBottom - visibleTop;
     const minTop = visibleTop + PANEL_MARGIN;
 
-    // First pass: apply width/left so we can measure actual height for centering
+    // First pass: apply width/left so we can measure actual height
     updateDynamicStyleClass(this.overlayContainer, "copilot-quick-ask-overlay-pos", {
       width: panelWidth,
       ...(typeof panelHeight === "number" ? { height: panelHeight } : {}),
@@ -472,22 +611,23 @@ export class QuickAskOverlay {
       top: Math.round(minTop), // Temporary top for measurement
     });
 
-    // Measure height for centering and clamping
+    // Measure height for placement decision and clamping
     const heightForClamp =
       typeof panelHeight === "number"
         ? panelHeight
         : this.overlayContainer.getBoundingClientRect().height || PANEL_MIN_HEIGHT;
 
-    // Calculate top position: anchor below selection if visible, otherwise center in viewport
-    let top = anchorRect
-      ? anchorRect.bottom - hostRect.top + PANEL_OFFSET_Y
-      : visibleTop + (visibleHeight - heightForClamp) / 2; // True center
-    top = Math.max(top, minTop);
-
-    // Clamp top to keep panel within viewport
-    const maxTop = visibleBottom - PANEL_MARGIN - heightForClamp;
-    const effectiveMaxTop = Math.max(minTop, maxTop);
-    const clampedTop = Math.max(minTop, Math.min(top, effectiveMaxTop));
+    // Calculate vertical position with dual-anchor flip logic
+    const clampedTop = this.computeVerticalPlacement(
+      bottomRect,
+      topRect,
+      hostRect,
+      visibleTop,
+      visibleBottom,
+      visibleHeight,
+      heightForClamp,
+      minTop
+    );
 
     // Final pass: apply the correct top position
     updateDynamicStyleClass(this.overlayContainer, "copilot-quick-ask-overlay-pos", {

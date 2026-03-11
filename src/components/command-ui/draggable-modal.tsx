@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useDraggable } from "@/hooks/use-draggable";
 import { useRafResizable } from "@/hooks/use-resizable";
@@ -31,6 +31,13 @@ interface DraggableModalProps {
    * while avoiding the "one Escape closes all open modals" issue when multiple DraggableModals are open.
    */
   closeOnEscapeFromOutside?: boolean;
+  /**
+   * Bottom-anchor Y coordinate for "above" placement.
+   * When set (and user hasn't manually repositioned), position.y is kept at
+   * anchorBottom - height so the panel grows upward as content loads.
+   * Cleared automatically on user drag or resize.
+   */
+  anchorBottom?: number;
 }
 
 /**
@@ -47,8 +54,9 @@ export function DraggableModal({
   resizable = false,
   minHeight = 260,
   closeOnEscapeFromOutside = false,
+  anchorBottom,
 }: DraggableModalProps) {
-  const { position, setPosition, dragRef, handleMouseDown, isDragging } = useDraggable({
+  const { position, setPosition, dragRef, handleMouseDown: rawHandleMouseDown, isDragging } = useDraggable({
     initialPosition: initialPosition || {
       x: typeof window !== "undefined" ? (window.innerWidth - 500) / 2 : 100,
       y: typeof window !== "undefined" ? (window.innerHeight - 400) / 2 : 100,
@@ -56,6 +64,68 @@ export function DraggableModal({
     // Allow dragging outside window bounds (like Quick Ask)
     bounds: null,
   });
+
+  // Reason: Track whether the user has manually repositioned (drag or resize).
+  // Once manual, anchorBottom is ignored and the panel uses free positioning.
+  const isManualPositionRef = useRef(false);
+  const pendingDragCleanupRef = useRef<(() => void) | null>(null);
+
+  // Reason: Only flip isManualPositionRef after actual pointer movement (>2px),
+  // so a click on the drag handle (without dragging) preserves anchorBottom behavior.
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      const ownerDoc = e.currentTarget.ownerDocument;
+      const startX = e.clientX;
+      const startY = e.clientY;
+
+      pendingDragCleanupRef.current?.();
+
+      const cleanup = () => {
+        ownerDoc.removeEventListener("mousemove", onMove, true);
+        ownerDoc.removeEventListener("mouseup", onUp, true);
+        if (pendingDragCleanupRef.current === cleanup) {
+          pendingDragCleanupRef.current = null;
+        }
+      };
+
+      const onMove = (ev: MouseEvent) => {
+        if (Math.abs(ev.clientX - startX) < 2 && Math.abs(ev.clientY - startY) < 2) return;
+        isManualPositionRef.current = true;
+        cleanup();
+      };
+
+      const onUp = () => cleanup();
+
+      ownerDoc.addEventListener("mousemove", onMove, true);
+      ownerDoc.addEventListener("mouseup", onUp, true);
+      pendingDragCleanupRef.current = cleanup;
+
+      rawHandleMouseDown(e);
+    },
+    [rawHandleMouseDown]
+  );
+
+  // Reason: Reset transient state when the modal reopens so that stale
+  // drag/resize/anchor state from a previous session does not leak.
+  useEffect(() => {
+    if (!open) return;
+    pendingDragCleanupRef.current?.();
+    pendingDragCleanupRef.current = null;
+    isManualPositionRef.current = false;
+    setHeightPx(null);
+    setWidthPx(null);
+    if (initialPosition) {
+      setPosition(initialPosition);
+    }
+  }, [open]); // eslint-disable-line react-hooks/exhaustive-deps -- intentionally only on open transitions
+
+  // Clean up pending drag listeners on unmount
+  useEffect(() => {
+    return () => {
+      pendingDragCleanupRef.current?.();
+      pendingDragCleanupRef.current = null;
+    };
+  }, []);
 
   // Resize state (height and width)
   const [heightPx, setHeightPx] = useState<number | null>(null);
@@ -88,6 +158,39 @@ export function DraggableModal({
     }
   }, [resizable, minHeight, heightPx]);
 
+  // Reason: For "above" placement, keep the panel's bottom edge anchored.
+  // When height increases (e.g., ContentArea appears), shift position.y up so the
+  // panel grows upward instead of downward into the selection.
+  // Uses useLayoutEffect to apply before paint, preventing visual flash.
+  useLayoutEffect(() => {
+    if (anchorBottom === undefined || isManualPositionRef.current) return;
+    if (heightPx === null) return;
+
+    const newY = Math.max(12, anchorBottom - heightPx);
+    // Guard: only update if position actually changed (avoid infinite re-render)
+    if (Math.abs(position.y - newY) < 1) return;
+
+    setPosition({ x: position.x, y: newY });
+  }, [anchorBottom, heightPx, position.x, position.y, setPosition]);
+
+  // Reason: Generic overflow correction for non-anchored panels.
+  // If content/minHeight growth pushes the modal below the viewport edge,
+  // shift it upward to keep the full panel visible. This handles cases like
+  // Quick Command starting compact (180px) then expanding (400px) near the
+  // bottom of the editor, without requiring the caller to anticipate future
+  // height changes.
+  useLayoutEffect(() => {
+    if (anchorBottom !== undefined || isManualPositionRef.current) return;
+    if (heightPx === null) return;
+
+    const ownerWindow = dragRef.current?.ownerDocument?.defaultView ?? window;
+    const maxY = ownerWindow.innerHeight - 12 - heightPx;
+    const newY = Math.max(12, Math.min(position.y, maxY));
+    if (Math.abs(position.y - newY) < 1) return;
+
+    setPosition({ x: position.x, y: newY });
+  }, [anchorBottom, heightPx, position.x, position.y, setPosition, dragRef]);
+
   const getResizeRect = useCallback(() => {
     return dragRef.current?.getBoundingClientRect() ?? null;
   }, [dragRef]);
@@ -102,6 +205,8 @@ export function DraggableModal({
 
   const applyResize = useCallback(
     (next: { width: number; height: number; x?: number }) => {
+      // Reason: User-initiated resize overrides bottom-anchor behavior
+      isManualPositionRef.current = true;
       setHeightPx((prev) => (prev === next.height ? prev : next.height));
       setWidthPx((prev) => (prev === next.width ? prev : next.width));
       if (typeof next.x === "number") {
