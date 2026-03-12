@@ -58,7 +58,7 @@ import { deduplicateSources } from "./utils/toolExecution";
 import { recordPromptPayload } from "./utils/promptPayloadRecorder";
 import { unescapeXml } from "./utils/xmlParsing";
 import { StructuredTool } from "@langchain/core/tools";
-import { AIMessage } from "@langchain/core/messages";
+import { AIMessage, AIMessageChunk } from "@langchain/core/messages";
 import ProjectManager from "@/LLMProviders/projectManager";
 import { isProjectMode } from "@/aiParams";
 
@@ -149,10 +149,28 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     logInfo("[CopilotPlus] Requesting tool planning with native tool calling...");
 
-    // Get model response for planning (cast to AIMessage for type safety)
-    const response = (await withSuppressedTokenWarnings(() =>
-      boundModel.invoke(planningMessages)
-    )) as AIMessage;
+    // Use stream() instead of invoke() to avoid LangChain's _generate() path,
+    // which calls _getEstimatedTokenCountFromPrompt -> getNumTokens -> tiktoken
+    // CDN fetch. stream() uses _streamResponseChunks() directly, bypassing the
+    // token estimation entirely. Actual token usage comes from API response metadata.
+    let response: AIMessage;
+    {
+      const stream = (await withSuppressedTokenWarnings(() =>
+        boundModel.stream(planningMessages)
+      )) as AsyncIterable<AIMessageChunk>;
+      let aggregated: AIMessageChunk | undefined;
+      for await (const chunk of stream) {
+        aggregated = aggregated ? aggregated.concat(chunk) : chunk;
+      }
+      if (!aggregated) {
+        throw new Error("[CopilotPlus] Received empty response from planning model");
+      }
+      response = new AIMessage({
+        content: aggregated.content,
+        tool_calls: aggregated.tool_calls,
+        additional_kwargs: aggregated.additional_kwargs,
+      });
+    }
 
     // Extract tool calls from native response
     const nativeToolCalls = response.tool_calls || [];
