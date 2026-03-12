@@ -52,6 +52,8 @@ export class ChatOpenRouter extends ChatOpenAI {
   private enableReasoning: boolean;
   private reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
   private openaiClient: OpenAI;
+  /** True when the configured baseURL belongs to the OpenRouter gateway. */
+  private isOpenRouter: boolean;
 
   constructor(fields: ChatOpenRouterInput) {
     const { enableReasoning = false, reasoningEffort, ...rest } = fields;
@@ -62,10 +64,13 @@ export class ChatOpenRouter extends ChatOpenAI {
     this.enableReasoning = enableReasoning;
     this.reasoningEffort = reasoningEffort;
 
+    const baseURL = fields.configuration?.baseURL || "https://openrouter.ai/api/v1";
+    this.isOpenRouter = baseURL.includes("openrouter.ai");
+
     // Create our own OpenAI client for raw access
     this.openaiClient = new OpenAI({
       apiKey: fields.apiKey,
-      baseURL: fields.configuration?.baseURL || "https://openrouter.ai/api/v1",
+      baseURL,
       defaultHeaders: fields.configuration?.defaultHeaders,
       fetch: fields.configuration?.fetch,
       dangerouslyAllowBrowser: true,
@@ -76,21 +81,20 @@ export class ChatOpenRouter extends ChatOpenAI {
    * Override the invocation parameters to include prompt caching and reasoning when enabled.
    *
    * Prompt caching: The `cache_control` field opts Anthropic models (via OpenRouter) into
-   * automatic cache breakpoint detection, reducing token costs on repeated context. Other
-   * providers (OpenAI, DeepSeek, Gemini, Grok, Groq) auto-cache without this field or
-   * safely ignore it, so it is always included.
+   * automatic cache breakpoint detection, reducing token costs on repeated context. This
+   * field is only sent when connected to the OpenRouter gateway; other backends (LM Studio,
+   * Copilot Plus) use the same class but must not receive OpenRouter-specific fields.
    *
    * @see https://openrouter.ai/docs/features/prompt-caching
    */
   override invocationParams(options?: this["ParsedCallOptions"]): any {
     const baseParams = super.invocationParams(options);
 
-    // Always enable prompt caching. Anthropic models via OpenRouter require explicit opt-in;
-    // other providers auto-cache or ignore this field harmlessly.
-    const withCaching = {
-      ...baseParams,
-      cache_control: { type: "ephemeral" },
-    };
+    // Only inject cache_control for OpenRouter endpoints. LM Studio, Copilot Plus, and
+    // other OpenAI-compatible backends share this class but reject unknown top-level fields.
+    const withCaching = this.isOpenRouter
+      ? { ...baseParams, cache_control: { type: "ephemeral" } }
+      : baseParams;
 
     // Add reasoning parameter if enabled
     if (this.enableReasoning) {
