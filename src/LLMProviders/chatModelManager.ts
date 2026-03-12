@@ -765,20 +765,54 @@ export default class ChatModelManager {
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
 
-    // Override getNumTokens to avoid tiktoken's remote fetch of gpt2.json from
-    // tiktoken.pages.dev. LangChain's default implementation tries to download
+    // Override token-counting methods to avoid tiktoken's remote fetch of gpt2.json
+    // from tiktoken.pages.dev. LangChain's default implementation tries to download
     // a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls when the
-    // CDN is unreachable. Use a simple char-based estimation instead — modern LLM
-    // APIs return accurate token usage in response metadata anyway.
-    newModelInstance.getNumTokens = async (
-      content: string | Array<{ type: string; text?: string }>
-    ) => {
+    // CDN is unreachable (6 retries with exponential backoff = minutes of hanging).
+    // Use simple char-based estimation instead -- modern LLM APIs return accurate
+    // token usage in response metadata anyway.
+    //
+    // Defense-in-depth: override at multiple levels to ensure no code path can
+    // trigger the CDN fetch. The OpenAI completions model's _generate() calls
+    // _getEstimatedTokenCountFromPrompt -> getNumTokensFromMessages -> getNumTokens
+    // when streaming is enabled. Overriding only getNumTokens is insufficient in
+    // some production bundle configurations, so we also override the higher-level
+    // methods.
+    const estimateTokens = (content: string | Array<{ type: string; text?: string }>) => {
       const text =
         typeof content === "string"
           ? content
-          : content.map((item) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
+          : content
+              .map((item) => (typeof item === "string" ? item : (item.text ?? "")))
+              .join("");
       return Math.ceil(text.length / 4);
     };
+
+    newModelInstance.getNumTokens = async (
+      content: string | Array<{ type: string; text?: string }>
+    ) => estimateTokens(content);
+
+    // Override getNumTokensFromMessages to prevent it from calling the base
+    // getNumTokens (which may resolve to the prototype's tiktoken-fetching version
+    // in some bundled builds).
+    (newModelInstance as any).getNumTokensFromMessages = async (messages: any[]) => {
+      let totalCount = 0;
+      const tokensPerMessage = 3;
+      const countPerMessage = messages.map((message: any) => {
+        const content = message?.content ?? message?.text ?? "";
+        const count = estimateTokens(content) + tokensPerMessage;
+        totalCount += count;
+        return count;
+      });
+      totalCount += 3; // Every reply is primed with <|start|>assistant<|message|>
+      return { totalCount, countPerMessage };
+    };
+
+    // Override _getEstimatedTokenCountFromPrompt -- the top-level method called by
+    // OpenAI's _generate() after streaming. This is the final safety net: even if
+    // the lower-level overrides are bypassed, this returns 0 so the chain never
+    // blocks on a CDN fetch. The actual token usage comes from the API response.
+    (newModelInstance as any)._getEstimatedTokenCountFromPrompt = async () => 0;
 
     return newModelInstance;
   }
