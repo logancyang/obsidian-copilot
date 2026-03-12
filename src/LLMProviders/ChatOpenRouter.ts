@@ -73,10 +73,24 @@ export class ChatOpenRouter extends ChatOpenAI {
   }
 
   /**
-   * Override the invocation parameters to include reasoning when enabled
+   * Override the invocation parameters to include prompt caching and reasoning when enabled.
+   *
+   * Prompt caching: The `cache_control` field opts Anthropic models (via OpenRouter) into
+   * automatic cache breakpoint detection, reducing token costs on repeated context. Other
+   * providers (OpenAI, DeepSeek, Gemini, Grok, Groq) auto-cache without this field or
+   * safely ignore it, so it is always included.
+   *
+   * @see https://openrouter.ai/docs/features/prompt-caching
    */
   override invocationParams(options?: this["ParsedCallOptions"]): any {
     const baseParams = super.invocationParams(options);
+
+    // Always enable prompt caching. Anthropic models via OpenRouter require explicit opt-in;
+    // other providers auto-cache or ignore this field harmlessly.
+    const withCaching = {
+      ...baseParams,
+      cache_control: { type: "ephemeral" },
+    };
 
     // Add reasoning parameter if enabled
     if (this.enableReasoning) {
@@ -91,7 +105,7 @@ export class ChatOpenRouter extends ChatOpenAI {
         const effort = this.reasoningEffort === "minimal" ? "low" : this.reasoningEffort;
         logInfo(`OpenRouter reasoning enabled with effort: ${effort}`);
         return {
-          ...baseParams,
+          ...withCaching,
           reasoning: {
             effort,
           },
@@ -99,7 +113,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       } else {
         logInfo(`OpenRouter reasoning enabled with max_tokens: 1024`);
         return {
-          ...baseParams,
+          ...withCaching,
           reasoning: {
             max_tokens: 1024,
           },
@@ -107,7 +121,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       }
     }
 
-    return baseParams;
+    return withCaching;
   }
 
   /**
