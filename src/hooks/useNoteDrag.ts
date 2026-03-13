@@ -20,6 +20,9 @@ export function useNoteDrag() {
     const dragManager = (app as any).dragManager;
     if (!dragManager) return;
 
+    // Mark this drag as internal so the chat drop zone overlay doesn't appear
+    e.dataTransfer.setData("copilot/internal-drag", "true");
+
     const linkText = app.metadataCache.fileToLinktext(file, "");
     const dragData = dragManager.dragLink(e.nativeEvent, linkText);
     dragManager.onDragStart(e.nativeEvent, dragData);
