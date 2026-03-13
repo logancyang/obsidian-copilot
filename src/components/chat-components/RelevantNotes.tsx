@@ -6,6 +6,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
+import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
@@ -131,6 +132,7 @@ function RelevantNote({
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
+  const handleDragStart = useNoteDrag();
 
   const loadContent = useCallback(async () => {
     if (fileContent) return; // Don't load if we already have content
@@ -181,6 +183,13 @@ function RelevantNote({
 
         <div className="tw-flex-1 tw-overflow-hidden">
           <a
+            draggable
+            onDragStart={(e) => {
+              const file = app.vault.getAbstractFileByPath(note.document.path);
+              if (file instanceof TFile) {
+                handleDragStart(e, file);
+              }
+            }}
             onClick={(e) => {
               e.preventDefault();
               const openInNewLeaf = e.metaKey || e.ctrlKey;
@@ -194,7 +203,7 @@ function RelevantNote({
               }
             }}
             className="tw-block tw-w-full tw-truncate tw-text-sm tw-font-bold tw-text-normal"
-            title={note.document.title}
+            title={`${note.document.title} - drag to insert wikilink`}
           >
             {note.document.title}
           </a>
@@ -293,6 +302,7 @@ export const RelevantNotes = memo(
     const activeFile = useActiveFile();
     const chatInput = useChatInput();
     const hasIndex = useHasIndex(activeFile?.path ?? "", refresher);
+    const handleDragStart = useNoteDrag();
     const navigateToNote = (notePath: string, openInNewLeaf = false) => {
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
@@ -404,7 +414,15 @@ export const RelevantNotes = memo(
                   <Badge
                     variant="outline"
                     key={note.document.path}
+                    draggable
+                    onDragStart={(e) => {
+                      const file = app.vault.getAbstractFileByPath(note.document.path);
+                      if (file instanceof TFile) {
+                        handleDragStart(e, file);
+                      }
+                    }}
                     className="tw-max-w-40 tw-text-xs tw-text-muted hover:tw-cursor-pointer hover:tw-bg-interactive-hover"
+                    title={`${note.document.title} - drag to insert wikilink`}
                   >
                     <span className="tw-truncate">{note.document.title}</span>
                   </Badge>

@@ -104,6 +104,11 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
       if (e.dataTransfer) {
         e.dataTransfer.dropEffect = "copy";
 
+        // Skip showing drop zone for drags originating from within the plugin (e.g. relevant notes)
+        if (e.dataTransfer.types.includes("copilot/internal-drag")) {
+          return;
+        }
+
         // Check if we have string items (Obsidian nav bar drag) or file items (external files)
         const hasStringItems = Array.from(e.dataTransfer.items).some(
           (item) => item.kind === "string"
