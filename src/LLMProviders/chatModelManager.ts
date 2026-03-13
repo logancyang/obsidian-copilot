@@ -765,26 +765,30 @@ export default class ChatModelManager {
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
 
-    // Override getNumTokens to avoid tiktoken's remote fetch of gpt2.json from
-    // tiktoken.pages.dev. LangChain's default implementation tries to download
-    // a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls when the
-    // CDN is unreachable. Use a simple char-based estimation instead -- modern LLM
-    // APIs return accurate token usage in response metadata anyway.
+    // Override getNumTokens on the PROTOTYPE to avoid tiktoken's remote fetch of
+    // gpt2.json from tiktoken.pages.dev. LangChain's default implementation tries
+    // to download a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls
+    // when the CDN is unreachable. Use a simple char-based estimation instead --
+    // modern LLM APIs return accurate token usage in response metadata anyway.
     //
-    // NOTE: Instance property overrides are bypassed in esbuild production bundles
-    // (prototype methods are called directly). This override still helps in dev
-    // builds and non-invoke code paths. The primary fix for the Plus mode hang is
-    // in CopilotPlusChainRunner.planToolCalls which uses stream() instead of
-    // invoke() to avoid the _generate() -> _getEstimatedTokenCountFromPrompt path.
-    newModelInstance.getNumTokens = async (
-      content: string | Array<{ type: string; text?: string }>
-    ) => {
-      const text =
-        typeof content === "string"
-          ? content
-          : content.map((item) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
-      return Math.ceil(text.length / 4);
-    };
+    // We patch the prototype (not the instance) because esbuild production bundles
+    // resolve `this.getNumTokens()` calls directly to the prototype, bypassing
+    // instance property shadows. A guard flag prevents repeated patching.
+    const proto = Object.getPrototypeOf(newModelInstance);
+    if (proto && !proto._tiktokenPatched) {
+      proto.getNumTokens = async (
+        content: string | Array<{ type: string; text?: string }>
+      ) => {
+        const text =
+          typeof content === "string"
+            ? content
+            : content
+                .map((item) => (typeof item === "string" ? item : (item.text ?? "")))
+                .join("");
+        return Math.ceil(text.length / 4);
+      };
+      proto._tiktokenPatched = true;
+    }
 
     return newModelInstance;
   }
