@@ -9,6 +9,7 @@ import {
   createAIMessageWithToolCalls,
 } from "./nativeToolCalling";
 import { logInfo, logWarn } from "@/logger";
+import { stripSpecialTokens } from "@/utils/stripSpecialTokens";
 
 /**
  * ThinkBlockStreamer handles streaming content from various LLM providers
@@ -116,7 +117,7 @@ export class ThinkBlockStreamer {
   private handleDeepseekChunk(chunk: any) {
     // Handle standard string content
     if (typeof chunk.content === "string") {
-      this.fullResponse += chunk.content;
+      this.fullResponse += stripSpecialTokens(chunk.content);
     }
 
     // Handle deepseek reasoning/thinking content
