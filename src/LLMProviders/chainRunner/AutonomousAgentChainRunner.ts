@@ -859,12 +859,14 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         logToolResult(tc.name, result);
 
-        // Track the executed query post-execution so transient failures remain retryable.
-        // Queries are tracked regardless of success/failure: a failed localSearch still
-        // consumed a tool-call slot, and marking it prevents an immediate retry loop.
-        const executedQuery = uniqueToolCallQueries[tcIdx];
-        if (executedQuery) {
-          previousSearchQueries.push(executedQuery);
+        // Track the executed query only on success so transient failures remain retryable.
+        // A failed localSearch means no results were retrieved; the model should be able
+        // to issue the same query again on the next iteration if it chooses to.
+        if (tc.name === "localSearch" && result.success) {
+          const executedQuery = uniqueToolCallQueries[tcIdx];
+          if (executedQuery) {
+            previousSearchQueries.push(executedQuery);
+          }
         }
 
         // Add tool result step (shown in rolling display - this is the "what was found")
