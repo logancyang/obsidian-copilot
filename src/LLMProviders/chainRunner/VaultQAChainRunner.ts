@@ -1,9 +1,4 @@
-import {
-  ABORT_REASON,
-  DEFAULT_MAX_SOURCE_CHUNKS,
-  ModelCapability,
-  RETRIEVED_DOCUMENT_TAG,
-} from "@/constants";
+import { ABORT_REASON, ModelCapability, RETRIEVED_DOCUMENT_TAG } from "@/constants";
 import { getStandaloneQuestion } from "@/chainUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
 import { logInfo } from "@/logger";
@@ -106,7 +101,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const hasTagTerms = tags.length > 0;
       const filterRetriever = new FilterRetriever(app, {
         salientTerms: hasTagTerms ? [...tags] : [],
-        maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+        maxK: settings.maxSourceChunks,
         returnAll: hasTagTerms,
       });
       const filterDocs = await filterRetriever.getRelevantDocuments(standaloneQuestion);
@@ -119,7 +114,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
         app,
         {
           minSimilarityScore: 0.01,
-          maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+          maxK: settings.maxSourceChunks,
           salientTerms: hasTagTerms ? [...tags] : [],
           tagTerms: tags,
           returnAll: hasTagTerms,
@@ -134,8 +129,8 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const { filterResults, searchResults } = mergeFilterAndSearchResults(filterDocs, searchDocs);
       // Cap total docs to prevent oversized prompts (filter results prioritized)
       const merged = [...filterResults, ...searchResults];
-      const retrieverCapReached = merged.length > DEFAULT_MAX_SOURCE_CHUNKS;
-      const retrievedDocs = merged.slice(0, DEFAULT_MAX_SOURCE_CHUNKS);
+      const retrieverCapReached = merged.length > settings.maxSourceChunks;
+      const retrievedDocs = merged.slice(0, settings.maxSourceChunks);
 
       // Store retrieved documents for sources
       this.chainManager.storeRetrieverDocuments(retrievedDocs);
@@ -165,7 +160,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       const sourceCatalog = formatSourceCatalog(sourceEntries).join("\n");
 
       const capNotice = retrieverCapReached
-        ? `\n\nIMPORTANT: The retrieval limit of ${DEFAULT_MAX_SOURCE_CHUNKS} documents was reached. ${merged.length - DEFAULT_MAX_SOURCE_CHUNKS} additional matching documents were omitted. Inform the user: "Note: The retrieval cap was reached — some matching documents were not included. Upgrade to Copilot Plus for more complete answers."`
+        ? `\n\nIMPORTANT: The retrieval limit of ${settings.maxSourceChunks} documents was reached. ${merged.length - settings.maxSourceChunks} additional matching documents were omitted. Inform the user: "Note: The retrieval cap was reached — some matching documents were not included. Upgrade to Copilot Plus for more complete answers."`
         : "";
 
       const qaInstructions =

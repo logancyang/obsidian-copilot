@@ -83,6 +83,104 @@ export const normalizeFootnoteRendering = (root: HTMLElement): void => {
     });
 };
 
+const INLINE_CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
+
+/**
+ * Makes inline citation numbers (e.g., [1], [2]) clickable by linking them
+ * to the corresponding source note. Reads the source mapping from the
+ * rendered .copilot-sources section in the same message.
+ */
+export const linkInlineCitations = (root: HTMLElement): void => {
+  // Build citation number -> href mapping from the rendered sources section
+  const sourceItems = root.querySelectorAll(".copilot-sources__item");
+  if (sourceItems.length === 0) return;
+
+  const citationHrefs = new Map<number, string>();
+  sourceItems.forEach((item) => {
+    const indexEl = item.querySelector(".copilot-sources__index");
+    const textEl = item.querySelector(".copilot-sources__text");
+    if (!indexEl || !textEl) return;
+
+    const indexMatch = indexEl.textContent?.match(/\[(\d+)\]/);
+    if (!indexMatch) return;
+    const num = parseInt(indexMatch[1], 10);
+
+    const link = textEl.querySelector("a");
+    if (link) {
+      const href = link.getAttribute("href");
+      if (href) citationHrefs.set(num, href);
+    }
+  });
+
+  if (citationHrefs.size === 0) return;
+
+  // Collect text nodes that contain citation patterns (outside sources section)
+  const sourcesEl = root.querySelector(".copilot-sources");
+  const textNodes: Text[] = [];
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      if (sourcesEl?.contains(node)) return NodeFilter.FILTER_REJECT;
+      if (node.parentElement?.closest("code, pre")) return NodeFilter.FILTER_REJECT;
+      INLINE_CITATION_RE.lastIndex = 0;
+      if (INLINE_CITATION_RE.test(node.textContent || "")) {
+        INLINE_CITATION_RE.lastIndex = 0;
+        return NodeFilter.FILTER_ACCEPT;
+      }
+      return NodeFilter.FILTER_REJECT;
+    },
+  });
+
+  let n: Text | null;
+  while ((n = walker.nextNode() as Text | null)) textNodes.push(n);
+
+  // Replace citation text with clickable links
+  textNodes.forEach((node) => {
+    const text = node.textContent || "";
+    INLINE_CITATION_RE.lastIndex = 0;
+
+    const fragment = document.createDocumentFragment();
+    let lastIndex = 0;
+    let match: RegExpExecArray | null;
+
+    while ((match = INLINE_CITATION_RE.exec(text)) !== null) {
+      // Text before the citation
+      if (match.index > lastIndex) {
+        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+      }
+
+      const nums = match[1].split(/\s*,\s*/).map((s) => parseInt(s.trim(), 10));
+      const allResolved = nums.every((num) => citationHrefs.has(num));
+
+      if (allResolved) {
+        const span = document.createElement("span");
+        span.className = "copilot-citation-group";
+        span.appendChild(document.createTextNode("["));
+        nums.forEach((num, i) => {
+          if (i > 0) span.appendChild(document.createTextNode(", "));
+          const link = document.createElement("a");
+          link.href = citationHrefs.get(num)!;
+          link.className = "copilot-citation-link";
+          link.textContent = String(num);
+          link.setAttribute("aria-label", `Source ${num}`);
+          span.appendChild(link);
+        });
+        span.appendChild(document.createTextNode("]"));
+        fragment.appendChild(span);
+      } else {
+        fragment.appendChild(document.createTextNode(match[0]));
+      }
+
+      lastIndex = match.index + match[0].length;
+    }
+
+    if (lastIndex < text.length) {
+      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+    }
+
+    node.parentNode?.replaceChild(fragment, node);
+  });
+};
+
 function MessageContext({ context }: { context: ChatMessage["context"] }) {
   if (
     !context ||
@@ -572,6 +670,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
             normalizeFootnoteRendering(textDiv);
+            linkInlineCitations(textDiv);
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;

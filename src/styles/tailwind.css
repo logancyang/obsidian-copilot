@@ -1039,6 +1039,16 @@ body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-opt
   color: var(--text-accent);
 }
 
+/* Inline citation links */
+.copilot-citation-link {
+  color: var(--text-accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.copilot-citation-link:hover {
+  text-decoration: underline;
+}
+
 /* fix the width of the popover on mobile */
 body.is-mobile div[data-radix-popper-content-wrapper] {
   min-width: fit-content !important;
