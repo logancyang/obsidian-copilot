@@ -899,10 +899,7 @@ If your plugin does not need CSS, delete this file.
 /* use 'important' to prevent ob default css style from being third-party theme overridden */
 
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
-  padding-bottom: max(
-    calc(var(--safe-area-inset-bottom, 0px) + var(--size-4-1)),
-    var(--size-4-8)
-  ) !important;
+  padding-bottom: calc(var(--safe-area-inset-bottom, 0px) + var(--size-4-1)) !important;
 }
 
 /* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
