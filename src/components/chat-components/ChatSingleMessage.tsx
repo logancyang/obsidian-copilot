@@ -91,11 +91,13 @@ const INLINE_CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
  * rendered .copilot-sources section in the same message.
  */
 export const linkInlineCitations = (root: HTMLElement): void => {
-  // Build citation number -> href mapping from the rendered sources section
+  // Build citation number -> source anchor mapping from the rendered sources section.
+  // We store the anchor element (not just the href) so we can copy Obsidian-specific
+  // attributes like data-href and class="internal-link" onto the inline citation link.
   const sourceItems = root.querySelectorAll(".copilot-sources__item");
   if (sourceItems.length === 0) return;
 
-  const citationHrefs = new Map<number, string>();
+  const citationAnchors = new Map<number, HTMLAnchorElement>();
   sourceItems.forEach((item) => {
     const indexEl = item.querySelector(".copilot-sources__index");
     const textEl = item.querySelector(".copilot-sources__text");
@@ -107,12 +109,11 @@ export const linkInlineCitations = (root: HTMLElement): void => {
 
     const link = textEl.querySelector("a");
     if (link) {
-      const href = link.getAttribute("href");
-      if (href) citationHrefs.set(num, href);
+      citationAnchors.set(num, link);
     }
   });
 
-  if (citationHrefs.size === 0) return;
+  if (citationAnchors.size === 0) return;
 
   // Collect text nodes that contain citation patterns (outside sources section)
   const sourcesEl = root.querySelector(".copilot-sources");
@@ -149,7 +150,7 @@ export const linkInlineCitations = (root: HTMLElement): void => {
       }
 
       const nums = match[1].split(/\s*,\s*/).map((s) => parseInt(s.trim(), 10));
-      const allResolved = nums.every((num) => citationHrefs.has(num));
+      const allResolved = nums.every((num) => citationAnchors.has(num));
 
       if (allResolved) {
         const span = document.createElement("span");
@@ -157,9 +158,15 @@ export const linkInlineCitations = (root: HTMLElement): void => {
         span.appendChild(document.createTextNode("["));
         nums.forEach((num, i) => {
           if (i > 0) span.appendChild(document.createTextNode(", "));
+          const sourceAnchor = citationAnchors.get(num)!;
           const link = document.createElement("a");
-          link.href = citationHrefs.get(num)!;
-          link.className = "copilot-citation-link";
+          // Copy all attributes from the source anchor so Obsidian internal-link
+          // metadata (e.g. data-href, class="internal-link") is preserved.
+          for (const attr of Array.from(sourceAnchor.attributes)) {
+            link.setAttribute(attr.name, attr.value);
+          }
+          // Override class and add our citation-specific styling
+          link.className = `copilot-citation-link${sourceAnchor.className ? ` ${sourceAnchor.className}` : ""}`;
           link.textContent = String(num);
           link.setAttribute("aria-label", `Source ${num}`);
           span.appendChild(link);
