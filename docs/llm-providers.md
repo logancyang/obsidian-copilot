@@ -31,7 +31,7 @@ OpenRouter is a gateway that provides access to hundreds of models from many pro
 Direct access to GPT-4.1, GPT-5, and other OpenAI models.
 
 - **Get a key**: https://platform.openai.com/api-keys
-- **Models include**: GPT-5.2, GPT-5 mini, GPT-5 nano, GPT-4.1, GPT-4.1 mini, GPT-4.1 nano, o4-mini (reasoning)
+- **Models include**: GPT-5.4, GPT-5 mini, GPT-5 nano, GPT-4.1, GPT-4.1 mini, GPT-4.1 nano, o4-mini (reasoning)
 - **Setting key**: `openAIApiKey`
 
 ### Anthropic
