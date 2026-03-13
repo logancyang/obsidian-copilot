@@ -783,6 +783,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       // so the loop handles it generically instead of hardcoding "localSearch".
       const uniqueToolCalls: typeof toolCalls = [];
       const batchQueries: string[] = [];
+      // Parallel array: for each entry in uniqueToolCalls, the associated localSearch query
+      // (or null for non-localSearch calls). Used to track queries post-execution.
+      const uniqueToolCallQueries: Array<string | null> = [];
 
       for (const tc of toolCalls) {
         if (tc.name === "localSearch") {
@@ -803,14 +806,21 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
               continue;
             }
             batchQueries.push(query);
+            uniqueToolCallQueries.push(query);
+          } else {
+            uniqueToolCallQueries.push(null);
           }
+        } else {
+          uniqueToolCallQueries.push(null);
         }
         uniqueToolCalls.push(tc);
       }
-      previousSearchQueries.push(...batchQueries);
+      // Note: queries are tracked in previousSearchQueries after each tool executes,
+      // not here, so that transient failures leave queries retryable on the next iteration.
 
       // Execute unique tool calls
-      for (const tc of uniqueToolCalls) {
+      for (let tcIdx = 0; tcIdx < uniqueToolCalls.length; tcIdx++) {
+        const tc = uniqueToolCalls[tcIdx];
         if (abortController.signal.aborted) break;
 
         const toolCall = {
@@ -848,6 +858,14 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         }
 
         logToolResult(tc.name, result);
+
+        // Track the executed query post-execution so transient failures remain retryable.
+        // Queries are tracked regardless of success/failure: a failed localSearch still
+        // consumed a tool-call slot, and marking it prevents an immediate retry loop.
+        const executedQuery = uniqueToolCallQueries[tcIdx];
+        if (executedQuery) {
+          previousSearchQueries.push(executedQuery);
+        }
 
         // Add tool result step (shown in rolling display - this is the "what was found")
         const resultSummary = summarizeToolResult(tc.name, result, sourceInfo, toolCall.args);
@@ -900,7 +918,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           this.stopReasoningTimer();
           this.reasoningState.status = "complete";
           const reasoningBlock = this.buildReasoningBlockMarkup();
-          const finalContent = synthesis.content || "Unable to synthesize a response from the search results.";
+          const finalContent =
+            synthesis.content || "Unable to synthesize a response from the search results.";
           const finalResponse = reasoningBlock
             ? reasoningBlock + "\n\n" + finalContent
             : finalContent;
