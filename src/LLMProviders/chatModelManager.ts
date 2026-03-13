@@ -118,6 +118,37 @@ export default class ChatModelManager {
   }
 
   private static readonly REASONING_MODEL_TEMPERATURE = 1;
+  private static _basePrototypePatched = false;
+
+  /**
+   * Walks up the prototype chain from any model instance to find
+   * BaseLanguageModel.prototype (where getNumTokens is defined) and patches
+   * it once. This single patch covers ALL LangChain model classes.
+   */
+  static patchTiktokenOnBasePrototype(modelInstance: any): void {
+    if (ChatModelManager._basePrototypePatched) return;
+
+    // Walk up to find the prototype that owns getNumTokens
+    let proto = Object.getPrototypeOf(modelInstance);
+    while (proto && !Object.prototype.hasOwnProperty.call(proto, "getNumTokens")) {
+      proto = Object.getPrototypeOf(proto);
+    }
+
+    if (proto) {
+      proto.getNumTokens = async (
+        content: string | Array<{ type: string; text?: string }>
+      ) => {
+        const text =
+          typeof content === "string"
+            ? content
+            : content
+                .map((item: any) => (typeof item === "string" ? item : (item.text ?? "")))
+                .join("");
+        return Math.ceil(text.length / 4);
+      };
+      ChatModelManager._basePrototypePatched = true;
+    }
+  }
 
   /**
    * Determines the appropriate temperature for a model
@@ -765,30 +796,17 @@ export default class ChatModelManager {
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
 
-    // Override getNumTokens on the PROTOTYPE to avoid tiktoken's remote fetch of
-    // gpt2.json from tiktoken.pages.dev. LangChain's default implementation tries
-    // to download a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls
-    // when the CDN is unreachable. Use a simple char-based estimation instead --
-    // modern LLM APIs return accurate token usage in response metadata anyway.
+    // Override getNumTokens to avoid tiktoken's remote fetch of gpt2.json from
+    // tiktoken.pages.dev. LangChain's default implementation tries to download
+    // a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls when the
+    // CDN is unreachable. Use a simple char-based estimation instead -- modern LLM
+    // APIs return accurate token usage in response metadata anyway.
     //
-    // We patch the prototype (not the instance) because esbuild production bundles
-    // resolve `this.getNumTokens()` calls directly to the prototype, bypassing
-    // instance property shadows. A guard flag prevents repeated patching.
-    const proto = Object.getPrototypeOf(newModelInstance);
-    if (proto && !proto._tiktokenPatched) {
-      proto.getNumTokens = async (
-        content: string | Array<{ type: string; text?: string }>
-      ) => {
-        const text =
-          typeof content === "string"
-            ? content
-            : content
-                .map((item) => (typeof item === "string" ? item : (item.text ?? "")))
-                .join("");
-        return Math.ceil(text.length / 4);
-      };
-      proto._tiktokenPatched = true;
-    }
+    // We walk up the prototype chain to find BaseLanguageModel.prototype (where
+    // getNumTokens is defined) and patch it ONCE there. This covers ALL model
+    // classes (ChatOpenAI, ChatOpenRouter, ChatGoogleGenerativeAI, etc.) with a
+    // single patch, regardless of which class is instantiated first.
+    ChatModelManager.patchTiktokenOnBasePrototype(newModelInstance);
 
     return newModelInstance;
   }
