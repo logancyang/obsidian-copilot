@@ -416,50 +416,86 @@ export async function getYouTubeTranscript(
     }
 
     // =========================================================================
-    // Step 3: Try to extract transcript
-    // Check if transcript panel is already open, otherwise click the button
+    // Step 3: Find or open the transcript panel
+    // Reason: YouTube has two coexisting transcript panel DOM structures:
+    // - Classic ("In this video"): ytd-transcript-segment-renderer
+    // - Modern ("Transcript"): transcript-segment-view-model
+    // YouTube selects the panel type server-side per video. We must support both.
+    // All segment queries are scoped to the panel to avoid false matches.
     // =========================================================================
-    let segments = document.querySelectorAll('ytd-transcript-segment-renderer');
+
+    // Reason: Find panel by checking for transcript segment elements inside it,
+    // rather than relying on fragile target-id strings that YouTube changes.
+    // Prefer visible panels to avoid picking up hidden/stale panels YouTube
+    // leaves in the DOM during page transitions.
+    const findTranscriptPanel = () => {
+      const panels = document.querySelectorAll('ytd-engagement-panel-section-list-renderer');
+      for (const panel of panels) {
+        const hasSegments = panel.querySelector('ytd-transcript-segment-renderer')
+                         || panel.querySelector('transcript-segment-view-model');
+        if (!hasSegments) continue;
+        const style = window.getComputedStyle(panel);
+        if (style.display !== 'none' && style.visibility !== 'hidden') return panel;
+      }
+      return null;
+    };
+
+    // Reason: Auto-detect classic vs modern layout and use the correct selectors
+    // for each. Queries are scoped to the panel to prevent matching unrelated UI.
+    const extractFromPanel = (panel) => {
+      const classicSegs = panel.querySelectorAll('ytd-transcript-segment-renderer');
+      if (classicSegs.length > 0) {
+        return [...classicSegs].map(seg => ({
+          timestamp: seg.querySelector('.segment-timestamp')?.textContent?.trim() || '',
+          text: seg.querySelector('yt-formatted-string.segment-text, .segment-text')?.textContent?.trim() || ''
+        })).filter(t => t.timestamp && t.text);
+      }
+      const modernSegs = panel.querySelectorAll('transcript-segment-view-model');
+      if (modernSegs.length > 0) {
+        return [...modernSegs].map(seg => ({
+          timestamp: seg.querySelector('.ytwTranscriptSegmentViewModelTimestamp')?.textContent?.trim() || '',
+          text: [...seg.querySelectorAll('span.yt-core-attributed-string')].map(s => s.textContent || '').join('').trim() || ''
+        })).filter(t => t.timestamp && t.text);
+      }
+      return null;
+    };
+
+    let panel = findTranscriptPanel();
     let needClose = false;
 
-    if (segments.length === 0) {
-      const btn = document.querySelector('ytd-video-description-transcript-section-renderer button');
-
+    if (!panel) {
+      const btn = document.querySelector('ytd-video-description-transcript-section-renderer button')
+                || document.querySelector('ytd-video-description-transcript-section-renderer [role="button"]');
       if (btn) {
         btn.click();
         needClose = true;
 
-        // Wait for transcript to load (poll every 500ms)
+        // Poll for the panel container to appear (not individual segments)
         for (let i = 0; i < ${maxAttempts}; i++) {
           await new Promise(r => setTimeout(r, 500));
-          segments = document.querySelectorAll('ytd-transcript-segment-renderer');
-          if (segments.length > 0) break;
+          panel = findTranscriptPanel();
+          if (panel) break;
         }
       }
     }
 
-    // Helper to close the transcript panel (called in finally block)
+    // =========================================================================
+    // Step 4: Extract transcript segments from the panel
+    // =========================================================================
+
+    // Reason: Close via captured panel element rather than hardcoded target-id.
+    // This is resilient to YouTube changing the target-id string.
     const closePanel = () => {
-      if (needClose) {
-        const closeBtn = document.querySelector(
-          'ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-searchable-transcript"] #visibility-button button'
-        );
-        if (closeBtn) closeBtn.click();
-      }
+      if (!needClose || !panel) return;
+      const closeBtn = panel.querySelector('#visibility-button button')
+                    || panel.querySelector('#visibility-button [role="button"]');
+      if (closeBtn) closeBtn.click();
     };
 
-    // =========================================================================
-    // Step 4: Extract transcript segments and return result
-    // =========================================================================
     try {
-      const transcript = [...segments].map(seg => ({
-        timestamp: seg.querySelector('.segment-timestamp')?.textContent?.trim() || '',
-        text: seg.querySelector('yt-formatted-string.segment-text, .segment-text')?.textContent?.trim() || ''
-      })).filter(t => t.timestamp && t.text);
-
+      const transcript = panel ? (extractFromPanel(panel) || []) : [];
       return { videoId, title, channel, description, uploadDate, duration, genre, transcript };
     } finally {
-      // Step 5: Always close the transcript panel if we opened it
       closePanel();
     }
   })()`;
