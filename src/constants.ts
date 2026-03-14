@@ -180,7 +180,6 @@ export enum ChatModels {
   GPT_41_mini = "gpt-4.1-mini",
   GPT_41_nano = "gpt-4.1-nano",
   O4_mini = "o4-mini",
-  AZURE_OPENAI = "azure-openai",
   GEMINI_3_PRO_PREVIEW = "gemini-3.1-pro-preview",
   GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview",
   GEMINI_PRO = "gemini-2.5-pro",
@@ -393,12 +392,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: true,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.AZURE_OPENAI,
-    provider: ChatModelProviders.AZURE_OPENAI,
-    enabled: true,
-    isBuiltIn: true,
   },
   {
     name: ChatModels.DEEPSEEK_CHAT,
@@ -624,12 +617,11 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     testModel: ChatModels.GROK_4_1_FAST,
   },
   [ChatModelProviders.AZURE_OPENAI]: {
-    label: "Azure OpenAI",
-    host: "",
-    curlBaseURL: "",
-    keyManagementURL: "",
+    label: "Azure",
+    host: "https://<resource>.services.ai.azure.com/models",
+    curlBaseURL: "https://<resource>.services.ai.azure.com/models",
+    keyManagementURL: "https://ai.azure.com",
     listModelURL: "",
-    testModel: ChatModels.AZURE_OPENAI,
   },
   [ChatModelProviders.GROQ]: {
     label: "Groq",

@@ -345,6 +345,40 @@ async function buildAzureOpenAIRequestSpec(
   const apiKeyResolved = await resolveApiKeyForCurl(model.apiKey);
   warnings.push(...apiKeyResolved.warnings);
 
+  const endpoint = isEmbeddingModel ? "embeddings" : "chat/completions";
+
+  // When a base URL is provided, use it directly (new flow)
+  if (model.baseUrl?.trim()) {
+    const { normalizeAzureUrl } = await import("@/LLMProviders/chatModelManager");
+    const { baseUrl, apiVersion } = normalizeAzureUrl(model.baseUrl.trim());
+    const version = apiVersion || model.azureOpenAIApiVersion?.trim() || "2024-05-01-preview";
+    const url = `${baseUrl}/${endpoint}?api-version=${encodeURIComponent(version)}`;
+
+    const body = isEmbeddingModel
+      ? { input: DEFAULT_EMBEDDING_INPUT }
+      : {
+          messages: [{ role: "user", content: DEFAULT_CHAT_MESSAGE }],
+          stream: false,
+          max_tokens: DEFAULT_OPENAI_MAX_TOKENS,
+        };
+
+    return {
+      ok: true,
+      warnings,
+      spec: {
+        method: "POST",
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+          "api-key": apiKeyResolved.apiKey,
+        },
+        body,
+      },
+    };
+  }
+
+  // Legacy flow: construct from instance/deployment/version fields
   const deploymentName = isEmbeddingModel
     ? model.azureOpenAIApiEmbeddingDeploymentName?.trim() || "[deployment]"
     : model.azureOpenAIApiDeploymentName?.trim() || "[deployment]";
@@ -358,7 +392,6 @@ async function buildAzureOpenAIRequestSpec(
     warnings.push("Azure api-version is empty; using placeholder.");
   }
 
-  const endpoint = isEmbeddingModel ? "embeddings" : "chat/completions";
   const endpointUrl = buildAzureEndpointUrl(model, deploymentName, endpoint, apiVersion);
   warnings.push(...endpointUrl.warnings);
 

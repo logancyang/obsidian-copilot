@@ -73,7 +73,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
   // 判断 Provider 是否有必填的额外设置
   const hasRequiredExtraSettings = (provider: string) => {
-    return provider === ChatModelProviders.AZURE_OPENAI;
+    return provider === ChatModelProviders.AZURE_OPENAI && !model.baseUrl;
   };
 
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
@@ -114,8 +114,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     newErrors.name = !model.name;
     if (!model.name) isValid = false;
 
-    // Validate Azure OpenAI specific fields
-    if (model.provider === ChatModelProviders.AZURE_OPENAI) {
+    // Validate Azure OpenAI specific fields (only when no base URL is provided)
+    if (model.provider === ChatModelProviders.AZURE_OPENAI && !model.baseUrl) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
 
@@ -334,6 +334,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             </FormField>
           );
         case ChatModelProviders.AZURE_OPENAI:
+          // When a base URL is provided, skip the legacy Azure-specific fields
+          if (model.baseUrl) return null;
           return (
             <>
               <FormField

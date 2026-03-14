@@ -85,6 +85,35 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
 
+/**
+ * Normalize an Azure URL that a user may have pasted in full.
+ * Strips trailing `/chat/completions` or `/embeddings` and extracts
+ * `api-version` from query parameters so the OpenAI client can
+ * construct the correct final URL.
+ */
+export function normalizeAzureUrl(raw: string | undefined): {
+  baseUrl: string | undefined;
+  apiVersion: string | undefined;
+} {
+  if (!raw) return { baseUrl: undefined, apiVersion: undefined };
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { baseUrl: raw, apiVersion: undefined };
+  }
+
+  const apiVersion = url.searchParams.get("api-version") || undefined;
+  url.search = "";
+  let baseUrl = url.toString().replace(/\/+$/, "");
+
+  // Strip paths that the OpenAI client appends automatically
+  baseUrl = baseUrl.replace(/\/(chat\/completions|embeddings)$/, "");
+
+  return { baseUrl, apiVersion };
+}
+
 export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel | null;
@@ -218,30 +247,38 @@ export default class ChatModelManager {
           },
         }),
       },
-      [ChatModelProviders.AZURE_OPENAI]: {
-        modelName:
-          customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        configuration: {
-          baseURL:
-            customModel.baseUrl ||
-            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
-          defaultQuery: {
-            "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+      [ChatModelProviders.AZURE_OPENAI]: await (async () => {
+        const azureUrl = normalizeAzureUrl(customModel.baseUrl);
+        return {
+          modelName: customModel.baseUrl
+            ? modelName
+            : customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
+          apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+          configuration: {
+            baseURL:
+              azureUrl.baseUrl ||
+              `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
+            defaultQuery: {
+              "api-version":
+                azureUrl.apiVersion ||
+                customModel.azureOpenAIApiVersion ||
+                settings.azureOpenAIApiVersion ||
+                "2024-05-01-preview",
+            },
+            defaultHeaders: {
+              "Content-Type": "application/json",
+              "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+            },
+            fetch: customModel.enableCors ? safeFetch : undefined,
           },
-          defaultHeaders: {
-            "Content-Type": "application/json",
-            "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-          },
-          fetch: customModel.enableCors ? safeFetch : undefined,
-        },
-        ...this.getOpenAISpecialConfig(
-          modelName,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature,
-          customModel
-        ),
-      },
+          ...this.getOpenAISpecialConfig(
+            modelName,
+            customModel.maxTokens ?? settings.maxTokens,
+            customModel.temperature ?? settings.temperature,
+            customModel
+          ),
+        };
+      })(),
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
         model: modelName,
@@ -738,7 +775,6 @@ export default class ChatModelManager {
       if (
         modelInfo.isGPT5 &&
         (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.AZURE_OPENAI ||
           model.provider === ChatModelProviders.OPENAI_FORMAT)
       ) {
         logInfo(`Chat model set with Responses API for GPT-5: ${model.name}`);
@@ -774,7 +810,6 @@ export default class ChatModelManager {
     if (
       modelInfo.isGPT5 &&
       (selectedModel.vendor === ChatModelProviders.OPENAI ||
-        selectedModel.vendor === ChatModelProviders.AZURE_OPENAI ||
         selectedModel.vendor === ChatModelProviders.OPENAI_FORMAT)
     ) {
       constructorConfig.useResponsesApi = true;
@@ -845,7 +880,6 @@ export default class ChatModelManager {
       if (
         modelInfo.isGPT5 &&
         (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.AZURE_OPENAI ||
           model.provider === ChatModelProviders.OPENAI_FORMAT)
       ) {
         constructorConfig.useResponsesApi = true;
