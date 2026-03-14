@@ -28,6 +28,7 @@ import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
@@ -40,6 +41,23 @@ import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
+
+// Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
+// tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
+// vocabulary from tiktoken.pages.dev, which blocks all LLM calls when the CDN is
+// unreachable. This char/4 estimation is the same fallback LangChain uses internally
+// before tiktoken loads. Actual token usage comes from API response metadata.
+(BaseLanguageModel.prototype as any).getNumTokens = async (
+  content: string | Array<{ type: string; text?: string }>
+) => {
+  const text =
+    typeof content === "string"
+      ? content
+      : content
+          .map((item: any) => (typeof item === "string" ? item : (item.text ?? "")))
+          .join("");
+  return Math.ceil(text.length / 4);
+};
 
 type ChatConstructorType = {
   new (config: any): any;
@@ -764,21 +782,6 @@ export default class ChatModelManager {
     }
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
-
-    // Override getNumTokens to avoid tiktoken's remote fetch of gpt2.json from
-    // tiktoken.pages.dev. LangChain's default implementation tries to download
-    // a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls when the
-    // CDN is unreachable. Use a simple char-based estimation instead — modern LLM
-    // APIs return accurate token usage in response metadata anyway.
-    newModelInstance.getNumTokens = async (
-      content: string | Array<{ type: string; text?: string }>
-    ) => {
-      const text =
-        typeof content === "string"
-          ? content
-          : content.map((item) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
-      return Math.ceil(text.length / 4);
-    };
 
     return newModelInstance;
   }

@@ -1,6 +1,7 @@
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
   ChatHistoryEntry,
+  extractTextFromChunk,
   removeErrorTags,
   removeThinkTags,
   withSuppressedTokenWarnings,
@@ -33,7 +34,10 @@ export async function getStandaloneQuestion(
       .getCurrentChainManager()
       .chatModelManager.getChatModelWithTemperature(0);
 
-    const response = await chatModel.invoke([
+    // Use stream() instead of invoke() to avoid LangChain's _generate() path,
+    // which triggers tiktoken CDN fetch via _getEstimatedTokenCountFromPrompt.
+    let text = "";
+    const stream = await chatModel.stream([
       {
         role: "user",
         content: condenseQuestionTemplate
@@ -41,8 +45,11 @@ export async function getStandaloneQuestion(
           .replace("{question}", question),
       },
     ]);
+    for await (const chunk of stream) {
+      text += extractTextFromChunk(chunk.content);
+    }
 
-    const cleanedResponse = removeThinkTags(response.content as string);
+    const cleanedResponse = removeThinkTags(text);
     return removeErrorTags(cleanedResponse);
   });
 }
