@@ -10,6 +10,7 @@ import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ActionButtons } from "./action-buttons";
+import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "./constants";
 import { Button } from "@/components/ui/button";
 
 interface MenuCommandModalProps {
@@ -36,6 +37,11 @@ interface MenuCommandModalProps {
   onReplace?: () => void;
   /** Initial position for the modal (defaults to center of screen) */
   initialPosition?: { x: number; y: number };
+  /**
+   * Bottom-anchor Y for "above" placement. Passed through to DraggableModal.
+   * When set, the panel grows upward as content loads.
+   */
+  anchorBottom?: number;
   /** Enable QuickAsk-style resize (height only). */
   resizable?: boolean;
   /** Hide ContentArea when state is idle (for Quick Command mode) */
@@ -74,6 +80,7 @@ export function MenuCommandModal({
   onInsert,
   onReplace,
   initialPosition,
+  anchorBottom,
   resizable = false,
   hideContentAreaOnIdle = false,
   includeNoteContext,
@@ -145,13 +152,14 @@ export function MenuCommandModal({
   const showContentArea = hideContentAreaOnIdle ? contentState.type !== "idle" : true;
 
   // Dynamic minHeight: compact when ContentArea is hidden, normal when shown
-  const dynamicMinHeight = showContentArea ? 400 : 180;
+  const dynamicMinHeight = showContentArea ? MODAL_MIN_HEIGHT_EXPANDED : MODAL_MIN_HEIGHT_COMPACT;
 
   return (
     <DraggableModal
       open={open}
       onClose={onClose}
       initialPosition={initialPosition}
+      anchorBottom={anchorBottom}
       resizable={resizable}
       minHeight={resizable ? dynamicMinHeight : undefined}
       closeOnEscapeFromOutside

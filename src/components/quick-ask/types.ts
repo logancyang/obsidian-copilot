@@ -51,9 +51,12 @@ export interface QuickAskPanelProps {
  * Payload for the Quick Ask widget StateEffect.
  */
 export interface QuickAskWidgetPayload {
-  pos: number;
-  /** Optional fallback anchor position (typically selection anchor) */
-  fallbackPos?: number | null;
+  /** Bottom anchor position — normalized selection.to for "place below" */
+  bottomAnchorPos: number;
+  /** Top anchor position — selection.from for "place above" (flip target) */
+  topAnchorPos?: number | null;
+  /** Focus anchor position — selection.head for horizontal placement in reverse selections */
+  focusAnchorPos?: number | null;
   options: {
     plugin: CopilotPlugin;
     editor: Editor;
