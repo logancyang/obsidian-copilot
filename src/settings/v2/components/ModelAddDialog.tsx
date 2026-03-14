@@ -340,8 +340,10 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             </FormField>
           );
         case ChatModelProviders.AZURE_OPENAI:
-          // When a base URL is provided, skip the legacy Azure-specific fields
-          if (model.baseUrl) return null;
+          // Chat models with a base URL use the new flow and skip legacy fields.
+          // Embedding models always require legacy fields since EmbeddingManager
+          // reads them directly and does not consume baseUrl.
+          if (model.baseUrl && !isEmbeddingModel) return null;
           return (
             <>
               <FormField
