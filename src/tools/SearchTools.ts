@@ -1,5 +1,5 @@
 import { getStandaloneQuestion } from "@/chainUtils";
-import { DEFAULT_MAX_SOURCE_CHUNKS, TEXT_WEIGHT } from "@/constants";
+import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { hasSelfHostSearchKey, selfHostWebSearch } from "@/LLMProviders/selfHostServices";
 import { logInfo } from "@/logger";
@@ -100,10 +100,11 @@ async function performLexicalSearch({
   forceLexical?: boolean;
   preExpandedQuery?: QueryExpansionInfo;
 }) {
+  const settings = getSettings();
   // Extract tag terms for self-host retriever (server-side tag filtering)
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
 
-  const effectiveMaxK = DEFAULT_MAX_SOURCE_CHUNKS;
+  const effectiveMaxK = settings.maxSourceChunks;
 
   logInfo(`lexicalSearch effectiveMaxK: ${effectiveMaxK}, forceLexical: ${forceLexical}`);
 
@@ -254,8 +255,9 @@ const semanticSearchTool = createLangChainTool({
   schema: localSearchSchema,
   func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
     const timeRange = validateTimeRange(rawTimeRange);
+    const settings = getSettings();
 
-    const effectiveMaxK = DEFAULT_MAX_SOURCE_CHUNKS;
+    const effectiveMaxK = settings.maxSourceChunks;
 
     logInfo(`semanticSearch effectiveMaxK: ${effectiveMaxK}`);
 
@@ -362,7 +364,7 @@ async function performMiyoSearch({
   timeRange?: { startTime: number; endTime: number };
 }) {
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-  const effectiveMaxK = DEFAULT_MAX_SOURCE_CHUNKS;
+  const effectiveMaxK = getSettings().maxSourceChunks;
 
   // FilterRetriever for local tag/title/time-range matches
   const filterRetriever = new FilterRetriever(app, {

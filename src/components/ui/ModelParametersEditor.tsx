@@ -217,7 +217,7 @@ export function ModelParametersEditor({
                 (opt) =>
                   opt.value !== ReasoningEffort.MINIMAL && opt.value !== ReasoningEffort.XHIGH
               ),
-              ...(model.name.startsWith("gpt-5.2") && model.provider === "openai"
+              ...(model.name.startsWith("gpt-5.4") && model.provider === "openai"
                 ? [{ value: ReasoningEffort.XHIGH, label: "Extra High" }]
                 : []),
             ]}
@@ -234,8 +234,8 @@ export function ModelParametersEditor({
                   <li>Low: Faster responses, basic reasoning (default)</li>
                   <li>Medium: Balanced performance</li>
                   <li>High: Thorough reasoning, slower responses</li>
-                  {model.name.startsWith("gpt-5.2") && model.provider === "openai" && (
-                    <li>Extra High: Maximum reasoning depth (GPT-5.2 only)</li>
+                  {model.name.startsWith("gpt-5.4") && model.provider === "openai" && (
+                    <li>Extra High: Maximum reasoning depth (GPT-5.4 only)</li>
                   )}
                 </ul>
                 {!hasReasoningCapability && !isOpenAIReasoningModel && (

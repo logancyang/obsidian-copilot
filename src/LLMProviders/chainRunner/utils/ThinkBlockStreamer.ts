@@ -25,6 +25,9 @@ export class ThinkBlockStreamer {
   private tokenUsage: TokenUsage | null = null;
   // Track if we've handled text-level think tags (e.g., from nvidia/nemotron)
   private hasHandledTextLevelThinkTag = false;
+  // Character index where an excluded text-level think block started.
+  // -1 means we're not currently inside an excluded block.
+  private excludedThinkBlockStart = -1;
 
   // Native tool call accumulation
   private toolCallChunks: Map<number, ToolCallChunk> = new Map();
@@ -38,33 +41,24 @@ export class ThinkBlockStreamer {
   }
 
   /**
-   * Handle text-level think tags embedded in content (e.g., nvidia/nemotron models).
+   * Handle text-level think tags embedded in content (e.g., nvidia/nemotron, qwen3 models).
    * Some models output thinking with only </think> closing tag, no opening tag.
    * This method detects and fixes this during streaming.
+   *
+   * When excludeThinking is true, thinking content is suppressed during streaming
+   * (not just stripped after the close tag arrives) by tracking the position where
+   * the excluded block started and truncating fullResponse on each chunk.
    */
   private handleTextLevelThinkTags() {
+    if (this.excludeThinking) {
+      this.handleExcludedThinkTags();
+      return;
+    }
+
     const hasCloseTag = this.fullResponse.includes("</think>");
     const hasOpenTag = this.fullResponse.includes("<think>");
 
-    // Skip if there's no </think> tag yet
-    if (!hasCloseTag) {
-      return;
-    }
-
-    // If excludeThinking is true, strip all think content
-    if (this.excludeThinking) {
-      // Handle case: content with </think> but no <think> (malformed)
-      // Strip everything before and including </think>
-      if (!hasOpenTag) {
-        const closeTagIndex = this.fullResponse.indexOf("</think>");
-        this.fullResponse = this.fullResponse.substring(closeTagIndex + "</think>".length).trim();
-      } else {
-        // Handle case: proper <think>...</think> tags
-        // Strip all think blocks
-        this.fullResponse = this.fullResponse.replace(/<think>[\s\S]*?<\/think>/g, "").trim();
-      }
-      return;
-    }
+    if (!hasCloseTag) return;
 
     // excludeThinking is false - fix missing opening tag if needed
     if (!hasOpenTag && !this.hasHandledTextLevelThinkTag) {
@@ -74,6 +68,55 @@ export class ThinkBlockStreamer {
           "This may indicate a misconfigured chat template in LM Studio. Adding opening tag."
       );
       this.fullResponse = "<think>" + this.fullResponse;
+    }
+  }
+
+  /**
+   * Strip text-level think tags when excludeThinking is true.
+   * Handles three streaming states:
+   * 1. Not inside a think block -- look for `<think>` to enter one
+   * 2. Inside an incomplete block (no `</think>` yet) -- truncate to pre-block content
+   * 3. Block just closed -- strip the complete block and exit the state
+   */
+  private handleExcludedThinkTags() {
+    // Currently inside an excluded block from a previous chunk
+    if (this.excludedThinkBlockStart >= 0) {
+      const closeIdx = this.fullResponse.indexOf("</think>", this.excludedThinkBlockStart);
+      if (closeIdx !== -1) {
+        // Block closed -- stitch content before and after the block
+        const before = this.fullResponse.substring(0, this.excludedThinkBlockStart);
+        const after = this.fullResponse.substring(closeIdx + "</think>".length);
+        this.fullResponse = (before + after).trimStart();
+        this.excludedThinkBlockStart = -1;
+      } else {
+        // Still streaming thinking -- truncate to the safe prefix
+        this.fullResponse = this.fullResponse.substring(0, this.excludedThinkBlockStart);
+      }
+      return;
+    }
+
+    // Not inside a block -- check for a new one
+    const openIdx = this.fullResponse.indexOf("<think>");
+    if (openIdx !== -1) {
+      this.excludedThinkBlockStart = openIdx;
+      const closeIdx = this.fullResponse.indexOf("</think>", openIdx);
+      if (closeIdx !== -1) {
+        // Complete block in one pass
+        const before = this.fullResponse.substring(0, openIdx);
+        const after = this.fullResponse.substring(closeIdx + "</think>".length);
+        this.fullResponse = (before + after).trimStart();
+        this.excludedThinkBlockStart = -1;
+      } else {
+        // Incomplete -- truncate
+        this.fullResponse = this.fullResponse.substring(0, openIdx);
+      }
+      return;
+    }
+
+    // Handle malformed: only </think> without <think> (e.g., some chat templates)
+    const closeIdx = this.fullResponse.indexOf("</think>");
+    if (closeIdx !== -1) {
+      this.fullResponse = this.fullResponse.substring(closeIdx + "</think>".length).trimStart();
     }
   }
 

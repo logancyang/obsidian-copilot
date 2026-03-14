@@ -6,7 +6,7 @@ import {
   setChainType,
 } from "@/aiParams";
 import ChainFactory, { ChainType, Document } from "@/chainFactory";
-import { BUILTIN_CHAT_MODELS, DEFAULT_MAX_SOURCE_CHUNKS, USER_SENDER } from "@/constants";
+import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   AutonomousAgentChainRunner,
   ChainRunner,
@@ -220,12 +220,12 @@ export default class ChainManager {
         const retriever = settings.enableSemanticSearchV3
           ? new (await import("@/search/hybridRetriever")).HybridRetriever({
               minSimilarityScore: 0.01,
-              maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+              maxK: settings.maxSourceChunks,
               salientTerms: [],
             })
           : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(app, {
               minSimilarityScore: 0.01,
-              maxK: DEFAULT_MAX_SOURCE_CHUNKS,
+              maxK: settings.maxSourceChunks,
               salientTerms: [],
               textWeight: undefined,
               returnAll: false,

@@ -173,7 +173,7 @@ export const DEFAULT_OLLAMA_NUM_CTX = 131072;
 
 export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
-  GPT_5_2 = "gpt-5.2",
+  GPT_5_4 = "gpt-5.4",
   GPT_5_mini = "gpt-5-mini",
   GPT_5_nano = "gpt-5-nano",
   GPT_41 = "gpt-4.1",
@@ -197,7 +197,7 @@ export enum ChatModels {
   OPENROUTER_GEMINI_3_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   OPENROUTER_GEMINI_2_5_FLASH = "google/gemini-2.5-flash",
   OPENROUTER_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
-  OPENROUTER_GPT_5_2 = "openai/gpt-5.2",
+  OPENROUTER_GPT_5_4 = "openai/gpt-5.4",
   OPENROUTER_GPT_5_MINI = "openai/gpt-5-mini",
   OPENROUTER_GROK_4_1_FAST = "x-ai/grok-4.1-fast",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
@@ -281,7 +281,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.OPENROUTER_GPT_5_2,
+    name: ChatModels.OPENROUTER_GPT_5_4,
     provider: ChatModelProviders.OPENROUTERAI,
     enabled: true,
     isBuiltIn: true,
@@ -317,7 +317,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.GPT_5_2,
+    name: ChatModels.GPT_5_4,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
     isBuiltIn: true,
@@ -613,7 +613,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     curlBaseURL: "https://api.openai.com/v1",
     keyManagementURL: "https://platform.openai.com/api-keys",
     listModelURL: "https://api.openai.com/v1/models",
-    testModel: ChatModels.GPT_5_2,
+    testModel: ChatModels.GPT_5_4,
   },
   [ChatModelProviders.XAI]: {
     label: "XAI",

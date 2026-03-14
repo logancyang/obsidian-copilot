@@ -897,11 +897,12 @@ If your plugin does not need CSS, delete this file.
 }
 
 /* use 'important' to prevent ob default css style from being third-party theme overridden */
+/* --copilot-status-bar-clearance is set dynamically by ChatViewLayout */
 
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
-  padding-bottom: max(
-    calc(var(--safe-area-inset-bottom, 0px) + var(--size-4-1)),
-    var(--size-4-8)
+  padding-bottom: calc(
+    var(--safe-area-inset-bottom, 0px) + var(--copilot-status-bar-clearance, 0px) +
+      var(--size-4-1)
   ) !important;
 }
 
@@ -1037,6 +1038,16 @@ body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-opt
 
 .copilot-sources__text a {
   color: var(--text-accent);
+}
+
+/* Inline citation links */
+.copilot-citation-link {
+  color: var(--text-accent);
+  cursor: pointer;
+  text-decoration: none;
+}
+.copilot-citation-link:hover {
+  text-decoration: underline;
 }
 
 /* fix the width of the popover on mobile */
