@@ -354,12 +354,14 @@ async function buildAzureOpenAIRequestSpec(
     const version = apiVersion || model.azureOpenAIApiVersion?.trim() || "2024-05-01-preview";
     const url = `${baseUrl}/${endpoint}?api-version=${encodeURIComponent(version)}`;
 
+    const modelName = model.name?.trim();
     const body = isEmbeddingModel
-      ? { input: DEFAULT_EMBEDDING_INPUT }
+      ? { input: DEFAULT_EMBEDDING_INPUT, ...(modelName ? { model: modelName } : {}) }
       : {
           messages: [{ role: "user", content: DEFAULT_CHAT_MESSAGE }],
           stream: false,
           max_tokens: DEFAULT_OPENAI_MAX_TOKENS,
+          ...(modelName ? { model: modelName } : {}),
         };
 
     return {

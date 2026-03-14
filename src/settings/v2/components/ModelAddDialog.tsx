@@ -114,8 +114,14 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     newErrors.name = !model.name;
     if (!model.name) isValid = false;
 
-    // Validate Azure OpenAI specific fields (only when no base URL is provided)
-    if (model.provider === ChatModelProviders.AZURE_OPENAI && !model.baseUrl) {
+    // Validate Azure OpenAI specific fields.
+    // Embedding models always require the legacy fields because EmbeddingManager
+    // does not consume baseUrl and still reads azureOpenAIApiInstanceName,
+    // azureOpenAIApiEmbeddingDeploymentName, and azureOpenAIApiVersion directly.
+    // Chat models may skip legacy fields when a full base URL is supplied instead.
+    const isAzure = model.provider === ChatModelProviders.AZURE_OPENAI;
+    const azureRequiresLegacyFields = isAzure && (isEmbeddingModel || !model.baseUrl);
+    if (azureRequiresLegacyFields) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
 
