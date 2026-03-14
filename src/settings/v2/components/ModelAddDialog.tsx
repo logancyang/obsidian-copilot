@@ -73,7 +73,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
   // 判断 Provider 是否有必填的额外设置
   const hasRequiredExtraSettings = (provider: string) => {
-    return provider === ChatModelProviders.AZURE_OPENAI;
+    return provider === ChatModelProviders.AZURE_OPENAI && !model.baseUrl;
   };
 
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
@@ -114,8 +114,14 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     newErrors.name = !model.name;
     if (!model.name) isValid = false;
 
-    // Validate Azure OpenAI specific fields
-    if (model.provider === ChatModelProviders.AZURE_OPENAI) {
+    // Validate Azure OpenAI specific fields.
+    // Embedding models always require the legacy fields because EmbeddingManager
+    // does not consume baseUrl and still reads azureOpenAIApiInstanceName,
+    // azureOpenAIApiEmbeddingDeploymentName, and azureOpenAIApiVersion directly.
+    // Chat models may skip legacy fields when a full base URL is supplied instead.
+    const isAzure = model.provider === ChatModelProviders.AZURE_OPENAI;
+    const azureRequiresLegacyFields = isAzure && (isEmbeddingModel || !model.baseUrl?.trim());
+    if (azureRequiresLegacyFields) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
 
@@ -334,6 +340,10 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             </FormField>
           );
         case ChatModelProviders.AZURE_OPENAI:
+          // Chat models with a base URL use the new flow and skip legacy fields.
+          // Embedding models always require legacy fields since EmbeddingManager
+          // reads them directly and does not consume baseUrl.
+          if (model.baseUrl?.trim() && !isEmbeddingModel) return null;
           return (
             <>
               <FormField
