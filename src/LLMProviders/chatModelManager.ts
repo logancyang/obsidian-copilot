@@ -53,9 +53,7 @@ import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopil
   const text =
     typeof content === "string"
       ? content
-      : content
-          .map((item: any) => (typeof item === "string" ? item : (item.text ?? "")))
-          .join("");
+      : content.map((item: any) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
   return Math.ceil(text.length / 4);
 };
 
@@ -498,10 +496,14 @@ export default class ChatModelManager {
         effort: customModel.reasoningEffort,
       };
 
-      // Add verbosity for GPT-5 models (Responses API only)
-      // This requires useResponsesApi=true which is set in createModelInstance()
-      // In Responses API, verbosity must be passed as text.verbosity
-      if (modelInfo.isGPT5 && customModel?.verbosity) {
+      // Add verbosity for GPT-5 models (Responses API only).
+      // Azure does not support Responses API so skip verbosity there;
+      // useResponsesApi is only enabled for OPENAI / OPENAI_FORMAT in createModelInstance().
+      if (
+        modelInfo.isGPT5 &&
+        customModel?.verbosity &&
+        customModel?.provider !== ChatModelProviders.AZURE_OPENAI
+      ) {
         const verbosityValue = customModel.verbosity;
         // For Responses API, verbosity is nested under 'text' parameter
         config.text = {

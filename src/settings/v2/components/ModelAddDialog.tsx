@@ -120,7 +120,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     // azureOpenAIApiEmbeddingDeploymentName, and azureOpenAIApiVersion directly.
     // Chat models may skip legacy fields when a full base URL is supplied instead.
     const isAzure = model.provider === ChatModelProviders.AZURE_OPENAI;
-    const azureRequiresLegacyFields = isAzure && (isEmbeddingModel || !model.baseUrl);
+    const azureRequiresLegacyFields = isAzure && (isEmbeddingModel || !model.baseUrl?.trim());
     if (azureRequiresLegacyFields) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
@@ -343,7 +343,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
           // Chat models with a base URL use the new flow and skip legacy fields.
           // Embedding models always require legacy fields since EmbeddingManager
           // reads them directly and does not consume baseUrl.
-          if (model.baseUrl && !isEmbeddingModel) return null;
+          if (model.baseUrl?.trim() && !isEmbeddingModel) return null;
           return (
             <>
               <FormField
