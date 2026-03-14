@@ -1,6 +1,7 @@
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
   ChatHistoryEntry,
+  extractTextFromChunk,
   removeErrorTags,
   removeThinkTags,
   withSuppressedTokenWarnings,
@@ -45,7 +46,7 @@ export async function getStandaloneQuestion(
       },
     ]);
     for await (const chunk of stream) {
-      text += typeof chunk.content === "string" ? chunk.content : "";
+      text += extractTextFromChunk(chunk.content);
     }
 
     const cleanedResponse = removeThinkTags(text);
