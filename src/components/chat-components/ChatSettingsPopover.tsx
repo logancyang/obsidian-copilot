@@ -247,18 +247,22 @@ export function ChatSettingsPopover() {
                       value={displayValue}
                       onChange={(e) => {
                         const value = e.target.value;
-                        // Only update if a valid prompt is selected
-                        if (value && promptExists(value)) {
+                        if (value === "") {
+                          setSessionPrompt("");
+                        } else if (promptExists(value)) {
                           setSessionPrompt(value);
                         }
                       }}
-                      options={prompts.map((prompt) => ({
-                        label:
-                          prompt.title === globalDefault
-                            ? `${prompt.title} (Default)`
-                            : prompt.title,
-                        value: prompt.title,
-                      }))}
+                      options={[
+                        { label: "None (use built-in prompt)", value: "" },
+                        ...prompts.map((prompt) => ({
+                          label:
+                            prompt.title === globalDefault
+                              ? `${prompt.title} (Default)`
+                              : prompt.title,
+                          value: prompt.title,
+                        })),
+                      ]}
                       placeholder="Select system prompt"
                       containerClassName="tw-flex-1"
                     />
