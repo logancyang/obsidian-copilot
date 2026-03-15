@@ -1,7 +1,9 @@
 import {
   addFallbackSources,
   deduplicateAdjacentCitations,
+  extractSourcesSection,
   formatSourceCatalog,
+  getCitationFormatReminder,
   getLocalSearchGuidance,
   getQACitationInstructions,
   hasExistingCitations,
@@ -225,6 +227,99 @@ More content
     });
   });
 
+  describe("extractSourcesSection", () => {
+    it("should extract #### Sources heading", () => {
+      const content = `Main content here
+
+#### Sources:
+[^1]: [[Doc A]]
+[^2]: [[Doc B]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.mainContent).toContain("Main content here");
+      expect(result!.sourcesBlock).toContain("[^1]: [[Doc A]]");
+    });
+
+    it("should extract bare Sources label", () => {
+      const content = `Main content
+
+Sources
+[^1]: [[Doc]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.sourcesBlock).toContain("[^1]: [[Doc]]");
+    });
+
+    it("should extract --- separator with footnote definitions", () => {
+      const content = `Some analysis with citations [^201] and [^202].
+
+---
+
+[^201]: [[How to Make Wealth]]
+[^202]: [[Superlinear Returns]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.mainContent).toContain("Some analysis with citations");
+      expect(result!.sourcesBlock).toContain("[^201]: [[How to Make Wealth]]");
+      expect(result!.sourcesBlock).toContain("[^202]: [[Superlinear Returns]]");
+    });
+
+    it("should not treat --- as sources separator when content after has no footnotes", () => {
+      const content = `Paragraph one
+
+---
+
+Paragraph two continues here`;
+      const result = extractSourcesSection(content);
+      expect(result).toBeNull();
+    });
+
+    it("should extract trailing bare footnote definitions with no separator", () => {
+      const content = `Content with citations [^1] and [^2].
+
+[^1]: [[Note A]]
+[^2]: [[Note B]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.mainContent).toContain("Content with citations");
+      expect(result!.sourcesBlock).toContain("[^1]: [[Note A]]");
+      expect(result!.sourcesBlock).toContain("[^2]: [[Note B]]");
+    });
+
+    it("should return null when no sources pattern found", () => {
+      expect(extractSourcesSection("Just plain content")).toBeNull();
+    });
+
+    it("should prefer Sources heading over --- when both present", () => {
+      const content = `Content
+
+---
+
+More content
+
+#### Sources
+[^1]: [[Doc]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.sourcesBlock).toContain("[^1]: [[Doc]]");
+      // Strategy 1 matches first, so mainContent includes everything before "#### Sources"
+      expect(result!.mainContent).toContain("More content");
+    });
+  });
+
+  describe("getCitationFormatReminder", () => {
+    it("should return reminder when citations enabled", () => {
+      const result = getCitationFormatReminder(true);
+      expect(result).not.toBeNull();
+      expect(result).toContain("#### Sources");
+      expect(result).toContain("[^n]");
+    });
+
+    it("should return null when citations disabled", () => {
+      expect(getCitationFormatReminder(false)).toBeNull();
+    });
+  });
+
   describe("processInlineCitations", () => {
     it("should process inline citations with footnote format", () => {
       const content = `Some content here
@@ -258,6 +353,50 @@ More content
       const content = "Just regular content without sources";
       const result = processInlineCitations(content);
       expect(result).toBe(content);
+    });
+
+    it("should process citations with --- separator (common in agent mode)", () => {
+      const content = `Here are the findings [^1] and [^2].
+
+---
+
+[^1]: [[How to Make Wealth]]
+[^2]: [[Superlinear Returns]]`;
+
+      const result = processInlineCitations(content);
+      expect(result).toContain("copilot-sources__summary");
+      expect(result).toContain('copilot-sources__index">[1]');
+      expect(result).toContain('copilot-sources__text">[[How to Make Wealth]]');
+      expect(result).toContain('copilot-sources__text">[[Superlinear Returns]]');
+    });
+
+    it("should process citations with bare trailing footnotes (no separator)", () => {
+      const content = `Analysis shows key insights [^1] about this topic [^2].
+
+[^1]: [[Note A]]
+[^2]: [[Note B]]`;
+
+      const result = processInlineCitations(content);
+      expect(result).toContain("copilot-sources__summary");
+      expect(result).toContain('copilot-sources__text">[[Note A]]');
+      expect(result).toContain('copilot-sources__text">[[Note B]]');
+    });
+
+    it("should handle non-sequential footnote numbers with --- separator", () => {
+      const content = `Point A [^201] and point B [^202].
+
+---
+
+[^201]: [[Doc One]]
+[^202]: [[Doc Two]]`;
+
+      const result = processInlineCitations(content);
+      expect(result).toContain("copilot-sources__summary");
+      // Non-sequential [^201] and [^202] should be renumbered to [1] and [2]
+      expect(result).toContain('copilot-sources__index">[1]');
+      expect(result).toContain('copilot-sources__index">[2]');
+      expect(result).toContain("Point A [1]");
+      expect(result).toContain("point B [2]");
     });
   });
 

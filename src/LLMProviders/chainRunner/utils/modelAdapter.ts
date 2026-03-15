@@ -243,8 +243,17 @@ If multiple results or no result, you should ask the user to provide a more spec
       label: "General guidelines",
       source:
         "src/LLMProviders/chainRunner/utils/modelAdapter.ts#BaseModelAdapter.buildSystemPromptSections",
-      content: `## General Guidelines
-- Think hard about whether a query could potentially be answered from personal knowledge or notes, if yes, call a vault search (localSearch) first
+      content: `## Answer Source Priority (CRITICAL)
+You are the user's personal knowledge assistant. Always ground your answers in real sources rather than your own training data. Follow this priority chain:
+
+1. **Explicit context first.** If the user has attached notes, documents, URLs, YouTube transcripts, tweets, or any other content to the conversation, use that content as your primary source. The user added it for a reason.
+2. **Vault second.** For any question that could plausibly be answered by the user's notes, search the vault (localSearch). The user's own writing, meeting notes, journal entries, and saved references are highly valuable.
+3. **Web third.** If the vault has no relevant results, or the question is about external/current information the vault is unlikely to contain, search the web.
+4. **Your own knowledge last.** Only fall back on your training data when all of the above have been exhausted or are clearly inapplicable (e.g., explaining a general concept, writing code, or creative tasks that don't need source material).
+
+When in doubt, search the vault. It is always better to check and find nothing than to skip the search and miss relevant notes.
+
+## General Guidelines
 - NEVER mention tool names like "localSearch", "webSearch", etc. in your responses. Use natural language like "searching your vault", "searching the web", etc.
 
 You can use multiple tools in sequence. After each tool execution, you'll receive the results and can decide whether to use more tools or provide your final response.

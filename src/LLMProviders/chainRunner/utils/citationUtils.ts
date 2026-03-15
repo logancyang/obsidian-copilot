@@ -87,6 +87,15 @@ Source Catalog (for reference only):
 ${sourceCatalog}`;
 }
 
+/**
+ * Short citation format reminder placed near the user query for better model compliance.
+ * Reinforces key formatting from CITATION_RULES without duplicating the full ruleset.
+ */
+export function getCitationFormatReminder(enableInlineCitations: boolean): string | null {
+  if (!enableInlineCitations) return null;
+  return "REMINDER: End your response with an '#### Sources' section listing each cited source as [^n]: [[Title]], numbered sequentially from [^1].";
+}
+
 // ===== CONSTANTS =====
 
 const MAX_FALLBACK_SOURCES = 20;
@@ -191,16 +200,50 @@ export interface SourcesSection {
 
 /**
  * Extracts the sources section from content if present.
+ * Tries multiple strategies in order:
+ *   1. Explicit "Sources" heading (e.g. "#### Sources", "Sources:")
+ *   2. Horizontal rule separator (---) followed by footnote definitions
+ *   3. Trailing block of bare footnote definitions with no separator
  */
 export function extractSourcesSection(content: string): SourcesSection | null {
+  // Strategy 1: Explicit "Sources" heading (original behavior)
   const sourcesRegex = /([\s\S]*?)\n+(?:####\s*)?Sources\s*:?\s*\n+([\s\S]*)$/i;
   const match = content.match(sourcesRegex);
-  if (!match) return null;
+  if (match) {
+    return {
+      mainContent: match[1],
+      sourcesBlock: (match[2] || "").trim(),
+    };
+  }
 
-  return {
-    mainContent: match[1],
-    sourcesBlock: (match[2] || "").trim(),
-  };
+  // Strategy 2: --- separator followed by footnote definitions
+  const hrMatch = content.match(/([\s\S]*?)\n+---+\s*\n+([\s\S]*)$/);
+  if (hrMatch) {
+    const afterHr = (hrMatch[2] || "").trim();
+    if (/\[\^\d+\]:/.test(afterHr)) {
+      return {
+        mainContent: hrMatch[1],
+        sourcesBlock: afterHr,
+      };
+    }
+  }
+
+  // Strategy 3: Trailing block of bare footnote definitions (no separator)
+  const trailingMatch = content.match(/([\s\S]*?)\n{2,}(\[\^\d+\]:[\s\S]*)$/);
+  if (trailingMatch) {
+    const footnotesBlock = (trailingMatch[2] || "").trim();
+    const allFootnotes = footnotesBlock
+      .split("\n")
+      .every((line) => !line.trim() || /^\[\^\d+\]:/.test(line.trim()));
+    if (allFootnotes) {
+      return {
+        mainContent: trailingMatch[1],
+        sourcesBlock: footnotesBlock,
+      };
+    }
+  }
+
+  return null;
 }
 
 /**

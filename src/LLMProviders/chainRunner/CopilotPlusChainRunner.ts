@@ -34,6 +34,7 @@ import { loadAndAddChatHistory } from "./utils/chatHistoryUtils";
 import {
   addFallbackSources,
   formatSourceCatalog,
+  getCitationFormatReminder,
   getLocalSearchGuidance,
   sanitizeContentForCitations,
   type SourceCatalogEntry,
@@ -52,6 +53,7 @@ import {
 } from "./utils/searchResultUtils";
 import {
   buildLocalSearchInnerContent,
+  injectGuidanceBeforeUserQuery,
   renderCiCMessage,
   wrapLocalSearchPayload,
 } from "./utils/cicPromptUtils";
@@ -650,6 +652,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
         const userContentWithLabel = ensureUserQueryLabel(userMessageContent.content);
         finalUserContent = renderCiCMessage(toolContext, userContentWithLabel);
+
+        // Inject citation format reminder before [User query]: for better model compliance
+        const citationReminder = getCitationFormatReminder(getSettings().enableInlineCitations);
+        if (citationReminder) {
+          finalUserContent = injectGuidanceBeforeUserQuery(finalUserContent, citationReminder);
+        }
       } else {
         // No tools - use converter's output as-is
         // Smart references are already properly formatted by LayerToMessagesConverter

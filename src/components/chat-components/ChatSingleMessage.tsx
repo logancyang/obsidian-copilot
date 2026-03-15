@@ -677,7 +677,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
             normalizeFootnoteRendering(textDiv);
-            linkInlineCitations(textDiv);
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
@@ -786,6 +785,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
           }
         });
+
+        // Link inline citations after all segments are rendered so the
+        // citation numbers and the .copilot-sources section are both in the DOM.
+        if (contentRef.current) {
+          linkInlineCitations(contentRef.current);
+        }
       }
     }
 
