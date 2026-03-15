@@ -197,6 +197,7 @@ Examples:
 - Do not call writeToFile tool if no change needs to be made
 - Always create new notes in root folder or folders the user explicitly specifies
 - When creating a new note in a folder, you MUST use getFileTree to get the exact folder path first
+- Do NOT use writeToFile for .base file operations. Use obsidianBases tool instead (base:create to add items, base:query to read data). Only use writeToFile for .base files if the user explicitly asks to edit the YAML structure of the .base file itself.
 
 Examples:
 - Basic: path: "path/to/note.md", content: "FULL CONTENT OF THE NOTE"
@@ -449,6 +450,7 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianBases:
+- IMPORTANT: This tool is the PRIMARY tool for ALL .base file operations. Do NOT use writeToFile or replaceInFile for .base files unless the user explicitly asks to edit raw YAML.
 - Use to explore and manage structured data in Obsidian Base (.base) database files.
 - bases: list all Base files in the vault. Use total=true for just the count.
 - base:views: list the views defined in a Base file. Requires file= or path=.
@@ -457,10 +459,15 @@ export function registerCliTools(): void {
   - The created item appears as a new note that matches the Base's filter criteria.
   - Use base:query first to understand the Base's structure and existing data before creating items.
   - If the Base filters by a specific tag or folder, ensure the new item will match those filters.
-- To create or modify .base files themselves, use writeToFile with valid YAML.
 
-Base file YAML structure (for creating with writeToFile):
-- filters: scope notes using nested and/or/not objects or single filter strings. Use file.hasTag("tag"), file.inFolder("folder"), and comparison operators (==, !=, >, <, >=, <=). Example: filters: { and: ['file.hasTag("project")', 'status != "done"'] }
+When to use this tool vs writeToFile:
+- "Add an item to my Library base" → use base:create (this tool)
+- "Show me what's in my Projects base" → use base:query (this tool)
+- "Create a new .base file for tracking books" → use writeToFile (needs raw YAML)
+- "Edit the filters in my Tasks.base" → use writeToFile (editing YAML structure)
+
+Base file YAML reference (only needed when creating/editing .base files with writeToFile):
+- filters: nested and/or/not objects or single filter strings. Use file.hasTag("tag"), file.inFolder("folder"), and operators (==, !=, >, <, >=, <=). Example: filters: { and: ['file.hasTag("project")', 'status != "done"'] }
 - formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Duration fields: .days, .hours, .minutes. Example: days_left: 'if(due, (date(due) - today()).days, "")'
 - properties: display config per property (displayName, width, hidden).
 - views: table (default), cards, list, or map. Each view can have its own filters, order (property display list), groupBy, summaries.
