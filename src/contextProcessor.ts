@@ -333,7 +333,7 @@ export class ContextProcessor {
       });
     }
 
-    if (!isTextReadableFile(resolvedFile)) {
+    if (resolvedFile.extension !== "md") {
       return rawMatch;
     }
 
