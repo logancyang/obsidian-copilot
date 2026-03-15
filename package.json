@@ -22,15 +22,12 @@
   },
   "keywords": [],
   "author": "Logan Yang",
-  "husky": {
-    "hooks": {
-      "pre-commit": "lint-staged"
-    }
-  },
   "lint-staged": {
     "*.{js,jsx,ts,tsx,json,css,md}": [
-      "prettier --write",
-      "git add"
+      "prettier --write"
+    ],
+    "*.{js,jsx,ts,tsx}": [
+      "eslint --fix --no-warn-ignored"
     ]
   },
   "license": "AGPL-3.0",
