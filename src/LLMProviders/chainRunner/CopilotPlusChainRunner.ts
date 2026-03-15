@@ -1006,9 +1006,12 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const qualitySummary = generateQualitySummary(includedDocs);
     const qualityHeader = formatQualitySummary(qualitySummary);
 
-    // Detect result type for two-tier formatting strategy
+    // Detect result type for two-tier formatting strategy.
+    // timeDominant is checked independently of filterOnly: time-range queries often include
+    // daily notes with source "title-match" (from getTitleMatches), which are not in
+    // FILTER_SOURCES, so filterOnly would be false even for pure time-range result sets.
     const filterOnly = isFilterOnlyResults(includedDocs);
-    const timeDominant = filterOnly && isTimeDominantResults(includedDocs);
+    const timeDominant = isTimeDominantResults(includedDocs);
 
     // Determine tier split based on result type
     let tier1Docs: any[];
