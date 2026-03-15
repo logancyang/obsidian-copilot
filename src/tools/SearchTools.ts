@@ -102,20 +102,21 @@ async function performLexicalSearch({
   preExpandedQuery?: QueryExpansionInfo;
 }) {
   const settings = getSettings();
-  // Extract tag terms for self-host retriever (server-side tag filtering)
-  const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-
-  // Fall back to parsing tags directly from the query string when salientTerms misses them
-  // (e.g. query="#python" with incomplete/empty salientTerms). Uses same regex as FilterRetriever.
-  const hasTagTerms =
-    tagTerms.length > 0 ||
-    (() => {
-      try {
-        return /#[\p{L}\p{N}_/-]+/gu.test(query);
-      } catch {
-        return /#[a-z0-9_/-]+/i.test(query);
-      }
-    })();
+  // Extract tag terms for self-host retriever (server-side tag filtering).
+  // When salientTerms misses hashtags (e.g. query="#python" with empty salientTerms),
+  // fall back to parsing them from the raw query so SelfHostRetriever gets tag filters.
+  const salientTagTerms = salientTerms.filter((term) => term.startsWith("#"));
+  const tagTerms =
+    salientTagTerms.length > 0
+      ? salientTagTerms
+      : (() => {
+          try {
+            return [...query.matchAll(/#[\p{L}\p{N}_/-]+/gu)].map((m) => m[0]);
+          } catch {
+            return [...query.matchAll(/#[a-z0-9_/-]+/gi)].map((m) => m[0]);
+          }
+        })();
+  const hasTagTerms = tagTerms.length > 0;
 
   // Time-range and tag-focused queries need expanded limits to avoid truncating results
   const needsExpandedLimits = timeRange !== undefined || hasTagTerms;
