@@ -47,7 +47,12 @@ export function ActionButtons({
       {state === "result" && showInsertReplace && (
         <>
           {onCopy && (
-            <Button size="sm" variant="secondary" onClick={onCopy} title="Copy to clipboard">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={onCopy}
+              title="Copy to clipboard"
+            >
               Copy
             </Button>
           )}

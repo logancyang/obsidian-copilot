@@ -56,13 +56,7 @@ export function DraggableModal({
   closeOnEscapeFromOutside = false,
   anchorBottom,
 }: DraggableModalProps) {
-  const {
-    position,
-    setPosition,
-    dragRef,
-    handleMouseDown: rawHandleMouseDown,
-    isDragging,
-  } = useDraggable({
+  const { position, setPosition, dragRef, handleMouseDown: rawHandleMouseDown, isDragging } = useDraggable({
     initialPosition: initialPosition || {
       x: typeof window !== "undefined" ? (window.innerWidth - 500) / 2 : 100,
       y: typeof window !== "undefined" ? (window.innerHeight - 400) / 2 : 100,
