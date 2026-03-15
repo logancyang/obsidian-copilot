@@ -149,8 +149,12 @@ export async function executeSequentialToolCall(
 }
 
 /**
- * Check if a composer tool call targets a .base file and should be redirected
- * to obsidianBases. Only redirects when obsidianBases is available.
+ * Check if a composer tool call targets an existing .base file and should be
+ * redirected to obsidianBases. Only redirects when:
+ * 1. The tool is writeToFile or replaceInFile
+ * 2. The path ends with .base
+ * 3. The file already exists (creating new .base files via composer is allowed)
+ * 4. obsidianBases is available in the current tool set
  */
 function getBaseFileRedirect(
   toolCall: ToolCall,
@@ -163,12 +167,17 @@ function getBaseFileRedirect(
   if (!path || !path.endsWith(".base")) {
     return null;
   }
+  // Allow creating new .base files via composer
+  const existingFile = app.vault.getAbstractFileByPath(path);
+  if (!existingFile) {
+    return null;
+  }
   if (!availableTools.some((t) => t.name === "obsidianBases")) {
     return null;
   }
   return {
     toolName: toolCall.name,
-    result: `Error: "${path}" is a .base file. Use the obsidianBases tool instead: base:create to add items, base:query to read data, base:views to list views. Only use ${toolCall.name} to create a brand new .base file or when the user explicitly asks to edit raw YAML.`,
+    result: `Error: "${path}" is an existing .base file. Use the obsidianBases tool instead: base:create to add items, base:query to read data, base:views to list views.`,
     success: false,
   };
 }
