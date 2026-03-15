@@ -183,6 +183,7 @@ export enum ChatModels {
   AZURE_OPENAI = "azure-openai",
   GEMINI_3_PRO_PREVIEW = "gemini-3.1-pro-preview",
   GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview",
+  GEMINI_3_FLASH_LITE_PREVIEW = "gemini-3.1-flash-lite-preview",
   GEMINI_PRO = "gemini-2.5-pro",
   GEMINI_FLASH = "gemini-2.5-flash",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
@@ -251,14 +252,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.OPENROUTER_GEMINI_3_FLASH_PREVIEW,
     provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
     name: ChatModels.OPENROUTER_GEMINI_3_PRO_PREVIEW,
     provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
@@ -274,7 +275,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.OPENROUTER_GEMINI_2_5_PRO,
     provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -283,7 +284,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.OPENROUTER_GPT_5_2,
     provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -292,7 +293,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.OPENROUTER_GPT_5_MINI,
     provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -301,7 +302,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GROK_4_1_FAST,
     provider: ChatModelProviders.XAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -310,7 +311,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.OPENROUTER_GROK_4_1_FAST,
     provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -335,7 +336,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GPT_41,
     provider: ChatModelProviders.OPENAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -344,7 +345,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GPT_41_mini,
     provider: ChatModelProviders.OPENAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     core: false,
     projectEnabled: true,
@@ -353,7 +354,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.CLAUDE_OPUS_4_6,
     provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
@@ -367,14 +368,22 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GEMINI_3_FLASH_PREVIEW,
     provider: ChatModelProviders.GOOGLE,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
-    name: ChatModels.GEMINI_3_PRO_PREVIEW,
+    name: ChatModels.GEMINI_3_FLASH_LITE_PREVIEW,
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_3_PRO_PREVIEW,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
@@ -389,7 +398,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.GEMINI_PRO,
     provider: ChatModelProviders.GOOGLE,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     projectEnabled: true,
     capabilities: [ModelCapability.VISION],
@@ -397,19 +406,19 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.AZURE_OPENAI,
     provider: ChatModelProviders.AZURE_OPENAI,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
   },
   {
     name: ChatModels.DEEPSEEK_CHAT,
     provider: ChatModelProviders.DEEPSEEK,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
   },
   {
     name: ChatModels.DEEPSEEK_REASONER,
     provider: ChatModelProviders.DEEPSEEK,
-    enabled: true,
+    enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.REASONING],
   },
