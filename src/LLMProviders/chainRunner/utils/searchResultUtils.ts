@@ -412,7 +412,7 @@ export function formatMetadataOnlyDocuments(
     })
     .join("\n");
 
-  return `<additionalMatches count="${docs.length}" note="Titles and metadata only. Use readNote for full content of relevant notes.">\n${fileElements}\n</additionalMatches>`;
+  return `<additionalMatches count="${docs.length}" note="These results contain titles and metadata only. To read the full content of a note, call the readNote tool with its path.">\n${fileElements}\n</additionalMatches>`;
 }
 
 export function logSearchResultsDebugTable(searchResults: any[]): void {

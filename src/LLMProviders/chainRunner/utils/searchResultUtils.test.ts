@@ -300,7 +300,7 @@ describe("searchResultUtils", () => {
     it("should include the note attribute", () => {
       const docs = [{ title: "Doc1", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
-      expect(result).toContain('note="Titles and metadata only. Use readNote for full content of relevant notes."');
+      expect(result).toContain('note="These results contain titles and metadata only. To read the full content of a note, call the readNote tool with its path."');
     });
 
     it("should format document with title, path, mtime, and snippet", () => {
