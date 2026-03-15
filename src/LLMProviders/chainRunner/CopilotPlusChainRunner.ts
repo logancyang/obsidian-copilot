@@ -46,6 +46,8 @@ import {
   formatSplitSearchResultsForLLM,
   generateQualitySummary,
   formatQualitySummary,
+  isFilterOnlyResults,
+  isTimeDominantResults,
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
 import {
@@ -1004,15 +1006,32 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const qualitySummary = generateQualitySummary(includedDocs);
     const qualityHeader = formatQualitySummary(qualitySummary);
 
-    // Two-tier split: when results exceed maxSourceChunks, overflow docs get metadata-only formatting
-    // to achieve significant context reduction (~85%) while preserving discoverability
-    const [tier1Docs, tier2Docs] =
-      includedDocs.length > settings.maxSourceChunks
-        ? [
-            includedDocs.slice(0, settings.maxSourceChunks),
-            includedDocs.slice(settings.maxSourceChunks),
-          ]
-        : [includedDocs, [] as any[]];
+    // Detect result type for two-tier formatting strategy
+    const filterOnly = isFilterOnlyResults(includedDocs);
+    const timeDominant = filterOnly && isTimeDominantResults(includedDocs);
+
+    // Determine tier split based on result type
+    let tier1Docs: any[];
+    let tier2Docs: any[];
+    if (timeDominant) {
+      // Sort by mtime desc; most recent get full content, older get metadata-only
+      const sorted = [...includedDocs].sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+      tier1Docs = sorted.slice(0, settings.maxSourceChunks);
+      tier2Docs = sorted.slice(settings.maxSourceChunks);
+    } else if (filterOnly) {
+      // Tag queries: no meaningful ranking — all docs get metadata-only
+      tier1Docs = [];
+      tier2Docs = includedDocs;
+    } else {
+      // Ranked results: existing behavior
+      if (includedDocs.length > settings.maxSourceChunks) {
+        tier1Docs = includedDocs.slice(0, settings.maxSourceChunks);
+        tier2Docs = includedDocs.slice(settings.maxSourceChunks);
+      } else {
+        tier1Docs = includedDocs;
+        tier2Docs = [];
+      }
+    }
 
     // Calculate total content length for tier 1 only (safety net truncation)
     const totalContentLength = tier1Docs.reduce(
@@ -1046,18 +1065,29 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const filterDocs = withIds.filter((d: any) => d.isFilterResult === true);
     const searchDocs = withIds.filter((d: any) => d.isFilterResult !== true);
 
-    // Use split formatter if there are filter results, otherwise fall back to unified format
+    // Use split formatter if there are filter results, otherwise fall back to unified format.
+    // For tag-only queries (tier1 empty), output metadata-only directly.
     const hasFilterResults = filterDocs.length > 0;
     let formattedContent = hasFilterResults
       ? formatSplitSearchResultsForLLM(filterDocs, searchDocs)
-      : formatSearchResultsForLLM(withIds);
+      : tier1Docs.length === 0
+        ? formatMetadataOnlyDocuments(tier2Docs)
+        : formatSearchResultsForLLM(withIds);
 
-    // Append metadata-only tier 2 for overflow docs
-    if (tier2Docs.length > 0) {
-      logInfo(
-        `Two-tier search: ${tier1Docs.length} full-content docs, ${tier2Docs.length} metadata-only docs`
-      );
+    // Append metadata-only tier 2 for overflow docs (only when tier 1 has full-content docs)
+    if (tier1Docs.length > 0 && tier2Docs.length > 0) {
+      if (timeDominant) {
+        logInfo(
+          `Time-dominant search: ${tier1Docs.length} recent notes (full content), ${tier2Docs.length} older notes (metadata-only)`
+        );
+      } else {
+        logInfo(
+          `Two-tier search: ${tier1Docs.length} full-content docs, ${tier2Docs.length} metadata-only docs`
+        );
+      }
       formattedContent = `${formattedContent}\n\n${formatMetadataOnlyDocuments(tier2Docs)}`;
+    } else if (filterOnly) {
+      logInfo(`Tag-only search: ${tier2Docs.length} notes (metadata-only)`);
     }
 
     // Build a compact, unnumbered source catalog to avoid bias

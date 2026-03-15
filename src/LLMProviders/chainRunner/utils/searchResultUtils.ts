@@ -352,15 +352,46 @@ ${doc.content || ""}
   return sections.join("\n\n");
 }
 
+/** Source values produced by FilterRetriever — docs with these sources have no real ranking. */
+const FILTER_SOURCES = new Set(["time-filtered", "tag-match", "title-match"]);
+
+/**
+ * Checks if all documents are from FilterRetriever (no real ranking).
+ * Returns true when every doc has a source in the filter-only set.
+ *
+ * @param docs - Array of document objects with optional source field
+ * @returns True if all docs are filter-only results
+ */
+export function isFilterOnlyResults(docs: Array<{ source?: string }>): boolean {
+  if (!Array.isArray(docs) || docs.length === 0) return false;
+  return docs.every((doc) => doc.source != null && FILTER_SOURCES.has(doc.source));
+}
+
+/**
+ * Checks if results are time-dominant (contain at least one time-filtered doc).
+ * Used to determine whether to sort by mtime for two-tier formatting.
+ *
+ * @param docs - Array of document objects with optional source field
+ * @returns True if any doc has source "time-filtered"
+ */
+export function isTimeDominantResults(docs: Array<{ source?: string }>): boolean {
+  if (!Array.isArray(docs)) return false;
+  return docs.some((doc) => doc.source === "time-filtered");
+}
+
 /**
  * Formats overflow documents as metadata-only XML for the two-tier search result system.
  * Used when total search results exceed maxSourceChunks to reduce context size.
- * Tier 2 documents show only title, path, modification time, and a 150-character snippet.
+ * Tier 2 documents show only title, path, modification time, and a snippet.
  *
  * @param docs - Array of document objects for metadata-only formatting
+ * @param snippetLength - Maximum characters for the content snippet (default 300)
  * @returns Formatted XML string with `<additionalMatches>` wrapper, or empty string if no docs
  */
-export function formatMetadataOnlyDocuments(docs: any[]): string {
+export function formatMetadataOnlyDocuments(
+  docs: Array<{ title?: string; path?: string; mtime?: number | null; content?: string }>,
+  snippetLength = 300
+): string {
   if (!Array.isArray(docs) || docs.length === 0) {
     return "";
   }
@@ -371,7 +402,7 @@ export function formatMetadataOnlyDocuments(docs: any[]): string {
       const path = doc.path || "";
       const modified = toIsoString(doc.mtime);
       const content = doc.content || "";
-      const snippet = content.slice(0, 150);
+      const snippet = content.slice(0, snippetLength);
 
       const pathEl = path ? `\n<path>${path}</path>` : "";
       const modifiedEl = modified ? `\n<modified>${modified}</modified>` : "";

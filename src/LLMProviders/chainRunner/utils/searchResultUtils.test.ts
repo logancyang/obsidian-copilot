@@ -3,6 +3,8 @@ import {
   formatSearchResultStringForLLM,
   extractSourcesFromSearchResults,
   formatMetadataOnlyDocuments,
+  isFilterOnlyResults,
+  isTimeDominantResults,
 } from "./searchResultUtils";
 
 describe("searchResultUtils", () => {
@@ -317,12 +319,20 @@ describe("searchResultUtils", () => {
       expect(result).toContain("<snippet>This is the note content</snippet>");
     });
 
-    it("should truncate content to 150 chars for snippet", () => {
-      const longContent = "a".repeat(300);
+    it("should truncate content to 300 chars for snippet by default", () => {
+      const longContent = "a".repeat(400);
       const docs = [{ title: "Doc", content: longContent }];
       const result = formatMetadataOnlyDocuments(docs);
-      expect(result).toContain(`<snippet>${"a".repeat(150)}</snippet>`);
-      expect(result).not.toContain("a".repeat(151));
+      expect(result).toContain(`<snippet>${"a".repeat(300)}</snippet>`);
+      expect(result).not.toContain("a".repeat(301));
+    });
+
+    it("should respect custom snippetLength parameter", () => {
+      const longContent = "b".repeat(200);
+      const docs = [{ title: "Doc", content: longContent }];
+      const result = formatMetadataOnlyDocuments(docs, 100);
+      expect(result).toContain(`<snippet>${"b".repeat(100)}</snippet>`);
+      expect(result).not.toContain("b".repeat(101));
     });
 
     it("should omit path when missing", () => {
@@ -364,6 +374,69 @@ describe("searchResultUtils", () => {
       const result = formatMetadataOnlyDocuments(docs);
       expect(result).toContain("<title>Doc1</title>");
       expect(result).toContain("<title>Doc2</title>");
+    });
+  });
+
+  describe("isFilterOnlyResults", () => {
+    it("should return false for empty array", () => {
+      expect(isFilterOnlyResults([])).toBe(false);
+    });
+
+    it("should return false for non-array input", () => {
+      expect(isFilterOnlyResults(null as any)).toBe(false);
+      expect(isFilterOnlyResults(undefined as any)).toBe(false);
+    });
+
+    it("should return true when all docs have filter sources", () => {
+      const docs = [
+        { source: "time-filtered" },
+        { source: "tag-match" },
+        { source: "title-match" },
+      ];
+      expect(isFilterOnlyResults(docs)).toBe(true);
+    });
+
+    it("should return false when any doc has a non-filter source", () => {
+      const docs = [{ source: "time-filtered" }, { source: "semantic" }];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return false when any doc has no source", () => {
+      const docs = [{ source: "tag-match" }, {}];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return true for single tag-match doc", () => {
+      expect(isFilterOnlyResults([{ source: "tag-match" }])).toBe(true);
+    });
+  });
+
+  describe("isTimeDominantResults", () => {
+    it("should return false for empty array", () => {
+      expect(isTimeDominantResults([])).toBe(false);
+    });
+
+    it("should return false for non-array input", () => {
+      expect(isTimeDominantResults(null as any)).toBe(false);
+      expect(isTimeDominantResults(undefined as any)).toBe(false);
+    });
+
+    it("should return true when at least one doc has source time-filtered", () => {
+      const docs = [{ source: "tag-match" }, { source: "time-filtered" }];
+      expect(isTimeDominantResults(docs)).toBe(true);
+    });
+
+    it("should return false when no docs have source time-filtered", () => {
+      const docs = [{ source: "tag-match" }, { source: "title-match" }];
+      expect(isTimeDominantResults(docs)).toBe(false);
+    });
+
+    it("should return true for single time-filtered doc", () => {
+      expect(isTimeDominantResults([{ source: "time-filtered" }])).toBe(true);
+    });
+
+    it("should return false when source is undefined", () => {
+      expect(isTimeDominantResults([{}])).toBe(false);
     });
   });
 });
