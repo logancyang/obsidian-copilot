@@ -12,8 +12,10 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
+  DEFAULT_VIM_NAVIGATION,
   EmbeddingModelProviders,
   SEND_SHORTCUT,
+  type VimNavigationSettings,
 } from "@/constants";
 
 /**
@@ -197,6 +199,8 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
+  /** Vim-style keyboard navigation settings for the chat UI */
+  vimNavigation: VimNavigationSettings;
 }
 
 export const settingsStore = createStore();
@@ -234,6 +238,48 @@ export function setSettings(settings: Partial<CopilotSettings>) {
  * @param rawValue - Persisted QA exclusion setting value.
  * @returns Encoded QA exclusion patterns string.
  */
+/**
+ * Validates and sanitizes VimNavigationSettings.
+ * Ensures keys are single characters, non-empty, and unique (case-insensitive).
+ * Falls back to DEFAULT_VIM_NAVIGATION for any invalid configuration.
+ */
+function sanitizeVimNavigation(raw: unknown): VimNavigationSettings {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_VIM_NAVIGATION };
+  }
+
+  const input = raw as Partial<VimNavigationSettings>;
+  const enabled = typeof input.enabled === "boolean" ? input.enabled : DEFAULT_VIM_NAVIGATION.enabled;
+
+  const rawKeys = [input.scrollUpKey, input.scrollDownKey, input.focusInputKey];
+
+  // Validate and trim each key to a single character
+  const trimmedKeys: string[] = [];
+  for (const key of rawKeys) {
+    if (typeof key !== "string") {
+      return { ...DEFAULT_VIM_NAVIGATION, enabled };
+    }
+    const trimmed = key.trim();
+    if (trimmed.length !== 1) {
+      return { ...DEFAULT_VIM_NAVIGATION, enabled };
+    }
+    trimmedKeys.push(trimmed);
+  }
+
+  // Validate uniqueness (case-insensitive) on trimmed values
+  const normalized = new Set(trimmedKeys.map((k) => k.toLowerCase()));
+  if (normalized.size !== trimmedKeys.length) {
+    return { ...DEFAULT_VIM_NAVIGATION, enabled };
+  }
+
+  return {
+    enabled,
+    scrollUpKey: trimmedKeys[0],
+    scrollDownKey: trimmedKeys[1],
+    focusInputKey: trimmedKeys[2],
+  };
+}
+
 export function sanitizeQaExclusions(rawValue: unknown): string {
   const rawValueString = typeof rawValue === "string" ? rawValue : DEFAULT_QA_EXCLUSIONS_SETTING;
 
@@ -570,6 +616,8 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       : DEFAULT_SETTINGS.userSystemPromptsFolder;
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
+
+  sanitizedSettings.vimNavigation = sanitizeVimNavigation(settingsToSanitize.vimNavigation);
 
   return sanitizedSettings;
 }
