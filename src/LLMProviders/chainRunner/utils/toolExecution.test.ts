@@ -155,5 +155,123 @@ describe("toolExecution", () => {
         success: false,
       });
     });
+
+    it("should redirect writeToFile targeting .base files when obsidianBases is available", async () => {
+      const writeToFile = createLangChainTool({
+        name: "writeToFile",
+        description: "Write to file",
+        schema: z.object({ path: z.string(), content: z.string() }),
+        func: async () => "written",
+      });
+      const obsidianBases = createLangChainTool({
+        name: "obsidianBases",
+        description: "Bases CLI",
+        schema: z.object({ command: z.string() }),
+        func: async () => "queried",
+      });
+
+      ToolRegistry.getInstance().register({
+        tool: writeToFile,
+        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
+      });
+
+      const result = await executeSequentialToolCall(
+        { name: "writeToFile", args: { path: "Library.base", content: "yaml" } },
+        [writeToFile, obsidianBases]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.result).toContain("obsidianBases");
+      expect(result.result).toContain(".base file");
+      expect(mockCallTool).not.toHaveBeenCalled();
+    });
+
+    it("should redirect replaceInFile targeting .base files when obsidianBases is available", async () => {
+      const replaceInFile = createLangChainTool({
+        name: "replaceInFile",
+        description: "Replace in file",
+        schema: z.object({ path: z.string(), diff: z.string() }),
+        func: async () => "replaced",
+      });
+      const obsidianBases = createLangChainTool({
+        name: "obsidianBases",
+        description: "Bases CLI",
+        schema: z.object({ command: z.string() }),
+        func: async () => "queried",
+      });
+
+      ToolRegistry.getInstance().register({
+        tool: replaceInFile,
+        metadata: {
+          id: "replaceInFile",
+          displayName: "Replace",
+          description: "",
+          category: "file",
+        },
+      });
+
+      const result = await executeSequentialToolCall(
+        { name: "replaceInFile", args: { path: "Databases/Projects.base", diff: "..." } },
+        [replaceInFile, obsidianBases]
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.result).toContain("obsidianBases");
+      expect(mockCallTool).not.toHaveBeenCalled();
+    });
+
+    it("should allow writeToFile for .base files when obsidianBases is NOT available", async () => {
+      const writeToFile = createLangChainTool({
+        name: "writeToFile",
+        description: "Write to file",
+        schema: z.object({ path: z.string(), content: z.string() }),
+        func: async () => "written",
+      });
+
+      ToolRegistry.getInstance().register({
+        tool: writeToFile,
+        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
+      });
+
+      mockCallTool.mockResolvedValueOnce("File written");
+
+      const result = await executeSequentialToolCall(
+        { name: "writeToFile", args: { path: "Library.base", content: "yaml" } },
+        [writeToFile] // no obsidianBases in available tools
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockCallTool).toHaveBeenCalled();
+    });
+
+    it("should not redirect writeToFile for non-.base files", async () => {
+      const writeToFile = createLangChainTool({
+        name: "writeToFile",
+        description: "Write to file",
+        schema: z.object({ path: z.string(), content: z.string() }),
+        func: async () => "written",
+      });
+      const obsidianBases = createLangChainTool({
+        name: "obsidianBases",
+        description: "Bases CLI",
+        schema: z.object({ command: z.string() }),
+        func: async () => "queried",
+      });
+
+      ToolRegistry.getInstance().register({
+        tool: writeToFile,
+        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
+      });
+
+      mockCallTool.mockResolvedValueOnce("File written");
+
+      const result = await executeSequentialToolCall(
+        { name: "writeToFile", args: { path: "Notes/todo.md", content: "# Todo" } },
+        [writeToFile, obsidianBases]
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockCallTool).toHaveBeenCalled();
+    });
   });
 });

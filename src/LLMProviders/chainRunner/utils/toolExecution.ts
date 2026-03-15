@@ -73,6 +73,12 @@ export async function executeSequentialToolCall(
       }
     }
 
+    // Guard: redirect .base file operations from composer to obsidianBases
+    const redirect = getBaseFileRedirect(toolCall, availableTools);
+    if (redirect) {
+      return redirect;
+    }
+
     // Prepare tool arguments
     const toolArgs = { ...toolCall.args };
 
@@ -140,6 +146,31 @@ export async function executeSequentialToolCall(
       success: false,
     };
   }
+}
+
+/**
+ * Check if a composer tool call targets a .base file and should be redirected
+ * to obsidianBases. Only redirects when obsidianBases is available.
+ */
+function getBaseFileRedirect(
+  toolCall: ToolCall,
+  availableTools: any[]
+): ToolExecutionResult | null {
+  if (toolCall.name !== "writeToFile" && toolCall.name !== "replaceInFile") {
+    return null;
+  }
+  const path = toolCall.args?.path as string | undefined;
+  if (!path || !path.endsWith(".base")) {
+    return null;
+  }
+  if (!availableTools.some((t) => t.name === "obsidianBases")) {
+    return null;
+  }
+  return {
+    toolName: toolCall.name,
+    result: `Error: "${path}" is a .base file. Use the obsidianBases tool instead: base:create to add items, base:query to read data, base:views to list views. Only use ${toolCall.name} to create a brand new .base file or when the user explicitly asks to edit raw YAML.`,
+    success: false,
+  };
 }
 
 /**
