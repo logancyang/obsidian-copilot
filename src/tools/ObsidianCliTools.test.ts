@@ -78,6 +78,21 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("obsidianDailyNoteTool", () => {
+  test("daily creates today's daily note", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
+
+    const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_daily_note");
+    expect(parsed.command).toBe("daily");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily",
+      vault: undefined,
+      params: {},
+    });
+  });
+
   test("daily:read returns note content payload", async () => {
     mockedRunCommand.mockResolvedValue(
       buildSuccessResult("daily:read", "# 2026-03-03\n\nToday's tasks...")

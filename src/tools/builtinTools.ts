@@ -335,19 +335,19 @@ export function registerCliTools(): void {
     metadata: {
       id: "obsidianDailyNote",
       displayName: "Daily Note",
-      description: "Read, append, or prepend to today's daily note, or get its path",
+      description: "Create, read, append, or prepend to today's daily note, or get its path",
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianDailyNote:
-- Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
+- Use for all daily note operations: creating, reading content, appending text, prepending text, or getting the file path.
 - Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
+- daily — create today's daily note. Applies the user's configured daily note template automatically. Use this when the user asks to create or set up today's daily note.
 - daily:read — read today's daily note content.
-- daily:append — append text to the end. Requires content parameter. Use inline=true to append without a newline.
-- daily:prepend — prepend text to the beginning. Requires content parameter. Use inline=true to prepend without a newline.
+- daily:append — append text to the end. Requires content parameter (must be non-empty). Use inline=true to append without a newline.
+- daily:prepend — prepend text to the beginning. Requires content parameter (must be non-empty). Use inline=true to prepend without a newline.
 - daily:path — get the vault-relative file path (useful for follow-up readNote calls).
-- daily:append and daily:prepend auto-create the daily note if it doesn't exist.
+- daily:append and daily:prepend also auto-create the daily note if it doesn't exist, but do NOT apply the template.
 - Use \\n for newlines and \\t for tabs in content strings.
-- Template workflow: use obsidianTemplates 'templates' to list templates, then 'template:read' to get resolved content (variables like {{date}} expanded), then daily:prepend to populate.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },

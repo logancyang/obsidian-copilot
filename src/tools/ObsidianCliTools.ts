@@ -19,9 +19,9 @@ function buildCliParams(args: Record<string, unknown>): Record<string, string | 
 
 const dailyNoteSchema = z.object({
   command: z
-    .enum(["daily:read", "daily:append", "daily:prepend", "daily:path"])
+    .enum(["daily", "daily:read", "daily:append", "daily:prepend", "daily:path"])
     .describe(
-      "daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
+      "daily — create today's daily note (applies configured template). daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
     ),
   content: z
     .string()
@@ -46,7 +46,7 @@ const dailyNoteSchema = z.object({
 export const obsidianDailyNoteTool = createLangChainTool({
   name: "obsidianDailyNote",
   description:
-    "Read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
+    "Create, read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
   schema: dailyNoteSchema,
   func: async (args) => {
     const { command, vault } = args;
