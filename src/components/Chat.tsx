@@ -14,8 +14,10 @@ import {
 import { resetSessionSystemPromptSettings } from "@/system-prompts";
 import { ChainType } from "@/chainFactory";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
-import { logInfo, logError } from "@/logger";
+import { useVimNavigation } from "@/hooks/useVimNavigation";
+import { logError, logInfo } from "@/logger";
 import type { WebTabContext } from "@/types/message";
+import { ChatMessage } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatInput";
@@ -45,7 +47,6 @@ import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
@@ -141,6 +142,21 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const handleChatPointerDownCapture = useCallback((): void => {
     plugin.chatSelectionHighlightController.persistFromPointerDown();
   }, [plugin]);
+
+  // Vim-style keyboard navigation (settings already sanitized with defaults)
+  const {
+    messagesRef,
+    focusMessages,
+    handleMessagesKeyDown,
+    handleMessagesBlur,
+    handleMessagesClick,
+  } = useVimNavigation({
+    enabled: settings.vimNavigation.enabled,
+    scrollUpKey: settings.vimNavigation.scrollUpKey,
+    scrollDownKey: settings.vimNavigation.scrollDownKey,
+    focusInputKey: settings.vimNavigation.focusInputKey,
+    focusInput: chatInput.focusInput,
+  });
 
   // Safe setter utilities - automatically wrap state setters to prevent updates after unmount
   const safeSet = useMemo<{
@@ -651,6 +667,15 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   useEffect(() => {
     const handleChatVisibility = () => {
+      // Only check for Vim navigation mode when it's enabled
+      if (settings.vimNavigation.enabled) {
+        // Don't steal focus if user is in Vim navigation mode (focus on messages area)
+        const activeElement = document.activeElement;
+        const messagesContainer = messagesRef.current;
+        if (messagesContainer && activeElement && messagesContainer.contains(activeElement)) {
+          return;
+        }
+      }
       chatInput.focusInput();
     };
     eventTarget?.addEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
@@ -659,7 +684,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.CHAT_IS_VISIBLE, handleChatVisibility);
     };
-  }, [eventTarget, chatInput]);
+  }, [eventTarget, chatInput, messagesRef, settings.vimNavigation.enabled]);
 
   const handleDelete = useCallback(
     async (messageIndex: number) => {
@@ -854,6 +879,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           onDelete={handleDelete}
           onReplaceChat={setInputMessage}
           showHelperComponents={selectedChain !== ChainType.PROJECT_CHAIN}
+          messagesRef={messagesRef}
+          vimNavigationEnabled={settings.vimNavigation.enabled}
+          onKeyDown={handleMessagesKeyDown}
+          onBlur={handleMessagesBlur}
+          onClick={handleMessagesClick}
         />
         {shouldShowProgressCard() ? (
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
@@ -932,6 +962,8 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               showIndexingCard={() => {
                 setIndexingCardVisible(true);
               }}
+              vimNavigationEnabled={settings.vimNavigation.enabled}
+              focusMessages={focusMessages}
             />
           </>
         )}
