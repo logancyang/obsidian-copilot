@@ -1,4 +1,4 @@
-import { getCurrentProject } from "@/aiParams";
+import { getCurrentProject, ProjectConfig } from "@/aiParams";
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import ChainManager from "@/LLMProviders/chainManager";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
@@ -87,9 +87,11 @@ export class ChatPersistenceManager {
         }
       }
 
+      const currentProject = getCurrentProject();
+
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(messages, firstMessageEpoch, existingTopic);
+        : this.generateFileName(currentProject, messages, firstMessageEpoch, existingTopic);
 
       const noteContent = this.generateNoteContent(
         chatContent,
@@ -160,7 +162,6 @@ export class ChatPersistenceManager {
             }
           } else if (this.isNameTooLongError(error)) {
             // Single fallback: minimal guaranteed-to-work filename with project prefix
-            const currentProject = getCurrentProject();
             const filePrefix = currentProject ? `${currentProject.id}__` : "";
             const fallbackName = `${settings.defaultSaveFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
 
@@ -212,7 +213,7 @@ export class ChatPersistenceManager {
         }
       }
 
-      this.generateTopicAsyncIfNeeded(messages, targetFile, existingTopic);
+      this.generateTopicAsyncIfNeeded(currentProject, targetFile, messages, existingTopic);
     } catch (error) {
       logError("[ChatPersistenceManager] Error saving chat:", error);
       new Notice("Failed to save chat as note. Check console for details.");
@@ -614,11 +615,13 @@ ${conversationSummary}`;
 
   /**
    * Generate a file name for the chat.
+   * @param project - The project context for the filename prefix.
    * @param messages - The conversation messages used to derive the topic.
    * @param firstMessageEpoch - Epoch timestamp of the first message in the chat.
    * @param topic - Optional pre-computed topic to use for the filename.
    */
   private generateFileName(
+    project: ProjectConfig | null,
     messages: ChatMessage[],
     firstMessageEpoch: number,
     topic?: string
@@ -627,7 +630,7 @@ ${conversationSummary}`;
     const formattedDateTime = formatDateTime(new Date(firstMessageEpoch));
     const timestampFileName = formattedDateTime.fileName;
 
-    // Use provided topic or fall back to first 10 words
+    // Use the provided topic or fall back to the first 10 words
     let topicForFilename: string;
     if (topic) {
       topicForFilename = topic;
@@ -656,8 +659,8 @@ ${conversationSummary}`;
     // Parse the custom format and replace variables
     let customFileName = settings.defaultConversationNoteName || "{$date}_{$time}__{$topic}";
 
-    // Get the current project prefix if any
-    const currentProject = getCurrentProject();
+    // Prefix from an input project, global project, or empty if none
+    const currentProject = project === undefined ? getCurrentProject() : project;
     const filePrefix = currentProject ? `${currentProject.id}__` : "";
 
     // Calculate fixed components in bytes
@@ -739,8 +742,9 @@ ${chatContent}`;
    * Trigger asynchronous topic generation and apply it to the saved note once available
    */
   private generateTopicAsyncIfNeeded(
-    messages: ChatMessage[],
+    project: ProjectConfig | null,
     file: TFile | null,
+    messages: ChatMessage[],
     existingTopic?: string
   ): void {
     const settings = getSettings();
@@ -756,6 +760,7 @@ ${chatContent}`;
           return;
         }
         await this.applyTopicToFrontmatter(file, topic);
+        await this.renameFileToMatchTopic(project, file, topic);
       } catch (error) {
         logError("[ChatPersistenceManager] Error during async topic generation:", error);
       }
@@ -798,5 +803,48 @@ ${chatContent}`;
     }
     const message = error instanceof Error ? error.message : String(error);
     return message.toLowerCase().includes("already exists");
+  }
+
+  /**
+   * Rename a note file to match its finalized frontmatter topic
+   */
+  async renameFileToMatchTopic(
+    project: ProjectConfig | null,
+    file: TFile,
+    topic: string
+  ): Promise<void> {
+    if (!file || !topic) return;
+
+    let epoch: number | undefined;
+
+    const cache = this.app.metadataCache.getFileCache(file);
+    if (cache?.frontmatter?.epoch) {
+      epoch = cache.frontmatter.epoch;
+    } else {
+      // Fallback for hidden-directory files
+      try {
+        const adapterFm = await readFrontmatterViaAdapter(this.app, file.path);
+        if (adapterFm?.epoch) {
+          epoch = Number(adapterFm.epoch);
+        }
+      } catch {
+        // Ignore
+      }
+    }
+
+    if (!epoch) {
+      return;
+    }
+
+    const messages = this.messageRepo.getDisplayMessages();
+    const newPath = this.generateFileName(project, messages, epoch, topic);
+
+    if (file.path === newPath) {
+      return;
+    }
+
+    await this.app.fileManager.renameFile(file, newPath);
+
+    return;
   }
 }
