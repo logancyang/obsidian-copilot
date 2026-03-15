@@ -786,9 +786,10 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           }
         });
 
-        // Link inline citations after all segments are rendered so the
-        // citation numbers and the .copilot-sources section are both in the DOM.
-        if (contentRef.current) {
+        // Link inline citations only after streaming completes. During streaming
+        // the sources section is incomplete and the DOM is rebuilt every chunk,
+        // so linking mid-stream wastes cycles and causes visible flickering.
+        if (contentRef.current && !isStreaming) {
           linkInlineCitations(contentRef.current);
         }
       }
