@@ -216,11 +216,16 @@ export function extractSourcesSection(content: string): SourcesSection | null {
     };
   }
 
-  // Strategy 2: --- separator followed by footnote definitions
+  // Strategy 2: --- separator followed by footnote definitions only
+  // All non-empty lines after the separator must be footnote definitions to avoid
+  // treating a content-bearing --- divider as a sources boundary.
   const hrMatch = content.match(/([\s\S]*?)\n+---+\s*\n+([\s\S]*)$/);
   if (hrMatch) {
     const afterHr = (hrMatch[2] || "").trim();
-    if (/\[\^\d+\]:/.test(afterHr)) {
+    const allFootnotes =
+      afterHr.length > 0 &&
+      afterHr.split("\n").every((line) => !line.trim() || /^\[\^\d+\]:/.test(line.trim()));
+    if (allFootnotes) {
       return {
         mainContent: hrMatch[1],
         sourcesBlock: afterHr,
