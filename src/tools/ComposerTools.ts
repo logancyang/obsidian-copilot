@@ -130,7 +130,7 @@ const writeToFileSchema = z.object({
     .optional()
     .default(true)
     .describe(
-      `(Optional) Whether to ask for change confirmation with preview UI before writing changes. Default: true. Set to false to skip preview and apply changes immediately.`
+      `(Optional) Hint for confirmation preference. Note: preview is always shown unless the user has enabled auto-accept in settings.`
     ),
 });
 
@@ -159,9 +159,10 @@ const writeToFileTool = createLangChainTool({
     // Convert object content to JSON string if needed
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
-    // Check if auto-accept edits is enabled in settings
+    // Only bypass confirmation when the user has explicitly enabled auto-accept in settings.
+    // The LLM may pass confirmation=false, but that alone should not skip preview.
     const settings = getSettings();
-    const shouldBypassConfirmation = settings.autoAcceptEdits || confirmation === false;
+    const shouldBypassConfirmation = settings.autoAcceptEdits;
 
     if (shouldBypassConfirmation) {
       try {
