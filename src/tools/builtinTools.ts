@@ -343,11 +343,12 @@ export function registerCliTools(): void {
 - Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
 - Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
 - daily:read — read today's daily note content.
-- daily:append — append text to the end of today's daily note. Requires content parameter.
-- daily:prepend — prepend text to the beginning of today's daily note. Requires content parameter.
-- daily:path — get the vault-relative file path of today's daily note (useful for follow-up readNote calls).
+- daily:append — append text to the end. Requires content parameter. Use inline=true to append without a newline.
+- daily:prepend — prepend text to the beginning. Requires content parameter. Use inline=true to prepend without a newline.
+- daily:path — get the vault-relative file path (useful for follow-up readNote calls).
 - daily:append and daily:prepend auto-create the daily note if it doesn't exist.
-- To create today's daily note from a template: first use obsidianTemplates with 'templates' to list available templates and identify the daily note template, then use 'template:read' with the template name to get the resolved content (with variables like {{date}} expanded), then use daily:prepend to populate the new note.
+- Use \\n for newlines and \\t for tabs in content strings.
+- Template workflow: use obsidianTemplates 'templates' to list templates, then 'template:read' to get resolved content (variables like {{date}} expanded), then daily:prepend to populate.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
@@ -378,10 +379,12 @@ export function registerCliTools(): void {
       requiresVault: true,
       customPromptInstructions: `For obsidianProperties:
 - Use to inspect frontmatter properties across the vault or within a specific note.
-- properties (no file/path): list all property names used vault-wide. Add counts=true for occurrence counts.
+- properties (no file/path): list all property names used vault-wide. Add counts=true for occurrence counts. Add sort=count to sort by frequency.
 - properties with file= or path=: list that note's key-value property pairs.
 - property:read: read a single property value from a specific note. Requires name parameter.
-- Do not use for full note content — use readNote for that.`,
+- file= resolves like a wikilink (name only, no path or extension). path= uses exact vault-relative path.
+- Do not use for full note content — use readNote for that.
+- To modify properties, use writeToFile or replaceInFile to update the frontmatter YAML.`,
     },
   });
 
@@ -396,10 +399,11 @@ export function registerCliTools(): void {
       customPromptInstructions: `For obsidianTasks:
 - Use to list and filter tasks across the vault.
 - todo=true: show only incomplete tasks. done=true: show only completed tasks.
+- status="x": filter by specific status character (e.g., "/" for in-progress, "x" for done, " " for open).
 - daily=true: show tasks from today's daily note only.
 - verbose=true: group tasks by file with line numbers.
 - total=true: return only the task count.
-- file= or path=: limit to a specific note.`,
+- file= resolves like a wikilink (name only). path= uses exact vault-relative path.`,
     },
   });
 
@@ -413,10 +417,11 @@ export function registerCliTools(): void {
       requiresVault: true,
       customPromptInstructions: `For obsidianLinks:
 - Use to explore the vault's link graph.
-- backlinks: list notes that link TO a given file. Use file= or path= to target a note.
+- backlinks: list notes that link TO a given file. Use file= or path= to target a note. Add counts=true for link counts.
 - links: list outgoing links FROM a given file. Use file= or path= to target a note.
-- orphans: list all notes with no incoming links. Use total=true for just the count.
-- unresolved: list wikilinks that don't resolve to any existing file. Use counts=true for occurrence counts, verbose=true to see source files.`,
+- orphans: list all notes with no incoming links. Use total=true for just the count. Add all=true to include non-markdown files.
+- unresolved: list wikilinks that don't resolve to any existing file. Use counts=true for occurrence counts, verbose=true to see source files.
+- file= resolves like a wikilink (name only). path= uses exact vault-relative path. Without either, targets the active file.`,
     },
   });
 
@@ -444,11 +449,20 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianBases:
-- Use to explore structured data in Obsidian Base (database) files.
+- Use to explore structured data in Obsidian Base (.base) database files.
 - bases: list all Base files in the vault. Use total=true for just the count.
 - base:views: list the views defined in a Base file. Requires file= or path=.
-- base:query: query data from a specific Base view. Requires file= or path=, optionally view= and format=.
-- This is read-only — no data modification.`,
+- base:query: query data from a specific Base view. Requires file= or path=, optionally view= and format= (e.g., format=csv).
+- This is read-only. To create or modify .base files, use writeToFile with valid YAML.
+
+Base file YAML structure (for creating with writeToFile):
+- filters: scope notes by tag, folder, property, or date. Operators: ==, !=, >, <, >=, <=, &&, ||. Example: 'tags includes "#project" && status != "done"'
+- formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Example: days_left: 'date(due) - today()'
+- properties: display config per property (label, width, hidden).
+- views: table (default), cards, list, or map. Each view can override filters and property display.
+- Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links), formula properties (formula.my_formula).
+- YAML quoting: single-quote formulas containing double quotes: 'if(done, "Yes", "No")'. Quote strings with special chars (:, {, }, [, ]).
+- Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].`,
     },
   });
 }
