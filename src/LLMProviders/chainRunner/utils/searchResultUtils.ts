@@ -1,4 +1,5 @@
 import { logInfo, logWarn, logMarkdownBlock, logTable } from "@/logger";
+import { sanitizeContentForCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 
 /**
  * Quality summary for search results.
@@ -405,7 +406,7 @@ export function formatMetadataOnlyDocuments(
       const title = doc.title || "Untitled";
       const path = doc.path || "";
       const modified = toIsoString(doc.mtime);
-      const content = doc.content || "";
+      const content = sanitizeContentForCitations(doc.content || "");
       const snippet = content.slice(0, snippetLength);
 
       const pathEl = path ? `\n<path>${path}</path>` : "";

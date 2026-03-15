@@ -1067,7 +1067,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const hasFilterResults = filterDocs.length > 0;
     let formattedContent = hasFilterResults
       ? formatSplitSearchResultsForLLM(filterDocs, searchDocs)
-      : tier1Docs.length === 0
+      : tier1Docs.length === 0 && tier2Docs.length > 0
         ? formatMetadataOnlyDocuments(tier2Docs)
         : formatSearchResultsForLLM(withIds);
 
