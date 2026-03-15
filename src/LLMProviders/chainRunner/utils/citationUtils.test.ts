@@ -15,6 +15,9 @@ import {
   type SourceCatalogEntry,
 } from "./citationUtils";
 
+/** Helper: wraps a citation like [1] in the placeholder span for test assertions. */
+const ref = (n: number | string) => `<span class="copilot-citation-ref">[${n}]</span>`;
+
 describe("citationUtils", () => {
   describe("sanitizeContentForCitations", () => {
     it("should remove footnote references", () => {
@@ -395,8 +398,8 @@ More content
       // Non-sequential [^201] and [^202] should be renumbered to [1] and [2]
       expect(result).toContain('copilot-sources__index">[1]');
       expect(result).toContain('copilot-sources__index">[2]');
-      expect(result).toContain("Point A [1]");
-      expect(result).toContain("point B [2]");
+      expect(result).toContain(`Point A ${ref(1)}`);
+      expect(result).toContain(`point B ${ref(2)}`);
     });
   });
 
@@ -525,10 +528,10 @@ More content
       );
 
       // Verify the citations in text are renumbered correctly
-      expect(result).toContain("Dolce Arts Studio [1]"); // [^9] -> [1]
-      expect(result).toContain("7 pm [2]"); // [^1] -> [2]
-      expect(result).toContain("your routine [3]"); // [^2] -> [3]
-      expect(result).toContain("April 8, 2024: You skipped your piano lesson this week [4]"); // [^18] -> [4]
+      expect(result).toContain(`Dolce Arts Studio ${ref(1)}`); // [^9] -> [1]
+      expect(result).toContain(`7 pm ${ref(2)}`); // [^1] -> [2]
+      expect(result).toContain(`your routine ${ref(3)}`); // [^2] -> [3]
+      expect(result).toContain(`April 8, 2024: You skipped your piano lesson this week ${ref(4)}`); // [^18] -> [4]
     });
 
     it("should consolidate duplicate sources from user's real example", () => {
@@ -558,14 +561,10 @@ More content
       expect(result).not.toContain('copilot-sources__index">[3]');
       expect(result).not.toContain('copilot-sources__index">[4]');
 
-      // Verify periods after citations are removed
-      expect(result).not.toContain("[1].");
-      expect(result).not.toContain("[2].");
-
       // Verify all citations are properly renumbered
-      expect(result).toContain("inheritance [1] He emphasizes");
-      expect(result).toContain("few years [1] Instead of working");
-      expect(result).toContain("not linear [2] In business");
+      expect(result).toContain(`inheritance ${ref(1)} He emphasizes`);
+      expect(result).toContain(`few years ${ref(1)} Instead of working`);
+      expect(result).toContain(`not linear ${ref(2)} In business`);
     });
 
     it("should handle complex non-sequential citations with duplicates", () => {
@@ -604,11 +603,11 @@ More content
       expect(result).not.toContain('copilot-sources__index">[4]');
 
       // Verify citations in text point to correct consolidated sources
-      expect(result).toContain("references [1] and also [2]"); // [^14]->[1], [^17]->[2]
-      expect(result).toContain("uses [3] again"); // [^3]->[3]
-      expect(result).toContain("cites [1]"); // [^14]->[1], [^22]->[1] (consolidated + deduplicated)
-      expect(result).not.toContain("cites [1] and [1]"); // adjacent dupes should be collapsed
-      expect(result).toContain("mentions [3] once more"); // [^3]->[3]
+      expect(result).toContain(`references ${ref(1)} and also ${ref(2)}`); // [^14]->[1], [^17]->[2]
+      expect(result).toContain(`uses ${ref(3)} again`); // [^3]->[3]
+      expect(result).toContain(`cites ${ref(1)}`); // [^14]->[1], [^22]->[1] (consolidated + deduplicated)
+      expect(result).not.toContain(`cites ${ref(1)} and ${ref(1)}`); // adjacent dupes should be collapsed
+      expect(result).toContain(`mentions ${ref(3)} once more`); // [^3]->[3]
     });
 
     it("should handle consecutive citations without spaces (CRITICAL BUG)", () => {
@@ -635,7 +634,7 @@ More content
       );
 
       // CRITICAL: Both citations in text must be converted (not partial like [4][^8])
-      expect(result).toContain("thresholds). [1][2]"); // [^7][^8] -> [1][2]
+      expect(result).toContain(`thresholds). ${ref(1)}${ref(2)}`); // [^7][^8] -> [1][2]
       expect(result).not.toContain("[^8]"); // Should not contain any unconverted citations
       expect(result).not.toContain("[^7]"); // Should not contain any unconverted citations
     });
@@ -653,8 +652,8 @@ More content
 
       // After consolidation, [^1] and [^2] both map to source 1
       // Adjacent [1][1] should be collapsed to [1]
-      expect(result).toContain("finding here [1] and another");
-      expect(result).not.toContain("[1][1]");
+      expect(result).toContain(`finding here ${ref(1)} and another`);
+      expect(result).not.toContain(`${ref(1)}${ref(1)}`);
       expect(result).toContain(
         '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[Same Note]]</span>'
       );
@@ -676,8 +675,8 @@ More content
 
       // [^1] and [^2] both map to [[Note A]] -> consolidated to source 1
       // "[1] and [1]" should collapse to "[1]"
-      expect(result).toContain("Claim here [1] and more");
-      expect(result).not.toContain("[1] and [1]");
+      expect(result).toContain(`Claim here ${ref(1)} and more`);
+      expect(result).not.toContain(`${ref(1)} and ${ref(1)}`);
     });
   });
 

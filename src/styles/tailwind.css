@@ -901,8 +901,7 @@ If your plugin does not need CSS, delete this file.
 
 .workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
   padding-bottom: calc(
-    var(--safe-area-inset-bottom, 0px) + var(--copilot-status-bar-clearance, 0px) +
-      var(--size-4-1)
+    var(--safe-area-inset-bottom, 0px) + var(--copilot-status-bar-clearance, 0px) + var(--size-4-1)
   ) !important;
 }
 
@@ -1041,6 +1040,26 @@ body.is-mobile .workspace-drawer.copilot-keyboard-open .workspace-drawer-tab-opt
 }
 
 /* Inline citation links */
+.copilot-citation-ref {
+  display: inline-block;
+  color: var(--text-muted);
+  font-size: 0.7em;
+  vertical-align: super;
+  background: var(--background-modifier-hover);
+  border-radius: var(--radius-s);
+  padding: 0 4px;
+  line-height: 1.4;
+  cursor: default;
+}
+.copilot-citation-group {
+  display: inline-block;
+  font-size: 0.7em;
+  vertical-align: super;
+  background: var(--background-modifier-hover);
+  border-radius: var(--radius-s);
+  padding: 0 4px;
+  line-height: 1.4;
+}
 .copilot-citation-link {
   color: var(--text-accent);
   cursor: pointer;

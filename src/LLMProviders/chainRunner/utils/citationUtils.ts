@@ -587,6 +587,18 @@ function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): 
 }
 
 /**
+ * Wraps normalized citation references like [1] or [1, 2] in placeholder spans.
+ * These spans provide visual feedback during streaming (styled as pending links)
+ * and are replaced by linkInlineCitations with actual clickable anchors after streaming.
+ */
+export function wrapCitationPlaceholders(content: string): string {
+  return content.replace(
+    /\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g,
+    '<span class="copilot-citation-ref">[$1]</span>'
+  );
+}
+
+/**
  * Main function to process inline citations in content.
  * Processes footnote-style citations and consolidates sources.
  */
@@ -625,6 +637,9 @@ export function processInlineCitations(
     mainContent = deduplicateAdjacentCitations(mainContent);
     items = uniqueItems;
   }
+
+  // Wrap citation numbers in placeholder spans for visual feedback during streaming
+  mainContent = wrapCitationPlaceholders(mainContent);
 
   const detailedItems = items
     .map<SourcesDisplayItem | null>((item, index) => {
