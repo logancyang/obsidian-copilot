@@ -12,6 +12,7 @@ import { createLangChainTool } from "./createLangChainTool";
 import { getWebSearchCitationInstructions } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { TieredLexicalRetriever } from "@/search/v3/TieredLexicalRetriever";
 import { FilterRetriever } from "@/search/v3/FilterRetriever";
+import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 import { mergeFilterAndSearchResults } from "@/search/v3/mergeResults";
 
 /**
@@ -101,12 +102,29 @@ async function performLexicalSearch({
   preExpandedQuery?: QueryExpansionInfo;
 }) {
   const settings = getSettings();
-  // Extract tag terms for self-host retriever (server-side tag filtering)
-  const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+  // Extract tag terms for self-host retriever (server-side tag filtering).
+  // When salientTerms misses hashtags (e.g. query="#python" with empty salientTerms),
+  // fall back to parsing them from the raw query so SelfHostRetriever gets tag filters.
+  const salientTagTerms = salientTerms.filter((term) => term.startsWith("#"));
+  const tagTerms =
+    salientTagTerms.length > 0
+      ? salientTagTerms
+      : (() => {
+          try {
+            return [...query.matchAll(/#[\p{L}\p{N}_/-]+/gu)].map((m) => m[0]);
+          } catch {
+            return [...query.matchAll(/#[a-z0-9_/-]+/gi)].map((m) => m[0]);
+          }
+        })();
+  const hasTagTerms = tagTerms.length > 0;
 
-  const effectiveMaxK = settings.maxSourceChunks;
+  // Time-range and tag-focused queries need expanded limits to avoid truncating results
+  const needsExpandedLimits = timeRange !== undefined || hasTagTerms;
+  const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
 
-  logInfo(`lexicalSearch effectiveMaxK: ${effectiveMaxK}, forceLexical: ${forceLexical}`);
+  logInfo(
+    `lexicalSearch effectiveMaxK: ${effectiveMaxK} (expanded: ${needsExpandedLimits}), forceLexical: ${forceLexical}`
+  );
 
   // Convert QueryExpansionInfo to ExpandedQuery format (adding queries field)
   const convertedPreExpansion = preExpandedQuery
@@ -125,6 +143,7 @@ async function performLexicalSearch({
     salientTerms,
     timeRange,
     maxK: effectiveMaxK,
+    returnAll: needsExpandedLimits,
   });
 
   const filterDocs = await filterRetriever.getRelevantDocuments(query);
@@ -137,10 +156,11 @@ async function performLexicalSearch({
 
   if (!filterRetriever.hasTimeRange()) {
     const retrieverOptions = {
-      minSimilarityScore: 0.1,
+      minSimilarityScore: needsExpandedLimits ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       textWeight: TEXT_WEIGHT,
+      returnAll: needsExpandedLimits,
       useRerankerThreshold: 0.5,
       tagTerms, // Used by SelfHostRetriever for server-side tag filtering
       preExpandedQuery: convertedPreExpansion, // Pass pre-expanded data to skip double expansion
@@ -257,17 +277,20 @@ const semanticSearchTool = createLangChainTool({
     const timeRange = validateTimeRange(rawTimeRange);
     const settings = getSettings();
 
-    const effectiveMaxK = settings.maxSourceChunks;
+    const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+    const needsExpandedLimits = timeRange !== undefined || tagTerms.length > 0;
+    const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
 
-    logInfo(`semanticSearch effectiveMaxK: ${effectiveMaxK}`);
+    logInfo(`semanticSearch effectiveMaxK: ${effectiveMaxK} (expanded: ${needsExpandedLimits})`);
 
     // Always use HybridRetriever for semantic search
     const retriever = new (await import("@/search/hybridRetriever")).HybridRetriever({
-      minSimilarityScore: 0.1,
+      minSimilarityScore: needsExpandedLimits ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       timeRange,
       textWeight: TEXT_WEIGHT,
+      returnAll: needsExpandedLimits,
       useRerankerThreshold: 0.5,
     });
 
@@ -364,13 +387,15 @@ async function performMiyoSearch({
   timeRange?: { startTime: number; endTime: number };
 }) {
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-  const effectiveMaxK = getSettings().maxSourceChunks;
+  const needsExpandedLimits = timeRange !== undefined || tagTerms.length > 0;
+  const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : getSettings().maxSourceChunks;
 
   // FilterRetriever for local tag/title/time-range matches
   const filterRetriever = new FilterRetriever(app, {
     salientTerms,
     timeRange,
     maxK: effectiveMaxK,
+    returnAll: needsExpandedLimits,
   });
   const filterDocs = await filterRetriever.getRelevantDocuments(query);
 
@@ -379,10 +404,11 @@ async function performMiyoSearch({
   let miyoDocs: import("@langchain/core/documents").Document[] = [];
   if (!filterRetriever.hasTimeRange()) {
     const miyoRetriever = RetrieverFactory.createMiyoRetriever(app, {
-      minSimilarityScore: 0.1,
+      minSimilarityScore: needsExpandedLimits ? 0.0 : 0.1,
       maxK: effectiveMaxK,
       salientTerms,
       textWeight: TEXT_WEIGHT,
+      returnAll: needsExpandedLimits,
       useRerankerThreshold: 0.5,
       tagTerms,
     });

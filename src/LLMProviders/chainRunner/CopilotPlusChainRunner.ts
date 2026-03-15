@@ -40,11 +40,14 @@ import {
 } from "./utils/citationUtils";
 import {
   extractSourcesFromSearchResults,
+  formatMetadataOnlyDocuments,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
   formatSplitSearchResultsForLLM,
   generateQualitySummary,
   formatQualitySummary,
+  isFilterOnlyResults,
+  isTimeDominantResults,
   logSearchResultsDebugTable,
 } from "./utils/searchResultUtils";
 import {
@@ -993,6 +996,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   }
 
   private prepareLocalSearchResult(documents: any[], timeExpression: string): string {
+    const settings = getSettings();
+
     // Filter documents that should be included in context
     // Use !== false to be consistent with formatSearchResultsForLLM and logSearchResultsDebugTable
     const includedDocs = documents.filter((doc) => doc.includeInContext !== false);
@@ -1001,21 +1006,48 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const qualitySummary = generateQualitySummary(includedDocs);
     const qualityHeader = formatQualitySummary(qualitySummary);
 
-    // Calculate total content length (only content, not metadata)
-    const totalContentLength = includedDocs.reduce(
-      (sum, doc) => sum + (doc.content?.length || 0),
-      0
-    );
+    // Detect result type for two-tier formatting strategy.
+    // timeDominant is checked independently of filterOnly: time-range queries often include
+    // daily notes with source "title-match" (from getTitleMatches), which are not in
+    // FILTER_SOURCES, so filterOnly would be false even for pure time-range result sets.
+    const filterOnly = isFilterOnlyResults(includedDocs);
+    const timeDominant = isTimeDominantResults(includedDocs);
+
+    // Determine tier split based on result type
+    let tier1Docs: any[];
+    let tier2Docs: any[];
+    if (timeDominant) {
+      // Sort by mtime desc; most recent get full content, older get metadata-only
+      const sorted = [...includedDocs].sort((a, b) => (b.mtime || 0) - (a.mtime || 0));
+      tier1Docs = sorted.slice(0, settings.maxSourceChunks);
+      tier2Docs = sorted.slice(settings.maxSourceChunks);
+    } else if (filterOnly) {
+      // Tag queries: no meaningful ranking — all docs get metadata-only
+      tier1Docs = [];
+      tier2Docs = includedDocs;
+    } else {
+      // Ranked results: existing behavior
+      if (includedDocs.length > settings.maxSourceChunks) {
+        tier1Docs = includedDocs.slice(0, settings.maxSourceChunks);
+        tier2Docs = includedDocs.slice(settings.maxSourceChunks);
+      } else {
+        tier1Docs = includedDocs;
+        tier2Docs = [];
+      }
+    }
+
+    // Calculate total content length for tier 1 only (safety net truncation)
+    const totalContentLength = tier1Docs.reduce((sum, doc) => sum + (doc.content?.length || 0), 0);
 
     // If total content length exceeds threshold, truncate content proportionally
-    let processedDocs = includedDocs;
+    let processedDocs = tier1Docs;
     if (totalContentLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
       const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalContentLength;
       logInfo(
         "Truncating document contents to fit context length. Truncation ratio:",
         truncationRatio
       );
-      processedDocs = includedDocs.map((doc) => ({
+      processedDocs = tier1Docs.map((doc) => ({
         ...doc,
         content:
           doc.content?.slice(0, Math.floor((doc.content?.length || 0) * truncationRatio)) || "",
@@ -1033,11 +1065,30 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const filterDocs = withIds.filter((d: any) => d.isFilterResult === true);
     const searchDocs = withIds.filter((d: any) => d.isFilterResult !== true);
 
-    // Use split formatter if there are filter results, otherwise fall back to unified format
+    // Use split formatter if there are filter results, otherwise fall back to unified format.
+    // For tag-only queries (tier1 empty), output metadata-only directly.
     const hasFilterResults = filterDocs.length > 0;
-    const formattedContent = hasFilterResults
+    let formattedContent = hasFilterResults
       ? formatSplitSearchResultsForLLM(filterDocs, searchDocs)
-      : formatSearchResultsForLLM(withIds);
+      : tier1Docs.length === 0 && tier2Docs.length > 0
+        ? formatMetadataOnlyDocuments(tier2Docs)
+        : formatSearchResultsForLLM(withIds);
+
+    // Append metadata-only tier 2 for overflow docs (only when tier 1 has full-content docs)
+    if (tier1Docs.length > 0 && tier2Docs.length > 0) {
+      if (timeDominant) {
+        logInfo(
+          `Time-dominant search: ${tier1Docs.length} recent notes (full content), ${tier2Docs.length} older notes (metadata-only)`
+        );
+      } else {
+        logInfo(
+          `Two-tier search: ${tier1Docs.length} full-content docs, ${tier2Docs.length} metadata-only docs`
+        );
+      }
+      formattedContent = `${formattedContent}\n\n${formatMetadataOnlyDocuments(tier2Docs)}`;
+    } else if (filterOnly) {
+      logInfo(`Tag-only search: ${tier2Docs.length} notes (metadata-only)`);
+    }
 
     // Build a compact, unnumbered source catalog to avoid bias
     const sourceEntries: SourceCatalogEntry[] = withIds
@@ -1058,7 +1109,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     });
 
     // Build guidance block with citation rules and source catalog
-    const settings = getSettings();
     const guidance = getLocalSearchGuidance(catalogLines, settings.enableInlineCitations).trim();
 
     // Add RAG instruction (like VaultQA) to ensure model uses the context

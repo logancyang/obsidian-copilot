@@ -2,6 +2,9 @@ import {
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
   extractSourcesFromSearchResults,
+  formatMetadataOnlyDocuments,
+  isFilterOnlyResults,
+  isTimeDominantResults,
 } from "./searchResultUtils";
 
 describe("searchResultUtils", () => {
@@ -271,6 +274,177 @@ describe("searchResultUtils", () => {
       const sources = extractSourcesFromSearchResults(documents);
       expect(sources).toHaveLength(3);
       expect(sources.map((s) => s.title)).toEqual(["Doc1", "Doc2", "Doc3"]);
+    });
+  });
+
+  describe("formatMetadataOnlyDocuments", () => {
+    it("should return empty string for empty array", () => {
+      expect(formatMetadataOnlyDocuments([])).toBe("");
+    });
+
+    it("should return empty string for non-array input", () => {
+      expect(formatMetadataOnlyDocuments(null as any)).toBe("");
+      expect(formatMetadataOnlyDocuments(undefined as any)).toBe("");
+    });
+
+    it("should include correct count attribute", () => {
+      const docs = [
+        { title: "Doc1", content: "Content 1" },
+        { title: "Doc2", content: "Content 2" },
+        { title: "Doc3", content: "Content 3" },
+      ];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toContain('count="3"');
+    });
+
+    it("should include the note attribute", () => {
+      const docs = [{ title: "Doc1", content: "Content" }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toContain(
+        'note="These results contain titles and metadata only. To read the full content of a note, call the readNote tool with its path."'
+      );
+    });
+
+    it("should format document with title, path, mtime, and snippet", () => {
+      const docs = [
+        {
+          title: "My Note",
+          path: "folder/my-note.md",
+          mtime: new Date("2024-01-15T10:30:00.000Z").getTime(),
+          content: "This is the note content",
+        },
+      ];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toContain("<title>My Note</title>");
+      expect(result).toContain("<path>folder/my-note.md</path>");
+      expect(result).toContain("<modified>2024-01-15T10:30:00.000Z</modified>");
+      expect(result).toContain("<snippet>This is the note content</snippet>");
+    });
+
+    it("should truncate content to 300 chars for snippet by default", () => {
+      const longContent = "a".repeat(400);
+      const docs = [{ title: "Doc", content: longContent }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toContain(`<snippet>${"a".repeat(300)}</snippet>`);
+      expect(result).not.toContain("a".repeat(301));
+    });
+
+    it("should respect custom snippetLength parameter", () => {
+      const longContent = "b".repeat(200);
+      const docs = [{ title: "Doc", content: longContent }];
+      const result = formatMetadataOnlyDocuments(docs, 100);
+      expect(result).toContain(`<snippet>${"b".repeat(100)}</snippet>`);
+      expect(result).not.toContain("b".repeat(101));
+    });
+
+    it("should omit path when missing", () => {
+      const docs = [{ title: "Doc", content: "Content" }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).not.toContain("<path>");
+    });
+
+    it("should omit modified when mtime is missing", () => {
+      const docs = [{ title: "Doc", content: "Content" }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).not.toContain("<modified>");
+    });
+
+    it("should omit snippet when content is empty", () => {
+      const docs = [{ title: "Doc", content: "" }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).not.toContain("<snippet>");
+    });
+
+    it("should use Untitled for missing title", () => {
+      const docs = [{ content: "Content" }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toContain("<title>Untitled</title>");
+    });
+
+    it("should wrap output in additionalMatches element", () => {
+      const docs = [{ title: "Doc", content: "Content" }];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toMatch(/^<additionalMatches /);
+      expect(result).toMatch(/<\/additionalMatches>$/);
+    });
+
+    it("should format multiple documents as file elements", () => {
+      const docs = [
+        { title: "Doc1", content: "Content 1" },
+        { title: "Doc2", content: "Content 2" },
+      ];
+      const result = formatMetadataOnlyDocuments(docs);
+      expect(result).toContain("<title>Doc1</title>");
+      expect(result).toContain("<title>Doc2</title>");
+    });
+  });
+
+  describe("isFilterOnlyResults", () => {
+    it("should return false for empty array", () => {
+      expect(isFilterOnlyResults([])).toBe(false);
+    });
+
+    it("should return false for non-array input", () => {
+      expect(isFilterOnlyResults(null as any)).toBe(false);
+      expect(isFilterOnlyResults(undefined as any)).toBe(false);
+    });
+
+    it("should return true when all docs have filter sources", () => {
+      const docs = [{ source: "time-filtered" }, { source: "tag-match" }];
+      expect(isFilterOnlyResults(docs)).toBe(true);
+    });
+
+    it("should return false for title-match docs (they get full content)", () => {
+      const docs = [{ source: "title-match" }];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return false when title-match is mixed with other filter sources", () => {
+      const docs = [{ source: "tag-match" }, { source: "title-match" }];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return false when any doc has a non-filter source", () => {
+      const docs = [{ source: "time-filtered" }, { source: "semantic" }];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return false when any doc has no source", () => {
+      const docs = [{ source: "tag-match" }, {}];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return true for single tag-match doc", () => {
+      expect(isFilterOnlyResults([{ source: "tag-match" }])).toBe(true);
+    });
+  });
+
+  describe("isTimeDominantResults", () => {
+    it("should return false for empty array", () => {
+      expect(isTimeDominantResults([])).toBe(false);
+    });
+
+    it("should return false for non-array input", () => {
+      expect(isTimeDominantResults(null as any)).toBe(false);
+      expect(isTimeDominantResults(undefined as any)).toBe(false);
+    });
+
+    it("should return true when at least one doc has source time-filtered", () => {
+      const docs = [{ source: "tag-match" }, { source: "time-filtered" }];
+      expect(isTimeDominantResults(docs)).toBe(true);
+    });
+
+    it("should return false when no docs have source time-filtered", () => {
+      const docs = [{ source: "tag-match" }, { source: "title-match" }];
+      expect(isTimeDominantResults(docs)).toBe(false);
+    });
+
+    it("should return true for single time-filtered doc", () => {
+      expect(isTimeDominantResults([{ source: "time-filtered" }])).toBe(true);
+    });
+
+    it("should return false when source is undefined", () => {
+      expect(isTimeDominantResults([{}])).toBe(false);
     });
   });
 });
