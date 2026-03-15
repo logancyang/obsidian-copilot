@@ -28,6 +28,7 @@ import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
@@ -40,6 +41,21 @@ import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
+
+// Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
+// tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
+// vocabulary from tiktoken.pages.dev, which blocks all LLM calls when the CDN is
+// unreachable. This char/4 estimation is the same fallback LangChain uses internally
+// before tiktoken loads. Actual token usage comes from API response metadata.
+(BaseLanguageModel.prototype as any).getNumTokens = async (
+  content: string | Array<{ type: string; text?: string }>
+) => {
+  const text =
+    typeof content === "string"
+      ? content
+      : content.map((item: any) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
+  return Math.ceil(text.length / 4);
+};
 
 type ChatConstructorType = {
   new (config: any): any;
@@ -66,6 +82,35 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
 } as const;
 
 type ChatProviderConstructMap = typeof CHAT_PROVIDER_CONSTRUCTORS;
+
+/**
+ * Normalize an Azure URL that a user may have pasted in full.
+ * Strips trailing `/chat/completions` or `/embeddings` and extracts
+ * `api-version` from query parameters so the OpenAI client can
+ * construct the correct final URL.
+ */
+export function normalizeAzureUrl(raw: string | undefined): {
+  baseUrl: string | undefined;
+  apiVersion: string | undefined;
+} {
+  if (!raw) return { baseUrl: undefined, apiVersion: undefined };
+
+  let url: URL;
+  try {
+    url = new URL(raw);
+  } catch {
+    return { baseUrl: raw, apiVersion: undefined };
+  }
+
+  const apiVersion = url.searchParams.get("api-version") || undefined;
+  url.search = "";
+  let baseUrl = url.toString().replace(/\/+$/, "");
+
+  // Strip paths that the OpenAI client appends automatically
+  baseUrl = baseUrl.replace(/\/(chat\/completions|embeddings)$/, "");
+
+  return { baseUrl, apiVersion };
+}
 
 export default class ChatModelManager {
   private static instance: ChatModelManager;
@@ -200,30 +245,38 @@ export default class ChatModelManager {
           },
         }),
       },
-      [ChatModelProviders.AZURE_OPENAI]: {
-        modelName:
-          customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
-        apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        configuration: {
-          baseURL:
-            customModel.baseUrl ||
-            `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
-          defaultQuery: {
-            "api-version": customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
+      [ChatModelProviders.AZURE_OPENAI]: await (async () => {
+        const azureUrl = normalizeAzureUrl(customModel.baseUrl);
+        return {
+          modelName: customModel.baseUrl
+            ? modelName
+            : customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName,
+          apiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+          configuration: {
+            baseURL:
+              azureUrl.baseUrl ||
+              `https://${customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName}.openai.azure.com/openai/deployments/${customModel.azureOpenAIApiDeploymentName || settings.azureOpenAIApiDeploymentName}`,
+            defaultQuery: {
+              "api-version":
+                azureUrl.apiVersion ||
+                customModel.azureOpenAIApiVersion ||
+                settings.azureOpenAIApiVersion ||
+                "2024-05-01-preview",
+            },
+            defaultHeaders: {
+              "Content-Type": "application/json",
+              "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
+            },
+            fetch: customModel.enableCors ? safeFetch : undefined,
           },
-          defaultHeaders: {
-            "Content-Type": "application/json",
-            "api-key": await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-          },
-          fetch: customModel.enableCors ? safeFetch : undefined,
-        },
-        ...this.getOpenAISpecialConfig(
-          modelName,
-          customModel.maxTokens ?? settings.maxTokens,
-          customModel.temperature ?? settings.temperature,
-          customModel
-        ),
-      },
+          ...this.getOpenAISpecialConfig(
+            modelName,
+            customModel.maxTokens ?? settings.maxTokens,
+            customModel.temperature ?? settings.temperature,
+            customModel
+          ),
+        };
+      })(),
       [ChatModelProviders.COHEREAI]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
         model: modelName,
@@ -443,10 +496,14 @@ export default class ChatModelManager {
         effort: customModel.reasoningEffort,
       };
 
-      // Add verbosity for GPT-5 models (Responses API only)
-      // This requires useResponsesApi=true which is set in createModelInstance()
-      // In Responses API, verbosity must be passed as text.verbosity
-      if (modelInfo.isGPT5 && customModel?.verbosity) {
+      // Add verbosity for GPT-5 models (Responses API only).
+      // Azure does not support Responses API so skip verbosity there;
+      // useResponsesApi is only enabled for OPENAI / OPENAI_FORMAT in createModelInstance().
+      if (
+        modelInfo.isGPT5 &&
+        customModel?.verbosity &&
+        customModel?.provider !== ChatModelProviders.AZURE_OPENAI
+      ) {
         const verbosityValue = customModel.verbosity;
         // For Responses API, verbosity is nested under 'text' parameter
         config.text = {
@@ -720,7 +777,6 @@ export default class ChatModelManager {
       if (
         modelInfo.isGPT5 &&
         (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.AZURE_OPENAI ||
           model.provider === ChatModelProviders.OPENAI_FORMAT)
       ) {
         logInfo(`Chat model set with Responses API for GPT-5: ${model.name}`);
@@ -756,7 +812,6 @@ export default class ChatModelManager {
     if (
       modelInfo.isGPT5 &&
       (selectedModel.vendor === ChatModelProviders.OPENAI ||
-        selectedModel.vendor === ChatModelProviders.AZURE_OPENAI ||
         selectedModel.vendor === ChatModelProviders.OPENAI_FORMAT)
     ) {
       constructorConfig.useResponsesApi = true;
@@ -764,21 +819,6 @@ export default class ChatModelManager {
     }
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
-
-    // Override getNumTokens to avoid tiktoken's remote fetch of gpt2.json from
-    // tiktoken.pages.dev. LangChain's default implementation tries to download
-    // a ~3MB BPE vocabulary file at runtime, which blocks all LLM calls when the
-    // CDN is unreachable. Use a simple char-based estimation instead — modern LLM
-    // APIs return accurate token usage in response metadata anyway.
-    newModelInstance.getNumTokens = async (
-      content: string | Array<{ type: string; text?: string }>
-    ) => {
-      const text =
-        typeof content === "string"
-          ? content
-          : content.map((item) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
-      return Math.ceil(text.length / 4);
-    };
 
     return newModelInstance;
   }
@@ -842,7 +882,6 @@ export default class ChatModelManager {
       if (
         modelInfo.isGPT5 &&
         (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.AZURE_OPENAI ||
           model.provider === ChatModelProviders.OPENAI_FORMAT)
       ) {
         constructorConfig.useResponsesApi = true;

@@ -1,10 +1,13 @@
 import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
+import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "@/components/command-ui/constants";
 import { SelectionHighlight } from "@/editor/selectionHighlight";
 import { createHighlightReplaceGuard, type ReplaceGuard } from "@/editor/replaceGuard";
 import { logError, logWarn } from "@/logger";
 import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
+import { computeVerticalPlacement } from "@/utils/panelPlacement";
+import { computeSelectionAnchors } from "@/utils/selectionAnchors";
 import type { EditorView } from "@codemirror/view";
 import { PenLine } from "lucide-react";
 import { App, Component, MarkdownRenderer, Notice, MarkdownView } from "obsidian";
@@ -84,6 +87,8 @@ interface CustomCommandChatModalContentProps {
   onClose: () => void;
   systemPrompt?: string;
   initialPosition?: { x: number; y: number };
+  /** Bottom-anchor Y for "above" placement (panel grows upward) */
+  anchorBottom?: number;
   behaviorConfig?: Partial<ModalBehaviorConfig>;
 }
 
@@ -98,6 +103,7 @@ function CustomCommandChatModalContent({
   onClose,
   systemPrompt,
   initialPosition,
+  anchorBottom,
   behaviorConfig,
 }: CustomCommandChatModalContentProps) {
   // Resolve behavior configuration
@@ -451,6 +457,7 @@ function CustomCommandChatModalContent({
       onInsert={handleInsert}
       onReplace={handleReplace}
       initialPosition={initialPosition}
+      anchorBottom={anchorBottom}
       resizable
       hideContentAreaOnIdle={behavior.hideContentAreaOnIdle}
       includeNoteContext={behavior.showIncludeNoteContext ? includeNoteContext : undefined}
@@ -508,12 +515,20 @@ export class CustomCommandChatModal {
 
   /**
    * Calculate initial position based on cursor/selection in the editor.
-   * Handles: single-line, multi-line, line-start trap, flip when near bottom edge.
+   * Strategy: vertical-first (determines placement), then horizontal (depends on placement).
+   * - Multi-line selections always center horizontally on the editor.
+   * - Space checks use scrollRect (editor visible area), not window.
+   * - Horizontal clamp to scrollRect first, then viewport as safety net.
    */
-  private getInitialPosition(activeView: MarkdownView | null): { x: number; y: number } {
+  private getInitialPosition(activeView: MarkdownView | null): { x: number; y: number; anchorBottom?: number } {
     const win = this.resolveWindow(activeView);
     const panelWidth = Math.min(500, win.innerWidth * 0.9);
-    const panelHeight = 440;
+    // Reason: The actual initial panel height depends on whether ContentArea is shown.
+    // Quick Command starts idle with no ContentArea (compact).
+    // Custom Commands always show ContentArea (expanded).
+    // Using the correct height prevents gaps (above) or overlaps (below).
+    const hideContentAreaOnIdle = this.configs.behaviorConfig?.hideContentAreaOnIdle ?? false;
+    const panelHeight = hideContentAreaOnIdle ? MODAL_MIN_HEIGHT_COMPACT : MODAL_MIN_HEIGHT_EXPANDED;
     const margin = 12;
     const gap = 6;
 
@@ -531,100 +546,91 @@ export class CustomCommandChatModal {
     const selection = view.state.selection.main;
     const isCursor = selection.empty;
 
-    // Reason: Use `head` (where user's cursor is) instead of `to`, so that
-    // reverse selections still position the popup near the user's focus point.
-    let anchorPos = selection.head;
+    // Reason: Dual-anchor model — compute separate top/bottom anchor positions.
+    // bottomPos is used for "place below selection", topPos for "place above selection".
+    // The shared utility handles the line-start trap correction.
+    const anchors = computeSelectionAnchors(selection, view.state.doc);
 
-    // Fix "line-start trap": when head lands on next line's start after selecting newline
-    // Reason: Only apply when head is at the END of selection (head === to), not when
-    // user reverse-selects TO a line start (head === from). This avoids jumping to
-    // previous line when user intentionally selects to line beginning.
-    if (!isCursor && anchorPos > 0 && anchorPos === selection.to) {
-      const lineAtHead = view.state.doc.lineAt(anchorPos);
-      if (anchorPos === lineAtHead.from) {
-        // Head is at line start and is the selection end, move back to previous line's end
-        anchorPos = anchorPos - 1;
-      }
-    }
+    // Get coordinates for all anchor positions
+    const focusCoords = view.coordsAtPos(anchors.focusPos);
+    const bottomCoords = view.coordsAtPos(anchors.bottomPos);
+    const topCoords = view.coordsAtPos(anchors.topPos);
 
-    // Get coordinates for anchor position
-    const anchorCoords = view.coordsAtPos(anchorPos);
-    if (!anchorCoords) {
+    if (!focusCoords && !bottomCoords && !topCoords) {
       return fallback;
     }
 
-    // Check visibility (both vertical and horizontal)
+    // Check visibility of each anchor against the editor's visible scroll area
     const scrollRect = view.scrollDOM.getBoundingClientRect();
-    const isVerticallyVisible =
-      anchorCoords.bottom >= scrollRect.top && anchorCoords.top <= scrollRect.bottom;
-    const isHorizontallyVisible =
-      anchorCoords.right >= scrollRect.left && anchorCoords.left <= scrollRect.right;
+    const isVisible = (coords: { top: number; bottom: number; left: number; right: number }) =>
+      coords.bottom >= scrollRect.top &&
+      coords.top <= scrollRect.bottom &&
+      coords.right >= scrollRect.left &&
+      coords.left <= scrollRect.right;
 
-    if (!isVerticallyVisible || !isHorizontallyVisible) {
+    const visibleFocus = focusCoords && isVisible(focusCoords) ? focusCoords : null;
+    const visibleBottom = bottomCoords && isVisible(bottomCoords) ? bottomCoords : null;
+    const visibleTop = topCoords && isVisible(topCoords) ? topCoords : null;
+
+    if (!visibleFocus && !visibleBottom && !visibleTop) {
       return fallback;
     }
 
-    // Calculate horizontal position
-    let centerX: number;
-    if (isCursor) {
-      // Cursor only: position near cursor (not centered, to avoid obscuring)
-      centerX = anchorCoords.left;
-    } else {
-      // Selection: check if single-line or multi-line
-      const lineAtFrom = view.state.doc.lineAt(selection.from);
-      const lineAtTo = view.state.doc.lineAt(selection.to);
+    // --- Visual multi-line detection ---
+    // Reason: Using visual line height comparison instead of logical line numbers
+    // correctly handles soft-wrapped lines that span multiple visual rows.
+    const caretHeight = Math.min(
+      (topCoords?.bottom ?? 0) - (topCoords?.top ?? 0),
+      (bottomCoords?.bottom ?? 0) - (bottomCoords?.top ?? 0)
+    );
+    const isVisualMultiLine = !isCursor && topCoords && bottomCoords
+      && Math.abs(topCoords.top - bottomCoords.top) > Math.max(caretHeight / 2, 2);
 
-      if (lineAtFrom.number === lineAtTo.number) {
-        // Single-line: center between from and to
-        const fromCoords = view.coordsAtPos(selection.from);
-        const toCoords = view.coordsAtPos(selection.to);
-        if (fromCoords && toCoords) {
-          centerX = (fromCoords.left + toCoords.right) / 2;
-        } else {
-          centerX = anchorCoords.left;
-        }
-      } else {
-        // Multi-line: follow the anchor (head) position
-        centerX = anchorCoords.left;
-      }
-    }
+    // --- Vertical positioning (decides placement first) ---
+    // Reason: Extracted to a pure helper (computeVerticalPlacement) so the
+    // branching logic is testable without DOM/CodeMirror dependencies.
+    const { top: rawTop, anchorBottomY } = computeVerticalPlacement({
+      scrollRect,
+      visibleBottom,
+      visibleTop,
+      panelHeight,
+      margin,
+      gap,
+      viewportHeight: win.innerHeight,
+    });
+    const top = rawTop;
 
-    // Calculate left position
-    // For cursor: align left edge near cursor; for selection: center the panel
+    // --- Horizontal positioning (depends on vertical placement) ---
     let left: number;
+
     if (isCursor) {
-      left = centerX;
+      // Cursor: anchor at cursor position
+      const anchor = visibleFocus ?? visibleBottom ?? visibleTop!;
+      left = anchor.left;
+    } else if (!isVisualMultiLine) {
+      // Visual single-line: center panel on the selection span
+      // Reason: Use normalized anchor positions instead of raw selection.from/to
+      // to handle newline-at-end selections (line-start trap).
+      const fromCoords = view.coordsAtPos(anchors.topPos);
+      const toCoords = view.coordsAtPos(anchors.bottomPos);
+      if (fromCoords && toCoords) {
+        const centerX = (fromCoords.left + toCoords.right) / 2;
+        left = centerX - panelWidth / 2;
+      } else {
+        // Coords unavailable — fall back to editor center
+        left = (scrollRect.left + scrollRect.right) / 2 - panelWidth / 2;
+      }
     } else {
-      left = centerX - panelWidth / 2;
+      // Reason: Visual multi-line selections center on the editor regardless of
+      // below/above/center placement, preventing left-edge snapping on reverse selections.
+      left = (scrollRect.left + scrollRect.right) / 2 - panelWidth / 2;
     }
+
+    // Clamp to editor visible area first, then viewport as safety net
+    left = Math.max(scrollRect.left, Math.min(left, scrollRect.right - panelWidth));
     left = Math.max(margin, Math.min(left, win.innerWidth - margin - panelWidth));
 
-    // Calculate vertical position with flip logic
-    const anchorBottom = anchorCoords.bottom;
-    const anchorTop = anchorCoords.top;
-    const spaceBelow = win.innerHeight - anchorBottom - gap;
-    const spaceAbove = anchorTop - gap;
-
-    let top: number;
-    if (spaceBelow >= panelHeight + margin) {
-      // Enough space below: place below anchor
-      top = anchorBottom + gap;
-    } else if (spaceAbove >= panelHeight + margin) {
-      // Not enough below but enough above: flip to above
-      top = anchorTop - gap - panelHeight;
-    } else {
-      // Neither side has enough space: prefer the side with more space
-      if (spaceBelow >= spaceAbove) {
-        top = anchorBottom + gap;
-      } else {
-        top = anchorTop - gap - panelHeight;
-      }
-    }
-
-    // Final clamp to ensure panel stays within viewport
-    top = Math.max(margin, Math.min(top, win.innerHeight - margin - panelHeight));
-
-    return { x: left, y: top };
+    return { x: left, y: top, anchorBottom: anchorBottomY };
   }
 
   open() {
@@ -669,7 +675,7 @@ export class CustomCommandChatModal {
       });
     }
 
-    const initialPosition = this.getInitialPosition(activeView);
+    const { anchorBottom, ...initialPosition } = this.getInitialPosition(activeView);
 
     const handleInsert = (message: string) => {
       insertIntoEditor(message);
@@ -707,6 +713,7 @@ export class CustomCommandChatModal {
         onClose={handleClose}
         systemPrompt={systemPrompt}
         initialPosition={initialPosition}
+        anchorBottom={anchorBottom}
         behaviorConfig={behaviorConfig}
       />
     );

@@ -12,10 +12,10 @@ import { createMapPosReplaceGuard } from "./replaceGuard";
 import { SelectionHighlight } from "./selectionHighlight";
 import type CopilotPlugin from "@/main";
 import { logWarn } from "@/logger";
+import { computeSelectionAnchors } from "@/utils/selectionAnchors";
 
 interface QuickAskWidgetState {
   view: EditorView;
-  pos: number;
   close: (restoreFocus?: boolean) => void;
 }
 
@@ -143,6 +143,8 @@ export class QuickAskController {
     };
 
     try {
+      const anchors = computeSelectionAnchors(selection, view.state.doc);
+
       view.dispatch({
         effects: [
           // First clear any existing widget and highlight
@@ -150,8 +152,9 @@ export class QuickAskController {
           ...SelectionHighlight.buildEffects(view, null),
           // Then create the new widget with highlight
           quickAskWidgetEffect.of({
-            pos: selection.head,
-            fallbackPos: selection.anchor,
+            bottomAnchorPos: anchors.bottomPos,
+            topAnchorPos: anchors.topPos,
+            focusAnchorPos: anchors.focusPos,
             options: {
               plugin: this.plugin,
               editor,
@@ -167,7 +170,7 @@ export class QuickAskController {
         ],
       });
 
-      this.quickAskWidgetState = { view, pos: selection.head, close };
+      this.quickAskWidgetState = { view, close };
     } catch (error) {
       // View may have been destroyed
       logWarn("Failed to show Quick Ask panel:", error);

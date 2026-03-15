@@ -43,9 +43,14 @@ import {
   serializeReasoningBlock,
   summarizeToolCall,
   summarizeToolResult,
-  QueryExpansionInfo,
 } from "./utils/AgentReasoningState";
-import { QueryExpander } from "@/search/v3/QueryExpander";
+import { findDuplicateQuery, stripLeakedRoleLines } from "./utils/queryDeduplication";
+
+const AGENT_LOOP_GUIDANCE = `## Agent Behavior
+- You have a limited number of tool calls. Use them wisely.
+- NEVER search for the same or very similar query twice. If results were insufficient, try substantially different terms.
+- After 1-2 searches, synthesize an answer from the results you have. Do not keep searching unless the results are clearly insufficient.
+- If you have enough information to answer, respond directly without calling any more tools.`;
 
 type AgentSource = {
   title: string;
@@ -89,6 +94,7 @@ interface AgentRunContext {
  */
 interface ReActLoopParams {
   boundModel: Runnable;
+  chatModel: Runnable; // Raw model without tools, used for forced synthesis
   tools: StructuredTool[];
   messages: BaseMessage[];
   originalPrompt: string;
@@ -286,6 +292,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     return serializeReasoningBlock(this.reasoningState);
   }
 
+  // TODO: Unify system prompt construction -- this static method and prepareAgentConversation()
+  // both independently gather tool metadata, build tool instructions, and append AGENT_LOOP_GUIDANCE.
+  // Extract a shared helper like buildAgentSystemPromptSuffix(tools) to avoid drift.
   /**
    * Generate system prompt for the autonomous agent.
    * Note: Tool schemas are handled by bindTools(), so we only include
@@ -310,10 +319,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       .map((meta) => `For ${meta.displayName}: ${meta.customPromptInstructions}`)
       .join("\n");
 
+    const parts = [basePrompt];
     if (toolInstructions) {
-      return `${basePrompt}\n\n## Tool Guidelines\n${toolInstructions}`;
+      parts.push(`## Tool Guidelines\n${toolInstructions}`);
     }
-    return basePrompt;
+    parts.push(AGENT_LOOP_GUIDANCE);
+    return parts.join("\n\n");
   }
 
   /**
@@ -422,6 +433,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       // Run the simplified ReAct loop with native tool calling
       const loopResult = await this.runReActLoop({
         boundModel: context.loopDeps.boundModel,
+        chatModel,
         tools: context.loopDeps.availableTools,
         messages: context.messages,
         originalPrompt: context.originalUserPrompt,
@@ -575,10 +587,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       .map((meta) => `For ${meta.displayName}: ${meta.customPromptInstructions}`)
       .join("\n");
 
-    // Combine system message with tool guidelines
+    // Combine system message with tool guidelines and agent loop guidance
     const systemContent = [
       systemMessage?.content || "",
       toolInstructions ? `\n## Tool Guidelines\n${toolInstructions}` : "",
+      AGENT_LOOP_GUIDANCE,
     ]
       .filter(Boolean)
       .join("\n\n");
@@ -642,6 +655,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const collectedSources: AgentSource[] = [];
     const loopStartTime = Date.now();
 
+    const previousSearchQueries: string[] = [];
+    let consecutiveAllSkipped = 0;
     let iteration = 0;
     let responseMetadata: ResponseMetadata | undefined;
 
@@ -671,11 +686,19 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         tokenUsage: streamingResult.tokenUsage ?? undefined,
       };
 
+      const trimmedContent = content?.trim();
+      logInfo(
+        `[Agent] Iteration ${iteration} model output:`,
+        trimmedContent ? trimmedContent.slice(0, 200) : "(empty)"
+      );
+
       // Check for native tool calls
       const toolCalls = aiMessage.tool_calls || [];
+      logInfo(`[Agent] Iteration ${iteration}: ${toolCalls.length} tool call(s)`);
 
       // No tool calls = final response
       if (toolCalls.length === 0) {
+        logInfo(`[Agent] Iteration ${iteration}: Final response (no tool calls)`);
         // Stop reasoning timer and finalize the reasoning block
         this.stopReasoningTimer();
         this.reasoningState.status = "complete";
@@ -732,22 +755,72 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         };
       }
 
-      // Add AI message with tool calls - but DON'T accumulate intermediate content
-      // Intermediate content (like "I'll search for..." ) should not appear in final response
-      messages.push(aiMessage);
+      // Clean leaked role tokens from intermediate content before adding to conversation.
+      // Small local models leak chat template fragments (e.g. <|im_start|>user -> "user")
+      // that would otherwise pollute the conversation history and confuse subsequent iterations.
+      const cleanedContent = stripLeakedRoleLines(content);
+      const intermediateMessage = new AIMessage({
+        content: cleanedContent,
+        tool_calls: aiMessage.tool_calls,
+      });
+      messages.push(intermediateMessage);
 
       // For iterations > 1, the model's content often contains its summary of findings
       // from previous tool calls. Extract first sentence as a "finding summary".
       // (Iteration 1 has no previous findings - its content is just "I'll search for...")
-      if (iteration > 1 && content && content.trim().length > 0) {
-        const findingSummary = extractFirstSentence(content);
+      if (iteration > 1 && cleanedContent && cleanedContent.trim().length > 0) {
+        const findingSummary = extractFirstSentence(cleanedContent);
         if (findingSummary) {
           this.addReasoningStep(findingSummary);
         }
       }
 
-      // Execute each tool
+      // --- Pre-deduplicate tool calls before execution ---
+      // Prevents within-batch duplicates (model emits 3 similar searches at once)
+      // and cross-iteration duplicates (model retries a query from a previous iteration).
+      // Duplicates are silently handled: ToolMessage feedback is sent but no reasoning step shown.
+      // TODO: Make dedup a ToolRegistry metadata property (e.g. deduplicateQueries: true)
+      // so the loop handles it generically instead of hardcoding "localSearch".
+      const uniqueToolCalls: typeof toolCalls = [];
+      const batchQueries: string[] = [];
+      // Parallel array: for each entry in uniqueToolCalls, the associated localSearch query
+      // (or null for non-localSearch calls). Used to track queries post-execution.
+      const uniqueToolCallQueries: Array<string | null> = [];
+
       for (const tc of toolCalls) {
+        if (tc.name === "localSearch") {
+          const query = (tc.args as Record<string, unknown>)?.query as string | undefined;
+          if (query) {
+            const duplicate =
+              findDuplicateQuery(query, previousSearchQueries) ??
+              findDuplicateQuery(query, batchQueries);
+            if (duplicate) {
+              logInfo(`[Agent] Dedup: "${query}" (similar to: "${duplicate}")`);
+              messages.push(
+                createToolResultMessage(
+                  tc.id || generateToolCallId(),
+                  tc.name,
+                  `You already searched for a similar query: "${duplicate}". Synthesize your answer from existing results.`
+                )
+              );
+              continue;
+            }
+            batchQueries.push(query);
+            uniqueToolCallQueries.push(query);
+          } else {
+            uniqueToolCallQueries.push(null);
+          }
+        } else {
+          uniqueToolCallQueries.push(null);
+        }
+        uniqueToolCalls.push(tc);
+      }
+      // Note: queries are tracked in previousSearchQueries after each tool executes,
+      // not here, so that transient failures leave queries retryable on the next iteration.
+
+      // Execute unique tool calls
+      for (let tcIdx = 0; tcIdx < uniqueToolCalls.length; tcIdx++) {
+        const tc = uniqueToolCalls[tcIdx];
         if (abortController.signal.aborted) break;
 
         const toolCall = {
@@ -755,57 +828,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           args: tc.args as Record<string, unknown>,
         };
 
-        // Pre-expand query for localSearch to show expanded terms BEFORE search
-        let preExpandedTerms: QueryExpansionInfo | undefined;
-        if (tc.name === "localSearch") {
-          const query = toolCall.args.query as string | undefined;
-          if (query) {
-            try {
-              const expander = new QueryExpander({
-                getChatModel: async () => {
-                  return this.chainManager.chatModelManager.getChatModel();
-                },
-              });
-              const expansion = await expander.expand(query);
-              // Compute recall terms (all terms used for search)
-              const seen = new Set<string>();
-              const recallTerms: string[] = [];
-              const addTerm = (term: unknown) => {
-                if (typeof term !== "string") return;
-                const trimmed = term.trim();
-                // Filter out invalid terms like "[object Object]"
-                if (!trimmed || trimmed === "[object Object]" || trimmed.startsWith("[object "))
-                  return;
-                const normalized = trimmed.toLowerCase();
-                if (!seen.has(normalized)) {
-                  seen.add(normalized);
-                  recallTerms.push(trimmed);
-                }
-              };
-              if (expansion.originalQuery) addTerm(expansion.originalQuery);
-              (expansion.salientTerms || []).forEach(addTerm);
-              (expansion.expandedQueries || []).forEach(addTerm);
-
-              preExpandedTerms = {
-                originalQuery: expansion.originalQuery,
-                salientTerms: expansion.salientTerms,
-                expandedQueries: expansion.expandedQueries,
-                recallTerms,
-              };
-            } catch {
-              // Ignore expansion errors, fall back to basic summary
-            }
-          }
-        }
-
         // Add tool call step (shown in both rolling display and expanded view)
-        const toolCallSummary = summarizeToolCall(tc.name, toolCall.args, preExpandedTerms);
+        const toolCallSummary = summarizeToolCall(tc.name, toolCall.args);
         this.addReasoningStep(toolCallSummary, tc.name);
-
-        // Inject pre-expanded query data into args to avoid double expansion in search
-        if (preExpandedTerms) {
-          toolCall.args._preExpandedQuery = preExpandedTerms;
-        }
 
         logToolCall(toolCall, iteration);
 
@@ -834,6 +859,16 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         logToolResult(tc.name, result);
 
+        // Track the executed query only on success so transient failures remain retryable.
+        // A failed localSearch means no results were retrieved; the model should be able
+        // to issue the same query again on the next iteration if it chooses to.
+        if (tc.name === "localSearch" && result.success) {
+          const executedQuery = uniqueToolCallQueries[tcIdx];
+          if (executedQuery) {
+            previousSearchQueries.push(executedQuery);
+          }
+        }
+
         // Add tool result step (shown in rolling display - this is the "what was found")
         const resultSummary = summarizeToolResult(tc.name, result, sourceInfo, toolCall.args);
         this.addReasoningStep(resultSummary, tc.name);
@@ -845,6 +880,61 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           result.result
         );
         messages.push(toolMessage);
+      }
+
+      // Detect stuck model: all tool calls were duplicates (none made it through dedup)
+      if (uniqueToolCalls.length === 0 && toolCalls.length > 0) {
+        consecutiveAllSkipped++;
+        logInfo(
+          `[Agent] All ${toolCalls.length} tool call(s) skipped as duplicates ` +
+            `(${consecutiveAllSkipped} consecutive)`
+        );
+
+        if (consecutiveAllSkipped >= 2) {
+          // Model is stuck in a search loop -- force synthesis without tools
+          logInfo("[Agent] Model stuck in search loop, forcing synthesis without tools");
+          this.addReasoningStep("Synthesizing answer from search results");
+
+          messages.push(
+            new HumanMessage(
+              "You have already searched and found relevant results. Do not call any tools. " +
+                "Answer the following question now based ONLY on the search results above:\n\n" +
+                originalPrompt
+            )
+          );
+
+          // Call raw model (without tools) to guarantee text-only response
+          const synthesis = await this.streamModelResponse(
+            params.chatModel,
+            messages,
+            abortController,
+            updateCurrentAiMessage
+          );
+
+          responseMetadata = {
+            wasTruncated: synthesis.streamingResult.wasTruncated,
+            tokenUsage: synthesis.streamingResult.tokenUsage ?? undefined,
+          };
+
+          // Finalize as final response
+          this.stopReasoningTimer();
+          this.reasoningState.status = "complete";
+          const reasoningBlock = this.buildReasoningBlockMarkup();
+          const finalContent =
+            synthesis.content || "Unable to synthesize a response from the search results.";
+          const finalResponse = reasoningBlock
+            ? reasoningBlock + "\n\n" + finalContent
+            : finalContent;
+          updateCurrentAiMessage(finalResponse);
+
+          return {
+            finalResponse,
+            sources: collectedSources,
+            responseMetadata,
+          };
+        }
+      } else {
+        consecutiveAllSkipped = 0;
       }
     }
 
@@ -921,6 +1011,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       true // excludeThinking = true for agent mode
     );
 
+    let rawContent = ""; // Accumulate raw content before think-stripping, for debug logging
+
     try {
       const stream = await withSuppressedTokenWarnings(() =>
         boundModel.stream(messages, {
@@ -946,6 +1038,10 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           }
         }
 
+        // Accumulate raw content for debug logging (before think-stripping)
+        const chunkContent = typeof chunk.content === "string" ? chunk.content : "";
+        if (chunkContent) rawContent += chunkContent;
+
         // Process chunk through ThinkBlockStreamer to strip thinking content
         thinkStreamer.processChunk(chunk);
       }
@@ -953,6 +1049,15 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       // Close the streamer to finalize content (handles unclosed think blocks, etc.)
       const streamingResult = thinkStreamer.close();
       const fullContent = streamingResult.content;
+
+      // Log raw vs stripped content difference for debugging model behavior
+      const rawTrimmed = rawContent.trim();
+      const strippedTrimmed = fullContent.trim();
+      if (rawTrimmed && !strippedTrimmed) {
+        logInfo(
+          `[Agent] Model produced content that was entirely stripped (likely think blocks): ${rawTrimmed.slice(0, 300)}`
+        );
+      }
 
       // Build tool calls from accumulated chunks (with sanitization for empty objects)
       const toolCalls = buildToolCallsFromChunks(toolCallChunks);

@@ -1,5 +1,6 @@
 import {
   addFallbackSources,
+  deduplicateAdjacentCitations,
   formatSourceCatalog,
   getLocalSearchGuidance,
   getQACitationInstructions,
@@ -8,6 +9,7 @@ import {
   normalizeCitations,
   processInlineCitations,
   sanitizeContentForCitations,
+  updateCitationsForConsolidation,
   type SourceCatalogEntry,
 } from "./citationUtils";
 
@@ -465,7 +467,8 @@ More content
       // Verify citations in text point to correct consolidated sources
       expect(result).toContain("references [1] and also [2]"); // [^14]->[1], [^17]->[2]
       expect(result).toContain("uses [3] again"); // [^3]->[3]
-      expect(result).toContain("cites [1] and [1]"); // [^14]->[1], [^22]->[1] (consolidated)
+      expect(result).toContain("cites [1]"); // [^14]->[1], [^22]->[1] (consolidated + deduplicated)
+      expect(result).not.toContain("cites [1] and [1]"); // adjacent dupes should be collapsed
       expect(result).toContain("mentions [3] once more"); // [^3]->[3]
     });
 
@@ -496,6 +499,114 @@ More content
       expect(result).toContain("thresholds). [1][2]"); // [^7][^8] -> [1][2]
       expect(result).not.toContain("[^8]"); // Should not contain any unconverted citations
       expect(result).not.toContain("[^7]"); // Should not contain any unconverted citations
+    });
+
+    it("should deduplicate adjacent citations after consolidation", () => {
+      // Two chunks from the same note cited adjacently: [^1][^2] both -> [[Same Note]]
+      const content = `Key finding here [^1][^2] and another point [^3].
+
+#### Sources:
+[^1]: [[Same Note]]
+[^2]: [[Same Note]]
+[^3]: [[Other Note]]`;
+
+      const result = processInlineCitations(content);
+
+      // After consolidation, [^1] and [^2] both map to source 1
+      // Adjacent [1][1] should be collapsed to [1]
+      expect(result).toContain("finding here [1] and another");
+      expect(result).not.toContain("[1][1]");
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[Same Note]]</span>'
+      );
+      expect(result).toContain(
+        '<span class="copilot-sources__index">[2]</span><span class="copilot-sources__text">[[Other Note]]</span>'
+      );
+    });
+
+    it("should deduplicate citations separated by 'and' after consolidation", () => {
+      // Use separate brackets since buildCitationMap scans [^N] individually
+      const content = `Claim here [^1] and [^2] and more [^3].
+
+#### Sources:
+[^1]: [[Note A]]
+[^2]: [[Note A]]
+[^3]: [[Note B]]`;
+
+      const result = processInlineCitations(content);
+
+      // [^1] and [^2] both map to [[Note A]] -> consolidated to source 1
+      // "[1] and [1]" should collapse to "[1]"
+      expect(result).toContain("Claim here [1] and more");
+      expect(result).not.toContain("[1] and [1]");
+    });
+  });
+
+  describe("updateCitationsForConsolidation", () => {
+    it("should deduplicate numbers within a bracket group", () => {
+      const map = new Map([
+        [1, 1],
+        [2, 1],
+        [3, 2],
+      ]);
+      expect(updateCitationsForConsolidation("[1, 2] text [3]", map)).toBe("[1] text [2]");
+    });
+
+    it("should preserve order of first occurrence", () => {
+      const map = new Map([
+        [1, 1],
+        [2, 1],
+        [3, 1],
+      ]);
+      expect(updateCitationsForConsolidation("[1, 2, 3]", map)).toBe("[1]");
+    });
+  });
+
+  describe("deduplicateAdjacentCitations", () => {
+    it("should collapse identical adjacent brackets", () => {
+      expect(deduplicateAdjacentCitations("[1][1]")).toBe("[1]");
+    });
+
+    it("should collapse triple identical adjacent brackets", () => {
+      expect(deduplicateAdjacentCitations("[1][1][1]")).toBe("[1]");
+    });
+
+    it("should not collapse different adjacent brackets", () => {
+      expect(deduplicateAdjacentCitations("[1][2]")).toBe("[1][2]");
+    });
+
+    it("should collapse when second is a subset of first", () => {
+      expect(deduplicateAdjacentCitations("[1, 2][1]")).toBe("[1, 2]");
+    });
+
+    it("should not collapse when second has new numbers", () => {
+      expect(deduplicateAdjacentCitations("[1][1, 2]")).toBe("[1][1, 2]");
+    });
+
+    it("should handle mixed cases in sequence", () => {
+      expect(deduplicateAdjacentCitations("[1][1][2]")).toBe("[1][2]");
+    });
+
+    it("should handle spaces between brackets", () => {
+      expect(deduplicateAdjacentCitations("[1] [1]")).toBe("[1]");
+    });
+
+    it("should preserve surrounding text", () => {
+      expect(deduplicateAdjacentCitations("claim [1][1] and more [2]")).toBe(
+        "claim [1] and more [2]"
+      );
+    });
+
+    it("should collapse duplicates separated by 'and'", () => {
+      expect(deduplicateAdjacentCitations("cites [1] and [1]")).toBe("cites [1]");
+    });
+
+    it("should not collapse different citations separated by 'and'", () => {
+      expect(deduplicateAdjacentCitations("cites [1] and [2]")).toBe("cites [1] and [2]");
+    });
+
+    it("should collapse duplicates separated by comma", () => {
+      expect(deduplicateAdjacentCitations("cites [1], [1]")).toBe("cites [1]");
     });
   });
 });

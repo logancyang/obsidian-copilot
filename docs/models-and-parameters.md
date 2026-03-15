@@ -17,9 +17,9 @@ Copilot comes with a set of built-in models across many providers. Some are alwa
 | google/gemini-2.5-pro | OpenRouter | Vision |
 | google/gemini-3-flash-preview | OpenRouter | Vision, Reasoning |
 | google/gemini-3.1-pro-preview | OpenRouter | Vision, Reasoning |
-| openai/gpt-5.2 | OpenRouter | Vision |
+| openai/gpt-5.4 | OpenRouter | Vision |
 | openai/gpt-5-mini | OpenRouter | Vision |
-| gpt-5.2 | OpenAI | Vision |
+| gpt-5.4 | OpenAI | Vision |
 | gpt-5-mini | OpenAI | Vision |
 | gpt-4.1 | OpenAI | Vision |
 | gpt-4.1-mini | OpenAI | Vision |

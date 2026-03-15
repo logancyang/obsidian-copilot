@@ -278,6 +278,9 @@ export function summarizeToolResult(
   }
 }
 
+// TODO: The `expansion` parameter and QueryExpansionInfo interface are now dead code --
+// the agent runner no longer pre-expands queries. Clean up the expansion branch below
+// and the _preExpandedQuery schema field in SearchTools.ts.
 /**
  * Generate a summary for when a tool is being called.
  *

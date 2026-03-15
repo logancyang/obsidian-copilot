@@ -400,6 +400,7 @@ export function consolidateDuplicateSources(items: string[]): {
 
 /**
  * Updates citations in content to reflect consolidated numbering.
+ * Deduplicates within each bracket group after remapping.
  */
 export function updateCitationsForConsolidation(
   content: string,
@@ -409,12 +410,44 @@ export function updateCitationsForConsolidation(
 
   return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_match, nums) => {
     const parts = nums.split(/\s*,\s*/);
-    const remappedParts = parts.map((n: string) => {
-      const oldNum = parseInt(n, 10);
-      return String(consolidationMap.get(oldNum) || oldNum);
-    });
-    return `[${remappedParts.join(", ")}]`;
+    const seen = new Set<number>();
+    const unique: number[] = [];
+    for (const n of parts) {
+      const remapped = consolidationMap.get(parseInt(n, 10)) || parseInt(n, 10);
+      if (!seen.has(remapped)) {
+        seen.add(remapped);
+        unique.push(remapped);
+      }
+    }
+    return `[${unique.join(", ")}]`;
   });
+}
+
+/**
+ * Collapses duplicate citation brackets that appear next to each other.
+ * Handles truly adjacent brackets ([1][1]) and brackets separated by
+ * connectors like " and " or ", " ([1] and [1]).
+ * Only collapses when the second bracket is a subset of the first.
+ */
+export function deduplicateAdjacentCitations(content: string): string {
+  let result = content;
+  let prev;
+  do {
+    prev = result;
+    // Match citation brackets separated by optional whitespace or connectors (" and ", ", ")
+    result = result.replace(
+      /\[(\d+(?:\s*,\s*\d+)*)\](?:\s*(?:and|,)\s*|\s*)\[(\d+(?:\s*,\s*\d+)*)\]/g,
+      (match, first, second) => {
+        const firstNums = new Set(first.split(/\s*,\s*/).map((s: string) => s.trim()));
+        const secondNums = second.split(/\s*,\s*/).map((s: string) => s.trim());
+        if (secondNums.every((n: string) => firstNums.has(n))) {
+          return `[${[...firstNums].join(", ")}]`;
+        }
+        return match;
+      }
+    );
+  } while (result !== prev);
+  return result;
 }
 
 interface SourcesDisplayItem {
@@ -538,9 +571,10 @@ export function processInlineCitations(
   let items = convertFootnoteDefinitions(sourcesBlock, citationMap);
   const { uniqueItems, consolidationMap } = consolidateDuplicateSources(items);
 
-  // Update citations to reflect consolidation
+  // Update citations to reflect consolidation and deduplicate
   if (consolidationMap.size > 0) {
     mainContent = updateCitationsForConsolidation(mainContent, consolidationMap);
+    mainContent = deduplicateAdjacentCitations(mainContent);
     items = uniqueItems;
   }
 

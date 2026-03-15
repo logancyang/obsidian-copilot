@@ -30,7 +30,7 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
    * Reasoning effort level: "minimal", "low", "medium", "high", or "xhigh"
    * Controls the amount of reasoning the model uses
    * Note: "minimal" will be treated as "low" for OpenRouter
-   * Note: "xhigh" is only supported by GPT-5.2 models
+   * Note: "xhigh" is only supported by GPT-5.4 models
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 

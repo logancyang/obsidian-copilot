@@ -1,5 +1,5 @@
 // src/components/SourcesModal.tsx
-import { App, Modal } from "obsidian";
+import { App, Modal, TFile } from "obsidian";
 
 export class SourcesModal extends Modal {
   sources: { title: string; path: string; score: number; explanation?: any }[];
@@ -54,6 +54,19 @@ export class SourcesModal extends Modal {
       const link = itemContainer.createEl("a", {
         href: `obsidian://open?vault=${encodeURIComponent(this.app.vault.getName())}&file=${encodeURIComponent(source.path || source.title)}`,
         text: displayText,
+      });
+      link.title = `${displayText} - drag to insert wikilink`;
+      link.draggable = true;
+      link.addEventListener("dragstart", (e) => {
+        const filePath = source.path || source.title;
+        const file = this.app.vault.getAbstractFileByPath(filePath);
+        if (file instanceof TFile) {
+          const dragManager = (this.app as any).dragManager;
+          if (!dragManager) return;
+          const linkText = this.app.metadataCache.fileToLinktext(file, "");
+          const dragData = dragManager.dragLink(e, linkText);
+          dragManager.onDragStart(e, dragData);
+        }
       });
       link.addEventListener("click", (e) => {
         e.preventDefault();

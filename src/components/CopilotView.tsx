@@ -1,5 +1,6 @@
 import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
+import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
@@ -19,6 +20,7 @@ export default class CopilotView extends ItemView {
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private keyboardObserver: MutationObserver | null = null;
   private drawerHideObserver: MutationObserver | null = null;
+  private layout: ChatViewLayout | null = null;
   private lastDrawerEl: HTMLElement | null = null;
   eventTarget: EventTarget;
 
@@ -61,6 +63,7 @@ export default class CopilotView extends ItemView {
     };
 
     this.renderView(handleSaveAsNote, updateUserMessageHistory);
+    this.layout = new ChatViewLayout(this.containerEl, this.app.workspace);
     this.setupMobileKeyboardObserver();
     this.setupDrawerHideObserver();
 
@@ -206,6 +209,8 @@ export default class CopilotView extends ItemView {
     this.keyboardObserver = null;
     this.drawerHideObserver?.disconnect();
     this.drawerHideObserver = null;
+    this.layout?.destroy();
+    this.layout = null;
     // Reason: Clean up the class on the tracked drawer element when the view is closed.
     // Use lastDrawerEl instead of querying closest(), because the view may have already
     // been detached from the drawer DOM by the time onClose fires.

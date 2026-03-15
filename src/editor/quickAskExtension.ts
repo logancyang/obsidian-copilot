@@ -11,6 +11,7 @@ import { StateEffect } from "@codemirror/state";
 import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { QuickAskOverlay } from "@/components/quick-ask/QuickAskOverlay";
 import type { QuickAskWidgetPayload } from "@/components/quick-ask/types";
+import { mapQuickAskAnchorPositions } from "@/utils/quickAskAnchorMapping";
 
 /**
  * StateEffect for showing/hiding the Quick Ask widget.
@@ -25,8 +26,9 @@ export const quickAskWidgetEffect = StateEffect.define<QuickAskWidgetPayload | n
 export const quickAskOverlayPlugin = ViewPlugin.fromClass(
   class {
     private overlay: QuickAskOverlay | null = null;
-    private pos: number | null = null;
-    private fallbackPos: number | null = null;
+    private bottomAnchorPos: number | null = null;
+    private topAnchorPos: number | null = null;
+    private focusAnchorPos: number | null = null;
 
     constructor(private readonly view: EditorView) {}
 
@@ -41,21 +43,25 @@ export const quickAskOverlayPlugin = ViewPlugin.fromClass(
             // Close the overlay (highlight is handled by controller)
             this.overlay?.destroy();
             this.overlay = null;
-            this.pos = null;
-            this.fallbackPos = null;
+            this.bottomAnchorPos = null;
+            this.topAnchorPos = null;
+            this.focusAnchorPos = null;
             continue;
           }
 
           // Close existing overlay before opening new one
           this.overlay?.destroy();
-          this.pos = payload.pos;
-          this.fallbackPos = typeof payload.fallbackPos === "number" ? payload.fallbackPos : null;
+          this.bottomAnchorPos = payload.bottomAnchorPos;
+          this.topAnchorPos =
+            typeof payload.topAnchorPos === "number" ? payload.topAnchorPos : null;
+          this.focusAnchorPos =
+            typeof payload.focusAnchorPos === "number" ? payload.focusAnchorPos : null;
 
           // NOTE: SelectionHighlight is now managed by quickAskController.ts
           // to avoid dispatch-during-update errors
 
           this.overlay = new QuickAskOverlay(payload.options);
-          this.overlay.mount(payload.pos, this.fallbackPos);
+          this.overlay.mount(payload.bottomAnchorPos, this.topAnchorPos, this.focusAnchorPos);
         }
       }
 
@@ -67,15 +73,19 @@ export const quickAskOverlayPlugin = ViewPlugin.fromClass(
           guard.onDocChanged(update.changes);
         }
 
-        // Update anchor position for panel positioning
-        if (this.pos !== null) {
-          this.pos = update.changes.mapPos(this.pos);
-        }
-        if (this.fallbackPos !== null) {
-          this.fallbackPos = update.changes.mapPos(this.fallbackPos);
-        }
-        if (this.pos !== null) {
-          this.overlay.updatePosition(this.pos, this.fallbackPos);
+        const mapped = mapQuickAskAnchorPositions(
+          {
+            bottomAnchorPos: this.bottomAnchorPos,
+            topAnchorPos: this.topAnchorPos,
+            focusAnchorPos: this.focusAnchorPos,
+          },
+          update.changes
+        );
+        this.bottomAnchorPos = mapped.bottomAnchorPos;
+        this.topAnchorPos = mapped.topAnchorPos;
+        this.focusAnchorPos = mapped.focusAnchorPos;
+        if (this.bottomAnchorPos !== null) {
+          this.overlay.updatePosition(this.bottomAnchorPos, this.topAnchorPos, this.focusAnchorPos);
         }
 
         // Trigger panel re-render to update Replace button disabled state
@@ -87,8 +97,9 @@ export const quickAskOverlayPlugin = ViewPlugin.fromClass(
       // NOTE: SelectionHighlight cleanup is handled by quickAskController.ts
       this.overlay?.destroy();
       this.overlay = null;
-      this.pos = null;
-      this.fallbackPos = null;
+      this.bottomAnchorPos = null;
+      this.topAnchorPos = null;
+      this.focusAnchorPos = null;
     }
   }
 );
