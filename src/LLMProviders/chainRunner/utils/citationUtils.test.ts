@@ -1,7 +1,9 @@
 import {
   addFallbackSources,
   deduplicateAdjacentCitations,
+  extractSourcesSection,
   formatSourceCatalog,
+  getCitationFormatReminder,
   getLocalSearchGuidance,
   getQACitationInstructions,
   hasExistingCitations,
@@ -12,6 +14,9 @@ import {
   updateCitationsForConsolidation,
   type SourceCatalogEntry,
 } from "./citationUtils";
+
+/** Helper: wraps a citation like [1] in the placeholder span for test assertions. */
+const ref = (n: number | string) => `<span class="copilot-citation-ref">[${n}]</span>`;
 
 describe("citationUtils", () => {
   describe("sanitizeContentForCitations", () => {
@@ -225,6 +230,99 @@ More content
     });
   });
 
+  describe("extractSourcesSection", () => {
+    it("should extract #### Sources heading", () => {
+      const content = `Main content here
+
+#### Sources:
+[^1]: [[Doc A]]
+[^2]: [[Doc B]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.mainContent).toContain("Main content here");
+      expect(result!.sourcesBlock).toContain("[^1]: [[Doc A]]");
+    });
+
+    it("should extract bare Sources label", () => {
+      const content = `Main content
+
+Sources
+[^1]: [[Doc]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.sourcesBlock).toContain("[^1]: [[Doc]]");
+    });
+
+    it("should extract --- separator with footnote definitions", () => {
+      const content = `Some analysis with citations [^201] and [^202].
+
+---
+
+[^201]: [[How to Make Wealth]]
+[^202]: [[Superlinear Returns]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.mainContent).toContain("Some analysis with citations");
+      expect(result!.sourcesBlock).toContain("[^201]: [[How to Make Wealth]]");
+      expect(result!.sourcesBlock).toContain("[^202]: [[Superlinear Returns]]");
+    });
+
+    it("should not treat --- as sources separator when content after has no footnotes", () => {
+      const content = `Paragraph one
+
+---
+
+Paragraph two continues here`;
+      const result = extractSourcesSection(content);
+      expect(result).toBeNull();
+    });
+
+    it("should extract trailing bare footnote definitions with no separator", () => {
+      const content = `Content with citations [^1] and [^2].
+
+[^1]: [[Note A]]
+[^2]: [[Note B]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.mainContent).toContain("Content with citations");
+      expect(result!.sourcesBlock).toContain("[^1]: [[Note A]]");
+      expect(result!.sourcesBlock).toContain("[^2]: [[Note B]]");
+    });
+
+    it("should return null when no sources pattern found", () => {
+      expect(extractSourcesSection("Just plain content")).toBeNull();
+    });
+
+    it("should prefer Sources heading over --- when both present", () => {
+      const content = `Content
+
+---
+
+More content
+
+#### Sources
+[^1]: [[Doc]]`;
+      const result = extractSourcesSection(content);
+      expect(result).not.toBeNull();
+      expect(result!.sourcesBlock).toContain("[^1]: [[Doc]]");
+      // Strategy 1 matches first, so mainContent includes everything before "#### Sources"
+      expect(result!.mainContent).toContain("More content");
+    });
+  });
+
+  describe("getCitationFormatReminder", () => {
+    it("should return reminder when citations enabled", () => {
+      const result = getCitationFormatReminder(true);
+      expect(result).not.toBeNull();
+      expect(result).toContain("#### Sources");
+      expect(result).toContain("[^n]");
+    });
+
+    it("should return null when citations disabled", () => {
+      expect(getCitationFormatReminder(false)).toBeNull();
+    });
+  });
+
   describe("processInlineCitations", () => {
     it("should process inline citations with footnote format", () => {
       const content = `Some content here
@@ -258,6 +356,50 @@ More content
       const content = "Just regular content without sources";
       const result = processInlineCitations(content);
       expect(result).toBe(content);
+    });
+
+    it("should process citations with --- separator (common in agent mode)", () => {
+      const content = `Here are the findings [^1] and [^2].
+
+---
+
+[^1]: [[How to Make Wealth]]
+[^2]: [[Superlinear Returns]]`;
+
+      const result = processInlineCitations(content);
+      expect(result).toContain("copilot-sources__summary");
+      expect(result).toContain('copilot-sources__index">[1]');
+      expect(result).toContain('copilot-sources__text">[[How to Make Wealth]]');
+      expect(result).toContain('copilot-sources__text">[[Superlinear Returns]]');
+    });
+
+    it("should process citations with bare trailing footnotes (no separator)", () => {
+      const content = `Analysis shows key insights [^1] about this topic [^2].
+
+[^1]: [[Note A]]
+[^2]: [[Note B]]`;
+
+      const result = processInlineCitations(content);
+      expect(result).toContain("copilot-sources__summary");
+      expect(result).toContain('copilot-sources__text">[[Note A]]');
+      expect(result).toContain('copilot-sources__text">[[Note B]]');
+    });
+
+    it("should handle non-sequential footnote numbers with --- separator", () => {
+      const content = `Point A [^201] and point B [^202].
+
+---
+
+[^201]: [[Doc One]]
+[^202]: [[Doc Two]]`;
+
+      const result = processInlineCitations(content);
+      expect(result).toContain("copilot-sources__summary");
+      // Non-sequential [^201] and [^202] should be renumbered to [1] and [2]
+      expect(result).toContain('copilot-sources__index">[1]');
+      expect(result).toContain('copilot-sources__index">[2]');
+      expect(result).toContain(`Point A ${ref(1)}`);
+      expect(result).toContain(`point B ${ref(2)}`);
     });
   });
 
@@ -386,10 +528,10 @@ More content
       );
 
       // Verify the citations in text are renumbered correctly
-      expect(result).toContain("Dolce Arts Studio [1]"); // [^9] -> [1]
-      expect(result).toContain("7 pm [2]"); // [^1] -> [2]
-      expect(result).toContain("your routine [3]"); // [^2] -> [3]
-      expect(result).toContain("April 8, 2024: You skipped your piano lesson this week [4]"); // [^18] -> [4]
+      expect(result).toContain(`Dolce Arts Studio ${ref(1)}`); // [^9] -> [1]
+      expect(result).toContain(`7 pm ${ref(2)}`); // [^1] -> [2]
+      expect(result).toContain(`your routine ${ref(3)}`); // [^2] -> [3]
+      expect(result).toContain(`April 8, 2024: You skipped your piano lesson this week ${ref(4)}`); // [^18] -> [4]
     });
 
     it("should consolidate duplicate sources from user's real example", () => {
@@ -419,14 +561,10 @@ More content
       expect(result).not.toContain('copilot-sources__index">[3]');
       expect(result).not.toContain('copilot-sources__index">[4]');
 
-      // Verify periods after citations are removed
-      expect(result).not.toContain("[1].");
-      expect(result).not.toContain("[2].");
-
       // Verify all citations are properly renumbered
-      expect(result).toContain("inheritance [1] He emphasizes");
-      expect(result).toContain("few years [1] Instead of working");
-      expect(result).toContain("not linear [2] In business");
+      expect(result).toContain(`inheritance ${ref(1)} He emphasizes`);
+      expect(result).toContain(`few years ${ref(1)} Instead of working`);
+      expect(result).toContain(`not linear ${ref(2)} In business`);
     });
 
     it("should handle complex non-sequential citations with duplicates", () => {
@@ -465,11 +603,11 @@ More content
       expect(result).not.toContain('copilot-sources__index">[4]');
 
       // Verify citations in text point to correct consolidated sources
-      expect(result).toContain("references [1] and also [2]"); // [^14]->[1], [^17]->[2]
-      expect(result).toContain("uses [3] again"); // [^3]->[3]
-      expect(result).toContain("cites [1]"); // [^14]->[1], [^22]->[1] (consolidated + deduplicated)
-      expect(result).not.toContain("cites [1] and [1]"); // adjacent dupes should be collapsed
-      expect(result).toContain("mentions [3] once more"); // [^3]->[3]
+      expect(result).toContain(`references ${ref(1)} and also ${ref(2)}`); // [^14]->[1], [^17]->[2]
+      expect(result).toContain(`uses ${ref(3)} again`); // [^3]->[3]
+      expect(result).toContain(`cites ${ref(1)}`); // [^14]->[1], [^22]->[1] (consolidated + deduplicated)
+      expect(result).not.toContain(`cites ${ref(1)} and ${ref(1)}`); // adjacent dupes should be collapsed
+      expect(result).toContain(`mentions ${ref(3)} once more`); // [^3]->[3]
     });
 
     it("should handle consecutive citations without spaces (CRITICAL BUG)", () => {
@@ -496,7 +634,7 @@ More content
       );
 
       // CRITICAL: Both citations in text must be converted (not partial like [4][^8])
-      expect(result).toContain("thresholds). [1][2]"); // [^7][^8] -> [1][2]
+      expect(result).toContain(`thresholds). ${ref(1)}${ref(2)}`); // [^7][^8] -> [1][2]
       expect(result).not.toContain("[^8]"); // Should not contain any unconverted citations
       expect(result).not.toContain("[^7]"); // Should not contain any unconverted citations
     });
@@ -514,8 +652,8 @@ More content
 
       // After consolidation, [^1] and [^2] both map to source 1
       // Adjacent [1][1] should be collapsed to [1]
-      expect(result).toContain("finding here [1] and another");
-      expect(result).not.toContain("[1][1]");
+      expect(result).toContain(`finding here ${ref(1)} and another`);
+      expect(result).not.toContain(`${ref(1)}${ref(1)}`);
       expect(result).toContain(
         '<span class="copilot-sources__index">[1]</span><span class="copilot-sources__text">[[Same Note]]</span>'
       );
@@ -537,8 +675,8 @@ More content
 
       // [^1] and [^2] both map to [[Note A]] -> consolidated to source 1
       // "[1] and [1]" should collapse to "[1]"
-      expect(result).toContain("Claim here [1] and more");
-      expect(result).not.toContain("[1] and [1]");
+      expect(result).toContain(`Claim here ${ref(1)} and more`);
+      expect(result).not.toContain(`${ref(1)} and ${ref(1)}`);
     });
   });
 

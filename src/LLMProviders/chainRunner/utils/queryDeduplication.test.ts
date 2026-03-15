@@ -22,25 +22,57 @@ describe("computeWordOverlap", () => {
     expect(computeWordOverlap("Hello World", "hello world")).toBe(1);
   });
 
-  it("computes correct Jaccard similarity for partial overlap", () => {
+  it("computes correct similarity for partial overlap", () => {
     // "paul graham mistakes" vs "paul graham errors"
-    // intersection: {paul, graham} = 2, union: {paul, graham, mistakes, errors} = 4
-    expect(computeWordOverlap("paul graham mistakes", "paul graham errors")).toBe(0.5);
+    // intersection: {paul, graham} = 2
+    // jaccard: 2/4 = 0.5, containment: 2/min(3,3) = 0.667
+    // max(0.5, 0.667) = 0.667
+    const overlap = computeWordOverlap("paul graham mistakes", "paul graham errors");
+    expect(overlap).toBeCloseTo(0.667, 2);
   });
 
   it("catches inflection variants with sufficient shared context", () => {
     // "Paul Graham mistake founders" vs "Paul Graham mistakes founders"
-    // intersection: {paul, graham, founders} = 3, union: {paul, graham, mistake, founders, mistakes} = 5
+    // intersection: {paul, graham, founders} = 3
+    // jaccard: 3/5 = 0.6, containment: 3/min(4,4) = 0.75
+    // max(0.6, 0.75) = 0.75
     const overlap = computeWordOverlap(
       "Paul Graham mistake founders",
       "Paul Graham mistakes founders"
     );
-    expect(overlap).toBe(0.6);
+    expect(overlap).toBe(0.75);
   });
 
   it("handles duplicate words in input", () => {
     // Sets deduplicate, so "hello hello" -> {"hello"}
     expect(computeWordOverlap("hello hello", "hello")).toBe(1);
+  });
+
+  it("uses containment for subset-style refinements", () => {
+    // "Paul Graham getting rich" vs "Paul Graham essay how to get rich"
+    // A = {paul, graham, getting, rich} (4), B = {paul, graham, essay, how, to, get, rich} (7)
+    // intersection: {paul, graham, rich} = 3
+    // jaccard: 3/8 = 0.375, containment: 3/min(4,7) = 0.75
+    // max(0.375, 0.75) = 0.75
+    const overlap = computeWordOverlap(
+      "Paul Graham getting rich",
+      "Paul Graham essay how to get rich"
+    );
+    expect(overlap).toBe(0.75);
+  });
+
+  it("returns max of jaccard and containment", () => {
+    // Two equal-length sets: jaccard and containment are the same
+    // {a, b, c} vs {a, b, d} -> intersection 2, union 4
+    // jaccard: 2/4 = 0.5, containment: 2/min(3,3) = 0.667
+    const overlap = computeWordOverlap("a b c", "a b d");
+    expect(overlap).toBeCloseTo(0.667, 2);
+  });
+
+  it("handles one-word query contained in longer query", () => {
+    // {python} vs {python, tutorial, beginners}
+    // intersection: 1, containment: 1/min(1,3) = 1.0
+    expect(computeWordOverlap("python", "python tutorial beginners")).toBe(1);
   });
 });
 
@@ -71,11 +103,11 @@ describe("findDuplicateQuery", () => {
   });
 
   it("respects custom threshold", () => {
-    // overlap = 0.5, default threshold catches it
+    // overlap = 0.667 (containment: 2/min(3,3)), so 0.6 catches it but 0.7 misses it
     const previous = ["paul graham mistakes"];
-    expect(findDuplicateQuery("paul graham errors", previous, 0.5)).toBe("paul graham mistakes");
+    expect(findDuplicateQuery("paul graham errors", previous, 0.6)).toBe("paul graham mistakes");
     // Higher threshold misses it
-    expect(findDuplicateQuery("paul graham errors", previous, 0.6)).toBeNull();
+    expect(findDuplicateQuery("paul graham errors", previous, 0.7)).toBeNull();
   });
 });
 

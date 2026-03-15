@@ -87,6 +87,15 @@ Source Catalog (for reference only):
 ${sourceCatalog}`;
 }
 
+/**
+ * Short citation format reminder placed near the user query for better model compliance.
+ * Reinforces key formatting from CITATION_RULES without duplicating the full ruleset.
+ */
+export function getCitationFormatReminder(enableInlineCitations: boolean): string | null {
+  if (!enableInlineCitations) return null;
+  return "REMINDER: End your response with an '#### Sources' section listing each cited source as [^n]: [[Title]], numbered sequentially from [^1].";
+}
+
 // ===== CONSTANTS =====
 
 const MAX_FALLBACK_SOURCES = 20;
@@ -191,16 +200,55 @@ export interface SourcesSection {
 
 /**
  * Extracts the sources section from content if present.
+ * Tries multiple strategies in order:
+ *   1. Explicit "Sources" heading (e.g. "#### Sources", "Sources:")
+ *   2. Horizontal rule separator (---) followed by footnote definitions
+ *   3. Trailing block of bare footnote definitions with no separator
  */
 export function extractSourcesSection(content: string): SourcesSection | null {
+  // Strategy 1: Explicit "Sources" heading (original behavior)
   const sourcesRegex = /([\s\S]*?)\n+(?:####\s*)?Sources\s*:?\s*\n+([\s\S]*)$/i;
   const match = content.match(sourcesRegex);
-  if (!match) return null;
+  if (match) {
+    return {
+      mainContent: match[1],
+      sourcesBlock: (match[2] || "").trim(),
+    };
+  }
 
-  return {
-    mainContent: match[1],
-    sourcesBlock: (match[2] || "").trim(),
-  };
+  // Strategy 2: --- separator followed by footnote definitions only
+  // All non-empty lines after the separator must be footnote definitions to avoid
+  // treating a content-bearing --- divider as a sources boundary.
+  const hrMatch = content.match(/([\s\S]*?)\n+---+\s*\n+([\s\S]*)$/);
+  if (hrMatch) {
+    const afterHr = (hrMatch[2] || "").trim();
+    const allFootnotes =
+      afterHr.length > 0 &&
+      afterHr.split("\n").every((line) => !line.trim() || /^\[\^\d+\]:/.test(line.trim()));
+    if (allFootnotes) {
+      return {
+        mainContent: hrMatch[1],
+        sourcesBlock: afterHr,
+      };
+    }
+  }
+
+  // Strategy 3: Trailing block of bare footnote definitions (no separator)
+  const trailingMatch = content.match(/([\s\S]*?)\n{2,}(\[\^\d+\]:[\s\S]*)$/);
+  if (trailingMatch) {
+    const footnotesBlock = (trailingMatch[2] || "").trim();
+    const allFootnotes = footnotesBlock
+      .split("\n")
+      .every((line) => !line.trim() || /^\[\^\d+\]:/.test(line.trim()));
+    if (allFootnotes) {
+      return {
+        mainContent: trailingMatch[1],
+        sourcesBlock: footnotesBlock,
+      };
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -539,6 +587,18 @@ function buildSourcesDetails(mainContent: string, items: SourcesDisplayItem[]): 
 }
 
 /**
+ * Wraps normalized citation references like [1] or [1, 2] in placeholder spans.
+ * These spans provide visual feedback during streaming (styled as pending links)
+ * and are replaced by linkInlineCitations with actual clickable anchors after streaming.
+ */
+export function wrapCitationPlaceholders(content: string): string {
+  return content.replace(
+    /\[(\d+(?:\s*,\s*\d+)*)\](?!\()/g,
+    '<span class="copilot-citation-ref">[$1]</span>'
+  );
+}
+
+/**
  * Main function to process inline citations in content.
  * Processes footnote-style citations and consolidates sources.
  */
@@ -577,6 +637,9 @@ export function processInlineCitations(
     mainContent = deduplicateAdjacentCitations(mainContent);
     items = uniqueItems;
   }
+
+  // Wrap citation numbers in placeholder spans for visual feedback during streaming
+  mainContent = wrapCitationPlaceholders(mainContent);
 
   const detailedItems = items
     .map<SourcesDisplayItem | null>((item, index) => {

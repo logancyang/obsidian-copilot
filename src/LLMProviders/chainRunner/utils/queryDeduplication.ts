@@ -5,11 +5,17 @@
  */
 
 /**
- * Compute Jaccard similarity between two strings based on lowercased word sets.
+ * Compute similarity between two strings using the maximum of Jaccard
+ * similarity and containment coefficient on lowercased word sets.
+ *
+ * Jaccard = |A ∩ B| / |A ∪ B| -- good for symmetric overlap.
+ * Containment = |A ∩ B| / min(|A|, |B|) -- catches when one query is
+ * a refinement of another (e.g. "Paul Graham getting rich" vs
+ * "Paul Graham essay how to get rich").
  *
  * @param a - First string
  * @param b - Second string
- * @returns Jaccard similarity coefficient (0-1)
+ * @returns max(jaccard, containment) similarity (0-1)
  */
 export function computeWordOverlap(a: string, b: string): number {
   const wordsA = new Set(a.toLowerCase().split(/\s+/).filter(Boolean));
@@ -24,7 +30,10 @@ export function computeWordOverlap(a: string, b: string): number {
   }
 
   const union = wordsA.size + wordsB.size - intersection;
-  return intersection / union;
+  const jaccard = intersection / union;
+  const containment = intersection / Math.min(wordsA.size, wordsB.size);
+
+  return Math.max(jaccard, containment);
 }
 
 /**
@@ -32,13 +41,13 @@ export function computeWordOverlap(a: string, b: string): number {
  *
  * @param query - The new query to check
  * @param previousQueries - List of previously issued queries
- * @param threshold - Jaccard similarity threshold above which queries are considered duplicates (default 0.5)
+ * @param threshold - Similarity threshold above which queries are considered duplicates (default 0.6)
  * @returns The first matching previous query if found, or null
  */
 export function findDuplicateQuery(
   query: string,
   previousQueries: string[],
-  threshold = 0.5
+  threshold = 0.6
 ): string | null {
   for (const prev of previousQueries) {
     if (computeWordOverlap(query, prev) >= threshold) {

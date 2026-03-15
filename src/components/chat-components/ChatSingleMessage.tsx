@@ -184,7 +184,12 @@ export const linkInlineCitations = (root: HTMLElement): void => {
       fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
     }
 
-    node.parentNode?.replaceChild(fragment, node);
+    // If the text node is inside a placeholder span, replace the span itself
+    // so the placeholder wrapper is cleanly removed.
+    const replaceTarget = node.parentElement?.classList.contains("copilot-citation-ref")
+      ? node.parentElement
+      : node;
+    replaceTarget.parentNode?.replaceChild(fragment, replaceTarget);
   });
 };
 
@@ -498,9 +503,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         settings.enableInlineCitations
       );
 
+      // Wrap any remaining raw [^N] footnote marks as placeholder badges.
+      // During streaming, processInlineCitations can't process them until the
+      // sources section has streamed in. Without this, the markdown renderer
+      // interprets [^N] as footnote references and shows bare superscript numbers.
+      const citationPlaceholderProcessed = sourcesSectionProcessed.replace(
+        /\[\^(\d+)\](?!:)/g,
+        '<span class="copilot-citation-ref">[$1]</span>'
+      );
+
       // Transform [[link]] to clickable format but exclude ![[]] image links
       const noteLinksProcessed = replaceLinks(
-        sourcesSectionProcessed,
+        citationPlaceholderProcessed,
         /(?<!!)\[\[([^\]]+)]]/g,
         (file: TFile) =>
           `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`
@@ -677,7 +691,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
             MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
             normalizeFootnoteRendering(textDiv);
-            linkInlineCitations(textDiv);
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
@@ -786,6 +799,13 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
           }
         });
+
+        // Link inline citations only after streaming completes. During streaming
+        // the sources section is incomplete and the DOM is rebuilt every chunk,
+        // so linking mid-stream wastes cycles and causes visible flickering.
+        if (contentRef.current && !isStreaming) {
+          linkInlineCitations(contentRef.current);
+        }
       }
     }
 

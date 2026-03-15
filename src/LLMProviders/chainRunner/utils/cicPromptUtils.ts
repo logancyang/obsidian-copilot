@@ -83,7 +83,7 @@ export function injectGuidanceBeforeUserQuery(payload: string, guidance?: string
   }
 
   const userQueryLabel = "[User query]:";
-  const labelIndex = payload.indexOf(userQueryLabel);
+  const labelIndex = payload.lastIndexOf(userQueryLabel);
   if (labelIndex === -1) {
     const trimmedPayload = payload.trimEnd();
     const joiner = trimmedPayload.length > 0 ? "\n\n" : "";
