@@ -66,72 +66,73 @@ Instead of one tool per CLI command (~100 commands = too many tools) or one gene
 
 ### v0 (Current — 2 commands, 2 tools)
 
-| Tool | Commands | Notes |
-|------|----------|-------|
-| `obsidianDailyRead` | `daily:read` | Read-only. Dedicated tool for v0 simplicity. |
+| Tool                 | Commands      | Notes                                        |
+| -------------------- | ------------- | -------------------------------------------- |
+| `obsidianDailyRead`  | `daily:read`  | Read-only. Dedicated tool for v0 simplicity. |
 | `obsidianRandomRead` | `random:read` | Read-only. Dedicated tool for v0 simplicity. |
 
 ### v1 (Current — 13 commands across 7 tools)
 
 All v1 tools are **read-only or direct-execution** (no confirmation UX required).
 
-| Tool | Commands | Notes |
-|------|----------|-------|
-| **obsidianDailyNote** | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy). Subsumes v0 `obsidianDailyRead`. |
-| **obsidianProperties** | `properties`, `property:read` | Read-only. Write commands (`property:set`, `property:remove`) deferred to v2. |
-| **obsidianTasks** | `tasks` | Read-only (task listing). Write command (`task` toggle/status) deferred to v2. |
-| **obsidianRandomRead** | `random:read` | Read-only. Standalone tool (single command). Continues from v0. |
-| **obsidianLinks** | `backlinks`, `links`, `orphans`, `unresolved` | All read-only |
-| **obsidianTemplates** | `templates`, `template:read` | Read-only. `template:insert` deferred (requires active file context). Moved from v2. |
-| **obsidianBases** | `bases`, `base:views`, `base:query` | All read-only |
+| Tool                   | Commands                                                    | Notes                                                                                           |
+| ---------------------- | ----------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| **obsidianDailyNote**  | `daily:read`, `daily:append`, `daily:prepend`, `daily:path` | Append/prepend execute directly (see Write Operations Policy). Subsumes v0 `obsidianDailyRead`. |
+| **obsidianProperties** | `properties`, `property:read`                               | Read-only. Write commands (`property:set`, `property:remove`) deferred to v2.                   |
+| **obsidianTasks**      | `tasks`                                                     | Read-only (task listing). Write command (`task` toggle/status) deferred to v2.                  |
+| **obsidianRandomRead** | `random:read`                                               | Read-only. Standalone tool (single command). Continues from v0.                                 |
+| **obsidianLinks**      | `backlinks`, `links`, `orphans`, `unresolved`               | All read-only                                                                                   |
+| **obsidianTemplates**  | `templates`, `template:read`                                | Read-only. `template:insert` deferred (requires active file context). Moved from v2.            |
+| **obsidianBases**      | `bases`, `base:views`, `base:query`, `base:create`          | Read + create. `base:create` executes directly (see Write Operations Policy).                   |
 
 ### v2 (Future — ~9 commands: 3 mutations on existing tools + 2 new tools)
 
 v2 introduces **confirmation-required mutations** on existing v1 tools and adds new tool categories.
 
-| Tool | Commands | Notes |
-|------|----------|-------|
+| Tool                                    | Commands                          | Notes                                                                   |
+| --------------------------------------- | --------------------------------- | ----------------------------------------------------------------------- |
 | **obsidianProperties** _(v1 extension)_ | `property:set`, `property:remove` | Light confirmation in chat before executing. Extends v1 read-only tool. |
-| **obsidianTasks** _(v1 extension)_ | `task` (toggle/done/todo/status) | Light confirmation in chat before executing. Extends v1 read-only tool. |
-| **obsidianBookmarks** | `bookmarks`, `bookmark` | `bookmark` (add) gated by mutation setting |
+| **obsidianTasks** _(v1 extension)_      | `task` (toggle/done/todo/status)  | Light confirmation in chat before executing. Extends v1 read-only tool. |
+| **obsidianBookmarks**                   | `bookmarks`, `bookmark`           | `bookmark` (add) gated by mutation setting                              |
 
 ### Excluded from Tool System
 
 The following CLI commands are **not exposed** to the AI agent:
 
-| Category | Commands | Rationale |
-|----------|----------|-----------|
-| Destructive file ops | `delete`, `move`, `rename`, `create --overwrite` | Too dangerous for autonomous agent use |
-| Plugin/theme management | `plugin:*`, `theme:*`, `snippet:*` | Not an AI task, security risk |
-| Sync & history | `sync:*`, `history:restore`, `diff` | User-managed operations, data loss risk |
-| UI/workspace control | `tabs`, `tab:open`, `workspace`, `open`, `daily` (open variant) | UI-only, no data value for LLM |
-| System commands | `reload`, `restart`, `version`, `vault`, `vaults` | Not useful for agent workflows |
-| Developer tools | `eval`, `dev:*`, `devtools` | Arbitrary code execution risk |
-| Niche metadata | `aliases`, `wordcount`, `recents`, `hotkeys`, `commands` | Low AI synergy |
-| Search | `search`, `search:context`, `search:open` | Redundant with Copilot's existing keyword + semantic search (`localSearch`) |
-| File read | `read` | Redundant with Copilot's existing `readNote` tool (see Tool Disambiguation) |
-| Tag listing | `tags` | Redundant with Copilot's existing `getTagList` tool (see Tool Disambiguation) |
-| Arbitrary file writes | `append`, `prepend`, `create` | File modifications beyond daily notes should go through the existing Composer tool (`writeToFile`/`replaceInFile`) |
+| Category                | Commands                                                        | Rationale                                                                                                          |
+| ----------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Destructive file ops    | `delete`, `move`, `rename`, `create --overwrite`                | Too dangerous for autonomous agent use                                                                             |
+| Plugin/theme management | `plugin:*`, `theme:*`, `snippet:*`                              | Not an AI task, security risk                                                                                      |
+| Sync & history          | `sync:*`, `history:restore`, `diff`                             | User-managed operations, data loss risk                                                                            |
+| UI/workspace control    | `tabs`, `tab:open`, `workspace`, `open`, `daily` (open variant) | UI-only, no data value for LLM                                                                                     |
+| System commands         | `reload`, `restart`, `version`, `vault`, `vaults`               | Not useful for agent workflows                                                                                     |
+| Developer tools         | `eval`, `dev:*`, `devtools`                                     | Arbitrary code execution risk                                                                                      |
+| Niche metadata          | `aliases`, `wordcount`, `recents`, `hotkeys`, `commands`        | Low AI synergy                                                                                                     |
+| Search                  | `search`, `search:context`, `search:open`                       | Redundant with Copilot's existing keyword + semantic search (`localSearch`)                                        |
+| File read               | `read`                                                          | Redundant with Copilot's existing `readNote` tool (see Tool Disambiguation)                                        |
+| Tag listing             | `tags`                                                          | Redundant with Copilot's existing `getTagList` tool (see Tool Disambiguation)                                      |
+| Arbitrary file writes   | `append`, `prepend`, `create`                                   | File modifications beyond daily notes should go through the existing Composer tool (`writeToFile`/`replaceInFile`) |
 
 ### Write Operations Policy
 
-| Operation | Execution model | Tier | Rationale |
-|-----------|----------------|------|-----------|
-| **Daily note append/prepend** | Direct execution, show result in chat response | v1 | User explicitly asked for the action; daily notes are append-only by nature and low-risk |
-| **Arbitrary file append/prepend** | Excluded — use Composer tool | — | File modifications beyond daily notes need the Composer diff/preview UX for safety |
-| **Property set/remove** | Light confirmation in chat before executing | v2 | Metadata changes are reversible but should be intentional; deferred to validate read-only tools first |
-| **Task toggle/status** | Light confirmation in chat before executing | v2 | Status changes are reversible but should be intentional; deferred to validate read-only tools first |
+| Operation                         | Execution model                                | Tier | Rationale                                                                                             |
+| --------------------------------- | ---------------------------------------------- | ---- | ----------------------------------------------------------------------------------------------------- |
+| **Daily note append/prepend**     | Direct execution, show result in chat response | v1   | User explicitly asked for the action; daily notes are append-only by nature and low-risk              |
+| **Base create**                   | Direct execution, show result in chat response | v1   | User explicitly asked to add an item; creates a new note matching Base filters, additive and low-risk |
+| **Arbitrary file append/prepend** | Excluded — use Composer tool                   | —    | File modifications beyond daily notes need the Composer diff/preview UX for safety                    |
+| **Property set/remove**           | Light confirmation in chat before executing    | v2   | Metadata changes are reversible but should be intentional; deferred to validate read-only tools first |
+| **Task toggle/status**            | Light confirmation in chat before executing    | v2   | Status changes are reversible but should be intentional; deferred to validate read-only tools first   |
 
 ### Tool Disambiguation
 
 CLI tools are **complementary** to existing internal tools, not replacements. Several CLI commands were evaluated and intentionally excluded because Copilot already has superior internal implementations:
 
-| CLI Command | Existing Internal Tool | Why Internal Wins |
-|-------------|----------------------|-------------------|
-| `read` | `readNote` | In-process (`app.vault.cachedRead`), 200-line chunking, multi-strategy path resolution (wikilink, basename, partial match), linked notes extraction, mtime metadata. CLI `read` spawns a process, returns raw text, and requires exact paths. |
-| `tags` | `getTagList` | In-process (`app.metadataCache`), structured JSON with occurrence counts, frontmatter/inline breakdown, progressive size limiting (500KB cap), configurable `maxEntries`. CLI `tags` returns unstructured text with no filtering. |
-| `search`, `search:context` | `localSearch` | Hybrid keyword + semantic search with BM25, query expansion, reranking, time range filtering, tag-aware retrieval. CLI search is basic text matching. |
-| `append`, `prepend`, `create` | `writeToFile` / `replaceInFile` | Composer diff/preview UX for safety, line-ending normalization, SEARCH/REPLACE blocks, auto-accept setting. Exception: `daily:append`/`daily:prepend` use CLI directly (low-risk, append-only). |
+| CLI Command                   | Existing Internal Tool          | Why Internal Wins                                                                                                                                                                                                                             |
+| ----------------------------- | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `read`                        | `readNote`                      | In-process (`app.vault.cachedRead`), 200-line chunking, multi-strategy path resolution (wikilink, basename, partial match), linked notes extraction, mtime metadata. CLI `read` spawns a process, returns raw text, and requires exact paths. |
+| `tags`                        | `getTagList`                    | In-process (`app.metadataCache`), structured JSON with occurrence counts, frontmatter/inline breakdown, progressive size limiting (500KB cap), configurable `maxEntries`. CLI `tags` returns unstructured text with no filtering.             |
+| `search`, `search:context`    | `localSearch`                   | Hybrid keyword + semantic search with BM25, query expansion, reranking, time range filtering, tag-aware retrieval. CLI search is basic text matching.                                                                                         |
+| `append`, `prepend`, `create` | `writeToFile` / `replaceInFile` | Composer diff/preview UX for safety, line-ending normalization, SEARCH/REPLACE blocks, auto-accept setting. Exception: `daily:append`/`daily:prepend` use CLI directly (low-risk, append-only).                                               |
 
 **Prompt instruction guidelines for CLI tools:**
 
@@ -270,9 +271,9 @@ Read today's daily note content.
 obsidian daily:read
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| _(none)_ | | No parameters. Reads the daily note for today. |
+| Parameter | Required | Description                                    |
+| --------- | -------- | ---------------------------------------------- |
+| _(none)_  |          | No parameters. Reads the daily note for today. |
 
 **Output**: Full markdown content of today's daily note. Empty string if no daily note exists.
 
@@ -295,9 +296,9 @@ Get the vault-relative file path of today's daily note.
 obsidian daily:path
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| _(none)_ | | No parameters. |
+| Parameter | Required | Description    |
+| --------- | -------- | -------------- |
+| _(none)_  |          | No parameters. |
 
 **Output**: Single line — the vault-relative path.
 
@@ -315,10 +316,10 @@ Append content to the end of today's daily note. Creates the daily note if it do
 obsidian daily:append content="- Meeting with Alice at 3pm"
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `content=<text>` | Yes | Text to append. |
-| `inline` | No | Boolean flag. Append without a leading newline. |
+| Parameter        | Required | Description                                     |
+| ---------------- | -------- | ----------------------------------------------- |
+| `content=<text>` | Yes      | Text to append.                                 |
+| `inline`         | No       | Boolean flag. Append without a leading newline. |
 
 **Output**: Empty on success. The content is added at the end of the file.
 
@@ -332,10 +333,10 @@ Prepend content to the beginning of today's daily note (after frontmatter). Crea
 obsidian daily:prepend content="## Morning Standup"
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `content=<text>` | Yes | Text to prepend. |
-| `inline` | No | Boolean flag. Prepend without a trailing newline. |
+| Parameter        | Required | Description                                       |
+| ---------------- | -------- | ------------------------------------------------- |
+| `content=<text>` | Yes      | Text to prepend.                                  |
+| `inline`         | No       | Boolean flag. Prepend without a trailing newline. |
 
 **Output**: Empty on success.
 
@@ -376,14 +377,14 @@ copilot-command-model-key: ""
 copilot-command-last-used: 0
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file=<name>` | No | Target file by name (without extension). |
-| `path=<path>` | No | Target file by vault-relative path. |
-| `name=<name>` | No | Get count for a specific property name (vault-wide mode). |
-| `counts` | No | Include occurrence counts (vault-wide mode). |
-| `sort=count` | No | Sort by count instead of name (vault-wide mode). |
-| `total` | No | Return only the property count. |
+| Parameter     | Required | Description                                               |
+| ------------- | -------- | --------------------------------------------------------- |
+| `file=<name>` | No       | Target file by name (without extension).                  |
+| `path=<path>` | No       | Target file by vault-relative path.                       |
+| `name=<name>` | No       | Get count for a specific property name (vault-wide mode). |
+| `counts`      | No       | Include occurrence counts (vault-wide mode).              |
+| `sort=count`  | No       | Sort by count instead of name (vault-wide mode).          |
+| `total`       | No       | Return only the property count.                           |
 
 **Output (vault-wide)**: One property name per line, alphabetically sorted by default. With `counts`, format is `name: count`. With `total`, a single number.
 
@@ -397,11 +398,11 @@ Read a single property value from a specific note.
 obsidian property:read name="tags" file="My Note"
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `name=<name>` | Yes | Property name to read. |
-| `file=<name>` | No | Target file by name. |
-| `path=<path>` | No | Target file by vault-relative path. |
+| Parameter     | Required | Description                         |
+| ------------- | -------- | ----------------------------------- |
+| `name=<name>` | Yes      | Property name to read.              |
+| `file=<name>` | No       | Target file by name.                |
+| `path=<path>` | No       | Target file by vault-relative path. |
 
 **Output**: The raw property value. For arrays, comma-separated. For strings, the plain value.
 
@@ -423,16 +424,16 @@ obsidian tasks file="Project Plan" verbose
 obsidian tasks daily
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file=<name>` | No | Filter by file name. |
-| `path=<path>` | No | Filter by file path. |
-| `todo` | No | Show only incomplete tasks. |
-| `done` | No | Show only completed tasks. |
-| `status="<char>"` | No | Filter by status character (e.g., `status="/"` for in-progress). |
-| `daily` | No | Show tasks from today's daily note. |
-| `verbose` | No | Group tasks by file with line numbers. |
-| `total` | No | Return only the task count. |
+| Parameter         | Required | Description                                                      |
+| ----------------- | -------- | ---------------------------------------------------------------- |
+| `file=<name>`     | No       | Filter by file name.                                             |
+| `path=<path>`     | No       | Filter by file path.                                             |
+| `todo`            | No       | Show only incomplete tasks.                                      |
+| `done`            | No       | Show only completed tasks.                                       |
+| `status="<char>"` | No       | Filter by status character (e.g., `status="/"` for in-progress). |
+| `daily`           | No       | Show tasks from today's daily note.                              |
+| `verbose`         | No       | Group tasks by file with line numbers.                           |
+| `total`           | No       | Return only the task count.                                      |
 
 **Output (default text)**: One task per line, markdown checkbox format.
 
@@ -474,9 +475,9 @@ obsidian random:read
 obsidian random:read folder="Ideas"
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `folder=<path>` | No | Limit selection to a specific folder. |
+| Parameter       | Required | Description                           |
+| --------------- | -------- | ------------------------------------- |
+| `folder=<path>` | No       | Limit selection to a specific folder. |
 
 **Output**: Full markdown content of the randomly selected note. A different note is returned each invocation.
 
@@ -495,12 +496,12 @@ obsidian backlinks file="My Note"
 obsidian backlinks path="Projects/plan.md" counts
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file=<name>` | No | Target file by name. |
-| `path=<path>` | No | Target file by vault-relative path. |
-| `counts` | No | Include link counts per source file. |
-| `total` | No | Return only the backlink count. |
+| Parameter     | Required | Description                          |
+| ------------- | -------- | ------------------------------------ |
+| `file=<name>` | No       | Target file by name.                 |
+| `path=<path>` | No       | Target file by vault-relative path.  |
+| `counts`      | No       | Include link counts per source file. |
+| `total`       | No       | Return only the backlink count.      |
 
 **Output (default TSV)**: One source file per line.
 
@@ -529,11 +530,11 @@ obsidian links file="My Note"
 obsidian links path="Projects/plan.md" total
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file=<name>` | No | Source file by name. |
-| `path=<path>` | No | Source file by vault-relative path. |
-| `total` | No | Return only the link count. |
+| Parameter     | Required | Description                         |
+| ------------- | -------- | ----------------------------------- |
+| `file=<name>` | No       | Source file by name.                |
+| `path=<path>` | No       | Source file by vault-relative path. |
+| `total`       | No       | Return only the link count.         |
 
 **Output**: One link target per line.
 
@@ -553,10 +554,10 @@ obsidian orphans
 obsidian orphans total
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `total` | No | Return only the orphan count. |
-| `all` | No | Include non-markdown files (images, PDFs, etc.). |
+| Parameter | Required | Description                                      |
+| --------- | -------- | ------------------------------------------------ |
+| `total`   | No       | Return only the orphan count.                    |
+| `all`     | No       | Include non-markdown files (images, PDFs, etc.). |
 
 **Output**: One file path per line.
 
@@ -579,11 +580,11 @@ obsidian unresolved counts verbose
 obsidian unresolved total
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `counts` | No | Include how many times each unresolved link appears. |
-| `verbose` | No | Include source file for each unresolved link. |
-| `total` | No | Return only the unresolved link count. |
+| Parameter | Required | Description                                          |
+| --------- | -------- | ---------------------------------------------------- |
+| `counts`  | No       | Include how many times each unresolved link appears. |
+| `verbose` | No       | Include source file for each unresolved link.        |
+| `total`   | No       | Return only the unresolved link count.               |
 
 **Output (default TSV)**: One unresolved link target per line.
 
@@ -622,9 +623,9 @@ List all available template names in the configured templates folder.
 obsidian templates
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| _(none)_ | | No parameters. Lists all template names. |
+| Parameter | Required | Description                              |
+| --------- | -------- | ---------------------------------------- |
+| _(none)_  |          | No parameters. Lists all template names. |
 
 **Output**: One template name per line.
 
@@ -645,9 +646,9 @@ Read a template's content with variable placeholders resolved.
 obsidian template:read name="Daily Note"
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `name=<name>` | Yes | Template name (as returned by `templates`). |
+| Parameter     | Required | Description                                 |
+| ------------- | -------- | ------------------------------------------- |
+| `name=<name>` | Yes      | Template name (as returned by `templates`). |
 
 **Output**: Full markdown content of the template.
 
@@ -673,9 +674,9 @@ List all Base (database) files in the vault.
 obsidian bases
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `total` | No | Return only the count of Base files. |
+| Parameter | Required | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `total`   | No       | Return only the count of Base files. |
 
 **Output**: One Base file per line.
 
@@ -696,10 +697,10 @@ obsidian base:views file="Projects"
 obsidian base:views path="Databases/Projects.base"
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file=<name>` | No* | Target Base file by name (without extension). |
-| `path=<path>` | No* | Target Base file by vault-relative path. |
+| Parameter     | Required | Description                                   |
+| ------------- | -------- | --------------------------------------------- |
+| `file=<name>` | No\*     | Target Base file by name (without extension). |
+| `path=<path>` | No\*     | Target Base file by vault-relative path.      |
 
 \* One of `file` or `path` is required.
 
@@ -711,6 +712,31 @@ By Status
 Kanban
 ```
 
+#### `base:create`
+
+Create a new item (row) in a Base. The created item is a new markdown note that matches the Base's filter criteria.
+
+```
+obsidian base:create file="Library" name="Dune Messiah" content="A book by Frank Herbert"
+obsidian base:create path="Databases/Projects.base" view="Active" name="New Feature"
+```
+
+| Parameter        | Required | Description                                                   |
+| ---------------- | -------- | ------------------------------------------------------------- |
+| `file=<name>`    | No\*     | Target Base file by name (without extension).                 |
+| `path=<path>`    | No\*     | Target Base file by vault-relative path.                      |
+| `view=<name>`    | No       | View to add the item to. Omit for default view.               |
+| `name=<name>`    | No       | File name for the created note. Omit for auto-generated name. |
+| `content=<text>` | No       | Initial markdown content for the note.                        |
+
+\* One of `file` or `path` is required.
+
+**Output**: Confirmation message with the path of the created note.
+
+**Note**: `open` and `newtab` parameters are accepted by the CLI but not passed by the tool (UI-only, no value for agent).
+
+---
+
 #### `base:query`
 
 Query data from a Base view.
@@ -720,13 +746,13 @@ obsidian base:query file="Projects" view="All Items"
 obsidian base:query path="Databases/Projects.base" format=csv
 ```
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `file=<name>` | No* | Target Base file by name (without extension). |
-| `path=<path>` | No* | Target Base file by vault-relative path. |
-| `view=<name>` | No | View name to query. Omit for default view. |
-| `format=<fmt>` | No | Output format (e.g., `csv`). Omit for default text. |
-| `total` | No | Return only the row count. |
+| Parameter      | Required | Description                                         |
+| -------------- | -------- | --------------------------------------------------- |
+| `file=<name>`  | No\*     | Target Base file by name (without extension).       |
+| `path=<path>`  | No\*     | Target Base file by vault-relative path.            |
+| `view=<name>`  | No       | View name to query. Omit for default view.          |
+| `format=<fmt>` | No       | Output format (e.g., `csv`). Omit for default text. |
+| `total`        | No       | Return only the row count.                          |
 
 \* One of `file` or `path` is required.
 
@@ -748,10 +774,10 @@ Beta,Done
 
 All commands return consistent error formats:
 
-| Condition | Output |
-|-----------|--------|
-| File not found | `Error: File "path/to/file.md" not found.` |
-| Missing required param | `Error: Missing required parameter: name=<name>` with usage line |
-| No results | Command-specific empty message (e.g., `No tasks found.`, `No backlinks found.`, `No links found.`) |
-| CLI binary not found | Process error code `ENOENT` — handled by `ObsidianCliClient` fallback resolution |
-| Timeout | Process killed after `timeoutMs` — handled by `ObsidianCliClient` |
+| Condition              | Output                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------- |
+| File not found         | `Error: File "path/to/file.md" not found.`                                                         |
+| Missing required param | `Error: Missing required parameter: name=<name>` with usage line                                   |
+| No results             | Command-specific empty message (e.g., `No tasks found.`, `No backlinks found.`, `No links found.`) |
+| CLI binary not found   | Process error code `ENOENT` — handled by `ObsidianCliClient` fallback resolution                   |
+| Timeout                | Process killed after `timeoutMs` — handled by `ObsidianCliClient`                                  |

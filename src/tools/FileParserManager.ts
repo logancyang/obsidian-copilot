@@ -102,7 +102,7 @@ class SelfHostPdfParser {
 }
 
 export class MarkdownParser implements FileParser {
-  supportedExtensions = ["md"];
+  supportedExtensions = ["md", "base"];
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
     return await vault.read(file);

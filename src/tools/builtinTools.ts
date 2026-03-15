@@ -445,22 +445,26 @@ export function registerCliTools(): void {
     metadata: {
       id: "obsidianBases",
       displayName: "Bases",
-      description: "List Base files, views, or query data from Obsidian Bases",
+      description: "List Base files, views, query data, or create new items in Obsidian Bases",
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianBases:
-- Use to explore structured data in Obsidian Base (.base) database files.
+- Use to explore and manage structured data in Obsidian Base (.base) database files.
 - bases: list all Base files in the vault. Use total=true for just the count.
 - base:views: list the views defined in a Base file. Requires file= or path=.
 - base:query: query data from a specific Base view. Requires file= or path=, optionally view= and format= (e.g., format=csv).
-- This is read-only. To create or modify .base files, use writeToFile with valid YAML.
+- base:create: create a new item (row) in a Base. Requires file= or path=. Optional: view= (target view), name= (file name for the item), content= (initial note content).
+  - The created item appears as a new note that matches the Base's filter criteria.
+  - Use base:query first to understand the Base's structure and existing data before creating items.
+  - If the Base filters by a specific tag or folder, ensure the new item will match those filters.
+- To create or modify .base files themselves, use writeToFile with valid YAML.
 
 Base file YAML structure (for creating with writeToFile):
-- filters: scope notes by tag, folder, property, or date. Operators: ==, !=, >, <, >=, <=, &&, ||. Example: 'tags includes "#project" && status != "done"'
-- formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Example: days_left: 'date(due) - today()'
-- properties: display config per property (label, width, hidden).
-- views: table (default), cards, list, or map. Each view can override filters and property display.
-- Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links), formula properties (formula.my_formula).
+- filters: scope notes using nested and/or/not objects or single filter strings. Use file.hasTag("tag"), file.inFolder("folder"), and comparison operators (==, !=, >, <, >=, <=). Example: filters: { and: ['file.hasTag("project")', 'status != "done"'] }
+- formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Duration fields: .days, .hours, .minutes. Example: days_left: 'if(due, (date(due) - today()).days, "")'
+- properties: display config per property (displayName, width, hidden).
+- views: table (default), cards, list, or map. Each view can have its own filters, order (property display list), groupBy, summaries.
+- Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links, file.backlinks), formula properties (formula.my_formula).
 - YAML quoting: single-quote formulas containing double quotes: 'if(done, "Yes", "No")'. Quote strings with special chars (:, {, }, [, ]).
 - Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].`,
     },

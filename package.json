@@ -27,7 +27,7 @@
       "prettier --write"
     ],
     "*.{js,jsx,ts,tsx}": [
-      "eslint --fix --no-warn-ignored"
+      "eslint --fix"
     ]
   },
   "license": "AGPL-3.0",

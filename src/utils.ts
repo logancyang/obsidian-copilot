@@ -1,5 +1,6 @@
 import { ChainType, Document } from "@/chainFactory";
 import {
+  ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ChatModelProviders,
   EmbeddingModelProviders,
   NOMIC_EMBED_TEXT,
@@ -7,6 +8,7 @@ import {
   ProviderInfo,
   ProviderMetadata,
   SettingKeyProviders,
+  TEXT_READABLE_EXTENSIONS,
   USER_SENDER,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
@@ -370,8 +372,19 @@ export function stringToFormattedDateTime(timestamp: string): FormattedDateTime 
   };
 }
 
+// Re-export for backward compatibility (constants now live in @/constants)
+export { ALLOWED_NOTE_CONTEXT_EXTENSIONS, TEXT_READABLE_EXTENSIONS };
+
+/**
+ * Check if a file has a text-readable extension (md, canvas, base).
+ */
+export function isTextReadableFile(file: TFile | null): boolean {
+  if (!file) return false;
+  return TEXT_READABLE_EXTENSIONS.includes(file.extension);
+}
+
 export async function getFileContent(file: TFile, vault: Vault): Promise<string | null> {
-  if (file.extension != "md" && file.extension != "canvas") return null;
+  if (!isTextReadableFile(file)) return null;
   return await vault.read(file);
 }
 
@@ -380,13 +393,7 @@ export function getFileName(file: TFile): string {
 }
 
 /**
- * Valid file extensions for note context.
- * This does NOT include images - images are handled separately in the UI.
- */
-export const ALLOWED_NOTE_CONTEXT_EXTENSIONS = ["md", "pdf", "canvas"];
-
-/**
- * Check if a file is allowed for note context (markdown, PDF, or canvas files).
+ * Check if a file is allowed for note context (text-readable files plus PDF).
  * This does NOT include images - images are handled separately in the UI.
  * @param file The file to check
  * @returns true if the file is allowed for note context, false otherwise
@@ -408,9 +415,8 @@ export function isPlusChain(chainType: ChainType): boolean {
 
 /**
  * Checks if a file extension is allowed for context based on the chain type.
- * All chains support markdown and canvas files.
- * Plus chains support all file types (PDF, EPUB, PPT, DOCX, etc.).
- * Free chains only support markdown and canvas files.
+ * All chains support text-readable files (md, canvas, base).
+ * Plus chains additionally support PDF, EPUB, PPT, DOCX, etc.
  * @param file The file to check
  * @param chainType The current chain type
  * @returns true if the file is allowed for this chain type, false otherwise
@@ -418,13 +424,11 @@ export function isPlusChain(chainType: ChainType): boolean {
 export function isAllowedFileForChainContext(file: TFile | null, chainType: ChainType): boolean {
   if (!file) return false;
 
-  // All chains support markdown and canvas files
-  if (file.extension === "md" || file.extension === "canvas") {
+  if (isTextReadableFile(file)) {
     return true;
   }
 
   // Plus chains support all other file types (PDF, EPUB, PPT, DOCX, etc.)
-  // Free chains only support markdown and canvas
   return isPlusChain(chainType);
 }
 

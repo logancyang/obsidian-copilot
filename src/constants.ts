@@ -858,6 +858,20 @@ export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "youtube",
 };
 
+/**
+ * Text-readable file extensions that all chains can process without Plus mode.
+ * These files can be read directly via `vault.read()` and don't require special parsers.
+ * Add new text-based extensions here to enable them everywhere (active note, context, chain).
+ */
+export const TEXT_READABLE_EXTENSIONS = ["md", "canvas", "base"];
+
+/**
+ * Valid file extensions for note context.
+ * Includes text-readable files plus Plus-only formats like PDF.
+ * This does NOT include images - images are handled separately in the UI.
+ */
+export const ALLOWED_NOTE_CONTEXT_EXTENSIONS = [...TEXT_READABLE_EXTENSIONS, "pdf"];
+
 export const RESTRICTION_MESSAGES = {
   NON_MARKDOWN_FILES_RESTRICTED:
     "Non-markdown files are only available in Copilot Plus mode. Please upgrade to access this file type.",

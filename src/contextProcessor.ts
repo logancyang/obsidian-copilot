@@ -6,7 +6,7 @@ import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { WebViewerTimeoutError } from "@/services/webViewerService/webViewerServiceTypes";
 import { FileParserManager } from "@/tools/FileParserManager";
-import { isPlusChain } from "@/utils";
+import { isPlusChain, isTextReadableFile } from "@/utils";
 import { normalizeUrlString } from "@/utils/urlNormalization";
 import { TFile, Vault, Notice } from "obsidian";
 import {
@@ -333,7 +333,7 @@ export class ContextProcessor {
       });
     }
 
-    if (resolvedFile.extension !== "md") {
+    if (!isTextReadableFile(resolvedFile)) {
       return rawMatch;
     }
 
@@ -553,8 +553,8 @@ export class ContextProcessor {
           return;
         }
 
-        // 2. Apply chain restrictions only to supported files that are NOT md or canvas
-        if (!isPlusChain(currentChain) && note.extension !== "md" && note.extension !== "canvas") {
+        // 2. Apply chain restrictions only to supported files that are NOT text-readable
+        if (!isPlusChain(currentChain) && !isTextReadableFile(note)) {
           // This file type is supported, but requires Plus mode (e.g., PDF)
           logWarn(`File type ${note.extension} requires Copilot Plus mode for context processing.`);
           // Show user-facing notice about the restriction
