@@ -352,6 +352,38 @@ ${doc.content || ""}
   return sections.join("\n\n");
 }
 
+/**
+ * Formats overflow documents as metadata-only XML for the two-tier search result system.
+ * Used when total search results exceed maxSourceChunks to reduce context size.
+ * Tier 2 documents show only title, path, modification time, and a 150-character snippet.
+ *
+ * @param docs - Array of document objects for metadata-only formatting
+ * @returns Formatted XML string with `<additionalMatches>` wrapper, or empty string if no docs
+ */
+export function formatMetadataOnlyDocuments(docs: any[]): string {
+  if (!Array.isArray(docs) || docs.length === 0) {
+    return "";
+  }
+
+  const fileElements = docs
+    .map((doc: any) => {
+      const title = doc.title || "Untitled";
+      const path = doc.path || "";
+      const modified = toIsoString(doc.mtime);
+      const content = doc.content || "";
+      const snippet = content.slice(0, 150);
+
+      const pathEl = path ? `\n<path>${path}</path>` : "";
+      const modifiedEl = modified ? `\n<modified>${modified}</modified>` : "";
+      const snippetEl = snippet ? `\n<snippet>${snippet}</snippet>` : "";
+
+      return `<file>\n<title>${title}</title>${pathEl}${modifiedEl}${snippetEl}\n</file>`;
+    })
+    .join("\n");
+
+  return `<additionalMatches count="${docs.length}" note="Titles and metadata only. Use readNote for full content of relevant notes.">\n${fileElements}\n</additionalMatches>`;
+}
+
 export function logSearchResultsDebugTable(searchResults: any[]): void {
   if (!Array.isArray(searchResults) || searchResults.length === 0) {
     logInfo("Search Results: (none)");

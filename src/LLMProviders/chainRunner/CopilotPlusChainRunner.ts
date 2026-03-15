@@ -40,6 +40,7 @@ import {
 } from "./utils/citationUtils";
 import {
   extractSourcesFromSearchResults,
+  formatMetadataOnlyDocuments,
   formatSearchResultsForLLM,
   formatSearchResultStringForLLM,
   formatSplitSearchResultsForLLM,
@@ -993,6 +994,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   }
 
   private prepareLocalSearchResult(documents: any[], timeExpression: string): string {
+    const settings = getSettings();
+
     // Filter documents that should be included in context
     // Use !== false to be consistent with formatSearchResultsForLLM and logSearchResultsDebugTable
     const includedDocs = documents.filter((doc) => doc.includeInContext !== false);
@@ -1001,21 +1004,31 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const qualitySummary = generateQualitySummary(includedDocs);
     const qualityHeader = formatQualitySummary(qualitySummary);
 
-    // Calculate total content length (only content, not metadata)
-    const totalContentLength = includedDocs.reduce(
+    // Two-tier split: when results exceed maxSourceChunks, overflow docs get metadata-only formatting
+    // to achieve significant context reduction (~85%) while preserving discoverability
+    const [tier1Docs, tier2Docs] =
+      includedDocs.length > settings.maxSourceChunks
+        ? [
+            includedDocs.slice(0, settings.maxSourceChunks),
+            includedDocs.slice(settings.maxSourceChunks),
+          ]
+        : [includedDocs, [] as any[]];
+
+    // Calculate total content length for tier 1 only (safety net truncation)
+    const totalContentLength = tier1Docs.reduce(
       (sum, doc) => sum + (doc.content?.length || 0),
       0
     );
 
     // If total content length exceeds threshold, truncate content proportionally
-    let processedDocs = includedDocs;
+    let processedDocs = tier1Docs;
     if (totalContentLength > MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT) {
       const truncationRatio = MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT / totalContentLength;
       logInfo(
         "Truncating document contents to fit context length. Truncation ratio:",
         truncationRatio
       );
-      processedDocs = includedDocs.map((doc) => ({
+      processedDocs = tier1Docs.map((doc) => ({
         ...doc,
         content:
           doc.content?.slice(0, Math.floor((doc.content?.length || 0) * truncationRatio)) || "",
@@ -1035,9 +1048,17 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
 
     // Use split formatter if there are filter results, otherwise fall back to unified format
     const hasFilterResults = filterDocs.length > 0;
-    const formattedContent = hasFilterResults
+    let formattedContent = hasFilterResults
       ? formatSplitSearchResultsForLLM(filterDocs, searchDocs)
       : formatSearchResultsForLLM(withIds);
+
+    // Append metadata-only tier 2 for overflow docs
+    if (tier2Docs.length > 0) {
+      logInfo(
+        `Two-tier search: ${tier1Docs.length} full-content docs, ${tier2Docs.length} metadata-only docs`
+      );
+      formattedContent = `${formattedContent}\n\n${formatMetadataOnlyDocuments(tier2Docs)}`;
+    }
 
     // Build a compact, unnumbered source catalog to avoid bias
     const sourceEntries: SourceCatalogEntry[] = withIds
@@ -1058,7 +1079,6 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     });
 
     // Build guidance block with citation rules and source catalog
-    const settings = getSettings();
     const guidance = getLocalSearchGuidance(catalogLines, settings.enableInlineCitations).trim();
 
     // Add RAG instruction (like VaultQA) to ensure model uses the context
