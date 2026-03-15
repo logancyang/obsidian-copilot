@@ -105,8 +105,20 @@ async function performLexicalSearch({
   // Extract tag terms for self-host retriever (server-side tag filtering)
   const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
 
+  // Fall back to parsing tags directly from the query string when salientTerms misses them
+  // (e.g. query="#python" with incomplete/empty salientTerms). Uses same regex as FilterRetriever.
+  const hasTagTerms =
+    tagTerms.length > 0 ||
+    (() => {
+      try {
+        return /#[\p{L}\p{N}_/-]+/gu.test(query);
+      } catch {
+        return /#[a-z0-9_/-]+/i.test(query);
+      }
+    })();
+
   // Time-range and tag-focused queries need expanded limits to avoid truncating results
-  const needsExpandedLimits = timeRange !== undefined || tagTerms.length > 0;
+  const needsExpandedLimits = timeRange !== undefined || hasTagTerms;
   const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
 
   logInfo(

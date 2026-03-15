@@ -1034,10 +1034,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     }
 
     // Calculate total content length for tier 1 only (safety net truncation)
-    const totalContentLength = tier1Docs.reduce(
-      (sum, doc) => sum + (doc.content?.length || 0),
-      0
-    );
+    const totalContentLength = tier1Docs.reduce((sum, doc) => sum + (doc.content?.length || 0), 0);
 
     // If total content length exceeds threshold, truncate content proportionally
     let processedDocs = tier1Docs;

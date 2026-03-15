@@ -300,7 +300,9 @@ describe("searchResultUtils", () => {
     it("should include the note attribute", () => {
       const docs = [{ title: "Doc1", content: "Content" }];
       const result = formatMetadataOnlyDocuments(docs);
-      expect(result).toContain('note="These results contain titles and metadata only. To read the full content of a note, call the readNote tool with its path."');
+      expect(result).toContain(
+        'note="These results contain titles and metadata only. To read the full content of a note, call the readNote tool with its path."'
+      );
     });
 
     it("should format document with title, path, mtime, and snippet", () => {
@@ -388,12 +390,18 @@ describe("searchResultUtils", () => {
     });
 
     it("should return true when all docs have filter sources", () => {
-      const docs = [
-        { source: "time-filtered" },
-        { source: "tag-match" },
-        { source: "title-match" },
-      ];
+      const docs = [{ source: "time-filtered" }, { source: "tag-match" }];
       expect(isFilterOnlyResults(docs)).toBe(true);
+    });
+
+    it("should return false for title-match docs (they get full content)", () => {
+      const docs = [{ source: "title-match" }];
+      expect(isFilterOnlyResults(docs)).toBe(false);
+    });
+
+    it("should return false when title-match is mixed with other filter sources", () => {
+      const docs = [{ source: "tag-match" }, { source: "title-match" }];
+      expect(isFilterOnlyResults(docs)).toBe(false);
     });
 
     it("should return false when any doc has a non-filter source", () => {

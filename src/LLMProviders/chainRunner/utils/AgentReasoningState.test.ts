@@ -66,9 +66,9 @@ describe("AgentReasoningState tool summaries", () => {
     expect(summarizeToolCall("obsidianProperties", { command: "properties" })).toBe(
       "Listing vault properties"
     );
-    expect(summarizeToolCall("obsidianProperties", { command: "property:read", name: "tags" })).toBe(
-      `Reading property "tags"`
-    );
+    expect(
+      summarizeToolCall("obsidianProperties", { command: "property:read", name: "tags" })
+    ).toBe(`Reading property "tags"`);
     expect(summarizeToolCall("obsidianTasks", { command: "tasks" })).toBe("Listing vault tasks");
     expect(summarizeToolCall("obsidianLinks", { command: "backlinks" })).toBe("Listing backlinks");
     expect(summarizeToolCall("obsidianLinks", { command: "orphans" })).toBe(

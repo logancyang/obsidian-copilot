@@ -352,8 +352,12 @@ ${doc.content || ""}
   return sections.join("\n\n");
 }
 
-/** Source values produced by FilterRetriever — docs with these sources have no real ranking. */
-const FILTER_SOURCES = new Set(["time-filtered", "tag-match", "title-match"]);
+/**
+ * Source values produced by FilterRetriever — docs with these sources have no real ranking.
+ * Note: "title-match" is excluded here because explicit note references ([[Note Name]])
+ * should always receive full content in tier 1, not metadata-only.
+ */
+const FILTER_SOURCES = new Set(["time-filtered", "tag-match"]);
 
 /**
  * Checks if all documents are from FilterRetriever (no real ranking).
