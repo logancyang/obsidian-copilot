@@ -534,7 +534,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
               type="text"
               placeholder={`Enter model name (e.g. ${
                 model.provider === ChatModelProviders.AMAZON_BEDROCK && !isEmbeddingModel
-                  ? "global.anthropic.claude-sonnet-4-5-20250929-v1:0"
+                  ? "global.anthropic.claude-sonnet-4-6-v1:0"
                   : isEmbeddingModel
                     ? "text-embedding-3-small"
                     : "gpt-4"

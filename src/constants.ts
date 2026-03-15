@@ -186,7 +186,7 @@ export enum ChatModels {
   GEMINI_PRO = "gemini-2.5-pro",
   GEMINI_FLASH = "gemini-2.5-flash",
   CLAUDE_OPUS_4_6 = "claude-opus-4-6",
-  CLAUDE_SONNET_4_5 = "claude-sonnet-4-5-20250929",
+  CLAUDE_SONNET_4_6 = "claude-sonnet-4-6",
   GROK_4_1_FAST = "grok-4-1-fast",
   GROQ_LLAMA_8b = "llama3-8b-8192",
   COMMAND_R = "command-r",
@@ -358,7 +358,7 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
-    name: ChatModels.CLAUDE_SONNET_4_5,
+    name: ChatModels.CLAUDE_SONNET_4_6,
     provider: ChatModelProviders.ANTHROPIC,
     enabled: true,
     isBuiltIn: true,
@@ -605,7 +605,7 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     curlBaseURL: "https://api.anthropic.com",
     keyManagementURL: "https://console.anthropic.com/settings/keys",
     listModelURL: "https://api.anthropic.com/v1/models",
-    testModel: ChatModels.CLAUDE_SONNET_4_5,
+    testModel: ChatModels.CLAUDE_SONNET_4_6,
   },
   [ChatModelProviders.OPENAI]: {
     label: "OpenAI",
