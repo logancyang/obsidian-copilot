@@ -454,6 +454,7 @@ export enum EmbeddingModels {
   COHEREAI_EMBED_MULTILINGUAL_LIGHT_V3_0 = "embed-multilingual-light-v3.0",
   GOOGLE_ENG = "text-embedding-004",
   GOOGLE_GEMINI_EMBEDDING = "gemini-embedding-001",
+  GOOGLE_GEMINI_EMBEDDING_2_PREVIEW = "gemini-embedding-2-preview",
   COPILOT_PLUS_SMALL = "copilot-plus-small",
   COPILOT_PLUS_LARGE = "copilot-plus-large",
   COPILOT_PLUS_MULTILINGUAL = "copilot-plus-multilingual",
@@ -531,6 +532,14 @@ export const BUILTIN_EMBEDDING_MODELS: CustomModel[] = [
   },
   {
     name: EmbeddingModels.GOOGLE_GEMINI_EMBEDDING,
+    provider: EmbeddingModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    isEmbeddingModel: true,
+    core: true,
+  },
+  {
+    name: EmbeddingModels.GOOGLE_GEMINI_EMBEDDING_2_PREVIEW,
     provider: EmbeddingModelProviders.GOOGLE,
     enabled: true,
     isBuiltIn: true,
