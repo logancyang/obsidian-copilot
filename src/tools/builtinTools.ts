@@ -458,13 +458,18 @@ export function registerCliTools(): void {
   - If the Base filters by a specific tag or folder, ensure the new item will match those filters.
 
 Base file YAML reference (for creating new .base files with writeToFile):
-- filters: nested and/or/not objects or single filter strings. Use file.hasTag("tag"), file.inFolder("folder"), and operators (==, !=, >, <, >=, <=). Example: filters: { and: ['file.hasTag("project")', 'status != "done"'] }
+- filters: MUST be either a single string OR an object with and/or/not keys. NEVER use a bare YAML list.
+  - Single filter: filters: 'file.hasTag("book")'
+  - Multiple filters: filters: { and: ['file.hasTag("book")', 'status == "reading"'] }
+  - Negation: filters: { not: ['file.hasTag("archived")'] }
+  - Bare lists like "filters: - 'expr'" are INVALID and will cause parse errors.
 - formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Duration fields: .days, .hours, .minutes. Example: days_left: 'if(due, (date(due) - today()).days, "")'
 - properties: display config per property (displayName, width, hidden).
 - views: table (default), cards, list, or map. Each view can have its own filters, order (property display list), groupBy, summaries.
 - Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links, file.backlinks), formula properties (formula.my_formula).
 - YAML quoting: single-quote formulas containing double quotes: 'if(done, "Yes", "No")'. Quote strings with special chars (:, {, }, [, ]).
-- Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].`,
+- Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].
+- VALIDATION: After creating a .base file, ALWAYS call obsidianBases with base:views on the new file to verify it parses correctly. If it returns an error, fix the YAML with writeToFile and re-validate.`,
     },
   });
 }
