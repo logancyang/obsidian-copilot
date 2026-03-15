@@ -24,12 +24,6 @@ jest.mock("@/tools/toolManager", () => ({
 import { checkIsPlusUser } from "@/plusUtils";
 import { ToolManager } from "@/tools/toolManager";
 
-// Mock global app.vault for .base file existence checks
-const mockGetAbstractFileByPath = jest.fn();
-(globalThis as any).app = {
-  vault: { getAbstractFileByPath: mockGetAbstractFileByPath },
-};
-
 describe("toolExecution", () => {
   const mockCheckIsPlusUser = checkIsPlusUser as jest.MockedFunction<typeof checkIsPlusUser>;
   const mockCallTool = ToolManager.callTool as jest.MockedFunction<typeof ToolManager.callTool>;
@@ -38,8 +32,6 @@ describe("toolExecution", () => {
     jest.clearAllMocks();
     // Clear the registry before each test
     ToolRegistry.getInstance().clear();
-    // Default: files don't exist (for .base guard tests)
-    mockGetAbstractFileByPath.mockReturnValue(null);
   });
 
   describe("executeSequentialToolCall", () => {
@@ -164,135 +156,7 @@ describe("toolExecution", () => {
       });
     });
 
-    it("should redirect writeToFile targeting existing .base files when obsidianBases is available", async () => {
-      const writeToFile = createLangChainTool({
-        name: "writeToFile",
-        description: "Write to file",
-        schema: z.object({ path: z.string(), content: z.string() }),
-        func: async () => "written",
-      });
-      const obsidianBases = createLangChainTool({
-        name: "obsidianBases",
-        description: "Bases CLI",
-        schema: z.object({ command: z.string() }),
-        func: async () => "queried",
-      });
-
-      ToolRegistry.getInstance().register({
-        tool: writeToFile,
-        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
-      });
-
-      // File exists — should redirect
-      mockGetAbstractFileByPath.mockReturnValueOnce({ path: "Library.base" });
-
-      const result = await executeSequentialToolCall(
-        { name: "writeToFile", args: { path: "Library.base", content: "yaml" } },
-        [writeToFile, obsidianBases]
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.result).toContain("obsidianBases");
-      expect(result.result).toContain(".base file");
-      expect(mockCallTool).not.toHaveBeenCalled();
-    });
-
-    it("should allow writeToFile to create new .base files", async () => {
-      const writeToFile = createLangChainTool({
-        name: "writeToFile",
-        description: "Write to file",
-        schema: z.object({ path: z.string(), content: z.string() }),
-        func: async () => "written",
-      });
-      const obsidianBases = createLangChainTool({
-        name: "obsidianBases",
-        description: "Bases CLI",
-        schema: z.object({ command: z.string() }),
-        func: async () => "queried",
-      });
-
-      ToolRegistry.getInstance().register({
-        tool: writeToFile,
-        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
-      });
-
-      // File does NOT exist — should allow creation
-      mockGetAbstractFileByPath.mockReturnValueOnce(null);
-      mockCallTool.mockResolvedValueOnce("File created");
-
-      const result = await executeSequentialToolCall(
-        { name: "writeToFile", args: { path: "NewBase.base", content: "filters: ..." } },
-        [writeToFile, obsidianBases]
-      );
-
-      expect(result.success).toBe(true);
-      expect(mockCallTool).toHaveBeenCalled();
-    });
-
-    it("should redirect replaceInFile targeting existing .base files when obsidianBases is available", async () => {
-      const replaceInFile = createLangChainTool({
-        name: "replaceInFile",
-        description: "Replace in file",
-        schema: z.object({ path: z.string(), diff: z.string() }),
-        func: async () => "replaced",
-      });
-      const obsidianBases = createLangChainTool({
-        name: "obsidianBases",
-        description: "Bases CLI",
-        schema: z.object({ command: z.string() }),
-        func: async () => "queried",
-      });
-
-      ToolRegistry.getInstance().register({
-        tool: replaceInFile,
-        metadata: {
-          id: "replaceInFile",
-          displayName: "Replace",
-          description: "",
-          category: "file",
-        },
-      });
-
-      // File exists — should redirect
-      mockGetAbstractFileByPath.mockReturnValueOnce({ path: "Databases/Projects.base" });
-
-      const result = await executeSequentialToolCall(
-        { name: "replaceInFile", args: { path: "Databases/Projects.base", diff: "..." } },
-        [replaceInFile, obsidianBases]
-      );
-
-      expect(result.success).toBe(false);
-      expect(result.result).toContain("obsidianBases");
-      expect(mockCallTool).not.toHaveBeenCalled();
-    });
-
-    it("should allow writeToFile for existing .base files when obsidianBases is NOT available", async () => {
-      const writeToFile = createLangChainTool({
-        name: "writeToFile",
-        description: "Write to file",
-        schema: z.object({ path: z.string(), content: z.string() }),
-        func: async () => "written",
-      });
-
-      ToolRegistry.getInstance().register({
-        tool: writeToFile,
-        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
-      });
-
-      // File exists but obsidianBases is NOT available — should allow
-      mockGetAbstractFileByPath.mockReturnValueOnce({ path: "Library.base" });
-      mockCallTool.mockResolvedValueOnce("File written");
-
-      const result = await executeSequentialToolCall(
-        { name: "writeToFile", args: { path: "Library.base", content: "yaml" } },
-        [writeToFile] // no obsidianBases in available tools
-      );
-
-      expect(result.success).toBe(true);
-      expect(mockCallTool).toHaveBeenCalled();
-    });
-
-    it("should not redirect writeToFile for non-.base files", async () => {
+    it("should execute writeToFile normally for any file path", async () => {
       const writeToFile = createLangChainTool({
         name: "writeToFile",
         description: "Write to file",

@@ -73,12 +73,6 @@ export async function executeSequentialToolCall(
       }
     }
 
-    // Guard: redirect .base file operations from composer to obsidianBases
-    const redirect = getBaseFileRedirect(toolCall, availableTools);
-    if (redirect) {
-      return redirect;
-    }
-
     // Prepare tool arguments
     const toolArgs = { ...toolCall.args };
 
@@ -146,40 +140,6 @@ export async function executeSequentialToolCall(
       success: false,
     };
   }
-}
-
-/**
- * Check if a composer tool call targets an existing .base file and should be
- * redirected to obsidianBases. Only redirects when:
- * 1. The tool is writeToFile or replaceInFile
- * 2. The path ends with .base
- * 3. The file already exists (creating new .base files via composer is allowed)
- * 4. obsidianBases is available in the current tool set
- */
-function getBaseFileRedirect(
-  toolCall: ToolCall,
-  availableTools: any[]
-): ToolExecutionResult | null {
-  if (toolCall.name !== "writeToFile" && toolCall.name !== "replaceInFile") {
-    return null;
-  }
-  const path = toolCall.args?.path as string | undefined;
-  if (!path || !path.endsWith(".base")) {
-    return null;
-  }
-  // Allow creating new .base files via composer
-  const existingFile = app.vault.getAbstractFileByPath(path);
-  if (!existingFile) {
-    return null;
-  }
-  if (!availableTools.some((t) => t.name === "obsidianBases")) {
-    return null;
-  }
-  return {
-    toolName: toolCall.name,
-    result: `Error: "${path}" is an existing .base file. Use the obsidianBases tool instead: base:create to add items, base:query to read data, base:views to list views.`,
-    success: false,
-  };
 }
 
 /**

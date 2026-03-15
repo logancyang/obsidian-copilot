@@ -469,7 +469,7 @@ Base file YAML reference (for creating new .base files with writeToFile):
 - Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links, file.backlinks), formula properties (formula.my_formula).
 - YAML quoting: single-quote formulas containing double quotes: 'if(done, "Yes", "No")'. Quote strings with special chars (:, {, }, [, ]).
 - Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].
-- VALIDATION: After creating a .base file, ALWAYS call obsidianBases with base:views on the new file to verify it parses correctly. If it returns an error, fix the YAML with writeToFile and re-validate.`,
+- VALIDATION: After creating or editing a .base file, ALWAYS call obsidianBases with base:views to verify it parses correctly. If it returns an error, fix the YAML with writeToFile and re-validate. Do not stop until validation passes.`,
     },
   });
 }
