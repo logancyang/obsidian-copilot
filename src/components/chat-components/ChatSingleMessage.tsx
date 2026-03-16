@@ -1,4 +1,4 @@
-import { ChatButtons, EditFileDiff } from "@/components/chat-components/ChatButtons";
+import { ChatButtons } from "@/components/chat-components/ChatButtons";
 import { SourcesModal } from "@/components/modals/SourcesModal";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -338,9 +338,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   // Check if current model has reasoning capability
   const settings = useSettingsValue();
-
-  // Diffs from writeFile/editFile tool calls — stored as a typed field on the message.
-  const editFileDiffs: EditFileDiff[] = message.editFileDiffs ?? [];
 
   const copyToClipboard = () => {
     if (!navigator.clipboard || !navigator.clipboard.writeText) {
@@ -989,7 +986,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
               <ChatButtons
                 message={message}
-                app={app}
                 onCopy={copyToClipboard}
                 isCopied={isCopied}
                 onInsertIntoEditor={handleInsertIntoEditor}
@@ -998,7 +994,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 onDelete={onDelete}
                 onShowSources={handleShowSources}
                 hasSources={message.sources && message.sources.length > 0 ? true : false}
-                editFileDiffs={editFileDiffs}
               />
             </div>
           )}

@@ -62,7 +62,6 @@ export class MessageRepository {
         sources: message.sources,
         content: message.content,
         responseMetadata: message.responseMetadata,
-        editFileDiffs: message.editFileDiffs,
       };
 
       this.messages.push(storedMessage);
@@ -216,7 +215,6 @@ export class MessageRepository {
         sources: msg.sources,
         content: msg.content,
         responseMetadata: msg.responseMetadata,
-        editFileDiffs: msg.editFileDiffs,
       }));
   }
 

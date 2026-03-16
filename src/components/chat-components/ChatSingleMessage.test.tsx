@@ -48,9 +48,6 @@ jest.mock("obsidian", () => {
     MarkdownView: class {},
     TFile: class {},
     App: class {},
-    ItemView: class {
-      constructor() {}
-    },
     Platform: {
       isMobile: false,
     },
