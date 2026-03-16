@@ -141,7 +141,9 @@ export const obsidianPropertiesTool = createLangChainTool({
 // ---------------------------------------------------------------------------
 
 const tasksSchema = z.object({
-  command: z.literal("tasks").describe("List tasks across the vault with optional filters."),
+  command: z
+    .literal("tasks")
+    .describe('Must be exactly "tasks". Lists tasks across the vault with optional filters.'),
   file: z.string().optional().describe("Filter tasks by file name."),
   path: z.string().optional().describe("Filter tasks by vault-relative file path."),
   todo: z.boolean().optional().describe("Show only incomplete (todo) tasks."),

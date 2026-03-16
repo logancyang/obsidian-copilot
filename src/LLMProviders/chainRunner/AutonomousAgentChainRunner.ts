@@ -869,9 +869,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           }
         }
 
-        // Add tool result step (shown in rolling display - this is the "what was found")
+        // Add tool result step only when it provides new info (failure or source counts).
+        // Skip redundant success steps like "Listed vault tasks" after "Listing vault tasks".
         const resultSummary = summarizeToolResult(tc.name, result, sourceInfo, toolCall.args);
-        this.addReasoningStep(resultSummary, tc.name);
+        if (!result.success || sourceInfo) {
+          this.addReasoningStep(resultSummary, tc.name);
+        }
 
         // Add ToolMessage to conversation
         const toolMessage = createToolResultMessage(

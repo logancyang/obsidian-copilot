@@ -348,6 +348,7 @@ export function registerCliTools(): void {
 - daily:path — get the vault-relative file path (useful for follow-up readNote calls).
 - daily:append and daily:prepend also auto-create the daily note if it doesn't exist, but do NOT apply the template.
 - Use \\n for newlines and \\t for tabs in content strings.
+- For past or future daily notes (e.g. "yesterday's daily note"): NEVER ask the user for the date — use the time tools. Workflow: (1) call getCurrentTime to resolve the date, (2) call daily:path to discover the date format and folder, (3) call obsidianTemplates with command=templates to list available template names, then call template:read with the name that matches (e.g. "Daily Note Template"), (4) use writeToFile to create the note at the resolved path with the template content, replacing variables like {{date}} with the target date. If templates returns an error or no daily template is found, ask the user for their template path and use readNote to read it.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
@@ -396,13 +397,15 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianTasks:
+- ALWAYS use this tool when the user asks about tasks, todos, or checkboxes. Do NOT use localSearch for task queries.
 - Use to list and filter tasks across the vault.
 - todo=true: show only incomplete tasks. done=true: show only completed tasks.
 - status="x": filter by specific status character (e.g., "/" for in-progress, "x" for done, " " for open).
 - daily=true: show tasks from today's daily note only.
 - verbose=true: group tasks by file with line numbers.
 - total=true: return only the task count.
-- file= resolves like a wikilink (name only). path= uses exact vault-relative path.`,
+- file= resolves like a wikilink (name only). path= uses exact vault-relative path.
+- For time-based task queries (e.g. "tasks from last month"): use verbose=true to get tasks grouped by file, then filter results by file dates or daily note filenames to match the time range.`,
     },
   });
 
