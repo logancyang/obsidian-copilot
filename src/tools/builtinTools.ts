@@ -348,7 +348,7 @@ export function registerCliTools(): void {
 - daily:path — get the vault-relative file path (useful for follow-up readNote calls).
 - daily:append and daily:prepend also auto-create the daily note if it doesn't exist, but do NOT apply the template.
 - Use \\n for newlines and \\t for tabs in content strings.
-- For past or future daily notes (e.g. "yesterday's daily note"): NEVER ask the user for the date — use the time tools. Workflow: (1) call getCurrentTime to resolve the date, (2) call daily:path to discover the date format and folder, (3) call obsidianTemplates template:read to get the daily note template content, (4) use writeToFile to create the note at the resolved path with the template content, replacing variables like {{date}} with the target date. If template:read fails, ask the user for their template path and use readNote to read it.
+- For past or future daily notes (e.g. "yesterday's daily note"): NEVER ask the user for the date — use the time tools. Workflow: (1) call getCurrentTime to resolve the date, (2) call daily:path to discover the date format and folder, (3) call obsidianTemplates with command=templates to list available template names, then call template:read with the name that matches (e.g. "Daily Note Template"), (4) use writeToFile to create the note at the resolved path with the template content, replacing variables like {{date}} with the target date. If templates returns an error or no daily template is found, ask the user for their template path and use readNote to read it.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
