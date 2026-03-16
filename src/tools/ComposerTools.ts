@@ -1,11 +1,9 @@
 import { TFile } from "obsidian";
-import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
-import { createPatch, diffTrimmedLines } from "diff";
+import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { ensureFolderExists, sanitizeFilePath } from "@/utils";
-import { getSettings } from "@/settings/model";
 import { logWarn } from "@/logger";
 
 async function getFile(file_path: string): Promise<TFile> {
@@ -40,45 +38,6 @@ async function getFile(file_path: string): Promise<TFile> {
   } catch (error) {
     throw new Error(`Failed to get or create file "${file_path}": ${error.message}`);
   }
-}
-
-/**
- * Show the ApplyView preview UI for file changes and return the user decision.
- * @param file_path - Vault-relative path to the file
- * @param content - Target content to compare against current file content
- */
-async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
-  const file = await getFile(file_path);
-  const activeFile = app.workspace.getActiveFile();
-
-  if (file && (!activeFile || activeFile.path !== file_path)) {
-    // If target file is not the active file, open the target file in the current leaf
-    await app.workspace.getLeaf().openFile(file as TFile);
-  }
-
-  let originalContent = "";
-  if (file) {
-    originalContent = await app.vault.read(file as TFile);
-  }
-  const changes = diffTrimmedLines(originalContent, content, {
-    newlineIsToken: true,
-  });
-  // Return a promise that resolves when the user makes a decision
-  return new Promise((resolve) => {
-    // Open the Apply View in a new leaf with the processed content and the callback
-    const leaf = app.workspace.getLeaf(true);
-    leaf.setViewState({
-      type: APPLY_VIEW_TYPE,
-      active: true,
-      state: {
-        changes: changes,
-        path: file_path,
-        resultCallback: (result: ApplyViewResult) => {
-          resolve(result);
-        },
-      },
-    });
-  });
 }
 
 // Define Zod schema for writeFile
@@ -118,25 +77,11 @@ const writeFileSchema = z.object({
               {"id": "e1-2", "fromNode": "1", "toNode": "2", "fromSide": "right", "toSide": "left", "color": "3", "label": "links to"}
             ]
           }`),
-  confirmation: z
-    .preprocess((val) => {
-      if (typeof val === "string") {
-        const lc = val.trim().toLowerCase();
-        if (lc === "true") return true;
-        if (lc === "false") return false;
-      }
-      return val;
-    }, z.boolean())
-    .optional()
-    .default(true)
-    .describe(
-      `(Optional) Hint for confirmation preference. Note: preview is always shown unless the user has enabled auto-accept in settings.`
-    ),
 });
 
 const writeFileTool = createLangChainTool({
   name: "writeFile",
-  description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI.
+  description: `Request to write content to a file at the specified path.
 
       # Steps to find the the target path
       1. Extract the target file information from user message and find out the file path from the context.
@@ -144,10 +89,8 @@ const writeFileTool = createLangChainTool({
       3. If still failed to find the target file or the file path, ask the user to specify the target file.
       `,
   schema: writeFileSchema,
-  func: async ({ path, content, confirmation = true }) => {
+  func: async ({ path, content }) => {
     // Sanitize path to prevent ENAMETOOLONG errors on filesystems with 255-byte limits.
-    // Must happen here (not just in getFile) so show_preview also receives the sanitized path,
-    // since ApplyView uses state.path with its own getFile that doesn't sanitize.
     const sanitizedPath = sanitizeFilePath(path);
     if (sanitizedPath !== path) {
       logWarn(
@@ -159,34 +102,22 @@ const writeFileTool = createLangChainTool({
     // Convert object content to JSON string if needed
     const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
 
-    // Only bypass confirmation when the user has explicitly enabled auto-accept in settings.
-    // The LLM may pass confirmation=false, but that alone should not skip preview.
-    const settings = getSettings();
-    const shouldBypassConfirmation = settings.autoAcceptEdits;
-
-    if (shouldBypassConfirmation) {
-      try {
-        const file = await getFile(path);
-        await app.vault.modify(file, contentString);
-        return {
-          result: "accepted" as ApplyViewResult,
-          message:
-            "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
-        };
-      } catch (error: any) {
-        return {
-          result: "failed" as ApplyViewResult,
-          message: `Error writing to file without preview: ${error?.message || error}`,
-        };
-      }
+    try {
+      const file = await getFile(path);
+      const beforeContent = await app.vault.read(file);
+      await app.vault.modify(file, contentString);
+      const changes = diffTrimmedLines(beforeContent, contentString, { newlineIsToken: true });
+      return {
+        result: "accepted" as ApplyViewResult,
+        path,
+        changes,
+      };
+    } catch (error: any) {
+      return {
+        result: "failed" as ApplyViewResult,
+        message: `Error writing file: ${error?.message || error}`,
+      };
     }
-
-    const result = await show_preview(path, contentString);
-    // Simple JSON wrapper for consistent parsing
-    return {
-      result: result,
-      message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
-    };
   },
 });
 
@@ -387,13 +318,13 @@ const editFileTool = createLangChainTool({
         return `No changes made to ${path}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`;
       }
 
-      // Write directly to disk and return the diff inline
+      // Write directly to disk and return the changes for the read-only diff view
       await app.vault.modify(file, modifiedContent);
-      const diffText = createPatch(path, rawContent, modifiedContent);
+      const changes = diffTrimmedLines(rawContent, modifiedContent, { newlineIsToken: true });
       return {
         result: "accepted" as ApplyViewResult,
         path,
-        diff: diffText,
+        changes,
       };
     } catch (error) {
       return `Error modifying ${path}: ${error}. Please check the file path and try again.`;

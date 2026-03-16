@@ -112,6 +112,7 @@ interface ReActLoopResult {
   finalResponse: string;
   sources: AgentSource[];
   responseMetadata?: ResponseMetadata;
+  editFileDiffs: { path: string; changes: import("diff").Change[] }[];
 }
 
 export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
@@ -469,7 +470,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         updateCurrentAiMessage,
         uniqueSources.length > 0 ? uniqueSources : undefined,
         this.llmFormattedMessages.join("\n\n"),
-        loopResult.responseMetadata
+        loopResult.responseMetadata,
+        loopResult.editFileDiffs.length > 0 ? loopResult.editFileDiffs : undefined
       );
 
       this.lastDisplayedContent = "";
@@ -653,6 +655,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     const maxIterations = getSettings().autonomousAgentMaxIterations;
     const collectedSources: AgentSource[] = [];
+    const collectedDiffs: { path: string; changes: import("diff").Change[] }[] = [];
     const loopStartTime = Date.now();
 
     const previousSearchQueries: string[] = [];
@@ -752,6 +755,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           finalResponse,
           sources: collectedSources,
           responseMetadata,
+          editFileDiffs: collectedDiffs,
         };
       }
 
@@ -857,6 +861,18 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           );
         }
 
+        // Collect diffs from writeFile/editFile for the "Show diff" button
+        if ((tc.name === "writeFile" || tc.name === "editFile") && result.success) {
+          try {
+            const parsed = JSON.parse(result.result);
+            if (parsed?.result === "accepted" && parsed?.path && Array.isArray(parsed?.changes)) {
+              collectedDiffs.push({ path: parsed.path, changes: parsed.changes });
+            }
+          } catch {
+            // result was not parseable JSON — skip
+          }
+        }
+
         logToolResult(tc.name, result);
 
         // Track the executed query only on success so transient failures remain retryable.
@@ -934,6 +950,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             finalResponse,
             sources: collectedSources,
             responseMetadata,
+            editFileDiffs: collectedDiffs,
           };
         }
       } else {
@@ -955,6 +972,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
           finalResponse: "",
           sources: collectedSources,
           responseMetadata,
+          editFileDiffs: collectedDiffs,
         };
       }
       const interruptedMessage = "The response was interrupted.";
@@ -966,6 +984,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         finalResponse,
         sources: collectedSources,
         responseMetadata,
+        editFileDiffs: collectedDiffs,
       };
     }
 
@@ -988,6 +1007,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       finalResponse,
       sources: collectedSources,
       responseMetadata,
+      editFileDiffs: collectedDiffs,
     };
   }
 

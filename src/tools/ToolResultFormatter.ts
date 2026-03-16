@@ -537,27 +537,20 @@ export class ToolResultFormatter {
   }
 
   private static formatWriteToFile(result: any): string {
-    // Extract result status from object or use string directly
-    const status = typeof result === "object" ? result.result : result;
-    const statusStr = String(status).toLowerCase();
+    const status = typeof result === "object" ? String(result.result ?? "") : String(result);
 
-    if (statusStr.includes("accepted")) {
-      return "✅ File change: accepted";
-    } else if (statusStr.includes("rejected")) {
-      return "❌ File change: rejected";
+    if (status.toLowerCase().includes("accepted")) {
+      return "✅ File written";
     }
 
-    // Return message if available, otherwise the raw result
-    return typeof result === "object" && result.message ? result.message : String(status);
+    // Error strings pass through unchanged
+    return typeof result === "object" && result.message ? result.message : status;
   }
 
   private static formatReplaceInFile(result: any): string {
     const status = typeof result === "object" ? String(result.result ?? "") : String(result);
-    const diff = typeof result === "object" ? result.diff : undefined;
 
-    if (status.toLowerCase().includes("accepted") && diff) {
-      return `✅ Edit accepted\n\`\`\`diff\n${diff}\n\`\`\``;
-    } else if (status.toLowerCase().includes("accepted")) {
+    if (status.toLowerCase().includes("accepted")) {
       return "✅ Edit accepted";
     } else if (status.toLowerCase().includes("rejected")) {
       return "❌ Edit rejected";

@@ -1,4 +1,5 @@
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
+import { Change } from "diff";
 import { TFile } from "obsidian";
 
 /**
@@ -163,6 +164,9 @@ export interface ChatMessage {
 
   /** Response metadata from LLM (for AI messages) */
   responseMetadata?: ResponseMetadata;
+
+  /** Diffs from writeFile/editFile tool calls, for the "Show diff" button */
+  editFileDiffs?: { path: string; changes: Change[] }[];
 }
 
 /**
@@ -215,4 +219,5 @@ export interface StoredMessage {
   sources?: { title: string; path: string; score: number; explanation?: any }[];
   content?: any[];
   responseMetadata?: ResponseMetadata;
+  editFileDiffs?: { path: string; changes: Change[] }[];
 }

@@ -1,3 +1,4 @@
+import { APPLY_VIEW_TYPE, ApplyViewState } from "@/components/composer/ApplyView";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { USER_SENDER } from "@/constants";
@@ -6,17 +7,25 @@ import { ChatMessage } from "@/types/message";
 import {
   Check,
   Copy,
+  GitCompare,
   LibraryBig,
   PenSquare,
   RotateCw,
   TextCursorInput,
   Trash2,
 } from "lucide-react";
-import { Platform } from "obsidian";
+import { App, Platform } from "obsidian";
+import { Change } from "diff";
 import React from "react";
+
+export interface EditFileDiff {
+  path: string;
+  changes: Change[];
+}
 
 interface ChatButtonsProps {
   message: ChatMessage;
+  app?: App;
   onCopy: () => void;
   isCopied: boolean;
   onInsertIntoEditor?: () => void;
@@ -25,10 +34,12 @@ interface ChatButtonsProps {
   onDelete: () => void;
   onShowSources?: () => void;
   hasSources: boolean;
+  editFileDiffs?: EditFileDiff[];
 }
 
 export const ChatButtons: React.FC<ChatButtonsProps> = ({
   message,
+  app,
   onCopy,
   isCopied,
   onInsertIntoEditor,
@@ -37,7 +48,19 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
   onDelete,
   onShowSources,
   hasSources,
+  editFileDiffs,
 }) => {
+  const handleShowDiff = () => {
+    if (!app || !editFileDiffs?.length) return;
+    for (const { path, changes } of editFileDiffs) {
+      const leaf = app.workspace.getLeaf(true);
+      leaf.setViewState({
+        type: APPLY_VIEW_TYPE,
+        active: true,
+        state: { changes, path } satisfies ApplyViewState,
+      });
+    }
+  };
   return (
     <div
       className={cn("tw-flex tw-gap-1", {
@@ -73,6 +96,16 @@ export const ChatButtons: React.FC<ChatButtonsProps> = ({
         </>
       ) : (
         <>
+          {editFileDiffs && editFileDiffs.length > 0 && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button onClick={handleShowDiff} variant="ghost2" size="fit" title="Show diff">
+                  <GitCompare className="tw-size-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Show diff</TooltipContent>
+            </Tooltip>
+          )}
           {hasSources && (
             <Tooltip>
               <TooltipTrigger asChild>
