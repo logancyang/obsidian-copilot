@@ -151,9 +151,9 @@ export class ToolResultFormatter {
           return this.formatWebSearch(parsedResult);
         case "youtubeTranscription":
           return this.formatYoutubeTranscription(parsedResult);
-        case "writeToFile":
+        case "writeFile":
           return this.formatWriteToFile(parsedResult);
-        case "replaceInFile":
+        case "editFile":
           return this.formatReplaceInFile(parsedResult);
         case "readNote":
           return this.formatReadNote(parsedResult);
@@ -552,32 +552,19 @@ export class ToolResultFormatter {
   }
 
   private static formatReplaceInFile(result: any): string {
-    // Extract block count from object or string
-    let blockCount = 0;
-    let status = "";
+    const status = typeof result === "object" ? String(result.result ?? "") : String(result);
+    const diff = typeof result === "object" ? result.diff : undefined;
 
-    if (typeof result === "object") {
-      blockCount = result.blocksApplied || 0;
-      status = result.result || "";
-    } else if (typeof result === "string") {
-      const match = result.match(/Applied (\d+) SEARCH\/REPLACE block/);
-      if (match) blockCount = parseInt(match[1]);
-      status = result;
+    if (status.toLowerCase().includes("accepted") && diff) {
+      return `✅ Edit accepted\n\`\`\`diff\n${diff}\n\`\`\``;
+    } else if (status.toLowerCase().includes("accepted")) {
+      return "✅ Edit accepted";
+    } else if (status.toLowerCase().includes("rejected")) {
+      return "❌ Edit rejected";
     }
 
-    const statusStr = String(status).toLowerCase();
-
-    if (statusStr.includes("accepted")) {
-      const replacementText = blockCount === 1 ? "replacement" : "replacements";
-      return blockCount > 0
-        ? `✅ ${blockCount} ${replacementText} accepted`
-        : "✅ File replacements: accepted";
-    } else if (statusStr.includes("rejected")) {
-      return blockCount === 0 ? "❌ No replacements made" : "❌ File replacements: rejected";
-    }
-
-    // Return message if available, otherwise the raw result
-    return typeof result === "object" && result.message ? result.message : String(status);
+    // Error / not-found strings pass through unchanged
+    return typeof result === "object" && result.message ? result.message : status;
   }
 
   private static formatReadNote(result: any): string {

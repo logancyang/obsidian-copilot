@@ -166,8 +166,8 @@ export function getToolDisplayName(toolName: string): string {
     youtubeTranscription: "YouTube transcription",
     indexVault: "vault indexing",
     indexTool: "index",
-    writeToFile: "file editor",
-    replaceInFile: "file editor",
+    writeFile: "file editor",
+    editFile: "file editor",
     obsidianDailyNote: "daily note (CLI)",
     obsidianRandomRead: "random note (CLI)",
     obsidianProperties: "properties (CLI)",
@@ -195,8 +195,8 @@ export function getToolEmoji(toolName: string): string {
     youtubeTranscription: "📺",
     indexVault: "📚",
     indexTool: "📚",
-    writeToFile: "✏️",
-    replaceInFile: "🔄",
+    writeFile: "✏️",
+    editFile: "🔄",
     readNote: "🔍",
     obsidianDailyNote: "📅",
     obsidianRandomRead: "🎲",
@@ -214,7 +214,7 @@ export function getToolEmoji(toolName: string): string {
  * Get user confirmation message for tool call
  */
 export function getToolConfirmtionMessage(toolName: string, toolArgs?: any): string | null {
-  if (toolName == "writeToFile" || toolName == "replaceInFile") {
+  if (toolName == "writeFile" || toolName == "editFile") {
     return "Accept / reject in the Preview";
   }
 

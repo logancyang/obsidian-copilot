@@ -7,25 +7,25 @@ describe("cleanMessageForCopy", () => {
     expect(cleanMessageForCopy(input)).toBe(expected);
   });
 
-  it("should remove writeToFile blocks wrapped in XML codeblocks", () => {
+  it("should remove writeFile blocks wrapped in XML codeblocks", () => {
     const input = `Some text before
 \`\`\`xml
-<writeToFile>
+<writeFile>
 <path>test.md</path>
 <content>File content here</content>
-</writeToFile>
+</writeFile>
 \`\`\`
 Some text after`;
     const expected = "Some text before\n\nSome text after";
     expect(cleanMessageForCopy(input)).toBe(expected);
   });
 
-  it("should remove standalone writeToFile blocks", () => {
+  it("should remove standalone writeFile blocks", () => {
     const input = `Text before
-<writeToFile>
+<writeFile>
 <path>test.md</path>
 <content>File content</content>
-</writeToFile>
+</writeFile>
 Text after`;
     const expected = "Text before\n\nText after";
     expect(cleanMessageForCopy(input)).toBe(expected);
@@ -42,7 +42,7 @@ Text after`;
     const input = `Start of message
 <think>First thought</think>
 Middle part
-<writeToFile><path>file.md</path><content>content</content></writeToFile>
+<writeFile><path>file.md</path><content>content</content></writeFile>
 <!--TOOL_CALL_START:456:webSearch:Web Search:🌐::false-->Searching web<!--TOOL_CALL_END:456:Results-->
 End of message`;
     const expected = "Start of message\n\nMiddle part\n\nEnd of message";

@@ -321,7 +321,7 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       `,
       expectedCalls: [
         {
-          toolName: "replaceInFile",
+          toolName: "editFile",
           // Check if args.diff contains the correct search text
           argumentValidator: (args) => {
             expect(args.path).toBe("test.md");
@@ -353,7 +353,7 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       `,
       expectedCalls: [
         {
-          toolName: "writeToFile",
+          toolName: "writeFile",
           argumentValidator: (args) => {
             expect(args).toBeDefined();
           },

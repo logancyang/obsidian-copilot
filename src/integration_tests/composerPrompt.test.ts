@@ -79,7 +79,7 @@ describe.skip("Composer Instructions - Integration Tests", () => {
     });
   });
 
-  // Helper function to run a test with a given prompt and check for writeToFile blocks
+  // Helper function to run a test with a given prompt and check for writeFile blocks
   const testComposerResponse = async (
     testName: string,
     userPrompt: string,
@@ -97,13 +97,13 @@ describe.skip("Composer Instructions - Integration Tests", () => {
         console.log(`${testName} - Response preview:`, content);
 
         if (expectedBlocks == 0) {
-          expect(content).not.toContain("<writeToFile>");
+          expect(content).not.toContain("<writeFile>");
           return;
         } else {
-          // Extract writeToFile blocks
-          const writeToFileRegex =
-            /<writeToFile>\s*<path>(.*?)<\/path>\s*<content>([\s\S]*?)<\/content>\s*<\/writeToFile>/g;
-          const matches = [...content.matchAll(writeToFileRegex)];
+          // Extract writeFile blocks
+          const writeFileRegex =
+            /<writeFile>\s*<path>(.*?)<\/path>\s*<content>([\s\S]*?)<\/content>\s*<\/writeFile>/g;
+          const matches = [...content.matchAll(writeFileRegex)];
 
           expect(matches.length).toBe(expectedBlocks);
 

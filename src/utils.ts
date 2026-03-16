@@ -979,7 +979,7 @@ export function getProviderKeyManagementURL(provider: string): string {
 }
 
 /**
- * Cleans a message by removing Think blocks, Action blocks (writeToFile), tool call markers,
+ * Cleans a message by removing Think blocks, Action blocks (writeFile), tool call markers,
  * and agent reasoning blocks for copying to clipboard or inserting at cursor.
  * This is more comprehensive than removeThinkTags which is used for RAG.
  */
@@ -989,14 +989,14 @@ export function cleanMessageForCopy(message: string): string {
   // First use the existing removeThinkTags function
   cleanedMessage = removeThinkTags(cleanedMessage);
 
-  // Remove writeToFile blocks wrapped in XML codeblocks
+  // Remove writeFile blocks wrapped in XML codeblocks
   cleanedMessage = cleanedMessage.replace(
-    /```xml\s*[\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?```/g,
+    /```xml\s*[\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?```/g,
     ""
   );
 
-  // Remove standalone writeToFile blocks
-  cleanedMessage = cleanedMessage.replace(/<writeToFile>[\s\S]*?<\/writeToFile>/g, "");
+  // Remove standalone writeFile blocks
+  cleanedMessage = cleanedMessage.replace(/<writeFile>[\s\S]*?<\/writeFile>/g, "");
 
   // Remove tool call markers
   // Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->
@@ -1045,7 +1045,7 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   const cursorFrom = editor.getCursor("from");
   const cursorTo = editor.getCursor("to");
 
-  // Clean the message before inserting (removes think tags, writeToFile blocks, tool calls)
+  // Clean the message before inserting (removes think tags, writeFile blocks, tool calls)
   const cleanedMessage = cleanMessageForCopy(message);
   const cleanedLines = cleanedMessage.split("\n");
 

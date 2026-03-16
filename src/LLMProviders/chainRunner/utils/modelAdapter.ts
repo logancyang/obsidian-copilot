@@ -305,7 +305,7 @@ class GPTModelAdapter extends BaseModelAdapter {
     );
 
     const tools = availableToolNames || [];
-    const hasComposerTools = tools.includes("writeToFile") || tools.includes("replaceInFile");
+    const hasComposerTools = tools.includes("writeFile") || tools.includes("editFile");
 
     const gptSectionParts: string[] = [];
 
@@ -325,10 +325,10 @@ class GPTModelAdapter extends BaseModelAdapter {
       gptSectionParts.push(`🚨 FILE EDITING WITH COMPOSER TOOLS 🚨
 
 When user asks you to edit or modify a file, you MUST:
-1. Determine if it's a small edit (use replaceInFile) or major rewrite (use writeToFile)
+1. Determine if it's a small edit (use editFile) or major rewrite (use writeFile)
 2. Call the tool immediately - do not just describe what you plan to do
 
-For replaceInFile, the diff parameter must use SEARCH/REPLACE format:
+For editFile, the diff parameter must use SEARCH/REPLACE format:
 ------- SEARCH
 content to find
 =======
@@ -336,7 +336,7 @@ replacement content
 +++++++ REPLACE
 
 ❌ WRONG: "I'll help you add item 4 to the list. Let me update that for you." [No tool call = FAILURE]
-✅ CORRECT: Actually call replaceInFile or writeToFile with proper parameters`);
+✅ CORRECT: Actually call editFile or writeFile with proper parameters`);
     }
 
     gptSectionParts.push(
@@ -386,7 +386,7 @@ replacement content
     }
 
     if (requiresFileEdit) {
-      return `${message}\n\n🚨 GPT REMINDER: Use replaceInFile for small edits (with SEARCH/REPLACE blocks in diff parameter).`;
+      return `${message}\n\n🚨 GPT REMINDER: Use editFile for small edits (with SEARCH/REPLACE blocks in diff parameter).`;
     }
 
     return message;

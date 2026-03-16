@@ -1,7 +1,7 @@
 import { getSettings } from "@/settings/model";
 import { Vault } from "obsidian";
 import { isDesktopRuntime } from "@/services/obsidianCli/ObsidianCliClient";
-import { replaceInFileTool, writeToFileTool } from "./ComposerTools";
+import { editFileTool, writeFileTool } from "./ComposerTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
@@ -179,22 +179,22 @@ Examples:
     },
   },
   {
-    tool: writeToFileTool,
+    tool: writeFileTool,
     metadata: {
-      id: "writeToFile",
+      id: "writeFile",
       displayName: "Write to File",
       description: "Create or modify files in your vault",
       category: "file",
       requiresVault: true,
       timeoutMs: 0, // No timeout - waits for user preview decision
       copilotCommands: ["@composer"],
-      customPromptInstructions: `For writeToFile:
+      customPromptInstructions: `For writeFile:
 - NEVER display the file content directly in your response
 - Always pass the complete file content to the tool
 - Include the full path to the file
-- You MUST explicitly call writeToFile for any intent of updating or creating files
-- Do not call writeToFile tool again if the result is not accepted
-- Do not call writeToFile tool if no change needs to be made
+- You MUST explicitly call writeFile for any intent of updating or creating files
+- Do not call writeFile tool again if the result is not accepted
+- Do not call writeFile tool if no change needs to be made
 - Always create new notes in root folder or folders the user explicitly specifies
 - When creating a new note in a folder, you MUST use getFileTree to get the exact folder path first
 Examples:
@@ -203,22 +203,24 @@ Examples:
     },
   },
   {
-    tool: replaceInFileTool,
+    tool: editFileTool,
     metadata: {
-      id: "replaceInFile",
-      displayName: "Replace in File",
-      description: "Make targeted changes to existing files using SEARCH/REPLACE blocks",
+      id: "editFile",
+      displayName: "Edit File",
+      description: "Make a targeted, single-match edit to an existing file",
       category: "file",
       requiresVault: true,
       timeoutMs: 0, // No timeout - waits for user preview decision
-      customPromptInstructions: `For replaceInFile:
-- Remember: Small edits → replaceInFile, Major rewrites → writeToFile
-- SEARCH text must match EXACTLY including all whitespace
-- The diff parameter uses SEARCH/REPLACE block format
+      customPromptInstructions: `For editFile:
+- Use for targeted edits; use writeFile for major rewrites or new files
+- oldText must uniquely identify the location — include surrounding context lines if needed
+- The tool automatically handles minor whitespace/quote differences (fuzzy matching)
+- Call once per edit; for multiple edits call the tool multiple times
 
-Example: To add "Bob Johnson" to attendees list in notes/meeting.md:
+Example: Add "Bob Johnson" to attendees in notes/meeting.md:
 path: "notes/meeting.md"
-diff: "------- SEARCH\\n## Attendees\\n- John Smith\\n- Jane Doe\\n=======\\n## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson\\n+++++++ REPLACE"`,
+oldText: "## Attendees\\n- John Smith\\n- Jane Doe"
+newText: "## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson"`,
     },
   },
 
@@ -344,8 +346,11 @@ export function registerCliTools(): void {
 - daily — create today's daily note. Applies the user's configured daily note template automatically. Use this when the user asks to create or set up today's daily note.
 - daily:read — read today's daily note content.
 - daily:path — get the vault-relative file path (useful for follow-up readNote calls).
-- For past or future daily notes (e.g. "yesterday's daily note"): NEVER ask the user for the date — use the time tools. Workflow: (1) call getCurrentTime to resolve the date, (2) call daily:path to discover the date format and folder, (3) call obsidianTemplates with command=templates to list available template names, then call template:read with the name that matches (e.g. "Daily Note Template"), (4) use writeToFile to create the note at the resolved path with the template content, replacing variables like {{date}} with the target date. If templates returns an error or no daily template is found, ask the user for their template path and use readNote to read it.
-- To add content to a daily note, use writeToFile or replaceInFile.
+- For past or future daily notes (e.g. "yesterday's daily note"): NEVER ask the user for the date — use the time tools. Workflow: (1) call getCurrentTime to resolve the date, (2) call daily:path to discover the date format and folder, (3) call obsidianTemplates with command=templates to list available template names, then call template:read with the name that matches (e.g. "Daily Note Template"), (4) use writeFile to create the note at the resolved path with the template content, replacing variables like {{date}} with the target date. If templates returns an error or no daily template is found, ask the user for their template path and use readNote to read it.
+- To add content to a daily note, use writeFile or editFile.
+- daily:append and daily:prepend also auto-create the daily note if it doesn't exist, but do NOT apply the template.
+- Use \\n for newlines and \\t for tabs in content strings.
+- For arbitrary file writes beyond daily notes, use writeFile or editFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
   });
@@ -380,7 +385,7 @@ export function registerCliTools(): void {
 - property:read: read a single property value from a specific note. Requires name parameter.
 - file= resolves like a wikilink (name only, no path or extension). path= uses exact vault-relative path.
 - Do not use for full note content — use readNote for that.
-- To modify properties, use writeToFile or replaceInFile to update the frontmatter YAML.`,
+- To modify properties, use writeFile or editFile to update the frontmatter YAML.`,
     },
   });
 
@@ -456,7 +461,7 @@ export function registerCliTools(): void {
   - Use base:query first to understand the Base's structure and existing data before creating items.
   - If the Base filters by a specific tag or folder, ensure the new item will match those filters.
 
-Base file YAML reference (for creating new .base files with writeToFile):
+Base file YAML reference (for creating new .base files with writeFile):
 - filters: MUST be either a single string OR an object with and/or/not keys. NEVER use a bare YAML list.
   - Single filter: filters: 'file.hasTag("book")'
   - Multiple filters: filters: { and: ['file.hasTag("book")', 'status == "reading"'] }
@@ -468,7 +473,7 @@ Base file YAML reference (for creating new .base files with writeToFile):
 - Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links, file.backlinks), formula properties (formula.my_formula).
 - YAML quoting: single-quote formulas containing double quotes: 'if(done, "Yes", "No")'. Quote strings with special chars (:, {, }, [, ]).
 - Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].
-- VALIDATION: After creating or editing a .base file, ALWAYS call obsidianBases with base:views to verify it parses correctly. If it returns an error, fix the YAML with writeToFile and re-validate. Do not stop until validation passes.`,
+- VALIDATION: After creating or editing a .base file, ALWAYS call obsidianBases with base:views to verify it parses correctly. If it returns an error, fix the YAML with writeFile and re-validate. Do not stop until validation passes.`,
     },
   });
 }

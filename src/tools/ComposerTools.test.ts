@@ -1,323 +1,5 @@
-import {
-  parseSearchReplaceBlocks,
-  normalizeLineEndings,
-  replaceWithLineEndingAwareness,
-} from "./ComposerTools";
+import { normalizeLineEndings, normalizeForFuzzyMatch } from "./ComposerTools";
 import { sanitizeFilePath } from "@/utils";
-
-describe("parseSearchReplaceBlocks", () => {
-  describe("Standard format", () => {
-    test("should parse basic SEARCH/REPLACE block with newlines", () => {
-      const diff = `------- SEARCH
-old text here
-=======
-new text here
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text here",
-        replaceText: "new text here",
-      });
-    });
-
-    test("should parse multiline content", () => {
-      const diff = `------- SEARCH
-function oldFunction() {
-  return "old";
-}
-=======
-function newFunction() {
-  return "new";
-}
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].searchText).toBe(`function oldFunction() {
-  return "old";
-}`);
-      expect(result[0].replaceText).toBe(`function newFunction() {
-  return "new";
-}`);
-    });
-  });
-
-  describe("Flexible format without newlines", () => {
-    test("should parse compact format without newlines", () => {
-      const diff = "-------SEARCHold text=======new text+++++++REPLACE";
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text",
-        replaceText: "new text",
-      });
-    });
-
-    test("should handle minimal markers", () => {
-      const diff = "---SEARCHtest===replacement+++REPLACE";
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "test",
-        replaceText: "replacement",
-      });
-    });
-  });
-
-  describe("Different line endings", () => {
-    test("should handle Windows line endings (\\r\\n)", () => {
-      const diff = "------- SEARCH\r\nold text\r\n=======\r\nnew text\r\n+++++++ REPLACE";
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text",
-        replaceText: "new text",
-      });
-    });
-
-    test("should handle mixed line endings", () => {
-      const diff = "------- SEARCH\nold text\r\n=======\nnew text\r\n+++++++ REPLACE";
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text",
-        replaceText: "new text",
-      });
-    });
-  });
-
-  describe("Multiple blocks", () => {
-    test("should parse multiple SEARCH/REPLACE blocks", () => {
-      const diff = `------- SEARCH
-first old text
-=======
-first new text
-+++++++ REPLACE
-
-------- SEARCH
-second old text
-=======
-second new text
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({
-        searchText: "first old text",
-        replaceText: "first new text",
-      });
-      expect(result[1]).toEqual({
-        searchText: "second old text",
-        replaceText: "second new text",
-      });
-    });
-
-    test("should parse multiple blocks with different formatting", () => {
-      const diff = `------- SEARCH
-block1 search
-=======
-block1 replace
-+++++++ REPLACE
--------SEARCHblock2 search=======block2 replace+++++++REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(2);
-      expect(result[0]).toEqual({
-        searchText: "block1 search",
-        replaceText: "block1 replace",
-      });
-      expect(result[1]).toEqual({
-        searchText: "block2 search",
-        replaceText: "block2 replace",
-      });
-    });
-  });
-
-  describe("Whitespace handling", () => {
-    test("should trim whitespace from search and replace text", () => {
-      const diff = `------- SEARCH
-   old text with spaces   
-=======
-   new text with spaces   
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text with spaces",
-        replaceText: "new text with spaces",
-      });
-    });
-
-    test("should handle spaces in markers", () => {
-      const diff = `-------   SEARCH   
-old text
-=======
-new text
-+++++++   REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text",
-        replaceText: "new text",
-      });
-    });
-  });
-
-  describe("Special characters", () => {
-    test("should handle special regex characters in content", () => {
-      const diff = `------- SEARCH
-function test() { return /regex.*pattern/g; }
-=======
-function test() { return /new.*pattern/g; }
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0].searchText).toBe("function test() { return /regex.*pattern/g; }");
-      expect(result[0].replaceText).toBe("function test() { return /new.*pattern/g; }");
-    });
-
-    test("should handle Unicode characters", () => {
-      const diff = `------- SEARCH
-这是测试文本
-=======
-这是新文本
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "这是测试文本",
-        replaceText: "这是新文本",
-      });
-    });
-  });
-
-  describe("Empty content", () => {
-    test("should handle empty search text", () => {
-      const diff = `------- SEARCH
-=======
-new content to add
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "",
-        replaceText: "new content to add",
-      });
-    });
-
-    test("should handle empty replace text (deletion)", () => {
-      const diff = `------- SEARCH
-content to delete
-=======
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "content to delete",
-        replaceText: "",
-      });
-    });
-  });
-
-  describe("Variable marker lengths", () => {
-    test("should handle different numbers of dashes", () => {
-      const diff = `----------- SEARCH
-old text
-=======
-new text
-+++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text",
-        replaceText: "new text",
-      });
-    });
-
-    test("should handle different numbers of equals and plus signs", () => {
-      const diff = `------- SEARCH
-old text
-===========
-new text
-+++++++++++ REPLACE`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({
-        searchText: "old text",
-        replaceText: "new text",
-      });
-    });
-  });
-
-  describe("Edge cases and invalid formats", () => {
-    test("should return empty array for invalid format", () => {
-      const diff = "invalid format without proper markers";
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(0);
-    });
-
-    test("should return empty array for incomplete block", () => {
-      const diff = `------- SEARCH
-old text
-=======
-new text`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(0);
-    });
-
-    test("should handle empty diff string", () => {
-      const result = parseSearchReplaceBlocks("");
-
-      expect(result).toHaveLength(0);
-    });
-
-    test("should handle case sensitivity in markers", () => {
-      const diff = `------- search
-old text
-=======
-new text
-+++++++ replace`;
-
-      const result = parseSearchReplaceBlocks(diff);
-
-      expect(result).toHaveLength(0);
-    });
-  });
-});
 
 describe("normalizeLineEndings", () => {
   test("should normalize CRLF to LF", () => {
@@ -356,122 +38,46 @@ describe("normalizeLineEndings", () => {
   });
 });
 
-describe("replaceWithLineEndingAwareness", () => {
-  describe("CRLF files", () => {
-    test("should preserve CRLF when file predominantly uses CRLF", () => {
-      const content = "line1\r\nold text\r\nline3\r\n";
-      const searchText = "old text";
-      const replaceText = "new text";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\r\nnew text\r\nline3\r\n");
-    });
-
-    test("should work when search text has different line endings than file", () => {
-      const content = "line1\r\nold\r\ntext\r\nline3\r\n";
-      const searchText = "old\ntext"; // LF in search text
-      const replaceText = "new\ntext"; // LF in replace text
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\r\nnew\r\ntext\r\nline3\r\n"); // Result preserves CRLF
-    });
-
-    test("should handle multiline replacement with CRLF", () => {
-      const content = "function test() {\r\n  return 'old';\r\n}\r\n";
-      const searchText = "function test() {\n  return 'old';\n}";
-      const replaceText = "function test() {\n  return 'new';\n}";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("function test() {\r\n  return 'new';\r\n}\r\n");
-    });
+describe("normalizeForFuzzyMatch", () => {
+  test("should strip trailing whitespace from each line", () => {
+    const text = "line1   \nline2\t\nline3";
+    const result = normalizeForFuzzyMatch(text);
+    expect(result).toBe("line1\nline2\nline3");
   });
 
-  describe("LF files", () => {
-    test("should preserve LF when file predominantly uses LF", () => {
-      const content = "line1\nold text\nline3\n";
-      const searchText = "old text";
-      const replaceText = "new text";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\nnew text\nline3\n");
-    });
-
-    test("should work when search text has different line endings than file", () => {
-      const content = "line1\nold\ntext\nline3\n";
-      const searchText = "old\r\ntext"; // CRLF in search text
-      const replaceText = "new\r\ntext"; // CRLF in replace text
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\nnew\ntext\nline3\n"); // Result preserves LF
-    });
+  test("should normalize smart single quotes to ASCII apostrophe", () => {
+    expect(normalizeForFuzzyMatch("it\u2018s a test")).toBe("it's a test");
+    expect(normalizeForFuzzyMatch("it\u2019s a test")).toBe("it's a test");
   });
 
-  describe("Mixed line ending handling", () => {
-    test("should choose CRLF when CRLF is more common", () => {
-      const content = "line1\r\nline2\r\nold text\nline4\r\n"; // 3 CRLF, 1 LF
-      const searchText = "old text";
-      const replaceText = "new text";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\r\nline2\r\nnew text\r\nline4\r\n");
-    });
-
-    test("should choose LF when LF is more common", () => {
-      const content = "line1\nline2\nold text\r\nline4\n"; // 3 LF, 1 CRLF
-      const searchText = "old text";
-      const replaceText = "new text";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\nline2\nnew text\nline4\n");
-    });
-
-    test("should default to LF when counts are equal", () => {
-      const content = "line1\r\nold text\nline3"; // 1 CRLF, 1 LF
-      const searchText = "old text";
-      const replaceText = "new text";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\nnew text\nline3"); // Defaults to LF
-    });
+  test("should normalize smart double quotes to ASCII quotes", () => {
+    expect(normalizeForFuzzyMatch("\u201CHello\u201D")).toBe('"Hello"');
   });
 
-  describe("Edge cases", () => {
-    test("should handle empty search text (edge case behavior)", () => {
-      const content = "ab";
-      const searchText = "";
-      const replaceText = "x";
+  test("should normalize Unicode dashes to hyphen", () => {
+    // En-dash, em-dash, minus sign
+    expect(normalizeForFuzzyMatch("a\u2013b")).toBe("a-b");
+    expect(normalizeForFuzzyMatch("a\u2014b")).toBe("a-b");
+    expect(normalizeForFuzzyMatch("a\u2212b")).toBe("a-b");
+  });
 
-      // Empty string replacement inserts between every character (JavaScript's replaceAll behavior)
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("xaxbx");
-    });
+  test("should normalize non-breaking space to regular space", () => {
+    expect(normalizeForFuzzyMatch("hello\u00A0world")).toBe("hello world");
+  });
 
-    test("should handle empty replace text (deletion)", () => {
-      const content = "line1\r\nto delete\r\nline3\r\n";
-      const searchText = "to delete\r\n";
-      const replaceText = "";
+  test("should apply NFKC normalization (fullwidth to ASCII)", () => {
+    // Fullwidth digits normalize to regular digits via NFKC
+    expect(normalizeForFuzzyMatch("\uFF10\uFF11\uFF12")).toBe("012");
+  });
 
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("line1\r\nline3\r\n");
-    });
+  test("should handle multiline text with mixed artifacts", () => {
+    const text = "line1   \nit\u2019s here\nvalue\u00A0=\u00A0\u201Chello\u201D";
+    const result = normalizeForFuzzyMatch(text);
+    expect(result).toBe('line1\nit\'s here\nvalue = "hello"');
+  });
 
-    test("should handle no line endings in content", () => {
-      const content = "old text without line endings";
-      const searchText = "old text";
-      const replaceText = "new text";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("new text without line endings");
-    });
-
-    test("should handle multiple occurrences", () => {
-      const content = "old\r\ntest old\r\nmore old\r\n";
-      const searchText = "old";
-      const replaceText = "new";
-
-      const result = replaceWithLineEndingAwareness(content, searchText, replaceText);
-      expect(result).toBe("new\r\ntest new\r\nmore new\r\n");
-    });
+  test("should return empty string unchanged", () => {
+    expect(normalizeForFuzzyMatch("")).toBe("");
   });
 });
 

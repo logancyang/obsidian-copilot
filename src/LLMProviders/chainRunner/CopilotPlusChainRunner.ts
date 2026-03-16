@@ -17,7 +17,7 @@ import { logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { getSystemPromptWithMemory } from "@/system-prompts/systemPromptBuilder";
-import { writeToFileTool } from "@/tools/ComposerTools";
+import { writeFileTool } from "@/tools/ComposerTools";
 import { ToolManager } from "@/tools/toolManager";
 import { ToolResultFormatter } from "@/tools/ToolResultFormatter";
 import { ToolRegistry } from "@/tools/ToolRegistry";
@@ -697,7 +697,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       contextEnvelope: userMessage.contextEnvelope,
     });
 
-    const actionStreamer = new ActionBlockStreamer(ToolManager, writeToFileTool);
+    const actionStreamer = new ActionBlockStreamer(ToolManager, writeFileTool);
 
     // Wrap the stream call with warning suppression
     const chatStream = await withSuppressedTokenWarnings(() =>

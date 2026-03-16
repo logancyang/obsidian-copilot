@@ -1,6 +1,6 @@
 import { TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
-import { diffTrimmedLines } from "diff";
+import { createPatch, diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
@@ -81,8 +81,8 @@ async function show_preview(file_path: string, content: string): Promise<ApplyVi
   });
 }
 
-// Define Zod schema for writeToFile
-const writeToFileSchema = z.object({
+// Define Zod schema for writeFile
+const writeFileSchema = z.object({
   path: z.string().describe(`(Required) The path to the file to write to. 
           The path must end with explicit file extension, such as .md or .canvas .
           Prefer to create new files in existing folders or root folder unless the user's request specifies otherwise.
@@ -134,8 +134,8 @@ const writeToFileSchema = z.object({
     ),
 });
 
-const writeToFileTool = createLangChainTool({
-  name: "writeToFile",
+const writeFileTool = createLangChainTool({
+  name: "writeFile",
   description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI.
 
       # Steps to find the the target path
@@ -143,7 +143,7 @@ const writeToFileTool = createLangChainTool({
       2. If target file is not specified, use the active note as the target file.
       3. If still failed to find the target file or the file path, ask the user to specify the target file.
       `,
-  schema: writeToFileSchema,
+  schema: writeFileSchema,
   func: async ({ path, content, confirmation = true }) => {
     // Sanitize path to prevent ENAMETOOLONG errors on filesystems with 255-byte limits.
     // Must happen here (not just in getFile) so show_preview also receives the sanitized path,
@@ -190,35 +190,22 @@ const writeToFileTool = createLangChainTool({
   },
 });
 
-const replaceInFileSchema = z.object({
+const editFileSchema = z.object({
   path: z
     .string()
     .describe(
       `(Required) The path of the file to modify (relative to the root of the vault and include the file extension).`
     ),
-  diff: z.string()
-    .describe(`(Required) One or more SEARCH/REPLACE blocks. Each block MUST follow this exact format with these exact markers:
-
-------- SEARCH
-[exact content to find, including all whitespace and indentation]
-=======
-[new content to replace with]
-+++++++ REPLACE
-
-WHEN TO USE THIS TOOL vs writeToFile:
-- Use replaceInFile for: small edits, fixing typos, updating specific sections, targeted changes
-- Use writeToFile for: creating new files, major rewrites, when you can't identify specific text to replace
-
-CRITICAL RULES:
-1. SEARCH content must match EXACTLY - every character, space, and line break
-2. Use the exact markers: "------- SEARCH", "=======", "+++++++ REPLACE"
-3. For multiple changes, include multiple SEARCH/REPLACE blocks in order
-4. Keep blocks concise - include only the lines being changed plus minimal context
-
-COMMON MISTAKES TO AVOID:
-- Wrong: Using different markers like "---- SEARCH" or "SEARCH -------"
-- Wrong: Including too many unchanged lines
-- Wrong: Not matching whitespace/indentation exactly`),
+  oldText: z.string().describe(
+    `(Required) The exact text to find and replace. Must match the file content exactly, including whitespace and indentation.
+Fuzzy matching handles minor differences like trailing spaces or smart quotes, but the overall structure must be correct.
+To make the match unique, include enough surrounding context lines (not just the changed line).`
+  ),
+  newText: z
+    .string()
+    .describe(
+      `(Required) The new text to replace the old text with. Can be empty string to delete the old text.`
+    ),
 });
 
 /**
@@ -230,43 +217,117 @@ function normalizeLineEndings(text: string): string {
 }
 
 /**
- * Performs line ending aware text replacement.
- * Normalizes line endings for matching but preserves the original line ending style.
+ * Normalizes text for fuzzy matching by applying Unicode normalization and
+ * stripping common LLM-introduced artifacts (smart quotes, special dashes,
+ * trailing whitespace, non-breaking spaces, etc.).
  */
-function replaceWithLineEndingAwareness(
-  content: string,
-  searchText: string,
-  replaceText: string
-): string {
-  // Detect the predominant line ending style in the original content
-  const crlfCount = (content.match(/\r\n/g) || []).length;
-  const lfCount = (content.match(/(?<!\r)\n/g) || []).length;
-  const usesCrlf = crlfCount > lfCount;
-
-  // Normalize for matching
-  const normalizedContent = normalizeLineEndings(content);
-  const normalizedSearchText = normalizeLineEndings(searchText);
-  const normalizedReplaceText = normalizeLineEndings(replaceText);
-
-  // Perform replacement on normalized content
-  const resultNormalized = normalizedContent.replaceAll(
-    normalizedSearchText,
-    normalizedReplaceText
+function normalizeForFuzzyMatch(text: string): string {
+  return (
+    text
+      .normalize("NFKC")
+      .split("\n")
+      .map((line) => line.trimEnd())
+      .join("\n")
+      // Smart single quotes → '
+      .replace(/[\u2018\u2019]/g, "'")
+      // Smart double quotes → "
+      .replace(/[\u201C\u201D]/g, '"')
+      // Unicode dashes/hyphens → -
+      .replace(/[\u2010-\u2015\u2212]/g, "-")
+      // Special spaces → regular space
+      .replace(/[\u00A0\u2002-\u200A\u202F\u205F\u3000]/g, " ")
   );
-
-  // Convert back to original line ending style if CRLF was predominant
-  if (usesCrlf) {
-    return resultNormalized.replace(/\n/g, "\r\n");
-  }
-
-  return resultNormalized;
 }
 
-const replaceInFileTool = createLangChainTool({
-  name: "replaceInFile",
-  description: `Request to replace sections of content in an existing file using SEARCH/REPLACE blocks that define exact changes to specific parts of the file. This tool should be used when you need to make targeted changes to specific parts of a LARGE file.`,
-  schema: replaceInFileSchema,
-  func: async ({ path, diff }: { path: string; diff: string }) => {
+/**
+ * Counts non-overlapping occurrences of searchText in content.
+ */
+function countOccurrences(content: string, searchText: string): number {
+  if (!searchText) return 0;
+  let count = 0;
+  let pos = 0;
+  while ((pos = content.indexOf(searchText, pos)) !== -1) {
+    count++;
+    pos += searchText.length;
+  }
+  return count;
+}
+
+/**
+ * Strips the UTF-8 BOM character from the start of a string if present.
+ */
+function stripBOM(content: string): { content: string; hasBOM: boolean } {
+  if (content.charCodeAt(0) === 0xfeff) {
+    return { content: content.slice(1), hasBOM: true };
+  }
+  return { content, hasBOM: false };
+}
+
+/**
+ * Result of searching for text to replace in file content.
+ * All string fields use LF line endings.
+ */
+interface TextSearchResult {
+  /** Whether the text was found at all */
+  found: boolean;
+  /** Number of occurrences found */
+  occurrences: number;
+  /** Working content string (may be fuzzy-normalized) to use for replacement */
+  workingContent: string;
+  /** Matched search string to replace */
+  workingSearch: string;
+  /** Replacement string */
+  workingReplace: string;
+  /** Whether fuzzy matching was used */
+  usedFuzzyMatch: boolean;
+}
+
+/**
+ * Finds oldText in content using a two-stage strategy:
+ * 1. Exact string match (after line-ending normalization)
+ * 2. Fuzzy match (NFKC + trailing whitespace + smart quotes/dashes/spaces)
+ *
+ * All inputs must already have line endings normalized to LF.
+ */
+function findTextForReplacement(
+  normalizedContent: string,
+  normalizedOldText: string,
+  normalizedNewText: string
+): TextSearchResult {
+  // Stage 1: exact match
+  const exactCount = countOccurrences(normalizedContent, normalizedOldText);
+  if (exactCount > 0) {
+    return {
+      found: true,
+      occurrences: exactCount,
+      workingContent: normalizedContent,
+      workingSearch: normalizedOldText,
+      workingReplace: normalizedNewText,
+      usedFuzzyMatch: false,
+    };
+  }
+
+  // Stage 2: fuzzy match
+  const fuzzyContent = normalizeForFuzzyMatch(normalizedContent);
+  const fuzzySearch = normalizeForFuzzyMatch(normalizedOldText);
+  const fuzzyReplace = normalizeForFuzzyMatch(normalizedNewText);
+  const fuzzyCount = countOccurrences(fuzzyContent, fuzzySearch);
+
+  return {
+    found: fuzzyCount > 0,
+    occurrences: fuzzyCount,
+    workingContent: fuzzyContent,
+    workingSearch: fuzzySearch,
+    workingReplace: fuzzyReplace,
+    usedFuzzyMatch: true,
+  };
+}
+
+const editFileTool = createLangChainTool({
+  name: "editFile",
+  description: `Request to make a targeted change to an existing file by specifying the exact text to find and its replacement. Use this tool for precise, surgical edits to specific parts of a file.`,
+  schema: editFileSchema,
+  func: async ({ path, oldText, newText }: { path: string; oldText: string; newText: string }) => {
     const file = app.vault.getAbstractFileByPath(path);
 
     if (!file || !(file instanceof TFile)) {
@@ -274,166 +335,70 @@ const replaceInFileTool = createLangChainTool({
     }
 
     try {
-      const originalContent = await app.vault.read(file);
-      let modifiedContent = originalContent;
+      const rawContent = await app.vault.read(file);
 
-      // Reject this tool if the original content is small
-      const MIN_FILE_SIZE_FOR_REPLACE = 3000;
-      if (originalContent.length < MIN_FILE_SIZE_FOR_REPLACE) {
-        return `File is too small to use this tool. Please use writeToFile instead.`;
+      // Strip BOM so it doesn't interfere with matching
+      const { content: contentNoBOM, hasBOM } = stripBOM(rawContent);
+
+      // Detect predominant line ending style before normalizing
+      const crlfCount = (contentNoBOM.match(/\r\n/g) || []).length;
+      const lfCount = (contentNoBOM.match(/(?<!\r)\n/g) || []).length;
+      const usesCrlf = crlfCount > lfCount;
+
+      // Normalize all line endings to LF for consistent matching
+      const normalizedContent = normalizeLineEndings(contentNoBOM);
+      const normalizedOldText = normalizeLineEndings(oldText);
+      const normalizedNewText = normalizeLineEndings(newText);
+
+      // Find the text using exact or fuzzy matching
+      const searchResult = findTextForReplacement(
+        normalizedContent,
+        normalizedOldText,
+        normalizedNewText
+      );
+
+      if (!searchResult.found) {
+        return `Could not find the specified text in ${path}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
       }
 
-      // Parse SEARCH/REPLACE blocks from diff
-      const searchReplaceBlocks = parseSearchReplaceBlocks(diff);
-
-      if (searchReplaceBlocks.length === 0) {
-        return `No valid SEARCH/REPLACE blocks found in diff. Please use the correct format with ------- SEARCH, =======, and +++++++ REPLACE markers. \n diff: ${diff}`;
+      if (searchResult.occurrences > 1) {
+        return `Found ${searchResult.occurrences} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
       }
 
-      let changesApplied = 0;
+      // Perform the single replacement using index-based concatenation (avoids $-special-char issues)
+      const matchIndex = searchResult.workingContent.indexOf(searchResult.workingSearch);
+      let modifiedContent =
+        searchResult.workingContent.substring(0, matchIndex) +
+        searchResult.workingReplace +
+        searchResult.workingContent.substring(matchIndex + searchResult.workingSearch.length);
 
-      // Apply each SEARCH/REPLACE block in order
-      for (const block of searchReplaceBlocks) {
-        let { searchText, replaceText } = block;
-
-        // Check if the search text exists in the current content (with line ending normalization)
-        const normalizedContent = normalizeLineEndings(modifiedContent);
-        const normalizedSearchText = normalizeLineEndings(searchText);
-
-        if (!normalizedContent.includes(normalizedSearchText)) {
-          // Handle corner case where the search text is at the end of the file
-          if (normalizedContent.includes(normalizedSearchText.trimEnd())) {
-            searchText = searchText.trimEnd();
-            replaceText = replaceText.trimEnd();
-          } else {
-            return `Search text not found in file ${path} : "${searchText}".`;
-          }
-        }
-
-        // Replace all occurrences using line ending aware replacement
-        const beforeReplace = modifiedContent;
-        modifiedContent = replaceWithLineEndingAwareness(modifiedContent, searchText, replaceText);
-
-        // Check if any replacements were made
-        if (modifiedContent !== beforeReplace) {
-          changesApplied++;
-        }
+      // Restore original line ending style
+      if (usesCrlf) {
+        modifiedContent = modifiedContent.replace(/\n/g, "\r\n");
       }
 
-      if (originalContent === modifiedContent) {
-        return `No changes made to ${path}. The search text was not found or replacement resulted in identical content. Call writeToFile instead`;
+      // Restore BOM if the original file had one
+      if (hasBOM) {
+        modifiedContent = "\uFEFF" + modifiedContent;
       }
 
-      // Check if auto-accept edits is enabled in settings
-      const settings = getSettings();
-      if (settings.autoAcceptEdits) {
-        // Bypass preview and apply changes directly
-        try {
-          await app.vault.modify(file, modifiedContent);
-          return {
-            result: "accepted" as ApplyViewResult,
-            blocksApplied: changesApplied,
-            message: `Applied ${changesApplied} SEARCH/REPLACE block(s) without preview. Do not call this tool again to modify this file in response to the current user request.`,
-          };
-        } catch (error: any) {
-          return {
-            result: "failed" as ApplyViewResult,
-            blocksApplied: changesApplied,
-            message: `Error applying changes without preview: ${error?.message || error}`,
-          };
-        }
+      // No-op detection: content is unchanged after replacement
+      if (rawContent === modifiedContent) {
+        return `No changes made to ${path}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`;
       }
 
-      // Show preview of changes
-      const result = await show_preview(path, modifiedContent);
-
-      // Simple JSON wrapper with essential info
+      // Write directly to disk and return the diff inline
+      await app.vault.modify(file, modifiedContent);
+      const diffText = createPatch(path, rawContent, modifiedContent);
       return {
-        result: result,
-        blocksApplied: changesApplied,
-        message: `Applied ${changesApplied} SEARCH/REPLACE block(s) (replacing all occurrences). Result: ${result}. Do not call this tool again to modify this file in response to the current user request.`,
+        result: "accepted" as ApplyViewResult,
+        path,
+        diff: diffText,
       };
     } catch (error) {
-      return `Error performing SEARCH/REPLACE on ${path}: ${error}. Please check the file path and diff format and try again.`;
+      return `Error modifying ${path}: ${error}. Please check the file path and try again.`;
     }
   },
 });
 
-/**
- * Helper function to parse SEARCH/REPLACE blocks from diff string.
- *
- * Supports flexible formatting with various line endings and optional newlines.
- *
- * @param diff - The diff string containing SEARCH/REPLACE blocks
- * @returns Array of parsed search/replace text pairs
- *
- * @example
- * // Standard format with newlines:
- * const diff1 = `------- SEARCH
- * old text here
- * =======
- * new text here
- * +++++++ REPLACE`;
- *
- * @example
- * // Flexible format without newlines:
- * const diff2 = `-------SEARCHold text=======new text+++++++REPLACE`;
- *
- * @example
- * // Windows line endings:
- * const diff3 = `------- SEARCH\r\nold text\r\n=======\r\nnew text\r\n+++++++ REPLACE`;
- *
- * @example
- * // Multiple blocks:
- * const diff4 = `------- SEARCH
- * first old text
- * =======
- * first new text
- * +++++++ REPLACE
- *
- * ------- SEARCH
- * second old text
- * =======
- * second new text
- * +++++++ REPLACE`;
- *
- * Regex patterns match:
- * - SEARCH_MARKER: /-{3,}\s*SEARCH\s*(?:\r?\n)?/ → "---SEARCH" to "----------- SEARCH\n"
- * - SEPARATOR: /(?:\r?\n)?={3,}\s*(?:\r?\n)?/ → "===" to "\n========\n"
- * - REPLACE_MARKER: /(?:\r?\n)?\+{3,}\s*REPLACE/ → "+++REPLACE" to "\n+++++++ REPLACE"
- */
-function parseSearchReplaceBlocks(
-  diff: string
-): Array<{ searchText: string; replaceText: string }> {
-  const blocks: Array<{ searchText: string; replaceText: string }> = [];
-
-  const SEARCH_MARKER = /-{3,}\s*SEARCH\s*(?:\r?\n)?/;
-  const SEPARATOR = /(?:\r?\n)?={3,}\s*(?:\r?\n)?/;
-  const REPLACE_MARKER = /(?:\r?\n)?\+{3,}\s*REPLACE/;
-
-  const blockRegex = new RegExp(
-    SEARCH_MARKER.source +
-      "([\\s\\S]*?)" +
-      SEPARATOR.source +
-      "([\\s\\S]*?)" +
-      REPLACE_MARKER.source,
-    "g"
-  );
-
-  let match;
-  while ((match = blockRegex.exec(diff)) !== null) {
-    const searchText = match[1].trim();
-    const replaceText = match[2].trim();
-    blocks.push({ searchText, replaceText });
-  }
-
-  return blocks;
-}
-
-export {
-  writeToFileTool,
-  replaceInFileTool,
-  parseSearchReplaceBlocks,
-  normalizeLineEndings,
-  replaceWithLineEndingAwareness,
-};
+export { writeFileTool, editFileTool, normalizeLineEndings, normalizeForFuzzyMatch };
