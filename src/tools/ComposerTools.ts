@@ -1,6 +1,6 @@
 import { TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
-import { createPatch, diffTrimmedLines } from "diff";
+import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
@@ -47,7 +47,11 @@ async function getFile(file_path: string): Promise<TFile> {
  * @param file_path - Vault-relative path to the file
  * @param content - Target content to compare against current file content
  */
-async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
+async function show_preview(
+  file_path: string,
+  content: string,
+  simple = false
+): Promise<ApplyViewResult> {
   const file = await getFile(file_path);
   const activeFile = app.workspace.getActiveFile();
 
@@ -73,6 +77,7 @@ async function show_preview(file_path: string, content: string): Promise<ApplyVi
       state: {
         changes: changes,
         path: file_path,
+        simple: simple,
         resultCallback: (result: ApplyViewResult) => {
           resolve(result);
         },
@@ -387,13 +392,20 @@ const editFileTool = createLangChainTool({
         return `No changes made to ${path}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`;
       }
 
-      // Write directly to disk and return the diff inline
-      await app.vault.modify(file, modifiedContent);
-      const diffText = createPatch(path, rawContent, modifiedContent);
+      const settings = getSettings();
+      if (settings.autoAcceptEdits) {
+        await app.vault.modify(file, modifiedContent);
+        return {
+          result: "accepted" as ApplyViewResult,
+          message:
+            "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
+        };
+      }
+
+      const result = await show_preview(path, modifiedContent, true);
       return {
-        result: "accepted" as ApplyViewResult,
-        path,
-        diff: diffText,
+        result: result,
+        message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
       };
     } catch (error) {
       return `Error modifying ${path}: ${error}. Please check the file path and try again.`;
