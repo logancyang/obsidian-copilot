@@ -397,13 +397,15 @@ export function registerCliTools(): void {
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianTasks:
+- ALWAYS use this tool when the user asks about tasks, todos, or checkboxes. Do NOT use localSearch for task queries.
 - Use to list and filter tasks across the vault.
 - todo=true: show only incomplete tasks. done=true: show only completed tasks.
 - status="x": filter by specific status character (e.g., "/" for in-progress, "x" for done, " " for open).
 - daily=true: show tasks from today's daily note only.
 - verbose=true: group tasks by file with line numbers.
 - total=true: return only the task count.
-- file= resolves like a wikilink (name only). path= uses exact vault-relative path.`,
+- file= resolves like a wikilink (name only). path= uses exact vault-relative path.
+- For time-based task queries (e.g. "tasks from last month"): use verbose=true to get tasks grouped by file, then filter results by file dates or daily note filenames to match the time range.`,
     },
   });
 
