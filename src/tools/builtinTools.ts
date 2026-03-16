@@ -335,21 +335,17 @@ export function registerCliTools(): void {
     metadata: {
       id: "obsidianDailyNote",
       displayName: "Daily Note",
-      description: "Create, read, append, or prepend to today's daily note, or get its path",
+      description: "Create or read today's daily note, or get its path",
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianDailyNote:
-- Use for all daily note operations: creating, reading content, appending text, prepending text, or getting the file path.
+- Use for daily note operations: creating, reading content, or getting the file path.
 - Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
 - daily — create today's daily note. Applies the user's configured daily note template automatically. Use this when the user asks to create or set up today's daily note.
 - daily:read — read today's daily note content.
-- daily:append — append text to the end. Requires content parameter (must be non-empty). Use inline=true to append without a newline.
-- daily:prepend — prepend text to the beginning. Requires content parameter (must be non-empty). Use inline=true to prepend without a newline.
 - daily:path — get the vault-relative file path (useful for follow-up readNote calls).
-- daily:append and daily:prepend also auto-create the daily note if it doesn't exist, but do NOT apply the template.
-- Use \\n for newlines and \\t for tabs in content strings.
 - For past or future daily notes (e.g. "yesterday's daily note"): NEVER ask the user for the date — use the time tools. Workflow: (1) call getCurrentTime to resolve the date, (2) call daily:path to discover the date format and folder, (3) call obsidianTemplates with command=templates to list available template names, then call template:read with the name that matches (e.g. "Daily Note Template"), (4) use writeToFile to create the note at the resolved path with the template content, replacing variables like {{date}} with the target date. If templates returns an error or no daily template is found, ask the user for their template path and use readNote to read it.
-- For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
+- To add content to a daily note, use writeToFile or replaceInFile.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
   });
@@ -438,7 +434,7 @@ export function registerCliTools(): void {
       customPromptInstructions: `For obsidianTemplates:
 - Use 'templates' to list all available templates when you need to find the right template for a task.
 - Use 'template:read' with a template name to get its content with variables resolved. Requires name parameter.
-- This is useful for creating daily notes from templates — read the template first, then use obsidianDailyNote's daily:prepend to populate the note.`,
+- This is useful for creating daily notes from templates — read the template first, then use writeToFile to populate the note.`,
     },
   });
 

@@ -8,12 +8,6 @@ describe("AgentReasoningState tool summaries", () => {
     expect(summarizeToolCall("obsidianDailyNote", { command: "daily:read", vault: "Work" })).toBe(
       `Reading today's daily note from "Work"`
     );
-    expect(summarizeToolCall("obsidianDailyNote", { command: "daily:append" })).toBe(
-      "Appending to daily note"
-    );
-    expect(
-      summarizeToolCall("obsidianDailyNote", { command: "daily:prepend", vault: "Work" })
-    ).toBe(`Prepending to daily note from "Work"`);
     expect(summarizeToolCall("obsidianDailyNote", { command: "daily:path" })).toBe(
       "Getting daily note path"
     );
@@ -36,11 +30,6 @@ describe("AgentReasoningState tool summaries", () => {
         command: "daily:read",
       })
     ).toBe("Loaded today's daily note");
-    expect(
-      summarizeToolResult("obsidianDailyNote", { success: true }, undefined, {
-        command: "daily:append",
-      })
-    ).toBe("Appended to daily note");
     expect(
       summarizeToolResult("obsidianDailyNote", { success: true }, undefined, {
         command: "daily:path",
@@ -66,9 +55,9 @@ describe("AgentReasoningState tool summaries", () => {
     expect(summarizeToolCall("obsidianProperties", { command: "properties" })).toBe(
       "Listing vault properties"
     );
-    expect(summarizeToolCall("obsidianProperties", { command: "property:read", name: "tags" })).toBe(
-      `Reading property "tags"`
-    );
+    expect(
+      summarizeToolCall("obsidianProperties", { command: "property:read", name: "tags" })
+    ).toBe(`Reading property "tags"`);
     expect(summarizeToolCall("obsidianTasks", { command: "tasks" })).toBe("Listing vault tasks");
     expect(summarizeToolCall("obsidianLinks", { command: "backlinks" })).toBe("Listing backlinks");
     expect(summarizeToolCall("obsidianLinks", { command: "orphans" })).toBe(
