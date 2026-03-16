@@ -152,7 +152,7 @@ export class ThinkBlockStreamer {
       this.hasOpenThinkBlock = false;
     }
     if (textContent) {
-      this.fullResponse += textContent;
+      this.fullResponse += stripSpecialTokens(textContent);
     }
     return hasThinkingContent;
   }
