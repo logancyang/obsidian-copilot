@@ -127,49 +127,6 @@ describe("obsidianDailyNoteTool", () => {
     expect(parsed.content).toBe("Daily/2026-03-03.md");
   });
 
-  test("daily:append passes content and inline params", async () => {
-    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily:append", ""));
-
-    await (obsidianDailyNoteTool as any).invoke({
-      command: "daily:append",
-      content: "- New task",
-      inline: false,
-    });
-
-    expect(mockedRunCommand).toHaveBeenCalledWith({
-      command: "daily:append",
-      vault: undefined,
-      params: { content: "- New task", inline: false },
-    });
-  });
-
-  test("daily:prepend passes content param", async () => {
-    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily:prepend", ""));
-
-    await (obsidianDailyNoteTool as any).invoke({
-      command: "daily:prepend",
-      content: "## Morning",
-    });
-
-    expect(mockedRunCommand).toHaveBeenCalledWith({
-      command: "daily:prepend",
-      vault: undefined,
-      params: { content: "## Morning" },
-    });
-  });
-
-  test("daily:append throws when content is missing", async () => {
-    await expect(
-      (obsidianDailyNoteTool as any).invoke({ command: "daily:append" })
-    ).rejects.toThrow("content is required for daily:append");
-  });
-
-  test("daily:prepend throws when content is missing", async () => {
-    await expect(
-      (obsidianDailyNoteTool as any).invoke({ command: "daily:prepend" })
-    ).rejects.toThrow("content is required for daily:prepend");
-  });
-
   test("throws on CLI failure with stderr message", async () => {
     mockedRunCommand.mockResolvedValue(
       buildFailedResult("daily:read", "EFAIL", "Daily note plugin not enabled", 1)

@@ -19,19 +19,9 @@ function buildCliParams(args: Record<string, unknown>): Record<string, string | 
 
 const dailyNoteSchema = z.object({
   command: z
-    .enum(["daily", "daily:read", "daily:append", "daily:prepend", "daily:path"])
+    .enum(["daily", "daily:read", "daily:path"])
     .describe(
-      "daily — create today's daily note (applies configured template). daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
-    ),
-  content: z
-    .string()
-    .optional()
-    .describe("Text to append or prepend. Required for daily:append and daily:prepend."),
-  inline: z
-    .boolean()
-    .optional()
-    .describe(
-      "For daily:append: append without a leading newline. For daily:prepend: prepend without a trailing newline."
+      "daily — create today's daily note (applies configured template). daily:read — read today's daily note content. daily:path — get the vault-relative file path."
     ),
   vault: z
     .string()
@@ -46,13 +36,10 @@ const dailyNoteSchema = z.object({
 export const obsidianDailyNoteTool = createLangChainTool({
   name: "obsidianDailyNote",
   description:
-    "Create, read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
+    "Create or read today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
   schema: dailyNoteSchema,
   func: async (args) => {
     const { command, vault } = args;
-    if ((command === "daily:append" || command === "daily:prepend") && !args.content) {
-      throw new Error(`content is required for ${command}`);
-    }
 
     const params = buildCliParams(args as Record<string, unknown>);
     const result = await runObsidianCliCommand({ command, vault, params });
@@ -60,7 +47,6 @@ export const obsidianDailyNoteTool = createLangChainTool({
     if (!result.ok) throwCliFailure(result);
 
     // Preserve raw stdout for read commands — trimming may alter meaningful Markdown whitespace.
-    // Non-read commands (append, prepend, path) return short status strings where trimming is safe.
     const content = command === "daily:read" ? result.stdout : result.stdout.trim();
 
     return {
