@@ -19,9 +19,9 @@ function buildCliParams(args: Record<string, unknown>): Record<string, string | 
 
 const dailyNoteSchema = z.object({
   command: z
-    .enum(["daily:read", "daily:append", "daily:prepend", "daily:path"])
+    .enum(["daily", "daily:read", "daily:append", "daily:prepend", "daily:path"])
     .describe(
-      "daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
+      "daily — create today's daily note (applies configured template). daily:read — read today's daily note content. daily:append — append text to the end. daily:prepend — prepend text to the beginning. daily:path — get the vault-relative file path."
     ),
   content: z
     .string()
@@ -46,7 +46,7 @@ const dailyNoteSchema = z.object({
 export const obsidianDailyNoteTool = createLangChainTool({
   name: "obsidianDailyNote",
   description:
-    "Read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
+    "Create, read, append, or prepend content to today's daily note, or get its vault path, via the official Obsidian CLI. Use readNote for reading specific notes by path. Use obsidianRandomRead for picking a random note.",
   schema: dailyNoteSchema,
   func: async (args) => {
     const { command, vault } = args;
@@ -295,21 +295,31 @@ export const obsidianTemplatesTool = createLangChainTool({
 
 const basesSchema = z.object({
   command: z
-    .enum(["bases", "base:views", "base:query"])
+    .enum(["bases", "base:views", "base:query", "base:create"])
     .describe(
-      "bases — list all Base files in the vault. base:views — list views defined in a Base file. base:query — query data from a Base view."
+      "bases — list all Base files in the vault. base:views — list views defined in a Base file. base:query — query data from a Base view. base:create — create a new item (row) in a Base."
     ),
   file: z
     .string()
     .optional()
-    .describe("Target Base file by name (without extension). Used for base:views and base:query."),
+    .describe(
+      "Target Base file by name (without extension). Used for base:views, base:query, and base:create."
+    ),
   path: z
     .string()
     .optional()
     .describe(
-      "Target Base file by vault-relative path. Alternative to file= for base:views and base:query."
+      "Target Base file by vault-relative path. Alternative to file= for base:views, base:query, and base:create."
     ),
-  view: z.string().optional().describe("View name to query. For base:query only."),
+  view: z
+    .string()
+    .optional()
+    .describe("View name. For base:query: view to query. For base:create: view to add item to."),
+  name: z.string().optional().describe("New file name for the created item. For base:create only."),
+  content: z
+    .string()
+    .optional()
+    .describe("Initial content for the created item. For base:create only."),
   format: z
     .string()
     .optional()
@@ -322,17 +332,26 @@ const basesSchema = z.object({
 });
 
 /**
- * Tool for querying Obsidian Base (database) files via the official Obsidian CLI.
- * Supports listing bases, listing views, and querying data from views.
+ * Commands that require a target Base file (file or path parameter).
+ */
+const BASE_COMMANDS_REQUIRING_FILE = ["base:views", "base:query", "base:create"] as const;
+
+/**
+ * Tool for interacting with Obsidian Base (database) files via the official Obsidian CLI.
+ * Supports listing bases, listing views, querying data from views, and creating new items.
  */
 export const obsidianBasesTool = createLangChainTool({
   name: "obsidianBases",
   description:
-    "Query Obsidian Base (database) files via the official Obsidian CLI: list all bases, list views in a base, or query data from a base view. Read-only.",
+    "Interact with Obsidian Base (database) files via the official Obsidian CLI: list all bases, list views in a base, query data from a base view, or create a new item in a base.",
   schema: basesSchema,
   func: async (args) => {
     const { command, vault } = args;
-    if ((command === "base:views" || command === "base:query") && !args.file && !args.path) {
+    if (
+      (BASE_COMMANDS_REQUIRING_FILE as readonly string[]).includes(command) &&
+      !args.file &&
+      !args.path
+    ) {
       throw new Error(`file or path is required for ${command}`);
     }
 

@@ -197,7 +197,6 @@ Examples:
 - Do not call writeToFile tool if no change needs to be made
 - Always create new notes in root folder or folders the user explicitly specifies
 - When creating a new note in a folder, you MUST use getFileTree to get the exact folder path first
-
 Examples:
 - Basic: path: "path/to/note.md", content: "FULL CONTENT OF THE NOTE"
 - Skip confirmation: path: "path/to/note.md", content: "FULL CONTENT", confirmation: false`,
@@ -336,19 +335,19 @@ export function registerCliTools(): void {
     metadata: {
       id: "obsidianDailyNote",
       displayName: "Daily Note",
-      description: "Read, append, or prepend to today's daily note, or get its path",
+      description: "Create, read, append, or prepend to today's daily note, or get its path",
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianDailyNote:
-- Use for all daily note operations: reading content, appending text, prepending text, or getting the file path.
+- Use for all daily note operations: creating, reading content, appending text, prepending text, or getting the file path.
 - Use readNote for reading specific notes by path. Use obsidianDailyNote only for today's daily note.
+- daily — create today's daily note. Applies the user's configured daily note template automatically. Use this when the user asks to create or set up today's daily note.
 - daily:read — read today's daily note content.
-- daily:append — append text to the end. Requires content parameter. Use inline=true to append without a newline.
-- daily:prepend — prepend text to the beginning. Requires content parameter. Use inline=true to prepend without a newline.
+- daily:append — append text to the end. Requires content parameter (must be non-empty). Use inline=true to append without a newline.
+- daily:prepend — prepend text to the beginning. Requires content parameter (must be non-empty). Use inline=true to prepend without a newline.
 - daily:path — get the vault-relative file path (useful for follow-up readNote calls).
-- daily:append and daily:prepend auto-create the daily note if it doesn't exist.
+- daily:append and daily:prepend also auto-create the daily note if it doesn't exist, but do NOT apply the template.
 - Use \\n for newlines and \\t for tabs in content strings.
-- Template workflow: use obsidianTemplates 'templates' to list templates, then 'template:read' to get resolved content (variables like {{date}} expanded), then daily:prepend to populate.
 - For arbitrary file writes beyond daily notes, use writeToFile or replaceInFile instead.
 - If the user names a specific vault, pass it using the vault parameter.`,
     },
@@ -445,24 +444,32 @@ export function registerCliTools(): void {
     metadata: {
       id: "obsidianBases",
       displayName: "Bases",
-      description: "List Base files, views, or query data from Obsidian Bases",
+      description: "List Base files, views, query data, or create new items in Obsidian Bases",
       category: "cli",
       requiresVault: true,
       customPromptInstructions: `For obsidianBases:
-- Use to explore structured data in Obsidian Base (.base) database files.
+- Use to explore and manage structured data in Obsidian Base (.base) database files.
 - bases: list all Base files in the vault. Use total=true for just the count.
 - base:views: list the views defined in a Base file. Requires file= or path=.
 - base:query: query data from a specific Base view. Requires file= or path=, optionally view= and format= (e.g., format=csv).
-- This is read-only. To create or modify .base files, use writeToFile with valid YAML.
+- base:create: create a new item (row) in a Base. Requires file= or path=. Optional: view= (target view), name= (file name for the item), content= (initial note content).
+  - The created item appears as a new note that matches the Base's filter criteria.
+  - Use base:query first to understand the Base's structure and existing data before creating items.
+  - If the Base filters by a specific tag or folder, ensure the new item will match those filters.
 
-Base file YAML structure (for creating with writeToFile):
-- filters: scope notes by tag, folder, property, or date. Operators: ==, !=, >, <, >=, <=, &&, ||. Example: 'tags includes "#project" && status != "done"'
-- formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Example: days_left: 'date(due) - today()'
-- properties: display config per property (label, width, hidden).
-- views: table (default), cards, list, or map. Each view can override filters and property display.
-- Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links), formula properties (formula.my_formula).
+Base file YAML reference (for creating new .base files with writeToFile):
+- filters: MUST be either a single string OR an object with and/or/not keys. NEVER use a bare YAML list.
+  - Single filter: filters: 'file.hasTag("book")'
+  - Multiple filters: filters: { and: ['file.hasTag("book")', 'status == "reading"'] }
+  - Negation: filters: { not: ['file.hasTag("archived")'] }
+  - Bare lists like "filters: - 'expr'" are INVALID and will cause parse errors.
+- formulas: computed properties. Functions: date(), now(), today(), if(cond, true, false), duration(). Duration fields: .days, .hours, .minutes. Example: days_left: 'if(due, (date(due) - today()).days, "")'
+- properties: display config per property (displayName, width, hidden).
+- views: table (default), cards, list, or map. Each view can have its own filters, order (property display list), groupBy, summaries.
+- Property types: note properties (from frontmatter), file properties (file.name, file.mtime, file.ctime, file.tags, file.links, file.backlinks), formula properties (formula.my_formula).
 - YAML quoting: single-quote formulas containing double quotes: 'if(done, "Yes", "No")'. Quote strings with special chars (:, {, }, [, ]).
-- Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].`,
+- Embed in notes with ![[MyBase.base]] or ![[MyBase.base#View Name]].
+- VALIDATION: After creating or editing a .base file, ALWAYS call obsidianBases with base:views to verify it parses correctly. If it returns an error, fix the YAML with writeToFile and re-validate. Do not stop until validation passes.`,
     },
   });
 }

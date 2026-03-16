@@ -155,5 +155,35 @@ describe("toolExecution", () => {
         success: false,
       });
     });
+
+    it("should execute writeToFile normally for any file path", async () => {
+      const writeToFile = createLangChainTool({
+        name: "writeToFile",
+        description: "Write to file",
+        schema: z.object({ path: z.string(), content: z.string() }),
+        func: async () => "written",
+      });
+      const obsidianBases = createLangChainTool({
+        name: "obsidianBases",
+        description: "Bases CLI",
+        schema: z.object({ command: z.string() }),
+        func: async () => "queried",
+      });
+
+      ToolRegistry.getInstance().register({
+        tool: writeToFile,
+        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
+      });
+
+      mockCallTool.mockResolvedValueOnce("File written");
+
+      const result = await executeSequentialToolCall(
+        { name: "writeToFile", args: { path: "Notes/todo.md", content: "# Todo" } },
+        [writeToFile, obsidianBases]
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockCallTool).toHaveBeenCalled();
+    });
   });
 });

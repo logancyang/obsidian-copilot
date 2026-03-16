@@ -78,6 +78,21 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("obsidianDailyNoteTool", () => {
+  test("daily creates today's daily note", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
+
+    const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily" });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_daily_note");
+    expect(parsed.command).toBe("daily");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "daily",
+      vault: undefined,
+      params: {},
+    });
+  });
+
   test("daily:read returns note content payload", async () => {
     mockedRunCommand.mockResolvedValue(
       buildSuccessResult("daily:read", "# 2026-03-03\n\nToday's tasks...")
@@ -579,6 +594,73 @@ describe("obsidianBasesTool", () => {
       vault: undefined,
       params: { file: "Contacts", total: true },
     });
+  });
+
+  test("base:create passes file, view, name, and content params", async () => {
+    mockedRunCommand.mockResolvedValue(
+      buildSuccessResult("base:create", "Created: Library/Dune Messiah.md")
+    );
+
+    const response = await (obsidianBasesTool as any).invoke({
+      command: "base:create",
+      file: "Library",
+      view: "To Read",
+      name: "Dune Messiah",
+      content: "A book by Frank Herbert",
+    });
+    const parsed = JSON.parse(response);
+
+    expect(parsed.type).toBe("obsidian_cli_bases");
+    expect(parsed.command).toBe("base:create");
+    expect(parsed.content).toBe("Created: Library/Dune Messiah.md");
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:create",
+      vault: undefined,
+      params: {
+        file: "Library",
+        view: "To Read",
+        name: "Dune Messiah",
+        content: "A book by Frank Herbert",
+      },
+    });
+  });
+
+  test("base:create with path and vault params", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("base:create", "Created: item.md"));
+
+    await (obsidianBasesTool as any).invoke({
+      command: "base:create",
+      path: "Databases/Library.base",
+      name: "New Item",
+      vault: "Work",
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:create",
+      vault: "Work",
+      params: { path: "Databases/Library.base", name: "New Item" },
+    });
+  });
+
+  test("base:create with minimal params (file only)", async () => {
+    mockedRunCommand.mockResolvedValue(buildSuccessResult("base:create", "Created: Untitled.md"));
+
+    await (obsidianBasesTool as any).invoke({
+      command: "base:create",
+      file: "Projects",
+    });
+
+    expect(mockedRunCommand).toHaveBeenCalledWith({
+      command: "base:create",
+      vault: undefined,
+      params: { file: "Projects" },
+    });
+  });
+
+  test("base:create throws when file and path are both missing", async () => {
+    await expect((obsidianBasesTool as any).invoke({ command: "base:create" })).rejects.toThrow(
+      "file or path is required for base:create"
+    );
   });
 
   test("base:views throws when file and path are both missing", async () => {
