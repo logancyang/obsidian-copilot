@@ -35,7 +35,7 @@ export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assist
   14. YouTube URLs: If the user provides YouTube URLs in their message, transcriptions will be automatically fetched and provided to you. You don't need to do anything special - just use the transcription content if available.
   15. For markdown lists, always use '- ' (hyphen followed by exactly one space) for bullet points, with no leading spaces before the hyphen. Never use '*' (asterisk) for bullets.`;
 
-export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in <writeToFile> tags.
+export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canvas JSON in <writeFile> tags.
 
   # Steps to find the the target notes
   1. Extract the target note information from user message and find out the note path from the context below.
@@ -46,14 +46,14 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
 
   Input: Add a new section to note A
   Output:
-  <writeToFile>
+  <writeFile>
   <path>path/to/file.md</path>
   <content>The FULL CONTENT of the note A with added section goes here</content>
-  </writeToFile>
+  </writeFile>
 
   Input: Create a new canvas with "Hello, world!"
   Output:
-  <writeToFile>
+  <writeFile>
   <path>path/to/file.canvas</path>
   <content>
   {
@@ -71,11 +71,11 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
     "edges": []
   }
   </content>
-  </writeToFile>
+  </writeFile>
 
   Input: Create a canvas with a file node and a group
   Output:
-  <writeToFile>
+  <writeFile>
   <path>path/to/file.canvas</path>
   <content>
   {
@@ -89,7 +89,7 @@ export const COMPOSER_OUTPUT_INSTRUCTIONS = `Return the new note content or canv
     ]
   }
   </content>
-  </writeToFile>
+  </writeFile>
 
   # Canvas JSON Format (JSON Canvas spec 1.0)
   Required node fields: id, type, x, y, width, height
@@ -979,8 +979,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     "webSearch",
     "pomodoro",
     "youtubeTranscription",
-    "writeToFile",
-    "replaceInFile",
+    "writeFile",
+    "editFile",
     "updateMemory",
   ],
   reasoningEffort: DEFAULT_MODEL_SETTING.REASONING_EFFORT,

@@ -422,12 +422,17 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         return processCollapsibleSection(content, "think", "Thought for a while", "Thinking...");
       };
 
-      const processWriteToFileSection = (content: string): string => {
-        // First, unwrap any XML codeblocks that contain writeToFile tags
+      const processWriteFileSection = (content: string): string => {
+        // Normalise legacy <writeToFile> tags from saved history to <writeFile>
+        // so they continue to render correctly after the tool rename.
+        const normalizeLegacyTags = (text: string): string =>
+          text.replace(/<(\/?)writeToFile>/g, "<$1writeFile>");
+
+        // First, unwrap any XML codeblocks that contain writeFile tags
         const unwrapXmlCodeblocks = (text: string): string => {
-          // Pattern to match XML codeblocks that contain writeToFile tags
+          // Pattern to match XML codeblocks that contain writeFile tags (or legacy writeToFile)
           const xmlCodeblockRegex =
-            /```(?:xml)?\s*([\s\S]*?<writeToFile>[\s\S]*?<\/writeToFile>[\s\S]*?)\s*```/g;
+            /```(?:xml)?\s*([\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?)\s*```/g;
 
           return text.replace(xmlCodeblockRegex, (_match, xmlContent) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
@@ -435,12 +440,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           });
         };
 
-        // During streaming, also handle unclosed writeToFile tags in XML codeblocks
+        // During streaming, also handle unclosed writeFile tags in XML codeblocks
         const unwrapStreamingXmlCodeblocks = (text: string): string => {
           if (!isStreaming) return text;
 
-          // Pattern to match XML codeblocks that contain unclosed writeToFile tags
-          const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeToFile>[\s\S]*?)$/g;
+          // Pattern to match XML codeblocks that contain unclosed writeFile tags
+          const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeFile>[\s\S]*?)$/g;
 
           return text.replace(streamingXmlCodeblockRegex, (_match, xmlContent) => {
             // Extract the content and return it without the codeblock wrapper
@@ -448,14 +453,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           });
         };
 
-        // Unwrap XML codeblocks first
-        let processedContent = unwrapXmlCodeblocks(content);
+        // Normalise legacy tags, then unwrap XML codeblocks
+        let processedContent = normalizeLegacyTags(content);
+        processedContent = unwrapXmlCodeblocks(processedContent);
         processedContent = unwrapStreamingXmlCodeblocks(processedContent);
 
-        // Then process the writeToFile sections normally
+        // Then process the writeFile sections normally
         return processCollapsibleSection(
           processedContent,
-          "writeToFile",
+          "writeFile",
           "Generated new content",
           "Generating changes..."
         );
@@ -494,12 +500,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       // Process think sections (no-op if none); do not depend on current model selection
       const thinkSectionProcessed = processThinkSection(noteImageProcessed);
 
-      // Process writeToFile sections
-      const writeToFileSectionProcessed = processWriteToFileSection(thinkSectionProcessed);
+      // Process writeFile sections
+      const writeFileSectionProcessed = processWriteFileSection(thinkSectionProcessed);
 
       // Transform markdown sources section into HTML structure
       const sourcesSectionProcessed = processInlineCitations(
-        writeToFileSectionProcessed,
+        writeFileSectionProcessed,
         settings.enableInlineCitations
       );
 

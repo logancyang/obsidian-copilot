@@ -195,6 +195,8 @@ export interface ApplyViewState {
   changes: Change[];
   path: string;
   resultCallback?: (result: ApplyViewResult) => void;
+  /** When true, hides per-block accept/reject buttons (used by editFile) */
+  simple?: boolean;
 }
 
 // Extended Change interface to track user acceptance
@@ -359,6 +361,7 @@ const SplitBlock = memo(({ block }: SplitBlockProps) => {
 SplitBlock.displayName = "SplitBlock";
 
 const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
+  const simple = state.simple ?? false;
   const [diff, setDiff] = useState<ExtendedChange[]>(() => {
     return state.changes.map((change) => ({
       ...change,
@@ -640,7 +643,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               )}
 
               {/* Only show accept/reject buttons for blocks with changes that are undecided */}
-              {hasChanges && blockStatus === "undecided" && (
+              {!simple && hasChanges && blockStatus === "undecided" && (
                 <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
                   <div className="tw-flex tw-items-center tw-gap-2">
                     <Button variant="destructive" size="sm" onClick={() => rejectBlock(blockIndex)}>
@@ -656,52 +659,54 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
               )}
 
               {/* Show status for decided blocks with revert option */}
-              {hasChanges && (blockStatus === "accepted" || blockStatus === "rejected") && (
-                <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
-                  <div className="tw-flex tw-items-center tw-gap-2">
-                    <div className="tw-mr-2 tw-text-sm tw-font-medium">
-                      {blockStatus === "accepted" ? (
-                        <div className="tw-flex tw-items-center tw-gap-1 tw-text-success">
-                          <Check className="tw-size-4" />
-                          <div>Accepted</div>
-                        </div>
-                      ) : (
-                        <div className="tw-flex tw-items-center tw-gap-1 tw-text-error">
-                          <XIcon className="tw-size-4" />
-                          <div>Rejected</div>
-                        </div>
-                      )}
-                    </div>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() => {
-                        // Reset the block to undecided state
-                        setDiff((prevDiff) => {
-                          const newDiff = [...prevDiff];
-                          const block = changeBlocks?.[blockIndex];
+              {!simple &&
+                hasChanges &&
+                (blockStatus === "accepted" || blockStatus === "rejected") && (
+                  <div className="tw-flex tw-items-center tw-justify-end tw-border-[0px] tw-border-t tw-border-solid tw-border-border tw-p-2">
+                    <div className="tw-flex tw-items-center tw-gap-2">
+                      <div className="tw-mr-2 tw-text-sm tw-font-medium">
+                        {blockStatus === "accepted" ? (
+                          <div className="tw-flex tw-items-center tw-gap-1 tw-text-success">
+                            <Check className="tw-size-4" />
+                            <div>Accepted</div>
+                          </div>
+                        ) : (
+                          <div className="tw-flex tw-items-center tw-gap-1 tw-text-error">
+                            <XIcon className="tw-size-4" />
+                            <div>Rejected</div>
+                          </div>
+                        )}
+                      </div>
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        onClick={() => {
+                          // Reset the block to undecided state
+                          setDiff((prevDiff) => {
+                            const newDiff = [...prevDiff];
+                            const block = changeBlocks?.[blockIndex];
 
-                          if (!block) return newDiff;
+                            if (!block) return newDiff;
 
-                          block.forEach((blockChange) => {
-                            const index = newDiff.findIndex((change) => change === blockChange);
-                            if (index !== -1) {
-                              newDiff[index] = {
-                                ...newDiff[index],
-                                accepted: null,
-                              };
-                            }
+                            block.forEach((blockChange) => {
+                              const index = newDiff.findIndex((change) => change === blockChange);
+                              if (index !== -1) {
+                                newDiff[index] = {
+                                  ...newDiff[index],
+                                  accepted: null,
+                                };
+                              }
+                            });
+
+                            return newDiff;
                           });
-
-                          return newDiff;
-                        });
-                      }}
-                    >
-                      Revert
-                    </Button>
+                        }}
+                      >
+                        Revert
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
             </div>
           );
         })}

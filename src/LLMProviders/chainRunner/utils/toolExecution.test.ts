@@ -156,9 +156,9 @@ describe("toolExecution", () => {
       });
     });
 
-    it("should execute writeToFile normally for any file path", async () => {
-      const writeToFile = createLangChainTool({
-        name: "writeToFile",
+    it("should execute writeFile normally for any file path", async () => {
+      const writeFile = createLangChainTool({
+        name: "writeFile",
         description: "Write to file",
         schema: z.object({ path: z.string(), content: z.string() }),
         func: async () => "written",
@@ -171,15 +171,15 @@ describe("toolExecution", () => {
       });
 
       ToolRegistry.getInstance().register({
-        tool: writeToFile,
-        metadata: { id: "writeToFile", displayName: "Write", description: "", category: "file" },
+        tool: writeFile,
+        metadata: { id: "writeFile", displayName: "Write", description: "", category: "file" },
       });
 
       mockCallTool.mockResolvedValueOnce("File written");
 
       const result = await executeSequentialToolCall(
-        { name: "writeToFile", args: { path: "Notes/todo.md", content: "# Todo" } },
-        [writeToFile, obsidianBases]
+        { name: "writeFile", args: { path: "Notes/todo.md", content: "# Todo" } },
+        [writeFile, obsidianBases]
       );
 
       expect(result.success).toBe(true);

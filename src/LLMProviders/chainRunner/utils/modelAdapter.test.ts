@@ -21,13 +21,13 @@ describe("ModelAdapter", () => {
       const toolMetadata: ToolMetadata[] = [
         createToolMetadata("localSearch", "LocalSearch specific instructions"),
         createToolMetadata("webSearch", "WebSearch specific instructions"),
-        createToolMetadata("writeToFile", "WriteToFile specific instructions"),
+        createToolMetadata("writeFile", "WriteToFile specific instructions"),
       ];
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(
         basePrompt,
         toolDescriptions,
-        ["localSearch", "webSearch", "writeToFile"],
+        ["localSearch", "webSearch", "writeFile"],
         toolMetadata
       );
 
@@ -44,7 +44,7 @@ describe("ModelAdapter", () => {
       const toolMetadata: ToolMetadata[] = [
         createToolMetadata("localSearch", "LocalSearch specific instructions"),
         createToolMetadata("webSearch", "WebSearch specific instructions"),
-        createToolMetadata("writeToFile", "WriteToFile specific instructions"),
+        createToolMetadata("writeFile", "WriteToFile specific instructions"),
       ];
 
       // Only pass localSearch as enabled
@@ -129,15 +129,15 @@ describe("ModelAdapter", () => {
       const enhancedPrompt = adapter.enhanceSystemPrompt(
         basePrompt,
         toolDescriptions,
-        ["replaceInFile", "writeToFile"],
+        ["editFile", "writeFile"],
         []
       );
 
       // Check for composer-specific GPT instructions (simplified without XML examples)
       expect(enhancedPrompt).toContain("FILE EDITING WITH COMPOSER TOOLS");
-      expect(enhancedPrompt).toContain("replaceInFile");
-      expect(enhancedPrompt).toContain("writeToFile");
-      expect(enhancedPrompt).toContain("SEARCH/REPLACE format");
+      expect(enhancedPrompt).toContain("editFile");
+      expect(enhancedPrompt).toContain("writeFile");
+      expect(enhancedPrompt).toContain("oldText");
     });
 
     it("should rebuild enhanceSystemPrompt output from section metadata", () => {
@@ -164,8 +164,8 @@ describe("ModelAdapter", () => {
       const enhanced = adapter.enhanceUserMessage(editMessage, true);
 
       expect(enhanced).toContain("GPT REMINDER");
-      expect(enhanced).toContain("replaceInFile");
-      expect(enhanced).toContain("SEARCH/REPLACE blocks");
+      expect(enhanced).toContain("editFile");
+      expect(enhanced).toContain("oldText/newText parameters");
     });
   });
 });

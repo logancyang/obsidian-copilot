@@ -252,8 +252,8 @@ export function summarizeToolResult(
       return "Indexed vault";
     case "updateMemory":
       return "Updated memory";
-    case "writeToFile":
-    case "replaceInFile": {
+    case "writeFile":
+    case "editFile": {
       // Parse the result to check if accepted/rejected
       const filePath = args?.path as string | undefined;
       const fileName = filePath ? filePath.split("/").pop() || filePath : "file";
@@ -269,7 +269,7 @@ export function summarizeToolResult(
       // TODO(@wenzhengjiang): Handle no-op cases (e.g., "File is too small", "Search text not found")
       // Requires ComposerTools to return structured results instead of plain strings.
       // See docs/TODO-composer-tool-redesign.md
-      return toolName === "writeToFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
+      return toolName === "writeFile" ? `Wrote to "${fileName}"` : `Edited "${fileName}"`;
     }
     default:
       return "Done";
@@ -422,7 +422,7 @@ export function summarizeToolCall(
       return "Indexing vault";
     case "updateMemory":
       return "Saving to memory";
-    case "writeToFile": {
+    case "writeFile": {
       const filePath = args?.path as string | undefined;
       if (filePath) {
         const fileName = filePath.split("/").pop() || filePath;
@@ -430,7 +430,7 @@ export function summarizeToolCall(
       }
       return "Writing to file";
     }
-    case "replaceInFile": {
+    case "editFile": {
       const filePath = args?.path as string | undefined;
       if (filePath) {
         const fileName = filePath.split("/").pop() || filePath;
