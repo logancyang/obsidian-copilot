@@ -233,6 +233,35 @@ export class ChatPersistenceManager {
         content = await this.app.vault.adapter.read(file.path);
       }
       const messages = this.parseChatContent(content);
+
+      // Reason: parseChatContent reconstructs epoch from body timestamps which only
+      // have second precision (YYYY/MM/DD HH:mm:ss), losing the original milliseconds.
+      // The frontmatter epoch is the authoritative conversation identity used by
+      // findFileByEpoch/saveChat. Restore it here so a load→save cycle correctly
+      // matches the original file instead of creating a duplicate.
+      if (messages.length > 0) {
+        const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        // Reason: also try adapter-based read for hidden directory files
+        const fmEpoch = frontmatter?.epoch
+          ?? (await readFrontmatterViaAdapter(this.app, file.path).catch(() => null))?.epoch;
+        if (fmEpoch != null) {
+          const epoch = Number(fmEpoch);
+          if (!Number.isNaN(epoch)) {
+            // Reason: ensure timestamp object exists even when parseChatContent
+            // returned null (e.g. "Unknown time" format in older notes).
+            if (messages[0].timestamp) {
+              messages[0].timestamp.epoch = epoch;
+            } else {
+              messages[0].timestamp = {
+                epoch,
+                display: "Unknown time",
+                fileName: "",
+              };
+            }
+          }
+        }
+      }
+
       logInfo(`[ChatPersistenceManager] Loaded ${messages.length} messages from ${file.path}`);
       return messages;
     } catch (error) {
