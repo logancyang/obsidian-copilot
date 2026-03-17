@@ -704,9 +704,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       }
     }
 
-    // First autosave the current chat if the setting is enabled
+    // First autosave the current chat if the setting is enabled.
+    // Reason: catch here because handleNewChat is called from an onClick handler
+    // where a rejected promise would become an unhandled rejection.
     if (settings.autosaveChat) {
-      await handleSaveAsNote();
+      await handleSaveAsNote().catch(() => {});
     }
 
     // Clear messages through the new architecture
@@ -896,7 +898,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           <>
             <ChatControls
               onNewChat={handleNewChat}
-              onSaveAsNote={() => handleSaveAsNote()}
+              onSaveAsNote={() => handleSaveAsNote().catch(() => {})}
               onLoadHistory={handleLoadChatHistory}
               onModeChange={(newMode) => {
                 setPreviousMode(selectedChain);

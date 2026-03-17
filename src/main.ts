@@ -289,7 +289,14 @@ export default class CopilotPlugin extends Plugin {
     if (getSettings().autosaveChat) {
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
       if (chatView) {
-        await chatView.saveChat(projectOverride);
+        if (projectOverride !== undefined) {
+          // Reason: project-switch path needs to detect save failure to abort the switch.
+          await chatView.saveChat(projectOverride);
+        } else {
+          // Reason: non-switch callers (loadChatHistory, newChat, settings reload) should
+          // not be blocked by a transient save error. Error is already logged+noticed inside.
+          await chatView.saveChat().catch(() => {});
+        }
       }
     }
   }
