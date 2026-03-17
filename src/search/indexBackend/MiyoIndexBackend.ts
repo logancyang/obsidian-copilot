@@ -275,6 +275,15 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   }
 
   /**
+   * Miyo is a remote HTTP backend with no local index.
+   *
+   * @returns True because Miyo sends data to a remote service.
+   */
+  public isRemoteBackend(): boolean {
+    return true;
+  }
+
+  /**
    * Resolve the Miyo base URL using settings and discovery.
    *
    * @returns Base URL string.

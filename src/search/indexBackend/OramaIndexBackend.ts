@@ -186,6 +186,15 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   }
 
   /**
+   * Orama uses a local index, so it is not a remote backend.
+   *
+   * @returns False because Orama stores data locally.
+   */
+  public isRemoteBackend(): boolean {
+    return false;
+  }
+
+  /**
    * Return the underlying Orama database instance when available.
    */
   public getDb(): Orama<any> | undefined {
