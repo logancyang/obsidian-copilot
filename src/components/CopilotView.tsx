@@ -1,3 +1,4 @@
+import { ProjectConfig } from "@/aiParams";
 import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
@@ -17,7 +18,8 @@ export default class CopilotView extends ItemView {
 
   private fileParserManager: FileParserManager;
   private root: Root | null = null;
-  private handleSaveAsNote: (() => Promise<void>) | null = null;
+  private handleSaveAsNote: ((projectOverride?: ProjectConfig | null) => Promise<void>) | null =
+    null;
   private keyboardObserver: MutationObserver | null = null;
   private drawerHideObserver: MutationObserver | null = null;
   private layout: ChatViewLayout | null = null;
@@ -55,7 +57,9 @@ export default class CopilotView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.root = createRoot(this.containerEl.children[1]);
-    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
+    const handleSaveAsNote = (
+      saveFunction: (projectOverride?: ProjectConfig | null) => Promise<void>
+    ) => {
       this.handleSaveAsNote = saveFunction;
     };
     const updateUserMessageHistory = (newMessage: string) => {
@@ -162,7 +166,9 @@ export default class CopilotView extends ItemView {
   }
 
   private renderView(
-    handleSaveAsNote: (saveFunction: () => Promise<void>) => void,
+    handleSaveAsNote: (
+      saveFunction: (projectOverride?: ProjectConfig | null) => Promise<void>
+    ) => void,
     updateUserMessageHistory: (newMessage: string) => void
   ): void {
     if (!this.root) return;
@@ -185,16 +191,18 @@ export default class CopilotView extends ItemView {
     );
   }
 
-  async saveChat(): Promise<void> {
+  async saveChat(projectOverride?: ProjectConfig | null): Promise<void> {
     if (this.handleSaveAsNote) {
-      await this.handleSaveAsNote();
+      await this.handleSaveAsNote(projectOverride);
     }
   }
 
   updateView(): void {
     // Note: The new architecture handles message loading through ChatManager
     // The messages will be loaded when the Chat component initializes
-    const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
+    const handleSaveAsNote = (
+      saveFunction: (projectOverride?: ProjectConfig | null) => Promise<void>
+    ) => {
       this.handleSaveAsNote = saveFunction;
     };
     const updateUserMessageHistory = (newMessage: string) => {

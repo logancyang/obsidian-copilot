@@ -1,3 +1,4 @@
+import { ProjectConfig } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
 import { logInfo } from "@/logger";
 import { ChatManager } from "@/core/ChatManager";
@@ -249,8 +250,8 @@ export class ChatUIState {
   /**
    * Save current chat history
    */
-  async saveChat(modelKey: string): Promise<void> {
-    await this.chatManager.saveChat(modelKey);
+  async saveChat(modelKey: string, projectOverride?: ProjectConfig | null): Promise<void> {
+    await this.chatManager.saveChat(modelKey, projectOverride);
   }
 
   /**

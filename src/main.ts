@@ -3,6 +3,7 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import {
   CustomModel,
   getCurrentProject,
+  ProjectConfig,
   setSelectedTextContexts,
   getSelectedTextContexts,
 } from "@/aiParams";
@@ -284,11 +285,11 @@ export default class CopilotPlugin extends Plugin {
     this.userMessageHistory = [...this.userMessageHistory, newMessage];
   }
 
-  async autosaveCurrentChat() {
+  async autosaveCurrentChat(projectOverride?: ProjectConfig | null) {
     if (getSettings().autosaveChat) {
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
       if (chatView) {
-        await chatView.saveChat();
+        await chatView.saveChat(projectOverride);
       }
     }
   }

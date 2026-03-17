@@ -1,4 +1,4 @@
-import { ProjectConfig, setCurrentProject } from "@/aiParams";
+import { ProjectConfig } from "@/aiParams";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
@@ -248,45 +248,69 @@ export const ProjectList = memo(
       modal.open();
     };
 
-    const handleDeleteProject = (project: ProjectConfig) => {
-      const currentProjects = projects || [];
-      const newProjectList = currentProjects.filter((p) => p.name !== project.name);
-
-      // If the deleted project is currently selected, close it
-      if (selectedProject?.name === project.name) {
-        enableOrDisableProject(false);
+    const handleDeleteProject = async (project: ProjectConfig) => {
+      // Reason: close the project first so switchProject(null) saves the chat
+      // before the project is removed from settings. If close fails, abort
+      // the delete to avoid removing a project whose chat was not saved.
+      if (selectedProject?.id === project.id) {
+        const closed = await enableOrDisableProject(false);
+        if (!closed) return;
       }
+
+      const currentProjects = projects || [];
+      const newProjectList = currentProjects.filter((p) => p.id !== project.id);
 
       // Update the project list in settings
       updateSetting("projectList", newProjectList);
       new Notice(`Project "${project.name}" deleted successfully`);
     };
 
-    const enableOrDisableProject = (enable: boolean, project?: ProjectConfig) => {
+    /** @returns true if the operation succeeded, false on failure */
+    const enableOrDisableProject = async (
+      enable: boolean,
+      project?: ProjectConfig
+    ): Promise<boolean> => {
       if (!enable) {
+        try {
+          // Reason: await switchProject first so UI only updates on success.
+          await plugin?.projectManager?.switchProject(null);
+        } catch (error) {
+          logError("[ProjectList] Failed to close project:", error);
+          new Notice("Failed to close project. Please try again.");
+          return false;
+        }
         setSelectedProject(null);
         setShowChatInput(false);
         setIsOpen(true);
         showChatUI(false);
-        setCurrentProject(null);
-        return;
+        return true;
       } else {
         if (!project) {
           logError("Must be exist one project.");
-          return;
+          return false;
         }
         setSelectedProject(project);
         setShowChatInput(true);
         setIsOpen(false);
+        return true;
       }
     };
 
-    const handleLoadContext = (p: ProjectConfig) => {
+    const handleLoadContext = async (p: ProjectConfig) => {
+      try {
+        // Reason: await switchProject first so UI only updates on success.
+        // switchProject saves old chat before updating atom.
+        await plugin?.projectManager?.switchProject(p);
+      } catch (error) {
+        logError("[ProjectList] Failed to switch project:", error);
+        new Notice("Failed to switch project. Please try again.");
+        return;
+      }
+
       setSelectedProject(p);
       setShowChatInput(true);
       setIsOpen(false);
       showChatUI(true);
-      setCurrentProject(p);
 
       setTimeout(() => {
         chatInput.focusInput();
@@ -348,9 +372,9 @@ export const ProjectList = memo(
                       <Button
                         variant="ghost2"
                         size="icon"
-                        onClick={() => {
-                          enableOrDisableProject(false);
-                          onProjectClose();
+                        onClick={async () => {
+                          const closed = await enableOrDisableProject(false);
+                          if (closed) onProjectClose();
                         }}
                         aria-label="Close Current Project"
                       >
