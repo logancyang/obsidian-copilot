@@ -377,17 +377,26 @@ function mapFuzzyIndexToNormal(
   return normalPos;
 }
 
+/** Structured result from applyEditToContent — avoids sentinel string collisions. */
+export type ApplyEditResult =
+  | { ok: true; content: string }
+  | { ok: false; reason: "NOT_FOUND" }
+  | { ok: false; reason: "AMBIGUOUS"; occurrences: number };
+
 /**
  * Pure, I/O-free core of the editFile operation. Applies a single targeted
- * text replacement to `content` and returns the modified string, or an error
- * message string if the replacement cannot be performed.
+ * text replacement to `content` and returns a structured result.
  *
  * Handles BOM preservation, CRLF ↔ LF round-tripping, exact matching, and
  * fuzzy matching (smart quotes, dashes, trailing whitespace, NBSP, NFKC).
  *
  * Exported for unit testing.
  */
-export function applyEditToContent(content: string, oldText: string, newText: string): string {
+export function applyEditToContent(
+  content: string,
+  oldText: string,
+  newText: string
+): ApplyEditResult {
   const { content: contentNoBOM, hasBOM } = stripBOM(content);
 
   const crlfCount = (contentNoBOM.match(/\r\n/g) || []).length;
@@ -405,10 +414,10 @@ export function applyEditToContent(content: string, oldText: string, newText: st
   );
 
   if (!searchResult.found) {
-    return `NOT_FOUND`;
+    return { ok: false, reason: "NOT_FOUND" };
   }
   if (searchResult.occurrences > 1) {
-    return `AMBIGUOUS:${searchResult.occurrences}`;
+    return { ok: false, reason: "AMBIGUOUS", occurrences: searchResult.occurrences };
   }
 
   let matchStart: number;
@@ -441,7 +450,7 @@ export function applyEditToContent(content: string, oldText: string, newText: st
     modifiedContent = "\uFEFF" + modifiedContent;
   }
 
-  return modifiedContent;
+  return { ok: true, content: modifiedContent };
 }
 
 const editFileTool = createLangChainTool({
@@ -457,15 +466,16 @@ const editFileTool = createLangChainTool({
 
     try {
       const rawContent = await app.vault.read(file);
-      const modifiedContent = applyEditToContent(rawContent, oldText, newText);
+      const editResult = applyEditToContent(rawContent, oldText, newText);
 
-      if (modifiedContent === "NOT_FOUND") {
-        return `Could not find the specified text in ${path}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
+      if (!editResult.ok) {
+        if (editResult.reason === "NOT_FOUND") {
+          return `Could not find the specified text in ${path}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
+        }
+        return `Found ${editResult.occurrences} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
       }
-      if (modifiedContent.startsWith("AMBIGUOUS:")) {
-        const count = modifiedContent.split(":")[1];
-        return `Found ${count} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
-      }
+
+      const modifiedContent = editResult.content;
 
       // No-op detection: content is unchanged after replacement
       if (rawContent === modifiedContent) {

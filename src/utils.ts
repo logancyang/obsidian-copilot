@@ -989,14 +989,17 @@ export function cleanMessageForCopy(message: string): string {
   // First use the existing removeThinkTags function
   cleanedMessage = removeThinkTags(cleanedMessage);
 
-  // Remove writeFile blocks wrapped in XML codeblocks
+  // Remove writeFile blocks wrapped in XML codeblocks (also handles legacy writeToFile tag)
   cleanedMessage = cleanedMessage.replace(
-    /```xml\s*[\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?```/g,
+    /```xml\s*[\s\S]*?<write(?:File|ToFile)>[\s\S]*?<\/write(?:File|ToFile)>[\s\S]*?```/g,
     ""
   );
 
-  // Remove standalone writeFile blocks
-  cleanedMessage = cleanedMessage.replace(/<writeFile>[\s\S]*?<\/writeFile>/g, "");
+  // Remove standalone writeFile/writeToFile blocks
+  cleanedMessage = cleanedMessage.replace(
+    /<write(?:File|ToFile)>[\s\S]*?<\/write(?:File|ToFile)>/g,
+    ""
+  );
 
   // Remove tool call markers
   // Format: <!--TOOL_CALL_START:id:toolName:displayName:emoji:confirmationMessage:isExecuting-->content<!--TOOL_CALL_END:id:result-->

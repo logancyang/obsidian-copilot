@@ -85,30 +85,32 @@ describe("applyEditToContent", () => {
   describe("exact match", () => {
     test("replaces first occurrence when text is unique", () => {
       const content = "Hello world\nGoodbye world";
-      expect(applyEditToContent(content, "Hello world", "Hi world")).toBe(
-        "Hi world\nGoodbye world"
-      );
+      const result = applyEditToContent(content, "Hello world", "Hi world");
+      expect(result).toEqual({ ok: true, content: "Hi world\nGoodbye world" });
     });
 
     test("replaces text in the middle of a line", () => {
       const content = "## Attendees\n- Alice\n- Bob";
-      expect(applyEditToContent(content, "- Alice\n- Bob", "- Alice\n- Bob\n- Charlie")).toBe(
-        "## Attendees\n- Alice\n- Bob\n- Charlie"
-      );
+      const result = applyEditToContent(content, "- Alice\n- Bob", "- Alice\n- Bob\n- Charlie");
+      expect(result).toEqual({ ok: true, content: "## Attendees\n- Alice\n- Bob\n- Charlie" });
     });
 
     test("returns NOT_FOUND when oldText is absent", () => {
-      expect(applyEditToContent("Hello world", "Goodbye", "Hi")).toBe("NOT_FOUND");
+      expect(applyEditToContent("Hello world", "Goodbye", "Hi")).toEqual({
+        ok: false,
+        reason: "NOT_FOUND",
+      });
     });
 
     test("returns AMBIGUOUS when oldText matches more than once", () => {
       const content = "foo\nfoo\nbar";
       const result = applyEditToContent(content, "foo", "baz");
-      expect(result).toMatch(/^AMBIGUOUS:/);
+      expect(result).toEqual({ ok: false, reason: "AMBIGUOUS", occurrences: 2 });
     });
 
     test("supports empty newText (deletion)", () => {
-      expect(applyEditToContent("Hello world", "Hello ", "")).toBe("world");
+      const result = applyEditToContent("Hello world", "Hello ", "");
+      expect(result).toEqual({ ok: true, content: "world" });
     });
   });
 
@@ -116,25 +118,25 @@ describe("applyEditToContent", () => {
     test("matches smart single quotes in file when oldText has straight quotes", () => {
       const content = "it\u2019s a note"; // file has right single quote
       const result = applyEditToContent(content, "it's a note", "updated");
-      expect(result).toBe("updated");
+      expect(result).toEqual({ ok: true, content: "updated" });
     });
 
     test("matches smart double quotes in file when oldText has straight quotes", () => {
       const content = "\u201CHello\u201D world"; // file has curly double quotes
       const result = applyEditToContent(content, '"Hello" world', "updated");
-      expect(result).toBe("updated");
+      expect(result).toEqual({ ok: true, content: "updated" });
     });
 
     test("matches unicode en-dash in file when oldText has hyphen", () => {
       const content = "2020\u20132021 report";
       const result = applyEditToContent(content, "2020-2021 report", "updated");
-      expect(result).toBe("updated");
+      expect(result).toEqual({ ok: true, content: "updated" });
     });
 
     test("matches non-breaking space in file when oldText has regular space", () => {
       const content = "hello\u00A0world";
       const result = applyEditToContent(content, "hello world", "hi there");
-      expect(result).toBe("hi there");
+      expect(result).toEqual({ ok: true, content: "hi there" });
     });
   });
 
@@ -142,13 +144,13 @@ describe("applyEditToContent", () => {
     test("matches line with trailing spaces when oldText has none", () => {
       const content = "line one   \nline two";
       const result = applyEditToContent(content, "line one\nline two", "replaced");
-      expect(result).toBe("replaced");
+      expect(result).toEqual({ ok: true, content: "replaced" });
     });
 
     test("matches line with trailing tab when oldText has none", () => {
       const content = "heading\t\ncontent";
       const result = applyEditToContent(content, "heading\ncontent", "replaced");
-      expect(result).toBe("replaced");
+      expect(result).toEqual({ ok: true, content: "replaced" });
     });
   });
 
@@ -162,11 +164,13 @@ describe("applyEditToContent", () => {
         "outro with \u201Cmore quotes\u201D";
       // oldText uses straight quotes — no exact match, fuzzy match required
       const result = applyEditToContent(content, 'use "smart" style here', "replaced");
-      expect(result).toBe(
-        "intro with \u201Csmart quotes\u201D\n" +
+      expect(result).toEqual({
+        ok: true,
+        content:
+          "intro with \u201Csmart quotes\u201D\n" +
           "replaced\n" +
-          "outro with \u201Cmore quotes\u201D"
-      );
+          "outro with \u201Cmore quotes\u201D",
+      });
     });
 
     test("does not strip trailing spaces from lines outside the matched span", () => {
@@ -175,7 +179,7 @@ describe("applyEditToContent", () => {
       const content = "before line   \nuse \u201Csmart\u201D text\nafter line   ";
       // oldText uses straight quotes — no exact match, fuzzy match required
       const result = applyEditToContent(content, 'use "smart" text', "new text");
-      expect(result).toBe("before line   \nnew text\nafter line   ");
+      expect(result).toEqual({ ok: true, content: "before line   \nnew text\nafter line   " });
     });
 
     test("replaces trailing whitespace on matched line when oldText uses tab instead of spaces", () => {
@@ -183,7 +187,7 @@ describe("applyEditToContent", () => {
       // fuzzy match succeeds and the full original line (incl. trailing spaces) is replaced
       const content = "line one\nline two   \nline three";
       const result = applyEditToContent(content, "line two\t", "replaced");
-      expect(result).toBe("line one\nreplaced\nline three");
+      expect(result).toEqual({ ok: true, content: "line one\nreplaced\nline three" });
     });
   });
 
@@ -194,13 +198,13 @@ describe("applyEditToContent", () => {
       const content = "chapter \u2163 title\nnext line";
       // oldText uses the ASCII equivalent that NFKC produces
       const result = applyEditToContent(content, "chapter IV title", "replaced");
-      expect(result).toBe("replaced\nnext line");
+      expect(result).toEqual({ ok: true, content: "replaced\nnext line" });
     });
 
     test("preserves content outside span when NFKC expansion occurs mid-file", () => {
       const content = "intro\nchapter \u2163 end\noutro";
       const result = applyEditToContent(content, "chapter IV end", "new heading");
-      expect(result).toBe("intro\nnew heading\noutro");
+      expect(result).toEqual({ ok: true, content: "intro\nnew heading\noutro" });
     });
   });
 
@@ -216,7 +220,7 @@ describe("applyEditToContent", () => {
         "## Section\n- item - one",
         "## Section\n- item - two"
       );
-      expect(result).toBe("preamble\n## Section\n- item - two\nend");
+      expect(result).toEqual({ ok: true, content: "preamble\n## Section\n- item - two\nend" });
     });
   });
 
@@ -224,13 +228,13 @@ describe("applyEditToContent", () => {
     test("preserves CRLF line endings after replacement", () => {
       const content = "line1\r\nline2\r\nline3";
       const result = applyEditToContent(content, "line2", "updated");
-      expect(result).toBe("line1\r\nupdated\r\nline3");
+      expect(result).toEqual({ ok: true, content: "line1\r\nupdated\r\nline3" });
     });
 
     test("preserves LF line endings after replacement", () => {
       const content = "line1\nline2\nline3";
       const result = applyEditToContent(content, "line2", "updated");
-      expect(result).toBe("line1\nupdated\nline3");
+      expect(result).toEqual({ ok: true, content: "line1\nupdated\nline3" });
     });
   });
 
@@ -238,8 +242,10 @@ describe("applyEditToContent", () => {
     test("preserves UTF-8 BOM in the output", () => {
       const content = "\uFEFFHello world";
       const result = applyEditToContent(content, "Hello", "Hi");
-      expect(result.charCodeAt(0)).toBe(0xfeff);
-      expect(result).toBe("\uFEFFHi world");
+      expect(result).toEqual({ ok: true, content: "\uFEFFHi world" });
+      if (result.ok) {
+        expect(result.content.charCodeAt(0)).toBe(0xfeff);
+      }
     });
   });
 });
