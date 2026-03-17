@@ -438,7 +438,7 @@ export function registerCliTools(): void {
       customPromptInstructions: `For obsidianTemplates:
 - Use 'templates' to list all available templates when you need to find the right template for a task.
 - Use 'template:read' with a template name to get its content with variables resolved. Requires name parameter.
-- This is useful for creating daily notes from templates — read the template first, then use writeToFile to populate the note.`,
+- This is useful for creating daily notes from templates — read the template first, then use writeFile to populate the note.`,
     },
   });
 

@@ -528,7 +528,10 @@ const editFileTool = createLangChainTool({
     const file = app.vault.getAbstractFileByPath(sanitizedPath);
 
     if (!file || !(file instanceof TFile)) {
-      return `File not found at path: ${sanitizedPath}. Please check the file path and try again.`;
+      return {
+        result: "failed" as ApplyViewResult,
+        message: `File not found at path: ${sanitizedPath}. Please check the file path and try again.`,
+      };
     }
 
     try {
@@ -537,16 +540,25 @@ const editFileTool = createLangChainTool({
 
       if (!editResult.ok) {
         if (editResult.reason === "NOT_FOUND") {
-          return `Could not find the specified text in ${sanitizedPath}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
+          return {
+            result: "failed" as ApplyViewResult,
+            message: `Could not find the specified text in ${sanitizedPath}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`,
+          };
         }
-        return `Found ${editResult.occurrences} occurrences of the search text in ${sanitizedPath}. The text must be unique — add more surrounding context to make it unambiguous.`;
+        return {
+          result: "failed" as ApplyViewResult,
+          message: `Found ${editResult.occurrences} occurrences of the search text in ${sanitizedPath}. The text must be unique — add more surrounding context to make it unambiguous.`,
+        };
       }
 
       const modifiedContent = editResult.content;
 
       // No-op detection: content is unchanged after replacement
       if (rawContent === modifiedContent) {
-        return `No changes made to ${sanitizedPath}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`;
+        return {
+          result: "accepted" as ApplyViewResult,
+          message: `No changes made to ${sanitizedPath}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`,
+        };
       }
 
       const settings = getSettings();
@@ -565,7 +577,10 @@ const editFileTool = createLangChainTool({
         message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
       };
     } catch (error) {
-      return `Error modifying ${sanitizedPath}: ${error}. Please check the file path and try again.`;
+      return {
+        result: "failed" as ApplyViewResult,
+        message: `Error modifying ${sanitizedPath}: ${error}. Please check the file path and try again.`,
+      };
     }
   },
 });
