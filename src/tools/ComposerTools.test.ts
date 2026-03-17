@@ -108,6 +108,14 @@ describe("applyEditToContent", () => {
       expect(result).toEqual({ ok: false, reason: "AMBIGUOUS", occurrences: 2 });
     });
 
+    test("returns AMBIGUOUS for overlapping matches", () => {
+      // "aba" appears at position 0 and position 2 in "ababa" — overlapping.
+      // Non-overlapping counting would report 1 and silently apply; we must
+      // detect both and return AMBIGUOUS.
+      const result = applyEditToContent("ababa", "aba", "x");
+      expect(result).toEqual({ ok: false, reason: "AMBIGUOUS", occurrences: 2 });
+    });
+
     test("supports empty newText (deletion)", () => {
       const result = applyEditToContent("Hello world", "Hello ", "");
       expect(result).toEqual({ ok: true, content: "world" });

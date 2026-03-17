@@ -245,7 +245,10 @@ function normalizeForFuzzyMatch(text: string): string {
 }
 
 /**
- * Counts non-overlapping occurrences of searchText in content.
+ * Counts overlapping occurrences of searchText in content.
+ * Advances by 1 each time so that overlapping patterns (e.g. "aba" in "ababa")
+ * are not under-counted, preventing an ambiguous match from being silently
+ * applied at the wrong position.
  */
 function countOccurrences(content: string, searchText: string): number {
   if (!searchText) return 0;
@@ -253,7 +256,7 @@ function countOccurrences(content: string, searchText: string): number {
   let pos = 0;
   while ((pos = content.indexOf(searchText, pos)) !== -1) {
     count++;
-    pos += searchText.length;
+    pos += 1;
   }
   return count;
 }
