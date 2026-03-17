@@ -458,10 +458,11 @@ const editFileTool = createLangChainTool({
   description: `Request to make a targeted change to an existing file by specifying the exact text to find and its replacement. Use this tool for precise, surgical edits to specific parts of a file.`,
   schema: editFileSchema,
   func: async ({ path, oldText, newText }: { path: string; oldText: string; newText: string }) => {
-    const file = app.vault.getAbstractFileByPath(path);
+    const sanitizedPath = sanitizeFilePath(path);
+    const file = app.vault.getAbstractFileByPath(sanitizedPath);
 
     if (!file || !(file instanceof TFile)) {
-      return `File not found at path: ${path}. Please check the file path and try again.`;
+      return `File not found at path: ${sanitizedPath}. Please check the file path and try again.`;
     }
 
     try {
@@ -470,16 +471,16 @@ const editFileTool = createLangChainTool({
 
       if (!editResult.ok) {
         if (editResult.reason === "NOT_FOUND") {
-          return `Could not find the specified text in ${path}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
+          return `Could not find the specified text in ${sanitizedPath}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
         }
-        return `Found ${editResult.occurrences} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
+        return `Found ${editResult.occurrences} occurrences of the search text in ${sanitizedPath}. The text must be unique — add more surrounding context to make it unambiguous.`;
       }
 
       const modifiedContent = editResult.content;
 
       // No-op detection: content is unchanged after replacement
       if (rawContent === modifiedContent) {
-        return `No changes made to ${path}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`;
+        return `No changes made to ${sanitizedPath}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`;
       }
 
       const settings = getSettings();
@@ -492,13 +493,13 @@ const editFileTool = createLangChainTool({
         };
       }
 
-      const result = await show_preview(path, modifiedContent, true);
+      const result = await show_preview(sanitizedPath, modifiedContent, true);
       return {
         result: result,
         message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
       };
     } catch (error) {
-      return `Error modifying ${path}: ${error}. Please check the file path and try again.`;
+      return `Error modifying ${sanitizedPath}: ${error}. Please check the file path and try again.`;
     }
   },
 });
