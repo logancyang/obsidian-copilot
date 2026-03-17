@@ -122,4 +122,11 @@ export interface SemanticIndexBackend {
    * Flush or persist any pending backend work before unload.
    */
   onunload(): void;
+
+  /**
+   * Return true when this backend is remote (e.g. Miyo) and does not use a local index.
+   * Used to bypass the `disableIndexOnMobile` guard for remote backends that have no
+   * local storage concerns.
+   */
+  isRemoteBackend(): boolean;
 }

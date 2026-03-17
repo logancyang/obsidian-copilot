@@ -130,7 +130,11 @@ export default class VectorStoreManager {
       return 0;
     }
 
-    if (Platform.isMobile && getSettings().disableIndexOnMobile) {
+    if (
+      Platform.isMobile &&
+      getSettings().disableIndexOnMobile &&
+      !this.indexBackend.isRemoteBackend()
+    ) {
       new Notice("Indexing is disabled on mobile devices");
       return 0;
     }

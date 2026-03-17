@@ -72,7 +72,11 @@ export class IndexEventHandler {
     if (!this.shouldHandleEvents()) {
       return;
     }
-    if (Platform.isMobile && getSettings().disableIndexOnMobile) {
+    if (
+      Platform.isMobile &&
+      getSettings().disableIndexOnMobile &&
+      !this.indexBackend.isRemoteBackend()
+    ) {
       return;
     }
 
