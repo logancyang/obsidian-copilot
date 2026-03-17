@@ -328,12 +328,10 @@ When user asks you to edit or modify a file, you MUST:
 1. Determine if it's a small edit (use editFile) or major rewrite (use writeFile)
 2. Call the tool immediately - do not just describe what you plan to do
 
-For editFile, the diff parameter must use SEARCH/REPLACE format:
-------- SEARCH
-content to find
-=======
-replacement content
-+++++++ REPLACE
+For editFile, pass the exact text to find and its replacement:
+- path: vault-relative file path
+- oldText: exact text to find (include surrounding context lines to make it unique)
+- newText: replacement text (empty string to delete)
 
 ❌ WRONG: "I'll help you add item 4 to the list. Let me update that for you." [No tool call = FAILURE]
 ✅ CORRECT: Actually call editFile or writeFile with proper parameters`);
@@ -386,7 +384,7 @@ replacement content
     }
 
     if (requiresFileEdit) {
-      return `${message}\n\n🚨 GPT REMINDER: Use editFile for small edits (with SEARCH/REPLACE blocks in diff parameter).`;
+      return `${message}\n\n🚨 GPT REMINDER: Use editFile for small edits (oldText/newText parameters) or writeFile for full rewrites.`;
     }
 
     return message;

@@ -315,7 +315,6 @@ function findTextForReplacement(
   // Stage 2: fuzzy match
   const fuzzyContent = normalizeForFuzzyMatch(normalizedContent);
   const fuzzySearch = normalizeForFuzzyMatch(normalizedOldText);
-  const fuzzyReplace = normalizeForFuzzyMatch(normalizedNewText);
   const fuzzyCount = countOccurrences(fuzzyContent, fuzzySearch);
 
   return {
@@ -323,9 +322,42 @@ function findTextForReplacement(
     occurrences: fuzzyCount,
     workingContent: fuzzyContent,
     workingSearch: fuzzySearch,
-    workingReplace: fuzzyReplace,
+    // Use the original (non-fuzzy-normalized) replacement text so the caller
+    // can apply it against normalizedContent rather than fuzzyContent.
+    workingReplace: normalizedNewText,
     usedFuzzyMatch: true,
   };
+}
+
+/**
+ * Maps a character index in fuzzyContent back to the corresponding index in
+ * normalizedContent using line structure.
+ *
+ * Both strings have the same number of lines (normalizeForFuzzyMatch never
+ * adds or removes newlines). Lines in fuzzyContent may be shorter due to
+ * trimEnd; character replacements (smart quotes, dashes, spaces) are all 1:1,
+ * so the column index within a line is preserved for non-trailing positions.
+ */
+function mapFuzzyIndexToNormal(
+  normalLines: string[],
+  fuzzyLines: string[],
+  fuzzyIndex: number
+): number {
+  let remaining = fuzzyIndex;
+  let normalPos = 0;
+
+  for (let i = 0; i < fuzzyLines.length; i++) {
+    const fuzzyLineLen = fuzzyLines[i].length;
+    if (remaining <= fuzzyLineLen) {
+      // Position is within this line; same column maps correctly since
+      // char replacements are 1:1 and trimEnd only removes trailing chars.
+      return normalPos + Math.min(remaining, normalLines[i]?.length ?? remaining);
+    }
+    remaining -= fuzzyLineLen + 1; // +1 for the \n separator
+    normalPos += (normalLines[i]?.length ?? 0) + 1;
+  }
+
+  return normalPos;
 }
 
 const editFileTool = createLangChainTool({
@@ -370,12 +402,32 @@ const editFileTool = createLangChainTool({
         return `Found ${searchResult.occurrences} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
       }
 
-      // Perform the single replacement using index-based concatenation (avoids $-special-char issues)
-      const matchIndex = searchResult.workingContent.indexOf(searchResult.workingSearch);
+      // Perform the single replacement using index-based concatenation (avoids $-special-char issues).
+      // When fuzzy matching was used, map the match position back to normalizedContent so that
+      // only the matched span is replaced — writing fuzzyContent as the base would inadvertently
+      // apply fuzzy normalization (trimEnd, smart-quote replacement, etc.) to the entire file.
+      let matchStart: number;
+      let matchEnd: number;
+
+      if (searchResult.usedFuzzyMatch) {
+        const normalLines = normalizedContent.split("\n");
+        const fuzzyLines = searchResult.workingContent.split("\n");
+        const fuzzyMatchIndex = searchResult.workingContent.indexOf(searchResult.workingSearch);
+        matchStart = mapFuzzyIndexToNormal(normalLines, fuzzyLines, fuzzyMatchIndex);
+        matchEnd = mapFuzzyIndexToNormal(
+          normalLines,
+          fuzzyLines,
+          fuzzyMatchIndex + searchResult.workingSearch.length
+        );
+      } else {
+        matchStart = normalizedContent.indexOf(searchResult.workingSearch);
+        matchEnd = matchStart + searchResult.workingSearch.length;
+      }
+
       let modifiedContent =
-        searchResult.workingContent.substring(0, matchIndex) +
+        normalizedContent.substring(0, matchStart) +
         searchResult.workingReplace +
-        searchResult.workingContent.substring(matchIndex + searchResult.workingSearch.length);
+        normalizedContent.substring(matchEnd);
 
       // Restore original line ending style
       if (usesCrlf) {

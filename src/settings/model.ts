@@ -459,6 +459,14 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       DEFAULT_SETTINGS.autonomousAgentEnabledToolIds;
   }
 
+  // Migration: rename legacy tool IDs to their new names
+  const toolIdRenames: Record<string, string> = {
+    writeToFile: "writeFile",
+    replaceInFile: "editFile",
+  };
+  sanitizedSettings.autonomousAgentEnabledToolIds =
+    sanitizedSettings.autonomousAgentEnabledToolIds.map((id) => toolIdRenames[id] ?? id);
+
   // Ensure memoryFolderName has a default value
   if (
     !sanitizedSettings.memoryFolderName ||
