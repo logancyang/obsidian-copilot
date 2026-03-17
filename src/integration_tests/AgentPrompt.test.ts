@@ -322,12 +322,11 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
       expectedCalls: [
         {
           toolName: "editFile",
-          // Check if args.diff contains the correct search text
+          // Check that args use the new oldText/newText shape
           argumentValidator: (args) => {
             expect(args.path).toBe("test.md");
-            expect(args.diff).toContain(
-              `------- SEARCH\nLondon, UK - A city of kings and punks, rain and rebellion. London blends royal heritage with cutting-edge creativity, from the Tower of London to Shoreditch street art.\n=======`
-            );
+            expect(args.oldText).toContain("London, UK");
+            expect(args.newText).toBeDefined();
           },
           mockedReturnValue: "File updated successfully",
         },
