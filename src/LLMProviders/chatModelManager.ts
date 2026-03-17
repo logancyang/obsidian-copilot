@@ -39,6 +39,7 @@ import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
+import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 
@@ -818,6 +819,14 @@ export default class ChatModelManager {
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
     }
 
+    // For LM Studio, use ChatLMStudio by default for Responses API compatibility.
+    // Opt out by setting useResponsesApi to false.
+    if (model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false) {
+      const lmStudioInstance = new ChatLMStudio(constructorConfig);
+      logInfo(`[ChatModelManager] Using Responses API for LM Studio model: ${model.name}`);
+      return lmStudioInstance;
+    }
+
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
 
     return newModelInstance;
@@ -887,7 +896,12 @@ export default class ChatModelManager {
         constructorConfig.useResponsesApi = true;
       }
 
-      const testModel = new (this.getProviderConstructor(modelToTest))(constructorConfig);
+      // For LM Studio with Responses API, ping via ChatLMStudio so the
+      // connectivity check hits the same /v1/responses endpoint used in chats.
+      const testModel =
+        model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false
+          ? new ChatLMStudio(constructorConfig)
+          : new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 8000,
       });
