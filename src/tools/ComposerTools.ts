@@ -485,11 +485,18 @@ export function applyEditToContent(
       fuzzyLines,
       fuzzyMatchIndex + searchResult.workingSearch.length
     );
-    // Guard: if match boundaries collapsed (both ends landed inside the same
-    // NFKC-expanded code point), the span is degenerate and cannot be cleanly
-    // mapped back to the original. Treat as NOT_FOUND rather than silently
-    // producing a zero-width or wrong replacement.
+    // Guard 1: degenerate span — both boundaries landed inside the same
+    // NFKC-expanded code point (zero-width replacement).
     if (matchStart >= matchEnd) {
+      return { ok: false, reason: "NOT_FOUND" };
+    }
+    // Guard 2: round-trip check — the mapped span in the original must fuzzy-
+    // normalize back to the search term. This catches cases where the fuzzy
+    // match covered only part of an NFKC expansion (e.g. "V" matching inside
+    // "IV" derived from "Ⅳ"), which would replace the entire source character
+    // even though the requested text never exists standalone in the file.
+    const roundTrip = normalizeForFuzzyMatch(normalizedContent.substring(matchStart, matchEnd));
+    if (roundTrip !== searchResult.workingSearch) {
       return { ok: false, reason: "NOT_FOUND" };
     }
   } else {

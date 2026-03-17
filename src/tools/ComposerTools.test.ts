@@ -207,6 +207,14 @@ describe("applyEditToContent", () => {
       expect(applyEditToContent(content, "I", "X")).toEqual({ ok: false, reason: "NOT_FOUND" });
     });
 
+    test("returns NOT_FOUND when fuzzy match covers only part of an NFKC expansion", () => {
+      // "V" fuzzy-matches within "IV" (the NFKC expansion of "Ⅳ"), giving a
+      // non-degenerate span [0,1) that covers the whole "Ⅳ" — but "V" is not a
+      // standalone character in the file. Round-trip check must reject this.
+      const content = "chapter Ⅳ end";
+      expect(applyEditToContent(content, "V", "X")).toEqual({ ok: false, reason: "NOT_FOUND" });
+    });
+
     test("matches line containing NFKC-expanding character and preserves surrounding content", () => {
       // Ⅳ (U+2163 ROMAN NUMERAL FOUR) expands to 'IV' under NFKC — fuzzy line is longer
       // than the original, so simple column mapping would be wrong.
