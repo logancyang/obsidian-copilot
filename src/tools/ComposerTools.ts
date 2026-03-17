@@ -433,6 +433,13 @@ export function applyEditToContent(
       fuzzyLines,
       fuzzyMatchIndex + searchResult.workingSearch.length
     );
+    // Guard: if match boundaries collapsed (both ends landed inside the same
+    // NFKC-expanded code point), the span is degenerate and cannot be cleanly
+    // mapped back to the original. Treat as NOT_FOUND rather than silently
+    // producing a zero-width or wrong replacement.
+    if (matchStart >= matchEnd) {
+      return { ok: false, reason: "NOT_FOUND" };
+    }
   } else {
     matchStart = normalizedContent.indexOf(searchResult.workingSearch);
     matchEnd = matchStart + searchResult.workingSearch.length;

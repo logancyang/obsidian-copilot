@@ -192,6 +192,13 @@ describe("applyEditToContent", () => {
   });
 
   describe("fuzzy match — NFKC expansion", () => {
+    test("returns NOT_FOUND when match boundary falls inside an NFKC expansion", () => {
+      // "Ⅳ" (U+2163) expands to "IV" under NFKC. Searching for just "I" would
+      // land the match-end inside the expansion → degenerate zero-width span → NOT_FOUND.
+      const content = "chapter Ⅳ end";
+      expect(applyEditToContent(content, "I", "X")).toEqual({ ok: false, reason: "NOT_FOUND" });
+    });
+
     test("matches line containing NFKC-expanding character and preserves surrounding content", () => {
       // Ⅳ (U+2163 ROMAN NUMERAL FOUR) expands to 'IV' under NFKC — fuzzy line is longer
       // than the original, so simple column mapping would be wrong.
