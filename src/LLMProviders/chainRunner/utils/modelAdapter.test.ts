@@ -137,7 +137,7 @@ describe("ModelAdapter", () => {
       expect(enhancedPrompt).toContain("FILE EDITING WITH COMPOSER TOOLS");
       expect(enhancedPrompt).toContain("editFile");
       expect(enhancedPrompt).toContain("writeFile");
-      expect(enhancedPrompt).toContain("SEARCH/REPLACE format");
+      expect(enhancedPrompt).toContain("oldText");
     });
 
     it("should rebuild enhanceSystemPrompt output from section metadata", () => {
@@ -165,7 +165,7 @@ describe("ModelAdapter", () => {
 
       expect(enhanced).toContain("GPT REMINDER");
       expect(enhanced).toContain("editFile");
-      expect(enhanced).toContain("SEARCH/REPLACE blocks");
+      expect(enhanced).toContain("oldText/newText parameters");
     });
   });
 });
