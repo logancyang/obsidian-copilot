@@ -183,7 +183,7 @@ Examples:
     metadata: {
       id: "writeFile",
       displayName: "Write to File",
-      description: "Create or modify files in your vault",
+      description: "Create or rewrite files in your vault",
       category: "file",
       requiresVault: true,
       timeoutMs: 0, // No timeout - waits for user preview decision
