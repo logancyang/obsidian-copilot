@@ -423,9 +423,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       };
 
       const processWriteFileSection = (content: string): string => {
+        // Normalise legacy <writeToFile> tags from saved history to <writeFile>
+        // so they continue to render correctly after the tool rename.
+        const normalizeLegacyTags = (text: string): string =>
+          text.replace(/<(\/?)writeToFile>/g, "<$1writeFile>");
+
         // First, unwrap any XML codeblocks that contain writeFile tags
         const unwrapXmlCodeblocks = (text: string): string => {
-          // Pattern to match XML codeblocks that contain writeFile tags
+          // Pattern to match XML codeblocks that contain writeFile tags (or legacy writeToFile)
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?)\s*```/g;
 
@@ -448,8 +453,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           });
         };
 
-        // Unwrap XML codeblocks first
-        let processedContent = unwrapXmlCodeblocks(content);
+        // Normalise legacy tags, then unwrap XML codeblocks
+        let processedContent = normalizeLegacyTags(content);
+        processedContent = unwrapXmlCodeblocks(processedContent);
         processedContent = unwrapStreamingXmlCodeblocks(processedContent);
 
         // Then process the writeFile sections normally

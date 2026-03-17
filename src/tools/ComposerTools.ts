@@ -348,7 +348,8 @@ function mapFuzzyIndexToNormal(
 
   for (let i = 0; i < fuzzyLines.length; i++) {
     const fuzzyLineLen = fuzzyLines[i].length;
-    const normalLineLen = normalLines[i]?.length ?? fuzzyLineLen;
+    const normalLine = normalLines[i] ?? "";
+    const normalLineLen = normalLine.length;
     if (remaining <= fuzzyLineLen) {
       if (remaining === fuzzyLineLen) {
         // Position is at the end of this fuzzy line. The original line may be
@@ -356,8 +357,18 @@ function mapFuzzyIndexToNormal(
         // original line to avoid leaving orphaned trailing spaces in output.
         return normalPos + normalLineLen;
       }
-      // Position is mid-line; char replacements are 1:1 so same column maps.
-      return normalPos + Math.min(remaining, normalLineLen);
+      // Walk char-by-char to handle NFKC expansion: a single code point in
+      // normalizedContent (e.g. Ⅳ) can expand to multiple chars in fuzzyContent
+      // (e.g. IV), so a simple column copy would land at the wrong offset.
+      let fi = 0;
+      let ni = 0;
+      while (ni < normalLine.length && fi < remaining) {
+        const expandedLen = normalLine[ni].normalize("NFKC").length;
+        if (fi + expandedLen > remaining) break; // target is inside this char's expansion
+        fi += expandedLen;
+        ni++;
+      }
+      return normalPos + ni;
     }
     remaining -= fuzzyLineLen + 1; // +1 for the \n separator
     normalPos += normalLineLen + 1;

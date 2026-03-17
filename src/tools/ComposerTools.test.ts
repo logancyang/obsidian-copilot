@@ -187,6 +187,23 @@ describe("applyEditToContent", () => {
     });
   });
 
+  describe("fuzzy match — NFKC expansion", () => {
+    test("matches line containing NFKC-expanding character and preserves surrounding content", () => {
+      // Ⅳ (U+2163 ROMAN NUMERAL FOUR) expands to 'IV' under NFKC — fuzzy line is longer
+      // than the original, so simple column mapping would be wrong.
+      const content = "chapter \u2163 title\nnext line";
+      // oldText uses the ASCII equivalent that NFKC produces
+      const result = applyEditToContent(content, "chapter IV title", "replaced");
+      expect(result).toBe("replaced\nnext line");
+    });
+
+    test("preserves content outside span when NFKC expansion occurs mid-file", () => {
+      const content = "intro\nchapter \u2163 end\noutro";
+      const result = applyEditToContent(content, "chapter IV end", "new heading");
+      expect(result).toBe("intro\nnew heading\noutro");
+    });
+  });
+
   describe("fuzzy match — multiline", () => {
     test("matches a multiline block with mixed smart quotes and trailing whitespace", () => {
       const content =
