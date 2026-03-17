@@ -348,16 +348,89 @@ function mapFuzzyIndexToNormal(
 
   for (let i = 0; i < fuzzyLines.length; i++) {
     const fuzzyLineLen = fuzzyLines[i].length;
+    const normalLineLen = normalLines[i]?.length ?? fuzzyLineLen;
     if (remaining <= fuzzyLineLen) {
-      // Position is within this line; same column maps correctly since
-      // char replacements are 1:1 and trimEnd only removes trailing chars.
-      return normalPos + Math.min(remaining, normalLines[i]?.length ?? remaining);
+      if (remaining === fuzzyLineLen) {
+        // Position is at the end of this fuzzy line. The original line may be
+        // longer (trimEnd stripped trailing whitespace), so map to end of the
+        // original line to avoid leaving orphaned trailing spaces in output.
+        return normalPos + normalLineLen;
+      }
+      // Position is mid-line; char replacements are 1:1 so same column maps.
+      return normalPos + Math.min(remaining, normalLineLen);
     }
     remaining -= fuzzyLineLen + 1; // +1 for the \n separator
-    normalPos += (normalLines[i]?.length ?? 0) + 1;
+    normalPos += normalLineLen + 1;
   }
 
   return normalPos;
+}
+
+/**
+ * Pure, I/O-free core of the editFile operation. Applies a single targeted
+ * text replacement to `content` and returns the modified string, or an error
+ * message string if the replacement cannot be performed.
+ *
+ * Handles BOM preservation, CRLF ↔ LF round-tripping, exact matching, and
+ * fuzzy matching (smart quotes, dashes, trailing whitespace, NBSP, NFKC).
+ *
+ * Exported for unit testing.
+ */
+export function applyEditToContent(content: string, oldText: string, newText: string): string {
+  const { content: contentNoBOM, hasBOM } = stripBOM(content);
+
+  const crlfCount = (contentNoBOM.match(/\r\n/g) || []).length;
+  const lfCount = (contentNoBOM.match(/(?<!\r)\n/g) || []).length;
+  const usesCrlf = crlfCount > lfCount;
+
+  const normalizedContent = normalizeLineEndings(contentNoBOM);
+  const normalizedOldText = normalizeLineEndings(oldText);
+  const normalizedNewText = normalizeLineEndings(newText);
+
+  const searchResult = findTextForReplacement(
+    normalizedContent,
+    normalizedOldText,
+    normalizedNewText
+  );
+
+  if (!searchResult.found) {
+    return `NOT_FOUND`;
+  }
+  if (searchResult.occurrences > 1) {
+    return `AMBIGUOUS:${searchResult.occurrences}`;
+  }
+
+  let matchStart: number;
+  let matchEnd: number;
+
+  if (searchResult.usedFuzzyMatch) {
+    const normalLines = normalizedContent.split("\n");
+    const fuzzyLines = searchResult.workingContent.split("\n");
+    const fuzzyMatchIndex = searchResult.workingContent.indexOf(searchResult.workingSearch);
+    matchStart = mapFuzzyIndexToNormal(normalLines, fuzzyLines, fuzzyMatchIndex);
+    matchEnd = mapFuzzyIndexToNormal(
+      normalLines,
+      fuzzyLines,
+      fuzzyMatchIndex + searchResult.workingSearch.length
+    );
+  } else {
+    matchStart = normalizedContent.indexOf(searchResult.workingSearch);
+    matchEnd = matchStart + searchResult.workingSearch.length;
+  }
+
+  let modifiedContent =
+    normalizedContent.substring(0, matchStart) +
+    searchResult.workingReplace +
+    normalizedContent.substring(matchEnd);
+
+  if (usesCrlf) {
+    modifiedContent = modifiedContent.replace(/\n/g, "\r\n");
+  }
+  if (hasBOM) {
+    modifiedContent = "\uFEFF" + modifiedContent;
+  }
+
+  return modifiedContent;
 }
 
 const editFileTool = createLangChainTool({
@@ -373,70 +446,14 @@ const editFileTool = createLangChainTool({
 
     try {
       const rawContent = await app.vault.read(file);
+      const modifiedContent = applyEditToContent(rawContent, oldText, newText);
 
-      // Strip BOM so it doesn't interfere with matching
-      const { content: contentNoBOM, hasBOM } = stripBOM(rawContent);
-
-      // Detect predominant line ending style before normalizing
-      const crlfCount = (contentNoBOM.match(/\r\n/g) || []).length;
-      const lfCount = (contentNoBOM.match(/(?<!\r)\n/g) || []).length;
-      const usesCrlf = crlfCount > lfCount;
-
-      // Normalize all line endings to LF for consistent matching
-      const normalizedContent = normalizeLineEndings(contentNoBOM);
-      const normalizedOldText = normalizeLineEndings(oldText);
-      const normalizedNewText = normalizeLineEndings(newText);
-
-      // Find the text using exact or fuzzy matching
-      const searchResult = findTextForReplacement(
-        normalizedContent,
-        normalizedOldText,
-        normalizedNewText
-      );
-
-      if (!searchResult.found) {
+      if (modifiedContent === "NOT_FOUND") {
         return `Could not find the specified text in ${path}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`;
       }
-
-      if (searchResult.occurrences > 1) {
-        return `Found ${searchResult.occurrences} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
-      }
-
-      // Perform the single replacement using index-based concatenation (avoids $-special-char issues).
-      // When fuzzy matching was used, map the match position back to normalizedContent so that
-      // only the matched span is replaced — writing fuzzyContent as the base would inadvertently
-      // apply fuzzy normalization (trimEnd, smart-quote replacement, etc.) to the entire file.
-      let matchStart: number;
-      let matchEnd: number;
-
-      if (searchResult.usedFuzzyMatch) {
-        const normalLines = normalizedContent.split("\n");
-        const fuzzyLines = searchResult.workingContent.split("\n");
-        const fuzzyMatchIndex = searchResult.workingContent.indexOf(searchResult.workingSearch);
-        matchStart = mapFuzzyIndexToNormal(normalLines, fuzzyLines, fuzzyMatchIndex);
-        matchEnd = mapFuzzyIndexToNormal(
-          normalLines,
-          fuzzyLines,
-          fuzzyMatchIndex + searchResult.workingSearch.length
-        );
-      } else {
-        matchStart = normalizedContent.indexOf(searchResult.workingSearch);
-        matchEnd = matchStart + searchResult.workingSearch.length;
-      }
-
-      let modifiedContent =
-        normalizedContent.substring(0, matchStart) +
-        searchResult.workingReplace +
-        normalizedContent.substring(matchEnd);
-
-      // Restore original line ending style
-      if (usesCrlf) {
-        modifiedContent = modifiedContent.replace(/\n/g, "\r\n");
-      }
-
-      // Restore BOM if the original file had one
-      if (hasBOM) {
-        modifiedContent = "\uFEFF" + modifiedContent;
+      if (modifiedContent.startsWith("AMBIGUOUS:")) {
+        const count = modifiedContent.split(":")[1];
+        return `Found ${count} occurrences of the search text in ${path}. The text must be unique — add more surrounding context to make it unambiguous.`;
       }
 
       // No-op detection: content is unchanged after replacement
