@@ -153,6 +153,9 @@ export interface CustomModel {
   // Ollama specific fields
   numCtx?: number;
 
+  // LM Studio specific fields
+  useResponsesApi?: boolean;
+
   projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;

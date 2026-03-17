@@ -592,7 +592,7 @@ export class ChatManager {
         onTruncate();
       }
 
-      // Update chain memory
+      // Update chain memory after truncation
       await this.updateChainMemory();
 
       // Get the LLM version of the user message for regeneration
@@ -661,7 +661,7 @@ export class ChatManager {
         return false;
       }
 
-      // Update chain memory
+      // Update chain memory after deletion
       await this.updateChainMemory();
 
       logInfo(`[ChatManager] Successfully deleted message ${messageId}`);
@@ -699,7 +699,7 @@ export class ChatManager {
     const currentRepo = this.getCurrentMessageRepo();
     currentRepo.truncateAfterMessageId(messageId);
 
-    // Update chain memory with the truncated messages
+    // Update chain memory after truncation
     await this.updateChainMemory();
 
     logInfo(`[ChatManager] Truncated messages after ${messageId}`);
@@ -738,7 +738,7 @@ export class ChatManager {
   }
 
   /**
-   * Update chain memory with current LLM messages
+   * Sync chain memory with the current message repository.
    */
   private async updateChainMemory(): Promise<void> {
     try {
@@ -798,7 +798,7 @@ export class ChatManager {
     this.lastKnownProjectId = null; // Reset to force change detection
     const currentRepo = this.getCurrentMessageRepo();
 
-    // Sync chain memory with the current project's messages
+    // Sync chain memory with the new project's messages
     await this.updateChainMemory();
 
     logInfo(
