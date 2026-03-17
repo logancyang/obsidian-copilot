@@ -312,18 +312,67 @@ function findTextForReplacement(
     };
   }
 
-  // Stage 2: fuzzy match
+  // Compute fuzzy forms once — used by both Stage 2 and Stage 3.
   const fuzzyContent = normalizeForFuzzyMatch(normalizedContent);
   const fuzzySearch = normalizeForFuzzyMatch(normalizedOldText);
+
+  // Stage 2: fuzzy match
   const fuzzyCount = countOccurrences(fuzzyContent, fuzzySearch);
+  if (fuzzyCount > 0) {
+    return {
+      found: true,
+      occurrences: fuzzyCount,
+      workingContent: fuzzyContent,
+      workingSearch: fuzzySearch,
+      // Use the original (non-fuzzy-normalized) replacement text so the caller
+      // can apply it against normalizedContent rather than fuzzyContent.
+      workingReplace: normalizedNewText,
+      usedFuzzyMatch: true,
+    };
+  }
+
+  // Stage 3: retry after stripping one trailing newline from oldText.
+  // LLMs frequently append \n to the last line of oldText even when the file
+  // has no final newline, causing both exact and fuzzy stages to miss.
+  if (normalizedOldText.endsWith("\n")) {
+    const trimmedOldText = normalizedOldText.slice(0, -1);
+    // Mirror the trim on newText so the file's no-trailing-newline format is
+    // preserved (only strip one \n, and only if newText also ends with one).
+    const trimmedNewText = normalizedNewText.endsWith("\n")
+      ? normalizedNewText.slice(0, -1)
+      : normalizedNewText;
+
+    const trimmedExactCount = countOccurrences(normalizedContent, trimmedOldText);
+    if (trimmedExactCount > 0) {
+      return {
+        found: true,
+        occurrences: trimmedExactCount,
+        workingContent: normalizedContent,
+        workingSearch: trimmedOldText,
+        workingReplace: trimmedNewText,
+        usedFuzzyMatch: false,
+      };
+    }
+
+    const fuzzyTrimmedSearch = normalizeForFuzzyMatch(trimmedOldText);
+    const fuzzyTrimmedCount = countOccurrences(fuzzyContent, fuzzyTrimmedSearch);
+    if (fuzzyTrimmedCount > 0) {
+      return {
+        found: true,
+        occurrences: fuzzyTrimmedCount,
+        workingContent: fuzzyContent,
+        workingSearch: fuzzyTrimmedSearch,
+        workingReplace: trimmedNewText,
+        usedFuzzyMatch: true,
+      };
+    }
+  }
 
   return {
-    found: fuzzyCount > 0,
-    occurrences: fuzzyCount,
+    found: false,
+    occurrences: 0,
     workingContent: fuzzyContent,
     workingSearch: fuzzySearch,
-    // Use the original (non-fuzzy-normalized) replacement text so the caller
-    // can apply it against normalizedContent rather than fuzzyContent.
     workingReplace: normalizedNewText,
     usedFuzzyMatch: true,
   };

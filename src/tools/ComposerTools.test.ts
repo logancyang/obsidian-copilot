@@ -231,6 +231,27 @@ describe("applyEditToContent", () => {
     });
   });
 
+  describe("trailing newline tolerance at EOF", () => {
+    test("matches when oldText has trailing newline but file does not", () => {
+      const content = "line1\nline2";
+      const result = applyEditToContent(content, "line2\n", "replaced\n");
+      expect(result).toEqual({ ok: true, content: "line1\nreplaced" });
+    });
+
+    test("matches last line via fuzzy when oldText has trailing newline and smart quote", () => {
+      const content = "line1\nit\u2019s done"; // smart quote, no trailing newline
+      const result = applyEditToContent(content, "it's done\n", "it's finished\n");
+      expect(result).toEqual({ ok: true, content: "line1\nit's finished" });
+    });
+
+    test("does not strip trailing newline when file itself ends with newline", () => {
+      // Exact match should fire in Stage 1; Stage 3 should not interfere
+      const content = "line1\nline2\n";
+      const result = applyEditToContent(content, "line2\n", "replaced\n");
+      expect(result).toEqual({ ok: true, content: "line1\nreplaced\n" });
+    });
+  });
+
   describe("line ending preservation", () => {
     test("preserves CRLF line endings after replacement", () => {
       const content = "line1\r\nline2\r\nline3";
