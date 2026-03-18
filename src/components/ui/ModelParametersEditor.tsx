@@ -8,6 +8,7 @@ import {
   DEFAULT_OLLAMA_NUM_CTX,
   ModelCapability,
   ReasoningEffort,
+  ThinkingMode,
 } from "@/constants";
 import { CopilotSettings } from "@/settings/model";
 import {
@@ -78,7 +79,8 @@ export function ModelParametersEditor({
     model.provider === "lm_studio" ||
     model.provider === ChatModelProviders.LM_STUDIO ||
     hasReasoningCapability;
-  const showVerbosity = model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
+  const showVerbosity =
+    model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
 
   return (
     <div className="tw-space-y-4">
@@ -131,9 +133,39 @@ export function ModelParametersEditor({
                   model can use as context. Default is {DEFAULT_OLLAMA_NUM_CTX}.
                 </p>
                 <em>
-                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will
-                  cap this at the model&apos;s actual maximum.
+                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will cap
+                  this at the model&apos;s actual maximum.
                 </em>
+              </>
+            }
+          />
+        </FormField>
+      )}
+
+      {/* Thinking Mode - Ollama only */}
+      {isOllamaModel && (
+        <FormField>
+          <ParameterControl
+            type="select"
+            optional={true}
+            label="Thinking Mode"
+            value={model.thinkingMode}
+            onChange={(value) => onChange("thinkingMode", value as ThinkingMode)}
+            disableFn={onReset ? () => onReset("thinkingMode") : undefined}
+            defaultValue={ThinkingMode.AUTO}
+            options={[
+              { value: ThinkingMode.AUTO, label: "Auto" },
+              { value: ThinkingMode.ENABLED, label: "Enabled" },
+              { value: ThinkingMode.DISABLED, label: "Disabled" },
+            ]}
+            helpText={
+              <>
+                <p>Controls whether the model uses its internal reasoning/thinking capabilities.</p>
+                <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
+                  <li>Auto: Follows the model&apos;s Reasoning capability setting</li>
+                  <li>Enabled: Force thinking on (useful for models like Qwen3)</li>
+                  <li>Disabled: Force thinking off (faster responses, less VRAM)</li>
+                </ul>
               </>
             }
           />
