@@ -162,8 +162,8 @@ export function ModelParametersEditor({
               <>
                 <p>Controls whether the model uses its internal reasoning/thinking capabilities.</p>
                 <ul className="tw-mt-2 tw-space-y-1 tw-text-xs">
-                  <li>Auto: Follows the model&apos;s Reasoning capability setting</li>
-                  <li>Enabled: Force thinking on (useful for models like Qwen3)</li>
+                  <li>Auto: Follows the model&apos;s reasoning capability setting</li>
+                  <li>Enabled: Force thinking on</li>
                   <li>Disabled: Force thinking off (faster responses, less VRAM)</li>
                 </ul>
               </>
