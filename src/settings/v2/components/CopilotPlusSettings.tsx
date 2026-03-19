@@ -106,6 +106,7 @@ export const CopilotPlusSettings: React.FC = () => {
    */
   const handleVaultNameApply = async () => {
     const newName = pendingVaultName.trim();
+    if (!newName) return;
     const oldName = (settings.miyoVaultName || "").trim();
     if (newName === oldName) return;
 
@@ -313,14 +314,15 @@ export const CopilotPlusSettings: React.FC = () => {
                         placeholder="Default: vault path"
                         className="tw-w-full sm:tw-w-[200px]"
                       />
-                      {pendingVaultName.trim() !== (settings.miyoVaultName || "").trim() && (
-                        <button
-                          onClick={handleVaultNameApply}
-                          className="tw-rounded-md tw-bg-interactive-accent tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium tw-text-on-accent hover:tw-bg-interactive-accent-hover"
-                        >
-                          Apply
-                        </button>
-                      )}
+                      {pendingVaultName.trim() !== "" &&
+                        pendingVaultName.trim() !== (settings.miyoVaultName || "").trim() && (
+                          <button
+                            onClick={handleVaultNameApply}
+                            className="tw-rounded-md tw-bg-interactive-accent tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium tw-text-on-accent hover:tw-bg-interactive-accent-hover"
+                          >
+                            Apply
+                          </button>
+                        )}
                     </div>
                   </SettingItem>
 
