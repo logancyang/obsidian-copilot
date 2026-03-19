@@ -109,13 +109,17 @@ export const CopilotPlusSettings: React.FC = () => {
     const oldName = (settings.miyoVaultName || "").trim();
     if (newName === oldName) return;
 
-    if (!settings.enableMiyo) {
-      // Miyo is off — save silently, no re-index needed
+    // Compare resolved source IDs — if the user typed the auto-detected value
+    // (e.g. the vault path), the effective Miyo namespace is unchanged and we
+    // must not clear the existing index or trigger an unnecessary re-index.
+    const oldSourceId = resolveMiyoSourceId(app, oldName);
+    const newSourceId = resolveMiyoSourceId(app, newName);
+
+    if (!settings.enableMiyo || newSourceId === oldSourceId) {
+      // Miyo is off, or the effective source ID hasn't changed — save silently.
       updateSetting("miyoVaultName", newName);
       return;
     }
-
-    const oldSourceId = resolveMiyoSourceId(app, oldName);
     const confirmChange = async () => {
       try {
         const miyoClient = new MiyoClient();
