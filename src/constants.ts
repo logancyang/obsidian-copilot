@@ -238,6 +238,7 @@ export const MODEL_CAPABILITIES: Record<ModelCapability, string> = {
 };
 
 export const BUILTIN_CHAT_MODELS: CustomModel[] = [
+  // Enabled models first
   {
     name: ChatModels.COPILOT_PLUS_FLASH,
     provider: ChatModelProviders.COPILOT_PLUS,
@@ -248,6 +249,55 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     projectEnabled: false,
     capabilities: [ModelCapability.VISION],
   },
+  {
+    name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5_4,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GPT_5_mini,
+    provider: ChatModelProviders.OPENAI,
+    enabled: true,
+    isBuiltIn: true,
+    core: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.CLAUDE_SONNET_4_6,
+    provider: ChatModelProviders.ANTHROPIC,
+    enabled: true,
+    isBuiltIn: true,
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.GEMINI_3_FLASH_LITE_PREVIEW,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  {
+    name: ChatModels.GEMINI_FLASH,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION],
+  },
+  // Disabled models
   {
     name: ChatModels.OPENROUTER_GEMINI_3_FLASH_PREVIEW,
     provider: ChatModelProviders.OPENROUTERAI,
@@ -261,15 +311,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.OPENROUTER_GEMINI_2_5_FLASH,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.OPENROUTER_GEMINI_2_5_PRO,
@@ -317,22 +358,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
-    name: ChatModels.GPT_5_4,
-    provider: ChatModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
-    name: ChatModels.GPT_5_mini,
-    provider: ChatModelProviders.OPENAI,
-    enabled: true,
-    isBuiltIn: true,
-    core: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
     name: ChatModels.GPT_41,
     provider: ChatModelProviders.OPENAI,
     enabled: false,
@@ -358,13 +383,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
-    name: ChatModels.CLAUDE_SONNET_4_6,
-    provider: ChatModelProviders.ANTHROPIC,
-    enabled: true,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
     name: ChatModels.GEMINI_3_FLASH_PREVIEW,
     provider: ChatModelProviders.GOOGLE,
     enabled: false,
@@ -372,27 +390,11 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
-    name: ChatModels.GEMINI_3_FLASH_LITE_PREVIEW,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
-  },
-  {
     name: ChatModels.GEMINI_3_PRO_PREVIEW,
     provider: ChatModelProviders.GOOGLE,
     enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GEMINI_FLASH,
-    provider: ChatModelProviders.GOOGLE,
-    enabled: true,
-    isBuiltIn: true,
-    projectEnabled: true,
-    capabilities: [ModelCapability.VISION],
   },
   {
     name: ChatModels.GEMINI_PRO,
