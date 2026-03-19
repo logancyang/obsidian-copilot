@@ -1,4 +1,4 @@
-import { CopilotSettings } from "@/settings/model";
+import { CopilotSettings, getSettings } from "@/settings/model";
 import { App, FileSystemAdapter } from "obsidian";
 
 /**
@@ -15,10 +15,36 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
 /**
  * Resolve the Miyo source id for the current vault.
  *
+ * Uses the user-configured vault name when set, otherwise falls back to the
+ * vault filesystem path or vault name.
+ *
  * @param app - Obsidian application instance.
- * @returns Vault folder path when available, otherwise vault name.
+ * @returns Custom vault name when configured, vault folder path when available, otherwise vault name.
  */
 export function getMiyoSourceId(app: App): string {
+  const customName = (getSettings().miyoVaultName || "").trim();
+  if (customName) {
+    return customName;
+  }
+  const vaultPath = getVaultBasePath(app);
+  if (vaultPath) {
+    return vaultPath;
+  }
+  return app.vault.getName();
+}
+
+/**
+ * Resolve the Miyo source id that would apply if a given vault name override were saved.
+ *
+ * @param app - Obsidian application instance.
+ * @param vaultNameOverride - The vault name value to use (empty string = auto-detect).
+ * @returns Resolved source id string.
+ */
+export function resolveMiyoSourceId(app: App, vaultNameOverride: string): string {
+  const trimmed = vaultNameOverride.trim();
+  if (trimmed) {
+    return trimmed;
+  }
   const vaultPath = getVaultBasePath(app);
   if (vaultPath) {
     return vaultPath;

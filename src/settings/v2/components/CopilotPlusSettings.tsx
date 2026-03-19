@@ -1,20 +1,28 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
+import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, resolveMiyoSourceId } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
 export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
   const [isValidatingSelfHost, setIsValidatingSelfHost] = useState(false);
   const isSelfHostEligible = useIsSelfHostEligible();
+  const [pendingVaultName, setPendingVaultName] = useState(settings.miyoVaultName || "");
+
+  // Keep local input in sync if settings change externally (e.g. settings reset)
+  useEffect(() => {
+    setPendingVaultName(settings.miyoVaultName || "");
+  }, [settings.miyoVaultName]);
 
   /**
    * Toggle self-host mode and handle validation requirements.
@@ -88,6 +96,60 @@ export const CopilotPlusSettings: React.FC = () => {
       confirmChange,
       `Enabling Miyo Search will refresh your vault index to store data in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. If your hardware is strong, you can increase this later in QA settings. Continue?`,
       "Refresh Index"
+    ).open();
+  };
+
+  /**
+   * Apply a vault name change for Miyo. When Miyo is enabled and the name actually changed,
+   * shows a confirmation modal warning that the existing Miyo index will be deleted and a
+   * full re-index will be triggered under the new name.
+   */
+  const handleVaultNameApply = async () => {
+    const newName = pendingVaultName.trim();
+    const oldName = (settings.miyoVaultName || "").trim();
+    if (newName === oldName) return;
+
+    // Compare resolved source IDs — if the user typed the auto-detected value
+    // (e.g. the vault path), the effective Miyo namespace is unchanged and we
+    // must not clear the existing index or trigger an unnecessary re-index.
+    const oldSourceId = resolveMiyoSourceId(app, oldName);
+    const newSourceId = resolveMiyoSourceId(app, newName);
+
+    if (!settings.enableMiyo || newSourceId === oldSourceId) {
+      // Miyo is off, or the effective source ID hasn't changed — save silently.
+      updateSetting("miyoVaultName", newName);
+      return;
+    }
+    const confirmChange = async () => {
+      try {
+        const miyoClient = new MiyoClient();
+        const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
+        await miyoClient.clearIndex(baseUrl, oldSourceId);
+      } catch (e) {
+        logWarn("Failed to clear Miyo index for old vault name", e);
+      }
+
+      updateSetting("miyoVaultName", newName);
+
+      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+      await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+        userInitiated: true,
+      });
+    };
+
+    const cancelChange = () => {
+      // Reset input back to the saved value if user cancels
+      setPendingVaultName(oldName);
+    };
+
+    new ConfirmModal(
+      app,
+      confirmChange,
+      `Changing the vault name will delete the existing Miyo index for "${oldSourceId || "(auto-detected)"}" and trigger a full re-index under the new name. This cannot be undone. Continue?`,
+      "Change Vault Name",
+      "Change & Re-index",
+      "Cancel",
+      cancelChange
     ).open();
   };
 
@@ -227,6 +289,40 @@ export const CopilotPlusSettings: React.FC = () => {
                     onChange={(value) => updateSetting("miyoServerUrl", value)}
                     placeholder="http://127.0.0.1:8742"
                   />
+
+                  <SettingItem
+                    type="custom"
+                    title="Vault Name"
+                    description={
+                      <span>
+                        This is how Miyo identifies and remembers your vault&apos;s index — think of
+                        it as the unique label for all your indexed notes. Leave blank to use the
+                        auto-detected vault path. <strong>Set this before enabling Miyo.</strong> If
+                        you access Miyo from multiple devices or a remote server, use the same vault
+                        name on every device so they all share the same index.
+                      </span>
+                    }
+                  >
+                    <div className="tw-flex tw-items-center tw-gap-2">
+                      <Input
+                        value={pendingVaultName}
+                        onChange={(e) => setPendingVaultName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") handleVaultNameApply();
+                        }}
+                        placeholder="Default: vault path"
+                        className="tw-w-full sm:tw-w-[200px]"
+                      />
+                      {pendingVaultName.trim() !== (settings.miyoVaultName || "").trim() && (
+                        <button
+                          onClick={handleVaultNameApply}
+                          className="tw-rounded-md tw-bg-interactive-accent tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium tw-text-on-accent hover:tw-bg-interactive-accent-hover"
+                        >
+                          Apply
+                        </button>
+                      )}
+                    </div>
+                  </SettingItem>
 
                   <SettingItem
                     type="switch"

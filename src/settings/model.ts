@@ -141,6 +141,8 @@ export interface CopilotSettings {
   selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
+  /** Custom vault name for Miyo indexing (overrides auto-detected vault path/name) */
+  miyoVaultName: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
@@ -414,6 +416,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableMiyo has a default value
   if (typeof sanitizedSettings.enableMiyo !== "boolean") {
     sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
+  }
+
+  // Ensure miyoVaultName has a default value
+  if (typeof sanitizedSettings.miyoVaultName !== "string") {
+    sanitizedSettings.miyoVaultName = DEFAULT_SETTINGS.miyoVaultName;
   }
 
   // Ensure selfHostSearchProvider is a valid value
