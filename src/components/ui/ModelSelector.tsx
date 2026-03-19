@@ -11,11 +11,6 @@ import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String } from "@/utils";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  getApiKeyForProvider,
-  isRequiredChatModel,
-  providerRequiresApiKey,
-} from "@/utils/modelUtils";
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -42,22 +37,7 @@ export function ModelSelector({
     (model) => model.enabled && getModelKeyFromModel(model) === value
   );
 
-  // Filter models: show required models, local models, or models with valid API keys
-  const showModels = settings.activeModels.filter((model) => {
-    const isRequired = isRequiredChatModel(model);
-    if (isRequired) {
-      return true;
-    }
-
-    // Local providers don't require API keys
-    if (!providerRequiresApiKey(model.provider)) {
-      return true;
-    }
-
-    // Cloud providers need API keys
-    const hasApiKey = !!getApiKeyForProvider(model.provider, model);
-    return hasApiKey;
-  });
+  const showModels = settings.activeModels;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -84,13 +64,15 @@ export function ModelSelector({
         {showModels
           .filter((model) => model.enabled)
           .map((model) => {
-            const { hasApiKey, errorNotice } = checkModelApiKey(model, settings);
+            const { hasApiKey } = checkModelApiKey(model, settings);
             return (
               <DropdownMenuItem
                 key={getModelKeyFromModel(model)}
+                disabled={!hasApiKey}
                 onSelect={async (event) => {
-                  if (!hasApiKey && errorNotice) {
-                    setModelError(errorNotice);
+                  if (!hasApiKey) {
+                    event.preventDefault();
+                    return;
                   }
 
                   try {
@@ -108,9 +90,12 @@ export function ModelSelector({
                     }
                   }
                 }}
-                className={!hasApiKey ? "tw-opacity-70" : ""}
+                className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
               >
                 <ModelDisplay model={model} iconSize={12} />
+                {!hasApiKey && (
+                  <span className="tw-ml-auto tw-text-smallest tw-text-faint">Needs API key</span>
+                )}
               </DropdownMenuItem>
             );
           })}
