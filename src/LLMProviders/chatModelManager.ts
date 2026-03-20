@@ -362,11 +362,18 @@ export default class ChatModelManager {
           baseURL: customModel.baseUrl || "http://localhost:1234/v1",
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
-        // Enable reasoning extraction for models with REASONING capability
-        enableReasoning: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
-        // Pass reasoning effort if configured and reasoning capability is enabled
+        // Enable reasoning extraction based on thinking mode (same logic as Ollama's think param)
+        enableReasoning:
+          customModel.thinkingMode === "enabled"
+            ? true
+            : customModel.thinkingMode === "disabled"
+              ? false
+              : (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false),
+        // Pass reasoning effort if configured and reasoning is enabled (respects thinking mode)
         reasoningEffort:
-          customModel.capabilities?.includes(ModelCapability.REASONING) &&
+          customModel.thinkingMode !== "disabled" &&
+          (customModel.thinkingMode === "enabled" ||
+            customModel.capabilities?.includes(ModelCapability.REASONING)) &&
           customModel.reasoningEffort
             ? customModel.reasoningEffort
             : undefined,

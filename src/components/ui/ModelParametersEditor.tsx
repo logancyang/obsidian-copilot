@@ -49,6 +49,8 @@ export function ModelParametersEditor({
   showTokenLimit = true,
 }: ModelParametersEditorProps) {
   const isOllamaModel = model.provider === ChatModelProviders.OLLAMA;
+  const isLMStudioModel =
+    model.provider === ChatModelProviders.LM_STUDIO || model.provider === "lm_studio";
 
   // Parameter values: model.xxx ?? settings.xxx
   const temperature = model.temperature ?? settings.temperature;
@@ -142,8 +144,8 @@ export function ModelParametersEditor({
         </FormField>
       )}
 
-      {/* Thinking Mode - Ollama only */}
-      {isOllamaModel && (
+      {/* Thinking Mode - Ollama and LM Studio */}
+      {(isOllamaModel || isLMStudioModel) && (
         <FormField>
           <ParameterControl
             type="select"
