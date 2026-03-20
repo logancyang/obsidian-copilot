@@ -37,7 +37,7 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
   /**
    * Enable prompt caching (cache_control) for OpenRouter requests.
    * Defaults to true. Set to false for Zero Data Retention (ZDR) endpoints
-   * that do not support Anthropic's automatic caching.
+   * that do not support prompt caching.
    */
   enablePromptCaching?: boolean;
 

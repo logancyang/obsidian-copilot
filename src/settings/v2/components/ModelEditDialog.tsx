@@ -222,7 +222,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               content={
                 <div className="tw-text-sm tw-text-muted">
                   Disable if your OpenRouter endpoint uses Zero Data Retention (ZDR), which does not
-                  support Anthropic prompt caching.
+                  support prompt caching.
                 </div>
               }
             />
