@@ -329,6 +329,8 @@ export default class ChatModelManager {
           customModel.reasoningEffort
             ? customModel.reasoningEffort
             : undefined,
+        // Enable prompt caching by default; can be turned off for ZDR endpoints
+        enablePromptCaching: customModel.enablePromptCaching ?? true,
       },
       [ChatModelProviders.GROQ]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),

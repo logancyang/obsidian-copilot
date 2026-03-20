@@ -34,6 +34,13 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
    */
   reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
 
+  /**
+   * Enable prompt caching (cache_control) for OpenRouter requests.
+   * Defaults to true. Set to false for Zero Data Retention (ZDR) endpoints
+   * that do not support prompt caching.
+   */
+  enablePromptCaching?: boolean;
+
   // All other ChatOpenAI parameters
   modelName?: string;
   apiKey?: string;
@@ -51,18 +58,25 @@ export interface ChatOpenRouterInput extends BaseChatModelParams {
 export class ChatOpenRouter extends ChatOpenAI {
   private enableReasoning: boolean;
   private reasoningEffort?: "minimal" | "low" | "medium" | "high" | "xhigh";
+  private enablePromptCaching: boolean;
   private openaiClient: OpenAI;
   /** True when the configured baseURL belongs to the OpenRouter gateway. */
   private isOpenRouter: boolean;
 
   constructor(fields: ChatOpenRouterInput) {
-    const { enableReasoning = false, reasoningEffort, ...rest } = fields;
+    const {
+      enableReasoning = false,
+      reasoningEffort,
+      enablePromptCaching = true,
+      ...rest
+    } = fields;
 
     // Pass all other parameters to ChatOpenAI
     super(rest);
 
     this.enableReasoning = enableReasoning;
     this.reasoningEffort = reasoningEffort;
+    this.enablePromptCaching = enablePromptCaching;
 
     const baseURL = fields.configuration?.baseURL || "https://openrouter.ai/api/v1";
     this.isOpenRouter = baseURL.includes("openrouter.ai");
@@ -92,9 +106,12 @@ export class ChatOpenRouter extends ChatOpenAI {
 
     // Only inject cache_control for OpenRouter endpoints. LM Studio, Copilot Plus, and
     // other OpenAI-compatible backends share this class but reject unknown top-level fields.
-    const withCaching = this.isOpenRouter
-      ? { ...baseParams, cache_control: { type: "ephemeral" } }
-      : baseParams;
+    // Skip caching when enablePromptCaching is false (e.g. for ZDR endpoints that don't
+    // support Anthropic's automatic caching).
+    const withCaching =
+      this.isOpenRouter && this.enablePromptCaching
+        ? { ...baseParams, cache_control: { type: "ephemeral" } }
+        : baseParams;
 
     // Add reasoning parameter if enabled
     if (this.enableReasoning) {
