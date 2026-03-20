@@ -207,6 +207,30 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
           )}
         </FormField>
 
+        {/* Prompt Caching Toggle for OpenRouter */}
+        {localModel.provider === ChatModelProviders.OPENROUTERAI && (
+          <FormField label="Prompt Caching">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <Checkbox
+                id="enable-prompt-caching"
+                checked={localModel.enablePromptCaching !== false}
+                onCheckedChange={(checked) => handleLocalUpdate("enablePromptCaching", checked)}
+              />
+              <Label htmlFor="enable-prompt-caching" className="tw-cursor-pointer tw-text-sm">
+                Enable Prompt Caching
+              </Label>
+              <HelpTooltip
+                content={
+                  <div className="tw-text-sm tw-text-muted">
+                    Disable if your OpenRouter endpoint uses Zero Data Retention (ZDR), which does
+                    not support Anthropic prompt caching.
+                  </div>
+                }
+              />
+            </div>
+          </FormField>
+        )}
+
         {showOtherParameters && (
           <>
             <FormField
@@ -296,30 +320,6 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
                       Use Responses API (faster inference)
                     </Label>
                   </HelpTooltip>
-                </div>
-              </FormField>
-            )}
-
-            {/* Prompt Caching Toggle for OpenRouter */}
-            {localModel.provider === ChatModelProviders.OPENROUTERAI && (
-              <FormField label="Prompt Caching">
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  <Checkbox
-                    id="enable-prompt-caching"
-                    checked={localModel.enablePromptCaching !== false}
-                    onCheckedChange={(checked) => handleLocalUpdate("enablePromptCaching", checked)}
-                  />
-                  <Label htmlFor="enable-prompt-caching" className="tw-cursor-pointer tw-text-sm">
-                    Enable Prompt Caching
-                  </Label>
-                  <HelpTooltip
-                    content={
-                      <div className="tw-text-sm tw-text-muted">
-                        Disable if your OpenRouter endpoint uses Zero Data Retention (ZDR), which
-                        does not support Anthropic prompt caching.
-                      </div>
-                    }
-                  />
                 </div>
               </FormField>
             )}
