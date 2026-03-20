@@ -300,6 +300,32 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
               </FormField>
             )}
 
+            {/* Prompt Caching Toggle for OpenRouter */}
+            {localModel.provider === ChatModelProviders.OPENROUTERAI && (
+              <FormField label="Prompt Caching">
+                <div className="tw-flex tw-items-center tw-gap-2">
+                  <Checkbox
+                    id="enable-prompt-caching"
+                    checked={localModel.enablePromptCaching !== false}
+                    onCheckedChange={(checked) => handleLocalUpdate("enablePromptCaching", checked)}
+                  />
+                  <HelpTooltip
+                    content={
+                      <div className="tw-text-sm tw-text-muted">
+                        Enable Anthropic prompt caching (cache_control) for this model. Turn this
+                        off if you use a Zero Data Retention (ZDR) endpoint on OpenRouter that does
+                        not support automatic caching.
+                      </div>
+                    }
+                  >
+                    <Label htmlFor="enable-prompt-caching" className="tw-cursor-pointer tw-text-sm">
+                      Enable Prompt Caching
+                    </Label>
+                  </HelpTooltip>
+                </div>
+              </FormField>
+            )}
+
             {/* Model Parameters Editor */}
             <ModelParametersEditor
               model={localModel}

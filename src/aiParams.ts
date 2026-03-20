@@ -156,6 +156,9 @@ export interface CustomModel {
   // LM Studio specific fields
   useResponsesApi?: boolean;
 
+  // OpenRouter specific fields
+  enablePromptCaching?: boolean;
+
   projectEnabled?: boolean;
   plusExclusive?: boolean;
   believerExclusive?: boolean;
