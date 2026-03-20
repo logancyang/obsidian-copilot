@@ -22,6 +22,7 @@ The repository has a GitHub Actions workflow that triggers on PR merge to `maste
 ### Step 1: Determine Release Type
 
 Ask the user:
+
 - **Patch** (bug fixes, small improvements)
 - **Minor** (new features, enhancements)
 - **Major** (breaking changes, major rewrites)
@@ -34,6 +35,7 @@ git pull origin master
 ```
 
 Create a release branch:
+
 ```bash
 git checkout -b release/vX.Y.Z
 ```
@@ -46,14 +48,16 @@ Run `npm version [patch|minor|major] --no-git-tag-version` to bump the version i
 
 After bumping, read the new version from `package.json` to use in subsequent steps.
 
-### Step 4: Gather Merged PRs
+### Step 4: Gather and Understand Merged PRs
 
 Find the last release tag:
+
 ```bash
 git describe --tags --abbrev=0
 ```
 
 List all merged PRs since that tag (paginate to avoid missing entries if there are many):
+
 ```bash
 gh pr list --state merged --base master --search "merged:>YYYY-MM-DD" --json number,title,author,labels --limit 500
 ```
@@ -61,15 +65,31 @@ gh pr list --state merged --base master --search "merged:>YYYY-MM-DD" --json num
 If the output is exactly 500 entries, there may be more — repeat with an earlier `--search` cutoff or use `--limit 1000` and re-run.
 
 Use the tag date as the cutoff. You can get it with:
+
 ```bash
 git log -1 --format=%ai <tag>
 ```
 
+**Read every PR's description** to understand what each change actually does. Don't rely on PR titles alone — they are often terse or developer-oriented. Fetch each PR's body:
+
+```bash
+gh pr view <NUMBER> --json body,title,author,labels
+```
+
+Read through all PR descriptions to understand:
+
+- What user-facing behavior changed
+- Why the change was made
+- Any context that helps you write a better release note
+
+This understanding is critical for writing accurate, user-facing release notes in the next step.
+
 ### Step 5: Generate Release Notes
 
-Write release notes following the established style in `RELEASES.md`. Study the existing entries carefully:
+Use your understanding of each PR's description and context to write release notes following the established style in `RELEASES.md`. Study the existing entries carefully:
 
 **Format rules:**
+
 - Header: `# Copilot for Obsidian - Release vX.Y.Z` followed by emoji (use 🚀 for minor/major, pick something fitting for patches)
 - Opening line: A 1-2 sentence cheerful summary of the release highlights
 - Bullet list of changes with emoji prefixes:
@@ -82,15 +102,18 @@ Write release notes following the established style in `RELEASES.md`. Study the 
   - `### Improvements` — list PRs as `- #NUMBER Description @author`
   - `### Bug Fixes` — list fix PRs as `- #NUMBER Description @author`
 - End with the Troubleshoot footer:
+
   ```
   ## Troubleshoot
 
   - If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
   - Please report any issue you see in the member channel!
   ```
+
 - Add `---` separator after the Troubleshoot section
 
 **Writing style:**
+
 - Cheerful and enthusiastic, like you're excited to share good news
 - No developer jargon — explain features from the user's perspective
 - Use exclamation marks and emoji naturally (don't overdo it)
@@ -104,6 +127,7 @@ Prepend the new release entry at the top of `RELEASES.md`, right after the `# Re
 ### Step 7: Commit and Create PR
 
 Stage all changed files:
+
 ```bash
 git add package.json package-lock.json manifest.json versions.json RELEASES.md
 ```
@@ -111,6 +135,7 @@ git add package.json package-lock.json manifest.json versions.json RELEASES.md
 Commit with message: `release: vX.Y.Z`
 
 Push and create the PR:
+
 ```bash
 git push -u origin release/vX.Y.Z
 gh pr create --title "X.Y.Z" --body "$(cat <<'EOF'
