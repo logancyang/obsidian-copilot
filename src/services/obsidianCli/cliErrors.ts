@@ -45,6 +45,11 @@ export function formatCliFailureMessage(
  */
 export function throwCliFailure(result: ObsidianCliProcessResult): never {
   throw new Error(
-    formatCliFailureMessage(result.stderr, result.exitCode, result.errorCode, result.attemptedBinaries)
+    formatCliFailureMessage(
+      result.stderr,
+      result.exitCode,
+      result.errorCode,
+      result.attemptedBinaries
+    )
   );
 }

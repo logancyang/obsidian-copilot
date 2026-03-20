@@ -113,6 +113,42 @@ export function normalizeAzureUrl(raw: string | undefined): {
   return { baseUrl, apiVersion };
 }
 
+/**
+ * Resolve the `think` parameter for Ollama models.
+ *
+ * Most models accept a boolean (true/false). GPT-OSS is an edge case:
+ * it ignores booleans and instead expects "low", "medium", or "high"
+ * to control reasoning trace length. Thinking cannot be fully disabled
+ * on GPT-OSS — "low" is the minimum.
+ */
+function resolveOllamaThink(modelName: string, customModel: CustomModel): boolean | string {
+  const isGptOss = modelName.toLowerCase().includes("gpt-oss");
+  const hasReasoning = customModel.capabilities?.includes(ModelCapability.REASONING) ?? false;
+
+  if (isGptOss) {
+    // GPT-OSS requires "low" | "medium" | "high" — booleans are ignored
+    if (customModel.thinkingMode === "disabled") return "low";
+    if (customModel.thinkingMode === "enabled") {
+      // Use reasoningEffort if set, clamped to gpt-oss's valid values
+      const effort = customModel.reasoningEffort?.toLowerCase();
+      if (effort === "low" || effort === "medium" || effort === "high") return effort;
+      return "medium";
+    }
+    // Auto: use reasoningEffort if REASONING capability is on, otherwise "low"
+    if (hasReasoning) {
+      const effort = customModel.reasoningEffort?.toLowerCase();
+      if (effort === "low" || effort === "medium" || effort === "high") return effort;
+      return "medium";
+    }
+    return "low";
+  }
+
+  // Standard models: boolean think
+  if (customModel.thinkingMode === "enabled") return true;
+  if (customModel.thinkingMode === "disabled") return false;
+  return hasReasoning;
+}
+
 export default class ChatModelManager {
   private static instance: ChatModelManager;
   private static chatModel: BaseChatModel | null;
@@ -343,13 +379,11 @@ export default class ChatModelManager {
           Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
         },
         // Enable thinking for models with REASONING capability (e.g., qwen3, deepseek-r1)
+        // GPT-OSS edge case: ignores booleans, requires "low"/"medium"/"high"
         // Thinking content goes to additional_kwargs.reasoning_content
-        think:
-          customModel.thinkingMode === "enabled"
-            ? true
-            : customModel.thinkingMode === "disabled"
-              ? false
-              : (customModel.capabilities?.includes(ModelCapability.REASONING) ?? false),
+        // Type assertion: ChatOllama types only declare boolean, but the Ollama API
+        // accepts "low"/"medium"/"high" for gpt-oss models
+        think: resolveOllamaThink(modelName, customModel) as boolean,
         // Reduce repetition in local models (1.1 = slight penalty, helps with hallucination loops)
         repeatPenalty: 1.1,
         numCtx: customModel.numCtx ?? DEFAULT_OLLAMA_NUM_CTX,

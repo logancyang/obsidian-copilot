@@ -168,6 +168,13 @@ export function ModelParametersEditor({
                   <li>Enabled: Force thinking on</li>
                   <li>Disabled: Force thinking off (faster responses, less VRAM)</li>
                 </ul>
+                {isOllamaModel && model.name.toLowerCase().includes("gpt-oss") && (
+                  <p className="tw-mt-2 tw-text-xs tw-text-warning">
+                    GPT-OSS uses reasoning levels (low/medium/high) instead of on/off. Use the
+                    Reasoning Effort setting to control the level. Thinking cannot be fully
+                    disabled.
+                  </p>
+                )}
               </>
             }
           />
