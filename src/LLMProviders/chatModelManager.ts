@@ -23,6 +23,7 @@ import {
   ModelInfo,
   safeFetch,
   safeFetchNoThrow,
+  shouldUseGitHubCopilotResponsesApi,
 } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
@@ -42,6 +43,7 @@ import { ChatOpenRouter } from "./ChatOpenRouter";
 import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
+import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
 
 // Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
 // tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
@@ -821,12 +823,21 @@ export default class ChatModelManager {
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
     }
 
+    if (shouldUseGitHubCopilotResponsesApi(model)) {
+      constructorConfig.useResponsesApi = true;
+      logInfo(`Enabling Responses API for GitHub Copilot model: ${model.name}`);
+    }
+
     // For LM Studio, use ChatLMStudio by default for Responses API compatibility.
     // Opt out by setting useResponsesApi to false.
     if (model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false) {
       const lmStudioInstance = new ChatLMStudio(constructorConfig);
       logInfo(`[ChatModelManager] Using Responses API for LM Studio model: ${model.name}`);
       return lmStudioInstance;
+    }
+
+    if (shouldUseGitHubCopilotResponsesApi(model)) {
+      return new GitHubCopilotResponsesModel(constructorConfig);
     }
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
@@ -898,12 +909,18 @@ export default class ChatModelManager {
         constructorConfig.useResponsesApi = true;
       }
 
+      if (shouldUseGitHubCopilotResponsesApi(model)) {
+        constructorConfig.useResponsesApi = true;
+      }
+
       // For LM Studio with Responses API, ping via ChatLMStudio so the
       // connectivity check hits the same /v1/responses endpoint used in chats.
       const testModel =
         model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false
           ? new ChatLMStudio(constructorConfig)
-          : new (this.getProviderConstructor(modelToTest))(constructorConfig);
+          : shouldUseGitHubCopilotResponsesApi(model)
+            ? new GitHubCopilotResponsesModel(constructorConfig)
+            : new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 8000,
       });
@@ -914,7 +931,7 @@ export default class ChatModelManager {
       await tryPing(false);
       return true;
     } catch (firstError) {
-      console.log("First ping attempt failed, trying with CORS...");
+      logInfo("First ping attempt failed, retrying with CORS enabled.");
       try {
         // Second try with CORS
         await tryPing(true);

@@ -68,8 +68,8 @@ export interface CopilotAuthState {
  * - Token management (access token + copilot token)
  * - Model listing
  *
- * Chat completions are handled by GitHubCopilotChatModel (extends ChatOpenAICompletions),
- * which uses this provider for token lifecycle via buildCopilotRequestHeaders/getValidCopilotToken.
+ * Chat requests are handled by GitHubCopilotChatModel / GitHubCopilotResponsesModel,
+ * which use this provider for token lifecycle via buildCopilotRequestHeaders/getValidCopilotToken.
  *
  * WARNING: This uses GitHub Copilot's internal API which is not officially
  * supported for third-party applications. Use at your own risk.
