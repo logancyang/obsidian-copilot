@@ -67,8 +67,10 @@ export async function patchFrontmatter(
   if (!(await app.vault.adapter.exists(filePath))) return;
 
   const raw = await app.vault.adapter.read(filePath);
+  // Reason: detect line ending style to preserve consistency when appending new fields
+  const lineEnding = raw.includes("\r\n") ? "\r\n" : "\n";
   const updated = raw.replace(
-    /^(---\n[\s\S]*?)(---)/,
+    /^(\uFEFF?---\r?\n[\s\S]*?\r?\n)(---)/,
     (_match, yamlBlock: string, closing: string) => {
       let patched = yamlBlock;
       for (const [key, value] of Object.entries(updates)) {
@@ -80,7 +82,7 @@ export async function patchFrontmatter(
         if (fieldRegex.test(patched)) {
           patched = patched.replace(fieldRegex, `${key}: ${formattedValue}`);
         } else {
-          patched += `${key}: ${formattedValue}\n`;
+          patched += `${key}: ${formattedValue}${lineEnding}`;
         }
       }
       return patched + closing;
@@ -102,12 +104,15 @@ export async function readFrontmatterViaAdapter(
   filePath: string
 ): Promise<Record<string, string> | null> {
   const raw = await app.vault.adapter.read(filePath);
-  const yaml = raw.match(/^---\n([\s\S]*?)\n---/)?.[1];
+  // Reason: strip BOM and accept CRLF line endings for Windows/external-editor compatibility
+  const normalized = raw.replace(/^\uFEFF/, "");
+  const yaml = normalized.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/)?.[1];
   if (!yaml) return null;
 
   const result: Record<string, string> = {};
-  for (const line of yaml.split("\n")) {
-    const match = line.match(/^(\w+):\s*(.+)/);
+  for (const line of yaml.split(/\r?\n/)) {
+    // Reason: use [\w-] instead of \w to support hyphenated YAML keys (e.g. copilot-project-last-used)
+    const match = line.match(/^([\w-]+):\s*(.+)/);
     if (match) {
       result[match[1]] = match[2].trim().replace(/^["']|["']$/g, "");
     }

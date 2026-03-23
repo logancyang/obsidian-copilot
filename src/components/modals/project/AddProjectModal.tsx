@@ -1,30 +1,48 @@
-import { ProjectConfig, getCurrentProject } from "@/aiParams";
+import { ProjectConfig } from "@/aiParams";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
-import { TruncatedText } from "@/components/TruncatedText";
+import { openCachedItemPreview } from "@/utils/cacheFileOpener";
+import type { ProcessingItem } from "@/components/project/processingAdapter";
+import { ProcessingStatus } from "@/components/project/processing-status";
+import { useProjectProcessingData } from "@/components/project/useProjectProcessingData";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
+import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { SettingSlider } from "@/components/ui/setting-slider";
 import { Textarea } from "@/components/ui/textarea";
-import { DEFAULT_MODEL_SETTING } from "@/constants";
+import { UrlTagInput } from "@/components/ui/url-tag-input";
 import { SystemPromptSyntaxInstruction } from "@/components/SystemPromptSyntaxInstruction";
-import { getDecodedPatterns } from "@/search/searchUtils";
+import { DEFAULT_MODEL_SETTING } from "@/constants";
+import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadgeList";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String, randomUUID } from "@/utils";
+import { Settings } from "lucide-react";
+import {
+  type UrlItem,
+  parseProjectUrls,
+  serializeProjectUrls,
+} from "@/utils/urlTagUtils";
+import type CopilotPlugin from "@/main";
 import { App, Modal, Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
-import { HelpTooltip } from "@/components/ui/help-tooltip";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
   onSave: (project: ProjectConfig) => Promise<void>;
   onCancel: () => void;
+  plugin?: CopilotPlugin;
 }
 
-function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProjectModalContentProps) {
+function AddProjectModalContent({
+  initialProject,
+  onSave,
+  onCancel,
+  plugin,
+}: AddProjectModalContentProps) {
   const settings = useSettingsValue();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({
@@ -56,30 +74,43 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     }
   );
 
-  const showContext = getDecodedPatterns(
-    formData.contextSource.inclusions || formData.contextSource.exclusions || "nothing"
-  )
-    .reverse()
-    .join(",");
+  // URL items derived from formData for UrlTagInput
+  const urlItems = useMemo(
+    () =>
+      parseProjectUrls(
+        formData.contextSource?.webUrls || "",
+        formData.contextSource?.youtubeUrls || ""
+      ),
+    [formData.contextSource?.webUrls, formData.contextSource?.youtubeUrls]
+  );
 
-  const handleEditProjectContext = (originP: ProjectConfig) => {
-    // attempt to retrieve the latest project configuration.
-    let projectToEdit = originP;
+  // Reason: Shared hook handles cache loading, file enumeration, and processingData construction.
+  // contextSource draft is passed so newly added (unsaved) URLs appear as "Pending".
+  const { processingData, projectCache, isCurrentProject } = useProjectProcessingData({
+    cacheProject: initialProject ?? null,
+    contextSource: formData.contextSource,
+  });
 
-    if (initialProject?.id) {
-      const currentProject = getCurrentProject();
-      if (currentProject?.id === originP.id) {
-        // Use the latest global project configuration
-        projectToEdit = currentProject;
-      }
-    }
 
+
+  const handleEditProjectContext = (projectDraft: ProjectConfig) => {
     const modal = new ContextManageModal(
       app,
-      async (updatedProject: ProjectConfig) => {
-        setFormData(updatedProject);
+      (updatedProject: ProjectConfig) => {
+        // Reason: Only merge inclusions/exclusions (what ContextManageModal edits).
+        // Don't replace the entire contextSource — that would overwrite any
+        // webUrls/youtubeUrls changes the user made in AddProjectModal while
+        // the child modal was open.
+        setFormData((prev) => ({
+          ...prev,
+          contextSource: {
+            ...prev.contextSource,
+            inclusions: updatedProject.contextSource?.inclusions,
+            exclusions: updatedProject.contextSource?.exclusions,
+          },
+        }));
       },
-      projectToEdit
+      projectDraft
     );
     modal.open();
   };
@@ -93,14 +124,11 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     value: string | number | string[] | Record<string, any>
   ) => {
     setFormData((prev) => {
-      // Handle text input
       if (typeof value === "string") {
-        // Only trim for model key which shouldn't have whitespace
         if (field === "projectModelKey") {
           value = value.trim();
         }
       }
-      // Handle string arrays
       if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
         value = value.map((item) => item.trim()).filter(Boolean);
       }
@@ -127,14 +155,65 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
     });
   };
 
-  const handleSave = async () => {
-    // Trim the project name before validation and saving
-    if (formData.name) {
-      formData.name = formData.name.trim();
+  /** Handle URL adds from UrlTagInput, serialize back to formData strings */
+  const handleUrlAdd = (newUrls: UrlItem[]) => {
+    const allUrls = [...urlItems, ...newUrls];
+    const { webUrls, youtubeUrls } = serializeProjectUrls(allUrls);
+    handleInputChange("contextSource.webUrls", webUrls);
+    handleInputChange("contextSource.youtubeUrls", youtubeUrls);
+  };
+
+  /** Handle URL removal from UrlTagInput */
+  const handleUrlRemove = (id: string) => {
+    const remaining = urlItems.filter((u) => u.id !== id);
+    const { webUrls, youtubeUrls } = serializeProjectUrls(remaining);
+    handleInputChange("contextSource.webUrls", webUrls);
+    handleInputChange("contextSource.youtubeUrls", youtubeUrls);
+  };
+
+  /** Handle inclusions pattern changes from badge list deletion */
+  const handleInclusionsChange = (value: string) => {
+    handleInputChange("contextSource.inclusions", value);
+  };
+
+  /** Handle exclusions pattern changes from badge list deletion */
+  const handleExclusionsChange = (value: string) => {
+    handleInputChange("contextSource.exclusions", value);
+  };
+
+  /** Handle opening cached parsed content for any item (file or URL) */
+  const handleOpenCachedItem = (item: ProcessingItem) => {
+    openCachedItemPreview(app, projectCache, item);
+  };
+
+  /** Handle removing a failed URL from the project config via ProcessingStatus × button */
+  const handleRemoveUrl = (item: ProcessingItem) => {
+    // Reason: ProcessingItem.id is the raw URL, while UrlItem.id is "type:url".
+    // Match by url field and cacheKind to avoid ID format mismatch.
+    const targetType = item.cacheKind === "youtube" ? "youtube" : "web";
+    const remaining = urlItems.filter((u) => !(u.type === targetType && u.url === item.id));
+    const { webUrls, youtubeUrls } = serializeProjectUrls(remaining);
+    handleInputChange("contextSource.webUrls", webUrls);
+    handleInputChange("contextSource.youtubeUrls", youtubeUrls);
+  };
+
+  /** Handle retry for failed processing items */
+  const handleRetry = (itemId: string) => {
+    if (!plugin?.projectManager || !processingData) return;
+    const failedItem = processingData.failedItemMap.get(itemId);
+    if (failedItem) {
+      plugin.projectManager.retryFailedItem(failedItem);
     }
+  };
+
+  const handleSave = async () => {
+    const trimmedName = formData.name?.trim() ?? "";
+    const saveData = { ...formData, name: trimmedName };
 
     const requiredFields = ["name", "projectModelKey"];
-    const missingFields = requiredFields.filter((field) => !formData[field as keyof ProjectConfig]);
+    const missingFields = requiredFields.filter(
+      (field) => !saveData[field as keyof ProjectConfig]
+    );
 
     if (missingFields.length > 0) {
       setTouched((prev) => ({
@@ -147,7 +226,7 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
 
     try {
       setIsSubmitting(true);
-      await onSave(formData as ProjectConfig);
+      await onSave(saveData as ProjectConfig);
     } catch (e) {
       new Notice(err2String(e));
       setTouched((prev) => ({
@@ -160,222 +239,220 @@ function AddProjectModalContent({ initialProject, onSave, onCancel }: AddProject
   };
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-2 tw-p-4">
-      <div className="tw-mb-2 tw-text-xl tw-font-bold tw-text-normal">
-        {initialProject ? "Edit Project" : "New Project"}
+    <div className="tw-flex tw-h-full tw-flex-col">
+      {/* Header */}
+      <div className="tw-shrink-0 tw-px-4 tw-pb-2 tw-pt-4">
+        <div className="tw-text-xl tw-font-bold tw-text-normal">
+          {initialProject ? "Edit Project" : "New Project"}
+        </div>
+        <p className="tw-mt-1 tw-text-sm tw-text-muted">
+          Configure your project settings and context sources
+        </p>
       </div>
 
-      <div className="tw-flex tw-flex-col tw-gap-2">
-        <FormField
-          label="Project Name"
-          required
-          error={touched.name && !formData.name}
-          errorMessage="Project name is required"
-        >
-          <Input
-            type="text"
-            value={formData.name}
-            onChange={(e) => handleInputChange("name", e.target.value)}
-            onBlur={() => setTouched((prev) => ({ ...prev, name: true }))}
-            className="tw-w-full"
-          />
-        </FormField>
+      {/* Scrollable Content */}
+      <ScrollArea className="tw-min-h-0 tw-flex-1">
+        <div className="tw-flex tw-flex-col tw-gap-6 tw-p-4">
+          {/* Basic Info Card */}
+          <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
+            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Basic Info</h3>
+            <div className="tw-flex tw-flex-col tw-gap-3">
+              <FormField
+                label="Project Name"
+                required
+                error={touched.name && !formData.name}
+                errorMessage="Project name is required"
+              >
+                <Input
+                  type="text"
+                  value={formData.name}
+                  onChange={(e) => handleInputChange("name", e.target.value)}
+                  onBlur={() => setTouched((prev) => ({ ...prev, name: true }))}
+                  className="tw-w-full"
+                />
+              </FormField>
 
-        <FormField
-          label="Description"
-          description="Briefly describe the purpose and goals of the project"
-        >
-          <Input
-            type="text"
-            value={formData.description}
-            onChange={(e) => handleInputChange("description", e.target.value)}
-            className="tw-w-full"
-          />
-        </FormField>
+              <FormField
+                label="Description"
+                description="Briefly describe the purpose and goals of the project"
+              >
+                <Input
+                  type="text"
+                  value={formData.description}
+                  onChange={(e) => handleInputChange("description", e.target.value)}
+                  className="tw-w-full"
+                />
+              </FormField>
 
-        <FormField
-          label="Project System Prompt"
-          description="Custom instructions for how the AI should behave in this project context"
-        >
-          <SystemPromptSyntaxInstruction />
-          <Textarea
-            value={formData.systemPrompt}
-            onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
-            onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
-            placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
-            className="tw-min-h-32"
-          />
-        </FormField>
-
-        <FormField
-          label="Default Model"
-          required
-          error={touched.projectModelKey && !formData.projectModelKey}
-          errorMessage="Default model is required"
-        >
-          <ObsidianNativeSelect
-            value={formData.projectModelKey}
-            onChange={(e) => {
-              const value = e.target.value;
-              const selectedModel = settings.activeModels.find(
-                (m) => m.enabled && getModelKeyFromModel(m) === value
-              );
-              if (!selectedModel) return;
-
-              const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
-              if (!hasApiKey && errorNotice) {
-                // Keep selection allowed; error will surface in chat on send
-              }
-              handleInputChange("projectModelKey", value);
-            }}
-            onBlur={() => setTouched((prev) => ({ ...prev, projectModelKey: true }))}
-            placeholder="Select a model"
-            options={settings.activeModels
-              .filter((m) => m.enabled && m.projectEnabled)
-              .map((model) => ({
-                label: getModelDisplayWithIcons(model),
-                value: getModelKeyFromModel(model),
-              }))}
-          />
-        </FormField>
-
-        <div className="tw-space-y-4">
-          <div className="tw-text-base tw-font-medium">Model Configuration</div>
-          <div className="tw-grid tw-grid-cols-1 tw-gap-4">
-            <FormField label="Temperature">
-              <SettingSlider
-                value={formData.modelConfigs?.temperature ?? DEFAULT_MODEL_SETTING.TEMPERATURE}
-                onChange={(value) => handleInputChange("modelConfigs.temperature", value)}
-                min={0}
-                max={2}
-                step={0.01}
-                className="tw-w-full"
-              />
-            </FormField>
-            <FormField label="Token Limit">
-              <SettingSlider
-                value={formData.modelConfigs?.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS}
-                onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
-                min={1}
-                max={65000}
-                step={1}
-                className="tw-w-full"
-              />
-            </FormField>
+              <FormField
+                label="Project System Prompt"
+                description="Custom instructions for how the AI should behave in this project context"
+              >
+                <SystemPromptSyntaxInstruction />
+                <Textarea
+                  value={formData.systemPrompt}
+                  onChange={(e) => handleInputChange("systemPrompt", e.target.value)}
+                  onBlur={() => setTouched((prev) => ({ ...prev, systemPrompt: true }))}
+                  placeholder="Enter your project system prompt here... Use {[[Note Name]]} to include note contents."
+                  className="tw-min-h-32"
+                />
+              </FormField>
+            </div>
           </div>
-        </div>
 
-        <div className="tw-space-y-4">
-          <div className="tw-text-base tw-font-medium">Context Sources</div>
-          <FormField
-            label={
-              <div className="tw-flex tw-items-center tw-gap-2">
-                <span>File Context</span>
-                <HelpTooltip
-                  buttonClassName="tw-size-4 tw-text-muted"
-                  content={
-                    <div className="tw-max-w-80">
-                      <strong>Supported File Types:</strong>
-                      <br />
-                      <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt, rtf and
-                      many more
-                      <br />
-                      <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
-                      <br />
-                      <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
-                      <br />
-                      <br />
-                      Non-markdown files are converted to markdown in the background.
-                      <br />
-                      <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever is
-                      reached first.
+          {/* Model Configuration Card */}
+          <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
+            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">
+              Model Configuration
+            </h3>
+            <div className="tw-flex tw-flex-col tw-gap-3">
+              <FormField
+                label="Default Model"
+                required
+                error={touched.projectModelKey && !formData.projectModelKey}
+                errorMessage="Default model is required"
+              >
+                <ObsidianNativeSelect
+                  value={formData.projectModelKey}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    const selectedModel = settings.activeModels.find(
+                      (m) => m.enabled && getModelKeyFromModel(m) === value
+                    );
+                    if (!selectedModel) return;
+
+                    const { hasApiKey, errorNotice } = checkModelApiKey(selectedModel, settings);
+                    if (!hasApiKey && errorNotice) {
+                      // Keep selection allowed; error will surface in chat on send
+                    }
+                    handleInputChange("projectModelKey", value);
+                  }}
+                  onBlur={() => setTouched((prev) => ({ ...prev, projectModelKey: true }))}
+                  placeholder="Select a model"
+                  options={settings.activeModels
+                    .filter((m) => m.enabled && m.projectEnabled)
+                    .map((model) => ({
+                      label: getModelDisplayWithIcons(model),
+                      value: getModelKeyFromModel(model),
+                    }))}
+                />
+              </FormField>
+
+              <FormField label="Temperature">
+                <SettingSlider
+                  value={formData.modelConfigs?.temperature ?? DEFAULT_MODEL_SETTING.TEMPERATURE}
+                  onChange={(value) => handleInputChange("modelConfigs.temperature", value)}
+                  min={0}
+                  max={2}
+                  step={0.01}
+                  className="tw-w-full"
+                />
+              </FormField>
+
+              <FormField label="Token Limit">
+                <SettingSlider
+                  value={formData.modelConfigs?.maxTokens ?? DEFAULT_MODEL_SETTING.MAX_TOKENS}
+                  onChange={(value) => handleInputChange("modelConfigs.maxTokens", value)}
+                  min={1}
+                  max={65000}
+                  step={1}
+                  className="tw-w-full"
+                />
+              </FormField>
+            </div>
+          </div>
+
+          {/* Context Sources Card */}
+          <div className="tw-rounded-lg tw-border tw-border-border tw-p-4 tw-bg-secondary/50">
+            <h3 className="tw-mb-3 tw-text-sm tw-font-medium tw-text-normal">Context Sources</h3>
+            <div className="tw-flex tw-flex-col tw-gap-4">
+              {/* File Context Sub-card */}
+              <div className="tw-rounded-lg tw-border tw-border-border tw-p-4">
+                <FormField
+                  label={
+                    <div className="tw-flex tw-items-center tw-gap-2">
+                      <span>File Context</span>
+                      <HelpTooltip
+                        buttonClassName="tw-size-4 tw-text-muted"
+                        content={
+                          <div className="tw-max-w-80">
+                            <strong>Supported File Types:</strong>
+                            <br />
+                            <strong>• Documents:</strong> pdf, doc, docx, ppt, pptx, epub, txt, rtf
+                            and many more
+                            <br />
+                            <strong>• Images:</strong> jpg, png, svg, gif, bmp, webp, tiff
+                            <br />
+                            <strong>• Spreadsheets:</strong> xlsx, xls, csv, numbers
+                            <br />
+                            <br />
+                            Non-markdown files are converted to markdown in the background.
+                            <br />
+                            <strong>Rate limit:</strong> 50 files or 100MB per 3 hours, whichever is
+                            reached first.
+                          </div>
+                        }
+                      />
                     </div>
                   }
-                />
-              </div>
-            }
-            description="Define patterns to include specific files, folders or tags (specified in the note property) in the project context."
-          >
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <div className="tw-flex tw-flex-1 tw-flex-row">
-                <TruncatedText className="tw-max-w-[100px] tw-text-sm tw-text-accent">
-                  {showContext}
-                </TruncatedText>
-              </div>
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  handleEditProjectContext(formData);
-                }}
-              >
-                Manage Context
-              </Button>
-            </div>
-          </FormField>
-
-          <FormField label="Web URLs">
-            <Textarea
-              value={formData.contextSource?.webUrls}
-              onChange={(e) => {
-                const urls = e.target.value.split("\n");
-
-                // Process each URL while preserving spaces and empty lines
-                const processedUrls = urls.map((url) => {
-                  if (!url.trim()) return url; // Preserve empty lines and whitespace-only lines
-                  try {
-                    new URL(url.trim());
-                    return url; // Keep original formatting including spaces
-                  } catch {
-                    return url; // Keep invalid URLs for user to fix
-                  }
-                });
-
-                handleInputChange("contextSource.webUrls", processedUrls.join("\n"));
-              }}
-              placeholder="Enter web URLs, one per line"
-              className="tw-min-h-20 tw-w-full"
-            />
-          </FormField>
-
-          <FormField label="YouTube URLs">
-            <Textarea
-              value={formData.contextSource?.youtubeUrls}
-              onChange={(e) => {
-                const urls = e.target.value.split("\n");
-
-                // Process each URL while preserving spaces and empty lines
-                const processedUrls = urls.map((url) => {
-                  if (!url.trim()) return url; // Preserve empty lines and whitespace-only lines
-                  try {
-                    const urlObj = new URL(url.trim());
-                    if (
-                      urlObj.hostname.includes("youtube.com") ||
-                      urlObj.hostname.includes("youtu.be")
-                    ) {
-                      return url; // Keep original formatting including spaces
+                  description="Define patterns to include specific files, folders or tags (specified in the note property) in the project context."
+                >
+                  <ProjectContextBadgeList
+                    inclusions={formData.contextSource?.inclusions}
+                    exclusions={formData.contextSource?.exclusions}
+                    onInclusionsChange={handleInclusionsChange}
+                    onExclusionsChange={handleExclusionsChange}
+                    actionSlot={
+                      <Button
+                        size="lg"
+                        className="tw-h-9 tw-gap-1 tw-px-3 sm:tw-h-auto sm:tw-px-2"
+                        onClick={() => handleEditProjectContext(formData)}
+                      >
+                        <Settings className="tw-size-4 sm:tw-size-3.5" />
+                        Manage Context
+                      </Button>
                     }
-                    return url; // Keep non-YouTube URLs for user to fix
-                  } catch {
-                    return url; // Keep invalid URLs for user to fix
-                  }
-                });
+                  />
+                </FormField>
+              </div>
 
-                handleInputChange("contextSource.youtubeUrls", processedUrls.join("\n"));
-              }}
-              placeholder="Enter YouTube URLs, one per line"
-              className="tw-min-h-20 tw-w-full"
+              {/* URLs Sub-card */}
+              <div className="tw-rounded-lg tw-border tw-border-border tw-p-4">
+                <div className="tw-mb-3">
+                  <span className="tw-text-sm tw-font-medium tw-text-normal">URLs</span>
+                  <p className="tw-mt-1 tw-text-ui-smaller tw-text-muted">
+                    Add web pages or YouTube videos as context sources
+                  </p>
+                </div>
+                <UrlTagInput urls={urlItems} onAdd={handleUrlAdd} onRemove={handleUrlRemove} />
+              </div>
+            </div>
+          </div>
+
+          {/* Processing Status - show for any project in edit mode (active: live state; others: cache state) */}
+          {initialProject && processingData && (
+            <ProcessingStatus
+              items={processingData.items}
+              onRetry={isCurrentProject ? handleRetry : undefined}
+              onOpenCachedItem={projectCache != null ? handleOpenCachedItem : undefined}
+              onRemoveUrl={handleRemoveUrl}
+              defaultExpanded={false}
+              maxHeight="200px"
             />
-          </FormField>
+          )}
         </div>
-      </div>
+      </ScrollArea>
 
-      <div className="tw-mt-4 tw-flex tw-items-center tw-justify-end tw-gap-2">
-        <Button variant="ghost" onClick={onCancel} disabled={isSubmitting}>
-          Cancel
-        </Button>
-        <Button onClick={handleSave} disabled={isSubmitting || !isFormValid()}>
-          {isSubmitting ? "Saving..." : "Save"}
-        </Button>
+      {/* Sticky Footer */}
+      <div className="tw-shrink-0 tw-border-t tw-border-border tw-px-4 tw-py-3">
+        <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+          <Button variant="ghost" onClick={onCancel} disabled={isSubmitting}>
+            Cancel
+          </Button>
+          <Button onClick={handleSave} disabled={isSubmitting || !isFormValid()}>
+            {isSubmitting ? "Saving..." : "Save"}
+          </Button>
+        </div>
       </div>
     </div>
   );
@@ -387,13 +464,19 @@ export class AddProjectModal extends Modal {
   constructor(
     app: App,
     private onSave: (project: ProjectConfig) => Promise<void>,
-    private initialProject?: ProjectConfig
+    private initialProject?: ProjectConfig,
+    private plugin?: CopilotPlugin
   ) {
     super(app);
   }
 
   onOpen() {
-    const { contentEl } = this;
+    const { contentEl, modalEl } = this;
+
+    // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea
+    // modalEl.style.minWidth = "min(640px, 90vw)";
+    modalEl.style.maxHeight = "85vh";
+
     this.root = createRoot(contentEl);
 
     const handleSave = async (project: ProjectConfig) => {
@@ -410,6 +493,7 @@ export class AddProjectModal extends Modal {
         initialProject={this.initialProject}
         onSave={handleSave}
         onCancel={handleCancel}
+        plugin={this.plugin}
       />
     );
   }
