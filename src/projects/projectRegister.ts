@@ -45,13 +45,20 @@ export class ProjectRegister {
   constructor(vault: Vault) {
     this.vault = vault;
     this.manager = ProjectFileManager.getInstance(vault);
-    this.initializeEventListeners();
   }
 
   /**
-   * Initialize: load all projects (internally runs read-side fallback migration).
+   * Initialize: register vault listeners and load all projects.
+   *
+   * Reason: listeners must be registered here (not in the constructor) because
+   * the constructor runs during plugin onload(), before onLayoutReady(). Obsidian's
+   * Vault.on("create") fires for every existing file during the initial vault load,
+   * which would trigger premature cache mutations and ensureProjectFrontmatter writes
+   * before migration has completed. Deferring to initialize() (called from
+   * onLayoutReady) avoids this race.
    */
   async initialize(): Promise<void> {
+    this.initializeEventListeners();
     await this.manager.initialize();
   }
 

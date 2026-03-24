@@ -204,12 +204,18 @@ export async function parseProjectConfigFile(file: TFile): Promise<ProjectFileRe
   // Reason: frontmatter id is the sole authoritative identity. Do NOT fallback to folderName
   // because with name-based folders, folderName is derived from project name, not id.
   // Files missing copilot-project-id are treated as corrupted and skipped.
-  const idFromFrontmatter = coerceFrontmatterString(frontmatter?.[COPILOT_PROJECT_ID], "").trim();
-  if (!idFromFrontmatter) {
+  // Reason: YAML scalar typing can parse bare numeric ids (e.g. `copilot-project-id: 123`)
+  // as numbers. Coerce to string so valid numeric ids are not silently dropped.
+  const rawId = frontmatter?.[COPILOT_PROJECT_ID];
+  const idFromFrontmatter =
+    typeof rawId === "number" && Number.isFinite(rawId)
+      ? String(rawId)
+      : coerceFrontmatterString(rawId, "");
+  if (!idFromFrontmatter.trim()) {
     logWarn(`[Projects] Missing ${COPILOT_PROJECT_ID} in frontmatter, skipping file: ${file.path}`);
     return null;
   }
-  const projectId = idFromFrontmatter;
+  const projectId = idFromFrontmatter.trim();
 
   const nameFromFrontmatter = coerceFrontmatterString(
     frontmatter?.[COPILOT_PROJECT_NAME],

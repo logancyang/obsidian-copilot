@@ -60,18 +60,17 @@ async function saveFailedProjectToUnsupported(
     // Reason: use adapter.exists() instead of vault.getAbstractFileByPath() because
     // hidden folders are not indexed in the vault cache.
     while (await vault.adapter.exists(filePath)) {
-      // Reason: if the existing file is for the same project (same raw id), skip — no new backup needed.
-      // Only add a suffix when the collision is from a different project id.
+      // Reason: skip only when the existing backup is structurally identical (same id AND content).
+      // Duplicate-id entries with different content (e.g. different systemPrompt/name) must each
+      // get their own backup, otherwise the second one is unrecoverable after projectList is cleared.
       if (suffix === 2) {
-        // First collision: check if existing backup is for the same project
         try {
           const existingContent = await vault.adapter.read(filePath);
-          // Reason: parse the fenced JSON block to structurally compare project id,
-          // avoiding false positives from substring matches in name/description/systemPrompt.
           const jsonMatch = existingContent.match(/```json\s*\n([\s\S]*?)\n```/);
           if (jsonMatch) {
             const backedUpProject = JSON.parse(jsonMatch[1]);
-            if (backedUpProject?.id === project.id) return false;
+            // Reason: compare full JSON to detect same-id but different-content duplicates.
+            if (JSON.stringify(backedUpProject) === JSON.stringify(project)) return false;
           }
         } catch {
           // Can't verify — treat as collision and create suffixed backup
