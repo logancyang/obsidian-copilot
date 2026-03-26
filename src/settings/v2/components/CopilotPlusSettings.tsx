@@ -232,10 +232,9 @@ export const CopilotPlusSettings: React.FC = () => {
                     title="Remote Vault Path (Optional)"
                     description={
                       <span>
-                        Leave blank when accessing Miyo locally — the vault path will be
-                        auto-detected. Set this only when using a remote Miyo server to override the
-                        vault identifier. Must match exactly across all devices sharing the same
-                        remote Miyo instance. <strong>Set this before enabling Miyo.</strong>
+                        Leave blank when accessing Miyo locally. Set this only when using a remote
+                        Miyo server to override the vault identifier. Must match exactly across all
+                        devices sharing the same remote Miyo instance.
                       </span>
                     }
                     value={settings.miyoRemoteVaultPath || ""}
@@ -251,11 +250,16 @@ export const CopilotPlusSettings: React.FC = () => {
                     disabled={isValidatingSelfHost}
                   />
 
-                  {settings.enableMiyo && (settings.miyoServerUrl || "").trim() && (
+                  {settings.enableMiyo && (
                     <div className="tw-text-xs tw-text-muted">
-                      Remote vault path:{" "}
+                      Vault path:{" "}
                       <span className="tw-font-medium tw-text-normal">
-                        {resolveMiyoVault(app, settings.miyoRemoteVaultPath || "")}
+                        {resolveMiyoVault(
+                          app,
+                          (settings.miyoServerUrl || "").trim()
+                            ? settings.miyoRemoteVaultPath || ""
+                            : ""
+                        )}
                       </span>
                     </div>
                   )}
