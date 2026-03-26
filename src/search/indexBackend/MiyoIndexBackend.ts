@@ -3,7 +3,7 @@ import { App, Notice } from "obsidian";
 import { CustomError } from "@/error";
 import { logError, logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoUpsertDocument } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoVault } from "@/miyo/miyoUtils";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import type {
   SemanticIndexBackend,
@@ -299,7 +299,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    * @returns Source id string.
    */
   private getSourceId(): string {
-    return getMiyoSourceId(this.app);
+    return getMiyoVault(this.app);
   }
 
   /**

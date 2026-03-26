@@ -1,6 +1,6 @@
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoVault } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
@@ -125,7 +125,7 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
     const settings = getSettings();
     const miyoClient = new MiyoClient();
     const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const vault = getMiyoSourceId(app);
+    const vault = getMiyoVault(app);
     const response = await miyoClient.searchRelated(baseUrl, filePath, {
       vault,
       limit: MAX_K,

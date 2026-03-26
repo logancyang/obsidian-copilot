@@ -4,7 +4,7 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoVault } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 
@@ -91,7 +91,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       }
       const response = await this.client.search(
         baseUrl,
-        getMiyoSourceId(this.app),
+        getMiyoVault(this.app),
         query,
         limit,
         filters

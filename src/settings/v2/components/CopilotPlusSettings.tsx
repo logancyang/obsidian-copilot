@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, resolveMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, resolveMiyoVault } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
@@ -291,7 +291,7 @@ export const CopilotPlusSettings: React.FC = () => {
                     <div className="tw-text-xs tw-text-muted">
                       Remote vault path:{" "}
                       <span className="tw-font-medium tw-text-normal">
-                        {resolveMiyoSourceId(
+                        {resolveMiyoVault(
                           app,
                           (settings.miyoServerUrl || "").trim()
                             ? settings.miyoRemoteVaultPath || ""

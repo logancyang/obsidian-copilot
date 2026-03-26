@@ -2,7 +2,7 @@ import { TFile } from "obsidian";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoVault } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { isSelfHostAccessValid } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
@@ -48,7 +48,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
 }));
 
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoSourceId: jest.fn(),
+  getMiyoVault: jest.fn(),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
 
@@ -82,7 +82,7 @@ describe("findRelevantNotes", () => {
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
   >;
-  const mockedGetMiyoSourceId = getMiyoSourceId as jest.MockedFunction<typeof getMiyoSourceId>;
+  const mockedGetMiyoSourceId = getMiyoVault as jest.MockedFunction<typeof getMiyoVault>;
   const mockedVectorStoreManager = VectorStoreManager as unknown as {
     getInstance: () => {
       getDocumentsByPath: jest.Mock;
