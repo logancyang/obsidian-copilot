@@ -291,7 +291,12 @@ export const CopilotPlusSettings: React.FC = () => {
                     <div className="tw-text-xs tw-text-muted">
                       Remote vault path:{" "}
                       <span className="tw-font-medium tw-text-normal">
-                        {resolveMiyoSourceId(app, settings.miyoRemoteVaultPath || "")}
+                        {resolveMiyoSourceId(
+                          app,
+                          (settings.miyoServerUrl || "").trim()
+                            ? settings.miyoRemoteVaultPath || ""
+                            : ""
+                        )}
                       </span>{" "}
                       <span className="tw-text-faint">
                         ({(settings.miyoServerUrl || "").trim() ? "remote" : "local"})
