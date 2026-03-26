@@ -1,7 +1,6 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
-import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
@@ -9,21 +8,13 @@ import { getMiyoCustomUrl, resolveMiyoVault } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
 export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
   const [isValidatingSelfHost, setIsValidatingSelfHost] = useState(false);
   const isSelfHostEligible = useIsSelfHostEligible();
-  const [pendingRemoteVaultPath, setPendingRemoteVaultPath] = useState(
-    settings.miyoRemoteVaultPath || ""
-  );
-
-  // Keep local input in sync if settings change externally (e.g. settings reset)
-  useEffect(() => {
-    setPendingRemoteVaultPath(settings.miyoRemoteVaultPath || "");
-  }, [settings.miyoRemoteVaultPath]);
 
   /**
    * Toggle self-host mode and handle validation requirements.
@@ -98,15 +89,6 @@ export const CopilotPlusSettings: React.FC = () => {
       `Enabling Miyo Search will refresh your vault index to store data in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. If your hardware is strong, you can increase this later in QA settings. Continue?`,
       "Refresh Index"
     ).open();
-  };
-
-  /**
-   * Save the remote vault path. This is a remote-only identifier and never triggers re-indexing.
-   */
-  const handleVaultPathApply = () => {
-    const newPath = pendingRemoteVaultPath.trim();
-    if (newPath === (settings.miyoRemoteVaultPath || "").trim()) return;
-    updateSetting("miyoRemoteVaultPath", newPath);
   };
 
   return (
@@ -246,7 +228,7 @@ export const CopilotPlusSettings: React.FC = () => {
                   />
 
                   <SettingItem
-                    type="custom"
+                    type="text"
                     title="Remote Vault Path (Optional)"
                     description={
                       <span>
@@ -256,27 +238,9 @@ export const CopilotPlusSettings: React.FC = () => {
                         remote Miyo instance. <strong>Set this before enabling Miyo.</strong>
                       </span>
                     }
-                  >
-                    <div className="tw-flex tw-items-center tw-gap-2">
-                      <Input
-                        value={pendingRemoteVaultPath}
-                        onChange={(e) => setPendingRemoteVaultPath(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") handleVaultPathApply();
-                        }}
-                        className="tw-w-full sm:tw-w-[200px]"
-                      />
-                      {pendingRemoteVaultPath.trim() !==
-                        (settings.miyoRemoteVaultPath || "").trim() && (
-                        <button
-                          onClick={handleVaultPathApply}
-                          className="tw-rounded-md tw-bg-interactive-accent tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium tw-text-on-accent hover:tw-bg-interactive-accent-hover"
-                        >
-                          Apply
-                        </button>
-                      )}
-                    </div>
-                  </SettingItem>
+                    value={settings.miyoRemoteVaultPath || ""}
+                    onChange={(value) => updateSetting("miyoRemoteVaultPath", value)}
+                  />
 
                   <SettingItem
                     type="switch"
