@@ -1,12 +1,11 @@
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoVault } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoVault, shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { isSelfHostAccessValid } from "@/plusUtils";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { TFile } from "obsidian";
 
@@ -20,8 +19,7 @@ const LINKS_WEIGHT = 0.3;
  * @returns True when Miyo mode and self-host access validation are active.
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
-  const settings = getSettings();
-  return settings.enableMiyo && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
+  return shouldUseMiyo(getSettings());
 }
 
 /**
