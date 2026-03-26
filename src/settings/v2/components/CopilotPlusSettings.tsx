@@ -287,19 +287,11 @@ export const CopilotPlusSettings: React.FC = () => {
                     disabled={isValidatingSelfHost}
                   />
 
-                  {settings.enableMiyo && (
+                  {settings.enableMiyo && (settings.miyoServerUrl || "").trim() && (
                     <div className="tw-text-xs tw-text-muted">
                       Remote vault path:{" "}
                       <span className="tw-font-medium tw-text-normal">
-                        {resolveMiyoVault(
-                          app,
-                          (settings.miyoServerUrl || "").trim()
-                            ? settings.miyoRemoteVaultPath || ""
-                            : ""
-                        )}
-                      </span>{" "}
-                      <span className="tw-text-faint">
-                        ({(settings.miyoServerUrl || "").trim() ? "remote" : "local"})
+                        {resolveMiyoVault(app, settings.miyoRemoteVaultPath || "")}
                       </span>
                     </div>
                   )}
