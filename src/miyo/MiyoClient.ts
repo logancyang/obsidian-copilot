@@ -182,16 +182,16 @@ export class MiyoClient {
    * Upsert a batch of documents.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    * @param documents - Documents to upsert.
    * @returns Number of documents upserted.
    */
   public async upsertDocuments(
     baseUrl: string,
-    sourceId: string,
+    vault: string,
     documents: MiyoUpsertDocument[]
   ): Promise<number> {
-    const payload = { vault: sourceId, documents };
+    const payload = { vault, documents };
     const response = await this.requestJson<{ upserted: number }>(baseUrl, "/v0/index/upsert", {
       method: "POST",
       body: payload,
@@ -203,12 +203,12 @@ export class MiyoClient {
    * Delete documents by file path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    * @param path - File path to delete.
    * @returns Count of documents deleted.
    */
-  public async deleteByPath(baseUrl: string, sourceId: string, path: string): Promise<number> {
-    const payload = { vault: sourceId, path };
+  public async deleteByPath(baseUrl: string, vault: string, path: string): Promise<number> {
+    const payload = { vault, path };
     const response = await this.requestJson<{ deleted?: number }>(baseUrl, "/v0/index/by_path", {
       method: "DELETE",
       body: payload,
@@ -220,10 +220,10 @@ export class MiyoClient {
    * Clear all indexed documents for a source.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    */
-  public async clearIndex(baseUrl: string, sourceId: string): Promise<void> {
-    const payload = { vault: sourceId };
+  public async clearIndex(baseUrl: string, vault: string): Promise<void> {
+    const payload = { vault };
     await this.requestJson(baseUrl, "/v0/index/clear", { method: "POST", body: payload });
   }
 
@@ -231,20 +231,20 @@ export class MiyoClient {
    * List indexed files with pagination.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    * @param offset - Offset for pagination.
    * @param limit - Page size.
    * @returns Indexed files response.
    */
   public async listFiles(
     baseUrl: string,
-    sourceId: string,
+    vault: string,
     offset: number,
     limit: number
   ): Promise<MiyoIndexedFilesResponse> {
     return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/index/files", {
       method: "GET",
-      query: { vault: sourceId, offset, limit },
+      query: { vault, offset, limit },
     });
   }
 
@@ -252,13 +252,13 @@ export class MiyoClient {
    * Fetch index statistics for a source.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    * @returns Index stats response.
    */
-  public async getStats(baseUrl: string, sourceId: string): Promise<MiyoIndexStatsResponse> {
+  public async getStats(baseUrl: string, vault: string): Promise<MiyoIndexStatsResponse> {
     return this.requestJson<MiyoIndexStatsResponse>(baseUrl, "/v0/index/stats", {
       method: "GET",
-      query: { vault: sourceId },
+      query: { vault },
     });
   }
 
@@ -266,18 +266,18 @@ export class MiyoClient {
    * Fetch all documents for a given path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    * @param path - File path to look up.
    * @returns Documents response.
    */
   public async getDocumentsByPath(
     baseUrl: string,
-    sourceId: string,
+    vault: string,
     path: string
   ): Promise<MiyoDocumentsResponse> {
     return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/index/documents", {
       method: "GET",
-      query: { vault: sourceId, path },
+      query: { vault, path },
     });
   }
 
@@ -285,7 +285,7 @@ export class MiyoClient {
    * Execute a hybrid search query.
    *
    * @param baseUrl - Miyo base URL.
-   * @param sourceId - Vault-specific source id.
+   * @param vault - Vault identifier sent to Miyo.
    * @param query - User query.
    * @param limit - Maximum number of results.
    * @param filters - Optional search filters.
@@ -293,14 +293,14 @@ export class MiyoClient {
    */
   public async search(
     baseUrl: string,
-    sourceId: string,
+    vault: string,
     query: string,
     limit: number,
     filters?: MiyoSearchFilter[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      vault: sourceId,
+      vault,
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
@@ -325,14 +325,14 @@ export class MiyoClient {
     baseUrl: string,
     filePath: string,
     options?: {
-      sourceId?: string;
+      vault?: string;
       limit?: number;
       filters?: MiyoSearchFilter[];
     }
   ): Promise<MiyoRelatedSearchResponse> {
     const payload = {
       file_path: filePath,
-      ...(options?.sourceId ? { vault: options.sourceId } : {}),
+      ...(options?.vault ? { vault: options.vault } : {}),
       ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
       ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
     };

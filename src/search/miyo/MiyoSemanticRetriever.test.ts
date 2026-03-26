@@ -1,4 +1,4 @@
-import { getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoVault } from "@/miyo/miyoUtils";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
@@ -12,7 +12,7 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoSourceId: jest.fn(),
+  getMiyoVault: jest.fn(),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
 jest.mock("@/miyo/MiyoClient", () => ({
@@ -47,7 +47,7 @@ describe("MiyoSemanticRetriever", () => {
       miyoServerUrl: "http://miyo.local",
       debug: false,
     });
-    (getMiyoSourceId as jest.Mock).mockReturnValue("vault-source");
+    (getMiyoVault as jest.Mock).mockReturnValue("vault-source");
     mockResolveBaseUrl.mockResolvedValue("http://miyo.local");
   });
 

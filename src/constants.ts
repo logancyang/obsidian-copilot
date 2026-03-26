@@ -968,7 +968,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   selfHostUrl: "",
   selfHostApiKey: "",
   miyoServerUrl: "",
-  miyoVaultName: "",
+  miyoRemoteVaultPath: "",
   selfHostSearchProvider: "firecrawl",
   firecrawlApiKey: "",
   perplexityApiKey: "",

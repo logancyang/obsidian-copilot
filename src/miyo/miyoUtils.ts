@@ -13,18 +13,20 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
 }
 
 /**
- * Resolve the Miyo source id for the current vault.
+ * Resolve the vault identifier sent to Miyo.
  *
- * Uses the user-configured vault name when set, otherwise falls back to the
- * vault filesystem path or vault name.
+ * Uses the user-configured remote vault path only when a remote server URL is also
+ * configured, otherwise falls back to the vault filesystem path or vault name.
  *
  * @param app - Obsidian application instance.
- * @returns Custom vault name when configured, vault folder path when available, otherwise vault name.
+ * @returns Remote vault path when a remote server is configured, vault folder path when available, otherwise vault name.
  */
-export function getMiyoSourceId(app: App): string {
-  const customName = (getSettings().miyoVaultName || "").trim();
-  if (customName) {
-    return customName;
+export function getMiyoVault(app: App): string {
+  const settings = getSettings();
+  const remoteVaultPath = (settings.miyoRemoteVaultPath || "").trim();
+  const serverUrl = (settings.miyoServerUrl || "").trim();
+  if (remoteVaultPath && serverUrl) {
+    return remoteVaultPath;
   }
   const vaultPath = getVaultBasePath(app);
   if (vaultPath) {
@@ -34,13 +36,13 @@ export function getMiyoSourceId(app: App): string {
 }
 
 /**
- * Resolve the Miyo source id that would apply if a given vault name override were saved.
+ * Resolve the vault identifier that would apply given a vault path override, used for UI preview.
  *
  * @param app - Obsidian application instance.
- * @param vaultNameOverride - The vault name value to use (empty string = auto-detect).
- * @returns Resolved source id string.
+ * @param vaultPathOverride - The vault path to use (empty string = auto-detect).
+ * @returns Overridden vault path, or auto-detected vault path/name.
  */
-export function resolveMiyoSourceId(app: App, vaultNameOverride: string): string {
+export function resolveMiyoVault(app: App, vaultNameOverride: string): string {
   const trimmed = vaultNameOverride.trim();
   if (trimmed) {
     return trimmed;

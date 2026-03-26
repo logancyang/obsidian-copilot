@@ -141,8 +141,8 @@ export interface CopilotSettings {
   selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
-  /** Custom vault name for Miyo indexing (overrides auto-detected vault path/name) */
-  miyoVaultName: string;
+  /** Remote vault path sent to Miyo as the vault's source identifier (overrides auto-detected vault path). Only relevant when a remote Miyo server URL is configured. */
+  miyoRemoteVaultPath: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
@@ -418,9 +418,19 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
   }
 
-  // Ensure miyoVaultName has a default value
-  if (typeof sanitizedSettings.miyoVaultName !== "string") {
-    sanitizedSettings.miyoVaultName = DEFAULT_SETTINGS.miyoVaultName;
+  // Migrate legacy miyoVaultName → miyoRemoteVaultPath
+  const legacySettings = sanitizedSettings as unknown as Record<string, unknown>;
+  if (
+    typeof legacySettings["miyoVaultName"] === "string" &&
+    !sanitizedSettings.miyoRemoteVaultPath
+  ) {
+    sanitizedSettings.miyoRemoteVaultPath = legacySettings["miyoVaultName"] as string;
+    delete legacySettings["miyoVaultName"];
+  }
+
+  // Ensure miyoRemoteVaultPath has a default value
+  if (typeof sanitizedSettings.miyoRemoteVaultPath !== "string") {
+    sanitizedSettings.miyoRemoteVaultPath = DEFAULT_SETTINGS.miyoRemoteVaultPath;
   }
 
   // Ensure selfHostSearchProvider is a valid value
