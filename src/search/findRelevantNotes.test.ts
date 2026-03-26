@@ -221,7 +221,7 @@ describe("findRelevantNotes", () => {
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
     expect(mockSearchRelated).toHaveBeenCalledTimes(1);
     expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "source.md", {
-      sourceId: "test-source",
+      vault: "test-source",
       limit: 20,
     });
   });
