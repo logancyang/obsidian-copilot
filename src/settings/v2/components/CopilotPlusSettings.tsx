@@ -4,7 +4,6 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
-import { logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, resolveMiyoSourceId } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
@@ -102,57 +101,12 @@ export const CopilotPlusSettings: React.FC = () => {
   };
 
   /**
-   * Apply a vault path change for Miyo. When Miyo is enabled and the path actually changed,
-   * shows a confirmation modal warning that the existing Miyo index will be deleted and a
-   * full re-index will be triggered under the new path.
+   * Save the remote vault path. This is a remote-only identifier and never triggers re-indexing.
    */
-  const handleVaultPathApply = async () => {
-    const newName = pendingRemoteVaultPath.trim();
-    const oldName = (settings.miyoRemoteVaultPath || "").trim();
-    if (newName === oldName) return;
-
-    // Compare resolved source IDs — if the user typed the auto-detected value
-    // (e.g. the vault path), the effective Miyo namespace is unchanged and we
-    // must not clear the existing index or trigger an unnecessary re-index.
-    const oldSourceId = resolveMiyoSourceId(app, oldName);
-    const newSourceId = resolveMiyoSourceId(app, newName);
-
-    if (!settings.enableMiyo || newSourceId === oldSourceId) {
-      // Miyo is off, or the effective source ID hasn't changed — save silently.
-      updateSetting("miyoRemoteVaultPath", newName);
-      return;
-    }
-    const confirmChange = async () => {
-      try {
-        const miyoClient = new MiyoClient();
-        const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-        await miyoClient.clearIndex(baseUrl, oldSourceId);
-      } catch (e) {
-        logWarn("Failed to clear Miyo index for old vault path", e);
-      }
-
-      updateSetting("miyoRemoteVaultPath", newName);
-
-      const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
-        userInitiated: true,
-      });
-    };
-
-    const cancelChange = () => {
-      // Reset input back to the saved value if user cancels
-      setPendingRemoteVaultPath(oldName);
-    };
-
-    new ConfirmModal(
-      app,
-      confirmChange,
-      `Changing the vault path will delete the existing Miyo index for "${oldSourceId || "(auto-detected)"}" and trigger a full re-index under the new path. This cannot be undone. Continue?`,
-      "Change Vault Path",
-      "Change & Re-index",
-      "Cancel",
-      cancelChange
-    ).open();
+  const handleVaultPathApply = () => {
+    const newPath = pendingRemoteVaultPath.trim();
+    if (newPath === (settings.miyoRemoteVaultPath || "").trim()) return;
+    updateSetting("miyoRemoteVaultPath", newPath);
   };
 
   return (
