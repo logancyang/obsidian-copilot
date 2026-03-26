@@ -15,16 +15,16 @@ export function getMiyoCustomUrl(settings: CopilotSettings): string {
 /**
  * Resolve the Miyo source id for the current vault.
  *
- * Uses the user-configured vault name when set, otherwise falls back to the
+ * Uses the user-configured remote vault path when set, otherwise falls back to the
  * vault filesystem path or vault name.
  *
  * @param app - Obsidian application instance.
- * @returns Custom vault name when configured, vault folder path when available, otherwise vault name.
+ * @returns Remote vault path when configured, vault folder path when available, otherwise vault name.
  */
 export function getMiyoSourceId(app: App): string {
-  const customName = (getSettings().miyoVaultName || "").trim();
-  if (customName) {
-    return customName;
+  const remoteVaultPath = (getSettings().miyoRemoteVaultPath || "").trim();
+  if (remoteVaultPath) {
+    return remoteVaultPath;
   }
   const vaultPath = getVaultBasePath(app);
   if (vaultPath) {

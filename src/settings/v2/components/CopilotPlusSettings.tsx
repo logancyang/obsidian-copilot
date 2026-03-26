@@ -17,12 +17,14 @@ export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
   const [isValidatingSelfHost, setIsValidatingSelfHost] = useState(false);
   const isSelfHostEligible = useIsSelfHostEligible();
-  const [pendingVaultName, setPendingVaultName] = useState(settings.miyoVaultName || "");
+  const [pendingRemoteVaultPath, setPendingRemoteVaultPath] = useState(
+    settings.miyoRemoteVaultPath || ""
+  );
 
   // Keep local input in sync if settings change externally (e.g. settings reset)
   useEffect(() => {
-    setPendingVaultName(settings.miyoVaultName || "");
-  }, [settings.miyoVaultName]);
+    setPendingRemoteVaultPath(settings.miyoRemoteVaultPath || "");
+  }, [settings.miyoRemoteVaultPath]);
 
   /**
    * Toggle self-host mode and handle validation requirements.
@@ -100,13 +102,13 @@ export const CopilotPlusSettings: React.FC = () => {
   };
 
   /**
-   * Apply a vault name change for Miyo. When Miyo is enabled and the name actually changed,
+   * Apply a vault path change for Miyo. When Miyo is enabled and the path actually changed,
    * shows a confirmation modal warning that the existing Miyo index will be deleted and a
-   * full re-index will be triggered under the new name.
+   * full re-index will be triggered under the new path.
    */
-  const handleVaultNameApply = async () => {
-    const newName = pendingVaultName.trim();
-    const oldName = (settings.miyoVaultName || "").trim();
+  const handleVaultPathApply = async () => {
+    const newName = pendingRemoteVaultPath.trim();
+    const oldName = (settings.miyoRemoteVaultPath || "").trim();
     if (newName === oldName) return;
 
     // Compare resolved source IDs — if the user typed the auto-detected value
@@ -117,7 +119,7 @@ export const CopilotPlusSettings: React.FC = () => {
 
     if (!settings.enableMiyo || newSourceId === oldSourceId) {
       // Miyo is off, or the effective source ID hasn't changed — save silently.
-      updateSetting("miyoVaultName", newName);
+      updateSetting("miyoRemoteVaultPath", newName);
       return;
     }
     const confirmChange = async () => {
@@ -126,10 +128,10 @@ export const CopilotPlusSettings: React.FC = () => {
         const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
         await miyoClient.clearIndex(baseUrl, oldSourceId);
       } catch (e) {
-        logWarn("Failed to clear Miyo index for old vault name", e);
+        logWarn("Failed to clear Miyo index for old vault path", e);
       }
 
-      updateSetting("miyoVaultName", newName);
+      updateSetting("miyoRemoteVaultPath", newName);
 
       const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
       await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
@@ -139,14 +141,14 @@ export const CopilotPlusSettings: React.FC = () => {
 
     const cancelChange = () => {
       // Reset input back to the saved value if user cancels
-      setPendingVaultName(oldName);
+      setPendingRemoteVaultPath(oldName);
     };
 
     new ConfirmModal(
       app,
       confirmChange,
-      `Changing the vault name will delete the existing Miyo index for "${oldSourceId || "(auto-detected)"}" and trigger a full re-index under the new name. This cannot be undone. Continue?`,
-      "Change Vault Name",
+      `Changing the vault path will delete the existing Miyo index for "${oldSourceId || "(auto-detected)"}" and trigger a full re-index under the new path. This cannot be undone. Continue?`,
+      "Change Vault Path",
       "Change & Re-index",
       "Cancel",
       cancelChange
@@ -283,39 +285,37 @@ export const CopilotPlusSettings: React.FC = () => {
                 <>
                   <SettingItem
                     type="text"
-                    title="Custom Miyo Server URL (Optional)"
-                    description="For advanced users only. Set this if Miyo is running on a remote machine. Leave blank to use automatic local service discovery."
+                    title="Remote Miyo Server URL (Optional)"
+                    description="Leave blank when accessing Miyo locally. Set this only when Miyo is running on a remote machine — it will override the local service discovery."
                     value={settings.miyoServerUrl || ""}
                     onChange={(value) => updateSetting("miyoServerUrl", value)}
-                    placeholder="http://127.0.0.1:8742"
                   />
 
                   <SettingItem
                     type="custom"
-                    title="Vault Name"
+                    title="Remote Vault Path (Optional)"
                     description={
                       <span>
-                        This is how Miyo identifies and remembers your vault&apos;s index — think of
-                        it as the unique label for all your indexed notes. Leave blank to use the
-                        auto-detected vault path. <strong>Set this before enabling Miyo.</strong> If
-                        you access Miyo from multiple devices or a remote server, use the same vault
-                        name on every device so they all share the same index.
+                        Leave blank when accessing Miyo locally — the vault path will be
+                        auto-detected. Set this only when using a remote Miyo server to override the
+                        vault identifier. Must match exactly across all devices sharing the same
+                        remote Miyo instance. <strong>Set this before enabling Miyo.</strong>
                       </span>
                     }
                   >
                     <div className="tw-flex tw-items-center tw-gap-2">
                       <Input
-                        value={pendingVaultName}
-                        onChange={(e) => setPendingVaultName(e.target.value)}
+                        value={pendingRemoteVaultPath}
+                        onChange={(e) => setPendingRemoteVaultPath(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === "Enter") handleVaultNameApply();
+                          if (e.key === "Enter") handleVaultPathApply();
                         }}
-                        placeholder="Default: vault path"
                         className="tw-w-full sm:tw-w-[200px]"
                       />
-                      {pendingVaultName.trim() !== (settings.miyoVaultName || "").trim() && (
+                      {pendingRemoteVaultPath.trim() !==
+                        (settings.miyoRemoteVaultPath || "").trim() && (
                         <button
-                          onClick={handleVaultNameApply}
+                          onClick={handleVaultPathApply}
                           className="tw-rounded-md tw-bg-interactive-accent tw-px-3 tw-py-1.5 tw-text-sm tw-font-medium tw-text-on-accent hover:tw-bg-interactive-accent-hover"
                         >
                           Apply
@@ -332,6 +332,18 @@ export const CopilotPlusSettings: React.FC = () => {
                     onCheckedChange={handleMiyoSearchToggle}
                     disabled={isValidatingSelfHost}
                   />
+
+                  {settings.enableMiyo && (
+                    <div className="tw-text-xs tw-text-muted">
+                      Remote vault path:{" "}
+                      <span className="tw-font-medium tw-text-normal">
+                        {resolveMiyoSourceId(app, settings.miyoRemoteVaultPath || "")}
+                      </span>{" "}
+                      <span className="tw-text-faint">
+                        ({(settings.miyoServerUrl || "").trim() ? "remote" : "local"})
+                      </span>
+                    </div>
+                  )}
 
                   <SettingItem
                     type="select"
