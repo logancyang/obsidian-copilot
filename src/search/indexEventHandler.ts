@@ -32,7 +32,11 @@ export class IndexEventHandler {
    * @returns {boolean} True when semantic search indexing should run.
    */
   private shouldHandleEvents(): boolean {
-    return getSettings().enableSemanticSearchV3;
+    if (!getSettings().enableSemanticSearchV3) {
+      return false;
+    }
+
+    return !(this.indexBackend.isRemoteBackend() && !this.indexBackend.requiresEmbeddings());
   }
 
   /**
