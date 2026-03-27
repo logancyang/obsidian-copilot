@@ -1,5 +1,6 @@
+import { isSelfHostAccessValid } from "@/plusUtils";
 import { CopilotSettings, getSettings } from "@/settings/model";
-import { App, FileSystemAdapter } from "obsidian";
+import { App, FileSystemAdapter, Platform } from "obsidian";
 
 /**
  * Return the user-configured Miyo server URL, or "" to fall back to local service discovery.
@@ -10,6 +11,28 @@ import { App, FileSystemAdapter } from "obsidian";
  */
 export function getMiyoCustomUrl(settings: CopilotSettings): string {
   return (settings.miyoServerUrl || "").trim();
+}
+
+/**
+ * Single source of truth for whether Miyo should be used.
+ *
+ * Returns false when:
+ * - `enableMiyo` is off, or
+ * - self-host access is invalid, or
+ * - running on mobile without a remote server URL (local service discovery
+ *   is unavailable on mobile, so Miyo can only work via an explicit URL).
+ *
+ * Note: `enableSemanticSearchV3` need not be checked — the UI enforces that
+ * enabling Miyo also enables semantic search, and disabling semantic search
+ * also disables Miyo.
+ *
+ * @param settings - Current Copilot settings.
+ */
+export function shouldUseMiyo(settings: CopilotSettings): boolean {
+  if (!settings.enableMiyo || !isSelfHostAccessValid()) {
+    return false;
+  }
+  return !Platform.isMobile || !!getMiyoCustomUrl(settings);
 }
 
 /**

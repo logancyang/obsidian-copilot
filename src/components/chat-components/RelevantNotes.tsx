@@ -10,7 +10,7 @@ import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
 import { logWarn } from "@/logger";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
-import type { CopilotSettings } from "@/settings/model";
+import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import {
   findRelevantNotes,
   getSimilarityCategory,
@@ -29,30 +29,6 @@ import {
 } from "lucide-react";
 import { Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
-
-const SELF_HOST_GRACE_PERIOD_MS = 15 * 24 * 60 * 60 * 1000;
-
-/**
- * Return true when Miyo-backed semantic index is expected to be active.
- *
- * @param settings - Current Copilot settings object.
- * @returns True when Miyo mode and self-host validation are active.
- */
-function shouldUseMiyoIndex(settings: CopilotSettings): boolean {
-  if (!settings.enableMiyo || !settings.enableSemanticSearchV3) {
-    return false;
-  }
-
-  if (settings.selfHostModeValidatedAt == null) {
-    return false;
-  }
-
-  if ((settings.selfHostValidationCount ?? 0) >= 3) {
-    return true;
-  }
-
-  return Date.now() - settings.selfHostModeValidatedAt < SELF_HOST_GRACE_PERIOD_MS;
-}
 
 function useRelevantNotes(refresher: number) {
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
@@ -93,9 +69,9 @@ function useHasIndex(notePath: string, refresher: number) {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
         const { getSettings } = await import("@/settings/model");
         const settings = getSettings();
-        const shouldUseMiyo = shouldUseMiyoIndex(settings);
+        const useMiyo = shouldUseMiyo(settings);
 
-        if (shouldUseMiyo) {
+        if (useMiyo) {
           const isEmpty = await VectorStoreManager.getInstance().isIndexEmpty();
           setHasIndex(!isEmpty);
           return;

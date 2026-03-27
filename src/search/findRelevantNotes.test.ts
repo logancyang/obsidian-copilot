@@ -2,9 +2,8 @@ import { TFile } from "obsidian";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoVault } from "@/miyo/miyoUtils";
+import { getMiyoVault, shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
-import { isSelfHostAccessValid } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 
 jest.mock("@/noteUtils", () => ({
@@ -50,10 +49,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
 jest.mock("@/miyo/miyoUtils", () => ({
   getMiyoVault: jest.fn(),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
-}));
-
-jest.mock("@/plusUtils", () => ({
-  isSelfHostAccessValid: jest.fn(),
+  shouldUseMiyo: jest.fn(),
 }));
 
 jest.mock("@/logger", () => ({
@@ -75,9 +71,7 @@ function createMarkdownFile(path: string): TFile {
 
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
-  const mockedIsSelfHostAccessValid = isSelfHostAccessValid as jest.MockedFunction<
-    typeof isSelfHostAccessValid
-  >;
+  const mockedShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
   const mockedGetLinkedNotes = getLinkedNotes as jest.MockedFunction<typeof getLinkedNotes>;
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
@@ -93,7 +87,7 @@ describe("findRelevantNotes", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedIsSelfHostAccessValid.mockReturnValue(false);
+    mockedShouldUseMiyo.mockReturnValue(false);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "",
@@ -180,7 +174,7 @@ describe("findRelevantNotes", () => {
   });
 
   it("uses Miyo when shouldUseMiyoForRelevantNotes is true (enableMiyo=true and valid self-host)", async () => {
-    mockedIsSelfHostAccessValid.mockReturnValue(true);
+    mockedShouldUseMiyo.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "http://127.0.0.1:8742",
@@ -256,7 +250,7 @@ describe("findRelevantNotes", () => {
   });
 
   it("falls back to link-only relevance when Miyo related-note search fails", async () => {
-    mockedIsSelfHostAccessValid.mockReturnValue(true);
+    mockedShouldUseMiyo.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "http://127.0.0.1:8742",
