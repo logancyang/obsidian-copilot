@@ -3,6 +3,7 @@ import { TEXT_WEIGHT } from "@/constants";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { hasSelfHostSearchKey, selfHostWebSearch } from "@/LLMProviders/selfHostServices";
 import { logInfo } from "@/logger";
+import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { getSettings } from "@/settings/model";
@@ -509,11 +510,17 @@ const indexTool = createLangChainTool({
       try {
         const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
         const count = await VectorStoreManager.getInstance().indexVaultToVectorStore();
-        const indexResultPrompt = `Semantic search index refreshed with ${count} documents.\n`;
+        const usingMiyo = shouldUseMiyo(settings);
+        const indexResultPrompt = usingMiyo
+          ? "Requested a Miyo folder scan for this vault.\n"
+          : `Semantic search index refreshed with ${count} documents.\n`;
         return {
           success: true,
-          message:
-            indexResultPrompt + `Semantic search index has been refreshed with ${count} documents.`,
+          message: usingMiyo
+            ? indexResultPrompt +
+              "Miyo will handle chunking and indexing for the registered folder."
+            : indexResultPrompt +
+              `Semantic search index has been refreshed with ${count} documents.`,
           documentCount: count,
         };
       } catch (error: any) {

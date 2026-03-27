@@ -141,7 +141,7 @@ export interface CopilotSettings {
   selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
-  /** Remote vault path sent to Miyo as the vault's source identifier (overrides auto-detected vault path). Only relevant when a remote Miyo server URL is configured. */
+  /** @deprecated Miyo now uses the current vault path as `folder_path`; preserved only for backwards-compatible settings migration. */
   miyoRemoteVaultPath: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
