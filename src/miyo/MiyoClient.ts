@@ -331,9 +331,6 @@ export class MiyoClient {
       ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
       ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
     };
-    if (getSettings().debug) {
-      logInfo("Miyo related search request:", { baseUrl, payload });
-    }
     return this.requestJson<MiyoRelatedSearchResponse>(baseUrl, "/v0/search/related", {
       method: "POST",
       body: payload,
