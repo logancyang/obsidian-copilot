@@ -1,4 +1,4 @@
-import { getCurrentProject, setCurrentProject, setProjectLoading, useChainType } from "@/aiParams";
+import { getCurrentProject, setProjectLoading, useChainType } from "@/aiParams";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ChainType } from "@/chainFactory";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
@@ -188,7 +188,7 @@ interface ChatControlsProps {
   onSaveAsNote: () => Promise<void>;
   onLoadHistory: () => void;
   onModeChange: (mode: ChainType) => void;
-  onCloseProject?: () => void;
+  onCloseProject?: () => Promise<void>;
   chatHistory: ChatHistoryItem[];
   onUpdateChatTitle: (id: string, newTitle: string) => Promise<void>;
   onDeleteChat: (id: string) => Promise<void>;
@@ -215,20 +215,19 @@ export function ChatControls({
   const isPlusUser = useIsPlusUser();
 
   const handleModeChange = async (chainType: ChainType) => {
-    // If leaving project mode with autosave enabled, save chat BEFORE clearing project context
-    // This ensures the chat is saved with the correct project prefix
-    const isLeavingProjectMode =
-      selectedChain === ChainType.PROJECT_CHAIN && chainType !== ChainType.PROJECT_CHAIN;
-    if (isLeavingProjectMode && settings.autosaveChat) {
-      await onSaveAsNote();
+    // Reason: close project BEFORE changing mode so that switchProject can
+    // save with the correct project context. If close fails, mode stays unchanged.
+    if (chainType !== ChainType.PROJECT_CHAIN) {
+      try {
+        await onCloseProject?.();
+      } catch (error) {
+        logError("[ChatControls] Failed to close project:", error);
+        new Notice("Failed to close project. Please try again.");
+        return;
+      }
     }
-
     setSelectedChain(chainType);
     onModeChange(chainType);
-    if (chainType !== ChainType.PROJECT_CHAIN) {
-      setCurrentProject(null);
-      onCloseProject?.();
-    }
   };
 
   return (
@@ -279,7 +278,7 @@ export function ChatControls({
               <DropdownMenuItem
                 onSelect={() => {
                   navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
-                  onCloseProject?.();
+                  onCloseProject?.()?.catch(() => {});
                 }}
               >
                 copilot plus
@@ -301,7 +300,7 @@ export function ChatControls({
               <DropdownMenuItem
                 onSelect={() => {
                   navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT);
-                  onCloseProject?.();
+                  onCloseProject?.()?.catch(() => {});
                 }}
               >
                 copilot plus

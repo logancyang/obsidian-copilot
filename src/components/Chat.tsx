@@ -59,7 +59,7 @@ type ChatMode = "default" | "project";
 
 interface ChatProps {
   chainManager: ChainManager;
-  onSaveChat: (saveAsNote: () => Promise<void>) => void;
+  onSaveChat: (saveAsNote: (projectOverride?: ProjectConfig | null) => Promise<void>) => void;
   updateUserMessageHistory: (newMessage: string) => void;
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
@@ -345,9 +345,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         updateUserMessageHistory(inputMessage);
       }
 
-      // Autosave if enabled
+      // Autosave if enabled (fire-and-forget; error already noticed inside handleSaveAsNote)
       if (settings.autosaveChat) {
-        handleSaveAsNote();
+        handleSaveAsNote().catch(() => {});
       }
 
       // Get the LLM message for AI processing
@@ -363,9 +363,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         );
       }
 
-      // Autosave again after AI response
+      // Autosave again after AI response (fire-and-forget)
       if (settings.autosaveChat) {
-        handleSaveAsNote();
+        handleSaveAsNote().catch(() => {});
       }
     } catch (error) {
       logError("Error sending message:", error);
@@ -377,20 +377,26 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     }
   };
 
-  const handleSaveAsNote = useCallback(async () => {
-    if (!app) {
-      logError("App instance is not available.");
-      return;
-    }
+  const handleSaveAsNote = useCallback(
+    async (projectOverride?: ProjectConfig | null) => {
+      if (!app) {
+        logError("App instance is not available.");
+        return;
+      }
 
-    try {
-      // Use the new ChatManager persistence functionality
-      await chatUIState.saveChat(currentModelKey);
-    } catch (error) {
-      logError("Error saving chat as note:", err2String(error));
-      new Notice("Failed to save chat as note. Check console for details.");
-    }
-  }, [app, chatUIState, currentModelKey]);
+      try {
+        await chatUIState.saveChat(currentModelKey, projectOverride);
+      } catch (error) {
+        logError("Error saving chat as note:", err2String(error));
+        new Notice("Failed to save chat as note. Check console for details.");
+        // Reason: rethrow so callers (e.g. switchProject → autosaveCurrentChat)
+        // can detect save failure and abort the project switch.
+        // Manual callers (fire-and-forget) will simply ignore the unhandled rejection.
+        throw error;
+      }
+    },
+    [app, chatUIState, currentModelKey]
+  );
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
@@ -448,9 +454,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           console.log("Message regenerated successfully");
         }
 
-        // Autosave the chat if the setting is enabled
+        // Autosave the chat if the setting is enabled (fire-and-forget)
         if (settings.autosaveChat) {
-          handleSaveAsNote();
+          handleSaveAsNote().catch(() => {});
         }
       } catch (error) {
         logError("Error regenerating message:", error);
@@ -525,9 +531,9 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           }
         }
 
-        // Autosave the chat if the setting is enabled
+        // Autosave the chat if the setting is enabled (fire-and-forget)
         if (settings.autosaveChat) {
-          handleSaveAsNote();
+          handleSaveAsNote().catch(() => {});
         }
       } catch (error) {
         logError("Error editing message:", error);
@@ -698,9 +704,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       }
     }
 
-    // First autosave the current chat if the setting is enabled
+    // First autosave the current chat if the setting is enabled.
+    // Reason: catch here because handleNewChat is called from an onClick handler
+    // where a rejected promise would become an unhandled rejection.
     if (settings.autosaveChat) {
-      await handleSaveAsNote();
+      await handleSaveAsNote().catch(() => {});
     }
 
     // Clear messages through the new architecture
@@ -890,7 +898,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           <>
             <ChatControls
               onNewChat={handleNewChat}
-              onSaveAsNote={() => handleSaveAsNote()}
+              onSaveAsNote={() => handleSaveAsNote().catch(() => {})}
               onLoadHistory={handleLoadChatHistory}
               onModeChange={(newMode) => {
                 setPreviousMode(selectedChain);
@@ -898,6 +906,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                 if (newMode === ChainType.PROJECT_CHAIN) {
                   setShowChatUI(false);
                 }
+              }}
+              onCloseProject={async () => {
+                // Reason: switchProject saves old chat with correct project ID
+                // before clearing the atom, preventing wrong-project saves.
+                await plugin.projectManager.switchProject(null);
               }}
               chatHistory={chatHistoryItems}
               onUpdateChatTitle={handleUpdateChatTitle}

@@ -50,7 +50,7 @@ export class ChatPersistenceManager {
   /**
    * Save current chat history to a markdown file
    */
-  async saveChat(modelKey: string): Promise<void> {
+  async saveChat(modelKey: string, projectOverride?: ProjectConfig | null): Promise<void> {
     try {
       const messages = this.messageRepo.getDisplayMessages();
       if (messages.length === 0) {
@@ -87,18 +87,22 @@ export class ChatPersistenceManager {
         }
       }
 
-      const currentProject = getCurrentProject();
+      // Reason: resolve the target project once and use this local variable everywhere.
+      // During project switches the caller passes the OLD project explicitly so that
+      // save correctness does not depend on global atom update ordering.
+      const project = projectOverride ?? getCurrentProject();
 
       const preferredFileName = existingFile
         ? existingFile.path
-        : this.generateFileName(currentProject, messages, firstMessageEpoch, existingTopic);
+        : this.generateFileName(project, messages, firstMessageEpoch, existingTopic);
 
       const noteContent = this.generateNoteContent(
         chatContent,
         firstMessageEpoch,
         modelKey,
         existingTopic,
-        existingLastAccessedAt
+        existingLastAccessedAt,
+        project
       );
       let targetFile: TFile | null = existingFile;
 
@@ -144,7 +148,8 @@ export class ChatPersistenceManager {
                 firstMessageEpoch,
                 modelKey,
                 existingTopic,
-                conflictLastAccessedAt
+                conflictLastAccessedAt,
+                project
               );
               await this.app.vault.modify(conflictFile, updatedContent);
               targetFile = conflictFile;
@@ -162,7 +167,7 @@ export class ChatPersistenceManager {
             }
           } else if (this.isNameTooLongError(error)) {
             // Single fallback: minimal guaranteed-to-work filename with project prefix
-            const filePrefix = currentProject ? `${currentProject.id}__` : "";
+            const filePrefix = project ? `${project.id}__` : "";
             const fallbackName = `${settings.defaultSaveFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
 
             try {
@@ -187,7 +192,8 @@ export class ChatPersistenceManager {
                     firstMessageEpoch,
                     modelKey,
                     conflictTopic,
-                    conflictLastAccessedAt
+                    conflictLastAccessedAt,
+                    project
                   );
                   await this.app.vault.modify(conflictFile, updatedContent);
                   targetFile = conflictFile;
@@ -213,10 +219,12 @@ export class ChatPersistenceManager {
         }
       }
 
-      this.generateTopicAsyncIfNeeded(currentProject, targetFile, messages, existingTopic);
+      this.generateTopicAsyncIfNeeded(project, targetFile, messages, existingTopic);
     } catch (error) {
       logError("[ChatPersistenceManager] Error saving chat:", error);
-      new Notice("Failed to save chat as note. Check console for details.");
+      // Reason: rethrow so callers (e.g. switchProject) can abort on save failure
+      // instead of silently proceeding with stale data. Callers handle user-facing notices.
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 
@@ -233,6 +241,35 @@ export class ChatPersistenceManager {
         content = await this.app.vault.adapter.read(file.path);
       }
       const messages = this.parseChatContent(content);
+
+      // Reason: parseChatContent reconstructs epoch from body timestamps which only
+      // have second precision (YYYY/MM/DD HH:mm:ss), losing the original milliseconds.
+      // The frontmatter epoch is the authoritative conversation identity used by
+      // findFileByEpoch/saveChat. Restore it here so a load→save cycle correctly
+      // matches the original file instead of creating a duplicate.
+      if (messages.length > 0) {
+        const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+        // Reason: also try adapter-based read for hidden directory files
+        const fmEpoch = frontmatter?.epoch
+          ?? (await readFrontmatterViaAdapter(this.app, file.path).catch(() => null))?.epoch;
+        if (fmEpoch != null) {
+          const epoch = Number(fmEpoch);
+          if (!Number.isNaN(epoch)) {
+            // Reason: ensure timestamp object exists even when parseChatContent
+            // returned null (e.g. "Unknown time" format in older notes).
+            if (messages[0].timestamp) {
+              messages[0].timestamp.epoch = epoch;
+            } else {
+              messages[0].timestamp = {
+                epoch,
+                display: "Unknown time",
+                fileName: "",
+              };
+            }
+          }
+        }
+      }
+
       logInfo(`[ChatPersistenceManager] Loaded ${messages.length} messages from ${file.path}`);
       return messages;
     } catch (error) {
@@ -719,18 +756,19 @@ ${conversationSummary}`;
     firstMessageEpoch: number,
     modelKey: string,
     topic?: string,
-    lastAccessedAt?: number
+    lastAccessedAt?: number,
+    projectOverride?: ProjectConfig | null
   ): string {
     const settings = getSettings();
-    const currentProject = getCurrentProject();
+    const project = projectOverride ?? getCurrentProject();
 
     return `---
 epoch: ${firstMessageEpoch}
 modelKey: "${escapeYamlString(modelKey)}"
 ${topic ? `topic: "${topic}"` : ""}
 ${lastAccessedAt ? `lastAccessedAt: ${lastAccessedAt}` : ""}
-${currentProject ? `projectId: ${currentProject.id}` : ""}
-${currentProject ? `projectName: ${currentProject.name}` : ""}
+${project ? `projectId: ${project.id}` : ""}
+${project ? `projectName: ${project.name}` : ""}
 tags:
   - ${settings.defaultConversationTag}
 ---

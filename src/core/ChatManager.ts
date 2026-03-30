@@ -5,7 +5,7 @@ import {
   getSystemPromptWithMemory,
 } from "@/system-prompts/systemPromptBuilder";
 import { ChainType } from "@/chainFactory";
-import { getChainType, getCurrentProject } from "@/aiParams";
+import { getChainType, getCurrentProject, ProjectConfig } from "@/aiParams";
 import { logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";
 import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
@@ -770,8 +770,8 @@ export class ChatManager {
   /**
    * Save current chat history
    */
-  async saveChat(modelKey: string): Promise<void> {
-    await this.persistenceManager.saveChat(modelKey);
+  async saveChat(modelKey: string, projectOverride?: ProjectConfig | null): Promise<void> {
+    await this.persistenceManager.saveChat(modelKey, projectOverride);
   }
 
   /**

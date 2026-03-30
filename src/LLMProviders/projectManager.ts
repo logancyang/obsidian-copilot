@@ -1,8 +1,12 @@
 import {
   FailedItem,
   getChainType,
+  getCurrentProject,
+  getProjectContextLoadState,
   isProjectMode,
   ProjectConfig,
+  setCurrentProject,
+  setProjectContextLoadState,
   setProjectLoading,
   subscribeToChainTypeChange,
   subscribeToModelKeyChange,
@@ -36,6 +40,12 @@ export default class ProjectManager {
   private fileParserManager: FileParserManager;
   private loadTracker: ProjectLoadTracker;
   private readonly projectUsageTimestampsManager = new RecentUsageManager<string>();
+  /** Serialization lock: only one switchProject executes at a time. */
+  private switchLock: Promise<void> = Promise.resolve();
+  /** Reason: true while switchProject is writing the atom via setCurrentProject().
+   *  The subscription callback checks this flag and skips re-entry, while real
+   *  user requests (where this flag is false) pass through to the lock queue. */
+  private updatingAtom = false;
 
   private constructor(app: App, plugin: CopilotPlugin) {
     this.app = app;
@@ -72,8 +82,12 @@ export default class ProjectManager {
       });
     });
 
-    // Subscribe to Project changes
+    // Subscribe to Project changes.
+    // Reason: skip re-entry caused by switchProject's own setCurrentProject() call.
+    // Real user requests (e.g. from UI) go through switchProject() directly,
+    // not through this subscription.
     subscribeToProjectChange(async (project) => {
+      if (this.updatingAtom) return;
       await this.switchProject(project);
     });
 
@@ -183,45 +197,111 @@ export default class ProjectManager {
   }
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {
+    const nextProjectId = project?.id ?? null;
+
+    // Reason: serialize concurrent switches so that save always observes the correct
+    // project atom. Without this, rapid A→B→C clicks can interleave, causing
+    // saveCurrentProjectMessage to persist repo A's messages under project B's prefix.
+    const prev = this.switchLock;
+    // eslint-disable-next-line @typescript-eslint/no-empty-function
+    let resolve: () => void = () => {};
+    this.switchLock = new Promise<void>((r) => (resolve = r));
+    await prev;
+
+    // Reason: snapshot load-tracking state before clearing so any rollback path
+    // (including save failure in the outer catch) can restore it.
+    const prevLoadState = { ...getProjectContextLoadState() };
+
     try {
+      // Reason: re-check after acquiring the lock. A queued duplicate (e.g. rapid
+      // double-click A→B) may find that the previous call already completed the switch,
+      // making this invocation a no-op. Must be inside try so finally still runs resolve().
+      if (this.currentProjectId === nextProjectId) return;
+
       // Clear all project context loading states
       this.loadTracker.clearAllLoadStates();
       setProjectLoading(true);
       logInfo("Project loading started...");
 
-      // 1. save current project message. 2. load next project message
+      // Reason: capture the current project BEFORE any state changes so that
+      // saveCurrentProjectMessage persists under the correct project identity,
+      // regardless of atom update ordering.
+      const prevProject = getCurrentProject();
+      const prevProjectId = this.currentProjectId;
 
       // switch default project
       if (!project) {
-        await this.saveCurrentProjectMessage();
-        this.currentProjectId = null; // ensure set currentProjectId
+        await this.saveCurrentProjectMessage(prevProject);
+        this.currentProjectId = null;
+        this.updatingAtom = true;
+        setCurrentProject(null);
+        this.updatingAtom = false;
 
-        await this.loadNextProjectMessage();
+        try {
+          await this.loadNextProjectMessage();
+        } catch (loadError) {
+          // Reason: restore previous project identity, then resync runtime
+          // state (repo + chain) so the UI is consistent with rolled-back selection.
+          this.currentProjectId = prevProjectId;
+          this.updatingAtom = true;
+          setCurrentProject(prevProject ?? null);
+          this.updatingAtom = false;
+          setProjectContextLoadState(prevLoadState);
+          try {
+            await this.loadNextProjectMessage();
+            await this.getCurrentChainManager().createChainWithNewModel();
+            this.refreshChatView();
+          } catch (restoreError) {
+            logError(`Failed to restore previous project runtime after rollback: ${restoreError}`);
+          }
+          throw loadError;
+        }
         this.refreshChatView();
         return;
       }
 
-      // else
-      const projectId = project.id;
-      if (this.currentProjectId === projectId) {
-        return;
+      await this.saveCurrentProjectMessage(prevProject);
+      this.currentProjectId = nextProjectId;
+      this.updatingAtom = true;
+      setCurrentProject(project);
+      this.updatingAtom = false;
+
+      // Reason: capture previous fileParserManager so we can restore it
+      // if any step below fails and we need to roll back.
+      const prevFileParserManager = this.fileParserManager;
+
+      try {
+        // Use sequential operations to ensure loading state is maintained
+        // through the entire process
+        await this.loadNextProjectMessage();
+        await this.getCurrentChainManager().createChainWithNewModel();
+        // Update FileParserManager with the current project
+        this.fileParserManager = new FileParserManager(
+          BrevilabsClient.getInstance(),
+          this.app.vault,
+          true,
+          project
+        );
+        await this.loadProjectContext(project);
+      } catch (switchError) {
+        // Reason: restore previous project identity, then resync runtime
+        // state (repo + chain) so the UI is consistent with rolled-back selection.
+        logWarn(`Rolling back project switch due to error: ${switchError}`);
+        this.currentProjectId = prevProjectId;
+        this.fileParserManager = prevFileParserManager;
+        this.updatingAtom = true;
+        setCurrentProject(prevProject ?? null);
+        this.updatingAtom = false;
+        setProjectContextLoadState(prevLoadState);
+        try {
+          await this.loadNextProjectMessage();
+          await this.getCurrentChainManager().createChainWithNewModel();
+          this.refreshChatView();
+        } catch (restoreError) {
+          logError(`Failed to restore previous project runtime after rollback: ${restoreError}`);
+        }
+        throw switchError;
       }
-
-      await this.saveCurrentProjectMessage();
-      this.currentProjectId = projectId; // ensure set currentProjectId
-
-      // Use sequential operations to ensure loading state is maintained
-      // through the entire process
-      await this.loadNextProjectMessage();
-      await this.getCurrentChainManager().createChainWithNewModel();
-      // Update FileParserManager with the current project
-      this.fileParserManager = new FileParserManager(
-        BrevilabsClient.getInstance(),
-        this.app.vault,
-        true,
-        project
-      );
-      await this.loadProjectContext(project);
 
       // fresh chat view
       this.refreshChatView();
@@ -232,16 +312,20 @@ export default class ProjectManager {
       logInfo(`Switched to project: ${project.name}`);
     } catch (error) {
       logError(`Failed to switch project: ${error}`);
+      // Reason: restore load-tracking state for any failure path that didn't
+      // already restore it (e.g. save failure before inner try/catch).
+      setProjectContextLoadState(prevLoadState);
       throw error;
     } finally {
       setProjectLoading(false);
+      resolve();
     }
   }
 
-  private async saveCurrentProjectMessage() {
+  private async saveCurrentProjectMessage(projectOverride?: ProjectConfig | null) {
     // The new ChatManager handles message persistence internally
     // during project switches, so we just need to trigger autosave
-    await this.plugin.autosaveCurrentChat();
+    await this.plugin.autosaveCurrentChat(projectOverride);
   }
 
   private async loadNextProjectMessage() {
