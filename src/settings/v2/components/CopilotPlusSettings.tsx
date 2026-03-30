@@ -227,6 +227,17 @@ export const CopilotPlusSettings: React.FC = () => {
                     onChange={(value) => updateSetting("miyoServerUrl", value)}
                   />
 
+                  {(settings.miyoServerUrl || "").trim() && (
+                    <SettingItem
+                      type="text"
+                      title="Remote Vault Folder (Optional)"
+                      description="The folder path on the remote machine that Miyo should search. Leave blank to use the local vault path (only works if the remote vault is mounted at the same path)."
+                      value={settings.miyoRemoteVaultPath || ""}
+                      onChange={(value) => updateSetting("miyoRemoteVaultPath", value)}
+                      placeholder="e.g. /Users/you/Documents/vault"
+                    />
+                  )}
+
                   <SettingItem
                     type="switch"
                     title="Enable Miyo"
@@ -240,7 +251,7 @@ export const CopilotPlusSettings: React.FC = () => {
                     <div className="tw-text-xs tw-text-muted">
                       Folder path sent to Miyo:{" "}
                       <span className="tw-font-medium tw-text-normal">
-                        {getMiyoFolderPath(app)}
+                        {getMiyoFolderPath(app, settings)}
                       </span>
                     </div>
                   )}
