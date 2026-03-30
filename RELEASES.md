@@ -1,5 +1,34 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.6 🛠️
+
+A solid patch release focused on **Miyo remote server improvements** and a handy **OpenRouter prompt caching toggle**!
+
+- 🧠 **Miyo remote server support, polished** — Several improvements land together for users running Miyo on a remote machine. You can now set a **Remote Vault Folder** path so Copilot sends the correct path to your remote server (instead of your local path). The settings UI is cleaner too: "Vault Name" is now "Remote Vault Path (Optional)" and "Custom Miyo Server URL" is now "Remote Miyo Server URL (Optional)", both defaulting to blank so local users see no change. An indicator under the Enable Miyo toggle shows you the effective vault path and whether it resolves as local or remote. (@wenzhengjiang)
+- 📱 **Miyo stays off on mobile without a remote server** — On mobile, where local service discovery is unavailable, Miyo now quietly disables itself unless you've configured a Remote Miyo Server URL. No more silent failures! (@wenzhengjiang)
+- 🔁 **Miyo folder API refactor** — Under the hood, Miyo integration now uses the new folder-based API, using your vault path as the folder root and translating paths back to vault-relative paths. Index refreshes now notify you that the folder index is refreshing in Miyo. (@wenzhengjiang)
+- ⚙️ **OpenRouter: per-model prompt caching toggle** — If you use an OpenRouter endpoint that doesn't support `cache_control` headers (like Zero Data Retention endpoints), you can now turn off prompt caching per model in the model edit dialog. Prompt caching stays on by default for everyone else. (@logancyang)
+
+More details in the changelog:
+
+### Improvements
+
+- #2334 feat(miyo): add remote vault folder path override for remote servers @wenzhengjiang
+- #2326 feat(miyo): rename vault name to remote vault path and align with server API @wenzhengjiang
+- #2318 feat(openrouter): add per-model toggle for prompt caching @logancyang
+
+### Bug Fixes
+
+- #2331 Refactor Miyo integration for folder API @wenzhengjiang
+- #2328 feat(miyo): disable miyo on mobile without a remote server URL @wenzhengjiang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.5 🛠️
 
 A packed patch release with **Composer V2 editing**, **Azure provider unification**, **drag-to-insert wikilinks**, **Obsidian Bases support**, **LM Studio Responses API**, and a wave of agent, search, and UI improvements!
