@@ -97,7 +97,8 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   enableIndexSync: boolean;
   debug: boolean;
-  enableEncryption: boolean;
+  /** @deprecated Removed — keychain is now the sole encryption mechanism. */
+  enableEncryption?: never;
   maxSourceChunks: number;
   enableInlineCitations: boolean;
   qaExclusions: string;
@@ -199,6 +200,30 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
+  /** @deprecated Removed — replaced by _diskSecretsCleared. */
+  _keychainMigrated?: never;
+  /**
+   * When `true`, the user confirmed all devices are upgraded and data.json
+   * secrets should be stripped on every save. Set by the migration modal
+   * "clear now" button or the "Forget All Secrets" action.
+   */
+  _diskSecretsCleared?: boolean;
+  /**
+   * Stable namespace ID for keychain entries, persisted once on first use.
+   * Reason: using a persisted ID (instead of deriving from vault path) means
+   * renaming or moving the vault folder does not orphan keychain entries.
+   */
+  _keychainVaultId?: string;
+  /**
+   * ISO 8601 timestamp of the first successful keychain backfill.
+   * Used to calculate the 7-day auto-clear deadline for data.json secrets.
+   */
+  _keychainMigratedAt?: string;
+  /**
+   * ISO 8601 timestamp of when the user dismissed the migration modal
+   * (clicked "Keep for now" → "OK"). Prevents the modal from showing again.
+   */
+  _migrationModalDismissedAt?: string;
 }
 
 export const settingsStore = createStore();
@@ -223,10 +248,24 @@ function resolveEmbeddingModelKey(settings: CopilotSettings): string {
 }
 
 /**
- * Sets the settings in the atom.
+ * Sets the settings in the atom (merges with current settings).
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+  newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
+  settingsStore.set(settingsAtom, newSettings);
+}
+
+/**
+ * Replace all settings in the atom without merging.
+ *
+ * Reason: `setSettings()` spreads incoming values over current settings, so
+ * fields absent from the incoming object (e.g. serialized as `undefined` and
+ * dropped by JSON.stringify) survive from the old state. This function is for
+ * flows like Setup URI import that need a true overwrite.
+ */
+export function replaceSettings(settings: CopilotSettings) {
+  const newSettings = mergeAllActiveModelsWithCoreModels({ ...DEFAULT_SETTINGS, ...settings });
   newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
   settingsStore.set(settingsAtom, newSettings);
 }
@@ -320,6 +359,14 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 }
 
 /**
+ * Normalize persisted model provider values so identity keys stay stable across migrations.
+ * Reason: Legacy data may store "azure_openai" while runtime uses "azure-openai".
+ */
+export function normalizeModelProvider(provider: string): string {
+  return provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : provider;
+}
+
+/**
  * Sanitizes the settings to ensure they are valid.
  * Note: This will be better handled by Zod in the future.
  */
@@ -342,7 +389,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     settingsToSanitize.activeEmbeddingModels = settingsToSanitize.activeEmbeddingModels.map((m) => {
       return {
         ...m,
-        provider: m.provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : m.provider,
+        provider: normalizeModelProvider(m.provider),
       };
     });
   }

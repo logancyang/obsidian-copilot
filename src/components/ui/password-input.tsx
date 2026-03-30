@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Eye, EyeOff } from "lucide-react";
-import { getDecryptedKey } from "@/encryptionService";
+import { getDecryptedKey, isEncryptedValue } from "@/encryptionService";
 import { logError } from "@/logger";
 import { err2String } from "@/utils";
 
@@ -12,37 +12,64 @@ export function PasswordInput({
   placeholder,
   disabled,
   className,
+  autoDecrypt = true,
 }: {
   value?: string;
   onChange?: (value: string) => void;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  /** When false, skip auto-decryption of encrypted values. Use for passphrase inputs. */
+  autoDecrypt?: boolean;
 }) {
   const [showPassword, setShowPassword] = useState(false);
+  const [decryptionFailed, setDecryptionFailed] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const isFirstLoad = useRef(true);
 
-  // Initialize the input value on first load
+  // Reason: useEffect cleanup sets `cancelled = true` whenever `value` changes
+  // or the component unmounts, preventing stale async decrypt results from
+  // overwriting the input or calling setState after unmount.
   useEffect(() => {
+    let cancelled = false;
+
     const processValue = async () => {
-      if (isFirstLoad.current && value && inputRef.current) {
+      const inputEl = inputRef.current;
+      if (!inputEl) return;
+
+      // Reason: decrypt whenever the incoming value looks encrypted, not only
+      // on first load — this handles settings import, rollback, and cross-
+      // component updates that may swap in an encrypted value mid-mount.
+      if (autoDecrypt && value && isEncryptedValue(value)) {
         try {
-          inputRef.current.value = await getDecryptedKey(value);
+          const decrypted = await getDecryptedKey(value);
+          if (cancelled) return;
+          // Reason: an encrypted value that decrypts to "" means the current
+          // device cannot decrypt it. Show an error instead of ciphertext.
+          if (!decrypted) {
+            inputEl.value = "";
+            setDecryptionFailed(true);
+          } else {
+            inputEl.value = decrypted;
+            setDecryptionFailed(false);
+          }
         } catch (error) {
+          if (cancelled) return;
           logError("Failed to decrypt value:" + err2String(error));
-          inputRef.current.value = value;
+          inputEl.value = "";
+          setDecryptionFailed(true);
         }
-        isFirstLoad.current = false;
       } else {
-        if (inputRef.current) {
-          inputRef.current.value = value || "";
-        }
+        inputEl.value = value || "";
+        setDecryptionFailed(false);
       }
     };
 
     processValue();
-  }, [value]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [value, autoDecrypt]);
 
   return (
     <div className={cn("tw-relative", className)}>
@@ -82,6 +109,11 @@ export function PasswordInput({
           />
         )}
       </div>
+      {decryptionFailed && (
+        <p className="tw-mt-1 tw-text-xs tw-text-error">
+          Unable to decrypt this key on the current device. Please re-enter the key.
+        </p>
+      )}
     </div>
   );
 }

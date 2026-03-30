@@ -11,6 +11,7 @@ import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
+import { SetupUriImportModal } from "@/components/modals/SetupUriImportModal";
 
 import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
@@ -20,9 +21,16 @@ import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
-import { encryptAllKeys } from "@/encryptionService";
-import { logInfo, logWarn } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
+import { KeychainService } from "@/services/keychainService";
+import {
+  persistSettings,
+  loadSettingsWithKeychain,
+  flushPersistence,
+  shouldShowMigrationModal,
+} from "@/services/settingsPersistence";
+import { KeychainMigrationModal } from "@/components/modals/KeychainMigrationModal";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { checkIsPlusUser, refreshSelfHostModeValidation } from "@/plusUtils";
@@ -36,7 +44,6 @@ import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
   getSettings,
-  sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
@@ -91,18 +98,39 @@ export default class CopilotPlugin extends Plugin {
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
-
   async onload(): Promise<void> {
+    KeychainService.getInstance(this.app);
     await this.loadSettings();
     this.settingsUnsubscriber = subscribeToSettingsChange(async (prev, next) => {
-      if (next.enableEncryption) {
-        await this.saveData(await encryptAllKeys(next));
-      } else {
-        await this.saveData(next);
+      try {
+        await persistSettings(next, (data) => this.saveData(data), prev);
+      } catch (error) {
+        // Reason: Do NOT rollback memory state on persist failure.
+        // The writeQueue serializes I/O, so a later setSettings() may already
+        // be queued. Rolling back memory would create a split where memory is S0
+        // but disk ends up at S2 when the later write succeeds.
+        // Instead, just notify the user — the in-memory state remains current,
+        // and the next successful persist will reconcile disk with memory.
+        logError("Failed to persist settings.", error);
+        new Notice("Copilot failed to save settings. Check logs and try again.");
       }
       registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
+
+    // Register protocol handler for Setup URI import
+    try {
+      this.registerObsidianProtocolHandler("copilot-setup", (params) => {
+        const payload = params.payload;
+        if (!payload) {
+          new Notice("Invalid Setup URI: missing payload.");
+          return;
+        }
+        new SetupUriImportModal(this.app, (data) => this.saveData(data), payload).open();
+      });
+    } catch (error) {
+      logWarn("Failed to register protocol handler for Setup URI import.", error);
+    }
 
     // Core plugin initialization
 
@@ -212,6 +240,12 @@ export default class CopilotPlugin extends Plugin {
       this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app.vault));
+
+      // Show keychain migration modal if applicable
+      // Reason: defer to onLayoutReady to avoid overlapping with other migration modals
+      if (shouldShowMigrationModal(getSettings())) {
+        new KeychainMigrationModal(this.app, (data) => this.saveData(data)).open();
+      }
     });
 
     // Initialize automatic selection handler
@@ -222,6 +256,11 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
+    // Best-effort flush of pending keychain/data.json writes.
+    // Reason: onunload() is void in Obsidian's type system, but awaiting here
+    // is no worse than fire-and-forget, and consistent with the log flush below.
+    await flushPersistence();
+
     // Clear all persistent selection highlights before unload
     // This prevents "stuck" highlights after hot reload (dev environment)
     this.clearAllPersistentSelectionHighlights();
@@ -587,9 +626,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadSettings() {
-    const savedSettings = await this.loadData();
-    const sanitizedSettings = sanitizeSettings(savedSettings);
-    setSettings(sanitizedSettings);
+    const rawData = await this.loadData();
+    const settings = await loadSettingsWithKeychain(rawData, (d) => this.saveData(d));
+    setSettings(settings);
   }
 
   mergeActiveModels(
