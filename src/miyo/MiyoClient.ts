@@ -1,44 +1,47 @@
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
+import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import { requestUrl } from "obsidian";
-import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 
 /**
- * Request payload for upserting documents into Miyo.
+ * Indexed file entry returned by Miyo.
  */
-export interface MiyoUpsertDocument {
-  id: string;
+export interface MiyoIndexedFileEntry {
   path: string;
-  title: string;
-  content: string;
-  created_at: number;
-  ctime: number;
+  title?: string | null;
   mtime: number;
-  tags: string[];
-  extension: string;
-  nchars: number;
-  metadata: Record<string, unknown>;
+  updated_at?: string;
+  folder_path?: string | null;
+  total_chunks?: number;
 }
 
 /**
- * Response for index file listing.
+ * Response for indexed file listing.
  */
 export interface MiyoIndexedFilesResponse {
-  files: Array<{ path: string; mtime: number }>;
+  files: MiyoIndexedFileEntry[];
   total: number;
 }
 
 /**
- * Response for index statistics.
+ * Folder entry returned by Miyo.
  */
-export interface MiyoIndexStatsResponse {
-  total_chunks: number;
-  total_files: number;
-  latest_mtime: number;
-  embedding_model?: string;
-  embedding_dim?: number;
+export interface MiyoFolderEntry {
+  path: string;
+  include_patterns?: string[];
+  exclude_patterns?: string[];
+  recursive?: boolean;
+  [key: string]: unknown;
+}
+
+/**
+ * Response for scan requests.
+ */
+export interface MiyoScanResponse {
+  status?: string;
+  path?: string;
 }
 
 /**
@@ -48,17 +51,18 @@ export interface MiyoDocumentsResponse {
   documents: Array<{
     id: string;
     path: string;
-    title?: string;
+    title?: string | null;
     chunk_index?: number;
-    chunk_text?: string;
+    chunk_text?: string | null;
     metadata?: Record<string, unknown>;
-    embedding_model?: string;
+    embedding_model?: string | null;
     ctime?: number;
     mtime?: number;
     tags?: string[];
     extension?: string;
-    created_at?: number;
+    created_at?: string | number | null;
     nchars?: number;
+    folder_path?: string | null;
   }>;
 }
 
@@ -69,17 +73,18 @@ export interface MiyoSearchResult {
   id: string;
   score: number;
   path: string;
-  title?: string;
+  title?: string | null;
   chunk_index?: number;
-  chunk_text: string;
+  chunk_text?: string | null;
   metadata?: Record<string, unknown>;
-  embedding_model?: string;
+  embedding_model?: string | null;
   ctime?: number;
   mtime?: number;
   tags?: string[];
   extension?: string;
-  created_at?: number;
+  created_at?: string | number | null;
   nchars?: number;
+  folder_path?: string | null;
 }
 
 /**
@@ -179,113 +184,103 @@ export class MiyoClient {
   }
 
   /**
-   * Upsert a batch of documents.
+   * Fetch the Miyo folder entry for a registered folder path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
-   * @param documents - Documents to upsert.
-   * @returns Number of documents upserted.
+   * @param folderPath - Absolute folder path registered in Miyo.
+   * @returns Folder entry.
    */
-  public async upsertDocuments(
+  public async getFolder(baseUrl: string, folderPath: string): Promise<MiyoFolderEntry> {
+    return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
+      method: "GET",
+      query: { path: folderPath },
+    });
+  }
+
+  /**
+   * Trigger a Miyo folder scan.
+   *
+   * @param baseUrl - Miyo base URL.
+   * @param folderPath - Absolute folder path registered in Miyo.
+   * @param force - Whether to force a full re-scan.
+   * @returns Scan response.
+   */
+  public async scanFolder(
     baseUrl: string,
-    vault: string,
-    documents: MiyoUpsertDocument[]
-  ): Promise<number> {
-    const payload = { vault, documents };
-    const response = await this.requestJson<{ upserted: number }>(baseUrl, "/v0/index/upsert", {
+    folderPath: string,
+    force = false
+  ): Promise<MiyoScanResponse> {
+    return this.requestJson<MiyoScanResponse>(baseUrl, "/v0/scan", {
       method: "POST",
-      body: payload,
+      body: {
+        path: folderPath,
+        force,
+      },
     });
-    return response?.upserted ?? 0;
   }
 
   /**
-   * Delete documents by file path.
+   * List indexed files for a folder with pagination and filters.
    *
    * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
-   * @param path - File path to delete.
-   * @returns Count of documents deleted.
-   */
-  public async deleteByPath(baseUrl: string, vault: string, path: string): Promise<number> {
-    const payload = { vault, path };
-    const response = await this.requestJson<{ deleted?: number }>(baseUrl, "/v0/index/by_path", {
-      method: "DELETE",
-      body: payload,
-    });
-    return response?.deleted ?? 0;
-  }
-
-  /**
-   * Clear all indexed documents for a source.
-   *
-   * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
-   */
-  public async clearIndex(baseUrl: string, vault: string): Promise<void> {
-    const payload = { vault };
-    await this.requestJson(baseUrl, "/v0/index/clear", { method: "POST", body: payload });
-  }
-
-  /**
-   * List indexed files with pagination.
-   *
-   * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
-   * @param offset - Offset for pagination.
-   * @param limit - Page size.
+   * @param options - Folder file list options.
    * @returns Indexed files response.
    */
-  public async listFiles(
+  public async listFolderFiles(
     baseUrl: string,
-    vault: string,
-    offset: number,
-    limit: number
+    options: {
+      folderPath: string;
+      title?: string;
+      filePath?: string;
+      mtimeAfter?: number;
+      mtimeBefore?: number;
+      offset?: number;
+      limit?: number;
+      orderBy?: "mtime" | "updated_at";
+    }
   ): Promise<MiyoIndexedFilesResponse> {
-    return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/index/files", {
+    return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/folder/files", {
       method: "GET",
-      query: { vault, offset, limit },
+      query: {
+        folder_path: options.folderPath,
+        title: options.title,
+        file_path: options.filePath,
+        mtime_after: options.mtimeAfter,
+        mtime_before: options.mtimeBefore,
+        offset: options.offset,
+        limit: options.limit,
+        order_by: options.orderBy,
+      },
     });
   }
 
   /**
-   * Fetch index statistics for a source.
+   * Fetch all indexed chunks for a file path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
-   * @returns Index stats response.
-   */
-  public async getStats(baseUrl: string, vault: string): Promise<MiyoIndexStatsResponse> {
-    return this.requestJson<MiyoIndexStatsResponse>(baseUrl, "/v0/index/stats", {
-      method: "GET",
-      query: { vault },
-    });
-  }
-
-  /**
-   * Fetch all documents for a given path.
-   *
-   * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
-   * @param path - File path to look up.
+   * @param folderPath - Folder path to scope the document lookup.
+   * @param path - Absolute file path to look up.
    * @returns Documents response.
    */
   public async getDocumentsByPath(
     baseUrl: string,
-    vault: string,
+    folderPath: string,
     path: string
   ): Promise<MiyoDocumentsResponse> {
-    return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/index/documents", {
+    return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/folder/documents", {
       method: "GET",
-      query: { vault, path },
+      query: {
+        path,
+        folder_path: folderPath,
+      },
     });
   }
 
   /**
-   * Execute a hybrid search query.
+   * Execute a hybrid search query scoped to a folder path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param vault - Vault identifier sent to Miyo.
+   * @param folderPath - Folder path sent to Miyo.
    * @param query - User query.
    * @param limit - Maximum number of results.
    * @param filters - Optional search filters.
@@ -293,14 +288,14 @@ export class MiyoClient {
    */
   public async search(
     baseUrl: string,
-    vault: string,
+    folderPath: string,
     query: string,
     limit: number,
     filters?: MiyoSearchFilter[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      vault,
+      folder_path: folderPath,
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
@@ -317,28 +312,25 @@ export class MiyoClient {
    * Execute related-notes search for a source note path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param filePath - Source note path to find related notes for.
-   * @param options - Optional source id, result limit, and filters.
+   * @param filePath - Absolute source note path to find related notes for.
+   * @param options - Optional folder path, result limit, and filters.
    * @returns Search response in the same shape as /v0/search.
    */
   public async searchRelated(
     baseUrl: string,
     filePath: string,
     options?: {
-      vault?: string;
+      folderPath?: string;
       limit?: number;
       filters?: MiyoSearchFilter[];
     }
   ): Promise<MiyoRelatedSearchResponse> {
     const payload = {
       file_path: filePath,
-      ...(options?.vault ? { vault: options.vault } : {}),
+      ...(options?.folderPath ? { folder_path: options.folderPath } : {}),
       ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
       ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
     };
-    if (getSettings().debug) {
-      logInfo("Miyo related search request:", { baseUrl, payload });
-    }
     return this.requestJson<MiyoRelatedSearchResponse>(baseUrl, "/v0/search/related", {
       method: "POST",
       body: payload,
@@ -415,9 +407,6 @@ export class MiyoClient {
       ...(getSettings().debug && options.method === "POST" ? { postBody: options.body } : {}),
     });
 
-    // TODO: Add a configurable timeout for large file parsing (e.g. big PDFs).
-    // Obsidian's requestUrl does not expose a timeout option, so consider using
-    // AbortController or a wrapper with Promise.race to prevent indefinite hangs.
     const response = await requestUrl({
       url: url.toString(),
       method: options.method,
@@ -428,9 +417,17 @@ export class MiyoClient {
     });
 
     if (response.status >= 400) {
-      const errorText = response.text ? response.text : "";
+      const errorPayload = this.parseResponseJson<{ detail?: string }>(
+        response.json,
+        response.text
+      );
+      const errorText = errorPayload?.detail || response.text || "";
       logWarn(`Miyo request failed (${response.status}): ${errorText}`);
-      throw new Error(`Miyo request failed with status ${response.status}`);
+      throw new Error(
+        errorText
+          ? `Miyo request failed with status ${response.status}: ${errorText}`
+          : `Miyo request failed with status ${response.status}`
+      );
     }
 
     const parsed = this.parseResponseJson<T>(response.json, response.text);

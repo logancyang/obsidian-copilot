@@ -1,5 +1,5 @@
 import { isSelfHostAccessValid } from "@/plusUtils";
-import { CopilotSettings, getSettings } from "@/settings/model";
+import { CopilotSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 
 /**
@@ -36,21 +36,12 @@ export function shouldUseMiyo(settings: CopilotSettings): boolean {
 }
 
 /**
- * Resolve the vault identifier sent to Miyo.
- *
- * Uses the user-configured remote vault path only when a remote server URL is also
- * configured, otherwise falls back to the vault filesystem path or vault name.
+ * Resolve the current vault folder path sent to Miyo as `folder_path`.
  *
  * @param app - Obsidian application instance.
- * @returns Remote vault path when a remote server is configured, vault folder path when available, otherwise vault name.
+ * @returns Current vault filesystem path when available, otherwise vault name.
  */
-export function getMiyoVault(app: App): string {
-  const settings = getSettings();
-  const remoteVaultPath = (settings.miyoRemoteVaultPath || "").trim();
-  const serverUrl = (settings.miyoServerUrl || "").trim();
-  if (remoteVaultPath && serverUrl) {
-    return remoteVaultPath;
-  }
+export function getMiyoFolderPath(app: App): string {
   const vaultPath = getVaultBasePath(app);
   if (vaultPath) {
     return vaultPath;
@@ -59,22 +50,48 @@ export function getMiyoVault(app: App): string {
 }
 
 /**
- * Resolve the vault identifier that would apply given a vault path override, used for UI preview.
+ * Resolve an absolute filesystem path for a vault file so it can be sent to Miyo.
  *
  * @param app - Obsidian application instance.
- * @param vaultPathOverride - The vault path to use (empty string = auto-detect).
- * @returns Overridden vault path, or auto-detected vault path/name.
+ * @param vaultRelativePath - Vault-relative note path.
+ * @returns Absolute file path when available, otherwise the original path.
  */
-export function resolveMiyoVault(app: App, vaultNameOverride: string): string {
-  const trimmed = vaultNameOverride.trim();
-  if (trimmed) {
-    return trimmed;
+export function getMiyoAbsolutePath(app: App, vaultRelativePath: string): string {
+  const adapter = app.vault.adapter;
+  if (adapter instanceof FileSystemAdapter) {
+    return adapter.getFullPath(vaultRelativePath);
   }
+
+  const adapterAny = adapter as unknown as { getFullPath?: (normalizedPath: string) => string };
+  if (typeof adapterAny.getFullPath === "function") {
+    return adapterAny.getFullPath(vaultRelativePath);
+  }
+
+  return vaultRelativePath;
+}
+
+/**
+ * Convert a Miyo file path back to a vault-relative path when it belongs to the current vault.
+ *
+ * @param app - Obsidian application instance.
+ * @param miyoPath - Path returned by Miyo.
+ * @returns Vault-relative path when the file is inside the current vault, otherwise the original path.
+ */
+export function getVaultRelativeMiyoPath(app: App, miyoPath: string): string {
   const vaultPath = getVaultBasePath(app);
-  if (vaultPath) {
-    return vaultPath;
+  if (!vaultPath) {
+    return miyoPath;
   }
-  return app.vault.getName();
+
+  const normalizedVaultPath = normalizeFilesystemPath(vaultPath);
+  const normalizedMiyoPath = normalizeFilesystemPath(miyoPath);
+  const prefix = `${normalizedVaultPath}/`;
+
+  if (normalizedMiyoPath.startsWith(prefix)) {
+    return normalizedMiyoPath.slice(prefix.length);
+  }
+
+  return miyoPath;
 }
 
 /**
@@ -83,7 +100,7 @@ export function resolveMiyoVault(app: App, vaultNameOverride: string): string {
  * @param app - Obsidian application instance.
  * @returns Vault base path or undefined when unavailable.
  */
-function getVaultBasePath(app: App): string | undefined {
+export function getVaultBasePath(app: App): string | undefined {
   const adapter = app.vault.adapter;
   if (adapter instanceof FileSystemAdapter) {
     return adapter.getBasePath();
@@ -97,4 +114,14 @@ function getVaultBasePath(app: App): string | undefined {
     return adapterAny.basePath;
   }
   return undefined;
+}
+
+/**
+ * Normalize a filesystem path for prefix comparisons across platforms.
+ *
+ * @param path - Filesystem path.
+ * @returns Normalized path with forward slashes and no trailing slash.
+ */
+function normalizeFilesystemPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
 }

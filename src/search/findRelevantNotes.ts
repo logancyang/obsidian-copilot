@@ -1,6 +1,12 @@
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoVault, shouldUseMiyo } from "@/miyo/miyoUtils";
+import {
+  getMiyoAbsolutePath,
+  getMiyoCustomUrl,
+  getMiyoFolderPath,
+  getVaultRelativeMiyoPath,
+  shouldUseMiyo,
+} from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
@@ -123,24 +129,25 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
     const settings = getSettings();
     const miyoClient = new MiyoClient();
     const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const vault = getMiyoVault(app);
-    const response = await miyoClient.searchRelated(baseUrl, filePath, {
-      vault,
+    const folderPath = getMiyoFolderPath(app);
+    const response = await miyoClient.searchRelated(baseUrl, getMiyoAbsolutePath(app, filePath), {
+      folderPath,
       limit: MAX_K,
     });
     const similarityScoreMap = new Map<string, number>();
     const results = response.results || [];
 
     for (const result of results) {
-      if (result.path === filePath) {
+      const relativePath = getVaultRelativeMiyoPath(app, result.path);
+      if (relativePath === filePath) {
         continue;
       }
       if (typeof result.score !== "number" || Number.isNaN(result.score)) {
         continue;
       }
-      const existing = similarityScoreMap.get(result.path);
+      const existing = similarityScoreMap.get(relativePath);
       if (existing === undefined || result.score > existing) {
-        similarityScoreMap.set(result.path, result.score);
+        similarityScoreMap.set(relativePath, result.score);
       }
     }
 

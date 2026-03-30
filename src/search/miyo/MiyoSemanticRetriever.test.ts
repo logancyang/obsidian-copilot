@@ -1,4 +1,4 @@
-import { getMiyoVault } from "@/miyo/miyoUtils";
+import { getMiyoFolderPath } from "@/miyo/miyoUtils";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
@@ -12,7 +12,8 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoVault: jest.fn(),
+  getMiyoFolderPath: jest.fn(),
+  getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
 jest.mock("@/miyo/MiyoClient", () => ({
@@ -47,7 +48,7 @@ describe("MiyoSemanticRetriever", () => {
       miyoServerUrl: "http://miyo.local",
       debug: false,
     });
-    (getMiyoVault as jest.Mock).mockReturnValue("vault-source");
+    (getMiyoFolderPath as jest.Mock).mockReturnValue("/vault");
     mockResolveBaseUrl.mockResolvedValue("http://miyo.local");
   });
 
@@ -57,28 +58,28 @@ describe("MiyoSemanticRetriever", () => {
         {
           id: "doc-1",
           score: 0.9,
-          path: "notes/a.md",
+          path: "/vault/notes/a.md",
           chunk_index: 0,
           chunk_text: "A chunk",
         },
         {
           id: "doc-1-dup",
           score: 0.85,
-          path: "notes/a.md",
+          path: "/vault/notes/a.md",
           chunk_index: 0,
           chunk_text: "A duplicated chunk",
         },
         {
           id: "doc-2",
           score: 0.1,
-          path: "notes/b.md",
+          path: "/vault/notes/b.md",
           chunk_index: 0,
           chunk_text: "Below threshold chunk",
         },
         {
           id: "doc-3",
           score: Number.NaN,
-          path: "notes/c.md",
+          path: "/vault/notes/c.md",
           chunk_index: 1,
           chunk_text: "NaN score chunk should pass",
         },
@@ -90,7 +91,7 @@ describe("MiyoSemanticRetriever", () => {
 
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
-      "vault-source",
+      "/vault",
       "query with [[notes/a]] mention",
       10,
       undefined
@@ -117,7 +118,7 @@ describe("MiyoSemanticRetriever", () => {
 
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
-      "vault-source",
+      "/vault",
       "show notes from this week",
       10,
       [{ field: "mtime", gte: startTime, lte: endTime }]
@@ -137,7 +138,7 @@ describe("MiyoSemanticRetriever", () => {
 
     expect(mockSearch).toHaveBeenCalledWith(
       "http://miyo.local",
-      "vault-source",
+      "/vault",
       "list all notes about ai digests",
       RETURN_ALL_LIMIT,
       undefined

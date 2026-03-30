@@ -130,6 +130,12 @@ export default class VectorStoreManager {
       return 0;
     }
 
+    if (this.activeBackendKey === "miyo") {
+      await this.miyoBackend.requestIndexRefresh(Boolean(overwrite));
+      notifyIndexChanged();
+      return 0;
+    }
+
     if (
       Platform.isMobile &&
       getSettings().disableIndexOnMobile &&
@@ -281,6 +287,9 @@ export default class VectorStoreManager {
 
   public async reindexFile(file: TFile): Promise<void> {
     await this.waitForInitialization();
+    if (this.activeBackendKey === "miyo") {
+      return;
+    }
     await this.indexOps.reindexFile(file);
     notifyIndexChanged();
   }
