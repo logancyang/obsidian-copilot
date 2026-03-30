@@ -261,7 +261,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    * @returns Folder path string.
    */
   private getFolderPath(): string {
-    return getMiyoFolderPath(this.app);
+    return getMiyoFolderPath(this.app, getSettings());
   }
 
   /**

@@ -91,7 +91,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       }
       const response = await this.client.search(
         baseUrl,
-        getMiyoFolderPath(this.app),
+        getMiyoFolderPath(this.app, getSettings()),
         query,
         limit,
         filters
