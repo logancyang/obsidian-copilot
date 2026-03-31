@@ -1,5 +1,5 @@
 /**
- * Obsidian Modal shell for exporting Copilot settings as an encrypted Setup URI.
+ * Obsidian Modal shell for exporting Copilot configuration as an encrypted .copilot file.
  * Renders the ExportStepperContent React component inside the modal.
  */
 
@@ -19,7 +19,9 @@ export class SetupUriExportModal extends Modal {
 
   onOpen(): void {
     this.root = createRoot(this.contentEl);
-    this.root.render(<ExportStepperContent pluginVersion={this.pluginVersion} />);
+    this.root.render(
+      <ExportStepperContent app={this.app} pluginVersion={this.pluginVersion} />
+    );
   }
 
   onClose(): void {

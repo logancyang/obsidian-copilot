@@ -39,8 +39,8 @@ export const ConfigurationSharing: React.FC = () => {
       <div className="tw-flex tw-flex-col tw-gap-1">
         <div className="tw-text-xl tw-font-bold">Configuration Sharing</div>
         <div className="tw-text-xs tw-leading-relaxed tw-text-muted">
-          Transfer your Copilot configuration (including API keys and preferences) between vaults
-          using an encrypted Setup URI.
+          Transfer your full Copilot configuration (settings, API keys, custom commands, system
+          prompts, and memories) between vaults using an encrypted .copilot file.
         </div>
       </div>
 
@@ -55,13 +55,13 @@ export const ConfigurationSharing: React.FC = () => {
           <div className="tw-min-w-0">
             <div className="tw-text-sm tw-font-medium tw-text-normal">Export Configuration</div>
             <div className="tw-truncate tw-text-xs tw-text-muted">
-              Create an encrypted URI of your current settings to use in another vault.
+              Save your full configuration as an encrypted file to use in another vault.
             </div>
           </div>
         </div>
 
         <Button variant="secondary" size="sm" onClick={handleExport} className="tw-shrink-0">
-          Export Setup URI
+          Export
         </Button>
       </div>
 
@@ -76,13 +76,13 @@ export const ConfigurationSharing: React.FC = () => {
           <div className="tw-min-w-0">
             <div className="tw-text-sm tw-font-medium tw-text-normal">Import Configuration</div>
             <div className="tw-truncate tw-text-xs tw-text-muted">
-              Manually import settings from a Setup URI if the protocol link doesn&apos;t work.
+              Restore settings and files from a .copilot configuration file.
             </div>
           </div>
         </div>
 
         <Button variant="secondary" size="sm" onClick={handleImport} className="tw-shrink-0">
-          Import Setup URI
+          Import
         </Button>
       </div>
     </section>

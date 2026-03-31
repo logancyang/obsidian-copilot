@@ -118,6 +118,7 @@ function stripModelSecrets(models: CustomModel[]): CustomModel[] {
  */
 export function cleanupLegacyFields(settings: CopilotSettings): CopilotSettings {
   const out = asRecord({ ...settings });
+  // Reason: these fields are from earlier dev iterations and should not persist.
   delete out.enableEncryption;
   delete out._keychainMigrated;
   return out as unknown as CopilotSettings;

@@ -83,12 +83,7 @@ jest.mock("@/services/settingsSecretTransforms", () => ({
     }
     return out;
   }),
-  cleanupLegacyFields: jest.fn((settings: Record<string, unknown>) => {
-    const out = { ...settings };
-    delete out.enableEncryption;
-    delete out._keychainMigrated;
-    return out;
-  }),
+  cleanupLegacyFields: jest.fn((settings: Record<string, unknown>) => ({ ...settings })),
 }));
 
 import { FileSystemAdapter, Notice } from "obsidian";
@@ -258,7 +253,7 @@ describe("backfillAndHydrate", () => {
     expect(result.hadFailures).toBe(false);
   });
 
-  it("marks failures and falls back to disk when keychain reads throw", async () => {
+  it("marks failures and decrypts disk fallback when keychain reads throw", async () => {
     const secretStorage = makeSecretStorage();
     secretStorage.getSecret.mockImplementation(() => {
       throw new Error("locked");
@@ -269,8 +264,9 @@ describe("backfillAndHydrate", () => {
       makeSettings({ openAIApiKey: "enc_disk_openai" })
     );
 
-    // Reason: when keychain is locked, the disk value should be preserved as-is
-    expect(result.settings.openAIApiKey).toBe("enc_disk_openai");
+    // Reason: when keychain is locked, encrypted disk values should be decrypted
+    // for runtime use so ciphertext doesn't flow into provider requests.
+    expect(result.settings.openAIApiKey).toBe("disk_openai");
     expect(result.backfilledAny).toBe(false);
     expect(result.hadFailures).toBe(true);
   });
@@ -390,10 +386,10 @@ describe("forgetAllSecrets", () => {
     );
 
     const saveData = jest.fn().mockResolvedValue(undefined);
-    const refreshSnapshot = jest.fn();
+    const refreshDiskState = jest.fn();
     const syncMemory = jest.fn();
 
-    await service.forgetAllSecrets(saveData, refreshSnapshot, syncMemory);
+    await service.forgetAllSecrets(saveData, refreshDiskState, syncMemory);
 
     // Reason: should only clear entries for THIS vault, not other vaults
     expect(secretStorage.setSecret).toHaveBeenCalledWith(
@@ -413,7 +409,7 @@ describe("forgetAllSecrets", () => {
     const savedModels = saved.activeModels as Array<Record<string, unknown>>;
     expect(savedModels[0].apiKey).toBe("");
 
-    expect(refreshSnapshot).toHaveBeenCalled();
+    expect(refreshDiskState).toHaveBeenCalled();
     expect(syncMemory).toHaveBeenCalled();
     // Reason: synced memory should also have secrets blanked
     const synced = syncMemory.mock.calls[0][0] as unknown as Record<string, unknown>;
@@ -431,16 +427,16 @@ describe("forgetAllSecrets", () => {
     (getSettings as jest.Mock).mockReturnValue(makeSettings({ openAIApiKey: "sk-123" }));
 
     const saveData = jest.fn().mockRejectedValue(new Error("disk write failed"));
-    const refreshSnapshot = jest.fn();
+    const refreshDiskState = jest.fn();
     const syncMemory = jest.fn();
     const onDiskSaveFailed = jest.fn();
 
-    await service.forgetAllSecrets(saveData, refreshSnapshot, syncMemory, onDiskSaveFailed);
+    await service.forgetAllSecrets(saveData, refreshDiskState, syncMemory, onDiskSaveFailed);
 
     // Reason: memory should still be synced even when disk save fails
     expect(syncMemory).toHaveBeenCalled();
     expect(onDiskSaveFailed).toHaveBeenCalled();
-    expect(refreshSnapshot).not.toHaveBeenCalled();
+    expect(refreshDiskState).not.toHaveBeenCalled();
     expect(Notice).toHaveBeenCalledWith(expect.stringContaining("data.json save failed"));
   });
 });

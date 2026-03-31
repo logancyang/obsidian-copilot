@@ -63,16 +63,15 @@ jest.mock("lucide-react", () => ({
 }));
 
 const mockRunTransaction = jest.fn();
-const mockGetRawDataSnapshot = jest.fn();
-const mockRefreshRawDataSnapshot = jest.fn();
+const mockRefreshDiskHasSecrets = jest.fn();
 const mockSuppressNextPersistOnce = jest.fn();
-const mockGetBackfillHadFailures = jest.fn().mockReturnValue(false);
+const mockCanClearDiskSecrets = jest.fn().mockReturnValue(true);
 jest.mock("@/services/settingsPersistence", () => ({
   runPersistenceTransaction: (task: () => Promise<void>) => mockRunTransaction(task),
-  getRawDataSnapshot: () => mockGetRawDataSnapshot(),
-  refreshRawDataSnapshot: (data: unknown) => mockRefreshRawDataSnapshot(data),
+  refreshDiskHasSecrets: (data: unknown) => mockRefreshDiskHasSecrets(data),
+  refreshLastPersistedSettings: jest.fn(),
   suppressNextPersistOnce: () => mockSuppressNextPersistOnce(),
-  getBackfillHadFailures: () => mockGetBackfillHadFailures(),
+  canClearDiskSecrets: () => mockCanClearDiskSecrets(),
 }));
 
 const mockGetSettings = jest.fn();
@@ -96,6 +95,7 @@ import { KeychainMigrationModal } from "./KeychainMigrationModal";
 describe("KeychainMigrationModal — handleKeepKeys", () => {
   const mockApp = {} as InstanceType<typeof import("obsidian").App>;
   const mockSaveData = jest.fn();
+  const mockLoadData = jest.fn();
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -103,7 +103,7 @@ describe("KeychainMigrationModal — handleKeepKeys", () => {
     capturedOnRemove = null;
 
     mockGetSettings.mockReturnValue({ openAIApiKey: "sk-test" });
-    mockGetRawDataSnapshot.mockReturnValue({ openAIApiKey: "sk-test" });
+    mockLoadData.mockResolvedValue({ openAIApiKey: "sk-test" });
 
     // Default: runPersistenceTransaction executes the task inline
     mockRunTransaction.mockImplementation(async (task: () => Promise<void>) => task());
@@ -117,7 +117,7 @@ describe("KeychainMigrationModal — handleKeepKeys", () => {
     modal: KeychainMigrationModal;
     onKeep: () => void;
   } {
-    const modal = new KeychainMigrationModal(mockApp, mockSaveData);
+    const modal = new KeychainMigrationModal(mockApp, mockSaveData, mockLoadData);
     modal.onOpen();
     expect(capturedOnKeep).not.toBeNull();
     return { modal, onKeep: capturedOnKeep! };
@@ -132,13 +132,12 @@ describe("KeychainMigrationModal — handleKeepKeys", () => {
     // saveData should have been called with the snapshot + timestamp
     expect(mockSaveData).toHaveBeenCalledTimes(1);
     const savedData = mockSaveData.mock.calls[0][0] as Record<string, unknown>;
-    expect(savedData._migrationModalDismissedAt).toBeDefined();
-    expect(typeof savedData._migrationModalDismissedAt).toBe("string");
+    expect(savedData._migrationModalDismissed).toBe(true);
 
-    // setSettings should have been called with the timestamp
+    // setSettings should have been called with the dismissal flag
     expect(mockSetSettings).toHaveBeenCalledTimes(1);
     const settingsArg = mockSetSettings.mock.calls[0][0] as Record<string, unknown>;
-    expect(settingsArg._migrationModalDismissedAt).toBeDefined();
+    expect(settingsArg._migrationModalDismissed).toBe(true);
 
     // Modal should have closed (super.close called)
     expect(mockSuperClose).toHaveBeenCalled();

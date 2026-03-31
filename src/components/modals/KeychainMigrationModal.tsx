@@ -13,10 +13,10 @@
 
 import { Button } from "@/components/ui/button";
 import {
+  canClearDiskSecrets,
   clearDiskSecrets,
-  getBackfillHadFailures,
-  getRawDataSnapshot,
-  refreshRawDataSnapshot,
+  refreshDiskHasSecrets,
+  refreshLastPersistedSettings,
   runPersistenceTransaction,
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
@@ -44,7 +44,7 @@ type ModalStep = "main" | "keep" | "remove";
 interface KeychainMigrationContentProps {
   onKeepConfirmed: () => void;
   onRemoveConfirmed: () => void;
-  /** When true, some secrets failed to migrate — "Remove now" is disabled. */
+  /** When true, clearing old disk copies is not currently safe. */
   clearDisabled: boolean;
 }
 
@@ -98,8 +98,8 @@ function MainContent({
         <div className="tw-flex tw-items-start tw-gap-2 tw-rounded-md tw-border tw-border-border tw-bg-error tw-p-3 tw-text-smallest tw-text-warning">
           <AlertTriangle className="tw-mt-0.5 tw-size-4 tw-shrink-0" />
           <span>
-            Some keys could not be decrypted and are only stored in data.json. Clearing is disabled
-            until all keys are successfully migrated.
+            Removing old copies is disabled until Copilot confirms the current keys are safely
+            stored in the OS Keychain.
           </span>
         </div>
       )}
@@ -108,8 +108,10 @@ function MainContent({
         <Info className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
         <span className="tw-leading-relaxed">
           Transfer keys to a new device anytime via{" "}
-          <strong className="tw-font-medium tw-text-normal">&ldquo;Setup URI&rdquo;</strong> in
-          Settings.
+          <strong className="tw-font-medium tw-text-normal">
+            &ldquo;Configuration Sharing&rdquo;
+          </strong>{" "}
+          in Settings.
         </span>
       </div>
 
@@ -124,9 +126,7 @@ function MainContent({
           onClick={onRemove}
           disabled={clearDisabled}
           className="tw-gap-1.5"
-          title={
-            clearDisabled ? "Some keys failed to migrate — removing is not safe yet" : undefined
-          }
+          title={clearDisabled ? "Removing old copies is not safe yet" : undefined}
         >
           <Trash2 className="tw-size-4" />
           Remove now
@@ -250,12 +250,18 @@ function KeychainMigrationContent({
 export class KeychainMigrationModal extends Modal {
   private root?: Root;
   private readonly saveDataFn: (data: CopilotSettings) => Promise<void>;
+  private readonly loadDataFn: () => Promise<unknown>;
   /** When true, the modal is allowed to close (user clicked a button). */
   private canClose = false;
 
-  constructor(app: App, saveData: (data: CopilotSettings) => Promise<void>) {
+  constructor(
+    app: App,
+    saveData: (data: CopilotSettings) => Promise<void>,
+    loadData: () => Promise<unknown>
+  ) {
     super(app);
     this.saveDataFn = saveData;
+    this.loadDataFn = loadData;
   }
 
   /**
@@ -283,7 +289,7 @@ export class KeychainMigrationModal extends Modal {
       <KeychainMigrationContent
         onKeepConfirmed={() => this.handleKeepKeys()}
         onRemoveConfirmed={() => this.handleClearKeys()}
-        clearDisabled={getBackfillHadFailures()}
+        clearDisabled={!canClearDiskSecrets(getSettings())}
       />
     );
   }
@@ -294,29 +300,31 @@ export class KeychainMigrationModal extends Modal {
   }
 
   /**
-   * User chose "Keep for now" → "OK". Record dismissal timestamp so the
-   * modal is not shown again, and let the 7-day auto-clear handle cleanup.
+   * User chose "Keep for now" → "OK". Record dismissal flag so the modal
+   * is not shown again, and let the 7-day auto-clear handle cleanup.
    *
-   * Reason: uses a dedicated persistence transaction that patches only the
-   * timestamp field into the raw disk snapshot, instead of going through
-   * the normal setSettings→persist path. This avoids round-tripping all
-   * hydrated secrets through doPersist, which would downgrade previously
-   * encrypted `enc_*` disk values to plaintext during the transition window.
+   * Reason: uses a dedicated persistence transaction that reads the latest
+   * raw disk data on demand and patches only the dismissal flag, instead of
+   * going through the normal setSettings→persist path. This avoids
+   * round-tripping all hydrated secrets through doPersist.
    */
   private async handleKeepKeys(): Promise<void> {
     try {
       await runPersistenceTransaction(async () => {
-        const timestamp = new Date().toISOString();
-        // Patch the raw disk snapshot directly — no secret round-trip.
-        const diskData = { ...getRawDataSnapshot(), _migrationModalDismissedAt: timestamp };
+        // Reason: read raw disk data inside the serialized transaction so
+        // encrypted disk values are preserved as-is (no secret round-trip).
+        const rawDiskData = ((await this.loadDataFn()) ?? {}) as Record<string, unknown>;
+        const diskData = { ...rawDiskData, _migrationModalDismissed: true };
         await this.saveDataFn(diskData as unknown as CopilotSettings);
-        refreshRawDataSnapshot(diskData as unknown as CopilotSettings);
+        refreshDiskHasSecrets(diskData as unknown as CopilotSettings);
+        const nextSettings = {
+          ...getSettings(),
+          _migrationModalDismissed: true,
+        } as CopilotSettings;
+        refreshLastPersistedSettings(nextSettings);
         // Sync in-memory so shouldShowMigrationModal returns false.
         suppressNextPersistOnce();
-        setSettings({
-          ...getSettings(),
-          _migrationModalDismissedAt: timestamp,
-        } as CopilotSettings);
+        setSettings(nextSettings);
       });
       this.dismissModal();
     } catch (error) {

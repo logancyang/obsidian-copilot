@@ -39,11 +39,6 @@ function makeModel(overrides: Partial<CustomModel> = {}): CustomModel {
   } as CustomModel;
 }
 
-/** JSON-safe clone helper for mutation assertions. */
-function clone<T>(value: T): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
-
 /** Load a fresh copy of the module with isolated mocks. */
 async function loadModule(overrides?: {
   keychain?: Record<string, unknown>;
@@ -125,12 +120,7 @@ async function loadModule(overrides?: {
       }
       return out as unknown as CopilotSettings;
     }),
-    cleanupLegacyFields: jest.fn((s: CopilotSettings) => {
-      const out = { ...s } as unknown as Record<string, unknown>;
-      delete out.enableEncryption;
-      delete out._keychainMigrated;
-      return out as unknown as CopilotSettings;
-    }),
+    cleanupLegacyFields: jest.fn((s: CopilotSettings) => ({ ...s })),
   }));
 
   const mod = await import("./settingsPersistence");
@@ -143,15 +133,17 @@ afterEach(() => {
 });
 
 // ---------------------------------------------------------------------------
-// persistSettings — transition-period disk secret preservation
+// persistSettings — migration-window save behavior
 // ---------------------------------------------------------------------------
 
-describe("persistSettings transition-period", () => {
-  it("preserves unchanged top-level disk secrets from the raw snapshot", async () => {
+describe("persistSettings migration-window", () => {
+  it("writes current secret values to data.json during migration window", async () => {
     const { mod, keychain } = await loadModule();
     const saveData = jest.fn().mockResolvedValue(undefined);
 
-    mod.refreshRawDataSnapshot(
+    // Reason: snapshot has an old enc_* value, but current memory has plaintext.
+    // After simplification, Branch B saves the current in-memory value directly.
+    mod.refreshDiskHasSecrets(
       makeSettings({ openAIApiKey: "enc_disk_openai" })
     );
 
@@ -166,8 +158,9 @@ describe("persistSettings transition-period", () => {
     await mod.persistSettings(current, saveData, prev);
     await mod.flushPersistence();
 
+    // Reason: Branch B now saves current values directly — no enc_* preservation
     expect(saveData).toHaveBeenCalledWith(
-      expect.objectContaining({ openAIApiKey: "enc_disk_openai" })
+      expect.objectContaining({ openAIApiKey: "sk-123" })
     );
   });
 
@@ -175,7 +168,7 @@ describe("persistSettings transition-period", () => {
     const { mod, keychain } = await loadModule();
     const saveData = jest.fn().mockResolvedValue(undefined);
 
-    mod.refreshRawDataSnapshot(makeSettings({ openAIApiKey: "enc_disk_old" }));
+    mod.refreshDiskHasSecrets(makeSettings({ openAIApiKey: "enc_disk_old" }));
 
     keychain.persistSecrets.mockReturnValue({
       secretEntries: [["kc-openai", "sk-new"]],
@@ -191,127 +184,6 @@ describe("persistSettings transition-period", () => {
     expect(saveData).toHaveBeenCalledWith(
       expect.objectContaining({ openAIApiKey: "sk-new" })
     );
-  });
-
-  it("preserves unchanged model secrets with azure_openai normalization", async () => {
-    const { mod } = await loadModule();
-
-    // Reason: test preserveUnchangedDiskSecrets directly to avoid complex module state issues.
-    // Snapshot has legacy azure_openai, runtime has sanitized azure-openai.
-    // Reason: runtime provider is "azure openai" (normalized from "azure_openai")
-    const dataToSave = makeSettings({
-      activeModels: [
-        makeModel({ name: "azure-chat", provider: "azure openai", apiKey: "plain-model-key" }),
-      ],
-      activeEmbeddingModels: [],
-    });
-
-    const prevSettings = makeSettings({
-      activeModels: [
-        makeModel({ name: "azure-chat", provider: "azure openai", apiKey: "plain-model-key" }),
-      ],
-      activeEmbeddingModels: [],
-    });
-
-    const snapshot = {
-      activeModels: [
-        { name: "azure-chat", provider: "azure_openai", apiKey: "enc_disk_model", enabled: true },
-      ],
-      activeEmbeddingModels: [],
-    } as Record<string, unknown>;
-
-    mod.preserveUnchangedDiskSecrets(dataToSave, prevSettings, snapshot);
-
-    expect(dataToSave.activeModels[0].apiKey).toBe("enc_disk_model");
-  });
-
-  it("does not resurrect a cleared secret from snapshot", async () => {
-    const { mod, keychain } = await loadModule();
-    const saveData = jest.fn().mockResolvedValue(undefined);
-
-    mod.refreshRawDataSnapshot(makeSettings({ openAIApiKey: "enc_disk_old" }));
-
-    keychain.persistSecrets.mockReturnValue({
-      secretEntries: [],
-      keychainIdsToDelete: ["kc-openai"],
-    });
-
-    const prev = makeSettings({ openAIApiKey: "sk-old" });
-    const current = makeSettings({ openAIApiKey: "" });
-
-    await mod.persistSettings(current, saveData, prev);
-    await mod.flushPersistence();
-
-    // Reason: cleared value ("") !== prev value ("sk-old"), so it counts as changed
-    expect(saveData).toHaveBeenCalledWith(
-      expect.objectContaining({ openAIApiKey: "" })
-    );
-  });
-
-  it("does not mutate the caller's settings model objects", async () => {
-    const { mod, keychain } = await loadModule();
-    const saveData = jest.fn().mockResolvedValue(undefined);
-
-    mod.refreshRawDataSnapshot(
-      makeSettings({
-        activeModels: [
-          makeModel({ name: "gpt-4", provider: "openai", apiKey: "enc_disk_value" }),
-        ],
-      })
-    );
-
-    keychain.persistSecrets.mockReturnValue({
-      secretEntries: [["kc-model", "plain-key"]],
-      keychainIdsToDelete: [],
-    });
-
-    const prev = makeSettings({
-      activeModels: [makeModel({ name: "gpt-4", provider: "openai", apiKey: "plain-key" })],
-    });
-    const current = makeSettings({
-      activeModels: [makeModel({ name: "gpt-4", provider: "openai", apiKey: "plain-key" })],
-    });
-    const currentBefore = clone(current);
-
-    await mod.persistSettings(current, saveData, prev);
-    await mod.flushPersistence();
-
-    // Reason: the bug fix clones model arrays, so the caller's objects stay untouched
-    expect(current).toEqual(currentBefore);
-    expect(current.activeModels[0].apiKey).toBe("plain-key");
-  });
-
-  it("does not preserve snapshot for new models absent from prevSettings", async () => {
-    const { mod, keychain } = await loadModule();
-    const saveData = jest.fn().mockResolvedValue(undefined);
-
-    mod.refreshRawDataSnapshot(
-      makeSettings({
-        activeModels: [
-          makeModel({ name: "old-model", provider: "openai", apiKey: "enc_old" }),
-        ],
-      })
-    );
-
-    keychain.persistSecrets.mockReturnValue({
-      secretEntries: [["kc-new", "new-key"]],
-      keychainIdsToDelete: [],
-    });
-
-    // Reason: prevSettings has no models — the current model is brand new
-    const prev = makeSettings({ activeModels: [] });
-    const current = makeSettings({
-      activeModels: [
-        makeModel({ name: "new-model", provider: "openai", apiKey: "new-key" }),
-      ],
-    });
-
-    await mod.persistSettings(current, saveData, prev);
-    await mod.flushPersistence();
-
-    const saved = saveData.mock.calls[0][0] as CopilotSettings;
-    // Reason: new model should keep its own value, not inherit from snapshot
-    expect(saved.activeModels[0].apiKey).toBe("new-key");
   });
 });
 
@@ -435,6 +307,25 @@ describe("loadSettingsWithKeychain", () => {
     expect(autoSaveCall).toBeUndefined();
     expect(mod.getBackfillHadFailures()).toBe(true);
   });
+
+  it("decrypts disk secrets when keychain is unavailable", async () => {
+    const { mod } = await loadModule({
+      keychain: { isAvailable: jest.fn().mockReturnValue(false) },
+    });
+
+    const loaded = await mod.loadSettingsWithKeychain(
+      makeSettings({
+        openAIApiKey: "enc_disk_openai",
+        activeModels: [makeModel({ apiKey: "enc_model_key" })],
+      }),
+      jest.fn().mockResolvedValue(undefined)
+    );
+
+    // Reason: encrypted disk values must be decrypted for runtime use
+    // so ciphertext doesn't flow into LLM provider requests.
+    expect(loaded.openAIApiKey).toBe("disk_openai");
+    expect(loaded.activeModels[0].apiKey).toBe("model_key");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -451,7 +342,7 @@ describe("clearDiskSecrets", () => {
 
     const saveData = jest.fn().mockResolvedValue(undefined);
 
-    // Seed rawDataSnapshot with secrets via loadSettingsWithKeychain
+    // Seed cached disk-secret state with secrets via loadSettingsWithKeychain
     await mod.loadSettingsWithKeychain(
       makeSettings({
         _keychainVaultId: "vault1234",

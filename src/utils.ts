@@ -359,6 +359,27 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
   }
 }
 
+/**
+ * List all direct-child markdown files in a vault folder.
+ *
+ * Reason: multiple modules (custom commands, system prompts, vault file export)
+ * need to enumerate .md files in a configured folder. This shared helper avoids
+ * duplicating the filter logic across modules.
+ *
+ * @param folder - Vault-relative folder path (will be normalized).
+ * @returns Array of TFile objects, or empty array if folder doesn't exist.
+ */
+export function listDirectChildMdFiles(folder: string): TFile[] {
+  const normalizedFolder = normalizePath(folder);
+  return app.vault.getFiles().filter((file): file is TFile => {
+    if (!(file instanceof TFile)) return false;
+    if (file.extension !== "md") return false;
+    if (!file.path.startsWith(normalizedFolder + "/")) return false;
+    const relativePath = file.path.slice(normalizedFolder.length + 1);
+    return !relativePath.includes("/");
+  });
+}
+
 export function stringToFormattedDateTime(timestamp: string): FormattedDateTime {
   const date = moment(timestamp, "YYYY/MM/DD HH:mm:ss");
   if (!date.isValid()) {

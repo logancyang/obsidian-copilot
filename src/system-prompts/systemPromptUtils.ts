@@ -8,7 +8,7 @@ import {
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { normalizePath, TAbstractFile, TFile } from "obsidian";
 import { getSettings } from "@/settings/model";
-import { stripFrontmatter } from "@/utils";
+import { listDirectChildMdFiles, stripFrontmatter } from "@/utils";
 import {
   updateCachedSystemPrompts,
   addPendingFileWrite,
@@ -150,7 +150,7 @@ export async function parseSystemPromptFile(file: TFile): Promise<UserSystemProm
  * Use this when you need to control cache updates yourself (e.g., for latest-wins semantics)
  */
 export async function fetchAllSystemPrompts(): Promise<UserSystemPrompt[]> {
-  const files = app.vault.getFiles().filter((file) => isSystemPromptFile(file));
+  const files = listDirectChildMdFiles(getSystemPromptsFolder());
   return await Promise.all(files.map(parseSystemPromptFile));
 }
 

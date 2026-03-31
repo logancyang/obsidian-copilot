@@ -25,6 +25,7 @@ import {
   getFileName,
   getNotesFromPath,
   getNotesFromTags,
+  listDirectChildMdFiles,
   processVariableNameForNotePath,
   stripFrontmatter,
 } from "@/utils";
@@ -92,10 +93,8 @@ export function isCustomCommandFile(file: TAbstractFile): boolean {
   if (file.extension !== "md") return false;
   const folder = getCustomCommandsFolder();
   if (!file.path.startsWith(folder + "/")) return false;
-  // Only include direct children (no slashes in relative path)
   const relativePath = file.path.slice(folder.length + 1);
-  if (relativePath.includes("/")) return false;
-  return true;
+  return !relativePath.includes("/");
 }
 
 export function hasOrderFrontmatter(file: TFile): boolean {
@@ -131,7 +130,7 @@ export async function parseCustomCommandFile(file: TFile): Promise<CustomCommand
 }
 
 export async function loadAllCustomCommands(): Promise<CustomCommand[]> {
-  const files = app.vault.getFiles().filter((file) => isCustomCommandFile(file));
+  const files = listDirectChildMdFiles(getCustomCommandsFolder());
   const commands: CustomCommand[] = await Promise.all(files.map(parseCustomCommandFile));
   updateCachedCommands(commands);
   return commands;

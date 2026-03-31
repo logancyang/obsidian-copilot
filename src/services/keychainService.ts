@@ -56,15 +56,19 @@ function generateVaultId(app: App): string {
   if (basePath) {
     return MD5(basePath).toString().slice(0, 8);
   }
-  // Reason: on mobile, basePath is unavailable. Use vault name + configDir as
-  // a deterministic seed so synced devices converge on the same namespace ID
-  // even before _keychainVaultId propagates via data.json sync.
-  // Known limitation: two vaults with the same name and configDir on the same
-  // mobile device will share a keychain namespace. This is acceptable because
-  // (a) it's a very niche scenario and (b) the alternative (random ID) causes
-  // cross-device sync divergence which is a worse problem.
-  const seed = `${app.vault.getName()}::${app.vault.configDir}`;
-  return MD5(seed).toString().slice(0, 8);
+  // Reason: on mobile, basePath is unavailable. Use a random ID to guarantee
+  // vault isolation — two same-named vaults on one device will NOT share
+  // keychain entries. The load path persists this ID to data.json immediately,
+  // so the divergence window is limited to first-run before sync propagates.
+  // Reason: guard getRandomValues existence — optional chaining on a missing
+  // method silently returns undefined, leaving the buffer zero-filled and
+  // collapsing all affected vaults to "00000000".
+  if (typeof globalThis.crypto?.getRandomValues === "function") {
+    const bytes = new Uint8Array(4);
+    globalThis.crypto.getRandomValues(bytes);
+    return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+  }
+  return MD5(`${Date.now()}-${Math.random()}`).toString().slice(0, 8);
 }
 
 /** Resolve the filesystem base path, or undefined on mobile. */
@@ -325,6 +329,14 @@ export class KeychainService {
       } catch (e) {
         console.warn(`Keychain read failed for "${key}" — falling back to disk value.`, e);
         hadFailures = true;
+        // Reason: decrypt disk value so `enc_*` ciphertext doesn't flow into
+        // provider requests. If decryption fails, keep original value.
+        if (typeof diskValue === "string" && diskValue.length > 0) {
+          const plaintext = await getDecryptedKey(diskValue);
+          if (plaintext) {
+            (hydrated as unknown as Record<string, unknown>)[key] = plaintext;
+          }
+        }
         continue;
       }
 
@@ -468,10 +480,29 @@ export class KeychainService {
   clearAllVaultSecrets(): void {
     const vaultPrefix = `copilot-v${this.vaultId}-`;
     const allIds = this.storage.listSecrets();
+    const failures: string[] = [];
     for (const id of allIds) {
       if (id.startsWith(vaultPrefix)) {
-        this.storage.setSecret(id, "");
+        try {
+          this.storage.setSecret(id, "");
+        } catch {
+          failures.push(id);
+        }
       }
+    }
+    // Reason: do NOT roll back successfully-cleared entries on partial failure.
+    // Once a user initiates "forget all secrets", each cleared entry's tombstone
+    // (empty string) is the correct final state — it prevents backfillAndHydrate()
+    // from resurrecting that secret from data.json on next startup. data.json
+    // only serves as a migration source for OTHER devices that haven't upgraded
+    // to keychain yet; the current device should never fall back to it.
+    // The throw below blocks disk/memory stripping so the user can retry the
+    // remaining failed entries, while already-cleared entries stay cleared.
+    if (failures.length > 0) {
+      throw new Error(
+        `Failed to clear ${failures.length} keychain ` +
+          `entr${failures.length === 1 ? "y" : "ies"}. Please retry.`
+      );
     }
   }
 
@@ -486,14 +517,14 @@ export class KeychainService {
    * (which could potentially resurrect old values).
    *
    * @param saveData - Callback to write data.json.
-   * @param refreshSnapshot - Callback to refresh the rawDataSnapshot after save.
+   * @param refreshDiskState - Callback to refresh the cached disk-secret flag after save.
    * @param syncMemory - Callback to update in-memory settings without re-entering
    *   the normal persist path. The caller must suppress the subscriber-triggered
    *   `persistSettings()` before calling this (via `suppressNextPersistOnce()`).
    */
   async forgetAllSecrets(
     saveData: SaveDataFn,
-    refreshSnapshot: (data: CopilotSettings) => void,
+    refreshDiskState: (data: CopilotSettings) => void,
     syncMemory: (data: Partial<CopilotSettings>) => void,
     /** When true, the caller should NOT suppress the subscriber-triggered persist. */
     onDiskSaveFailed?: () => void
@@ -515,7 +546,7 @@ export class KeychainService {
     let diskSaveSucceeded = false;
     try {
       await saveData(toSave);
-      refreshSnapshot(toSave);
+      refreshDiskState(toSave);
       diskSaveSucceeded = true;
     } catch (error) {
       // Keychain is already cleared. data.json may retain stale values.
@@ -573,6 +604,14 @@ export class KeychainService {
         } catch (e) {
           console.warn(`Keychain read failed for model "${identity}" field "${field}".`, e);
           hadFailures = true;
+          // Reason: decrypt disk value so `enc_*` ciphertext doesn't flow into
+          // provider requests. If decryption fails, keep original value.
+          if (typeof diskValue === "string" && diskValue.length > 0) {
+            const plaintext = await getDecryptedKey(diskValue);
+            if (plaintext) {
+              (copy as unknown as Record<string, unknown>)[field] = plaintext;
+            }
+          }
           continue;
         }
 

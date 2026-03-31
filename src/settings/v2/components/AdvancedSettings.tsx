@@ -8,12 +8,18 @@ import { KeychainService } from "@/services/keychainService";
 import {
   canClearDiskSecrets,
   clearDiskSecrets,
-  refreshRawDataSnapshot,
+  refreshDiskHasSecrets,
+  refreshLastPersistedSettings,
   runPersistenceTransaction,
   suppressNextPersistOnce,
 } from "@/services/settingsPersistence";
 import { logError } from "@/logger";
-import { type CopilotSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
+import {
+  type CopilotSettings,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
 import { ArrowUpRight, Plus, ShieldCheck, ShieldAlert, Trash2 } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Notice } from "obsidian";
@@ -88,8 +94,12 @@ export const AdvancedSettings: React.FC = () => {
       await runPersistenceTransaction(() =>
         keychain.forgetAllSecrets(
           saveData,
-          refreshRawDataSnapshot,
+          refreshDiskHasSecrets,
           (nextSettings) => {
+            // Reason: ALWAYS update the rollback baseline, even when disk save
+            // failed. The keychain is already cleared at this point — a stale
+            // baseline would let a later failed persist resurrect deleted secrets.
+            refreshLastPersistedSettings(nextSettings as CopilotSettings);
             // Reason: when disk save succeeded, suppress the subscriber persist
             // to avoid double-write. When it failed, let the subscriber retry
             // so the stripped state reaches data.json on the next save cycle.

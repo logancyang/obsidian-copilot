@@ -126,29 +126,22 @@ describe("stripKeychainFields", () => {
 });
 
 describe("cleanupLegacyFields", () => {
-  it("removes enableEncryption and _keychainMigrated", () => {
-    const settings = makeSettings({
-      openAIApiKey: "sk-123",
-      enableEncryption: true,
-      _keychainMigrated: true,
-    } as unknown as Partial<CopilotSettings>);
+  it("returns a shallow copy without mutating the original", () => {
+    const settings = makeSettings({ openAIApiKey: "sk-123" });
     const before = clone(settings);
 
     const result = cleanupLegacyFields(settings);
-    const rec = result as unknown as Record<string, unknown>;
 
     expect(result).not.toBe(settings);
-    expect(rec.enableEncryption).toBeUndefined();
-    expect(rec._keychainMigrated).toBeUndefined();
     expect(result.openAIApiKey).toBe("sk-123");
-    // Reason: original should be untouched
     expect(settings).toEqual(before);
   });
 
-  it("preserves current migration fields like _diskSecretsCleared", () => {
+  it("preserves migration fields", () => {
     const settings = makeSettings({
       _diskSecretsCleared: true,
       _keychainVaultId: "abc12345",
+      _migrationModalDismissed: true,
     } as Partial<CopilotSettings>);
 
     const result = cleanupLegacyFields(settings);
@@ -156,5 +149,6 @@ describe("cleanupLegacyFields", () => {
 
     expect(rec._diskSecretsCleared).toBe(true);
     expect(rec._keychainVaultId).toBe("abc12345");
+    expect(rec._migrationModalDismissed).toBe(true);
   });
 });

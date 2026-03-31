@@ -157,10 +157,10 @@ describe("crypto.ts", () => {
       }
     });
 
-    it("should throw reason='corrupted' for payload exceeding 500KB", async () => {
+    it("should throw reason='corrupted' for payload exceeding 10MB", async () => {
       // Reason: build a payload just over the size limit.
-      // Header (33) + ciphertext must exceed 500KB after base64url decode.
-      const oversizedCiphertextLen = 500 * 1024;
+      // Header (33) + ciphertext must exceed 10MB after base64url decode.
+      const oversizedCiphertextLen = 10 * 1024 * 1024;
       const encoded = buildFakePayload({ ciphertextLength: oversizedCiphertextLen });
 
       await expect(decryptWithPassphrase(encoded, "any-pass")).rejects.toThrow(

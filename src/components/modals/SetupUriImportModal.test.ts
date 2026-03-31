@@ -20,17 +20,26 @@ jest.mock("obsidian", () => ({
   Notice: mockNotice,
 }));
 
-// Capture the onPersistSettings callback from React render
+// Capture callbacks from React render
 let capturedOnPersist: ((settings: unknown) => Promise<void>) | null = null;
+let capturedOnRestore: ((files: unknown, settings: unknown) => Promise<void>) | null = null;
 jest.mock("react-dom/client", () => ({
   createRoot: jest.fn(() => ({
-    render: jest.fn((element: { props?: { onPersistSettings?: unknown } }) => {
-      if (element?.props?.onPersistSettings) {
-        capturedOnPersist = element.props.onPersistSettings as (
-          settings: unknown
-        ) => Promise<void>;
+    render: jest.fn(
+      (element: { props?: { onPersistSettings?: unknown; onRestoreVaultFiles?: unknown } }) => {
+        if (element?.props?.onPersistSettings) {
+          capturedOnPersist = element.props.onPersistSettings as (
+            settings: unknown
+          ) => Promise<void>;
+        }
+        if (element?.props?.onRestoreVaultFiles) {
+          capturedOnRestore = element.props.onRestoreVaultFiles as (
+            files: unknown,
+            settings: unknown
+          ) => Promise<void>;
+        }
       }
-    }),
+    ),
     unmount: jest.fn(),
   })),
 }));
@@ -43,6 +52,23 @@ jest.mock("react", () => ({
 
 jest.mock("@/components/setup-uri/ImportStepperContent", () => ({
   ImportStepperContent: "ImportStepperContent",
+}));
+
+jest.mock("@/logger", () => ({
+  logError: jest.fn(),
+}));
+
+jest.mock("@/setupUri/vaultFiles", () => ({
+  restoreVaultFiles: jest
+    .fn()
+    .mockResolvedValue({
+      commandsWritten: 0,
+      promptsWritten: 0,
+      memoryWritten: 0,
+      errors: [],
+      rollback: [],
+    }),
+  rollbackVaultFiles: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockPersistSettings = jest.fn().mockResolvedValue(undefined);
@@ -70,7 +96,10 @@ jest.mock("@/services/keychainService", () => ({
 
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
+import { restoreVaultFiles as mockRestoreVaultFilesFn } from "@/setupUri/vaultFiles";
 import { SetupUriImportModal } from "./SetupUriImportModal";
+
+const mockRestoreVaultFiles = mockRestoreVaultFilesFn as jest.Mock;
 
 /** Match the production heuristic for sensitive keys. */
 function isSensitiveKey(key: string): boolean {
@@ -93,6 +122,7 @@ describe("SetupUriImportModal", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     capturedOnPersist = null;
+    capturedOnRestore = null;
 
     // Simulate current local settings with a vault ID and a stale secret
     mockGetSettings.mockReturnValue({
@@ -172,5 +202,50 @@ describe("SetupUriImportModal", () => {
       expect(mergedSettings[key]).toBeDefined();
       expect(typeof mergedSettings[key]).toBe("string");
     }
+  });
+
+  it("exposes onRestoreVaultFiles callback that delegates to restoreVaultFiles", async () => {
+    const modal = new SetupUriImportModal(mockApp, mockSaveData);
+    modal.onOpen();
+    expect(capturedOnRestore).not.toBeNull();
+
+    const mockFiles = {
+      customCommands: [{ filename: "Test.md", content: "test" }],
+      systemPrompts: [],
+      memory: { recentConversations: null, savedMemories: null },
+    };
+    const mockImportedSettings = {
+      customPromptsFolder: "copilot/custom-prompts",
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    } as unknown as CopilotSettings;
+
+    // restoreVaultFiles is mocked to return success with no errors
+    await capturedOnRestore!(mockFiles, mockImportedSettings);
+
+    expect(mockRestoreVaultFiles).toHaveBeenCalledWith(mockApp, mockFiles, mockImportedSettings);
+  });
+
+  it("throws when restoreVaultFiles returns errors", async () => {
+    mockRestoreVaultFiles.mockResolvedValueOnce({
+      commandsWritten: 0,
+      promptsWritten: 0,
+      memoryWritten: 0,
+      errors: ["Failed to write file X"],
+      rollback: [],
+    });
+
+    const modal = new SetupUriImportModal(mockApp, mockSaveData);
+    modal.onOpen();
+
+    const mockFiles = {
+      customCommands: [],
+      systemPrompts: [],
+      memory: { recentConversations: null, savedMemories: null },
+    };
+
+    await expect(capturedOnRestore!(mockFiles, {} as CopilotSettings)).rejects.toThrow(
+      "Failed to write some files"
+    );
   });
 });

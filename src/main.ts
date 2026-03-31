@@ -11,7 +11,6 @@ import { registerCommands } from "@/commands";
 import CopilotView from "@/components/CopilotView";
 import { APPLY_VIEW_TYPE, ApplyView } from "@/components/composer/ApplyView";
 import { LoadChatHistoryModal } from "@/components/modals/LoadChatHistoryModal";
-import { SetupUriImportModal } from "@/components/modals/SetupUriImportModal";
 
 import { registerContextMenu } from "@/commands/contextMenu";
 import { CustomCommandRegister } from "@/commands/customCommandRegister";
@@ -117,20 +116,6 @@ export default class CopilotPlugin extends Plugin {
       registerCommands(this, prev, next);
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
-
-    // Register protocol handler for Setup URI import
-    try {
-      this.registerObsidianProtocolHandler("copilot-setup", (params) => {
-        const payload = params.payload;
-        if (!payload) {
-          new Notice("Invalid Setup URI: missing payload.");
-          return;
-        }
-        new SetupUriImportModal(this.app, (data) => this.saveData(data), payload).open();
-      });
-    } catch (error) {
-      logWarn("Failed to register protocol handler for Setup URI import.", error);
-    }
 
     // Core plugin initialization
 
@@ -244,7 +229,11 @@ export default class CopilotPlugin extends Plugin {
       // Show keychain migration modal if applicable
       // Reason: defer to onLayoutReady to avoid overlapping with other migration modals
       if (shouldShowMigrationModal(getSettings())) {
-        new KeychainMigrationModal(this.app, (data) => this.saveData(data)).open();
+        new KeychainMigrationModal(
+          this.app,
+          (data) => this.saveData(data),
+          () => this.loadData()
+        ).open();
       }
     });
 

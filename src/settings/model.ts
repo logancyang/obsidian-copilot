@@ -200,8 +200,6 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
-  /** @deprecated Removed — replaced by _diskSecretsCleared. */
-  _keychainMigrated?: never;
   /**
    * When `true`, the user confirmed all devices are upgraded and data.json
    * secrets should be stripped on every save. Set by the migration modal
@@ -220,10 +218,10 @@ export interface CopilotSettings {
    */
   _keychainMigratedAt?: string;
   /**
-   * ISO 8601 timestamp of when the user dismissed the migration modal
+   * Set to `true` when the user dismissed the migration modal
    * (clicked "Keep for now" → "OK"). Prevents the modal from showing again.
    */
-  _migrationModalDismissedAt?: string;
+  _migrationModalDismissed?: boolean;
 }
 
 export const settingsStore = createStore();

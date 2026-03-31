@@ -27,16 +27,16 @@ const AAD = new TextEncoder().encode("copilot-setup:v1");
 function assertWebCryptoAvailable(): void {
   if (!globalThis.crypto?.subtle) {
     throw new Error(
-      "Setup URI requires the WebCrypto API, which is not available in this environment."
+      "Configuration export requires the WebCrypto API, which is not available in this environment."
     );
   }
 }
 
-/** Maximum accepted encrypted payload size (500 KB) to prevent DoS. */
-const MAX_PAYLOAD_BYTES = 500 * 1024;
+/** Maximum accepted encrypted payload size (10 MB) to prevent DoS. */
+const MAX_PAYLOAD_BYTES = 10 * 1024 * 1024;
 
-/** Maximum allowed decompressed plaintext size (2 MB) to prevent zip-bomb DoS. */
-const MAX_DECOMPRESSED_BYTES = 2 * 1024 * 1024;
+/** Maximum allowed decompressed plaintext size (50 MB) to prevent zip-bomb DoS. */
+const MAX_DECOMPRESSED_BYTES = 50 * 1024 * 1024;
 
 /** Maximum allowed PBKDF2 iterations to prevent DoS via crafted payloads. */
 const MAX_ITERATIONS = 2_000_000;
@@ -146,7 +146,7 @@ function readUint32LE(buf: Uint8Array, offset: number): number {
  * accumulating chunks once the output exceeds `maxBytes`. Note: the CPU
  * work of decompressing the full stream is NOT aborted — only memory
  * allocation is capped. This is acceptable because the encrypted payload
- * is already limited to 500 KB (`MAX_PAYLOAD_BYTES`), which bounds the
+ * is already limited to 10 MB (`MAX_PAYLOAD_BYTES`), which bounds the
  * compressed input size and therefore the CPU cost.
  *
  * @param compressed - Deflate-compressed bytes.
@@ -209,6 +209,16 @@ export async function encryptWithPassphrase(
   assertWebCryptoAvailable();
   const compressed = deflate(new TextEncoder().encode(plaintext));
 
+  // Reason: AES-GCM appends a 16-byte auth tag. Pre-flight the total payload
+  // size before running expensive PBKDF2 key derivation.
+  const estimatedPayload = HEADER_LENGTH + compressed.length + 16;
+  if (estimatedPayload > MAX_PAYLOAD_BYTES) {
+    throw new Error(
+      "Configuration is too large to export (max 10 MB). " +
+        "Consider removing unused model configurations to reduce size."
+    );
+  }
+
   const salt = crypto.getRandomValues(new Uint8Array(SALT_LENGTH));
   const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
   const key = await deriveKey(passphrase, salt, DEFAULT_ITERATIONS);
@@ -227,7 +237,7 @@ export async function encryptWithPassphrase(
 
   if (payload.length > MAX_PAYLOAD_BYTES) {
     throw new Error(
-      "Configuration is too large to export as a Setup URI (max 500 KB). " +
+      "Configuration is too large to export (max 10 MB). " +
         "Consider removing unused model configurations to reduce size."
     );
   }
@@ -244,7 +254,7 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
   if (!globalThis.crypto?.subtle) {
     throw new SetupUriDecryptionError(
       "unsupported_environment",
-      "Setup URI requires the WebCrypto API, which is not available in this environment."
+      "Configuration import requires the WebCrypto API, which is not available in this environment."
     );
   }
   let raw: Uint8Array;
@@ -279,7 +289,7 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
   if (version !== PAYLOAD_VERSION) {
     throw new SetupUriDecryptionError(
       "unsupported_version",
-      `Unsupported Setup URI version: ${version}. Please update the Copilot plugin.`
+      `Unsupported configuration file version: ${version}. Please update the Copilot plugin.`
     );
   }
 
