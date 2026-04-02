@@ -357,6 +357,19 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 }
 
 /**
+ * Check whether a folder path is safe for vault-relative use.
+ * Rejects absolute paths, path traversal, and Windows drive paths.
+ */
+function isSafeVaultFolderPath(path: string): boolean {
+  if (!path || typeof path !== "string") return false;
+  const trimmed = path.trim();
+  if (trimmed.startsWith("/") || trimmed.startsWith("\\")) return false;
+  if (/^[A-Za-z]:/.test(trimmed)) return false;
+  if (trimmed.split(/[/\\]/).some((seg) => seg === "..")) return false;
+  return true;
+}
+
+/**
  * Normalize persisted model provider values so identity keys stay stable across migrations.
  * Reason: Legacy data may store "azure_openai" while runtime uses "azure-openai".
  */
@@ -529,10 +542,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.autonomousAgentEnabledToolIds =
     sanitizedSettings.autonomousAgentEnabledToolIds.map((id) => toolIdRenames[id] ?? id);
 
-  // Ensure memoryFolderName has a default value
+  // Ensure memoryFolderName has a default value and is a safe vault-relative path
   if (
     !sanitizedSettings.memoryFolderName ||
-    typeof sanitizedSettings.memoryFolderName !== "string"
+    typeof sanitizedSettings.memoryFolderName !== "string" ||
+    !isSafeVaultFolderPath(sanitizedSettings.memoryFolderName)
   ) {
     sanitizedSettings.memoryFolderName = DEFAULT_SETTINGS.memoryFolderName;
   }
@@ -608,14 +622,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.defaultSendShortcut = DEFAULT_SETTINGS.defaultSendShortcut;
   }
 
-  // Ensure folder settings fall back to defaults when empty/whitespace
+  // Ensure folder settings fall back to defaults when empty/whitespace or unsafe
   const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
   sanitizedSettings.defaultSaveFolder =
-    saveFolder.length > 0 ? saveFolder : DEFAULT_SETTINGS.defaultSaveFolder;
+    saveFolder.length > 0 && isSafeVaultFolderPath(saveFolder)
+      ? saveFolder
+      : DEFAULT_SETTINGS.defaultSaveFolder;
 
   const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
   sanitizedSettings.customPromptsFolder =
-    promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+    promptsFolder.length > 0 && isSafeVaultFolderPath(promptsFolder)
+      ? promptsFolder
+      : DEFAULT_SETTINGS.customPromptsFolder;
 
   // Ensure chatHistorySortStrategy has a valid value (exclude "manual" which is only for custom commands)
   if (
@@ -635,7 +653,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   const userSystemPromptsFolder = (settingsToSanitize.userSystemPromptsFolder || "").trim();
   sanitizedSettings.userSystemPromptsFolder =
-    userSystemPromptsFolder.length > 0
+    userSystemPromptsFolder.length > 0 && isSafeVaultFolderPath(userSystemPromptsFolder)
       ? userSystemPromptsFolder
       : DEFAULT_SETTINGS.userSystemPromptsFolder;
 
