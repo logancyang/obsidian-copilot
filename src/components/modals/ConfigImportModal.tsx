@@ -118,6 +118,11 @@ export class ConfigImportModal extends Modal {
     if (localRec._keychainVaultId) {
       merged._keychainVaultId = localRec._keychainVaultId;
     }
+    // Reason: preserve the current vault's userId so importing a config from
+    // another vault doesn't change this vault's Brevilabs server identity.
+    if (localRec.userId) {
+      merged.userId = localRec.userId;
+    }
 
     // Reason: preserve the local vault's existing disk-secret policy.
     const keychainAvailable = KeychainService.getInstance().isAvailable();

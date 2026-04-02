@@ -320,6 +320,11 @@ export async function loadSettingsWithKeychain(
   rawData: unknown,
   saveData: (data: CopilotSettings) => Promise<void>
 ): Promise<CopilotSettings> {
+  // Reason: Obsidian's loadData() returns null when data.json doesn't exist yet.
+  // This is the only reliable signal for a truly fresh install — old users who
+  // never stored API keys still have a non-null rawData with other settings.
+  const isTrulyFreshInstall = rawData == null || Object.keys(rawData as object).length === 0;
+
   // Reason: sanitize FIRST to normalize model providers (e.g. azure_openai → azure-openai).
   let settings = sanitizeSettings(rawData as CopilotSettings);
 
@@ -394,7 +399,7 @@ export async function loadSettingsWithKeychain(
   // into the transition path and writes plaintext API keys to data.json.
   // Existing users who cleared keys but have transition markers keep their
   // original storage policy.
-  if (!diskHadSecrets && !hadTransitionState && rec._diskSecretsCleared !== true) {
+  if (isTrulyFreshInstall && !diskHadSecrets && !hadTransitionState && rec._diskSecretsCleared !== true) {
     rec._diskSecretsCleared = true;
   }
 
