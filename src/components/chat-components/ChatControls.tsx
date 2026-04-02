@@ -8,6 +8,7 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { logError } from "@/logger";
+import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
@@ -44,9 +45,14 @@ export async function refreshVaultIndex() {
     if (settings.enableSemanticSearchV3) {
       // Use VectorStoreManager for semantic search indexing
       const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
+      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(false, {
         userInitiated: true,
       });
+      if (shouldUseMiyo(settings)) {
+        new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
+      } else {
+        new Notice(`Semantic search index refreshed with ${count} documents.`);
+      }
     } else {
       // V3 search builds indexes on demand
       new Notice("Lexical search builds indexes on demand. No manual indexing required.");
@@ -65,7 +71,14 @@ export async function forceReindexVault() {
     if (settings.enableSemanticSearchV3) {
       // Use VectorStoreManager for semantic search indexing
       const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-      await VectorStoreManager.getInstance().indexVaultToVectorStore(true, { userInitiated: true });
+      const count = await VectorStoreManager.getInstance().indexVaultToVectorStore(true, {
+        userInitiated: true,
+      });
+      if (shouldUseMiyo(settings)) {
+        new Notice("Miyo folder index refresh started. Open the Miyo app to check details.");
+      } else {
+        new Notice(`Semantic search index rebuilt with ${count} documents.`);
+      }
     } else {
       // V3 search builds indexes on demand
       new Notice("Lexical search builds indexes on demand. No manual indexing required.");

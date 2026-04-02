@@ -4,7 +4,7 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoFolderPath } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
@@ -86,8 +86,8 @@ export const CopilotPlusSettings: React.FC = () => {
     new ConfirmModal(
       app,
       confirmChange,
-      `Enabling Miyo Search will refresh your vault index to store data in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. If your hardware is strong, you can increase this later in QA settings. Continue?`,
-      "Refresh Index"
+      `Enabling Miyo Search will use your current vault path as the Miyo folder path and request a scan from Miyo. Make sure this folder is already registered in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. Continue?`,
+      "Request Miyo Scan"
     ).open();
   };
 
@@ -221,21 +221,40 @@ export const CopilotPlusSettings: React.FC = () => {
                 <>
                   <SettingItem
                     type="text"
-                    title="Custom Miyo Server URL (Optional)"
-                    description="For advanced users only. Set this if Miyo is running on a remote machine. Leave blank to use automatic local service discovery."
+                    title="Remote Miyo Server URL (Optional)"
+                    description="Leave blank when accessing Miyo locally. Set this only when Miyo is running on a remote machine — it will override the local service discovery."
                     value={settings.miyoServerUrl || ""}
                     onChange={(value) => updateSetting("miyoServerUrl", value)}
-                    placeholder="http://127.0.0.1:8742"
                   />
+
+                  {(settings.miyoServerUrl || "").trim() && (
+                    <SettingItem
+                      type="text"
+                      title="Remote Vault Folder (Optional)"
+                      description="The folder path on the remote machine that Miyo should search. Leave blank to use the local vault path (only works if the remote vault is mounted at the same path)."
+                      value={settings.miyoRemoteVaultPath || ""}
+                      onChange={(value) => updateSetting("miyoRemoteVaultPath", value)}
+                      placeholder="e.g. /Users/you/Documents/vault"
+                    />
+                  )}
 
                   <SettingItem
                     type="switch"
                     title="Enable Miyo"
-                    description="Use Miyo as your local search, PDF parsing, and context hub. Enabling this will prompt a one-time index refresh."
+                    description="Use Miyo as your local search, PDF parsing, and context hub. Copilot will send the current vault path to Miyo and can request scans, but folder registration is managed in Miyo."
                     checked={settings.enableMiyo}
                     onCheckedChange={handleMiyoSearchToggle}
                     disabled={isValidatingSelfHost}
                   />
+
+                  {settings.enableMiyo && (
+                    <div className="tw-text-xs tw-text-muted">
+                      Folder path sent to Miyo:{" "}
+                      <span className="tw-font-medium tw-text-normal">
+                        {getMiyoFolderPath(app, settings)}
+                      </span>
+                    </div>
+                  )}
 
                   <SettingItem
                     type="select"

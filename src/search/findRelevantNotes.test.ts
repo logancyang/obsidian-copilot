@@ -2,9 +2,13 @@ import { TFile } from "obsidian";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoSourceId } from "@/miyo/miyoUtils";
+import {
+  getMiyoAbsolutePath,
+  getMiyoFolderPath,
+  getVaultRelativeMiyoPath,
+  shouldUseMiyo,
+} from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
-import { isSelfHostAccessValid } from "@/plusUtils";
 import VectorStoreManager from "@/search/vectorStoreManager";
 
 jest.mock("@/noteUtils", () => ({
@@ -48,12 +52,11 @@ jest.mock("@/miyo/MiyoClient", () => ({
 }));
 
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoSourceId: jest.fn(),
+  getMiyoFolderPath: jest.fn(),
+  getMiyoAbsolutePath: jest.fn((_: unknown, path: string) => `/vault/${path}`),
+  getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
-}));
-
-jest.mock("@/plusUtils", () => ({
-  isSelfHostAccessValid: jest.fn(),
+  shouldUseMiyo: jest.fn(),
 }));
 
 jest.mock("@/logger", () => ({
@@ -75,14 +78,20 @@ function createMarkdownFile(path: string): TFile {
 
 describe("findRelevantNotes", () => {
   const mockedGetSettings = getSettings as jest.MockedFunction<typeof getSettings>;
-  const mockedIsSelfHostAccessValid = isSelfHostAccessValid as jest.MockedFunction<
-    typeof isSelfHostAccessValid
-  >;
+  const mockedShouldUseMiyo = shouldUseMiyo as jest.MockedFunction<typeof shouldUseMiyo>;
   const mockedGetLinkedNotes = getLinkedNotes as jest.MockedFunction<typeof getLinkedNotes>;
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
   >;
-  const mockedGetMiyoSourceId = getMiyoSourceId as jest.MockedFunction<typeof getMiyoSourceId>;
+  const mockedGetMiyoFolderPath = getMiyoFolderPath as jest.MockedFunction<
+    typeof getMiyoFolderPath
+  >;
+  const mockedGetMiyoAbsolutePath = getMiyoAbsolutePath as jest.MockedFunction<
+    typeof getMiyoAbsolutePath
+  >;
+  const mockedGetVaultRelativeMiyoPath = getVaultRelativeMiyoPath as jest.MockedFunction<
+    typeof getVaultRelativeMiyoPath
+  >;
   const mockedVectorStoreManager = VectorStoreManager as unknown as {
     getInstance: () => {
       getDocumentsByPath: jest.Mock;
@@ -93,7 +102,7 @@ describe("findRelevantNotes", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    mockedIsSelfHostAccessValid.mockReturnValue(false);
+    mockedShouldUseMiyo.mockReturnValue(false);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "",
@@ -104,7 +113,11 @@ describe("findRelevantNotes", () => {
     } as any);
     mockedGetLinkedNotes.mockReturnValue([]);
     mockedGetBacklinkedNotes.mockReturnValue([]);
-    mockedGetMiyoSourceId.mockReturnValue("test-source");
+    mockedGetMiyoFolderPath.mockReturnValue("/vault");
+    mockedGetMiyoAbsolutePath.mockImplementation((_: unknown, path: string) => `/vault/${path}`);
+    mockedGetVaultRelativeMiyoPath.mockImplementation((_: unknown, path: string) =>
+      path.replace("/vault/", "")
+    );
 
     const source = createMarkdownFile("source.md");
     const first = createMarkdownFile("first.md");
@@ -180,7 +193,7 @@ describe("findRelevantNotes", () => {
   });
 
   it("uses Miyo when shouldUseMiyoForRelevantNotes is true (enableMiyo=true and valid self-host)", async () => {
-    mockedIsSelfHostAccessValid.mockReturnValue(true);
+    mockedShouldUseMiyo.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "http://127.0.0.1:8742",
@@ -204,10 +217,10 @@ describe("findRelevantNotes", () => {
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
     mockSearchRelated.mockResolvedValue({
       results: [
-        { id: "self", path: "source.md", score: 0.99, chunk_text: "self" },
-        { id: "a-1", path: "alpha.md", score: 0.45, chunk_text: "alpha1" },
-        { id: "b-1", path: "beta.md", score: 0.88, chunk_text: "beta" },
-        { id: "a-2", path: "alpha.md", score: 0.6, chunk_text: "alpha2" },
+        { id: "self", path: "/vault/source.md", score: 0.99, chunk_text: "self" },
+        { id: "a-1", path: "/vault/alpha.md", score: 0.45, chunk_text: "alpha1" },
+        { id: "b-1", path: "/vault/beta.md", score: 0.88, chunk_text: "beta" },
+        { id: "a-2", path: "/vault/alpha.md", score: 0.6, chunk_text: "alpha2" },
       ],
     });
 
@@ -220,8 +233,8 @@ describe("findRelevantNotes", () => {
     expect(mockGetDb).not.toHaveBeenCalled();
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
     expect(mockSearchRelated).toHaveBeenCalledTimes(1);
-    expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "source.md", {
-      sourceId: "test-source",
+    expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "/vault/source.md", {
+      folderPath: "/vault",
       limit: 20,
     });
   });
@@ -241,8 +254,8 @@ describe("findRelevantNotes", () => {
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
     mockSearchRelated.mockResolvedValue({
       results: [
-        { id: "a-1", path: "alpha.md", score: 0.75, chunk_text: "alpha chunk" },
-        { id: "self", path: "source.md", score: 0.99, chunk_text: "self" },
+        { id: "a-1", path: "/vault/alpha.md", score: 0.75, chunk_text: "alpha chunk" },
+        { id: "self", path: "/vault/source.md", score: 0.99, chunk_text: "self" },
       ],
     });
 
@@ -256,7 +269,7 @@ describe("findRelevantNotes", () => {
   });
 
   it("falls back to link-only relevance when Miyo related-note search fails", async () => {
-    mockedIsSelfHostAccessValid.mockReturnValue(true);
+    mockedShouldUseMiyo.mockReturnValue(true);
     mockedGetSettings.mockReturnValue({
       debug: false,
       miyoServerUrl: "http://127.0.0.1:8742",

@@ -1,5 +1,101 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.6 🛠️
+
+A solid patch release focused on **Miyo remote server improvements** and a handy **OpenRouter prompt caching toggle**!
+
+- 🧠 **Miyo remote server support, polished** — Several improvements land together for users running Miyo on a remote machine. You can now set a **Remote Vault Folder** path so Copilot sends the correct path to your remote server (instead of your local path). The settings UI is cleaner too: "Vault Name" is now "Remote Vault Path (Optional)" and "Custom Miyo Server URL" is now "Remote Miyo Server URL (Optional)", both defaulting to blank so local users see no change. An indicator under the Enable Miyo toggle shows you the effective vault path and whether it resolves as local or remote. (@wenzhengjiang)
+- 📱 **Miyo stays off on mobile without a remote server** — On mobile, where local service discovery is unavailable, Miyo now quietly disables itself unless you've configured a Remote Miyo Server URL. No more silent failures! (@wenzhengjiang)
+- 🔁 **Miyo folder API refactor** — Under the hood, Miyo integration now uses the new folder-based API, using your vault path as the folder root and translating paths back to vault-relative paths. Index refreshes now notify you that the folder index is refreshing in Miyo. (@wenzhengjiang)
+- ⚙️ **OpenRouter: per-model prompt caching toggle** — If you use an OpenRouter endpoint that doesn't support `cache_control` headers (like Zero Data Retention endpoints), you can now turn off prompt caching per model in the model edit dialog. Prompt caching stays on by default for everyone else. (@logancyang)
+
+More details in the changelog:
+
+### Improvements
+
+- #2334 feat(miyo): add remote vault folder path override for remote servers @wenzhengjiang
+- #2326 feat(miyo): rename vault name to remote vault path and align with server API @wenzhengjiang
+- #2318 feat(openrouter): add per-model toggle for prompt caching @logancyang
+
+### Bug Fixes
+
+- #2331 Refactor Miyo integration for folder API @wenzhengjiang
+- #2328 feat(miyo): disable miyo on mobile without a remote server URL @wenzhengjiang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
+# Copilot for Obsidian - Release v3.2.5 🛠️
+
+A packed patch release with **Composer V2 editing**, **Azure provider unification**, **drag-to-insert wikilinks**, **Obsidian Bases support**, **LM Studio Responses API**, and a wave of agent, search, and UI improvements!
+
+- ✏️ **Composer V2: smarter file editing** — The new `editFile` tool replaces `replaceInFile` as the primary targeted-edit tool, bringing more reliable and precise in-file edits when Copilot modifies your notes. (@wenzhengjiang)
+- 🔗 **Drag relevant notes into your editor** — You can now drag notes and sources from the Copilot chat panel directly into any editor to insert wikilinks instantly. Great for building connections while researching! (@logancyang)
+- ☁️ **Azure OpenAI and Azure Foundry unified** — Both Azure providers are now merged into a single, cleaner Azure provider. No more confusion about which Azure to use! (@logancyang)
+- 🗂️ **Obsidian Bases support** — Copilot's agent now has a `base:create` command and can read `.base` active notes, with a new read-only `obsidianBases` CLI tool for querying your Bases. (@logancyang)
+- ⚡ **LM Studio: Responses API with KV cache reuse** — LM Studio models now use the Responses API for stateful KV cache reuse, giving you faster, more efficient conversations with local models. (@logancyang)
+- 💡 **Gemini Embedding 2 preview support** — Gemini Embedding 2 preview is now available as an embedding model option. (@logancyang)
+- 🤖 **GitHub Copilot Chat supports tool calling** — The GitHub Copilot Chat model now supports native tool calling, unlocking agent mode with it! (@Emt-lin)
+- 🗺️ **Automatic file renaming to match topic titles** — When Copilot generates a topic title for a chat, the file is now automatically renamed to match. (@somethingSTRANGE)
+- 💾 **OpenRouter prompt caching** — OpenRouter models now support `cache_control` for prompt caching, saving tokens on repeated context. (@logancyang)
+- 🧠 **Miyo improvements** — Customizable vault name setting, remote backend mobile re-indexing support, and license auth header for Miyo requests. (@wenzhengjiang)
+- 📅 **CLI tool upgrades** — Daily/random read tools, reasoning summaries, enhanced instructions from obsidian-skills reference, and daily note template workflow fixes for past/future dates. (@logancyang)
+- 🛠️ **Agent & search fixes** — Improved inline citations, query deduplication, answer source priority, expanded search limits for time-range/tag queries, and removed `returnAll` to prevent token spikes. (@logancyang)
+- 🎨 **UI & UX polish** — Quick Ask panel positioning overhaul, LaTeX rendering fix, Ollama numCtx config, "None" system prompt option, clickable citations, and more. (@Emt-lin, @logancyang)
+- 🔧 **Local model fixes** — Stripped leaked special tokens from local model responses; agent tool paths now use `vault.read` instead of `cachedRead` for reliability. (@logancyang, @yu-zou)
+- 🎬 **YouTube transcript fix** — Both classic and modern YouTube transcript panel DOM structures are now supported. (@Emt-lin)
+- 🔒 **Tiktoken CDN timeout fix** — Defense-in-depth overrides prevent tiktoken CDN timeouts in Plus mode. (@logancyang)
+
+More details in the changelog:
+
+### Improvements
+
+- #2305 Composer V2: Replace replaceInFile with editFile as the primary targeted-edit tool @wenzhengjiang
+- #2311 feat(miyo): add customizable vault name setting @wenzhengjiang
+- #2306 feat(lm-studio): use Responses API for stateful KV cache reuse @logancyang
+- #2303 feat(tools): add base:create command and .base active note support @logancyang
+- #2265 feat: add obsidianBases CLI tool (read-only) @logancyang
+- #2299 feat: add Gemini Embedding 2 preview model support @logancyang
+- #2291 feat: unify Azure OpenAI and Azure Foundry into single Azure provider @logancyang
+- #2288 feat: drag relevant notes and sources into editor to insert wikilinks @logancyang
+- #2279 feat(openrouter): enable prompt caching via cache_control @logancyang
+- #2242 feat: refactor GitHubCopilotChatModel to support tool calling @Emt-lin
+- #2301 feat: enhance CLI tool instructions from obsidian-skills reference @logancyang
+- #2181 Add Obsidian CLI daily/random read tools and reasoning summaries @logancyang
+- #2312 feat: add PR pricing agent @logancyang
+- #2260 Add license auth header to Miyo requests @wenzhengjiang
+
+### Bug Fixes
+
+- #2313 fix(ui): show enabled models without API keys as disabled in dropdown @logancyang
+- #2308 fix(search): allow remote backends to re-index on mobile when disableIndexOnMobile is enabled @wenzhengjiang
+- #2307 refactor(tools): remove daily note append/prepend CLI commands @logancyang
+- #2304 fix(tools): daily note template workflow for past/future dates @logancyang
+- #2300 fix(agent): improve inline citations, query dedup, and answer source priority @logancyang
+- #2295 fix: restore expanded search limits for time-range and tag queries @logancyang
+- #2293 fix: add "None" option to system prompt dropdown in chat settings @logancyang
+- #2287 fix: agent loop improvements, clickable citations, and UI fixes @logancyang
+- #2286 fix: support both classic and modern YouTube transcript panel DOM structures @Emt-lin
+- #2285 fix: strip leaked special tokens from local model responses @logancyang
+- #2283 fix: defense-in-depth overrides to prevent tiktoken CDN timeout in Plus mode @logancyang
+- #2278 fix: Quick Ask/Command panel positioning overhaul @Emt-lin
+- #2276 fix: command UI improvements, LaTeX rendering, and Ollama numCtx config @Emt-lin
+- #2274 fix(tools): replace cachedRead with vault.read in agent/tool paths @yu-zou
+- #2273 fix: remove returnAll from agent-facing search tools to prevent token spikes @logancyang
+- #2269 fix: pass timeRange to Miyo search path @logancyang
+- #2240 fix(rename): Add automatic file renaming to match generated topic titles @somethingSTRANGE
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.4
 
 A patch release with **Gemini stability fixes**, **Miyo improvements**, and **mobile/UI polish**.

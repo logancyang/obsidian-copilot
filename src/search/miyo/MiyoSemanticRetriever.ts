@@ -4,7 +4,7 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { App } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoSearchFilter, MiyoSearchResult } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoSourceId } from "@/miyo/miyoUtils";
+import { getMiyoCustomUrl, getMiyoFolderPath, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
 
@@ -91,7 +91,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
       }
       const response = await this.client.search(
         baseUrl,
-        getMiyoSourceId(this.app),
+        getMiyoFolderPath(this.app, getSettings()),
         query,
         limit,
         filters
@@ -140,10 +140,11 @@ export class MiyoSemanticRetriever extends BaseRetriever {
    * @returns LangChain Document instance.
    */
   private toDocument(result: MiyoSearchResult): Document {
+    const relativePath = getVaultRelativeMiyoPath(this.app, result.path);
     const metadata = result.metadata ?? {};
     const chunkId =
       metadata.chunkId ||
-      (result.chunk_index !== undefined ? `${result.path}#${result.chunk_index}` : undefined);
+      (result.chunk_index !== undefined ? `${relativePath}#${result.chunk_index}` : undefined);
 
     const score = typeof result.score === "number" ? result.score.toFixed(2) : "?";
     return new Document({
@@ -152,7 +153,7 @@ export class MiyoSemanticRetriever extends BaseRetriever {
         ...metadata,
         score: result.score,
         explanation: `miyo ${score}`,
-        path: result.path,
+        path: relativePath,
         mtime: result.mtime,
         ctime: result.ctime,
         title: result.title ?? "",

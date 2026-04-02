@@ -1,12 +1,17 @@
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
-import { getMiyoCustomUrl, getMiyoSourceId } from "@/miyo/miyoUtils";
+import {
+  getMiyoAbsolutePath,
+  getMiyoCustomUrl,
+  getMiyoFolderPath,
+  getVaultRelativeMiyoPath,
+  shouldUseMiyo,
+} from "@/miyo/miyoUtils";
 import { getBacklinkedNotes, getLinkedNotes } from "@/noteUtils";
 import { DBOperations } from "@/search/dbOperations";
 import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexBackend";
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
-import { isSelfHostAccessValid } from "@/plusUtils";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
 import { TFile } from "obsidian";
 
@@ -20,8 +25,7 @@ const LINKS_WEIGHT = 0.3;
  * @returns True when Miyo mode and self-host access validation are active.
  */
 function shouldUseMiyoForRelevantNotes(): boolean {
-  const settings = getSettings();
-  return settings.enableMiyo && settings.enableSemanticSearchV3 && isSelfHostAccessValid();
+  return shouldUseMiyo(getSettings());
 }
 
 /**
@@ -125,24 +129,25 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
     const settings = getSettings();
     const miyoClient = new MiyoClient();
     const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const sourceId = getMiyoSourceId(app);
-    const response = await miyoClient.searchRelated(baseUrl, filePath, {
-      sourceId,
+    const folderPath = getMiyoFolderPath(app, settings);
+    const response = await miyoClient.searchRelated(baseUrl, getMiyoAbsolutePath(app, filePath), {
+      folderPath,
       limit: MAX_K,
     });
     const similarityScoreMap = new Map<string, number>();
     const results = response.results || [];
 
     for (const result of results) {
-      if (result.path === filePath) {
+      const relativePath = getVaultRelativeMiyoPath(app, result.path);
+      if (relativePath === filePath) {
         continue;
       }
       if (typeof result.score !== "number" || Number.isNaN(result.score)) {
         continue;
       }
-      const existing = similarityScoreMap.get(result.path);
+      const existing = similarityScoreMap.get(relativePath);
       if (existing === undefined || result.score > existing) {
-        similarityScoreMap.set(result.path, result.score);
+        similarityScoreMap.set(relativePath, result.score);
       }
     }
 
