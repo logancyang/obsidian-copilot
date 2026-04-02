@@ -321,9 +321,12 @@ export async function loadSettingsWithKeychain(
   saveData: (data: CopilotSettings) => Promise<void>
 ): Promise<CopilotSettings> {
   // Reason: Obsidian's loadData() returns null when data.json doesn't exist yet.
-  // This is the only reliable signal for a truly fresh install — old users who
-  // never stored API keys still have a non-null rawData with other settings.
-  const isTrulyFreshInstall = rawData == null || Object.keys(rawData as object).length === 0;
+  // After first launch, only the bootstrap field _keychainVaultId may have been
+  // persisted before any real settings are saved. Treat that as still fresh.
+  const BOOTSTRAP_ONLY_KEYS = new Set(["_keychainVaultId"]);
+  const isTrulyFreshInstall =
+    rawData == null ||
+    Object.keys(rawData as object).every((k) => BOOTSTRAP_ONLY_KEYS.has(k));
 
   // Reason: sanitize FIRST to normalize model providers (e.g. azure_openai → azure-openai).
   let settings = sanitizeSettings(rawData as CopilotSettings);
