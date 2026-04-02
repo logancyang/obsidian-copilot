@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
-import { ConfigurationSharing } from "@/components/setup-uri/ConfigurationSharing";
+import { ConfigurationSharing } from "@/components/config-transfer/ConfigurationSharing";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { KeychainService } from "@/services/keychainService";

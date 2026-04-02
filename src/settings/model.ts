@@ -260,7 +260,7 @@ export function setSettings(settings: Partial<CopilotSettings>) {
  * Reason: `setSettings()` spreads incoming values over current settings, so
  * fields absent from the incoming object (e.g. serialized as `undefined` and
  * dropped by JSON.stringify) survive from the old state. This function is for
- * flows like Setup URI import that need a true overwrite.
+ * flows like configuration file import that need a true overwrite.
  */
 export function replaceSettings(settings: CopilotSettings) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...DEFAULT_SETTINGS, ...settings });

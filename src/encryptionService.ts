@@ -263,7 +263,7 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
 /**
  * Decrypt an API key and throw when decryption fails.
  * Use in workflows that must not proceed with undecryptable values
- * (e.g., Setup URI export).
+ * (e.g., configuration export).
  */
 export async function getDecryptedKeyOrThrow(apiKey: string): Promise<string> {
   const decrypted = await getDecryptedKey(apiKey);

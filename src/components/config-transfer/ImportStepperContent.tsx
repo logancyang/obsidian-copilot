@@ -19,15 +19,15 @@ import { Label } from "@/components/ui/label";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { logError } from "@/logger";
-import { SetupUriDecryptionError } from "@/setupUri/crypto";
+import { ConfigDecryptionError } from "@/configTransfer/crypto";
 import {
   parseConfigFileWrapper,
   decryptConfigFile,
   type ConfigFileWrapper,
   type ConfigFileMeta,
-} from "@/setupUri/configFile";
-import type { CollectedVaultFiles } from "@/setupUri/vaultFiles";
-import { StepIndicator } from "@/components/setup-uri/StepIndicator";
+} from "@/configTransfer/configFile";
+import type { CollectedVaultFiles } from "@/configTransfer/vaultFiles";
+import { StepIndicator } from "@/components/config-transfer/StepIndicator";
 import type { CopilotSettings } from "@/settings/model";
 
 const IMPORT_STEPS = [{ label: "Select File" }, { label: "Password" }, { label: "Confirm" }];
@@ -220,7 +220,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
       if (isMountedRef.current) setCurrentStep(2);
     } catch (error) {
       if (!isMountedRef.current) return;
-      if (error instanceof SetupUriDecryptionError) {
+      if (error instanceof ConfigDecryptionError) {
         setErrorMessage(error.message);
       } else if (error instanceof Error) {
         setErrorMessage(error.message);
@@ -289,7 +289,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
       }, reloadDelayMs);
     } catch (error) {
       if (isMountedRef.current) setIsImporting(false);
-      if (error instanceof SetupUriDecryptionError) {
+      if (error instanceof ConfigDecryptionError) {
         if (isMountedRef.current) setErrorMessage(error.message);
         else new Notice(error.message);
       } else if (error instanceof Error) {

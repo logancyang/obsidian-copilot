@@ -2,8 +2,8 @@ import React from "react";
 import { ArrowUpFromLine, ArrowDownToLine } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-import { SetupUriExportModal } from "@/components/modals/SetupUriExportModal";
-import { SetupUriImportModal } from "@/components/modals/SetupUriImportModal";
+import { ConfigExportModal } from "@/components/modals/ConfigExportModal";
+import { ConfigImportModal } from "@/components/modals/ConfigImportModal";
 import { Notice } from "obsidian";
 
 /** Resolve the Copilot plugin instance from the global `app`. */
@@ -22,7 +22,7 @@ export const ConfigurationSharing: React.FC = () => {
   const handleExport = () => {
     const copilotPlugin = getCopilotPlugin();
     const pluginVersion = copilotPlugin?.manifest?.version ?? "unknown";
-    new SetupUriExportModal(app, pluginVersion).open();
+    new ConfigExportModal(app, pluginVersion).open();
   };
 
   const handleImport = () => {
@@ -31,7 +31,7 @@ export const ConfigurationSharing: React.FC = () => {
       new Notice("Cannot import: Copilot plugin instance not found.");
       return;
     }
-    new SetupUriImportModal(app, (data) => copilotPlugin.saveData(data)).open();
+    new ConfigImportModal(app, (data) => copilotPlugin.saveData(data)).open();
   };
 
   return (

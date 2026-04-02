@@ -553,7 +553,7 @@ async function doPersist(
       cleanedRec._diskSecretsCleared = false;
       delete cleanedRec._migrationModalDismissed;
       // Reason: sync in-memory state through proper Jotai channel so
-      // generateSetupUri() and other consumers see the corrected flags.
+      // generateConfigFile() and other consumers see the corrected flags.
       resetDiskSecretFallbackFlags(settings);
     }
     await saveData(cleaned);

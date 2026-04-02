@@ -1,5 +1,5 @@
 /**
- * Passphrase-based encryption for Setup URI payloads.
+ * Passphrase-based encryption for Copilot configuration export payloads.
  *
  * Uses PBKDF2 key derivation + AES-256-GCM via the Web Crypto API,
  * ensuring cross-platform compatibility (desktop + mobile).
@@ -7,21 +7,20 @@
  * Payload binary format (all concatenated):
  *   [1B version][4B iterations LE][16B salt][12B iv][...ciphertext+tag]
  *
- * The output is encoded as base64url (RFC 4648 §5) so it can be safely
- * embedded in URI query parameters without escaping issues.
+ * The output is encoded as standard base64 for storage in .copilot files.
  */
 
 import { Buffer } from "buffer";
 import { Inflate, deflate } from "pako";
 
 // Reason: version byte allows future upgrades to KDF or cipher without
-// breaking existing URIs — decoders check version before parsing.
+// breaking existing configuration files — decoders check version before parsing.
 const PAYLOAD_VERSION = 1;
 const DEFAULT_ITERATIONS = 600_000;
 const SALT_LENGTH = 16;
 const IV_LENGTH = 12;
 const HEADER_LENGTH = 1 + 4 + SALT_LENGTH + IV_LENGTH; // 33 bytes
-const AAD = new TextEncoder().encode("copilot-setup:v1");
+const CONFIG_FILE_AAD = new TextEncoder().encode("copilot-config:v1");
 
 /** Assert WebCrypto is available before attempting crypto operations. */
 function assertWebCryptoAvailable(): void {
@@ -44,56 +43,49 @@ const MAX_ITERATIONS = 2_000_000;
 /** Minimum PBKDF2 iterations to prevent downgrade attacks. */
 const MIN_ITERATIONS = 100_000;
 
-/** Minimum required passphrase length (characters) for Setup URI encryption. */
-export const MIN_SETUP_URI_PASSPHRASE_LENGTH = 8;
+/** Minimum required passphrase length (characters) for configuration export. */
+export const MIN_CONFIG_PASSPHRASE_LENGTH = 8;
 
 /**
- * Enforce the Setup URI passphrase policy.
+ * Enforce the configuration export passphrase policy.
  *
  * Reason: UI validates password length, but core helpers must enforce the same
  * policy so non-UI callers cannot generate weakly-protected payloads.
  *
  * @throws {Error} When passphrase does not meet the minimum length requirement.
  */
-export function assertSetupUriPassphrase(passphrase: string): void {
-  if (passphrase.length < MIN_SETUP_URI_PASSPHRASE_LENGTH) {
-    throw new Error(`Password must be at least ${MIN_SETUP_URI_PASSPHRASE_LENGTH} characters.`);
+export function assertConfigPassphrase(passphrase: string): void {
+  if (passphrase.length < MIN_CONFIG_PASSPHRASE_LENGTH) {
+    throw new Error(`Password must be at least ${MIN_CONFIG_PASSPHRASE_LENGTH} characters.`);
   }
 }
 
 // ---------------------------------------------------------------------------
-// base64url helpers (RFC 4648 §5 — no +, /, or = padding)
+// base64 helpers
 // ---------------------------------------------------------------------------
 
-/** Encode a Uint8Array to a base64url string (RFC 4648 §5, no padding). */
-function toBase64url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
+/** Encode a Uint8Array to a standard base64 string. */
+function toBase64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
 }
 
-/** Regex matching valid base64url characters (RFC 4648 §5). */
-const BASE64URL_RE = /^[A-Za-z0-9\-_]*$/;
+/** Regex matching valid standard base64 characters with optional padding. */
+const BASE64_RE = /^[A-Za-z0-9+/=]*$/;
 
-/** Decode a base64url string back to a Uint8Array. */
-function fromBase64url(b64url: string): Uint8Array {
-  // Reason: Buffer.from(b64, "base64") silently ignores invalid chars.
-  // Pre-validate to provide a clear "not valid base64url" error message.
-  if (!BASE64URL_RE.test(b64url)) {
-    throw new Error("Input is not valid base64url data.");
+/** Decode a standard base64 string back to a Uint8Array. */
+function fromBase64(encoded: string): Uint8Array {
+  if (!BASE64_RE.test(encoded)) {
+    throw new Error("Input is not valid base64 data.");
   }
 
   // Reason: in base64, every 4 encoded chars represent 3 bytes.
-  // A remainder of 1 after mod-4 is structurally invalid — it cannot
-  // encode a whole number of bytes.
-  if (b64url.length % 4 === 1) {
-    throw new Error("Input is not valid base64url data.");
+  // A remainder of 1 after mod-4 is structurally invalid.
+  const stripped = encoded.replace(/=+$/, "");
+  if (stripped.length % 4 === 1) {
+    throw new Error("Input is not valid base64 data.");
   }
 
-  // Restore standard base64 characters and padding
-  let b64 = b64url.replace(/-/g, "+").replace(/_/g, "/");
-  while (b64.length % 4 !== 0) {
-    b64 += "=";
-  }
-  return new Uint8Array(Buffer.from(b64, "base64"));
+  return new Uint8Array(Buffer.from(encoded, "base64"));
 }
 
 // ---------------------------------------------------------------------------
@@ -196,16 +188,16 @@ function inflateWithLimit(compressed: Uint8Array, maxBytes: number): Uint8Array 
 /**
  * Encrypt a plaintext string with a user-supplied passphrase.
  *
- * The plaintext is first compressed with deflate to reduce URI size,
+ * The plaintext is first compressed with deflate to reduce file size,
  * then encrypted with AES-256-GCM using a PBKDF2-derived key.
  *
- * @returns A base64url-encoded string suitable for embedding in a URI.
+ * @returns A base64-encoded string for storage in .copilot files.
  */
 export async function encryptWithPassphrase(
   plaintext: string,
   passphrase: string
 ): Promise<string> {
-  assertSetupUriPassphrase(passphrase);
+  assertConfigPassphrase(passphrase);
   assertWebCryptoAvailable();
   const compressed = deflate(new TextEncoder().encode(plaintext));
 
@@ -224,7 +216,11 @@ export async function encryptWithPassphrase(
   const key = await deriveKey(passphrase, salt, DEFAULT_ITERATIONS);
 
   const ciphertext = new Uint8Array(
-    await crypto.subtle.encrypt({ name: "AES-GCM", iv, additionalData: AAD }, key, compressed)
+    await crypto.subtle.encrypt(
+      { name: "AES-GCM", iv, additionalData: CONFIG_FILE_AAD },
+      key,
+      compressed
+    )
   );
 
   // Assemble: [version(1)][iterations(4)][salt(16)][iv(12)][ciphertext...]
@@ -242,17 +238,17 @@ export async function encryptWithPassphrase(
     );
   }
 
-  return toBase64url(payload);
+  return toBase64(payload);
 }
 
 /**
- * Decrypt a base64url-encoded payload with the given passphrase.
+ * Decrypt a base64-encoded payload with the given passphrase.
  *
- * @throws {SetupUriDecryptionError} with a user-friendly `reason` field.
+ * @throws {ConfigDecryptionError} with a user-friendly `reason` field.
  */
 export async function decryptWithPassphrase(encoded: string, passphrase: string): Promise<string> {
   if (!globalThis.crypto?.subtle) {
-    throw new SetupUriDecryptionError(
+    throw new ConfigDecryptionError(
       "unsupported_environment",
       "Configuration import requires the WebCrypto API, which is not available in this environment."
     );
@@ -263,31 +259,31 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
     // huge buffers from maliciously long strings. Base64 expands ~33%.
     const maxEncodedLength = Math.ceil((MAX_PAYLOAD_BYTES * 4) / 3);
     if (encoded.length > maxEncodedLength) {
-      throw new SetupUriDecryptionError(
+      throw new ConfigDecryptionError(
         "corrupted",
         "The payload exceeds the maximum allowed size."
       );
     }
-    raw = fromBase64url(encoded);
+    raw = fromBase64(encoded);
   } catch (error) {
-    // Reason: re-throw SetupUriDecryptionError as-is (e.g., oversized payload)
-    // so callers get the correct diagnosis instead of a generic base64url error.
-    if (error instanceof SetupUriDecryptionError) throw error;
-    throw new SetupUriDecryptionError("corrupted", "The payload is not valid base64url data.");
+    // Reason: re-throw ConfigDecryptionError as-is (e.g., oversized payload)
+    // so callers get the correct diagnosis instead of a generic base64 error.
+    if (error instanceof ConfigDecryptionError) throw error;
+    throw new ConfigDecryptionError("corrupted", "The payload is not valid base64 data.");
   }
 
   if (raw.length > MAX_PAYLOAD_BYTES) {
-    throw new SetupUriDecryptionError("corrupted", "The payload exceeds the maximum allowed size.");
+    throw new ConfigDecryptionError("corrupted", "The payload exceeds the maximum allowed size.");
   }
 
   if (raw.length < HEADER_LENGTH + 16) {
     // Reason: GCM tag alone is 16 bytes, so anything shorter is truncated.
-    throw new SetupUriDecryptionError("corrupted", "The payload appears to be truncated.");
+    throw new ConfigDecryptionError("corrupted", "The payload appears to be truncated.");
   }
 
   const version = raw[0];
   if (version !== PAYLOAD_VERSION) {
-    throw new SetupUriDecryptionError(
+    throw new ConfigDecryptionError(
       "unsupported_version",
       `Unsupported configuration file version: ${version}. Please update the Copilot plugin.`
     );
@@ -295,7 +291,7 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
 
   const iterations = readUint32LE(raw, 1);
   if (iterations < MIN_ITERATIONS || iterations > MAX_ITERATIONS) {
-    throw new SetupUriDecryptionError(
+    throw new ConfigDecryptionError(
       "corrupted",
       `Invalid KDF iteration count (${iterations}). The payload may be corrupted.`
     );
@@ -309,14 +305,14 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
   try {
     const key = await deriveKey(passphrase, salt, iterations);
     decrypted = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv, additionalData: AAD },
+      { name: "AES-GCM", iv, additionalData: CONFIG_FILE_AAD },
       key,
       ciphertext
     );
   } catch {
     // Reason: AES-GCM auth failure is indistinguishable from wrong key
     // vs corrupted payload, so we surface both possibilities to the user.
-    throw new SetupUriDecryptionError(
+    throw new ConfigDecryptionError(
       "wrong_passphrase",
       "Decryption failed. Wrong password or corrupted payload."
     );
@@ -326,7 +322,7 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
     const decompressed = inflateWithLimit(new Uint8Array(decrypted), MAX_DECOMPRESSED_BYTES);
     return new TextDecoder().decode(decompressed);
   } catch {
-    throw new SetupUriDecryptionError(
+    throw new ConfigDecryptionError(
       "corrupted",
       "Failed to decompress the settings data (corrupted or too large)."
     );
@@ -343,13 +339,13 @@ export type DecryptionErrorReason =
   | "unsupported_version"
   | "unsupported_environment";
 
-/** Structured error for Setup URI decryption failures. */
-export class SetupUriDecryptionError extends Error {
+/** Structured error for configuration file decryption failures. */
+export class ConfigDecryptionError extends Error {
   constructor(
     public readonly reason: DecryptionErrorReason,
     message: string
   ) {
     super(message);
-    this.name = "SetupUriDecryptionError";
+    this.name = "ConfigDecryptionError";
   }
 }

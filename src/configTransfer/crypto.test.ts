@@ -1,5 +1,5 @@
 /**
- * Tests for Setup URI encryption/decryption primitives.
+ * Tests for configuration file encryption/decryption primitives.
  *
  * Uses the real Node.js Web Crypto API for round-trip tests to verify
  * actual cryptographic correctness (not just mock wiring).
@@ -23,9 +23,9 @@ Object.defineProperty(globalThis, "crypto", {
 import {
   encryptWithPassphrase,
   decryptWithPassphrase,
-  SetupUriDecryptionError,
-  assertSetupUriPassphrase,
-  MIN_SETUP_URI_PASSPHRASE_LENGTH,
+  ConfigDecryptionError,
+  assertConfigPassphrase,
+  MIN_CONFIG_PASSPHRASE_LENGTH,
 } from "./crypto";
 
 // ---------------------------------------------------------------------------
@@ -43,9 +43,9 @@ function writeUint32LE(value: number): Uint8Array {
   return new Uint8Array(buf);
 }
 
-/** Encode bytes to base64url (RFC 4648 §5). */
-function toBase64url(bytes: Uint8Array): string {
-  return Buffer.from(bytes).toString("base64url");
+/** Encode bytes to standard base64. */
+function toBase64(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("base64");
 }
 
 /**
@@ -70,7 +70,7 @@ function buildFakePayload(opts: {
   for (let i = HEADER_LENGTH; i < payload.length; i++) {
     payload[i] = i & 0xff;
   }
-  return toBase64url(payload);
+  return toBase64(payload);
 }
 
 // ---------------------------------------------------------------------------
@@ -100,7 +100,7 @@ describe("crypto.ts", () => {
 
       await expect(decryptWithPassphrase(encrypted, "wrong-password")).rejects.toThrow(
         expect.objectContaining({
-          name: "SetupUriDecryptionError",
+          name: "ConfigDecryptionError",
           reason: "wrong_passphrase",
         })
       );
@@ -113,14 +113,14 @@ describe("crypto.ts", () => {
   describe("decryptWithPassphrase format validation", () => {
     it.each([
       {
-        name: "invalid base64url characters",
+        name: "invalid base64 characters",
         encoded: "!!!not-valid-base64!!!",
         reason: "corrupted",
-        msgSubstr: "not valid base64url",
+        msgSubstr: "not valid base64",
       },
       {
         name: "truncated payload (too short)",
-        encoded: toBase64url(new Uint8Array(10)),
+        encoded: toBase64(new Uint8Array(10)),
         reason: "corrupted",
         msgSubstr: "truncated",
       },
@@ -145,7 +145,7 @@ describe("crypto.ts", () => {
     ])("should throw reason='$reason' for $name", async ({ encoded, reason, msgSubstr }) => {
       await expect(decryptWithPassphrase(encoded, "any-pass")).rejects.toThrow(
         expect.objectContaining({
-          name: "SetupUriDecryptionError",
+          name: "ConfigDecryptionError",
           reason,
         })
       );
@@ -159,13 +159,13 @@ describe("crypto.ts", () => {
 
     it("should throw reason='corrupted' for payload exceeding 10MB", async () => {
       // Reason: build a payload just over the size limit.
-      // Header (33) + ciphertext must exceed 10MB after base64url decode.
+      // Header (33) + ciphertext must exceed 10MB after base64 decode.
       const oversizedCiphertextLen = 10 * 1024 * 1024;
       const encoded = buildFakePayload({ ciphertextLength: oversizedCiphertextLen });
 
       await expect(decryptWithPassphrase(encoded, "any-pass")).rejects.toThrow(
         expect.objectContaining({
-          name: "SetupUriDecryptionError",
+          name: "ConfigDecryptionError",
           reason: "corrupted",
         })
       );
@@ -173,14 +173,14 @@ describe("crypto.ts", () => {
   });
 
   // -------------------------------------------------------------------------
-  // SetupUriDecryptionError class
+  // ConfigDecryptionError class
   // -------------------------------------------------------------------------
-  describe("SetupUriDecryptionError", () => {
+  describe("ConfigDecryptionError", () => {
     it("should be an Error with correct name and reason", () => {
-      const err = new SetupUriDecryptionError("wrong_passphrase", "test message");
+      const err = new ConfigDecryptionError("wrong_passphrase", "test message");
 
       expect(err).toBeInstanceOf(Error);
-      expect(err.name).toBe("SetupUriDecryptionError");
+      expect(err.name).toBe("ConfigDecryptionError");
       expect(err.reason).toBe("wrong_passphrase");
       expect(err.message).toBe("test message");
     });
@@ -189,19 +189,19 @@ describe("crypto.ts", () => {
   // -------------------------------------------------------------------------
   // Passphrase policy enforcement
   // -------------------------------------------------------------------------
-  describe("assertSetupUriPassphrase", () => {
+  describe("assertConfigPassphrase", () => {
     it("should throw for passphrases shorter than minimum length", () => {
-      expect(() => assertSetupUriPassphrase("short")).toThrow(
-        `Password must be at least ${MIN_SETUP_URI_PASSPHRASE_LENGTH} characters.`
+      expect(() => assertConfigPassphrase("short")).toThrow(
+        `Password must be at least ${MIN_CONFIG_PASSPHRASE_LENGTH} characters.`
       );
     });
 
     it("should not throw for passphrases at or above minimum length", () => {
       expect(() =>
-        assertSetupUriPassphrase("a".repeat(MIN_SETUP_URI_PASSPHRASE_LENGTH))
+        assertConfigPassphrase("a".repeat(MIN_CONFIG_PASSPHRASE_LENGTH))
       ).not.toThrow();
       expect(() =>
-        assertSetupUriPassphrase("a-very-long-passphrase-that-exceeds-minimum")
+        assertConfigPassphrase("a-very-long-passphrase-that-exceeds-minimum")
       ).not.toThrow();
     });
   });

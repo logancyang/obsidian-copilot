@@ -74,7 +74,7 @@ describe("parseConfigFileWrapper", () => {
       version: 1,
       meta: { pluginVersion: "3.2.6", createdAt: "2026-03-31T12:00:00Z" },
       stats: { commandCount: 5, promptCount: 3, memoryCount: 2 },
-      payload: "encrypted-base64url-payload",
+      payload: "encrypted-base64-payload",
     });
 
     const result = parseConfigFileWrapper(content);
@@ -85,7 +85,7 @@ describe("parseConfigFileWrapper", () => {
     expect(result.stats.commandCount).toBe(5);
     expect(result.stats.promptCount).toBe(3);
     expect(result.stats.memoryCount).toBe(2);
-    expect(result.payload).toBe("encrypted-base64url-payload");
+    expect(result.payload).toBe("encrypted-base64-payload");
   });
 
   it("throws on invalid JSON", () => {
@@ -212,7 +212,7 @@ describe("generateConfigFile + decryptConfigFile round-trip", () => {
     expect(raw._migrationModalDismissed).toBeUndefined();
   });
 
-  it("wrong password throws SetupUriDecryptionError", async () => {
+  it("wrong password throws ConfigDecryptionError", async () => {
     const content = await generateConfigFile(mockApp, "test-password-123", "3.2.6");
     const wrapper = parseConfigFileWrapper(content);
 

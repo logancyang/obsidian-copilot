@@ -19,15 +19,15 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { logError } from "@/logger";
-import { MIN_SETUP_URI_PASSPHRASE_LENGTH } from "@/setupUri/crypto";
-import { generateConfigFile } from "@/setupUri/configFile";
-import { StepIndicator } from "@/components/setup-uri/StepIndicator";
+import { MIN_CONFIG_PASSPHRASE_LENGTH } from "@/configTransfer/crypto";
+import { generateConfigFile } from "@/configTransfer/configFile";
+import { StepIndicator } from "@/components/config-transfer/StepIndicator";
 import {
   type ExportContentOptions,
   DEFAULT_EXPORT_OPTIONS,
-} from "@/setupUri/vaultFiles";
+} from "@/configTransfer/vaultFiles";
 
-const MIN_PASSPHRASE_LENGTH = MIN_SETUP_URI_PASSPHRASE_LENGTH;
+const MIN_PASSPHRASE_LENGTH = MIN_CONFIG_PASSPHRASE_LENGTH;
 const RECOMMENDED_PASSPHRASE_LENGTH = 12;
 
 const EXPORT_STEPS = [{ label: "Set Password" }, { label: "Export" }];

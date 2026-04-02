@@ -112,7 +112,7 @@ function stripModelSecrets(models: CustomModel[]): CustomModel[] {
  * Called on:
  * - Load path (after sanitize, before backfill)
  * - Save path (before writing data.json)
- * - Setup URI import path (after apply)
+ * - Configuration file import path (after apply)
  *
  * Returns a new object — does NOT mutate the input.
  */

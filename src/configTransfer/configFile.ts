@@ -4,7 +4,7 @@
  * A .copilot file is a JSON wrapper containing:
  * - `meta`: protocol metadata (version, plugin version, timestamp)
  * - `stats`: pre-decryption summary (command/prompt/memory counts)
- * - `payload`: base64url-encoded encrypted blob
+ * - `payload`: base64-encoded encrypted blob
  *
  * The encrypted inner payload contains:
  * - `settings`: full CopilotSettings with API keys decrypted to plaintext
@@ -16,7 +16,7 @@ import {
   assertSafeVaultRelativePath,
   type ExportContentOptions,
   DEFAULT_EXPORT_OPTIONS,
-} from "@/setupUri/vaultFiles";
+} from "@/configTransfer/vaultFiles";
 import { getDecryptedKeyOrThrow, isSensitiveKey } from "@/encryptionService";
 import { type CopilotSettings, getSettings, sanitizeSettings } from "@/settings/model";
 import { cleanupLegacyFields } from "@/services/settingsSecretTransforms";
@@ -25,9 +25,9 @@ import { KeychainService } from "@/services/keychainService";
 import {
   encryptWithPassphrase,
   decryptWithPassphrase,
-  assertSetupUriPassphrase,
-} from "@/setupUri/crypto";
-import { collectAllVaultFiles, type CollectedVaultFiles } from "@/setupUri/vaultFiles";
+  assertConfigPassphrase,
+} from "@/configTransfer/crypto";
+import { collectAllVaultFiles, type CollectedVaultFiles } from "@/configTransfer/vaultFiles";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -195,7 +195,7 @@ export async function generateConfigFile(
   pluginVersion: string,
   exportOptions: ExportContentOptions = DEFAULT_EXPORT_OPTIONS
 ): Promise<string> {
-  assertSetupUriPassphrase(passphrase);
+  assertConfigPassphrase(passphrase);
 
   // Reason: fail closed — when disk secrets are already cleared, API keys
   // only exist in the OS keychain. If keychain is unavailable or had read

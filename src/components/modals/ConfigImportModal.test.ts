@@ -1,5 +1,5 @@
 /**
- * Tests for SetupUriImportModal — specifically verifying that sparse imports
+ * Tests for ConfigImportModal — specifically verifying that sparse imports
  * (missing secret fields) start from DEFAULT_SETTINGS so omitted secrets
  * become "" and generate keychain tombstones.
  */
@@ -50,7 +50,7 @@ jest.mock("react", () => ({
   ),
 }));
 
-jest.mock("@/components/setup-uri/ImportStepperContent", () => ({
+jest.mock("@/components/config-transfer/ImportStepperContent", () => ({
   ImportStepperContent: "ImportStepperContent",
 }));
 
@@ -58,7 +58,7 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-jest.mock("@/setupUri/vaultFiles", () => ({
+jest.mock("@/configTransfer/vaultFiles", () => ({
   restoreVaultFiles: jest
     .fn()
     .mockResolvedValue({
@@ -96,8 +96,8 @@ jest.mock("@/services/keychainService", () => ({
 
 import { DEFAULT_SETTINGS } from "@/constants";
 import type { CopilotSettings } from "@/settings/model";
-import { restoreVaultFiles as mockRestoreVaultFilesFn } from "@/setupUri/vaultFiles";
-import { SetupUriImportModal } from "./SetupUriImportModal";
+import { restoreVaultFiles as mockRestoreVaultFilesFn } from "@/configTransfer/vaultFiles";
+import { ConfigImportModal } from "./ConfigImportModal";
 
 const mockRestoreVaultFiles = mockRestoreVaultFilesFn as jest.Mock;
 
@@ -115,7 +115,7 @@ function isSensitiveKey(key: string): boolean {
   );
 }
 
-describe("SetupUriImportModal", () => {
+describe("ConfigImportModal", () => {
   const mockApp = {} as InstanceType<typeof import("obsidian").App>;
   const mockSaveData = jest.fn().mockResolvedValue(undefined);
 
@@ -138,7 +138,7 @@ describe("SetupUriImportModal", () => {
    * Open the modal and return the captured onPersistSettings callback.
    */
   function openAndCapture(): (settings: CopilotSettings) => Promise<void> {
-    const modal = new SetupUriImportModal(mockApp, mockSaveData);
+    const modal = new ConfigImportModal(mockApp, mockSaveData);
     modal.onOpen();
     expect(capturedOnPersist).not.toBeNull();
     return capturedOnPersist!;
@@ -205,7 +205,7 @@ describe("SetupUriImportModal", () => {
   });
 
   it("exposes onRestoreVaultFiles callback that delegates to restoreVaultFiles", async () => {
-    const modal = new SetupUriImportModal(mockApp, mockSaveData);
+    const modal = new ConfigImportModal(mockApp, mockSaveData);
     modal.onOpen();
     expect(capturedOnRestore).not.toBeNull();
 
@@ -235,7 +235,7 @@ describe("SetupUriImportModal", () => {
       rollback: [],
     });
 
-    const modal = new SetupUriImportModal(mockApp, mockSaveData);
+    const modal = new ConfigImportModal(mockApp, mockSaveData);
     modal.onOpen();
 
     const mockFiles = {

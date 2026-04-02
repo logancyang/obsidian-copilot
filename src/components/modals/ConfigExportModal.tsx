@@ -3,12 +3,12 @@
  * Renders the ExportStepperContent React component inside the modal.
  */
 
-import { ExportStepperContent } from "@/components/setup-uri/ExportStepperContent";
+import { ExportStepperContent } from "@/components/config-transfer/ExportStepperContent";
 import { App, Modal } from "obsidian";
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
 
-export class SetupUriExportModal extends Modal {
+export class ConfigExportModal extends Modal {
   private root?: Root;
   private pluginVersion: string;
 

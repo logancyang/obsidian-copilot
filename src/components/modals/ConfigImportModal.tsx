@@ -7,7 +7,7 @@
  * are not interrupted by React unmount.
  */
 
-import { ImportStepperContent } from "@/components/setup-uri/ImportStepperContent";
+import { ImportStepperContent } from "@/components/config-transfer/ImportStepperContent";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { KeychainService } from "@/services/keychainService";
 import { persistSettings, suppressNextPersistOnce } from "@/services/settingsPersistence";
@@ -18,13 +18,13 @@ import {
   rollbackVaultFiles,
   type CollectedVaultFiles,
   type RestoreRollbackEntry,
-} from "@/setupUri/vaultFiles";
+} from "@/configTransfer/vaultFiles";
 import { logError } from "@/logger";
 import { App, Modal, Notice } from "obsidian";
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
 
-export class SetupUriImportModal extends Modal {
+export class ConfigImportModal extends Modal {
   private root?: Root;
   /** Injected saveData callback to avoid reaching into app.plugins at runtime. */
   private readonly saveDataFn: (data: CopilotSettings) => Promise<void>;
