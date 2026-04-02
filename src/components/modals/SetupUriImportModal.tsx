@@ -76,15 +76,27 @@ export class SetupUriImportModal extends Modal {
     }
   }
 
-  /** Undo vault file writes if a later import step fails. */
-  private async rollbackRestoredFiles(): Promise<void> {
-    if (this.pendingRestoreRollback.length === 0) return;
+  /**
+   * Undo vault file writes if a later import step fails.
+   * @returns Paths that could not be rolled back (empty if fully successful).
+   */
+  private async rollbackRestoredFiles(): Promise<string[]> {
+    if (this.pendingRestoreRollback.length === 0) return [];
     const rollback = this.pendingRestoreRollback;
     this.pendingRestoreRollback = [];
     try {
-      await rollbackVaultFiles(this.app, rollback);
+      const failedPaths = await rollbackVaultFiles(this.app, rollback);
+      if (failedPaths.length > 0) {
+        new Notice(
+          "Some files could not be restored to their original state. " +
+            "Please check: " +
+            failedPaths.join(", ")
+        );
+      }
+      return failedPaths;
     } catch (error) {
       logError("Failed to roll back imported vault files.", error);
+      return rollback.map((e) => e.path);
     }
   }
 

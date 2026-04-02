@@ -12,7 +12,11 @@
  */
 
 import { type App } from "obsidian";
-import { assertSafeVaultRelativePath } from "@/setupUri/vaultFiles";
+import {
+  assertSafeVaultRelativePath,
+  type ExportContentOptions,
+  DEFAULT_EXPORT_OPTIONS,
+} from "@/setupUri/vaultFiles";
 import { getDecryptedKeyOrThrow, isSensitiveKey } from "@/encryptionService";
 import { type CopilotSettings, getSettings, sanitizeSettings } from "@/settings/model";
 import { cleanupLegacyFields } from "@/services/settingsSecretTransforms";
@@ -188,7 +192,8 @@ function toSafeRecord(input: Record<string, unknown>): Record<string, unknown> {
 export async function generateConfigFile(
   appInstance: App,
   passphrase: string,
-  pluginVersion: string
+  pluginVersion: string,
+  exportOptions: ExportContentOptions = DEFAULT_EXPORT_OPTIONS
 ): Promise<string> {
   assertSetupUriPassphrase(passphrase);
 
@@ -236,8 +241,8 @@ export async function generateConfigFile(
   delete exported._migrationModalDismissed;
   delete exported.userId;
 
-  // Collect vault files
-  const vaultFiles = await collectAllVaultFiles(appInstance);
+  // Collect vault files based on export options
+  const vaultFiles = await collectAllVaultFiles(appInstance, exportOptions);
 
   // Count memory files for stats
   const memoryCount =

@@ -89,9 +89,19 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
   const cachedMetaRef = useRef<ConfigFileMeta | null>(null);
   const cachedVaultFilesRef = useRef<CollectedVaultFiles | null>(null);
 
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [minHeight, setMinHeight] = useState<number | undefined>();
   const isMountedRef = useRef(true);
   const reloadTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Reason: track the tallest height seen across all steps so the modal
+  // never shrinks when switching to a shorter step.
+  useEffect(() => {
+    if (!containerRef.current) return;
+    const h = containerRef.current.offsetHeight;
+    setMinHeight((prev) => (prev === undefined ? h : Math.max(prev, h)));
+  }, [currentStep]);
 
   // Reason: do NOT clear the reload timer on unmount — the timer fires
   // onClose + onReloadPlugin, which must run even if the modal is closed
@@ -320,7 +330,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
   }
 
   return (
-    <div className="tw-flex tw-flex-col tw-gap-6">
+    <div ref={containerRef} className="tw-flex tw-flex-col tw-gap-6" style={{ minHeight }}>
       <div className="tw-flex tw-items-center tw-gap-3 tw-text-normal">
         <ArrowDownToLine className="tw-size-5 tw-text-accent" />
         <h2 className="tw-m-0 tw-text-xl tw-font-bold">Import Configuration</h2>
@@ -454,11 +464,11 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
 
           <div className="tw-flex tw-items-center tw-justify-between">
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={handleBack}
               disabled={isDecrypting}
-              className="tw-gap-2 tw-text-muted"
+              className="tw-gap-1.5"
             >
               <ArrowLeft className="tw-size-4" />
               Back
@@ -520,12 +530,17 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
                   <Settings className="tw-size-3.5" />
                   <span>Settings &amp; API Keys</span>
                 </div>
-                {/* Reason: use decrypted data (not outer stats) for trustworthy counts */}
+                {/* Reason: use decrypted data (not outer stats) for trustworthy counts.
+                    Show target directories so the user knows where files will be written. */}
                 {(cachedVaultFilesRef.current?.customCommands.length ?? 0) > 0 && (
                   <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
                     <Terminal className="tw-size-3.5" />
                     <span>
                       {cachedVaultFilesRef.current!.customCommands.length} Custom Commands
+                      <span className="tw-text-faint">
+                        {" → "}
+                        {cachedSettingsRef.current?.customPromptsFolder || "—"}
+                      </span>
                     </span>
                   </div>
                 )}
@@ -534,6 +549,10 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
                     <MessageSquare className="tw-size-3.5" />
                     <span>
                       {cachedVaultFilesRef.current!.systemPrompts.length} System Prompts
+                      <span className="tw-text-faint">
+                        {" → "}
+                        {cachedSettingsRef.current?.userSystemPromptsFolder || "—"}
+                      </span>
                     </span>
                   </div>
                 )}
@@ -542,7 +561,13 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
                     cachedVaultFilesRef.current.memory.savedMemories != null) && (
                   <div className="tw-flex tw-items-center tw-gap-2 tw-text-xs tw-text-muted">
                     <Brain className="tw-size-3.5" />
-                    <span>Memory Files</span>
+                    <span>
+                      Memory Files
+                      <span className="tw-text-faint">
+                        {" → "}
+                        {cachedSettingsRef.current?.memoryFolderName || "—"}
+                      </span>
+                    </span>
                   </div>
                 )}
               </div>
@@ -568,11 +593,11 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
 
           <div className="tw-flex tw-items-center tw-justify-between">
             <Button
-              variant="ghost"
+              variant="secondary"
               size="sm"
               onClick={handleBack}
               disabled={isImporting}
-              className="tw-gap-2 tw-text-muted"
+              className="tw-gap-1.5"
             >
               <ArrowLeft className="tw-size-4" />
               Back

@@ -134,6 +134,26 @@ export function assertSafeVaultRelativePath(
 }
 
 // ---------------------------------------------------------------------------
+// Export options
+// ---------------------------------------------------------------------------
+
+/** Controls which vault file sections are included in a .copilot export. */
+export interface ExportContentOptions {
+  customCommands: boolean;
+  systemPrompts: boolean;
+  savedMemories: boolean;
+  recentConversations: boolean;
+}
+
+/** Default export options: everything on except recent conversations (privacy). */
+export const DEFAULT_EXPORT_OPTIONS: ExportContentOptions = {
+  customCommands: true,
+  systemPrompts: true,
+  savedMemories: true,
+  recentConversations: false,
+};
+
+// ---------------------------------------------------------------------------
 // Export-side: collect vault files
 // ---------------------------------------------------------------------------
 
@@ -171,23 +191,33 @@ async function readMemoryFile(appInstance: App, filePath: string): Promise<strin
 }
 
 /**
- * Collect all vault files (custom commands, system prompts, memory)
- * from the current settings' configured folders.
+ * Collect vault files based on export options.
+ *
+ * @param appInstance - Obsidian App for vault file access.
+ * @param options - Controls which sections to include. Defaults to all on
+ *   except recent conversations.
  */
-export async function collectAllVaultFiles(appInstance: App): Promise<CollectedVaultFiles> {
+export async function collectAllVaultFiles(
+  appInstance: App,
+  options: ExportContentOptions = DEFAULT_EXPORT_OPTIONS
+): Promise<CollectedVaultFiles> {
   const settings = getSettings();
   const memoryFolder = (settings.memoryFolderName || "").trim();
 
   const [customCommands, systemPrompts, recentConversations, savedMemories] = await Promise.all([
-    collectMdFiles(appInstance, settings.customPromptsFolder),
-    collectMdFiles(appInstance, settings.userSystemPromptsFolder),
+    options.customCommands
+      ? collectMdFiles(appInstance, settings.customPromptsFolder)
+      : Promise.resolve([]),
+    options.systemPrompts
+      ? collectMdFiles(appInstance, settings.userSystemPromptsFolder)
+      : Promise.resolve([]),
     // Reason: skip memory file reads when memoryFolderName is blank — building
     // a path like "/filename.md" from an empty prefix would look up the vault
     // root, which is incorrect.
-    memoryFolder
+    options.recentConversations && memoryFolder
       ? readMemoryFile(appInstance, `${memoryFolder}/${MEMORY_RECENT_CONVERSATIONS_FILENAME}`)
       : Promise.resolve(null),
-    memoryFolder
+    options.savedMemories && memoryFolder
       ? readMemoryFile(appInstance, `${memoryFolder}/${MEMORY_SAVED_MEMORIES_FILENAME}`)
       : Promise.resolve(null),
   ]);
@@ -373,10 +403,14 @@ export async function restoreVaultFiles(
  * in a half-imported state. Processes entries in reverse order so that the
  * earliest write is undone last.
  */
+/**
+ * @returns Paths that could not be rolled back (empty if fully successful).
+ */
 export async function rollbackVaultFiles(
   appInstance: App,
   rollback: RestoreRollbackEntry[]
-): Promise<void> {
+): Promise<string[]> {
+  const failedPaths: string[] = [];
   for (const entry of [...rollback].reverse()) {
     try {
       const existing = appInstance.vault.getAbstractFileByPath(entry.path);
@@ -386,14 +420,20 @@ export async function rollbackVaultFiles(
           await appInstance.vault.delete(existing);
         }
       } else {
-        // File was overwritten — restore original content
-        if (existing && existing instanceof TFile) {
+        // File was overwritten — restore original content.
+        // Reason: recreate if file was deleted before rollback runs,
+        // so the vault returns to its pre-import state.
+        if (existing instanceof TFile) {
           await appInstance.vault.modify(existing, entry.previousContent);
+        } else {
+          await appInstance.vault.create(entry.path, entry.previousContent);
         }
       }
     } catch (error) {
       // Reason: best-effort rollback — log but don't throw so remaining entries are still processed.
       logWarn(`[vaultFiles] Rollback failed for "${entry.path}":`, error);
+      failedPaths.push(entry.path);
     }
   }
+  return failedPaths;
 }

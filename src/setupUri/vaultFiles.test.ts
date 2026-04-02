@@ -25,8 +25,8 @@ jest.mock("@/utils", () => ({
 }));
 
 import { TFile } from "obsidian";
-import { collectAllVaultFiles, restoreVaultFiles } from "./vaultFiles";
-import type { CollectedVaultFiles } from "./vaultFiles";
+import { collectAllVaultFiles, restoreVaultFiles, rollbackVaultFiles } from "./vaultFiles";
+import type { CollectedVaultFiles, ExportContentOptions } from "./vaultFiles";
 import type { CopilotSettings } from "@/settings/model";
 
 /** Create a mock TFile with the given path. */
@@ -88,7 +88,14 @@ describe("collectAllVaultFiles", () => {
       return "";
     });
 
-    const result = await collectAllVaultFiles(mockApp);
+    // Reason: pass all-true options to test full collection.
+    const allOptions = {
+      customCommands: true,
+      systemPrompts: true,
+      savedMemories: true,
+      recentConversations: true,
+    };
+    const result = await collectAllVaultFiles(mockApp, allOptions);
 
     expect(result.customCommands).toHaveLength(1);
     expect(result.customCommands[0].filename).toBe("Summarize.md");
@@ -342,3 +349,138 @@ describe("restoreVaultFiles", () => {
     expect(result.commandsWritten).toBe(1);
   });
 });
+
+describe("collectAllVaultFiles with export options", () => {
+  const mockRead = jest.fn();
+  const mockGetAbstractFileByPath = jest.fn();
+
+  const mockApp = {
+    vault: {
+      read: mockRead,
+      getAbstractFileByPath: mockGetAbstractFileByPath,
+    },
+  } as unknown as import("obsidian").App;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockGetSettings.mockReturnValue({
+      customPromptsFolder: "copilot/custom-prompts",
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    });
+
+    const cmdFile = createMockTFile("copilot/custom-prompts/Summarize.md");
+    const promptFile = createMockTFile("copilot/system-prompts/Code Review.md");
+    const recentFile = createMockTFile("copilot/memory/Recent Conversations.md");
+    const savedFile = createMockTFile("copilot/memory/Saved Memories.md");
+
+    mockListDirectChildMdFiles.mockImplementation((folder: string) => {
+      if (folder === "copilot/custom-prompts") return [cmdFile];
+      if (folder === "copilot/system-prompts") return [promptFile];
+      return [];
+    });
+
+    mockGetAbstractFileByPath.mockImplementation((path: string) => {
+      if (path === "copilot/memory/Recent Conversations.md") return recentFile;
+      if (path === "copilot/memory/Saved Memories.md") return savedFile;
+      return null;
+    });
+
+    mockRead.mockImplementation((file: TFile) => {
+      if (file.path.includes("Summarize")) return "cmd content";
+      if (file.path.includes("Code Review")) return "prompt content";
+      if (file.path.includes("Recent")) return "## Chat 1";
+      if (file.path.includes("Saved")) return "- memory 1";
+      return "";
+    });
+  });
+
+  it("excludes recent conversations when option is false (default)", async () => {
+    const result = await collectAllVaultFiles(mockApp);
+
+    expect(result.customCommands).toHaveLength(1);
+    expect(result.systemPrompts).toHaveLength(1);
+    expect(result.memory.savedMemories).toBe("- memory 1");
+    expect(result.memory.recentConversations).toBeNull();
+  });
+
+  it("excludes unchecked sections", async () => {
+    const options: ExportContentOptions = {
+      customCommands: false,
+      systemPrompts: false,
+      savedMemories: false,
+      recentConversations: false,
+    };
+    const result = await collectAllVaultFiles(mockApp, options);
+
+    expect(result.customCommands).toHaveLength(0);
+    expect(result.systemPrompts).toHaveLength(0);
+    expect(result.memory.recentConversations).toBeNull();
+    expect(result.memory.savedMemories).toBeNull();
+  });
+});
+
+describe("rollbackVaultFiles", () => {
+  const mockCreate = jest.fn().mockResolvedValue(undefined);
+  const mockModify = jest.fn().mockResolvedValue(undefined);
+  const mockDelete = jest.fn().mockResolvedValue(undefined);
+  const mockGetAbstractFileByPath = jest.fn();
+
+  const mockApp = {
+    vault: {
+      create: mockCreate,
+      modify: mockModify,
+      delete: mockDelete,
+      getAbstractFileByPath: mockGetAbstractFileByPath,
+    },
+  } as unknown as import("obsidian").App;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it("restores overwritten files and deletes new files", async () => {
+    const existingFile = createMockTFile("copilot/custom-prompts/Summarize.md");
+    mockGetAbstractFileByPath.mockReturnValue(existingFile);
+
+    const rollback = [
+      { path: "copilot/custom-prompts/Summarize.md", previousContent: "original" },
+      { path: "copilot/custom-prompts/New.md", previousContent: null },
+    ];
+
+    const failed = await rollbackVaultFiles(mockApp, rollback);
+
+    expect(failed).toHaveLength(0);
+    expect(mockModify).toHaveBeenCalledWith(existingFile, "original");
+    expect(mockDelete).toHaveBeenCalledWith(existingFile);
+  });
+
+  it("recreates overwritten files that were deleted before rollback", async () => {
+    mockGetAbstractFileByPath.mockReturnValue(null);
+
+    const rollback = [
+      { path: "copilot/custom-prompts/Gone.md", previousContent: "original content" },
+    ];
+
+    const failed = await rollbackVaultFiles(mockApp, rollback);
+
+    expect(failed).toHaveLength(0);
+    expect(mockCreate).toHaveBeenCalledWith("copilot/custom-prompts/Gone.md", "original content");
+  });
+
+  it("returns failed paths on error", async () => {
+    mockGetAbstractFileByPath.mockImplementation(() => {
+      throw new Error("keychain locked");
+    });
+
+    const rollback = [
+      { path: "copilot/test.md", previousContent: "content" },
+    ];
+
+    const failed = await rollbackVaultFiles(mockApp, rollback);
+
+    expect(failed).toHaveLength(1);
+    expect(failed[0]).toBe("copilot/test.md");
+  });
+});
+
