@@ -314,12 +314,21 @@ export class KeychainMigrationModal extends Modal {
         // Reason: read raw disk data inside the serialized transaction so
         // encrypted disk values are preserved as-is (no secret round-trip).
         const rawDiskData = ((await this.loadDataFn()) ?? {}) as Record<string, unknown>;
-        const diskData = { ...rawDiskData, _migrationModalDismissed: true };
+        // Reason: ensure the 7-day auto-clear timer has a starting point.
+        // Without this, users who chose "Keep for now" but never had
+        // _keychainMigratedAt would never trigger the auto-clear.
+        const diskData = {
+          ...rawDiskData,
+          _migrationModalDismissed: true,
+          _keychainMigratedAt:
+            rawDiskData._keychainMigratedAt ?? new Date().toISOString(),
+        };
         await this.saveDataFn(diskData as unknown as CopilotSettings);
         refreshDiskHasSecrets(diskData as unknown as CopilotSettings);
         const nextSettings = {
           ...getSettings(),
           _migrationModalDismissed: true,
+          _keychainMigratedAt: diskData._keychainMigratedAt,
         } as CopilotSettings;
         refreshLastPersistedSettings(nextSettings);
         // Sync in-memory so shouldShowMigrationModal returns false.
