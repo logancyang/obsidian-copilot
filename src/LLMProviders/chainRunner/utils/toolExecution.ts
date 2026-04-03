@@ -61,15 +61,18 @@ export async function executeSequentialToolCall(
     const registry = ToolRegistry.getInstance();
     const metadata = registry.getToolMetadata(toolCall.name);
 
-    // Check if tool requires Plus subscription
+    // Check if tool requires Plus subscription (bypassed when enableAllFeatures is on)
     if (metadata?.isPlusOnly) {
-      const isPlusUser = await checkIsPlusUser();
-      if (!isPlusUser && !isSelfHostModeValid()) {
-        return {
-          toolName: toolCall.name,
-          result: `Error: ${getToolDisplayName(toolCall.name)} requires a Copilot Plus subscription`,
-          success: false,
-        };
+      const settings = getSettings();
+      if (!settings.enableAllFeatures) {
+        const isPlusUser = await checkIsPlusUser();
+        if (!isPlusUser && !isSelfHostModeValid()) {
+          return {
+            toolName: toolCall.name,
+            result: `Error: ${getToolDisplayName(toolCall.name)} requires a Copilot Plus subscription`,
+            success: false,
+          };
+        }
       }
     }
 

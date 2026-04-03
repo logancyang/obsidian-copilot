@@ -620,12 +620,15 @@ export function registerCommands(
     modal.open();
   });
 
-  // Add command to download YouTube script (Copilot Plus only)
+  // Add command to download YouTube script (Copilot Plus or enableAllFeatures)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
-    const isPlusUser = await checkIsPlusUser();
-    if (!isPlusUser) {
-      new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
-      return;
+    const { getSettings } = await import("@/settings/model");
+    if (!getSettings().enableAllFeatures) {
+      const isPlusUser = await checkIsPlusUser();
+      if (!isPlusUser) {
+        new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
+        return;
+      }
     }
 
     const modal = new YoutubeTranscriptModal(plugin.app);

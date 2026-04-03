@@ -91,11 +91,16 @@ export function isPlusModel(modelKey: string): boolean {
 
 /**
  * Synchronous check if Plus features should be enabled.
- * Returns true when self-host mode is valid OR user has valid Plus subscription.
+ * Returns true when enableAllFeatures is on, self-host mode is valid,
+ * OR user has valid Plus subscription.
  * Use this for synchronous checks (e.g., model validation, UI state).
  */
 export function isPlusEnabled(): boolean {
   const settings = getSettings();
+  // enableAllFeatures bypasses all Plus requirements (use your own API keys)
+  if (settings.enableAllFeatures) {
+    return true;
+  }
   // Self-host mode with valid plan validation bypasses Plus requirements
   if (isSelfHostModeValid()) {
     return true;
@@ -105,10 +110,15 @@ export function isPlusEnabled(): boolean {
 
 /**
  * Hook to get the isPlusUser setting.
- * Returns true when self-host mode is valid to allow offline usage.
+ * Returns true when enableAllFeatures is on, self-host mode is valid,
+ * or user has valid Plus subscription.
  */
 export function useIsPlusUser(): boolean | undefined {
   const settings = useSettingsValue();
+  // enableAllFeatures bypasses all Plus requirements
+  if (settings.enableAllFeatures) {
+    return true;
+  }
   // Self-host mode with valid plan validation bypasses Plus requirements (requires license key)
   if (
     settings.plusLicenseKey &&
@@ -130,9 +140,14 @@ export function useIsPlusUser(): boolean | undefined {
 
 /**
  * Check if the user is a Plus user.
- * When self-host mode is valid, this returns true to allow offline usage.
+ * When enableAllFeatures is on or self-host mode is valid, this returns true.
  */
 export async function checkIsPlusUser(context?: Record<string, any>): Promise<boolean | undefined> {
+  // enableAllFeatures bypasses all Plus requirements
+  if (getSettings().enableAllFeatures) {
+    return true;
+  }
+
   // Self-host mode with valid plan validation bypasses license check
   if (isSelfHostModeValid()) {
     return true;

@@ -6,7 +6,7 @@ import {
 } from "@/LLMProviders/brevilabsClient";
 import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
-import { logError } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 
@@ -49,8 +49,86 @@ export class Mention {
       .filter((url, index, self) => self.indexOf(url) === index);
   }
 
+  /**
+   * Fetch and extract readable content from a URL directly (no API key needed).
+   * Falls back to returning the raw URL if extraction fails.
+   */
+  private async fetchUrlContent(url: string): Promise<Url4llmResponse> {
+    const startTime = Date.now();
+    try {
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (compatible; ObsidianCopilot/1.0)",
+          Accept: "text/html,application/xhtml+xml,text/plain",
+        },
+        signal: AbortSignal.timeout(15000),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      const contentType = response.headers.get("content-type") || "";
+      if (!contentType.includes("text/html") && !contentType.includes("text/plain")) {
+        return {
+          response: `[Non-text content at ${url} (${contentType})]`,
+          elapsed_time_ms: Date.now() - startTime,
+        };
+      }
+
+      const html = await response.text();
+
+      // Basic HTML to text extraction - strip tags, decode entities, clean up
+      const text = html
+        // Remove script and style blocks
+        .replace(/<script[\s\S]*?<\/script>/gi, "")
+        .replace(/<style[\s\S]*?<\/style>/gi, "")
+        // Remove nav, header, footer
+        .replace(/<(nav|header|footer)[\s\S]*?<\/\1>/gi, "")
+        // Convert common block elements to newlines
+        .replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, "\n")
+        .replace(/<br\s*\/?>/gi, "\n")
+        // Strip remaining tags
+        .replace(/<[^>]+>/g, "")
+        // Decode HTML entities
+        .replace(/&amp;/g, "&")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&nbsp;/g, " ")
+        // Clean up whitespace
+        .replace(/[ \t]+/g, " ")
+        .replace(/\n{3,}/g, "\n\n")
+        .trim();
+
+      // Truncate to reasonable size for LLM context
+      const maxLength = 15000;
+      const truncated =
+        text.length > maxLength ? text.substring(0, maxLength) + "\n\n[Content truncated]" : text;
+
+      logInfo(`[fetchUrlContent] extracted ${truncated.length} chars from ${url}`);
+
+      return {
+        response: truncated,
+        elapsed_time_ms: Date.now() - startTime,
+      };
+    } catch (error) {
+      logWarn(`[fetchUrlContent] failed for ${url}:`, error);
+      return {
+        response: url,
+        elapsed_time_ms: Date.now() - startTime,
+      };
+    }
+  }
+
   async processUrl(url: string): Promise<Url4llmResponse & { error?: string }> {
     try {
+      const settings = getSettings();
+      // When enableAllFeatures is on, use direct fetch instead of Brevilabs
+      if (settings.enableAllFeatures) {
+        return await this.fetchUrlContent(url);
+      }
       return await this.brevilabsClient.url4llm(url);
     } catch (error) {
       const msg = err2String(error);
@@ -61,10 +139,30 @@ export class Mention {
 
   async processYoutubeUrl(url: string): Promise<{ transcript: string; error?: string }> {
     try {
-      const response =
-        isSelfHostModeValid() && getSettings().supadataApiKey
-          ? await selfHostYoutube4llm(url)
-          : await this.brevilabsClient.youtube4llm(url);
+      const settings = getSettings();
+
+      if (isSelfHostModeValid() && settings.supadataApiKey) {
+        const response = await selfHostYoutube4llm(url);
+        return { transcript: response.response.transcript };
+      }
+
+      if (settings.enableAllFeatures) {
+        // Import and use the free YouTube transcript extractor
+        try {
+          const { freeYoutubeTranscript } = await import("@/tools/YoutubeTools");
+          const response = await freeYoutubeTranscript(url);
+          return { transcript: response.response.transcript };
+        } catch (freeError) {
+          logWarn(`Free YouTube transcript failed for ${url}:`, freeError);
+          if (settings.supadataApiKey) {
+            const response = await selfHostYoutube4llm(url);
+            return { transcript: response.response.transcript };
+          }
+          throw freeError;
+        }
+      }
+
+      const response = await this.brevilabsClient.youtube4llm(url);
       return { transcript: response.response.transcript };
     } catch (error) {
       const msg = err2String(error);

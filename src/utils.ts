@@ -12,7 +12,7 @@ import {
   USER_SENDER,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { CopilotSettings } from "@/settings/model";
+import { CopilotSettings, getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
@@ -410,6 +410,10 @@ export function isAllowedFileForNoteContext(file: TFile | null): boolean {
  * @returns true if this is a Plus mode chain, false otherwise
  */
 export function isPlusChain(chainType: ChainType): boolean {
+  // When enableAllFeatures is on, treat all chains as Plus-capable
+  if (getSettings().enableAllFeatures) {
+    return true;
+  }
   return chainType === ChainType.COPILOT_PLUS_CHAIN || chainType === ChainType.PROJECT_CHAIN;
 }
 

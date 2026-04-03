@@ -1002,6 +1002,9 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
+  enableAllFeatures: false,
+  searxngUrl: "",
+  enableFreeYoutubeTranscript: true,
 };
 
 export const EVENT_NAMES = {

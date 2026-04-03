@@ -26,10 +26,13 @@ interface FirecrawlSearchResult {
 
 /**
  * Check whether the currently selected self-host search provider has an API key configured.
+ * SearXNG does not require an API key, only a URL.
  */
 export function hasSelfHostSearchKey(): boolean {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
+    case "searxng":
+      return !!settings.searxngUrl;
     case "perplexity":
       return !!settings.perplexityApiKey;
     case "firecrawl":
@@ -120,12 +123,57 @@ async function perplexitySonarSearch(
 }
 
 /**
+ * Web search via SearXNG self-hosted meta search engine.
+ * SearXNG requires no API key - just a running instance URL.
+ */
+async function searxngSearch(query: string, instanceUrl: string): Promise<SelfHostWebSearchResult> {
+  const startTime = Date.now();
+
+  // Normalize URL - strip trailing slash
+  const baseUrl = instanceUrl.replace(/\/+$/, "");
+  const searchUrl = `${baseUrl}/search?q=${encodeURIComponent(query)}&format=json&categories=general&language=en`;
+
+  const response = await fetch(searchUrl, {
+    method: "GET",
+    headers: { Accept: "application/json" },
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`SearXNG search failed (${response.status}): ${text}`);
+  }
+
+  const json = await response.json();
+  const results = Array.isArray(json?.results) ? json.results.slice(0, 10) : [];
+
+  const contentParts: string[] = [];
+  const citations: string[] = [];
+
+  for (const item of results) {
+    const title = item.title || "Untitled";
+    const content = item.content || "";
+    const url = item.url || "";
+    contentParts.push(`### ${title}\n${content}\nSource: ${url}`);
+    if (url) {
+      citations.push(url);
+    }
+  }
+
+  const elapsed = Date.now() - startTime;
+  logInfo(`[selfHostWebSearch] SearXNG: ${results.length} results in ${elapsed}ms`);
+
+  return { content: contentParts.join("\n\n"), citations };
+}
+
+/**
  * Dispatch self-host web search to the provider selected in settings.
  * Returns content + citations directly without the legacy Perplexity wrapper.
  */
 export async function selfHostWebSearch(query: string): Promise<SelfHostWebSearchResult> {
   const settings = getSettings();
   switch (settings.selfHostSearchProvider) {
+    case "searxng":
+      return searxngSearch(query, settings.searxngUrl);
     case "perplexity":
       return perplexitySonarSearch(query, await getDecryptedKey(settings.perplexityApiKey));
     case "firecrawl":

@@ -4,6 +4,7 @@ import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { isPlusEnabled } from "@/plusUtils";
 import { err2String, safeFetch } from "@/utils";
 import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -148,7 +149,7 @@ export default class EmbeddingManager {
     const customModel = this.getCustomModel(embeddingModelKey);
 
     // Check if model is plus-exclusive but user is not a plus user
-    if (customModel.plusExclusive && !getSettings().isPlusUser) {
+    if (customModel.plusExclusive && !isPlusEnabled()) {
       new Notice("Plus-only model, please consider upgrading to Plus to access it.");
       throw new CustomError("Plus-only model selected but user is not on Plus plan");
     }

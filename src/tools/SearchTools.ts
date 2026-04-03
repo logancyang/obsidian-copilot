@@ -566,7 +566,9 @@ const webSearchTool = createLangChainTool({
       let webContent: string;
       let citations: string[];
 
-      if (isSelfHostModeValid() && hasSelfHostSearchKey()) {
+      const settings = getSettings();
+      // Use self-host search providers when enableAllFeatures is on or self-host mode is valid
+      if ((settings.enableAllFeatures || isSelfHostModeValid()) && hasSelfHostSearchKey()) {
         const result = await selfHostWebSearch(standaloneQuestion);
         webContent = result.content;
         citations = result.citations;

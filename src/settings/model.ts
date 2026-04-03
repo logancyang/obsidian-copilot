@@ -144,7 +144,7 @@ export interface CopilotSettings {
   /** @deprecated Miyo now uses the current vault path as `folder_path`; preserved only for backwards-compatible settings migration. */
   miyoRemoteVaultPath: string;
   /** Which provider to use for self-host web search */
-  selfHostSearchProvider: "firecrawl" | "perplexity";
+  selfHostSearchProvider: "firecrawl" | "perplexity" | "searxng";
   /** Firecrawl API key for self-host web search */
   firecrawlApiKey: string;
   /** Perplexity API key for self-host web search via Sonar */
@@ -199,6 +199,12 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
+  /** Enable all Plus features without a license key (use your own API keys) */
+  enableAllFeatures: boolean;
+  /** SearXNG instance URL for self-hosted web search (e.g. http://localhost:8080) */
+  searxngUrl: string;
+  /** Enable free YouTube transcript extraction without API key */
+  enableFreeYoutubeTranscript: boolean;
 }
 
 export const settingsStore = createStore();

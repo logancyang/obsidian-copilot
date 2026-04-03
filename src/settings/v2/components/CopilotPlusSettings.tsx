@@ -94,11 +94,105 @@ export const CopilotPlusSettings: React.FC = () => {
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       <section className="tw-flex tw-flex-col tw-gap-4">
-        <div className="tw-flex tw-items-center tw-py-4">
-          <Badge variant="secondary" className="tw-text-accent">
-            Plus Required
-          </Badge>
+        <div className="tw-flex tw-flex-col tw-gap-4">
+          <div className="tw-pt-4 tw-text-xl tw-font-semibold">Unlock All Features</div>
+
+          <SettingItem
+            type="switch"
+            title="Enable All Features (Use Own API Keys)"
+            description="Unlock all Plus features (agent mode, tools, web search, YouTube transcription, memory, file processing) using your own API keys instead of a Plus license."
+            checked={settings.enableAllFeatures}
+            onCheckedChange={(checked) => {
+              updateSetting("enableAllFeatures", checked);
+            }}
+          />
+
+          {settings.enableAllFeatures && (
+            <>
+              <div className="tw-pt-2 tw-text-lg tw-font-semibold">Web Search (SearXNG)</div>
+
+              <SettingItem
+                type="select"
+                title="Web Search Provider"
+                description="Choose which service to use for web search."
+                value={settings.selfHostSearchProvider}
+                onChange={(value) =>
+                  updateSetting(
+                    "selfHostSearchProvider",
+                    value as "firecrawl" | "perplexity" | "searxng"
+                  )
+                }
+                options={[
+                  { label: "SearXNG (self-hosted, free)", value: "searxng" },
+                  { label: "Firecrawl", value: "firecrawl" },
+                  { label: "Perplexity Sonar", value: "perplexity" },
+                ]}
+              />
+
+              {settings.selfHostSearchProvider === "searxng" && (
+                <SettingItem
+                  type="text"
+                  title="SearXNG Instance URL"
+                  description="URL of your SearXNG instance. No API key required."
+                  value={settings.searxngUrl}
+                  onChange={(value) => updateSetting("searxngUrl", value)}
+                  placeholder="http://localhost:8080"
+                />
+              )}
+
+              {settings.selfHostSearchProvider === "firecrawl" && (
+                <SettingItem
+                  type="password"
+                  title="Firecrawl API Key"
+                  description="API key for web search via Firecrawl."
+                  value={settings.firecrawlApiKey}
+                  onChange={(value) => updateSetting("firecrawlApiKey", value)}
+                  placeholder="fc-..."
+                />
+              )}
+
+              {settings.selfHostSearchProvider === "perplexity" && (
+                <SettingItem
+                  type="password"
+                  title="Perplexity API Key"
+                  description="API key for web search via Perplexity Sonar."
+                  value={settings.perplexityApiKey}
+                  onChange={(value) => updateSetting("perplexityApiKey", value)}
+                  placeholder="pplx-..."
+                />
+              )}
+
+              <div className="tw-pt-2 tw-text-lg tw-font-semibold">YouTube Transcription</div>
+
+              <SettingItem
+                type="switch"
+                title="Free YouTube Transcript Extraction"
+                description="Extract YouTube transcripts without an API key. Falls back to Supadata if configured."
+                checked={settings.enableFreeYoutubeTranscript}
+                onCheckedChange={(checked) => {
+                  updateSetting("enableFreeYoutubeTranscript", checked);
+                }}
+              />
+
+              <SettingItem
+                type="password"
+                title="Supadata API Key (Optional Fallback)"
+                description="Optional API key for YouTube transcripts via Supadata. Used as fallback when free extraction fails."
+                value={settings.supadataApiKey}
+                onChange={(value) => updateSetting("supadataApiKey", value)}
+                placeholder="sd-..."
+              />
+            </>
+          )}
         </div>
+
+        {!settings.enableAllFeatures && (
+          <div className="tw-flex tw-items-center tw-py-4">
+            <Badge variant="secondary" className="tw-text-accent">
+              Plus Required
+            </Badge>
+          </div>
+        )}
         <div className="tw-flex tw-flex-col tw-gap-4">
           <div className="tw-pt-4 tw-text-xl tw-font-semibold">Autonomous Agent</div>
 
@@ -262,13 +356,28 @@ export const CopilotPlusSettings: React.FC = () => {
                     description="Choose which service to use for self-host web search."
                     value={settings.selfHostSearchProvider}
                     onChange={(value) =>
-                      updateSetting("selfHostSearchProvider", value as "firecrawl" | "perplexity")
+                      updateSetting(
+                        "selfHostSearchProvider",
+                        value as "firecrawl" | "perplexity" | "searxng"
+                      )
                     }
                     options={[
                       { label: "Firecrawl (default)", value: "firecrawl" },
                       { label: "Perplexity Sonar", value: "perplexity" },
+                      { label: "SearXNG (self-hosted)", value: "searxng" },
                     ]}
                   />
+
+                  {settings.selfHostSearchProvider === "searxng" && (
+                    <SettingItem
+                      type="text"
+                      title="SearXNG Instance URL"
+                      description="URL of your SearXNG instance. No API key required."
+                      value={settings.searxngUrl}
+                      onChange={(value) => updateSetting("searxngUrl", value)}
+                      placeholder="http://localhost:8080"
+                    />
+                  )}
 
                   {settings.selfHostSearchProvider === "firecrawl" && (
                     <SettingItem
