@@ -8,7 +8,6 @@ import {
   FileDown,
   Settings,
   Terminal,
-  MessageSquare,
   Brain,
   Lock,
   FileText,
@@ -26,6 +25,8 @@ import {
   type ExportContentOptions,
   DEFAULT_EXPORT_OPTIONS,
 } from "@/configTransfer/vaultFiles";
+import { COPILOT_FOLDER_ROOT } from "@/constants";
+import { ensureFolderExists } from "@/utils";
 
 const MIN_PASSPHRASE_LENGTH = MIN_CONFIG_PASSPHRASE_LENGTH;
 const RECOMMENDED_PASSPHRASE_LENGTH = 12;
@@ -50,13 +51,13 @@ function getDefaultFilename(): string {
   const time = [now.getHours(), now.getMinutes(), now.getSeconds()]
     .map((v) => String(v).padStart(2, "0"))
     .join("");
-  return `copilot-config-${date}-${time}.copilot`;
+  return `copilot-config-${date}-${time}.md`;
 }
 
 /**
  * 2-step export flow rendered inside an Obsidian Modal.
  * Step 0: Set encryption password with confirmation.
- * Step 1: Select content & export configuration to a .copilot file.
+ * Step 1: Select content & export configuration to a .md file in copilot/ directory.
  */
 export const ExportStepperContent: React.FC<ExportStepperContentProps> = ({
   app: appInstance,
@@ -118,15 +119,23 @@ export const ExportStepperContent: React.FC<ExportStepperContentProps> = ({
     setExportOptions((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  /** Generate and write the .copilot file to the vault root. */
+  /** Generate and write the config file to the copilot/ directory. */
   const handleExport = async () => {
     const rawName = filename.trim();
     if (!rawName) return;
 
-    // Reason: import auto-discovery only scans the vault root. Enforce
-    // filename-only input so the export location matches the import scan.
+    // Reason: enforce filename-only input so the export location stays
+    // within the copilot/ directory consistently.
     if (rawName.includes("/") || rawName.includes("\\")) {
-      new Notice("Please enter a file name only. Export files are saved to the vault root.");
+      new Notice("Please enter a file name only (no path separators).");
+      return;
+    }
+
+    // Reason: import auto-discovery matches copilot-config-*.md. Enforce
+    // this prefix so exported files are always discoverable during import.
+    const baseName = rawName.replace(/\.md$/i, "");
+    if (!baseName.startsWith("copilot-config-")) {
+      new Notice('File name must start with "copilot-config-".');
       return;
     }
 
@@ -138,7 +147,9 @@ export const ExportStepperContent: React.FC<ExportStepperContentProps> = ({
         pluginVersion,
         exportOptions
       );
-      const targetPath = rawName.endsWith(".copilot") ? rawName : `${rawName}.copilot`;
+      const safeName = /\.md$/i.test(rawName) ? rawName : `${rawName}.md`;
+      await ensureFolderExists(COPILOT_FOLDER_ROOT);
+      const targetPath = `${COPILOT_FOLDER_ROOT}/${safeName}`;
 
       // Reason: if the file already exists (e.g., re-export), overwrite it
       // instead of failing with a "file exists" error.
@@ -271,32 +282,20 @@ export const ExportStepperContent: React.FC<ExportStepperContentProps> = ({
                 <span className="tw-flex-1">System Prompts</span>
               </label>
 
-              {/* Saved Memories */}
-              <label className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-text-muted hover:tw-text-normal">
-                <input
-                  type="checkbox"
-                  checked={exportOptions.savedMemories}
-                  onChange={() => toggleOption("savedMemories")}
-                  className="tw-size-3.5 tw-cursor-pointer"
-                />
-                <Brain className="tw-size-3.5" />
-                <span className="tw-flex-1">Saved Memories</span>
-              </label>
-
-              {/* Recent Conversations — default off, privacy hint */}
+              {/* Memory (Saved Memories + Conversation Summaries) */}
               <div className="tw-flex tw-flex-col tw-gap-0.5">
                 <label className="tw-flex tw-cursor-pointer tw-items-center tw-gap-2 tw-text-muted hover:tw-text-normal">
                   <input
                     type="checkbox"
-                    checked={exportOptions.recentConversations}
-                    onChange={() => toggleOption("recentConversations")}
+                    checked={exportOptions.memory}
+                    onChange={() => toggleOption("memory")}
                     className="tw-size-3.5 tw-cursor-pointer"
                   />
-                  <MessageSquare className="tw-size-3.5" />
-                  <span className="tw-flex-1">Recent Conversations</span>
+                  <Brain className="tw-size-3.5" />
+                  <span className="tw-flex-1">Memory</span>
                 </label>
                 <span className="tw-pl-[22px] tw-text-[11px] tw-leading-tight tw-text-faint">
-                  May contain sensitive personal data. Export with caution.
+                  Includes saved memories and conversation summaries. May contain personal data.
                 </span>
               </div>
             </div>
@@ -307,10 +306,10 @@ export const ExportStepperContent: React.FC<ExportStepperContentProps> = ({
             <Input
               value={filename}
               onChange={(e) => setFilename(e.target.value)}
-              placeholder="copilot-config.copilot"
+              placeholder="copilot-config.md"
             />
             <span className="tw-text-xs tw-text-muted">
-              File will be saved to the vault root directory.
+              File will be saved to the copilot/ directory.
             </span>
           </div>
 

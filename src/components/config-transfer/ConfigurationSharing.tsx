@@ -39,8 +39,8 @@ export const ConfigurationSharing: React.FC = () => {
       <div className="tw-flex tw-flex-col tw-gap-1">
         <div className="tw-text-xl tw-font-bold">Configuration Sharing</div>
         <div className="tw-text-xs tw-leading-relaxed tw-text-muted">
-          Transfer your full Copilot configuration (settings, API keys, custom commands, system
-          prompts, and memories) between vaults using an encrypted .copilot file.
+          Transfer your Copilot configuration (settings, API keys, custom commands, and system
+          prompts) between vaults using an encrypted configuration file.
         </div>
       </div>
 
@@ -76,7 +76,7 @@ export const ConfigurationSharing: React.FC = () => {
           <div className="tw-min-w-0">
             <div className="tw-text-sm tw-font-medium tw-text-normal">Import Configuration</div>
             <div className="tw-truncate tw-text-xs tw-text-muted">
-              Restore settings and files from a .copilot configuration file.
+              Restore settings and files from a configuration file.
             </div>
           </div>
         </div>

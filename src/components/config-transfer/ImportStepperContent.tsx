@@ -32,7 +32,7 @@ import type { CopilotSettings } from "@/settings/model";
 
 const IMPORT_STEPS = [{ label: "Select File" }, { label: "Password" }, { label: "Confirm" }];
 
-/** A .copilot file detected in the vault. */
+/** A config .md file detected in the vault. */
 interface VaultConfigFile {
   name: string;
   path: string;
@@ -57,12 +57,12 @@ interface ImportStepperContentProps {
 
 /**
  * 3-step import flow rendered inside an Obsidian Modal.
- * Step 0: Select .copilot file (auto-detect from vault or upload from disk).
+ * Step 0: Select config file (auto-detect from vault or upload from disk).
  * Step 1: Enter decryption password.
  * Step 2: Confirm destructive overwrite, then import.
  */
 
-/** Maximum file size for .copilot files (15 MB). Prevents OOM before crypto checks. */
+/** Maximum file size for config files (15 MB). Prevents OOM before crypto checks. */
 const MAX_CONFIG_FILE_SIZE = 15 * 1024 * 1024;
 export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
   app: appInstance,
@@ -112,22 +112,6 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
     };
   }, []);
 
-  // Scan vault root for .copilot files on mount
-  useEffect(() => {
-    const files = appInstance.vault
-      .getFiles()
-      .filter((f) => f.extension === "copilot" && !f.path.includes("/"))
-      .map((f) => ({
-        name: f.name,
-        path: f.path,
-        size: f.stat.size,
-        mtime: f.stat.mtime,
-      }))
-      .sort((a, b) => b.mtime - a.mtime);
-
-    setVaultFiles(files);
-  }, [appInstance]);
-
   /** Reset file selection state (used before each new file attempt). */
   const clearFileSelection = useCallback(() => {
     setParsedWrapper(null);
@@ -135,7 +119,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
     setErrorMessage("");
   }, []);
 
-  /** Handle selecting a .copilot file from the vault. */
+  /** Handle selecting a config file from the vault. */
   const handleSelectVaultFile = useCallback(
     async (file: VaultConfigFile) => {
       clearFileSelection();
@@ -161,6 +145,32 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
     },
     [appInstance, clearFileSelection]
   );
+
+  // Scan entire vault for copilot-config-*.md files on mount, auto-select the most recent
+  useEffect(() => {
+    const files = appInstance.vault
+      .getFiles()
+      .filter(
+        (f) =>
+          f.extension === "md" &&
+          f.name.startsWith("copilot-config-")
+      )
+      .map((f) => ({
+        name: f.name,
+        path: f.path,
+        size: f.stat.size,
+        mtime: f.stat.mtime,
+      }))
+      .sort((a, b) => b.mtime - a.mtime);
+
+    setVaultFiles(files);
+
+    // Reason: auto-select the most recent file (first in mtime-desc order) so
+    // the user sees an immediate preview and can advance without extra clicks.
+    if (files.length >= 1) {
+      handleSelectVaultFile(files[0]);
+    }
+  }, [appInstance, handleSelectVaultFile]);
 
   /** Handle file upload from disk. */
   const handleFileUpload = useCallback(
@@ -337,7 +347,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
       </div>
 
       <div className="tw-text-sm tw-leading-relaxed tw-text-muted">
-        Select a .copilot configuration file and enter the password to import.
+        Select a configuration file and enter the password to import.
       </div>
 
       <StepIndicator steps={IMPORT_STEPS} currentStep={currentStep} />
@@ -356,7 +366,16 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
           {/* Vault files list */}
           {vaultFiles.length > 0 && (
             <div className="tw-flex tw-flex-col tw-gap-2">
-              <Label>Found in vault</Label>
+              <div className="tw-flex tw-items-center tw-justify-between">
+                <Label>
+                  {vaultFiles.length > 1 ? "Found in vault (select one)" : "Found in vault"}
+                </Label>
+                {vaultFiles.length > 1 && !selectedFileName && (
+                  <span className="tw-text-xs tw-font-medium tw-text-accent">
+                    Please select a file to import
+                  </span>
+                )}
+              </div>
               {vaultFiles.map((file) => (
                 <button
                   key={file.path}
@@ -390,12 +409,12 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
               className="tw-flex tw-cursor-pointer tw-flex-col tw-items-center tw-justify-center tw-gap-2 tw-rounded-lg tw-border tw-border-dashed tw-border-border tw-bg-transparent tw-p-6 tw-text-muted tw-transition-colors hover:tw-border-interactive-accent hover:tw-bg-modifier-hover"
             >
               <FileUp className="tw-size-6" />
-              <span className="tw-text-xs">Click to browse for a .copilot file</span>
+              <span className="tw-text-xs">Click to browse for a configuration file</span>
             </button>
             <input
               ref={fileInputRef}
               type="file"
-              accept=".copilot"
+              accept=".md"
               onChange={handleFileUpload}
               className="tw-hidden"
             />

@@ -130,6 +130,16 @@ export class ConfigImportModal extends Modal {
       merged._diskSecretsCleared = false;
     } else if (localRec._diskSecretsCleared != null) {
       merged._diskSecretsCleared = localRec._diskSecretsCleared;
+    } else {
+      // Reason: fresh vault + keychain available → imported secrets go straight
+      // to keychain via persistSettings(). Mark disk as cleared so the migration
+      // modal is never shown and no 7-day countdown starts.
+      // Guard: only treat as fresh if no migration markers exist. Old vaults
+      // that predate _diskSecretsCleared will have _keychainMigratedAt or
+      // _migrationModalDismissed set by earlier load cycles.
+      const isFreshVault =
+        localRec._keychainMigratedAt == null && localRec._migrationModalDismissed == null;
+      merged._diskSecretsCleared = isFreshVault;
     }
 
     // Reason: when disk secrets are not yet cleared, importing introduces new

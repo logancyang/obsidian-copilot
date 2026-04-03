@@ -712,9 +712,16 @@ export class KeychainService {
       .filter((m) => !currentIds.has(getModelKeyFromModel(m)))
       .flatMap((m) => {
         const identity = getModelKeyFromModel(m);
-        return MODEL_SECRET_FIELDS.map((field) =>
-          toModelKeychainId(this.vaultId, scope, identity, field)
-        );
+        // Reason: only tombstone models that actually had a secret value.
+        // Without this guard, importing to a fresh vault creates spurious
+        // tombstones for default models that never had an API key.
+        return MODEL_SECRET_FIELDS.flatMap((field) => {
+          const prevValue = (m as unknown as Record<string, unknown>)[field];
+          if (typeof prevValue !== "string" || prevValue.length === 0) {
+            return [];
+          }
+          return [toModelKeychainId(this.vaultId, scope, identity, field)];
+        });
       });
   }
 }

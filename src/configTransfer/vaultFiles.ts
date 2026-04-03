@@ -137,20 +137,19 @@ export function assertSafeVaultRelativePath(
 // Export options
 // ---------------------------------------------------------------------------
 
-/** Controls which vault file sections are included in a .copilot export. */
+/** Controls which vault file sections are included in a config export. */
 export interface ExportContentOptions {
   customCommands: boolean;
   systemPrompts: boolean;
-  savedMemories: boolean;
-  recentConversations: boolean;
+  /** Export both Saved Memories and Conversation Summaries from the memory folder. */
+  memory: boolean;
 }
 
-/** Default export options: everything on except recent conversations (privacy). */
+/** Default export options: memory off by default (contains conversation summaries). */
 export const DEFAULT_EXPORT_OPTIONS: ExportContentOptions = {
   customCommands: true,
   systemPrompts: true,
-  savedMemories: true,
-  recentConversations: false,
+  memory: false,
 };
 
 // ---------------------------------------------------------------------------
@@ -214,10 +213,10 @@ export async function collectAllVaultFiles(
     // Reason: skip memory file reads when memoryFolderName is blank — building
     // a path like "/filename.md" from an empty prefix would look up the vault
     // root, which is incorrect.
-    options.recentConversations && memoryFolder
+    options.memory && memoryFolder
       ? readMemoryFile(appInstance, `${memoryFolder}/${MEMORY_RECENT_CONVERSATIONS_FILENAME}`)
       : Promise.resolve(null),
-    options.savedMemories && memoryFolder
+    options.memory && memoryFolder
       ? readMemoryFile(appInstance, `${memoryFolder}/${MEMORY_SAVED_MEMORIES_FILENAME}`)
       : Promise.resolve(null),
   ]);

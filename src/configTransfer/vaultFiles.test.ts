@@ -92,8 +92,7 @@ describe("collectAllVaultFiles", () => {
     const allOptions = {
       customCommands: true,
       systemPrompts: true,
-      savedMemories: true,
-      recentConversations: true,
+      memory: true,
     };
     const result = await collectAllVaultFiles(mockApp, allOptions);
 
@@ -395,12 +394,12 @@ describe("collectAllVaultFiles with export options", () => {
     });
   });
 
-  it("excludes recent conversations when option is false (default)", async () => {
+  it("excludes memory files by default (privacy)", async () => {
     const result = await collectAllVaultFiles(mockApp);
 
     expect(result.customCommands).toHaveLength(1);
     expect(result.systemPrompts).toHaveLength(1);
-    expect(result.memory.savedMemories).toBe("- memory 1");
+    expect(result.memory.savedMemories).toBeNull();
     expect(result.memory.recentConversations).toBeNull();
   });
 
@@ -408,8 +407,7 @@ describe("collectAllVaultFiles with export options", () => {
     const options: ExportContentOptions = {
       customCommands: false,
       systemPrompts: false,
-      savedMemories: false,
-      recentConversations: false,
+      memory: false,
     };
     const result = await collectAllVaultFiles(mockApp, options);
 
