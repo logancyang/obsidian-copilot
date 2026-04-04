@@ -159,7 +159,7 @@ export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
 export const LLM_TIMEOUT_MS = 30000; // 30 seconds timeout for LLM operations
 export const DEFAULT_MAX_SOURCE_CHUNKS = 30; // Default max chunks for search results (with diverse top-K)
 export const AGENT_LOOP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for agent loop
-export const AGENT_MAX_ITERATIONS_LIMIT = 16; // Maximum allowed value for agent iterations setting
+export const AGENT_MAX_ITERATIONS_LIMIT = 32; // Maximum allowed value for agent iterations setting
 export const LOADING_MESSAGES = {
   DEFAULT: "",
   READING_FILES: "Reading files",
@@ -1010,7 +1010,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   supadataApiKey: "",
   enableLexicalBoosts: true,
   suggestedDefaultCommands: false,
-  autonomousAgentMaxIterations: 4,
+  autonomousAgentMaxIterations: 8,
   autonomousAgentEnabledToolIds: [
     "localSearch",
     "readNote",

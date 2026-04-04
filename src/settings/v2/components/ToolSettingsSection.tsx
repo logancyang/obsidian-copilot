@@ -106,7 +106,7 @@ export const ToolSettingsSection: React.FC = () => {
         type="slider"
         title="Max Iterations"
         description="Maximum number of reasoning iterations the autonomous agent can perform. Higher values allow for more complex reasoning but may take longer."
-        value={settings.autonomousAgentMaxIterations ?? 4}
+        value={settings.autonomousAgentMaxIterations ?? 8}
         onChange={(value) => {
           updateSetting("autonomousAgentMaxIterations", value);
         }}
