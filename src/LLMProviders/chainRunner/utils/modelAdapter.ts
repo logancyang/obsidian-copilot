@@ -1,5 +1,6 @@
 import { logInfo } from "@/logger";
 import { ToolMetadata } from "@/tools/ToolRegistry";
+import { getModelInfo } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 /**
@@ -400,18 +401,11 @@ For editFile, pass the exact text to find and its replacement:
  */
 class ClaudeModelAdapter extends BaseModelAdapter {
   /**
-   * Check if this is a Claude thinking model (3.7 Sonnet or Claude 4+)
-   * @returns True if the model supports thinking/reasoning modes
+   * Check if this is a Claude thinking model (3.7 Sonnet or Claude 4+).
+   * Delegates to getModelInfo() to avoid duplicating detection logic.
    */
   private isThinkingModel(): boolean {
-    return (
-      this.modelName.includes("claude-3-7-sonnet") ||
-      this.modelName.includes("claude-3.7-sonnet") ||
-      /claude-sonnet-[4-9]/.test(this.modelName) ||
-      /claude-opus-[4-9]/.test(this.modelName) ||
-      /claude-[4-9]-sonnet/.test(this.modelName) ||
-      /claude-[4-9]-opus/.test(this.modelName)
-    );
+    return getModelInfo(this.modelName).isThinkingEnabled;
   }
 
   /**

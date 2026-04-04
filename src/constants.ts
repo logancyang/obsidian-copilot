@@ -1039,7 +1039,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
   enableAllFeatures: false,
   searxngUrl: "",
-  enableFreeYoutubeTranscript: true,
   anthropicThinkingBudget: 10000,
 };
 

@@ -2,6 +2,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
+import { CopilotSettings } from "@/settings/model";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getMiyoFolderPath } from "@/miyo/miyoUtils";
@@ -119,7 +120,7 @@ export const CopilotPlusSettings: React.FC = () => {
                 onChange={(value) =>
                   updateSetting(
                     "selfHostSearchProvider",
-                    value as "firecrawl" | "perplexity" | "searxng"
+                    value as CopilotSettings["selfHostSearchProvider"]
                   )
                 }
                 options={[
@@ -165,19 +166,9 @@ export const CopilotPlusSettings: React.FC = () => {
               <div className="tw-pt-2 tw-text-lg tw-font-semibold">YouTube Transcription</div>
 
               <SettingItem
-                type="switch"
-                title="Free YouTube Transcript Extraction"
-                description="Extract YouTube transcripts without an API key. Falls back to Supadata if configured."
-                checked={settings.enableFreeYoutubeTranscript}
-                onCheckedChange={(checked) => {
-                  updateSetting("enableFreeYoutubeTranscript", checked);
-                }}
-              />
-
-              <SettingItem
                 type="password"
-                title="Supadata API Key (Optional Fallback)"
-                description="Optional API key for YouTube transcripts via Supadata. Used as fallback when free extraction fails."
+                title="Supadata API Key (Optional)"
+                description="Optional API key for YouTube transcripts via Supadata. When empty, free transcript extraction is used automatically."
                 value={settings.supadataApiKey}
                 onChange={(value) => updateSetting("supadataApiKey", value)}
                 placeholder="sd-..."
@@ -371,7 +362,7 @@ export const CopilotPlusSettings: React.FC = () => {
                     onChange={(value) =>
                       updateSetting(
                         "selfHostSearchProvider",
-                        value as "firecrawl" | "perplexity" | "searxng"
+                        value as CopilotSettings["selfHostSearchProvider"]
                       )
                     }
                     options={[

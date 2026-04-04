@@ -1,9 +1,10 @@
 import { type Youtube4llmResponse, BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
+import { unescapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { logInfo, logWarn } from "@/logger";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { extractAllYoutubeUrls } from "@/utils";
+import { extractAllYoutubeUrls, extractYoutubeVideoId } from "@/utils";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 
@@ -11,29 +12,12 @@ import { createLangChainTool } from "./createLangChainTool";
 const MAX_USER_MESSAGE_LENGTH = 50000; // Maximum number of characters
 
 /**
- * Extract YouTube video ID from a URL.
- */
-function extractVideoId(url: string): string | null {
-  const patterns = [
-    /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
-    /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-    /(?:youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/,
-  ];
-  for (const pattern of patterns) {
-    const match = url.match(pattern);
-    if (match) return match[1];
-  }
-  return null;
-}
-
-/**
  * Free YouTube transcript extraction using YouTube's innertube API.
  * No API key required - fetches captions directly from YouTube.
  */
 async function freeYoutubeTranscript(url: string): Promise<Youtube4llmResponse> {
   const startTime = Date.now();
-  const videoId = extractVideoId(url);
+  const videoId = extractYoutubeVideoId(url);
   if (!videoId) {
     throw new Error(`Could not extract video ID from URL: ${url}`);
   }
@@ -97,15 +81,7 @@ async function freeYoutubeTranscript(url: string): Promise<Youtube4llmResponse> 
   const textRegex = /<text[^>]*>([\s\S]*?)<\/text>/g;
   let match;
   while ((match = textRegex.exec(xml)) !== null) {
-    // Decode HTML entities
-    const decoded = match[1]
-      .replace(/&amp;/g, "&")
-      .replace(/&lt;/g, "<")
-      .replace(/&gt;/g, ">")
-      .replace(/&quot;/g, '"')
-      .replace(/&#39;/g, "'")
-      .replace(/\n/g, " ")
-      .trim();
+    const decoded = unescapeXml(match[1]).replace(/&#39;/g, "'").replace(/\n/g, " ").trim();
     if (decoded) {
       textSegments.push(decoded);
     }
@@ -121,6 +97,35 @@ async function freeYoutubeTranscript(url: string): Promise<Youtube4llmResponse> 
     response: { transcript },
     elapsed_time_ms: elapsed,
   };
+}
+
+/**
+ * Resolve a YouTube transcript using the best available provider.
+ * Priority: self-host (Supadata) → free extraction → Brevilabs (Plus)
+ */
+async function resolveYoutubeTranscript(url: string): Promise<Youtube4llmResponse> {
+  const settings = getSettings();
+
+  // Self-host mode with Supadata API key
+  if (isSelfHostModeValid() && settings.supadataApiKey) {
+    return await selfHostYoutube4llm(url);
+  }
+
+  // enableAllFeatures: try free extraction, fall back to Supadata if configured
+  if (settings.enableAllFeatures) {
+    try {
+      return await freeYoutubeTranscript(url);
+    } catch (freeError) {
+      logWarn(`Free YouTube transcript failed for ${url}, trying fallback:`, freeError);
+      if (settings.supadataApiKey) {
+        return await selfHostYoutube4llm(url);
+      }
+      throw freeError;
+    }
+  }
+
+  // Default: use Brevilabs (requires Plus)
+  return await BrevilabsClient.getInstance().youtube4llm(url);
 }
 
 interface YouTubeHandlerArgs {
@@ -170,31 +175,7 @@ const youtubeTranscriptionTool = createLangChainTool({
     const results = await Promise.all(
       urls.map(async (url) => {
         try {
-          const settings = getSettings();
-          let response: Youtube4llmResponse;
-
-          if (isSelfHostModeValid() && settings.supadataApiKey) {
-            // Self-host mode with Supadata API key
-            response = await selfHostYoutube4llm(url);
-          } else if (settings.enableAllFeatures && settings.enableFreeYoutubeTranscript) {
-            // Free extraction mode - try free method first, fall back to Supadata if configured
-            try {
-              response = await freeYoutubeTranscript(url);
-            } catch (freeError) {
-              logWarn(`Free YouTube transcript failed for ${url}, trying fallback:`, freeError);
-              if (settings.supadataApiKey) {
-                response = await selfHostYoutube4llm(url);
-              } else {
-                throw freeError;
-              }
-            }
-          } else if (settings.enableAllFeatures && settings.supadataApiKey) {
-            // enableAllFeatures with Supadata key configured
-            response = await selfHostYoutube4llm(url);
-          } else {
-            // Default: use Brevilabs (requires Plus)
-            response = await BrevilabsClient.getInstance().youtube4llm(url);
-          }
+          const response = await resolveYoutubeTranscript(url);
 
           // Check if transcript is empty
           if (!response.response.transcript) {
@@ -234,4 +215,4 @@ const youtubeTranscriptionTool = createLangChainTool({
   },
 });
 
-export { freeYoutubeTranscript, youtubeTranscriptionTool };
+export { freeYoutubeTranscript, resolveYoutubeTranscript, youtubeTranscriptionTool };

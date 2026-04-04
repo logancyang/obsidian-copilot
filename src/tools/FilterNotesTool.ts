@@ -39,7 +39,11 @@ const filterNotesTool = createLangChainTool({
       .describe(
         "Sort results by: modified (newest first), created (newest first), or name (alphabetical)"
       ),
-    limit: z.number().optional().describe("Maximum number of results to return (default: 50)"),
+    limit: z
+      .number()
+      .max(200)
+      .optional()
+      .describe("Maximum number of results to return (default: 50, max: 200)"),
   }),
   func: async ({ folder, tags, extension, modifiedAfter, modifiedBefore, sortBy, limit }) => {
     try {
@@ -51,12 +55,10 @@ const filterNotesTool = createLangChainTool({
       // Get all files matching extension
       let files = vault.getFiles().filter((f) => f.extension === ext);
 
-      // Filter by folder
+      // Filter by folder (ensure trailing slash for prefix match)
       if (folder) {
         const normalizedFolder = folder.endsWith("/") ? folder : folder + "/";
-        files = files.filter(
-          (f) => f.path.startsWith(normalizedFolder) || f.path.startsWith(folder)
-        );
+        files = files.filter((f) => f.path.startsWith(normalizedFolder));
       }
 
       // Filter by modification date

@@ -4,10 +4,9 @@ import {
   Twitter4llmResponse,
   Url4llmResponse,
 } from "@/LLMProviders/brevilabsClient";
-import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
+import { unescapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";
 import { logError, logInfo, logWarn } from "@/logger";
-import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 
 export interface MentionData {
@@ -79,25 +78,17 @@ export class Mention {
       const html = await response.text();
 
       // Basic HTML to text extraction - strip tags, decode entities, clean up
-      const text = html
-        // Remove script and style blocks
+      const stripped = html
         .replace(/<script[\s\S]*?<\/script>/gi, "")
         .replace(/<style[\s\S]*?<\/style>/gi, "")
-        // Remove nav, header, footer
         .replace(/<(nav|header|footer)[\s\S]*?<\/\1>/gi, "")
-        // Convert common block elements to newlines
         .replace(/<\/(p|div|h[1-6]|li|tr|br\s*\/?)>/gi, "\n")
         .replace(/<br\s*\/?>/gi, "\n")
-        // Strip remaining tags
-        .replace(/<[^>]+>/g, "")
-        // Decode HTML entities
-        .replace(/&amp;/g, "&")
-        .replace(/&lt;/g, "<")
-        .replace(/&gt;/g, ">")
-        .replace(/&quot;/g, '"')
+        .replace(/<[^>]+>/g, "");
+
+      const text = unescapeXml(stripped)
         .replace(/&#39;/g, "'")
         .replace(/&nbsp;/g, " ")
-        // Clean up whitespace
         .replace(/[ \t]+/g, " ")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
@@ -139,30 +130,8 @@ export class Mention {
 
   async processYoutubeUrl(url: string): Promise<{ transcript: string; error?: string }> {
     try {
-      const settings = getSettings();
-
-      if (isSelfHostModeValid() && settings.supadataApiKey) {
-        const response = await selfHostYoutube4llm(url);
-        return { transcript: response.response.transcript };
-      }
-
-      if (settings.enableAllFeatures) {
-        // Import and use the free YouTube transcript extractor
-        try {
-          const { freeYoutubeTranscript } = await import("@/tools/YoutubeTools");
-          const response = await freeYoutubeTranscript(url);
-          return { transcript: response.response.transcript };
-        } catch (freeError) {
-          logWarn(`Free YouTube transcript failed for ${url}:`, freeError);
-          if (settings.supadataApiKey) {
-            const response = await selfHostYoutube4llm(url);
-            return { transcript: response.response.transcript };
-          }
-          throw freeError;
-        }
-      }
-
-      const response = await this.brevilabsClient.youtube4llm(url);
+      const { resolveYoutubeTranscript } = await import("@/tools/YoutubeTools");
+      const response = await resolveYoutubeTranscript(url);
       return { transcript: response.response.transcript };
     } catch (error) {
       const msg = err2String(error);

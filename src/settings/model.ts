@@ -203,8 +203,6 @@ export interface CopilotSettings {
   enableAllFeatures: boolean;
   /** SearXNG instance URL for self-hosted web search (e.g. http://localhost:8080) */
   searxngUrl: string;
-  /** Enable free YouTube transcript extraction without API key */
-  enableFreeYoutubeTranscript: boolean;
   /** Thinking budget tokens for Claude extended thinking models (default: 10000) */
   anthropicThinkingBudget: number;
 }
