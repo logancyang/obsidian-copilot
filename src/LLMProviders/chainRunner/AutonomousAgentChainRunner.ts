@@ -29,6 +29,11 @@ import {
   accumulateToolCallChunk,
   ToolCallChunk,
 } from "./utils/nativeToolCalling";
+import {
+  buildXmlToolPrompt,
+  supportsNativeToolCalling,
+  streamWithXmlToolCalling,
+} from "./utils/xmlToolCalling";
 
 import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
 import { LayerToMessagesConverter } from "@/context/LayerToMessagesConverter";
@@ -64,7 +69,8 @@ type AgentSource = {
  */
 interface AgentLoopDeps {
   availableTools: StructuredTool[];
-  boundModel: Runnable; // Model with tools bound via bindTools()
+  boundModel: Runnable; // Model with tools bound via bindTools(), or raw model in XML mode
+  useXmlToolCalling?: boolean; // True when model doesn't support native bindTools
   processLocalSearchResult: (
     toolResult: { result: string; success: boolean },
     timeExpression?: string
@@ -103,6 +109,7 @@ interface ReActLoopParams {
   processLocalSearchResult: AgentLoopDeps["processLocalSearchResult"];
   applyCiCOrderingToLocalSearchResult: AgentLoopDeps["applyCiCOrderingToLocalSearchResult"];
   adapter: ModelAdapter;
+  useXmlToolCalling?: boolean; // True when using XML-based tool calling fallback
 }
 
 /**
@@ -446,6 +453,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         processLocalSearchResult: context.loopDeps.processLocalSearchResult,
         applyCiCOrderingToLocalSearchResult: context.loopDeps.applyCiCOrderingToLocalSearchResult,
         adapter,
+        useXmlToolCalling: context.loopDeps.useXmlToolCalling,
       });
 
       // If abort was already handled by timer, skip further processing
@@ -546,19 +554,25 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const messages: BaseMessage[] = [];
     const availableTools = this.getAvailableTools();
 
-    // Bind tools to the model for native function calling
+    // Bind tools to the model for native function calling, or fall back to XML mode
     const modelName = (chatModel as any).modelName || (chatModel as any).model || "unknown";
-    if (typeof chatModel.bindTools !== "function") {
-      throw new Error(
-        `Model ${modelName} does not support native tool calling (bindTools not available). ` +
-          `Agent mode requires a model with tool calling support.`
+    const useXmlToolCalling = !supportsNativeToolCalling(chatModel);
+    let boundModel: Runnable;
+
+    if (useXmlToolCalling) {
+      logInfo(
+        `[Agent] Model ${modelName} does not support bindTools - using XML tool calling fallback`
       );
+      // In XML mode, use the raw model; tool descriptions are injected into the system prompt
+      boundModel = chatModel;
+    } else {
+      boundModel = chatModel.bindTools(availableTools);
     }
-    const boundModel = chatModel.bindTools(availableTools);
 
     const loopDeps: AgentLoopDeps = {
       availableTools,
       boundModel,
+      useXmlToolCalling,
       processLocalSearchResult: this.processLocalSearchResult.bind(this),
       applyCiCOrderingToLocalSearchResult: this.applyCiCOrderingToLocalSearchResult.bind(this),
     };
@@ -592,9 +606,12 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       .join("\n");
 
     // Combine system message with tool guidelines and agent loop guidance
+    // In XML mode, inject tool definitions as XML into the system prompt
+    const xmlToolPrompt = useXmlToolCalling ? buildXmlToolPrompt(availableTools) : "";
     const systemContent = [
       systemMessage?.content || "",
       toolInstructions ? `\n## Tool Guidelines\n${toolInstructions}` : "",
+      xmlToolPrompt,
       AGENT_LOOP_GUIDANCE,
     ]
       .filter(Boolean)
@@ -653,6 +670,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       updateCurrentAiMessage,
       processLocalSearchResult,
       applyCiCOrderingToLocalSearchResult,
+      useXmlToolCalling,
     } = params;
 
     const maxIterations = getSettings().autonomousAgentMaxIterations;
@@ -675,15 +693,17 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
       }
       iteration++;
 
-      // Stream response - streamModelResponse updates this.accumulatedContent
+      // Stream response - use XML tool calling for models without native support
       // The timer will pick up content changes and display them with the reasoning block
       // Once final response is detected, timer stops and direct updates take over
-      const { content, aiMessage, streamingResult } = await this.streamModelResponse(
-        boundModel,
-        messages,
-        abortController,
-        updateCurrentAiMessage
-      );
+      const { content, aiMessage, streamingResult } = useXmlToolCalling
+        ? await streamWithXmlToolCalling(boundModel as any, messages, abortController)
+        : await this.streamModelResponse(
+            boundModel,
+            messages,
+            abortController,
+            updateCurrentAiMessage
+          );
 
       responseMetadata = {
         wasTruncated: streamingResult.wasTruncated,

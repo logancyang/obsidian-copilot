@@ -717,9 +717,79 @@ export class ModelAdapterFactory {
       return new CopilotPlusModelAdapter(modelName);
     }
 
+    // Local models (Ollama, LM Studio) - check by common local model names
+    if (LocalModelAdapter.isLocalModel(modelName)) {
+      logInfo("Using LocalModelAdapter");
+      return new LocalModelAdapter(modelName);
+    }
+
     // Default adapter for unknown models
     logInfo("Using BaseModelAdapter (default)");
     return new BaseModelAdapter(modelName);
+  }
+}
+
+/**
+ * Adapter for local models (Ollama, LM Studio) that may use XML tool calling
+ */
+class LocalModelAdapter extends BaseModelAdapter {
+  /**
+   * Detect common local model names (Llama, Mistral, Qwen, Phi, etc.)
+   */
+  static isLocalModel(modelName: string): boolean {
+    const localPatterns = [
+      "llama",
+      "mistral",
+      "mixtral",
+      "qwen",
+      "phi",
+      "gemma",
+      "codellama",
+      "deepseek",
+      "vicuna",
+      "wizardlm",
+      "neural-chat",
+      "starling",
+      "orca",
+      "yi-",
+      "solar",
+      "command-r",
+      "nous-hermes",
+    ];
+    return localPatterns.some((pattern) => modelName.includes(pattern));
+  }
+
+  buildSystemPromptSections(
+    basePrompt: string,
+    toolDescriptions: string,
+    availableToolNames?: string[],
+    toolMetadata?: ToolMetadata[]
+  ): PromptSection[] {
+    const sections = super.buildSystemPromptSections(
+      basePrompt,
+      toolDescriptions,
+      availableToolNames,
+      toolMetadata
+    );
+
+    sections.push({
+      id: "local-model-guidelines",
+      label: "Local model guidance",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#LocalModelAdapter.buildSystemPromptSections",
+      content: `LOCAL MODEL GUIDELINES:
+- You are running as a local model. Be concise in your responses to minimize latency.
+- When using tools, output ONE tool call at a time and wait for results before proceeding.
+- If a tool call fails, try a simpler query or explain what you were trying to do.
+- Prefer the localSearch tool for finding information in the user's vault.
+- Keep your reasoning focused and avoid overly long thinking chains.`,
+    });
+
+    return sections;
+  }
+
+  needsSpecialHandling(): boolean {
+    return true;
   }
 }
 
