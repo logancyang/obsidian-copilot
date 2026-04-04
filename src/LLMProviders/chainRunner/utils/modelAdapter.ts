@@ -400,29 +400,26 @@ For editFile, pass the exact text to find and its replacement:
  */
 class ClaudeModelAdapter extends BaseModelAdapter {
   /**
-   * Check if this is a Claude thinking model (3.7 Sonnet or Claude 4)
+   * Check if this is a Claude thinking model (3.7 Sonnet or Claude 4+)
    * @returns True if the model supports thinking/reasoning modes
    */
   private isThinkingModel(): boolean {
     return (
       this.modelName.includes("claude-3-7-sonnet") ||
-      this.modelName.includes("claude-sonnet-4") ||
       this.modelName.includes("claude-3.7-sonnet") ||
-      this.modelName.includes("claude-4-sonnet") ||
-      this.modelName.includes("claude-opus-4")
+      /claude-sonnet-[4-9]/.test(this.modelName) ||
+      /claude-opus-[4-9]/.test(this.modelName) ||
+      /claude-[4-9]-sonnet/.test(this.modelName) ||
+      /claude-[4-9]-opus/.test(this.modelName)
     );
   }
 
   /**
-   * Check if this is specifically Claude Sonnet 4 (has hallucination issues)
+   * Check if this is specifically Claude Sonnet 4.x (has hallucination tendencies in agent mode)
    * @returns True if the model is Claude Sonnet 4 variants
    */
   private isClaudeSonnet4(): boolean {
-    return (
-      this.modelName.includes("claude-sonnet-4") ||
-      this.modelName.includes("claude-4-sonnet") ||
-      this.modelName.includes("claude-sonnet-4-20250514")
-    );
+    return /claude-sonnet-4/.test(this.modelName) || /claude-4-sonnet/.test(this.modelName);
   }
 
   buildSystemPromptSections(
@@ -437,6 +434,18 @@ class ClaudeModelAdapter extends BaseModelAdapter {
       availableToolNames,
       toolMetadata
     );
+
+    // Add Claude-specific capabilities guidance (applies to all Claude models)
+    sections.push({
+      id: "claude-capabilities",
+      label: "Claude capabilities guidance",
+      source:
+        "src/LLMProviders/chainRunner/utils/modelAdapter.ts#ClaudeModelAdapter.buildSystemPromptSections",
+      content: `CLAUDE MODEL CAPABILITIES:
+- You have vision capability: if images are provided in the context, analyze them carefully and incorporate your observations into your response.
+- You excel at structured analysis: use XML tags, markdown formatting, and organized sections when presenting complex information.
+- When context contains <note_context>, <url_content>, or <youtube_video_context> XML tags, parse and use their contents to answer the user's question.`,
+    });
 
     if (!this.isThinkingModel()) {
       return sections;

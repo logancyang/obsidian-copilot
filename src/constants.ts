@@ -1005,6 +1005,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableAllFeatures: false,
   searxngUrl: "",
   enableFreeYoutubeTranscript: true,
+  anthropicThinkingBudget: 10000,
 };
 
 export const EVENT_NAMES = {

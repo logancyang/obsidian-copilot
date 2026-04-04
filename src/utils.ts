@@ -1200,10 +1200,15 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
 
   const isOSeries = isOSeriesModel(modelName);
   const isGPT5 = isGPT5Model(modelName);
+  // Claude thinking models: 3.7 Sonnet and all Claude 4+ (Sonnet 4, Opus 4, etc.)
+  // Future-proofed to match claude-sonnet-N, claude-opus-N for N >= 4
   const isThinkingEnabled =
     modelName.startsWith("claude-3-7-sonnet") ||
-    modelName.startsWith("claude-sonnet-4") ||
-    modelName.startsWith("claude-opus-4");
+    modelName.startsWith("claude-3.7-sonnet") ||
+    /^claude-sonnet-[4-9]/.test(modelName) ||
+    /^claude-opus-[4-9]/.test(modelName) ||
+    /^claude-[4-9]-sonnet/.test(modelName) ||
+    /^claude-[4-9]-opus/.test(modelName);
 
   return {
     isOSeries,

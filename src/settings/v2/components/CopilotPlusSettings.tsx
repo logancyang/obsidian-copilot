@@ -182,6 +182,19 @@ export const CopilotPlusSettings: React.FC = () => {
                 onChange={(value) => updateSetting("supadataApiKey", value)}
                 placeholder="sd-..."
               />
+
+              <div className="tw-pt-2 tw-text-lg tw-font-semibold">Claude Optimization</div>
+
+              <SettingItem
+                type="slider"
+                title="Extended Thinking Budget (tokens)"
+                description="Token budget for Claude's extended thinking (reasoning). Higher values allow deeper reasoning but use more tokens. Applies to Claude 3.7 Sonnet, Sonnet 4, and Opus 4 models."
+                min={1024}
+                max={32000}
+                step={1024}
+                value={settings.anthropicThinkingBudget}
+                onChange={(value) => updateSetting("anthropicThinkingBudget", value)}
+              />
             </>
           )}
         </div>

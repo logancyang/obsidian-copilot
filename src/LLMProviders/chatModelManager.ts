@@ -125,7 +125,19 @@ export default class ChatModelManager {
     }
   >;
 
-  private static readonly ANTHROPIC_THINKING_BUDGET_TOKENS = 2048;
+  /** Default thinking budget if setting not configured */
+  private static readonly DEFAULT_ANTHROPIC_THINKING_BUDGET_TOKENS = 10000;
+
+  /**
+   * Get thinking budget from settings, with validation.
+   */
+  private static getThinkingBudget(): number {
+    const budget = getSettings().anthropicThinkingBudget;
+    if (budget && budget >= 1024) {
+      return budget;
+    }
+    return ChatModelManager.DEFAULT_ANTHROPIC_THINKING_BUDGET_TOKENS;
+  }
 
   private readonly providerApiKeyMap: Record<ChatModelProviders, () => string> = {
     [ChatModelProviders.OPENAI]: () => getSettings().openAIApiKey,
@@ -242,7 +254,7 @@ export default class ChatModelManager {
         ...(isThinkingEnabled && {
           thinking: {
             type: "enabled",
-            budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
+            budget_tokens: ChatModelManager.getThinkingBudget(),
           },
         }),
       },
@@ -880,9 +892,11 @@ export default class ChatModelManager {
       // Check model capabilities to determine appropriate maxTokens
       const modelInfo = getModelInfo(model.name);
 
-      // For thinking-enabled models, maxTokens must be greater than thinking.budget_tokens (2048)
+      // For thinking-enabled models, maxTokens must be greater than thinking.budget_tokens
       // For other models, use minimal tokens for a fast ping
-      const pingMaxTokens = modelInfo.isThinkingEnabled ? 4096 : 30;
+      const pingMaxTokens = modelInfo.isThinkingEnabled
+        ? ChatModelManager.getThinkingBudget() + 2048
+        : 30;
       const tokenConfig = { maxTokens: pingMaxTokens };
 
       const constructorConfig: any = {

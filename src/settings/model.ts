@@ -205,6 +205,8 @@ export interface CopilotSettings {
   searxngUrl: string;
   /** Enable free YouTube transcript extraction without API key */
   enableFreeYoutubeTranscript: boolean;
+  /** Thinking budget tokens for Claude extended thinking models (default: 10000) */
+  anthropicThinkingBudget: number;
 }
 
 export const settingsStore = createStore();
