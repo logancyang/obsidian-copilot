@@ -205,6 +205,8 @@ export interface CopilotSettings {
   searxngUrl: string;
   /** Thinking budget tokens for Claude extended thinking models (default: 10000) */
   anthropicThinkingBudget: number;
+  /** Folder where custom agent definitions are stored */
+  customAgentsFolder: string;
 }
 
 export const settingsStore = createStore();

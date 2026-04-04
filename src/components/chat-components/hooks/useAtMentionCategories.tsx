@@ -1,6 +1,6 @@
 import React, { useMemo } from "react";
 import { Platform, TFile, TFolder } from "obsidian";
-import { FileText, Wrench, Folder, Globe } from "lucide-react";
+import { Bot, FileText, Wrench, Folder, Globe } from "lucide-react";
 import { TypeaheadOption } from "../TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
@@ -10,7 +10,8 @@ export type AtMentionCategory =
   | "folders"
   | "activeNote"
   | "webTabs"
-  | "activeWebTab";
+  | "activeWebTab"
+  | "agents";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
@@ -51,6 +52,13 @@ export const CATEGORY_OPTIONS: CategoryOption[] = [
     category: "folders",
     icon: <Folder className="tw-size-4" />,
   },
+  {
+    key: "agents",
+    title: "Agents",
+    subtitle: "Custom AI agents with specialized skills",
+    category: "agents",
+    icon: <Bot className="tw-size-4" />,
+  },
 ];
 
 /**
@@ -71,6 +79,10 @@ export function useAtMentionCategories(isCopilotPlus: boolean = false): Category
       // Web Tabs only available on desktop (Web Viewer not supported on mobile)
       if (cat.category === "webTabs") {
         return Platform.isDesktopApp;
+      }
+      // Agents available when Plus or enableAllFeatures is on
+      if (cat.category === "agents") {
+        return isCopilotPlus;
       }
       return true;
     });

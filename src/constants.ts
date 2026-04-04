@@ -1040,6 +1040,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   enableAllFeatures: false,
   searxngUrl: "",
   anthropicThinkingBudget: 10000,
+  customAgentsFolder: "copilot/agents",
 };
 
 export const EVENT_NAMES = {

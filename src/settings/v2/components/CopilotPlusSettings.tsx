@@ -174,6 +174,17 @@ export const CopilotPlusSettings: React.FC = () => {
                 placeholder="sd-..."
               />
 
+              <div className="tw-pt-2 tw-text-lg tw-font-semibold">Custom Agents</div>
+
+              <SettingItem
+                type="text"
+                title="Agents Folder"
+                description="Folder where custom agent definitions are stored. Each agent is a markdown file with YAML frontmatter. Starter agents are created automatically when the folder is first used."
+                value={settings.customAgentsFolder}
+                onChange={(value) => updateSetting("customAgentsFolder", value)}
+                placeholder="copilot/agents"
+              />
+
               <div className="tw-pt-2 tw-text-lg tw-font-semibold">Claude Optimization</div>
 
               <SettingItem

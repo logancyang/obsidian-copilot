@@ -1,7 +1,8 @@
 import React, { useMemo } from "react";
 import { Platform, TFolder, TFile } from "obsidian";
-import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
+import { Bot, FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
 import fuzzysort from "fuzzysort";
+import { useCustomAgents } from "@/custom-agents/state";
 import { getToolDescription } from "@/tools/toolManager";
 import { AVAILABLE_TOOLS } from "../constants/tools";
 import { useAllNotes } from "./useAllNotes";
@@ -28,6 +29,7 @@ export function useAtMentionSearch(
   // Get raw data without pre-filtering
   const allNotes = useAllNotes(isCopilotPlus);
   const allFolders = useAllFolders();
+  const customAgents = useCustomAgents();
 
   // Only enable web tab polling when actually needed:
   // - In category mode with a search query (searching across all categories)
@@ -112,6 +114,21 @@ export function useAtMentionSearch(
     [openWebTabs]
   );
 
+  const agentItems: AtMentionOption[] = useMemo(
+    () =>
+      customAgents.map((agent) => ({
+        key: `agent-${agent.title}`,
+        title: agent.title,
+        subtitle: agent.description,
+        category: "agents" as AtMentionCategory,
+        data: agent.title,
+        content: agent.description,
+        icon: React.createElement(Bot, { className: "tw-size-4" }),
+        searchKeyword: `${agent.title} ${agent.description}`,
+      })),
+    [customAgents]
+  );
+
   return useMemo(() => {
     if (mode === "category") {
       // Show category options when no query
@@ -191,6 +208,14 @@ export function useAtMentionSearch(
             }
           : null;
 
+      // Search agents using substring matching (like tools)
+      const matchingAgents = agentItems.filter((agent) => {
+        return (
+          agent.title.toLowerCase().includes(queryLower) ||
+          (agent.subtitle || "").toLowerCase().includes(queryLower)
+        );
+      });
+
       // Combine all non-tool items for unified fuzzy search
       const allNonToolItems = [...noteItems, ...folderItems, ...webTabItems];
       const fuzzySearchResults = fuzzysort.go(query, allNonToolItems, {
@@ -201,8 +226,9 @@ export function useAtMentionSearch(
 
       const rankedNonToolItems = fuzzySearchResults.map((result) => result.obj);
 
-      // Tools first, then Active Web Tab / Active Note (if matches), then everything else
+      // Agents first, then tools, then Active Web Tab / Active Note, then everything else
       return [
+        ...matchingAgents,
         ...matchingTools,
         ...(activeWebTabOption ? [activeWebTabOption] : []),
         ...(activeNoteOption ? [activeNoteOption] : []),
@@ -224,6 +250,9 @@ export function useAtMentionSearch(
           break;
         case "webTabs":
           items = webTabItems;
+          break;
+        case "agents":
+          items = agentItems;
           break;
       }
 
@@ -269,6 +298,7 @@ export function useAtMentionSearch(
     toolItems,
     folderItems,
     webTabItems,
+    agentItems,
     availableCategoryOptions,
     activeWebTab,
     currentActiveFile,

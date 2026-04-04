@@ -1,3 +1,4 @@
+import { getActiveAgent } from "@/custom-agents/state";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { getSettings } from "@/settings/model";
 import { DEFAULT_SYSTEM_PROMPT } from "@/constants";
@@ -25,33 +26,36 @@ export function getEffectiveUserPrompt(): string {
 
 /**
  * Build the complete system prompt for the current session.
- * Combines builtin prompt with user custom instructions.
+ * When a custom agent is active, its instructions are injected.
  *
- * Priority for user prompt: session override > global default > legacy setting fallback > ""
+ * Priority: active agent > session override > global default > legacy setting fallback > ""
  *
  * @returns The complete system prompt string
  */
 export function getSystemPrompt(): string {
   const userPrompt = getEffectiveUserPrompt();
+  const activeAgent = getActiveAgent();
 
   // Check if builtin prompt is disabled for current session
   const disableBuiltin = getDisableBuiltinSystemPrompt();
 
   if (disableBuiltin) {
-    // Only return user custom prompt
     return userPrompt;
   }
 
-  // Default behavior: use builtin prompt
   const basePrompt = DEFAULT_SYSTEM_PROMPT;
 
-  if (userPrompt) {
-    return `${basePrompt}
-<user_custom_instructions>
-${userPrompt}
-</user_custom_instructions>`;
-  }
-  return basePrompt;
+  // Inject active agent instructions
+  const agentSection = activeAgent
+    ? `\n\n<agent_instructions>\nYou are now acting as the "${activeAgent.title}" agent. ${activeAgent.description}\n\n${activeAgent.content}\n</agent_instructions>`
+    : "";
+
+  // Add user custom instructions
+  const userSection = userPrompt
+    ? `\n<user_custom_instructions>\n${userPrompt}\n</user_custom_instructions>`
+    : "";
+
+  return basePrompt + agentSection + userSection;
 }
 
 /**

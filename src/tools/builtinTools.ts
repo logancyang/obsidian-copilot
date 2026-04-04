@@ -6,6 +6,7 @@ import { createDirectoryTool } from "./DirectoryTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
 import { filterNotesTool } from "./FilterNotesTool";
 import { updateMemoryTool } from "./memoryTools";
+import { appendToNoteTool, renameNoteTool } from "./NoteManagementTools";
 import { readNoteTool } from "./NoteTools";
 import { obsidianRandomReadTool } from "./ObsidianCliDailyTools";
 import {
@@ -265,6 +266,44 @@ Examples:
 - Notes with tags: tags: ["#active", "#project"]
 - Recent notes: modifiedAfter: 1704067200000, sortBy: "modified"
 - Canvas files: extension: "canvas"`,
+    },
+  },
+
+  // Note management tools
+  {
+    tool: appendToNoteTool,
+    metadata: {
+      id: "appendToNote",
+      displayName: "Append to Note",
+      description: "Append content to an existing note",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For appendToNote:
+- Use for adding content to existing notes (logs, journals, lists, meeting notes)
+- Safer than writeFile - only adds content, never overwrites
+- Optionally specify a heading to append under (e.g. "## Tasks")
+- If no heading specified, appends at the end of the file
+
+Examples:
+- Append to end: notePath: "Daily Notes/2024-01-15.md", content: "- New task item"
+- Under heading: notePath: "meetings.md", content: "- Action: Follow up with team", heading: "## Action Items"`,
+    },
+  },
+  {
+    tool: renameNoteTool,
+    metadata: {
+      id: "renameNote",
+      displayName: "Rename/Move Note",
+      description: "Rename or move a note, auto-updating all internal links",
+      category: "file",
+      requiresVault: true,
+      customPromptInstructions: `For renameNote:
+- Use to rename or move notes to a different folder
+- Obsidian automatically updates all internal links pointing to the renamed note
+- Target directories are created automatically if they don't exist
+- Always use getFileTree first to confirm the current path
+
+Example: oldPath: "Inbox/draft.md", newPath: "Projects/final-report.md"`,
     },
   },
 

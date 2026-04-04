@@ -109,6 +109,20 @@ export function AtMentionCommandPlugin({
           editor.update(() => {
             $replaceTriggeredTextWithPill("@", { type: "active-note" });
           });
+        } else if (option.category === "agents") {
+          // Activate the selected agent
+          import("@/custom-agents/state").then(({ setActiveAgentTitle }) => {
+            setActiveAgentTitle(option.title);
+          });
+          // Insert agent pill
+          const pillData: PillData = {
+            type: "agents",
+            title: `Agent: ${option.title}`,
+            data: option.data,
+          };
+          editor.update(() => {
+            $replaceTriggeredTextWithPill("@", pillData);
+          });
         } else {
           // Regular pill
           const pillData: PillData = {

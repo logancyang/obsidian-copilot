@@ -23,7 +23,14 @@ import { AVAILABLE_TOOLS } from "../constants/tools";
 
 declare const app: App;
 
-export type PillType = "notes" | "tools" | "folders" | "active-note" | "webTabs" | "activeWebTab";
+export type PillType =
+  | "notes"
+  | "tools"
+  | "folders"
+  | "active-note"
+  | "webTabs"
+  | "activeWebTab"
+  | "agents";
 
 // Type representing different kinds of parsed content segments
 export type ParsedContentType =
