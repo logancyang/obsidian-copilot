@@ -1,15 +1,14 @@
 import { AGENT_FRONTMATTER_KEYS, CustomAgent } from "./type";
+import { DEFAULT_SETTINGS } from "@/constants";
 import { getSettings } from "@/settings/model";
 import { logInfo, logWarn } from "@/logger";
 import { TFile } from "obsidian";
-
-const DEFAULT_AGENTS_FOLDER = "copilot/agents";
 
 /**
  * Get the agents folder path from settings.
  */
 export function getAgentsFolder(): string {
-  return getSettings().customAgentsFolder || DEFAULT_AGENTS_FOLDER;
+  return getSettings().customAgentsFolder || DEFAULT_SETTINGS.customAgentsFolder;
 }
 
 /**
@@ -53,36 +52,6 @@ export async function parseAgentFile(file: TFile): Promise<CustomAgent | null> {
     logWarn(`Failed to parse agent file ${file.path}:`, error);
     return null;
   }
-}
-
-/**
- * Load all custom agents from the agents folder.
- */
-export async function loadAllCustomAgents(): Promise<CustomAgent[]> {
-  const folder = getAgentsFolder();
-  const vault = app.vault;
-
-  // Ensure folder exists
-  const folderExists = vault.getAbstractFileByPath(folder);
-  if (!folderExists) {
-    return [];
-  }
-
-  const files = vault.getFiles().filter((f) => isAgentFile(f));
-  const agents: CustomAgent[] = [];
-
-  for (const file of files) {
-    const agent = await parseAgentFile(file);
-    if (agent && agent.enabled) {
-      agents.push(agent);
-    }
-  }
-
-  // Sort by order, then by title
-  agents.sort((a, b) => a.order - b.order || a.title.localeCompare(b.title));
-
-  logInfo(`[CustomAgents] Loaded ${agents.length} agents from ${folder}`);
-  return agents;
 }
 
 /**

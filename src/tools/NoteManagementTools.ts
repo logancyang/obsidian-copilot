@@ -1,4 +1,5 @@
 import { logInfo } from "@/logger";
+import { TFile } from "obsidian";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 
@@ -34,7 +35,7 @@ const appendToNoteTool = createLangChainTool({
         };
       }
 
-      const existingContent = await vault.read(file as any);
+      const existingContent = await vault.read(file as TFile);
 
       let newContent: string;
       if (heading) {
@@ -76,7 +77,7 @@ const appendToNoteTool = createLangChainTool({
         newContent = existingContent.trimEnd() + "\n\n" + content + "\n";
       }
 
-      await vault.modify(file as any, newContent);
+      await vault.modify(file as TFile, newContent);
       logInfo(`[appendToNote] Appended to ${notePath}${heading ? ` under ${heading}` : ""}`);
 
       return {
@@ -119,12 +120,13 @@ const renameNoteTool = createLangChainTool({
         };
       }
 
-      // Ensure target directory exists
+      // Ensure target directory exists (createFolder is safe if it already exists)
       const targetDir = newPath.substring(0, newPath.lastIndexOf("/"));
       if (targetDir) {
-        const dirExists = vault.getAbstractFileByPath(targetDir);
-        if (!dirExists) {
+        try {
           await vault.createFolder(targetDir);
+        } catch {
+          // Folder already exists - safe to continue
         }
       }
 

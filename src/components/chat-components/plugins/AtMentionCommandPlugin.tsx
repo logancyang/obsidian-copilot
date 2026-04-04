@@ -11,6 +11,7 @@ import {
   CategoryOption,
 } from "../hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "../hooks/useAtMentionSearch";
+import { setActiveAgentTitle } from "@/custom-agents/state";
 
 // Get app instance
 declare const app: App;
@@ -110,10 +111,7 @@ export function AtMentionCommandPlugin({
             $replaceTriggeredTextWithPill("@", { type: "active-note" });
           });
         } else if (option.category === "agents") {
-          // Activate the selected agent
-          import("@/custom-agents/state").then(({ setActiveAgentTitle }) => {
-            setActiveAgentTitle(option.title);
-          });
+          setActiveAgentTitle(option.title);
           // Insert agent pill
           const pillData: PillData = {
             type: "agents",

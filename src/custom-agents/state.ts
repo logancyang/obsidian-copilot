@@ -87,10 +87,3 @@ export function deleteCachedCustomAgent(title: string): void {
 export function setActiveAgentTitle(title: string): void {
   customAgentsStore.set(activeAgentTitleAtom, title);
 }
-
-/**
- * Clear the active agent.
- */
-export function clearActiveAgent(): void {
-  customAgentsStore.set(activeAgentTitleAtom, "");
-}

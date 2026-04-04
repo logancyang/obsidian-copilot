@@ -80,7 +80,7 @@ export function useAtMentionCategories(isCopilotPlus: boolean = false): Category
       if (cat.category === "webTabs") {
         return Platform.isDesktopApp;
       }
-      // Agents available when Plus or enableAllFeatures is on
+      // Agents require Plus (enableAllFeatures makes isPlusUser return true)
       if (cat.category === "agents") {
         return isCopilotPlus;
       }
