@@ -2,7 +2,9 @@ import { getSettings } from "@/settings/model";
 import { Vault } from "obsidian";
 import { isDesktopRuntime } from "@/services/obsidianCli/ObsidianCliClient";
 import { editFileTool, writeFileTool } from "./ComposerTools";
+import { createDirectoryTool } from "./DirectoryTools";
 import { createGetFileTreeTool } from "./FileTreeTools";
+import { filterNotesTool } from "./FilterNotesTool";
 import { updateMemoryTool } from "./memoryTools";
 import { readNoteTool } from "./NoteTools";
 import { obsidianRandomReadTool } from "./ObsidianCliDailyTools";
@@ -221,6 +223,48 @@ Example: Add "Bob Johnson" to attendees in notes/meeting.md:
 path: "notes/meeting.md"
 oldText: "## Attendees\\n- John Smith\\n- Jane Doe"
 newText: "## Attendees\\n- John Smith\\n- Jane Doe\\n- Bob Johnson"`,
+    },
+  },
+
+  // Directory tools
+  {
+    tool: createDirectoryTool,
+    metadata: {
+      id: "createDirectory",
+      displayName: "Create Directory",
+      description: "Create new folders in your vault",
+      category: "file",
+      requiresVault: true,
+      isAlwaysEnabled: true,
+      customPromptInstructions: `For createDirectory:
+- Use to create a new folder/directory before creating notes in it
+- Supports nested paths (e.g. "Projects/2024/Q1")
+- If the directory already exists, it returns success without error
+
+Example: path: "Projects/NewProject"`,
+    },
+  },
+
+  // Filter tools
+  {
+    tool: filterNotesTool,
+    metadata: {
+      id: "filterNotes",
+      displayName: "Filter Notes",
+      description: "Filter vault notes by folder, tags, date, or file type",
+      category: "search",
+      requiresVault: true,
+      customPromptInstructions: `For filterNotes:
+- Use to browse and list notes by metadata (folder, tags, dates, file type)
+- Different from localSearch: filterNotes uses metadata, localSearch uses content
+- Combine with getTimeRangeMs for date-based filtering (pass epoch ms to modifiedAfter/modifiedBefore)
+- Use extension: "canvas" for canvas files, "base" for bases
+
+Examples:
+- Notes in a folder: folder: "Projects"
+- Notes with tags: tags: ["#active", "#project"]
+- Recent notes: modifiedAfter: 1704067200000, sortBy: "modified"
+- Canvas files: extension: "canvas"`,
     },
   },
 
