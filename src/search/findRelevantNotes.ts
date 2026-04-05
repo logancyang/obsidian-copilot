@@ -129,7 +129,7 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
     const settings = getSettings();
     const miyoClient = new MiyoClient();
     const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const folderPath = getMiyoFolderPath(app, settings);
+    const folderPath = getMiyoFolderPath(app);
     const response = await miyoClient.searchRelated(baseUrl, getMiyoAbsolutePath(app, filePath), {
       folderPath,
       limit: MAX_K,

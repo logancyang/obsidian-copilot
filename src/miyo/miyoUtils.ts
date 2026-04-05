@@ -36,25 +36,12 @@ export function shouldUseMiyo(settings: CopilotSettings): boolean {
 }
 
 /**
- * Resolve the folder path sent to Miyo as `folder_path`.
- *
- * When a remote server URL is configured and the user has set a remote vault folder,
- * that override is used — the remote machine's folder path may differ from the local
- * vault path. Falls back to the local vault filesystem path, then vault name.
+ * Resolve the folder identifier sent to Miyo as `folder_path`.
  *
  * @param app - Obsidian application instance.
- * @param settings - Current Copilot settings.
- * @returns Remote vault folder override when applicable, otherwise local vault path.
+ * @returns Vault folder name.
  */
-export function getMiyoFolderPath(app: App, settings: CopilotSettings): string {
-  const remoteVaultFolder = (settings.miyoRemoteVaultPath || "").trim();
-  if (remoteVaultFolder && getMiyoCustomUrl(settings)) {
-    return remoteVaultFolder;
-  }
-  const vaultPath = getVaultBasePath(app);
-  if (vaultPath) {
-    return vaultPath;
-  }
+export function getMiyoFolderPath(app: App): string {
   return app.vault.getName();
 }
 
