@@ -141,8 +141,6 @@ export interface CopilotSettings {
   selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
-  /** @deprecated Miyo now uses the current vault path as `folder_path`; preserved only for backwards-compatible settings migration. */
-  miyoRemoteVaultPath: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
@@ -326,6 +324,13 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // If settings is null/undefined, use DEFAULT_SETTINGS
   const settingsToSanitize = settings || DEFAULT_SETTINGS;
+  const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
+  const {
+    enableSelfHostedSearch: legacyEnableSelfHostedSearch,
+    selfHostedSearchUrl: legacySelfHostedSearchUrl,
+    selfHostedSearchApiKey: legacySelfHostedSearchApiKey,
+    enableMiyoSearch: legacyEnableMiyoSearch,
+  } = rawSettings;
 
   if (!settingsToSanitize.userId) {
     settingsToSanitize.userId = uuidv4();
@@ -348,20 +353,28 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
+  const sanitizedSettingsRecord = sanitizedSettings as unknown as Record<string, unknown>;
+  delete sanitizedSettingsRecord.miyoRemoteVaultPath;
+  delete sanitizedSettingsRecord.miyoVaultName;
+  delete sanitizedSettingsRecord.enableMiyoSearch;
 
   // Migration: Rename self-hosted search settings to self-host mode (v3.2.0+)
-  const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
   if (
-    rawSettings.enableSelfHostedSearch !== undefined &&
+    legacyEnableSelfHostedSearch !== undefined &&
     sanitizedSettings.enableSelfHostMode === undefined
   ) {
-    sanitizedSettings.enableSelfHostMode = rawSettings.enableSelfHostedSearch as boolean;
+    sanitizedSettings.enableSelfHostMode = legacyEnableSelfHostedSearch as boolean;
   }
-  if (rawSettings.selfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
-    sanitizedSettings.selfHostUrl = rawSettings.selfHostedSearchUrl as string;
+  if (legacySelfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
+    sanitizedSettings.selfHostUrl = legacySelfHostedSearchUrl as string;
   }
-  if (rawSettings.selfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
-    sanitizedSettings.selfHostApiKey = rawSettings.selfHostedSearchApiKey as string;
+  if (legacySelfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
+    sanitizedSettings.selfHostApiKey = legacySelfHostedSearchApiKey as string;
+  }
+
+  // Migration: Rename legacy enableMiyoSearch to enableMiyo.
+  if (legacyEnableMiyoSearch !== undefined && sanitizedSettings.enableMiyo === undefined) {
+    sanitizedSettings.enableMiyo = legacyEnableMiyoSearch as boolean;
   }
 
   // Stuff in settings are string even when the interface has number type!
@@ -418,19 +431,9 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
   }
 
-  // Migrate legacy miyoVaultName → miyoRemoteVaultPath
-  const legacySettings = sanitizedSettings as unknown as Record<string, unknown>;
-  if (
-    typeof legacySettings["miyoVaultName"] === "string" &&
-    !sanitizedSettings.miyoRemoteVaultPath
-  ) {
-    sanitizedSettings.miyoRemoteVaultPath = legacySettings["miyoVaultName"] as string;
-    delete legacySettings["miyoVaultName"];
-  }
-
-  // Ensure miyoRemoteVaultPath has a default value
-  if (typeof sanitizedSettings.miyoRemoteVaultPath !== "string") {
-    sanitizedSettings.miyoRemoteVaultPath = DEFAULT_SETTINGS.miyoRemoteVaultPath;
+  // Ensure miyoServerUrl has a default value
+  if (typeof sanitizedSettings.miyoServerUrl !== "string") {
+    sanitizedSettings.miyoServerUrl = DEFAULT_SETTINGS.miyoServerUrl;
   }
 
   // Ensure selfHostSearchProvider is a valid value

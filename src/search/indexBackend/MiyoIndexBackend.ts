@@ -256,12 +256,12 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   }
 
   /**
-   * Return the Miyo folder path for the current vault.
+   * Return the Miyo folder identifier for the current vault.
    *
-   * @returns Folder path string.
+   * @returns Vault folder name.
    */
   private getFolderPath(): string {
-    return getMiyoFolderPath(this.app, getSettings());
+    return getMiyoFolderPath(this.app);
   }
 
   /**
