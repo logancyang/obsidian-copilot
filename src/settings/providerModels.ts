@@ -344,6 +344,27 @@ export interface SiliconFlowModel {
   owned_by: string;
 }
 
+// MiniMax response model definition (OpenAI-compatible format)
+export interface MiniMaxModelResponse {
+  object: string;
+  data: MiniMaxModel[];
+}
+
+/**
+ {
+ "id": "MiniMax-M2.7",
+ "object": "model",
+ "created": 1710000000,
+ "owned_by": "minimax"
+ }
+ */
+export interface MiniMaxModel {
+  id: string;
+  object: string;
+  created: number;
+  owned_by: string;
+}
+
 // GitHub Copilot response model definition
 export interface GitHubCopilotModelResponse {
   object: string;
@@ -407,6 +428,7 @@ export interface ProviderResponseMap {
   [ChatModelProviders.XAI]: XAIModelResponse;
   [ChatModelProviders.OPENROUTERAI]: OpenRouterAIModelResponse;
   [ChatModelProviders.SILICONFLOW]: SiliconFlowModelResponse;
+  [ChatModelProviders.MINIMAX]: MiniMaxModelResponse;
   [ChatModelProviders.COPILOT_PLUS]: null;
   [ChatModelProviders.AZURE_OPENAI]: null;
   [ChatModelProviders.AMAZON_BEDROCK]: unknown;
@@ -501,6 +523,13 @@ export const providerAdapters: ProviderModelAdapters = {
       id: model.id,
       name: model.id,
       provider: ChatModelProviders.SILICONFLOW,
+    })) || [],
+
+  [ChatModelProviders.MINIMAX]: (data): StandardModel[] =>
+    data.data?.map((model) => ({
+      id: model.id,
+      name: model.id,
+      provider: ChatModelProviders.MINIMAX,
     })) || [],
 
   [ChatModelProviders.GITHUB_COPILOT]: (data): StandardModel[] =>
