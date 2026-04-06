@@ -1,6 +1,7 @@
 import { FailedItem, ProjectConfig, useProjectContextLoad, getCurrentProject } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import { FolderSearchModal } from "@/components/modals/FolderSearchModal";
+import { openCachedProjectFile } from "@/utils/cacheFileOpener";
 import { ProjectFileSelectModal } from "@/components/modals/ProjectFileSelectModal";
 import { TagSearchModal } from "@/components/modals/TagSearchModal";
 import { TruncatedText } from "@/components/TruncatedText";
@@ -22,6 +23,7 @@ import {
 import { getTagsFromNote } from "@/utils";
 import {
   AlertCircle,
+  ArrowUpRight,
   CheckCircle,
   FileAudio,
   FileImage,
@@ -255,9 +257,11 @@ interface ItemCardProps {
   viewMode: "list";
   loadStatus?: ProjectContextItemStatusInfo;
   onDelete: (e: React.MouseEvent, item: GroupItem) => void;
+  /** Optional: callback to open the cached parsed content for this file. */
+  onOpenCached?: () => void;
 }
 
-function ItemCard({ item, viewMode, loadStatus, onDelete }: ItemCardProps) {
+function ItemCard({ item, viewMode, loadStatus, onDelete, onOpenCached }: ItemCardProps) {
   const extension = item.id.split(".").pop() || "";
 
   // add or remove
@@ -306,6 +310,20 @@ function ItemCard({ item, viewMode, loadStatus, onDelete }: ItemCardProps) {
             )}
             <span className="tw-hidden md:tw-inline">{STATUS_LABELS[loadStatus.status]}</span>
           </Badge>
+        )}
+        {onOpenCached && loadStatus?.status === "success" && (
+          <Button
+            variant="ghost2"
+            size="icon"
+            className="tw-hidden tw-size-5 group-hover:tw-block"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenCached();
+            }}
+            title="View Parsed Content"
+          >
+            <ArrowUpRight className="tw-size-4" />
+          </Button>
         )}
         <IconComponent
           className="tw-hidden tw-size-4 tw-shrink-0 tw-text-muted hover:tw-text-warning group-hover:tw-block group-hover:tw-flex-none"
@@ -1307,6 +1325,16 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                                 activeSection === "ignoreFiles" || item.isIgnored
                                   ? handleDeleteIgnoreItem
                                   : handleDeleteItem
+                              }
+                              onOpenCached={
+                                // Reason: only offer open for non-markdown files that have been processed
+                                !item.isIgnored &&
+                                item.id.split(".").pop()?.toLowerCase() !== "md"
+                                  ? () => {
+                                      const name = item.name || item.id.split("/").pop() || item.id;
+                                      openCachedProjectFile(app, projectCache, item.id, name);
+                                    }
+                                  : undefined
                               }
                             />
                           ) : null

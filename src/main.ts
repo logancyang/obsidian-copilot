@@ -17,11 +17,12 @@ import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
+import { ProjectRegister } from "@/projects/projectRegister";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logInfo, logWarn } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
@@ -65,9 +66,14 @@ import {
   extractChatDate,
   extractChatLastAccessedAtMs,
   extractChatTitle,
+  filterChatHistoryFiles,
 } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import { listMarkdownFiles, patchFrontmatter, resolveFileByPath } from "@/utils/vaultAdapterUtils";
+import {
+  listMarkdownFiles,
+  patchFrontmatter,
+  resolveFileByPath,
+} from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface
@@ -81,6 +87,7 @@ export default class CopilotPlugin extends Plugin {
   fileParserManager: FileParserManager;
   customCommandRegister: CustomCommandRegister;
   systemPromptRegister: SystemPromptRegister;
+  projectRegister: ProjectRegister;
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
@@ -203,8 +210,18 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.systemPromptRegister = new SystemPromptRegister(this, this.app.vault);
+    this.projectRegister = new ProjectRegister(this.app.vault);
 
     this.app.workspace.onLayoutReady(() => {
+      // Reason: projects must initialize after vault file tree is indexed (onLayoutReady),
+      // not in onload(). Otherwise getAbstractFileByPath() returns null for non-hidden
+      // folders and the adapter fallback creates synthetic TFiles that crash vault.read().
+      // This matches the system-prompts initialization pattern.
+      this.projectRegister.initialize().catch((error) => {
+        logError("[Projects] ProjectRegister initialization failed", error);
+        new Notice("Failed to load projects. Check console for details.");
+      });
+
       // Initialize custom commands
       this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
 
@@ -239,6 +256,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister.cleanup();
     this.systemPromptRegister.cleanup();
+    this.projectRegister.cleanup();
     this.settingsUnsubscriber?.();
 
     // Cleanup selection handler
@@ -636,22 +654,11 @@ export default class CopilotPlugin extends Plugin {
     const folderFiles = await listMarkdownFiles(this.app, getSettings().defaultSaveFolder);
     if (folderFiles.length === 0) return [];
 
-    // Get current project ID if in a project
     const currentProject = getCurrentProject();
-    const currentProjectId = currentProject?.id;
 
-    if (currentProjectId) {
-      // In project mode: return only files with this project's ID prefix
-      const projectPrefix = `${currentProjectId}__`;
-      return folderFiles.filter((file) => file.basename.startsWith(projectPrefix));
-    } else {
-      // In non-project mode: return only files without any project ID prefix
-      // This assumes project IDs always use the format projectId__ as prefix
-      return folderFiles.filter((file) => {
-        // Check if the filename has any projectId__ prefix pattern
-        return !file.basename.match(/^[a-zA-Z0-9-]+__/);
-      });
-    }
+    // Reason: pass all files to filterChatHistoryFiles which checks frontmatter projectId.
+    // A prefix prefilter would miss renamed or legacy files that still have correct frontmatter.
+    return filterChatHistoryFiles(this.app, folderFiles, currentProject?.id);
   }
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {

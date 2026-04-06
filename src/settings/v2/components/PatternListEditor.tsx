@@ -40,12 +40,15 @@ interface PatternListEditorProps {
   value: string;
   onChange: (value: string) => void;
   maxCollapsedHeight?: number;
+  /** Max height when expanded — content scrolls beyond this. */
+  maxExpandedHeight?: number;
 }
 
 export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   value,
   onChange,
   maxCollapsedHeight = 84,
+  maxExpandedHeight = 200,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
@@ -92,7 +95,10 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   }, [maxCollapsedHeight, patterns]);
 
   const isTruncated = isOverflowing && !isExpanded;
-  const animatedMaxHeight = isExpanded ? contentHeight : maxCollapsedHeight;
+  // Reason: Cap expanded height so the badge list scrolls instead of pushing the modal off-screen.
+  const animatedMaxHeight = isExpanded
+    ? Math.min(contentHeight, maxExpandedHeight)
+    : maxCollapsedHeight;
 
   // Update patterns
   const updatePatterns = (newCategories: {
@@ -253,7 +259,12 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
       <div className="tw-relative tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2">
         <div
           ref={contentRef}
-          className="tw-overflow-hidden tw-transition-[max-height] tw-duration-300 tw-ease-in-out"
+          className={cn(
+            "tw-transition-[max-height] tw-duration-300 tw-ease-in-out",
+            isExpanded && contentHeight > maxExpandedHeight
+              ? "tw-overflow-y-auto"
+              : "tw-overflow-hidden"
+          )}
           style={{ maxHeight: isOverflowing ? animatedMaxHeight : undefined }}
         >
           {/* Empty state */}

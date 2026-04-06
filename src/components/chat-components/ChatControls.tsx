@@ -58,7 +58,7 @@ export async function refreshVaultIndex() {
       new Notice("Lexical search builds indexes on demand. No manual indexing required.");
     }
   } catch (error) {
-    console.error("Error refreshing vault index:", error);
+    logError("Error refreshing vault index:", error);
     new Notice("Failed to refresh vault index. Check console for details.");
   }
 }
@@ -84,7 +84,7 @@ export async function forceReindexVault() {
       new Notice("Lexical search builds indexes on demand. No manual indexing required.");
     }
   } catch (error) {
-    console.error("Error force reindexing vault:", error);
+    logError("Error force reindexing vault:", error);
     new Notice("Failed to force reindex vault. Check console for details.");
   }
 }
@@ -111,6 +111,9 @@ export async function reloadCurrentProject() {
     const plugin = (app as any).plugins.getPlugin("copilot");
     if (plugin && plugin.projectManager) {
       await plugin.projectManager.getProjectContext(currentProject.id);
+      // Reason: chain/model config must be refreshed after context reload so the next
+      // user message uses the updated system prompt and model settings.
+      await plugin.projectManager.getCurrentChainManager().createChainWithNewModel();
       new Notice(`Project context for "${currentProject.name}" reloaded successfully.`);
     } else {
       throw new Error("Copilot plugin or ProjectManager not available.");
