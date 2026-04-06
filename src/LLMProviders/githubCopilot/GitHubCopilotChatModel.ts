@@ -38,7 +38,9 @@ function normalizeDeltaContent(content: unknown): string {
 }
 
 /** Extract the constructor fields type from ChatOpenAICompletions. */
-type ChatOpenAICompletionsFields = NonNullable<ConstructorParameters<typeof ChatOpenAICompletions>[0]>;
+type ChatOpenAICompletionsFields = NonNullable<
+  ConstructorParameters<typeof ChatOpenAICompletions>[0]
+>;
 
 /**
  * Constructor params for GitHubCopilotChatModel.

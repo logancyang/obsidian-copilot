@@ -2,7 +2,7 @@ import { ChainType } from "@/chainFactory";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 
-import { ModelCapability, ReasoningEffort, Verbosity } from "@/constants";
+import { ModelCapability, ReasoningEffort, Verbosity, ThinkingMode } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
@@ -152,6 +152,7 @@ export interface CustomModel {
 
   // Ollama specific fields
   numCtx?: number;
+  thinkingMode?: ThinkingMode;
 
   // LM Studio specific fields
   useResponsesApi?: boolean;
