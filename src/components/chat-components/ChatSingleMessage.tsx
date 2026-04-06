@@ -373,6 +373,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         const openTag = `<${tagName}>`;
         let sectionIndex = 0;
 
+        // Trims content and appends \n so the closing </div> always lands on
+        // its own unindented line. Without this, content ending with a
+        // 4-space-indented line (a markdown code block) would cause </div> to
+        // be consumed by the code block and rendered as escaped literal text.
+        const ensureClosingTagOnNewLine = (text: string) => text.trim() + "\n";
+
+        const buildDetails = (sectionContent: string, openAttr: string, domId: string) =>
+          `<details id="${domId}"${openAttr} style="${detailsStyle}">` +
+          `<summary style="${summaryStyle}">${summaryText}</summary>` +
+          `<div class="tw-text-muted" style="${contentStyle}">${ensureClosingTagOnNewLine(sectionContent)}</div>` +
+          `</details>\n\n`;
+
         // During streaming, if we find any tag that's either unclosed or being processed
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
@@ -383,21 +395,18 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
             // Check if user has explicitly set a state; if not, default to collapsed (original behavior)
             const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
-
-            return `<details id="${domId}"${openAttribute} style="${detailsStyle}">
-              <summary style="${summaryStyle}">${summaryText}</summary>
-              <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
-            </details>\n\n`;
+            return buildDetails(sectionContent, openAttribute, domId);
           });
 
           // Then handle any unclosed tag, but preserve the streamed content
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (_match, partialContent) => `<div style="${detailsStyle}">
-              <div style="${summaryStyle}">${streamingSummaryText}</div>
-              <div class="tw-text-muted" style="${contentStyle}">${partialContent.trim()}</div>
-            </div>`
+            (_match, partialContent) =>
+              `<div style="${detailsStyle}">` +
+              `<div style="${summaryStyle}">${streamingSummaryText}</div>` +
+              `<div class="tw-text-muted" style="${contentStyle}">${ensureClosingTagOnNewLine(partialContent)}</div>` +
+              `</div>`
           );
           return content;
         }
@@ -410,11 +419,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
           // Restore open state from previous render
           const openAttribute = collapsibleOpenStateMap.get(domId) ? " open" : "";
-
-          return `<details id="${domId}"${openAttribute} style="${detailsStyle}">
-            <summary style="${summaryStyle}">${summaryText}</summary>
-            <div class="tw-text-muted" style="${contentStyle}">${sectionContent.trim()}</div>
-          </details>\n\n`;
+          return buildDetails(sectionContent, openAttribute, domId);
         });
       };
 
