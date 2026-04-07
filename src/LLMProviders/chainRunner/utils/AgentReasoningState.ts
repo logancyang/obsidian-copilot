@@ -96,7 +96,11 @@ export function parseReasoningBlock(content: string): ParsedReasoningBlock | nul
 
   let steps: string[] = [];
   try {
-    steps = JSON.parse(stepsJson) as string[];
+    const parsed: unknown = JSON.parse(stepsJson);
+    // Validate that parsed result is an array of strings
+    if (Array.isArray(parsed) && parsed.every((s) => typeof s === "string")) {
+      steps = parsed;
+    }
   } catch {
     // Invalid JSON, return empty steps
     steps = [];

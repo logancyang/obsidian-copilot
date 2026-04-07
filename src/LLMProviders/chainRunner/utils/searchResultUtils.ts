@@ -1,5 +1,6 @@
 import { logInfo, logWarn, logMarkdownBlock, logTable } from "@/logger";
 import { sanitizeContentForCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { z } from "zod";
 
 /**
  * Quality summary for search results.
@@ -139,6 +140,15 @@ ${doc.content || ""}
  * @param resultString - The JSON string result from localSearch tool
  * @returns Formatted text string for LLM, or error message if parsing fails
  */
+/** Schema for individual search result documents */
+const SearchResultDocSchema = z.object({
+  title: z.string().optional(),
+  path: z.string().optional(),
+  content: z.string().optional(),
+  score: z.number().optional(),
+  explanation: z.unknown().optional(),
+});
+
 export function formatSearchResultStringForLLM(resultString: string): string {
   try {
     const searchResults = JSON.parse(resultString);
@@ -146,7 +156,14 @@ export function formatSearchResultStringForLLM(resultString: string): string {
       return "Invalid search results format.";
     }
 
-    return formatSearchResultsForLLM(searchResults);
+    // Validate each result conforms to expected shape, filtering out malformed entries
+    const validated = searchResults.filter((item) => SearchResultDocSchema.safeParse(item).success);
+    if (validated.length === 0 && searchResults.length > 0) {
+      logWarn("All search results failed schema validation");
+      return "Invalid search results format.";
+    }
+
+    return formatSearchResultsForLLM(validated);
   } catch (error) {
     logWarn("Failed to format localSearch result string:", error);
     return "Error processing search results.";

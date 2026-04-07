@@ -5,6 +5,7 @@ import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import { z } from "zod";
 
 /**
  * User Memory Management Class
@@ -441,12 +442,22 @@ Generate a title and summary for this conversation:`;
       // Extract JSON from content, handling code blocks
       const jsonContent = this.extractJsonFromResponse(content);
 
-      // Try to parse JSON response
+      // Try to parse and validate JSON response
+      const TitleSummarySchema = z.object({
+        title: z.string().optional().default("Untitled Conversation"),
+        summary: z.string().optional().default("No summary available"),
+      });
+
       try {
         const parsed = JSON.parse(jsonContent);
+        const validated = TitleSummarySchema.safeParse(parsed);
+        if (validated.success) {
+          return validated.data;
+        }
+        logError("[UserMemoryManager] LLM response failed schema validation:", validated.error);
         return {
-          title: parsed.title || "Untitled Conversation",
-          summary: parsed.summary || "No summary available",
+          title: "Untitled Conversation",
+          summary: "Summary generation failed",
         };
       } catch (parseError) {
         logError("[UserMemoryManager] Failed to parse LLM response as JSON:", parseError);

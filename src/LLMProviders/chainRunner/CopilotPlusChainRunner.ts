@@ -25,6 +25,7 @@ import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { localSearchTool, webSearchTool } from "@/tools/SearchTools";
 import { updateMemoryTool } from "@/tools/memoryTools";
 import { extractChatHistory } from "@/utils";
+import { z } from "zod";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { getApiErrorMessage, getMessageRole, withSuppressedTokenWarnings } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
@@ -803,18 +804,38 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
             return result;
           };
 
+          // Zod schema for time range results from LLM tool calls
+          const TimeInfoSchema = z.object({
+            epoch: z.number(),
+          });
+          const TimeRangeSchema = z.object({
+            startTime: TimeInfoSchema,
+            endTime: TimeInfoSchema,
+            error: z.unknown().optional(),
+          });
+
           if (typeof timeRangeResult === "string") {
             try {
               const parsed = JSON.parse(timeRangeResult);
-              // Only use result if it's not an error
-              if (!parsed.error) {
-                timeRange = extractEpochValues(parsed);
+              const validated = TimeRangeSchema.safeParse(parsed);
+              if (validated.success && !validated.data.error) {
+                timeRange = extractEpochValues(validated.data);
+              } else if (!validated.success) {
+                // Fall back to error-field check for non-conforming shapes
+                if (parsed && typeof parsed === "object" && !parsed.error) {
+                  timeRange = extractEpochValues(parsed);
+                }
               }
             } catch {
               logWarn("[CopilotPlus] Failed to parse getTimeRangeMs result:", timeRangeResult);
             }
           } else if (timeRangeResult && !timeRangeResult.error) {
-            timeRange = extractEpochValues(timeRangeResult);
+            const validated = TimeRangeSchema.safeParse(timeRangeResult);
+            if (validated.success) {
+              timeRange = extractEpochValues(validated.data);
+            } else {
+              timeRange = extractEpochValues(timeRangeResult);
+            }
           }
           logInfo("[CopilotPlus] Executed getTimeRangeMs, result:", timeRange);
         }
