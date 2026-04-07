@@ -1,7 +1,7 @@
 import { Buffer } from "buffer";
 import { Platform } from "obsidian";
 
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { getSettings, updateSetting, type CopilotSettings } from "@/settings/model";
 
 type SafeStorage = {
@@ -22,6 +22,9 @@ const LEGACY_WEBCRYPTO_KEY = new TextEncoder().encode("obsidian-copilot-v1");
 const LEGACY_WEBCRYPTO_ALGORITHM = { name: "AES-GCM", iv: new Uint8Array(12) } as const;
 const DESKTOP_UNAVAILABLE_MESSAGE = "DESKTOP_KEY_UNAVAILABLE";
 const DECRYPTION_FAILURE_MESSAGE = "Copilot failed to decrypt API keys!";
+
+/** V1 encryption support will be removed in this version. */
+const LEGACY_V1_SUNSET_VERSION = "3.0.0";
 
 /**
  * Return true when the current runtime can use Electron safeStorage.
@@ -115,8 +118,18 @@ async function encryptV2(plaintext: string): Promise<string> {
 
 /**
  * Decrypt a legacy Web Crypto value that used the static key and zero IV.
+ *
+ * DEPRECATION: V1 encryption uses a static key with a zero IV and is
+ * cryptographically weak. This path exists only for migration and will be
+ * removed in v3.0.0 (see LEGACY_V1_SUNSET_VERSION). Every successful V1
+ * decryption triggers an automatic re-encryption to V2.
  */
 async function decryptLegacyWebCryptoValue(apiKey: string): Promise<string> {
+  logWarn(
+    `Decrypting a legacy V1-encrypted value. V1 support will be removed in v${LEGACY_V1_SUNSET_VERSION}. ` +
+      "The value will be auto-migrated to V2 encryption."
+  );
+
   const base64Data = apiKey.startsWith(WEBCRYPTO_PREFIX)
     ? apiKey.slice(WEBCRYPTO_PREFIX.length)
     : apiKey.slice(ENCRYPTION_PREFIX.length);
@@ -256,6 +269,11 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
 
 /**
  * Migrate legacy Web Crypto values to the V2 per-vault format.
+ *
+ * DEPRECATION: This function handles auto-migration of V1-encrypted values.
+ * V1 support (static key + zero IV) will be removed in v3.0.0
+ * (see LEGACY_V1_SUNSET_VERSION). After that version, any remaining V1
+ * values will be unrecoverable.
  */
 export async function migrateEncryptionToV2(
   settings: CopilotSettings
@@ -360,6 +378,9 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
       return new TextDecoder().decode(decryptedData);
     }
 
+    // DEPRECATION: V1 path — decrypt, then let migrateEncryptionToV2()
+    // (called at startup) persist the re-encrypted V2 value.
+    // Will be removed in v3.0.0 (see LEGACY_V1_SUNSET_VERSION).
     if (isLegacyWebCryptoValue(apiKey)) {
       return await decryptLegacyWebCryptoValue(apiKey);
     }
