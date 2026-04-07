@@ -814,6 +814,7 @@ export default class ChatModelManager {
 
     // For GPT-5 models, automatically use Responses API for proper verbosity support
     const constructorConfig: any = { ...modelConfig };
+    const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
     if (
       modelInfo.isGPT5 &&
       (selectedModel.vendor === ChatModelProviders.OPENAI ||
@@ -823,7 +824,7 @@ export default class ChatModelManager {
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
     }
 
-    if (shouldUseGitHubCopilotResponsesApi(model)) {
+    if (useCopilotResponses) {
       constructorConfig.useResponsesApi = true;
       logInfo(`Enabling Responses API for GitHub Copilot model: ${model.name}`);
     }
@@ -836,7 +837,7 @@ export default class ChatModelManager {
       return lmStudioInstance;
     }
 
-    if (shouldUseGitHubCopilotResponsesApi(model)) {
+    if (useCopilotResponses) {
       return new GitHubCopilotResponsesModel(constructorConfig);
     }
 
@@ -900,6 +901,7 @@ export default class ChatModelManager {
         ...pingConfig,
         ...tokenConfig,
       };
+      const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
 
       if (
         modelInfo.isGPT5 &&
@@ -909,7 +911,7 @@ export default class ChatModelManager {
         constructorConfig.useResponsesApi = true;
       }
 
-      if (shouldUseGitHubCopilotResponsesApi(model)) {
+      if (useCopilotResponses) {
         constructorConfig.useResponsesApi = true;
       }
 
@@ -918,7 +920,7 @@ export default class ChatModelManager {
       const testModel =
         model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false
           ? new ChatLMStudio(constructorConfig)
-          : shouldUseGitHubCopilotResponsesApi(model)
+          : useCopilotResponses
             ? new GitHubCopilotResponsesModel(constructorConfig)
             : new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {

@@ -26,6 +26,13 @@ export function buildGitHubCopilotAuthedFetch(
   baseFetch: FetchImplementation
 ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
   return async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
+    // Reason: OpenAI SDK v6 always calls fetch(urlString, init), so we only need
+    // to handle string and URL inputs. Request objects are not used by the SDK,
+    // but we extract the URL defensively to avoid silent failures.
+    // Note: If a future SDK version passes Request objects, this wrapper would
+    // need to clone the Request to preserve method/body/headers and support retry.
+    // Reason: Guard `typeof Request` to avoid ReferenceError in environments
+    // where the Request global may not exist (e.g., some Obsidian mobile runtimes).
     const url =
       typeof input === "string"
         ? input
@@ -37,6 +44,7 @@ export function buildGitHubCopilotAuthedFetch(
       const copilotHeaders = provider.buildCopilotRequestHeaders(token);
       const mergedHeaders = new Headers(init.headers);
 
+      // Copilot headers take precedence (especially Authorization)
       for (const [key, value] of Object.entries(copilotHeaders)) {
         mergedHeaders.set(key, value);
       }
@@ -47,11 +55,16 @@ export function buildGitHubCopilotAuthedFetch(
     let token = await provider.getValidCopilotToken();
     let response = await doRequest(token);
 
+    // 401: invalidate cached token and retry once with a fresh one.
+    // Reason: Only retry on 401 (Unauthorized / expired token). 403 means
+    // "Forbidden" (e.g., no Copilot subscription) — a permanent condition
+    // where token refresh won't help. This matches GitHubCopilotProvider's
+    // own retry logic which also limits retries to 401.
     if (response.status === 401) {
       try {
         await response.body?.cancel();
       } catch {
-        // Ignore cancellation errors when the body is already closed.
+        // Ignore cancellation errors — body may already be closed
       }
 
       provider.invalidateCopilotToken();

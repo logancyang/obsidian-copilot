@@ -61,6 +61,15 @@ export type GitHubCopilotChatModelParams = ChatOpenAICompletionsFields & {
  * This class is kept for Copilot models that still speak the Chat Completions API.
  * Codex models are routed separately through GitHubCopilotResponsesModel.
  *
+ * Reason: We extend ChatOpenAICompletions instead of ChatOpenAI because:
+ * 1. ChatOpenAI routes between Completions API and Responses API internally.
+ *    GitHub Copilot only supports the Chat Completions API endpoint.
+ * 2. ChatOpenAICompletions provides `bindTools()` (via BaseChatOpenAI),
+ *    `_streamResponseChunks`, and `_convertCompletionsDeltaToBaseMessageChunk`
+ *    directly — no routing indirection.
+ * 3. `_convertCompletionsDeltaToBaseMessageChunk` is directly overridable,
+ *    allowing us to normalize non-string content from Claude models.
+ *
  * Authentication (dynamic Copilot token refresh) and Copilot-specific headers
  * are injected via `configuration.fetch` using GitHubCopilotProvider's lifecycle.
  */
@@ -96,10 +105,15 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
 
     super({
       ...rest,
+      // ChatOpenAICompletions requires an apiKey but Copilot tokens are dynamic;
+      // real Authorization is injected in the fetch wrapper above.
       apiKey: apiKey || "copilot-dynamic-token",
+      // Reason: Copilot API may not support stream_options.include_usage,
+      // which ChatOpenAI sends by default. Disable to avoid potential 400 errors.
       streamUsage: false,
       configuration: {
         ...(configuration ?? {}),
+        // Reason: OpenAI SDK appends "/chat/completions" to baseURL automatically
         baseURL: (configuration?.baseURL as string) ?? COPILOT_API_BASE,
         fetch: authedFetch,
       },
@@ -131,12 +145,23 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
   protected override _convertCompletionsDeltaToBaseMessageChunk(
     delta: Record<string, any>,
     rawResponse: any,
+    // Reason: Parent expects OpenAI's ChatCompletionRole type, but we accept any string
+    // to avoid coupling to the exact OpenAI SDK type. Cast is safe because we pass through.
     defaultRole?: any
   ): BaseMessageChunk {
+    // Reason: Copilot API omits delta.role when proxying Claude models.
+    // The parent converter uses `delta.role ?? defaultRole` to determine message type.
+    // If both are undefined, it falls through to ChatMessageChunk (no tool_call_chunks).
+    // Model responses are always from the assistant role, so defaulting here is safe.
+    // We set defaultRole instead of mutating delta.role to avoid modifying transport objects.
     if (!delta.role && !defaultRole) {
       defaultRole = "assistant";
     }
 
+    // Reason: Mutate delta.content in place instead of spreading.
+    // OpenAI SDK's delta objects may have non-enumerable properties (e.g., tool_calls)
+    // that would be lost by `{ ...delta }` spread. Direct mutation is safe because
+    // each delta is a single-use streaming chunk.
     delta.content = normalizeDeltaContent(delta.content);
 
     return super._convertCompletionsDeltaToBaseMessageChunk(delta, rawResponse, defaultRole);
