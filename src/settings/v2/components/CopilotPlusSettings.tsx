@@ -1,15 +1,76 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_SETTINGS } from "@/constants";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { getMiyoCustomUrl, getMiyoFolderPath } from "@/miyo/miyoUtils";
 import { useIsSelfHostEligible, validateSelfHostMode } from "@/plusUtils";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { isValidHttpUrl, updateSetting, useSettingsValue } from "@/settings/model";
 import { Notice } from "obsidian";
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
+
+interface OptionalHttpUrlSettingProps {
+  title: string;
+  description: string;
+  placeholder?: string;
+  value: string;
+  disabled?: boolean;
+  onValidChange: (value: string) => void;
+}
+
+/**
+ * Render an optional URL setting that only persists empty values or valid HTTP(S) URLs.
+ *
+ * @param props - Input, display, and persistence props for the setting row.
+ * @returns A setting row with blur-based validation.
+ */
+const OptionalHttpUrlSetting: React.FC<OptionalHttpUrlSettingProps> = ({
+  title,
+  description,
+  placeholder,
+  value,
+  disabled,
+  onValidChange,
+}) => {
+  const [draftValue, setDraftValue] = useState(value);
+
+  useEffect(() => {
+    setDraftValue(value);
+  }, [value]);
+
+  /**
+   * Validate and persist the current draft value on blur.
+   */
+  const handleBlur = () => {
+    const trimmedValue = draftValue.trim();
+    if (!isValidHttpUrl(trimmedValue)) {
+      new Notice("Enter a valid http:// or https:// URL.");
+      setDraftValue(value);
+      return;
+    }
+
+    if (trimmedValue !== value) {
+      onValidChange(trimmedValue);
+    }
+  };
+
+  return (
+    <SettingItem type="custom" title={title} description={description}>
+      <Input
+        type="text"
+        value={draftValue}
+        onChange={(event) => setDraftValue(event.target.value)}
+        onBlur={handleBlur}
+        placeholder={placeholder}
+        disabled={disabled}
+        className="tw-w-full sm:tw-w-[200px]"
+      />
+    </SettingItem>
+  );
+};
 
 export const CopilotPlusSettings: React.FC = () => {
   const settings = useSettingsValue();
@@ -219,12 +280,11 @@ export const CopilotPlusSettings: React.FC = () => {
 
               {settings.enableSelfHostMode && (
                 <>
-                  <SettingItem
-                    type="text"
+                  <OptionalHttpUrlSetting
                     title="Remote Miyo Server URL (Optional)"
                     description="Leave blank when accessing Miyo locally. Set this only when Miyo is running on a remote machine — it will override the local service discovery."
                     value={settings.miyoServerUrl || ""}
-                    onChange={(value) => updateSetting("miyoServerUrl", value)}
+                    onValidChange={(value) => updateSetting("miyoServerUrl", value)}
                   />
 
                   <SettingItem

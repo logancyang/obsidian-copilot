@@ -36,12 +36,12 @@ jest.mock("@/search/searchUtils", () => ({
   }),
 }));
 
-// Mock crypto-js
-jest.mock("crypto-js", () => ({
-  MD5: jest.fn().mockImplementation((str) => ({
+// Mock crypto-js SHA-256 hashing
+jest.mock("crypto-js/sha256", () =>
+  jest.fn().mockImplementation((str) => ({
     toString: () => `mocked-hash-${str}`,
-  })),
-}));
+  }))
+);
 
 // Mock plusUtils
 jest.mock("@/plusUtils", () => ({
@@ -121,6 +121,8 @@ describe("ProjectContextCache", () => {
     mtime: Date.now(),
     size: 200,
   });
+
+  const mockedSha256 = jest.requireMock("crypto-js/sha256") as jest.Mock;
 
   beforeEach(() => {
     // Reset mocks
@@ -266,6 +268,13 @@ describe("ProjectContextCache", () => {
       expect(typeof entry.timestamp).toBe("number");
       expect(typeof entry.cacheKey).toBe("string");
     });
+  });
+
+  test("should hash project cache keys with SHA-256", () => {
+    const cacheKey = (projectContextCache as any).getCacheKey(mockProject);
+
+    expect(cacheKey).toBe(`mocked-hash-${mockProject.id}`);
+    expect(mockedSha256).toHaveBeenCalledWith(mockProject.id);
   });
 
   test("should update and remove web URLs", async () => {

@@ -1,6 +1,16 @@
 import { App, TFile, TFolder } from "obsidian";
 
 /**
+ * Escape a string for use inside a regular expression.
+ *
+ * @param str - Untrusted text to escape.
+ * @returns A literal-safe regex fragment.
+ */
+export function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
  * Resolve a file path to a TFile, with adapter fallback for hidden directories.
  * Returns a real TFile if in vault cache, a synthetic TFile if only on disk, or null.
  */
@@ -76,7 +86,7 @@ export async function patchFrontmatter(
           typeof value === "string"
             ? `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`
             : String(value);
-        const fieldRegex = new RegExp(`^${key}:\\s*.+`, "m");
+        const fieldRegex = new RegExp(`^${escapeRegExp(key)}:\\s*.+`, "m");
         if (fieldRegex.test(patched)) {
           patched = patched.replace(fieldRegex, `${key}: ${formattedValue}`);
         } else {

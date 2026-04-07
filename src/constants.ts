@@ -905,6 +905,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
   siliconflowApiKey: "",
+  encryptionKeyB64: "",
   // GitHub Copilot OAuth tokens
   githubCopilotAccessToken: "",
   githubCopilotToken: "",

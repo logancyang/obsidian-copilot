@@ -3,7 +3,7 @@ import { FileCache } from "@/cache/fileCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getSettings } from "@/settings/model";
-import { MD5 } from "crypto-js";
+import SHA256 from "crypto-js/sha256";
 import { TAbstractFile, TFile, Vault } from "obsidian";
 import debounce from "lodash.debounce";
 import { Mutex } from "async-mutex";
@@ -142,7 +142,7 @@ export class ProjectContextCache {
 
   private getCacheKey(project: ProjectConfig): string {
     // Use project ID as cache key
-    return MD5(project.id).toString();
+    return SHA256(project.id).toString();
   }
 
   private getCachePath(cacheKey: string): string {

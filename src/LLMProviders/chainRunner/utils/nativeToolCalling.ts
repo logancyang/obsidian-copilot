@@ -28,6 +28,16 @@ export interface ToolCallChunk {
 }
 
 /**
+ * Check whether a parsed tool-call payload is a plain object.
+ *
+ * @param value - Parsed JSON value from a model tool call.
+ * @returns True when the value is a non-null plain object.
+ */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/**
  * Extract native tool calls from an AIMessage.
  * Returns empty array if no tool calls present.
  *
@@ -145,7 +155,12 @@ export function buildToolCallsFromChunks(chunks: Map<number, ToolCallChunk>): Na
     let args: Record<string, unknown> = {};
     if (chunk.args) {
       try {
-        args = JSON.parse(chunk.args);
+        const rawArgs = JSON.parse(chunk.args);
+        if (isPlainObject(rawArgs)) {
+          args = rawArgs;
+        } else {
+          logError(`[ToolCall] Invalid args shape for tool "${chunk.name}"`);
+        }
       } catch {
         logError(`[ToolCall] Failed to parse args for tool "${chunk.name}": ${chunk.args}`);
         args = {};

@@ -5,7 +5,7 @@ import {
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
 } from "@/constants";
-import { sanitizeQaExclusions, sanitizeSettings } from "@/settings/model";
+import { isValidHttpUrl, sanitizeQaExclusions, sanitizeSettings } from "@/settings/model";
 import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import * as systemPromptsState from "@/system-prompts/state";
 import * as settingsModel from "@/settings/model";
@@ -215,6 +215,52 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
     expect(sanitized.userId).toBeTruthy();
     expect(sanitized.activeEmbeddingModels[0].provider).not.toBe("azure_openai");
     expect("miyoRemoteVaultPath" in sanitizedRecord).toBe(false);
+  });
+});
+
+describe("isValidHttpUrl", () => {
+  it("accepts empty strings", () => {
+    expect(isValidHttpUrl("")).toBe(true);
+  });
+
+  it("accepts https URLs", () => {
+    expect(isValidHttpUrl("https://example.com")).toBe(true);
+  });
+
+  it("accepts localhost http URLs", () => {
+    expect(isValidHttpUrl("http://localhost:8742")).toBe(true);
+  });
+
+  it("rejects javascript URLs", () => {
+    expect(isValidHttpUrl("javascript:alert(1)")).toBe(false);
+  });
+
+  it("rejects ftp URLs", () => {
+    expect(isValidHttpUrl("ftp://example.com")).toBe(false);
+  });
+});
+
+describe("sanitizeSettings - self-host URL validation", () => {
+  it("resets invalid self-host URLs to defaults", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      selfHostUrl: "javascript:alert(1)",
+      miyoServerUrl: "ftp://example.com",
+    });
+
+    expect(sanitized.selfHostUrl).toBe(DEFAULT_SETTINGS.selfHostUrl);
+    expect(sanitized.miyoServerUrl).toBe(DEFAULT_SETTINGS.miyoServerUrl);
+  });
+
+  it("preserves valid self-host URLs", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      selfHostUrl: "https://example.com",
+      miyoServerUrl: "http://localhost:8742",
+    });
+
+    expect(sanitized.selfHostUrl).toBe("https://example.com");
+    expect(sanitized.miyoServerUrl).toBe("http://localhost:8742");
   });
 });
 

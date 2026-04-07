@@ -20,7 +20,7 @@ import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
-import { encryptAllKeys } from "@/encryptionService";
+import { encryptAllKeys, migrateEncryptionToV2 } from "@/encryptionService";
 import { logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -590,6 +590,17 @@ export default class CopilotPlugin extends Plugin {
     const savedSettings = await this.loadData();
     const sanitizedSettings = sanitizeSettings(savedSettings);
     setSettings(sanitizedSettings);
+
+    const migratedSettings = await migrateEncryptionToV2(getSettings());
+    const finalSettings = migratedSettings
+      ? { ...getSettings(), ...migratedSettings }
+      : getSettings();
+
+    setSettings(finalSettings);
+
+    if (migratedSettings) {
+      await this.saveData(finalSettings);
+    }
   }
 
   mergeActiveModels(

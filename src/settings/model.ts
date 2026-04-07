@@ -48,6 +48,8 @@ export interface LegacyCommandSettings {
 export interface CopilotSettings {
   userId: string;
   plusLicenseKey: string;
+  /** Base64-encoded per-vault AES-256 key for Web Crypto V2 encryption */
+  encryptionKeyB64: string;
   openAIApiKey: string;
   openAIOrgId: string;
   huggingfaceApiKey: string;
@@ -203,6 +205,25 @@ export const settingsStore = createStore();
 export const settingsAtom = atom<CopilotSettings>(DEFAULT_SETTINGS);
 
 /**
+ * Validate that a URL uses an HTTP-family protocol.
+ *
+ * @param url - URL string to validate.
+ * @returns True for empty values and valid HTTP(S) URLs.
+ */
+export function isValidHttpUrl(url: string): boolean {
+  if (!url) {
+    return true;
+  }
+
+  try {
+    const parsedUrl = new URL(url);
+    return parsedUrl.protocol === "http:" || parsedUrl.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Resolve a valid embedding model key for the current settings.
  *
  * @param settings - Current Copilot settings.
@@ -336,6 +357,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     settingsToSanitize.userId = uuidv4();
   }
 
+  if (typeof settingsToSanitize.encryptionKeyB64 !== "string") {
+    settingsToSanitize.encryptionKeyB64 = DEFAULT_SETTINGS.encryptionKeyB64;
+  }
+
   // fix: Maintain consistency between EmbeddingModelProviders.AZURE_OPENAI and ChatModelProviders.AZURE_OPENAI,
   // where it was 'azure_openai' before EmbeddingModelProviders.AZURE_OPENAI.
   if (!settingsToSanitize.activeEmbeddingModels) {
@@ -433,6 +458,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   // Ensure miyoServerUrl has a default value
   if (typeof sanitizedSettings.miyoServerUrl !== "string") {
+    sanitizedSettings.miyoServerUrl = DEFAULT_SETTINGS.miyoServerUrl;
+  }
+
+  if (typeof sanitizedSettings.selfHostUrl !== "string") {
+    sanitizedSettings.selfHostUrl = DEFAULT_SETTINGS.selfHostUrl;
+  }
+
+  if (!isValidHttpUrl(sanitizedSettings.selfHostUrl)) {
+    sanitizedSettings.selfHostUrl = DEFAULT_SETTINGS.selfHostUrl;
+  }
+
+  if (!isValidHttpUrl(sanitizedSettings.miyoServerUrl)) {
     sanitizedSettings.miyoServerUrl = DEFAULT_SETTINGS.miyoServerUrl;
   }
 
