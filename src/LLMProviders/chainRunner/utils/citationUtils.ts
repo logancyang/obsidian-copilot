@@ -384,10 +384,13 @@ export function convertFootnoteDefinitions(
     let display: string;
     if (markdownLink) {
       // Proper markdown link format: [Title](URL)
-      display = `<a href="${markdownLink[2]}">${markdownLink[1]}</a>`;
+      const safeUrl = sanitizeUrl(markdownLink[2]);
+      display = safeUrl
+        ? `<a href="${escapeHtml(safeUrl)}">${escapeHtml(markdownLink[1])}</a>`
+        : escapeHtml(markdownLink[1]);
     } else if (wl) {
       // Wiki link format: [[Title]]
-      display = `[[${wl[1]}]]`;
+      display = `[[${escapeHtml(wl[1])}]]`;
     } else {
       // Handle malformed web citations like "Description text](URL)"
       const malformedLink = m[2].match(/^(.*?)\]\s*\(([^)]+)\)\s*$/);
@@ -395,7 +398,10 @@ export function convertFootnoteDefinitions(
         // Extract text and URL from malformed pattern
         const text = malformedLink[1].trim();
         const url = malformedLink[2].trim();
-        display = `<a href="${url}">${text}</a>`;
+        const safeUrl = sanitizeUrl(url);
+        display = safeUrl
+          ? `<a href="${escapeHtml(safeUrl)}">${escapeHtml(text)}</a>`
+          : escapeHtml(text);
       } else {
         // Fallback: remove any trailing parenthetical content
         display = m[2].replace(/\s*\([^)]*\)\s*$/, "");
@@ -506,13 +512,39 @@ interface SourcesDisplayItem {
 /**
  * Escapes HTML-sensitive characters to avoid unintended markup injection.
  */
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
     .replace(/'/g, "&#39;");
+}
+
+/**
+ * Validates that a URL uses a safe protocol (http or https).
+ * Returns the URL unchanged if safe, or an empty string if it uses
+ * a dangerous protocol like javascript:.
+ */
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim();
+  // Allow relative URLs and fragment-only URLs
+  if (trimmed.startsWith("/") || trimmed.startsWith("#") || trimmed.startsWith("?")) {
+    return trimmed;
+  }
+  try {
+    const parsed = new URL(trimmed);
+    if (parsed.protocol === "http:" || parsed.protocol === "https:") {
+      return trimmed;
+    }
+    return "";
+  } catch {
+    // If URL parsing fails, check for explicit dangerous protocols
+    if (/^\s*javascript\s*:/i.test(trimmed)) {
+      return "";
+    }
+    return trimmed;
+  }
 }
 
 /**
@@ -550,9 +582,12 @@ function parseSimpleSources(sourcesBlock: string): SourcesDisplayItem[] {
 
     let html: string;
     if (markdownLink) {
-      html = `<a href="${markdownLink[2]}">${markdownLink[1]}</a>`;
+      const safeUrl = sanitizeUrl(markdownLink[2]);
+      html = safeUrl
+        ? `<a href="${escapeHtml(safeUrl)}">${escapeHtml(markdownLink[1])}</a>`
+        : escapeHtml(markdownLink[1]);
     } else if (wikiLink) {
-      html = `[[${wikiLink[1]}]]`;
+      html = `[[${escapeHtml(wikiLink[1])}]]`;
     } else {
       html = escapeHtml(content);
     }

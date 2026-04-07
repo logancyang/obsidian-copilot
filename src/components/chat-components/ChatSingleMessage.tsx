@@ -31,7 +31,10 @@ import { USER_SENDER } from "@/constants";
 import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
-import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import {
+  escapeHtml,
+  processInlineCitations,
+} from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
@@ -523,7 +526,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         citationPlaceholderProcessed,
         /(?<!!)\[\[([^\]]+)]]/g,
         (file: TFile) =>
-          `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${file.basename}</a>`
+          `<a href="obsidian://open?file=${encodeURIComponent(file.path)}">${escapeHtml(file.basename)}</a>`
       );
 
       /**
