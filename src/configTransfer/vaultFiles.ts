@@ -275,15 +275,18 @@ async function writeVaultFile(
 }
 
 /**
- * Restore vault files to the target vault using paths from importedSettings.
+ * Restore vault files into this vault's currently configured Copilot folders.
  *
- * Reason: uses importedSettings (not getSettings()) because the imported
- * folder paths may differ from the current vault's paths, and settings
- * have not been persisted yet at this point.
+ * Reason: imported settings are untrusted input. Restrict writes to the
+ * current vault's configured folders so configuration import cannot redirect
+ * writes to arbitrary markdown paths elsewhere in the vault. Align the
+ * imported settings object with those local folders so later persistence
+ * matches where files were actually restored.
  *
  * @param appInstance - Obsidian App instance.
  * @param files - Collected vault files to restore.
- * @param importedSettings - Settings from the imported config file.
+ * @param importedSettings - Settings from the imported config file (mutated
+ *   to align folder paths with local configuration).
  * @returns Summary of what was written and any errors encountered.
  */
 export async function restoreVaultFiles(
@@ -299,9 +302,19 @@ export async function restoreVaultFiles(
     rollback: [],
   };
 
-  const commandsFolder = importedSettings.customPromptsFolder;
-  const promptsFolder = importedSettings.userSystemPromptsFolder;
-  const memoryFolder = importedSettings.memoryFolderName;
+  // Reason: always write into the LOCAL vault's configured folders, not
+  // the paths embedded in the imported file. This prevents a malicious
+  // export package from redirecting writes to arbitrary vault locations.
+  const currentSettings = getSettings();
+  const commandsFolder = (currentSettings.customPromptsFolder || "").trim();
+  const promptsFolder = (currentSettings.userSystemPromptsFolder || "").trim();
+  const memoryFolder = (currentSettings.memoryFolderName || "").trim();
+
+  // Reason: align the imported settings so that when they are persisted
+  // later, the folder paths match where files were actually written.
+  importedSettings.customPromptsFolder = commandsFolder;
+  importedSettings.userSystemPromptsFolder = promptsFolder;
+  importedSettings.memoryFolderName = memoryFolder;
 
   // Reason: only validate and create folders for sections that actually have
   // content to restore. This keeps import/export symmetric — export allows

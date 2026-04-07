@@ -28,7 +28,7 @@ import {
 } from "@/configTransfer/configFile";
 import type { CollectedVaultFiles } from "@/configTransfer/vaultFiles";
 import { StepIndicator } from "@/components/config-transfer/StepIndicator";
-import type { CopilotSettings } from "@/settings/model";
+import { getSettings, type CopilotSettings } from "@/settings/model";
 
 const IMPORT_STEPS = [{ label: "Select File" }, { label: "Password" }, { label: "Confirm" }];
 
@@ -89,11 +89,22 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
   const cachedMetaRef = useRef<ConfigFileMeta | null>(null);
   const cachedVaultFilesRef = useRef<CollectedVaultFiles | null>(null);
 
+  // Reason: show the LOCAL vault's configured folders (where files will
+  // actually be written) rather than the imported package's folder paths.
+  const localSettings = getSettings();
+  const localCommandsFolder = (localSettings.customPromptsFolder || "").trim();
+  const localPromptsFolder = (localSettings.userSystemPromptsFolder || "").trim();
+  const localMemoryFolder = (localSettings.memoryFolderName || "").trim();
+
   const containerRef = useRef<HTMLDivElement>(null);
   const [minHeight, setMinHeight] = useState<number | undefined>();
   const isMountedRef = useRef(true);
   const reloadTimerRef = useRef<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Reason: monotonic counter to discard stale async file-selection results.
+  // Each new selection bumps the counter; callbacks check their captured ID
+  // against the current value and bail if a newer selection superseded them.
+  const fileSelectionIdRef = useRef(0);
 
   // Reason: track the tallest height seen across all steps so the modal
   // never shrinks when switching to a shorter step.
@@ -122,6 +133,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
   /** Handle selecting a config file from the vault. */
   const handleSelectVaultFile = useCallback(
     async (file: VaultConfigFile) => {
+      const requestId = ++fileSelectionIdRef.current;
       clearFileSelection();
       try {
         if (file.size > MAX_CONFIG_FILE_SIZE) {
@@ -135,11 +147,11 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
         }
         const content = await appInstance.vault.read(tfile);
         const wrapper = parseConfigFileWrapper(content);
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || requestId !== fileSelectionIdRef.current) return;
         setSelectedFileName(file.name);
         setParsedWrapper(wrapper);
       } catch (error) {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || requestId !== fileSelectionIdRef.current) return;
         setErrorMessage(error instanceof Error ? error.message : "Failed to read file.");
       }
     },
@@ -178,6 +190,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
       const file = event.target.files?.[0];
       if (!file) return;
 
+      const requestId = ++fileSelectionIdRef.current;
       // Reason: reset input value so re-selecting the same file triggers change again.
       event.target.value = "";
       clearFileSelection();
@@ -187,7 +200,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
       }
       const reader = new FileReader();
       reader.onload = () => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || requestId !== fileSelectionIdRef.current) return;
         try {
           const content = reader.result as string;
           const wrapper = parseConfigFileWrapper(content);
@@ -198,7 +211,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
         }
       };
       reader.onerror = () => {
-        if (!isMountedRef.current) return;
+        if (!isMountedRef.current || requestId !== fileSelectionIdRef.current) return;
         setErrorMessage("Failed to read the selected file.");
       };
       reader.readAsText(file);
@@ -558,7 +571,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
                       {cachedVaultFilesRef.current!.customCommands.length} Custom Commands
                       <span className="tw-text-faint">
                         {" → "}
-                        {cachedSettingsRef.current?.customPromptsFolder || "—"}
+                        {localCommandsFolder || "—"}
                       </span>
                     </span>
                   </div>
@@ -570,7 +583,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
                       {cachedVaultFilesRef.current!.systemPrompts.length} System Prompts
                       <span className="tw-text-faint">
                         {" → "}
-                        {cachedSettingsRef.current?.userSystemPromptsFolder || "—"}
+                        {localPromptsFolder || "—"}
                       </span>
                     </span>
                   </div>
@@ -584,7 +597,7 @@ export const ImportStepperContent: React.FC<ImportStepperContentProps> = ({
                       Memory Files
                       <span className="tw-text-faint">
                         {" → "}
-                        {cachedSettingsRef.current?.memoryFolderName || "—"}
+                        {localMemoryFolder || "—"}
                       </span>
                     </span>
                   </div>

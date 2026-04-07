@@ -157,6 +157,14 @@ describe("restoreVaultFiles", () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reason: restoreVaultFiles now reads folder paths from getSettings()
+    // (local vault config) rather than from importedSettings, to prevent
+    // malicious import packages from redirecting writes.
+    mockGetSettings.mockReturnValue({
+      customPromptsFolder: "copilot/custom-prompts",
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    });
   });
 
   it("creates new files when they don't exist", async () => {
@@ -272,11 +280,14 @@ describe("restoreVaultFiles", () => {
     expect(result.commandsWritten).toBe(0);
   });
 
-  it("rejects absolute folder paths from imported settings", async () => {
-    const unsafeSettings = {
-      ...mockSettings,
+  it("rejects absolute folder paths from local settings", async () => {
+    // Reason: restoreVaultFiles reads folder paths from getSettings(), so
+    // unsafe paths in local config are still validated and rejected.
+    mockGetSettings.mockReturnValue({
       customPromptsFolder: "/etc/evil",
-    } as unknown as CopilotSettings;
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    });
 
     const files: CollectedVaultFiles = {
       customCommands: [{ filename: "Test.md", content: "test" }],
@@ -284,7 +295,7 @@ describe("restoreVaultFiles", () => {
       memory: { recentConversations: null, savedMemories: null },
     };
 
-    const result = await restoreVaultFiles(mockApp, files, unsafeSettings);
+    const result = await restoreVaultFiles(mockApp, files, mockSettings);
 
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toContain("absolute path");
@@ -292,10 +303,11 @@ describe("restoreVaultFiles", () => {
   });
 
   it("rejects folder paths with path traversal", async () => {
-    const unsafeSettings = {
-      ...mockSettings,
+    mockGetSettings.mockReturnValue({
       customPromptsFolder: "copilot/../../../secret",
-    } as unknown as CopilotSettings;
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    });
 
     const files: CollectedVaultFiles = {
       customCommands: [{ filename: "Test.md", content: "test" }],
@@ -303,7 +315,7 @@ describe("restoreVaultFiles", () => {
       memory: { recentConversations: null, savedMemories: null },
     };
 
-    const result = await restoreVaultFiles(mockApp, files, unsafeSettings);
+    const result = await restoreVaultFiles(mockApp, files, mockSettings);
 
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toContain("path traversal");
@@ -311,10 +323,11 @@ describe("restoreVaultFiles", () => {
   });
 
   it("rejects empty folder paths", async () => {
-    const unsafeSettings = {
-      ...mockSettings,
+    mockGetSettings.mockReturnValue({
       customPromptsFolder: "",
-    } as unknown as CopilotSettings;
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    });
 
     const files: CollectedVaultFiles = {
       customCommands: [{ filename: "Test.md", content: "test" }],
@@ -322,7 +335,7 @@ describe("restoreVaultFiles", () => {
       memory: { recentConversations: null, savedMemories: null },
     };
 
-    const result = await restoreVaultFiles(mockApp, files, unsafeSettings);
+    const result = await restoreVaultFiles(mockApp, files, mockSettings);
 
     expect(result.errors).toHaveLength(1);
     expect(result.errors[0]).toContain("empty");
@@ -330,10 +343,11 @@ describe("restoreVaultFiles", () => {
   });
 
   it("allows folder paths outside the copilot/ namespace", async () => {
-    const customSettings = {
-      ...mockSettings,
+    mockGetSettings.mockReturnValue({
       customPromptsFolder: "my-custom-prompts",
-    } as unknown as CopilotSettings;
+      userSystemPromptsFolder: "copilot/system-prompts",
+      memoryFolderName: "copilot/memory",
+    });
 
     const files: CollectedVaultFiles = {
       customCommands: [{ filename: "Test.md", content: "test" }],
@@ -342,10 +356,43 @@ describe("restoreVaultFiles", () => {
     };
 
     // Reason: users may configure folders anywhere in the vault.
-    const result = await restoreVaultFiles(mockApp, files, customSettings);
+    const result = await restoreVaultFiles(mockApp, files, mockSettings);
 
     expect(result.errors).toHaveLength(0);
     expect(result.commandsWritten).toBe(1);
+  });
+
+  it("uses local folder paths and aligns imported settings", async () => {
+    // Reason: imported settings may specify different folders (e.g. from
+    // another vault). restoreVaultFiles must write to local folders and
+    // mutate importedSettings to match, so later persistence is consistent.
+    mockGetSettings.mockReturnValue({
+      customPromptsFolder: "local/commands",
+      userSystemPromptsFolder: "local/prompts",
+      memoryFolderName: "local/memory",
+    });
+    mockGetAbstractFileByPath.mockReturnValue(null);
+
+    const importedSettings = {
+      customPromptsFolder: "foreign/commands",
+      userSystemPromptsFolder: "foreign/prompts",
+      memoryFolderName: "foreign/memory",
+    } as unknown as CopilotSettings;
+
+    const files: CollectedVaultFiles = {
+      customCommands: [{ filename: "Test.md", content: "cmd" }],
+      systemPrompts: [],
+      memory: { recentConversations: null, savedMemories: null },
+    };
+
+    const result = await restoreVaultFiles(mockApp, files, importedSettings);
+
+    expect(result.commandsWritten).toBe(1);
+    expect(mockCreate).toHaveBeenCalledWith("local/commands/Test.md", "cmd");
+    // Verify imported settings were aligned to local paths
+    expect(importedSettings.customPromptsFolder).toBe("local/commands");
+    expect(importedSettings.userSystemPromptsFolder).toBe("local/prompts");
+    expect(importedSettings.memoryFolderName).toBe("local/memory");
   });
 });
 

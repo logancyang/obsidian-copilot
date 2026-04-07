@@ -528,6 +528,10 @@ function resetDiskSecretFallbackFlags(settings: CopilotSettings): void {
     suppressNextPersistOnce();
     setSettings({
       _diskSecretsCleared: false,
+      // Reason: clear the migration timestamp so the 7-day auto-clear
+      // countdown restarts from the next successful backfill, not from
+      // a stale timestamp that could trigger immediate cleanup.
+      _keychainMigratedAt: undefined,
       _migrationModalDismissed: undefined,
     });
     return;
@@ -535,6 +539,7 @@ function resetDiskSecretFallbackFlags(settings: CopilotSettings): void {
   // Detached snapshot (e.g. import path) — safe to mutate directly.
   const rec = settings as unknown as Record<string, unknown>;
   rec._diskSecretsCleared = false;
+  delete rec._keychainMigratedAt;
   delete rec._migrationModalDismissed;
 }
 
@@ -559,6 +564,7 @@ async function doPersist(
     const cleanedRec = cleaned as unknown as Record<string, unknown>;
     if (cleanedRec._diskSecretsCleared === true && hasPersistedSecrets(cleanedRec)) {
       cleanedRec._diskSecretsCleared = false;
+      delete cleanedRec._keychainMigratedAt;
       delete cleanedRec._migrationModalDismissed;
       // Reason: sync in-memory state through proper Jotai channel so
       // generateConfigFile() and other consumers see the corrected flags.
@@ -654,6 +660,7 @@ async function doPersist(
           "could not be decrypted for keychain write. Disk copy preserved as fallback."
       );
       (cleaned as unknown as Record<string, unknown>)._diskSecretsCleared = false;
+      delete (cleaned as unknown as Record<string, unknown>)._keychainMigratedAt;
       delete (cleaned as unknown as Record<string, unknown>)._migrationModalDismissed;
       // Reason: sync in-memory state through proper Jotai channel so
       // shouldShowMigrationModal() and canClearDiskSecrets() see corrected flags.

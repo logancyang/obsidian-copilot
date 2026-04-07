@@ -257,7 +257,7 @@ export async function decryptWithPassphrase(encoded: string, passphrase: string)
   try {
     // Reason: pre-check encoded length before decoding to avoid allocating
     // huge buffers from maliciously long strings. Base64 expands ~33%.
-    const maxEncodedLength = Math.ceil((MAX_PAYLOAD_BYTES * 4) / 3);
+    const maxEncodedLength = 4 * Math.ceil(MAX_PAYLOAD_BYTES / 3);
     if (encoded.length > maxEncodedLength) {
       throw new ConfigDecryptionError(
         "corrupted",
