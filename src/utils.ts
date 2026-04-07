@@ -12,7 +12,7 @@ import {
   USER_SENDER,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { CopilotSettings } from "@/settings/model";
+import { CopilotSettings, getSettings } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
@@ -672,10 +672,21 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
   return Array.from(titlesSet);
 }
 
-export function extractJsonFromCodeBlock(content: string): any {
-  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const jsonContent = codeBlockMatch ? codeBlockMatch[1].trim() : content.trim();
-  return JSON.parse(jsonContent);
+export function extractJsonFromCodeBlock(content: string): Record<string, unknown> | null {
+  try {
+    const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+    const jsonContent = codeBlockMatch ? codeBlockMatch[1].trim() : content.trim();
+    const parsed = JSON.parse(jsonContent);
+
+    // Validate that the result is a plain object (not array, null, or primitive)
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return null;
+    }
+
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
 }
 
 const YOUTUBE_URL_REGEX =
@@ -785,6 +796,76 @@ export function extractAllYoutubeUrls(text: string): string[] {
   return Array.from(matches, (match) => match[0]);
 }
 
+/** Private/reserved IP patterns for SSRF protection. */
+const PRIVATE_IP_PATTERNS = [
+  /^127\./, // loopback
+  /^10\./, // 10.0.0.0/8
+  /^172\.(1[6-9]|2\d|3[01])\./, // 172.16.0.0/12
+  /^192\.168\./, // 192.168.0.0/16
+  /^169\.254\./, // link-local
+  /^0\.0\.0\.0$/, // unspecified
+];
+
+const BLOCKED_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
+
+/**
+ * Check whether a URL targets a private/internal network address.
+ *
+ * @param url - The URL string to check.
+ * @returns True when the URL resolves to a private or loopback address.
+ */
+export function isPrivateUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname;
+
+    if (BLOCKED_HOSTNAMES.has(hostname)) {
+      return true;
+    }
+
+    if (PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(hostname))) {
+      return true;
+    }
+
+    return false;
+  } catch {
+    // Malformed URL -- treat as private to be safe
+    return true;
+  }
+}
+
+/**
+ * Validate that a URL is safe to fetch (not targeting private networks).
+ * Throws if the URL is blocked. Allows the user-configured selfHostUrl.
+ *
+ * @param url - The URL string to validate.
+ */
+function assertSafeUrl(url: string): void {
+  const parsed = new URL(url);
+
+  // Only allow http: and https: protocols
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error(`Blocked request to disallowed protocol: ${parsed.protocol}`);
+  }
+
+  // Allow the user's configured self-host URL (intentionally local)
+  const selfHostUrl = getSettings().selfHostUrl;
+  if (selfHostUrl) {
+    try {
+      const selfHostParsed = new URL(selfHostUrl);
+      if (parsed.hostname === selfHostParsed.hostname && parsed.port === selfHostParsed.port) {
+        return;
+      }
+    } catch {
+      // Ignore malformed selfHostUrl
+    }
+  }
+
+  if (isPrivateUrl(url)) {
+    throw new Error(`Blocked request to private/internal address: ${parsed.hostname}`);
+  }
+}
+
 /**
  * Proxy function to use in place of fetch() to bypass CORS restrictions.
  * Uses Obsidian's requestUrl which bypasses browser CORS restrictions.
@@ -809,6 +890,10 @@ export async function safeFetch(
   options: RequestInit & { throwOnHttpError?: boolean } = {}
 ): Promise<Response> {
   const { throwOnHttpError = true } = options;
+
+  // SSRF protection: block requests to private/internal addresses
+  assertSafeUrl(url);
+
   // Initialize headers if not provided
   const normalizedHeaders = new Headers(options.headers);
   const headers = Object.fromEntries(normalizedHeaders.entries());
