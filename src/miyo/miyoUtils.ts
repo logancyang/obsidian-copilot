@@ -41,7 +41,7 @@ export function shouldUseMiyo(settings: CopilotSettings): boolean {
  * @param app - Obsidian application instance.
  * @returns Vault folder name.
  */
-export function getMiyoFolderPath(app: App): string {
+export function getMiyoFolderName(app: App): string {
   return app.vault.getName();
 }
 

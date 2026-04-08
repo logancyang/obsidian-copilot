@@ -184,16 +184,16 @@ export class MiyoClient {
   }
 
   /**
-   * Fetch the Miyo folder entry for a registered folder path.
+   * Fetch the Miyo folder entry for a registered folder name.
    *
    * @param baseUrl - Miyo base URL.
-   * @param folderPath - Absolute folder path registered in Miyo.
+   * @param folderName - Vault name registered in Miyo.
    * @returns Folder entry.
    */
-  public async getFolder(baseUrl: string, folderPath: string): Promise<MiyoFolderEntry> {
+  public async getFolder(baseUrl: string, folderName: string): Promise<MiyoFolderEntry> {
     return this.requestJson<MiyoFolderEntry>(baseUrl, "/v0/folder", {
       method: "GET",
-      query: { path: folderPath },
+      query: { path: folderName },
     });
   }
 
@@ -201,19 +201,19 @@ export class MiyoClient {
    * Trigger a Miyo folder scan.
    *
    * @param baseUrl - Miyo base URL.
-   * @param folderPath - Absolute folder path registered in Miyo.
+   * @param folderName - Vault name registered in Miyo.
    * @param force - Whether to force a full re-scan.
    * @returns Scan response.
    */
   public async scanFolder(
     baseUrl: string,
-    folderPath: string,
+    folderName: string,
     force = false
   ): Promise<MiyoScanResponse> {
     return this.requestJson<MiyoScanResponse>(baseUrl, "/v0/scan", {
       method: "POST",
       body: {
-        path: folderPath,
+        path: folderName,
         force,
       },
     });
@@ -229,7 +229,7 @@ export class MiyoClient {
   public async listFolderFiles(
     baseUrl: string,
     options: {
-      folderPath: string;
+      folderName: string;
       title?: string;
       filePath?: string;
       mtimeAfter?: number;
@@ -242,7 +242,7 @@ export class MiyoClient {
     return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/folder/files", {
       method: "GET",
       query: {
-        folder_path: options.folderPath,
+        folder_path: options.folderName,
         title: options.title,
         file_path: options.filePath,
         mtime_after: options.mtimeAfter,
@@ -258,29 +258,29 @@ export class MiyoClient {
    * Fetch all indexed chunks for a file path.
    *
    * @param baseUrl - Miyo base URL.
-   * @param folderPath - Folder path to scope the document lookup.
+   * @param folderName - Vault name to scope the document lookup.
    * @param path - Absolute file path to look up.
    * @returns Documents response.
    */
   public async getDocumentsByPath(
     baseUrl: string,
-    folderPath: string,
+    folderName: string,
     path: string
   ): Promise<MiyoDocumentsResponse> {
     return this.requestJson<MiyoDocumentsResponse>(baseUrl, "/v0/folder/documents", {
       method: "GET",
       query: {
         path,
-        folder_path: folderPath,
+        folder_path: folderName,
       },
     });
   }
 
   /**
-   * Execute a hybrid search query scoped to a folder path.
+   * Execute a hybrid search query scoped to a folder.
    *
    * @param baseUrl - Miyo base URL.
-   * @param folderPath - Folder path sent to Miyo.
+   * @param folderName - Vault name sent to Miyo.
    * @param query - User query.
    * @param limit - Maximum number of results.
    * @param filters - Optional search filters.
@@ -288,14 +288,14 @@ export class MiyoClient {
    */
   public async search(
     baseUrl: string,
-    folderPath: string,
+    folderName: string,
     query: string,
     limit: number,
     filters?: MiyoSearchFilter[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      folder_path: folderPath,
+      folder_path: folderName,
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
@@ -313,21 +313,21 @@ export class MiyoClient {
    *
    * @param baseUrl - Miyo base URL.
    * @param filePath - Absolute source note path to find related notes for.
-   * @param options - Optional folder path, result limit, and filters.
+   * @param options - Optional folder name, result limit, and filters.
    * @returns Search response in the same shape as /v0/search.
    */
   public async searchRelated(
     baseUrl: string,
     filePath: string,
     options?: {
-      folderPath?: string;
+      folderName?: string;
       limit?: number;
       filters?: MiyoSearchFilter[];
     }
   ): Promise<MiyoRelatedSearchResponse> {
     const payload = {
       file_path: filePath,
-      ...(options?.folderPath ? { folder_path: options.folderPath } : {}),
+      ...(options?.folderName ? { folder_path: options.folderName } : {}),
       ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
       ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
     };
@@ -341,13 +341,18 @@ export class MiyoClient {
    * Parse a local document via Miyo.
    *
    * @param baseUrl - Miyo base URL.
-   * @param path - Absolute local file path.
+   * @param folderName - Vault name sent to Miyo.
+   * @param path - Vault-relative file path.
    * @returns Parsed document response.
    */
-  public async parseDoc(baseUrl: string, path: string): Promise<MiyoParseDocResponse> {
+  public async parseDoc(
+    baseUrl: string,
+    folderName: string,
+    path: string
+  ): Promise<MiyoParseDocResponse> {
     return this.requestJson<MiyoParseDocResponse>(baseUrl, "/v0/parse-doc", {
       method: "POST",
-      body: { path },
+      body: { folder_path: folderName, path },
     });
   }
 

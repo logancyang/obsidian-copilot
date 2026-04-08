@@ -53,13 +53,13 @@ describe("MiyoClient", () => {
     });
   });
 
-  it("posts absolute path to /v0/parse-doc and returns parsed payload", async () => {
+  it("posts vault-relative path to /v0/parse-doc and returns parsed payload", async () => {
     mockedRequestUrl.mockResolvedValue({
       status: 200,
       json: {
         text: "parsed text",
         format: "pdf",
-        source_path: "/tmp/sample.pdf",
+        source_path: "docs/sample.pdf",
         title: "Sample",
         page_count: 3,
       },
@@ -67,12 +67,12 @@ describe("MiyoClient", () => {
     } as any);
 
     const client = new MiyoClient();
-    const result = await client.parseDoc("http://127.0.0.1:8742", "/tmp/sample.pdf");
+    const result = await client.parseDoc("http://127.0.0.1:8742", "TestVault", "docs/sample.pdf");
 
     expect(result).toEqual({
       text: "parsed text",
       format: "pdf",
-      source_path: "/tmp/sample.pdf",
+      source_path: "docs/sample.pdf",
       title: "Sample",
       page_count: 3,
     });
@@ -84,7 +84,7 @@ describe("MiyoClient", () => {
           Authorization: "Bearer plus-test-license",
         },
         contentType: "application/json",
-        body: JSON.stringify({ path: "/tmp/sample.pdf" }),
+        body: JSON.stringify({ folder_path: "TestVault", path: "docs/sample.pdf" }),
       })
     );
     expect(mockedLogInfo).toHaveBeenCalledWith(
@@ -152,7 +152,7 @@ describe("MiyoClient", () => {
 
     const client = new MiyoClient();
     await client.listFolderFiles("http://127.0.0.1:8742", {
-      folderPath: "/vault",
+      folderName: "/vault",
       offset: 10,
       limit: 25,
       orderBy: "mtime",

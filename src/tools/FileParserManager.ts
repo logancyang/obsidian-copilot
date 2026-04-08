@@ -9,7 +9,7 @@ import { isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { saveConvertedDocOutput as saveConvertedDocOutputCore } from "@/utils/convertedDocOutput";
 import { extractRetryTime, isRateLimitError } from "@/utils/rateLimitUtils";
-import { FileSystemAdapter, Notice, TFile, Vault } from "obsidian";
+import { Notice, TFile, Vault } from "obsidian";
 import { CanvasLoader } from "./CanvasLoader";
 
 interface FileParser {
@@ -27,27 +27,6 @@ export async function saveConvertedDocOutput(
 ): Promise<void> {
   const outputFolder = getSettings().convertedDocOutputFolder ?? "";
   await saveConvertedDocOutputCore(file, content, vault, outputFolder);
-}
-
-/**
- * Resolve absolute file path for a vault file when supported by the adapter.
- *
- * @param file - Target file.
- * @param vault - Obsidian vault instance.
- * @returns Absolute file path or null when unavailable.
- */
-function resolveAbsoluteFilePath(file: TFile, vault: Vault): string | null {
-  const adapter = vault.adapter;
-  if (adapter instanceof FileSystemAdapter) {
-    return adapter.getFullPath(file.path);
-  }
-
-  const adapterAny = adapter as unknown as { getFullPath?: (normalizedPath: string) => string };
-  if (typeof adapterAny.getFullPath === "function") {
-    return adapterAny.getFullPath(file.path);
-  }
-
-  return null;
 }
 
 /** Result from SelfHostPdfParser: null = not applicable, { content } = success, { error } = tried and failed. */
@@ -79,14 +58,10 @@ class SelfHostPdfParser {
       return null;
     }
 
-    const absolutePath = resolveAbsoluteFilePath(file, vault);
-    if (!absolutePath) {
-      return { error: "Could not resolve absolute file path for Miyo parse-doc" };
-    }
-
     try {
       const baseUrl = await this.miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-      const response = await this.miyoClient.parseDoc(baseUrl, absolutePath);
+      const folderName = vault.getName();
+      const response = await this.miyoClient.parseDoc(baseUrl, folderName, file.path);
       if (typeof response.text !== "string" || response.text.trim().length === 0) {
         return { error: "Miyo parse-doc returned empty text" };
       }

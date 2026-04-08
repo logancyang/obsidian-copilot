@@ -4,7 +4,7 @@ import { findRelevantNotes } from "@/search/findRelevantNotes";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import {
   getMiyoAbsolutePath,
-  getMiyoFolderPath,
+  getMiyoFolderName,
   getVaultRelativeMiyoPath,
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
@@ -52,7 +52,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
 }));
 
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoFolderPath: jest.fn(),
+  getMiyoFolderName: jest.fn(),
   getMiyoAbsolutePath: jest.fn((_: unknown, path: string) => `/vault/${path}`),
   getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
@@ -83,8 +83,8 @@ describe("findRelevantNotes", () => {
   const mockedGetBacklinkedNotes = getBacklinkedNotes as jest.MockedFunction<
     typeof getBacklinkedNotes
   >;
-  const mockedGetMiyoFolderPath = getMiyoFolderPath as jest.MockedFunction<
-    typeof getMiyoFolderPath
+  const mockedGetMiyoFolderName = getMiyoFolderName as jest.MockedFunction<
+    typeof getMiyoFolderName
   >;
   const mockedGetMiyoAbsolutePath = getMiyoAbsolutePath as jest.MockedFunction<
     typeof getMiyoAbsolutePath
@@ -113,7 +113,7 @@ describe("findRelevantNotes", () => {
     } as any);
     mockedGetLinkedNotes.mockReturnValue([]);
     mockedGetBacklinkedNotes.mockReturnValue([]);
-    mockedGetMiyoFolderPath.mockReturnValue("/vault");
+    mockedGetMiyoFolderName.mockReturnValue("/vault");
     mockedGetMiyoAbsolutePath.mockImplementation((_: unknown, path: string) => `/vault/${path}`);
     mockedGetVaultRelativeMiyoPath.mockImplementation((_: unknown, path: string) =>
       path.replace("/vault/", "")
@@ -234,7 +234,7 @@ describe("findRelevantNotes", () => {
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
     expect(mockSearchRelated).toHaveBeenCalledTimes(1);
     expect(mockSearchRelated).toHaveBeenCalledWith("http://127.0.0.1:8742", "/vault/source.md", {
-      folderPath: "/vault",
+      folderName: "/vault",
       limit: 20,
     });
   });

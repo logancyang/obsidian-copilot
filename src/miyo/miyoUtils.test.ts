@@ -2,11 +2,11 @@ jest.mock("@/plusUtils", () => ({
   isSelfHostAccessValid: jest.fn(),
 }));
 
-import { getMiyoFolderPath } from "@/miyo/miyoUtils";
+import { getMiyoFolderName } from "@/miyo/miyoUtils";
 
-describe("getMiyoFolderPath", () => {
+describe("getMiyoFolderName", () => {
   it("uses the vault folder name even when an adapter exposes an absolute path", () => {
-    const folderPath = getMiyoFolderPath({
+    const folderName = getMiyoFolderName({
       vault: {
         getName: () => "graham-essays-main",
         adapter: {
@@ -15,6 +15,6 @@ describe("getMiyoFolderPath", () => {
       },
     } as any);
 
-    expect(folderPath).toBe("graham-essays-main");
+    expect(folderName).toBe("graham-essays-main");
   });
 });
