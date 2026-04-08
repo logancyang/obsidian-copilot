@@ -808,6 +808,28 @@ const PRIVATE_IP_PATTERNS = [
 
 const BLOCKED_HOSTNAMES = new Set(["localhost", "127.0.0.1", "0.0.0.0", "::1", "[::1]"]);
 
+/** IPv6 prefixes that target private/reserved address space. */
+const PRIVATE_IPV6_PREFIXES = [
+  "::1", // loopback
+  "fc", // ULA (fc00::/7)
+  "fd", // ULA (fc00::/7)
+  "fe80:", // link-local (fe80::/10)
+  "::ffff:127.", // IPv4-mapped loopback
+  "::ffff:10.", // IPv4-mapped 10.0.0.0/8
+  "::ffff:192.168.", // IPv4-mapped 192.168.0.0/16
+];
+
+/**
+ * Check whether an IPv6 address (without brackets) is private/reserved.
+ */
+function isPrivateIPv6(addr: string): boolean {
+  const lower = addr.toLowerCase();
+  if (lower === "::1" || lower === "::") {
+    return true;
+  }
+  return PRIVATE_IPV6_PREFIXES.some((prefix) => lower.startsWith(prefix));
+}
+
 /**
  * Check whether a URL targets a private/internal network address.
  *
@@ -825,6 +847,11 @@ export function isPrivateUrl(url: string): boolean {
 
     if (PRIVATE_IP_PATTERNS.some((pattern) => pattern.test(hostname))) {
       return true;
+    }
+
+    // IPv6 addresses appear as [addr] in URLs; URL.hostname strips the brackets.
+    if (hostname.includes(":")) {
+      return isPrivateIPv6(hostname);
     }
 
     return false;

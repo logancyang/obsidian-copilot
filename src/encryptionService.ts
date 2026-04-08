@@ -84,6 +84,8 @@ export async function getLegacyEncryptionKey(): Promise<CryptoKey> {
 
 /**
  * Return the persisted per-vault Web Crypto key, generating one if needed.
+ * Use only for encryption; for decryption use getExistingVaultKey() to avoid
+ * accidental key rotation when the stored key is missing.
  */
 async function getOrCreateVaultKey(): Promise<CryptoKey> {
   const settings = getSettings();
@@ -93,6 +95,25 @@ async function getOrCreateVaultKey(): Promise<CryptoKey> {
     const rawKey = crypto.getRandomValues(new Uint8Array(32));
     rawKeyB64 = toBase64(rawKey);
     persistVaultKey(rawKeyB64);
+  }
+
+  return await crypto.subtle.importKey("raw", fromBase64(rawKeyB64), "AES-GCM", false, [
+    "encrypt",
+    "decrypt",
+  ]);
+}
+
+/**
+ * Return the persisted per-vault Web Crypto key without generating a new one.
+ * Returns null when no key is stored, preventing accidental key rotation
+ * during decryption (which would make existing ciphertext irrecoverable).
+ */
+async function getExistingVaultKey(): Promise<CryptoKey | null> {
+  const settings = getSettings();
+  const rawKeyB64 = settings.encryptionKeyB64;
+
+  if (!rawKeyB64) {
+    return null;
   }
 
   return await crypto.subtle.importKey("raw", fromBase64(rawKeyB64), "AES-GCM", false, [
@@ -296,10 +317,14 @@ export async function migrateEncryptionToV2(
   for (const key of keysToMigrate) {
     const value = settings[key as keyof CopilotSettings] as string;
     if (typeof value === "string" && isLegacyWebCryptoValue(value)) {
-      const decrypted = await decryptLegacyWebCryptoValue(value);
-      if (isMigratableDecryptedValue(decrypted)) {
-        (newSettings[key as keyof CopilotSettings] as any) = await encryptV2(decrypted);
-        changed = true;
+      try {
+        const decrypted = await decryptLegacyWebCryptoValue(value);
+        if (isMigratableDecryptedValue(decrypted)) {
+          (newSettings[key as keyof CopilotSettings] as any) = await encryptV2(decrypted);
+          changed = true;
+        }
+      } catch (e) {
+        logError(`V1 migration failed for setting "${key}", skipping: ${e}`);
       }
     }
   }
@@ -308,13 +333,17 @@ export async function migrateEncryptionToV2(
     newSettings.activeModels = await Promise.all(
       settings.activeModels.map(async (model) => {
         if (isLegacyWebCryptoValue(model.apiKey || "")) {
-          const decrypted = await decryptLegacyWebCryptoValue(model.apiKey || "");
-          if (isMigratableDecryptedValue(decrypted)) {
-            changed = true;
-            return {
-              ...model,
-              apiKey: await encryptV2(decrypted),
-            };
+          try {
+            const decrypted = await decryptLegacyWebCryptoValue(model.apiKey || "");
+            if (isMigratableDecryptedValue(decrypted)) {
+              changed = true;
+              return {
+                ...model,
+                apiKey: await encryptV2(decrypted),
+              };
+            }
+          } catch (e) {
+            logError(`V1 migration failed for model "${model.name}", skipping: ${e}`);
           }
         }
         return model;
@@ -326,13 +355,17 @@ export async function migrateEncryptionToV2(
     newSettings.activeEmbeddingModels = await Promise.all(
       settings.activeEmbeddingModels.map(async (model) => {
         if (isLegacyWebCryptoValue(model.apiKey || "")) {
-          const decrypted = await decryptLegacyWebCryptoValue(model.apiKey || "");
-          if (isMigratableDecryptedValue(decrypted)) {
-            changed = true;
-            return {
-              ...model,
-              apiKey: await encryptV2(decrypted),
-            };
+          try {
+            const decrypted = await decryptLegacyWebCryptoValue(model.apiKey || "");
+            if (isMigratableDecryptedValue(decrypted)) {
+              changed = true;
+              return {
+                ...model,
+                apiKey: await encryptV2(decrypted),
+              };
+            }
+          } catch (e) {
+            logError(`V1 migration failed for embedding model "${model.name}", skipping: ${e}`);
           }
         }
         return model;
@@ -373,7 +406,11 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
       const combined = fromBase64(base64Data);
       const iv = combined.subarray(0, 12);
       const ciphertext = combined.subarray(12);
-      const key = await getOrCreateVaultKey();
+      const key = await getExistingVaultKey();
+      if (!key) {
+        logError("V2 decryption key is missing — cannot decrypt without the original key");
+        return DECRYPTION_FAILURE_MESSAGE;
+      }
       const decryptedData = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
       return new TextDecoder().decode(decryptedData);
     }
