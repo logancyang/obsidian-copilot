@@ -84,7 +84,7 @@ describe("MiyoClient", () => {
           Authorization: "Bearer plus-test-license",
         },
         contentType: "application/json",
-        body: JSON.stringify({ folder_path: "TestVault", path: "docs/sample.pdf" }),
+        body: JSON.stringify({ folder_name: "TestVault", path: "docs/sample.pdf" }),
       })
     );
     expect(mockedLogInfo).toHaveBeenCalledWith(
@@ -97,7 +97,7 @@ describe("MiyoClient", () => {
     );
   });
 
-  it("sends folder_path in /v0/search requests", async () => {
+  it("sends folder_name in /v0/search requests", async () => {
     mockedRequestUrl.mockResolvedValue({
       status: 200,
       json: { results: [] },
@@ -115,7 +115,7 @@ describe("MiyoClient", () => {
         method: "POST",
         body: JSON.stringify({
           query: "project notes",
-          folder_path: "/vault",
+          folder_name: "/vault",
           limit: 10,
           filters: [{ field: "mtime", gte: 1, lte: 2 }],
         }),
@@ -143,7 +143,7 @@ describe("MiyoClient", () => {
     );
   });
 
-  it("lists indexed files from /v0/folder/files with folder_path query params", async () => {
+  it("lists indexed files from /v0/folder/files with folder_name query params", async () => {
     mockedRequestUrl.mockResolvedValue({
       status: 200,
       json: { files: [], total: 0 },
@@ -160,7 +160,7 @@ describe("MiyoClient", () => {
 
     expect(mockedRequestUrl).toHaveBeenCalledWith(
       expect.objectContaining({
-        url: "http://127.0.0.1:8742/v0/folder/files?folder_path=%2Fvault&offset=10&limit=25&order_by=mtime",
+        url: "http://127.0.0.1:8742/v0/folder/files?folder_name=%2Fvault&offset=10&limit=25&order_by=mtime",
         method: "GET",
       })
     );
