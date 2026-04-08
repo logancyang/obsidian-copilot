@@ -13,7 +13,6 @@ export interface MiyoIndexedFileEntry {
   title?: string | null;
   mtime: number;
   updated_at?: string;
-  folder_path?: string | null;
   total_chunks?: number;
 }
 
@@ -62,7 +61,6 @@ export interface MiyoDocumentsResponse {
     extension?: string;
     created_at?: string | number | null;
     nchars?: number;
-    folder_path?: string | null;
   }>;
 }
 
@@ -84,7 +82,6 @@ export interface MiyoSearchResult {
   extension?: string;
   created_at?: string | number | null;
   nchars?: number;
-  folder_path?: string | null;
 }
 
 /**
@@ -242,7 +239,7 @@ export class MiyoClient {
     return this.requestJson<MiyoIndexedFilesResponse>(baseUrl, "/v0/folder/files", {
       method: "GET",
       query: {
-        folder_path: options.folderName,
+        folder_name: options.folderName,
         title: options.title,
         file_path: options.filePath,
         mtime_after: options.mtimeAfter,
@@ -271,7 +268,7 @@ export class MiyoClient {
       method: "GET",
       query: {
         path,
-        folder_path: folderName,
+        folder_name: folderName,
       },
     });
   }
@@ -295,7 +292,7 @@ export class MiyoClient {
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      folder_path: folderName,
+      folder_name: folderName,
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
@@ -327,7 +324,7 @@ export class MiyoClient {
   ): Promise<MiyoRelatedSearchResponse> {
     const payload = {
       file_path: filePath,
-      ...(options?.folderName ? { folder_path: options.folderName } : {}),
+      ...(options?.folderName ? { folder_name: options.folderName } : {}),
       ...(typeof options?.limit === "number" ? { limit: options.limit } : {}),
       ...(options?.filters && options.filters.length > 0 ? { filters: options.filters } : {}),
     };
@@ -352,7 +349,7 @@ export class MiyoClient {
   ): Promise<MiyoParseDocResponse> {
     return this.requestJson<MiyoParseDocResponse>(baseUrl, "/v0/parse-doc", {
       method: "POST",
-      body: { folder_path: folderName, path },
+      body: { folder_name: folderName, path },
     });
   }
 

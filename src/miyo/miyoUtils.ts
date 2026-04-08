@@ -36,7 +36,7 @@ export function shouldUseMiyo(settings: CopilotSettings): boolean {
 }
 
 /**
- * Resolve the folder identifier sent to Miyo as `folder_path`.
+ * Resolve the folder identifier sent to Miyo as `folder_name`.
  *
  * @param app - Obsidian application instance.
  * @returns Vault folder name.
