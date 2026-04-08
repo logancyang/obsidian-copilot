@@ -5,7 +5,7 @@ import { MiyoClient, MiyoIndexedFileEntry } from "@/miyo/MiyoClient";
 import {
   getMiyoAbsolutePath,
   getMiyoCustomUrl,
-  getMiyoFolderPath,
+  getMiyoFolderName,
   getVaultRelativeMiyoPath,
 } from "@/miyo/miyoUtils";
 import type {
@@ -40,7 +40,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
   public async initialize(_embeddingInstance: Embeddings | undefined): Promise<void> {
     try {
       const baseUrl = await this.getBaseUrl();
-      await this.client.getFolder(baseUrl, this.getFolderPath());
+      await this.client.getFolder(baseUrl, this.getFolderName());
     } catch (error) {
       logWarn(`Miyo backend initialization failed: ${error}`);
       new Notice(
@@ -144,7 +144,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
     const absolutePath = getMiyoAbsolutePath(this.app, path);
     const response = await this.client.getDocumentsByPath(
       baseUrl,
-      this.getFolderPath(),
+      this.getFolderName(),
       absolutePath
     );
     const docs = response.documents ?? [];
@@ -242,7 +242,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   public async requestIndexRefresh(force = false): Promise<void> {
     const baseUrl = await this.getBaseUrl();
-    await this.client.scanFolder(baseUrl, this.getFolderPath(), force);
+    await this.client.scanFolder(baseUrl, this.getFolderName(), force);
   }
 
   /**
@@ -260,8 +260,8 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    *
    * @returns Vault folder name.
    */
-  private getFolderPath(): string {
-    return getMiyoFolderPath(this.app);
+  private getFolderName(): string {
+    return getMiyoFolderName(this.app);
   }
 
   /**
@@ -278,7 +278,7 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
 
     do {
       const response = await this.client.listFolderFiles(baseUrl, {
-        folderPath: this.getFolderPath(),
+        folderName: this.getFolderName(),
         offset,
         limit,
       });

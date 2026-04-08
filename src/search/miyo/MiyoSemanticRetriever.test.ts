@@ -1,4 +1,4 @@
-import { getMiyoFolderPath } from "@/miyo/miyoUtils";
+import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
 import { RETURN_ALL_LIMIT } from "@/search/v3/SearchCore";
@@ -12,7 +12,7 @@ jest.mock("@/settings/model", () => ({
   getSettings: jest.fn(),
 }));
 jest.mock("@/miyo/miyoUtils", () => ({
-  getMiyoFolderPath: jest.fn(),
+  getMiyoFolderName: jest.fn(),
   getVaultRelativeMiyoPath: jest.fn((_: unknown, path: string) => path.replace("/vault/", "")),
   getMiyoCustomUrl: jest.fn().mockReturnValue(""),
 }));
@@ -48,7 +48,7 @@ describe("MiyoSemanticRetriever", () => {
       miyoServerUrl: "http://miyo.local",
       debug: false,
     });
-    (getMiyoFolderPath as jest.Mock).mockReturnValue("/vault");
+    (getMiyoFolderName as jest.Mock).mockReturnValue("/vault");
     mockResolveBaseUrl.mockResolvedValue("http://miyo.local");
   });
 

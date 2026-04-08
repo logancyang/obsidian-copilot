@@ -3,7 +3,7 @@ import { MiyoClient } from "@/miyo/MiyoClient";
 import {
   getMiyoAbsolutePath,
   getMiyoCustomUrl,
-  getMiyoFolderPath,
+  getMiyoFolderName,
   getVaultRelativeMiyoPath,
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
@@ -129,9 +129,9 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
     const settings = getSettings();
     const miyoClient = new MiyoClient();
     const baseUrl = await miyoClient.resolveBaseUrl(getMiyoCustomUrl(settings));
-    const folderPath = getMiyoFolderPath(app);
+    const folderName = getMiyoFolderName(app);
     const response = await miyoClient.searchRelated(baseUrl, getMiyoAbsolutePath(app, filePath), {
-      folderPath,
+      folderName,
       limit: MAX_K,
     });
     const similarityScoreMap = new Map<string, number>();
