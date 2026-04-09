@@ -1,5 +1,29 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.7 🔧
+
+A focused patch release with **Miyo server compatibility fixes** and a small **debug table cleanup**!
+
+- 🔧 **Miyo now uses your vault name — not the full path** — Copilot sends your Obsidian vault folder name (instead of the absolute local path) when talking to Miyo, making it work correctly whether your Miyo server is local or remote. The outdated "Remote Vault Folder" setting has been removed since it's no longer needed. (@wenzhengjiang)
+- 📁 **Miyo API alignment: folder names and relative paths** — Internal Miyo requests now use `folder_name` (matching the updated server API) and send vault-relative file paths for document indexing, keeping Copilot in sync with the Miyo server protocol. (@wenzhengjiang)
+- 🛠️ **Cleaner search debug table** — The redundant row-index column has been removed from the search results debug log, and columns are now ordered more usefully: path, index type, modified time, score, explanation. (@logancyang)
+
+More details in the changelog:
+
+### Bug Fixes
+
+- #2342 Use vault name for Miyo requests @wenzhengjiang
+- #2348 refactor(miyo): rename folderPath to folderName and fix parse-doc path @wenzhengjiang
+- #2349 refactor(miyo): rename folder_path to folder_name @wenzhengjiang
+- #2344 fix(debug): remove idx column from search results debug table @logancyang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.6 🛠️
 
 A solid patch release focused on **Miyo remote server improvements** and a handy **OpenRouter prompt caching toggle**!
