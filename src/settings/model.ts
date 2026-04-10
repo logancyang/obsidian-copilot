@@ -131,6 +131,8 @@ export interface CopilotSettings {
   enableSelfHostMode: boolean;
   /** Enable Miyo-backed indexing and semantic search when self-host mode is active */
   enableMiyo: boolean;
+  /** When true, omit folder_name from Miyo search requests so all indexed content is searched */
+  miyoSearchAll: boolean;
   /** Timestamp of last successful Believer validation for self-host mode (null if never validated) */
   selfHostModeValidatedAt: number | null;
   /** Count of successful periodic validations (3 = permanently valid) */
@@ -429,6 +431,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // Ensure enableMiyo has a default value
   if (typeof sanitizedSettings.enableMiyo !== "boolean") {
     sanitizedSettings.enableMiyo = DEFAULT_SETTINGS.enableMiyo;
+  }
+
+  // Ensure miyoSearchAll has a default value
+  if (typeof sanitizedSettings.miyoSearchAll !== "boolean") {
+    sanitizedSettings.miyoSearchAll = DEFAULT_SETTINGS.miyoSearchAll;
   }
 
   // Ensure miyoServerUrl has a default value
