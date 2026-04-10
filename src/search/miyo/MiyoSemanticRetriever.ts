@@ -89,13 +89,8 @@ export class MiyoSemanticRetriever extends BaseRetriever {
           filters,
         });
       }
-      const response = await this.client.search(
-        baseUrl,
-        getMiyoFolderName(this.app),
-        query,
-        limit,
-        filters
-      );
+      const folderName = getSettings().miyoSearchAll ? undefined : getMiyoFolderName(this.app);
+      const response = await this.client.search(baseUrl, folderName, query, limit, filters);
 
       const rawResults = response.results || [];
       const filteredResults = rawResults.filter((result) => this.isScoreAboveThreshold(result));

@@ -237,12 +237,24 @@ export const CopilotPlusSettings: React.FC = () => {
                   />
 
                   {settings.enableMiyo && (
-                    <div className="tw-text-xs tw-text-muted">
-                      Folder identifier sent to Miyo:{" "}
-                      <span className="tw-font-medium tw-text-normal">
-                        {getMiyoFolderName(app)}
-                      </span>
-                    </div>
+                    <>
+                      <SettingItem
+                        type="switch"
+                        title="Search everything in Miyo"
+                        description="When enabled, Miyo searches all indexed content across all folders. When disabled, searches are limited to the current vault folder only."
+                        checked={settings.miyoSearchAll}
+                        onCheckedChange={(checked) => updateSetting("miyoSearchAll", checked)}
+                      />
+
+                      {!settings.miyoSearchAll && (
+                        <div className="tw-text-xs tw-text-muted">
+                          Folder identifier sent to Miyo:{" "}
+                          <span className="tw-font-medium tw-text-normal">
+                            {getMiyoFolderName(app)}
+                          </span>
+                        </div>
+                      )}
+                    </>
                   )}
 
                   <SettingItem

@@ -285,14 +285,14 @@ export class MiyoClient {
    */
   public async search(
     baseUrl: string,
-    folderName: string,
+    folderName: string | undefined,
     query: string,
     limit: number,
     filters?: MiyoSearchFilter[]
   ): Promise<MiyoSearchResponse> {
     const payload = {
       query,
-      folder_name: folderName,
+      ...(folderName ? { folder_name: folderName } : {}),
       limit,
       ...(filters && filters.length > 0 ? { filters } : {}),
     };
