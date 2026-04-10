@@ -45,14 +45,24 @@ function renderVerificationMessage(message: string): React.ReactNode {
       const match = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/);
       if (match) {
         return (
-          <a key={j} href={match[2]} target="_blank" rel="noopener noreferrer" className="tw-underline">
+          <a
+            key={j}
+            href={match[2]}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="tw-underline"
+          >
             {match[1]}
           </a>
         );
       }
       return part;
     });
-    return <p key={i} className={i > 0 ? "tw-mt-1" : ""}>{nodes}</p>;
+    return (
+      <p key={i} className={i > 0 ? "tw-mt-1" : ""}>
+        {nodes}
+      </p>
+    );
   });
 }
 
