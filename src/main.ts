@@ -3,6 +3,7 @@ import ProjectManager from "@/LLMProviders/projectManager";
 import {
   CustomModel,
   getCurrentProject,
+  ProjectConfig,
   setSelectedTextContexts,
   getSelectedTextContexts,
 } from "@/aiParams";
@@ -284,11 +285,18 @@ export default class CopilotPlugin extends Plugin {
     this.userMessageHistory = [...this.userMessageHistory, newMessage];
   }
 
-  async autosaveCurrentChat() {
+  async autosaveCurrentChat(projectOverride?: ProjectConfig | null) {
     if (getSettings().autosaveChat) {
       const chatView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0]?.view as CopilotView;
       if (chatView) {
-        await chatView.saveChat();
+        if (projectOverride !== undefined) {
+          // Reason: project-switch path needs to detect save failure to abort the switch.
+          await chatView.saveChat(projectOverride);
+        } else {
+          // Reason: non-switch callers (loadChatHistory, newChat, settings reload) should
+          // not be blocked by a transient save error. Error is already logged+noticed inside.
+          await chatView.saveChat().catch(() => {});
+        }
       }
     }
   }
