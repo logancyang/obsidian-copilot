@@ -86,6 +86,17 @@ If your plugin does not need CSS, delete this file.
   width: 70%;
 }
 
+/* Vim navigation: hide default outline, show for keyboard navigation */
+.copilot-messages-focusable:focus {
+  outline: none;
+}
+
+.copilot-messages-focusable:focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: -2px;
+  border-radius: var(--radius-s);
+}
+
 .chat-context-menu {
   display: flex;
   align-items: center;
