@@ -67,6 +67,135 @@ const { __renderMarkdownMock: renderMarkdownMock } = jest.requireMock("obsidian"
   __renderMarkdownMock: jest.Mock;
 };
 
+// ---------------------------------------------------------------------------
+// Verifies that the HTML string passed to MarkdownRenderer.renderMarkdown
+// never has </div> or </details> on the same line as a 4-space-indented
+// line. This was the root cause of the Gemma rendering bug: google/gemma-4-31b-it
+// thinking output ends with 4-space-indented bullet points, and without a
+// trailing \n the closing </div> was consumed by markdown's indented code
+// block rule and rendered as literal "&lt;/div&gt;" text.
+// ---------------------------------------------------------------------------
+
+describe("think block rendering — closing tags are not consumed by indented code blocks", () => {
+  const createAppStub = (): App =>
+    ({
+      workspace: { getActiveFile: jest.fn(() => null) },
+      metadataCache: { getFirstLinkpathDest: jest.fn(() => null) },
+    }) as unknown as App;
+
+  const baseAiMessage: ChatMessage = {
+    id: "ai-1",
+    sender: "AI",
+    message: "",
+    isVisible: true,
+    timestamp: null,
+  };
+
+  beforeEach(() => {
+    renderMarkdownMock.mockReset();
+  });
+
+  beforeAll(() => {
+    (globalThis as any).activeDocument = document;
+  });
+
+  /**
+   * Asserts that no line in the rendered markdown matches:
+   *   <4+ spaces><any content></div>  or  <4+ spaces><any content></details>
+   * Such a pattern means the closing tag is inside a code block and will be
+   * escaped by the markdown renderer.
+   */
+  function assertNoClosingTagOnIndentedLine(capturedMarkdown: string[]) {
+    for (const md of capturedMarkdown) {
+      for (const line of md.split("\n")) {
+        if (/^ {4}/.test(line)) {
+          expect(line).not.toContain("</div>");
+          expect(line).not.toContain("</details>");
+        }
+      }
+    }
+  }
+
+  it("does not place </div> on a 4-space-indented line (non-streaming, think block)", async () => {
+    const thinkContent =
+      "Planning my response:\n    *   Be helpful and direct.\n    *   Answer clearly.";
+    const messageText = `<think>${thinkContent}</think>Here is my answer.`;
+
+    const capturedMarkdown: string[] = [];
+    renderMarkdownMock.mockImplementation((md: string, el: HTMLElement) => {
+      capturedMarkdown.push(md);
+      el.innerHTML = "<p>rendered</p>";
+    });
+
+    render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseAiMessage, message: messageText }}
+          app={createAppStub()}
+          isStreaming={false}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    assertNoClosingTagOnIndentedLine(capturedMarkdown);
+  });
+
+  it("does not place </div> on a 4-space-indented line (streaming, complete think block)", async () => {
+    const thinkContent = "Thinking:\n    1.  First step.\n    2.  Second step.";
+    const messageText = `<think>${thinkContent}</think>Response text.`;
+
+    const capturedMarkdown: string[] = [];
+    renderMarkdownMock.mockImplementation((md: string, el: HTMLElement) => {
+      capturedMarkdown.push(md);
+      el.innerHTML = "<p>rendered</p>";
+    });
+
+    render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseAiMessage, message: messageText }}
+          app={createAppStub()}
+          isStreaming={true}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    assertNoClosingTagOnIndentedLine(capturedMarkdown);
+  });
+
+  it("does not place </div> on a 4-space-indented line (streaming, unclosed think block)", async () => {
+    // Simulates mid-stream: the </think> closing tag has not arrived yet.
+    const messageText = "<think>Thinking:\n    *   Still streaming.";
+
+    const capturedMarkdown: string[] = [];
+    renderMarkdownMock.mockImplementation((md: string, el: HTMLElement) => {
+      capturedMarkdown.push(md);
+      el.innerHTML = "<p>rendered</p>";
+    });
+
+    render(
+      <TooltipProvider>
+        <ChatSingleMessage
+          message={{ ...baseAiMessage, message: messageText }}
+          app={createAppStub()}
+          isStreaming={true}
+          onDelete={() => {}}
+        />
+      </TooltipProvider>
+    );
+
+    await waitFor(() => expect(renderMarkdownMock).toHaveBeenCalled());
+
+    assertNoClosingTagOnIndentedLine(capturedMarkdown);
+  });
+});
+
 describe("normalizeFootnoteRendering", () => {
   beforeEach(() => {
     renderMarkdownMock.mockReset();
