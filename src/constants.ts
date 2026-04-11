@@ -140,6 +140,13 @@ export const PLUS_UTM_MEDIUMS = {
 };
 export type PlusUtmMedium = (typeof PLUS_UTM_MEDIUMS)[keyof typeof PLUS_UTM_MEDIUMS];
 
+/** Thinking capabilities for Ollama based models. Say, if you're using Qwen3.5 and can't turn off thinking in copilot and it takes too long.
+ */
+export enum ThinkingMode {
+  AUTO = "auto",
+  ENABLED = "enabled",
+  DISABLED = "disabled",
+}
 /**
  * Reasoning effort levels for OpenAI reasoning models
  */
