@@ -109,7 +109,11 @@ function MainContent({
       <div className="tw-flex tw-items-start tw-gap-2 tw-px-1 tw-text-small tw-text-muted">
         <Info className="tw-mt-0.5 tw-size-4 tw-shrink-0 tw-text-accent" />
         <span className="tw-leading-relaxed">
-          On a new device, re-enter your API keys in the Copilot settings.
+          Transfer keys to a new device anytime via{" "}
+          <strong className="tw-font-medium tw-text-normal">
+            &ldquo;Configuration Sharing&rdquo;
+          </strong>{" "}
+          in Settings.
         </span>
       </div>
 

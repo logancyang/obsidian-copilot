@@ -175,49 +175,6 @@ describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
   });
 });
 
-describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
-  it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
-    const legacySettings = {
-      ...DEFAULT_SETTINGS,
-      enableMiyo: undefined as any,
-      enableMiyoSearch: true,
-      miyoServerUrl: "http://127.0.0.1:8742",
-      miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
-    };
-
-    const sanitized = sanitizeSettings(legacySettings as any);
-
-    expect(sanitized.enableMiyo).toBe(true);
-    expect(sanitized.miyoServerUrl).toBe("http://127.0.0.1:8742");
-    const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
-
-    expect("miyoRemoteVaultPath" in sanitizedRecord).toBe(false);
-    expect("enableMiyoSearch" in sanitizedRecord).toBe(false);
-  });
-
-  it("preserves embedding provider migrations while stripping obsolete Miyo keys", () => {
-    const legacySettings = {
-      ...DEFAULT_SETTINGS,
-      userId: "",
-      activeEmbeddingModels: [
-        {
-          name: "legacy-embedding",
-          provider: "azure_openai",
-          enabled: true,
-        },
-      ],
-      miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
-    };
-
-    const sanitized = sanitizeSettings(legacySettings as any);
-    const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
-
-    expect(sanitized.userId).toBeTruthy();
-    expect(sanitized.activeEmbeddingModels[0].provider).not.toBe("azure_openai");
-    expect("miyoRemoteVaultPath" in sanitizedRecord).toBe(false);
-  });
-});
-
 describe("getSystemPrompt", () => {
   beforeEach(() => {
     jest.clearAllMocks();

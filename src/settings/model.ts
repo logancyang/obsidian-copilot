@@ -144,6 +144,8 @@ export interface CopilotSettings {
   selfHostApiKey: string;
   /** Custom Miyo server URL, e.g. "http://192.168.1.10:8742" (empty = use local service discovery) */
   miyoServerUrl: string;
+  /** @deprecated Miyo now uses the current vault path as `folder_path`; preserved only for backwards-compatible settings migration. */
+  miyoRemoteVaultPath: string;
   /** Which provider to use for self-host web search */
   selfHostSearchProvider: "firecrawl" | "perplexity";
   /** Firecrawl API key for self-host web search */
@@ -246,10 +248,24 @@ function resolveEmbeddingModelKey(settings: CopilotSettings): string {
 }
 
 /**
- * Sets the settings in the atom.
+ * Sets the settings in the atom (merges with current settings).
  */
 export function setSettings(settings: Partial<CopilotSettings>) {
   const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
+  newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
+  settingsStore.set(settingsAtom, newSettings);
+}
+
+/**
+ * Replace all settings in the atom without merging.
+ *
+ * Reason: `setSettings()` spreads incoming values over current settings, so
+ * fields absent from the incoming object (e.g. serialized as `undefined` and
+ * dropped by JSON.stringify) survive from the old state. This function is for
+ * flows like configuration file import that need a true overwrite.
+ */
+export function replaceSettings(settings: CopilotSettings) {
+  const newSettings = mergeAllActiveModelsWithCoreModels({ ...DEFAULT_SETTINGS, ...settings });
   newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
   settingsStore.set(settingsAtom, newSettings);
 }
@@ -343,6 +359,19 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 }
 
 /**
+ * Check whether a folder path is safe for vault-relative use.
+ * Rejects absolute paths, path traversal, and Windows drive paths.
+ */
+function isSafeVaultFolderPath(path: string): boolean {
+  if (!path || typeof path !== "string") return false;
+  const trimmed = path.trim();
+  if (trimmed.startsWith("/") || trimmed.startsWith("\\")) return false;
+  if (/^[A-Za-z]:/.test(trimmed)) return false;
+  if (trimmed.split(/[/\\]/).some((seg) => seg === "..")) return false;
+  return true;
+}
+
+/**
  * Normalize persisted model provider values so identity keys stay stable across migrations.
  * Reason: Legacy data may store "azure_openai" while runtime uses "azure-openai".
  */
@@ -357,13 +386,6 @@ export function normalizeModelProvider(provider: string): string {
 export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   // If settings is null/undefined, use DEFAULT_SETTINGS
   const settingsToSanitize = settings || DEFAULT_SETTINGS;
-  const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
-  const {
-    enableSelfHostedSearch: legacyEnableSelfHostedSearch,
-    selfHostedSearchUrl: legacySelfHostedSearchUrl,
-    selfHostedSearchApiKey: legacySelfHostedSearchApiKey,
-    enableMiyoSearch: legacyEnableMiyoSearch,
-  } = rawSettings;
 
   if (!settingsToSanitize.userId) {
     settingsToSanitize.userId = uuidv4();
@@ -386,28 +408,20 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   }
 
   const sanitizedSettings: CopilotSettings = { ...settingsToSanitize };
-  const sanitizedSettingsRecord = sanitizedSettings as unknown as Record<string, unknown>;
-  delete sanitizedSettingsRecord.miyoRemoteVaultPath;
-  delete sanitizedSettingsRecord.miyoVaultName;
-  delete sanitizedSettingsRecord.enableMiyoSearch;
 
   // Migration: Rename self-hosted search settings to self-host mode (v3.2.0+)
+  const rawSettings = settingsToSanitize as unknown as Record<string, unknown>;
   if (
-    legacyEnableSelfHostedSearch !== undefined &&
+    rawSettings.enableSelfHostedSearch !== undefined &&
     sanitizedSettings.enableSelfHostMode === undefined
   ) {
-    sanitizedSettings.enableSelfHostMode = legacyEnableSelfHostedSearch as boolean;
+    sanitizedSettings.enableSelfHostMode = rawSettings.enableSelfHostedSearch as boolean;
   }
-  if (legacySelfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
-    sanitizedSettings.selfHostUrl = legacySelfHostedSearchUrl as string;
+  if (rawSettings.selfHostedSearchUrl !== undefined && !sanitizedSettings.selfHostUrl) {
+    sanitizedSettings.selfHostUrl = rawSettings.selfHostedSearchUrl as string;
   }
-  if (legacySelfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
-    sanitizedSettings.selfHostApiKey = legacySelfHostedSearchApiKey as string;
-  }
-
-  // Migration: Rename legacy enableMiyoSearch to enableMiyo.
-  if (legacyEnableMiyoSearch !== undefined && sanitizedSettings.enableMiyo === undefined) {
-    sanitizedSettings.enableMiyo = legacyEnableMiyoSearch as boolean;
+  if (rawSettings.selfHostedSearchApiKey !== undefined && !sanitizedSettings.selfHostApiKey) {
+    sanitizedSettings.selfHostApiKey = rawSettings.selfHostedSearchApiKey as string;
   }
 
   // Stuff in settings are string even when the interface has number type!
@@ -525,10 +539,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   sanitizedSettings.autonomousAgentEnabledToolIds =
     sanitizedSettings.autonomousAgentEnabledToolIds.map((id) => toolIdRenames[id] ?? id);
 
-  // Ensure memoryFolderName has a default value
+  // Ensure memoryFolderName has a default value and is a safe vault-relative path
   if (
     !sanitizedSettings.memoryFolderName ||
-    typeof sanitizedSettings.memoryFolderName !== "string"
+    typeof sanitizedSettings.memoryFolderName !== "string" ||
+    !isSafeVaultFolderPath(sanitizedSettings.memoryFolderName)
   ) {
     sanitizedSettings.memoryFolderName = DEFAULT_SETTINGS.memoryFolderName;
   }
@@ -604,14 +619,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     sanitizedSettings.defaultSendShortcut = DEFAULT_SETTINGS.defaultSendShortcut;
   }
 
-  // Ensure folder settings fall back to defaults when empty/whitespace
+  // Ensure folder settings fall back to defaults when empty/whitespace or unsafe
   const saveFolder = (settingsToSanitize.defaultSaveFolder || "").trim();
   sanitizedSettings.defaultSaveFolder =
-    saveFolder.length > 0 ? saveFolder : DEFAULT_SETTINGS.defaultSaveFolder;
+    saveFolder.length > 0 && isSafeVaultFolderPath(saveFolder)
+      ? saveFolder
+      : DEFAULT_SETTINGS.defaultSaveFolder;
 
   const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
   sanitizedSettings.customPromptsFolder =
-    promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+    promptsFolder.length > 0 && isSafeVaultFolderPath(promptsFolder)
+      ? promptsFolder
+      : DEFAULT_SETTINGS.customPromptsFolder;
 
   // Ensure chatHistorySortStrategy has a valid value (exclude "manual" which is only for custom commands)
   if (
@@ -631,7 +650,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   const userSystemPromptsFolder = (settingsToSanitize.userSystemPromptsFolder || "").trim();
   sanitizedSettings.userSystemPromptsFolder =
-    userSystemPromptsFolder.length > 0
+    userSystemPromptsFolder.length > 0 && isSafeVaultFolderPath(userSystemPromptsFolder)
       ? userSystemPromptsFolder
       : DEFAULT_SETTINGS.userSystemPromptsFolder;
 

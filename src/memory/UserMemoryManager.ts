@@ -3,6 +3,7 @@ import { ChatMessage } from "@/types/message";
 import { logInfo, logError, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
+import { MEMORY_RECENT_CONVERSATIONS_FILENAME, MEMORY_SAVED_MEMORIES_FILENAME } from "@/constants";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 
@@ -231,12 +232,12 @@ export class UserMemoryManager {
 
   private getRecentConversationFilePath(): string {
     const settings = getSettings();
-    return `${settings.memoryFolderName}/Recent Conversations.md`;
+    return `${settings.memoryFolderName}/${MEMORY_RECENT_CONVERSATIONS_FILENAME}`;
   }
 
   public getSavedMemoriesFilePath(): string {
     const settings = getSettings();
-    return `${settings.memoryFolderName}/Saved Memories.md`;
+    return `${settings.memoryFolderName}/${MEMORY_SAVED_MEMORIES_FILENAME}`;
   }
 
   /**

@@ -86,7 +86,7 @@ export const CopilotPlusSettings: React.FC = () => {
     new ConfirmModal(
       app,
       confirmChange,
-      `Enabling Miyo Search will use your current vault folder name as the Miyo folder identifier and request a scan from Miyo. Make sure this folder is already registered in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. Continue?`,
+      `Enabling Miyo Search will use your current vault path as the Miyo folder path and request a scan from Miyo. Make sure this folder is already registered in Miyo. Embedding Batch Size will be reset to the default (${DEFAULT_SETTINGS.embeddingBatchSize}) for local stability. Continue?`,
       "Request Miyo Scan"
     ).open();
   };
@@ -227,10 +227,21 @@ export const CopilotPlusSettings: React.FC = () => {
                     onChange={(value) => updateSetting("miyoServerUrl", value)}
                   />
 
+                  {(settings.miyoServerUrl || "").trim() && (
+                    <SettingItem
+                      type="text"
+                      title="Remote Vault Folder (Optional)"
+                      description="The folder path on the remote machine that Miyo should search. Leave blank to use the local vault path (only works if the remote vault is mounted at the same path)."
+                      value={settings.miyoRemoteVaultPath || ""}
+                      onChange={(value) => updateSetting("miyoRemoteVaultPath", value)}
+                      placeholder="e.g. /Users/you/Documents/vault"
+                    />
+                  )}
+
                   <SettingItem
                     type="switch"
                     title="Enable Miyo"
-                    description="Use Miyo as your local search, PDF parsing, and context hub. Copilot will send the current vault folder name to Miyo and can request scans, but folder registration is managed in Miyo."
+                    description="Use Miyo as your local search, PDF parsing, and context hub. Copilot will send the current vault path to Miyo and can request scans, but folder registration is managed in Miyo."
                     checked={settings.enableMiyo}
                     onCheckedChange={handleMiyoSearchToggle}
                     disabled={isValidatingSelfHost}
