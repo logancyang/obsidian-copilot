@@ -3,22 +3,43 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import { updateSetting, useSettingsValue } from "@/settings/model";
-import { ArrowUpRight, Plus } from "lucide-react";
-import React from "react";
+import { KeychainService } from "@/services/keychainService";
+import {
+  canClearDiskSecrets,
+  clearDiskSecrets,
+  refreshDiskHasSecrets,
+  refreshLastPersistedSettings,
+  runPersistenceTransaction,
+  suppressNextPersistOnce,
+} from "@/services/settingsPersistence";
+import { logError } from "@/logger";
+import {
+  type CopilotSettings,
+  setSettings,
+  updateSetting,
+  useSettingsValue,
+} from "@/settings/model";
+import { ArrowUpRight, Plus, ShieldCheck, ShieldAlert, Trash2 } from "lucide-react";
+import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { Notice } from "obsidian";
+import React, { useCallback, useState } from "react";
 import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
 import { useSystemPrompts } from "@/system-prompts/state";
 
 export const AdvancedSettings: React.FC = () => {
   const settings = useSettingsValue();
   const prompts = useSystemPrompts();
+  const [forgetting, setForgetting] = useState(false);
+  const [clearingOldCopies, setClearingOldCopies] = useState(false);
+
+  const keychainAvailable = KeychainService.getInstance().isAvailable();
+  const showClearOldCopies = canClearDiskSecrets(settings);
 
   // Check if the default system prompt exists in the current prompts list
   const defaultPromptExists = prompts.some(
     (prompt) => prompt.title === settings.defaultSystemPromptTitle
   );
 
-  // Display value: use the default prompt if it exists, otherwise empty string (will show placeholder)
   const displayValue = defaultPromptExists ? settings.defaultSystemPromptTitle : "";
 
   const handleSelectChange = (value: string) => {
@@ -28,7 +49,6 @@ export const AdvancedSettings: React.FC = () => {
   const handleOpenSourceFile = () => {
     if (!displayValue) return;
     const filePath = getPromptFilePath(displayValue);
-    // Close the settings modal before opening the file
     (app as any).setting.close();
     app.workspace.openLinkText(filePath, "", true);
   };
@@ -38,11 +58,106 @@ export const AdvancedSettings: React.FC = () => {
     modal.open();
   };
 
+  const handleForgetAllSecrets = useCallback(async () => {
+    if (forgetting) return;
+
+    // Reason: double-confirm destructive action via project ConfirmModal
+    const confirmed = await new Promise<boolean>((resolve) => {
+      new ConfirmModal(
+        app,
+        () => resolve(true),
+        "This will remove all API keys for this vault from the OS Keychain, " +
+          "data.json, and memory. You will need to re-enter them.",
+        "\u26A0\uFE0F Forget All Secrets",
+        "Remove",
+        "Cancel",
+        () => resolve(false)
+      ).open();
+    });
+    if (!confirmed) return;
+
+    setForgetting(true);
+    try {
+      const keychain = KeychainService.getInstance();
+      const saveData = async (data: any) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const plugins = (app as any).plugins;
+        const copilotPlugin = plugins.getPlugin("copilot");
+        if (!copilotPlugin) throw new Error("Copilot plugin not found");
+        await copilotPlugin.saveData(data);
+      };
+
+      // Reason: run inside the persistence queue to prevent interleaving
+      // with normal saves that could restore old secrets.
+      let skipSuppress = false;
+      await runPersistenceTransaction(() =>
+        keychain.forgetAllSecrets(
+          saveData,
+          refreshDiskHasSecrets,
+          (nextSettings) => {
+            refreshLastPersistedSettings(nextSettings as CopilotSettings);
+            if (!skipSuppress) {
+              suppressNextPersistOnce();
+            }
+            setSettings(nextSettings);
+          },
+          // Reason: disk save failed → forgetAllSecrets is a no-op (no memory
+          // or keychain changes). This callback is reserved for future retry logic.
+          () => {
+            skipSuppress = true;
+          }
+        )
+      );
+    } catch (error) {
+      logError("Failed to forget secrets.", error);
+      new Notice("Failed to remove API keys. Please try again.");
+    } finally {
+      setForgetting(false);
+    }
+  }, [forgetting]);
+
+  /** Clear old secret copies from data.json only (keychain stays intact). */
+  const handleClearOldCopies = useCallback(async () => {
+    if (clearingOldCopies) return;
+
+    const confirmed = await new Promise<boolean>((resolve) => {
+      new ConfirmModal(
+        app,
+        () => resolve(true),
+        "This will remove old API key copies from data.json. " +
+          "Your keys remain safe in the OS Keychain.",
+        "Remove from data.json",
+        "Remove",
+        "Cancel",
+        () => resolve(false)
+      ).open();
+    });
+    if (!confirmed) return;
+
+    setClearingOldCopies(true);
+    try {
+      const saveData = async (data: CopilotSettings) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const plugins = (app as any).plugins;
+        const copilotPlugin = plugins.getPlugin("copilot");
+        if (!copilotPlugin) throw new Error("Copilot plugin not found");
+        await copilotPlugin.saveData(data);
+      };
+      await clearDiskSecrets(saveData);
+      new Notice("Old copies removed from data.json.");
+    } catch (error) {
+      logError("Failed to clear old copies.", error);
+      new Notice("Failed to clear old copies. Please try again.");
+    } finally {
+      setClearingOldCopies(false);
+    }
+  }, [clearingOldCopies]);
+
   return (
     <div className="tw-space-y-4">
       {/* User System Prompt Section */}
       <section className="tw-space-y-4 tw-rounded-lg tw-border tw-p-4">
-        <h3 className="tw-text-lg tw-font-semibold">User System Prompt</h3>
+        <div className="tw-text-xl tw-font-bold">User System Prompt</div>
 
         <SettingItem
           type="custom"
@@ -93,26 +208,59 @@ export const AdvancedSettings: React.FC = () => {
 
       {/* Others Section */}
       <section className="tw-space-y-4 tw-rounded-lg tw-border tw-p-4">
-        <h3 className="tw-text-lg tw-font-semibold">Others</h3>
+        <div className="tw-text-xl tw-font-bold">Others</div>
 
+        {/* Keychain status badge */}
         <SettingItem
-          type="switch"
-          title="Enable Encryption"
-          description="Enable encryption for the API keys."
-          checked={settings.enableEncryption}
-          onCheckedChange={(checked) => {
-            updateSetting("enableEncryption", checked);
-          }}
-        />
+          type="custom"
+          title="API Key Storage"
+          description={
+            keychainAvailable
+              ? "API keys are stored in your operating system's secure Keychain."
+              : "OS Keychain is unavailable. Keys are stored in data.json (plaintext)."
+          }
+        >
+          <div className="tw-flex tw-flex-col tw-items-start tw-gap-3 sm:tw-items-end">
+            {keychainAvailable ? (
+              <div className="tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-bg-success tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-text-success">
+                <ShieldCheck className="tw-size-4" />
+                OS Keychain
+              </div>
+            ) : (
+              <div className="tw-flex tw-items-center tw-gap-1.5 tw-rounded-md tw-bg-error tw-px-3 tw-py-1 tw-text-smallest tw-font-semibold tw-text-warning">
+                <ShieldAlert className="tw-size-4" />
+                Unavailable
+              </div>
+            )}
+            {showClearOldCopies && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleClearOldCopies}
+                disabled={clearingOldCopies}
+              >
+                {clearingOldCopies ? "Removing..." : "Remove from data.json"}
+              </Button>
+            )}
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={handleForgetAllSecrets}
+              disabled={forgetting}
+              className="tw-gap-1.5"
+            >
+              <Trash2 className="tw-size-4" />
+              {forgetting ? "Deleting..." : "Delete All API Keys"}
+            </Button>
+          </div>
+        </SettingItem>
 
         <SettingItem
           type="switch"
           title="Debug Mode"
           description="Debug mode will log some debug message to the console."
           checked={settings.debug}
-          onCheckedChange={(checked) => {
-            updateSetting("debug", checked);
-          }}
+          onCheckedChange={(checked) => updateSetting("debug", checked)}
         />
 
         <SettingItem

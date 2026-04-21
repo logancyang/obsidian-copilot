@@ -43,6 +43,9 @@ export async function fetchModelsForProvider(
     }
 
     apiKey = await getDecryptedKey(apiKey);
+    if (!apiKey) {
+      return { success: false, models: [], error: "Failed to decrypt API key" };
+    }
 
     let url = getProviderInfo(provider).listModelURL;
     if (!url) {
