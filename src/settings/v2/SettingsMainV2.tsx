@@ -1,6 +1,7 @@
 import { ResetSettingsConfirmModal } from "@/components/modals/ResetSettingsConfirmModal";
 import { Button } from "@/components/ui/button";
 import { TabContent, TabItem, type TabItem as TabItemType } from "@/components/ui/setting-tabs";
+import { PluginProvider } from "@/contexts/PluginContext";
 import { TabProvider, useTab } from "@/contexts/TabContext";
 import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
@@ -96,43 +97,45 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   };
 
   return (
-    <TabProvider>
-      <div>
-        <div className="tw-flex tw-flex-col tw-gap-2">
-          <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
-            <div className="tw-flex tw-items-center tw-gap-2">
-              <span>Copilot Settings</span>
-              <div className="tw-flex tw-items-center tw-gap-1">
-                <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
-                {latestVersion && (
-                  <>
-                    {hasUpdate ? (
-                      <a
-                        href="obsidian://show-plugin?id=copilot"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="tw-text-xs tw-text-accent hover:tw-underline"
-                      >
-                        (Update to v{latestVersion})
-                      </a>
-                    ) : (
-                      <span className="tw-text-xs tw-text-normal"> (up to date)</span>
-                    )}
-                  </>
-                )}
+    <PluginProvider plugin={plugin}>
+      <TabProvider>
+        <div>
+          <div className="tw-flex tw-flex-col tw-gap-2">
+            <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+              <div className="tw-flex tw-items-center tw-gap-2">
+                <span>Copilot Settings</span>
+                <div className="tw-flex tw-items-center tw-gap-1">
+                  <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
+                  {latestVersion && (
+                    <>
+                      {hasUpdate ? (
+                        <a
+                          href="obsidian://show-plugin?id=copilot"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="tw-text-xs tw-text-accent hover:tw-underline"
+                        >
+                          (Update to v{latestVersion})
+                        </a>
+                      ) : (
+                        <span className="tw-text-xs tw-text-normal"> (up to date)</span>
+                      )}
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-            <div className="tw-self-end sm:tw-self-auto">
-              <Button variant="secondary" size="sm" onClick={handleReset}>
-                Reset Settings
-              </Button>
-            </div>
-          </h1>
+              <div className="tw-self-end sm:tw-self-auto">
+                <Button variant="secondary" size="sm" onClick={handleReset}>
+                  Reset Settings
+                </Button>
+              </div>
+            </h1>
+          </div>
+          {/* Add the key prop to force re-render */}
+          <SettingsContent key={resetKey} />
         </div>
-        {/* Add the key prop to force re-render */}
-        <SettingsContent key={resetKey} />
-      </div>
-    </TabProvider>
+      </TabProvider>
+    </PluginProvider>
   );
 };
 

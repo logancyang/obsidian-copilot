@@ -206,6 +206,13 @@ export interface CopilotSettings {
     mcpServers: unknown[];
     binaryVersion?: string;
     binaryPath?: string;
+    /**
+     * Whether the binary at `binaryPath` was installed by the plugin
+     * (`"managed"`) or pointed at by the user (`"custom"`). Undefined for
+     * legacy installs predating this field; sanitizer defaults to `"managed"`
+     * when a `binaryPath` exists.
+     */
+    binarySource?: "managed" | "custom";
   };
 }
 
@@ -616,6 +623,24 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   if (!sanitizedSettings.agentMode || typeof sanitizedSettings.agentMode !== "object") {
     sanitizedSettings.agentMode = { ...DEFAULT_SETTINGS.agentMode };
+  } else {
+    if (typeof sanitizedSettings.agentMode.binaryVersion !== "string") {
+      sanitizedSettings.agentMode.binaryVersion = undefined;
+    }
+    if (typeof sanitizedSettings.agentMode.binaryPath !== "string") {
+      sanitizedSettings.agentMode.binaryPath = undefined;
+    }
+    const rawSource = sanitizedSettings.agentMode.binarySource;
+    if (rawSource !== "managed" && rawSource !== "custom") {
+      // Default legacy installs (predating this field) and any garbled value
+      // to "managed" so the existing managed install keeps its UI affordances.
+      sanitizedSettings.agentMode.binarySource = sanitizedSettings.agentMode.binaryPath
+        ? "managed"
+        : undefined;
+    } else if (!sanitizedSettings.agentMode.binaryPath) {
+      // No path → no source. Keep the slice tidy.
+      sanitizedSettings.agentMode.binarySource = undefined;
+    }
   }
 
   return sanitizedSettings;
