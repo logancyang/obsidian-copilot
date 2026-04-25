@@ -1,7 +1,7 @@
 import { openAcpPermissionModal } from "@/components/agent/AcpPermissionModal";
 import { logError, logInfo } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { AgentSessionChatUIState } from "@/state/AgentSessionChatUIState";
+import { AgentChatUIState } from "@/LLMProviders/agentMode/AgentChatUIState";
 import { err2String } from "@/utils";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
@@ -20,7 +20,7 @@ export class AgentSessionManager {
   private backend: AcpBackendProcess | null = null;
   private starting: Promise<AcpBackendProcess> | null = null;
   private activeSession: AgentSession | null = null;
-  private activeChatUIState: AgentSessionChatUIState | null = null;
+  private activeChatUIState: AgentChatUIState | null = null;
   private prepareSession: Promise<AgentSession> | null = null;
   private listeners = new Set<() => void>();
   private disposed = false;
@@ -77,7 +77,7 @@ export class AgentSessionManager {
         throw new Error("AgentSessionManager was shut down during session creation");
       }
       this.activeSession = session;
-      this.activeChatUIState = new AgentSessionChatUIState(session);
+      this.activeChatUIState = new AgentChatUIState(session);
       logInfo(`[AgentMode] active session created (acpSessionId=${session.acpSessionId})`);
       return session;
     })();
@@ -106,7 +106,7 @@ export class AgentSessionManager {
     return this.activeSession;
   }
 
-  getActiveChatUIState(): AgentSessionChatUIState | null {
+  getActiveChatUIState(): AgentChatUIState | null {
     return this.activeChatUIState;
   }
 

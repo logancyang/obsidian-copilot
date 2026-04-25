@@ -1,0 +1,85 @@
+import { logError, logWarn } from "@/logger";
+import type { AgentChatBackend } from "@/LLMProviders/agentMode/AgentChatBackend";
+import type { AgentSession } from "@/LLMProviders/agentMode/AgentSession";
+import type { AgentChatMessage } from "@/LLMProviders/agentMode/types";
+
+/**
+ * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent
+ * Mode UI tree consumes this exclusively — it knows nothing about the legacy
+ * `ChatUIState` / `ChatManager` stack.
+ *
+ * Edit, regenerate, and persistence operations are intentionally absent —
+ * they don't have ACP semantics and Agent Mode chat persistence is deferred.
+ */
+export class AgentChatUIState implements AgentChatBackend {
+  private listeners = new Set<() => void>();
+
+  constructor(private readonly session: AgentSession) {
+    // Only forward message changes — status is consumed directly by
+    // `AgentModeStatus` via `session.subscribe`, so re-publishing it here
+    // would cause spurious re-renders of the message list.
+    this.session.subscribe({
+      onMessagesChanged: () => this.notifyListeners(),
+      onStatusChanged: () => {},
+    });
+  }
+
+  subscribe(listener: () => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notifyListeners(): void {
+    for (const l of this.listeners) {
+      try {
+        l();
+      } catch (e) {
+        logWarn("[AgentChatUIState] listener threw", e);
+      }
+    }
+  }
+
+  /**
+   * Append a user message and kick off the ACP turn. Returns the new user
+   * message id synchronously plus a `turn` promise the caller can await for
+   * loading-state lifecycle (Stop button, input lock).
+   */
+  sendMessage(text: string, content?: any[]): { id: string; turn: Promise<void> } {
+    const { userMessageId, turn } = this.session.sendPrompt(text, undefined, content);
+    this.notifyListeners();
+    const wrapped = turn.then(
+      () => undefined,
+      (err) => {
+        logError("[AgentMode] turn failed", err);
+      }
+    );
+    return { id: userMessageId, turn: wrapped };
+  }
+
+  async cancel(): Promise<void> {
+    await this.session.cancel();
+  }
+
+  async deleteMessage(id: string): Promise<boolean> {
+    // Refuse delete during an in-flight turn: the placeholder assistant
+    // message is what streaming notifications target, and removing it would
+    // leave the session writing into a vanished id.
+    const status = this.session.getStatus();
+    if (status === "running" || status === "awaiting_permission") {
+      logWarn("[AgentChatUIState] delete refused while turn is in flight");
+      return false;
+    }
+    const ok = this.session.store.deleteMessage(id);
+    if (ok) this.notifyListeners();
+    return ok;
+  }
+
+  clearMessages(): void {
+    this.session.store.clear();
+    this.notifyListeners();
+  }
+
+  getMessages(): AgentChatMessage[] {
+    return this.session.store.getDisplayMessages();
+  }
+}

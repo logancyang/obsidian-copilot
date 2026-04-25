@@ -247,12 +247,6 @@ export function ChatControls({
                 </div>
               )}
               {selectedChain === ChainType.PROJECT_CHAIN && "projects (alpha)"}
-              {selectedChain === ChainType.AGENT_MODE && (
-                <div className="tw-flex tw-items-center tw-gap-1">
-                  <Bot className="tw-size-4" />
-                  agent (alpha)
-                </div>
-              )}
               <ChevronDown className="tw-mt-0.5 tw-size-5" />
             </Button>
           </DropdownMenuTrigger>

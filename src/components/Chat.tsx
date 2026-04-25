@@ -43,7 +43,7 @@ import { logFileManager } from "@/logFileManager";
 import CopilotPlugin from "@/main";
 import { useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
-import { ChatUIState } from "@/state/ChatUIState";
+import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
@@ -64,15 +64,7 @@ interface ChatProps {
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   mode?: ChatMode;
-  chatUIState: ChatUIState;
-  /**
-   * True when the active chain is AGENT_MODE and an `AgentSessionChatUIState`
-   * is wired up. False whenever Agent Mode hasn't booted yet (no binary, boot
-   * error, still starting). Sends in AGENT_MODE without this flag would hit
-   * the legacy ChatManager fallback and silently no-op, so we guard the
-   * send path with it.
-   */
-  isAgentReady?: boolean;
+  chatUIState: ChatManagerChatUIState;
 }
 
 // Internal component that has access to the ChatInput context
@@ -84,7 +76,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   plugin,
   chatUIState,
   chatInput,
-  isAgentReady,
 }) => {
   const settings = useSettingsValue();
   const eventTarget = useContext(EventTargetContext);
@@ -283,11 +274,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       new Notice(RESTRICTION_MESSAGES.URL_PROCESSING_RESTRICTED);
     }
 
-    if (currentChain === ChainType.AGENT_MODE && !isAgentReady) {
-      new Notice("Agent backend isn't ready yet. Check the status pill above the input.");
-      return;
-    }
-
     try {
       // Create message content array
       const content: any[] = [];
@@ -364,20 +350,16 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         handleSaveAsNote();
       }
 
-      // Agent Mode drives its own streaming pipeline through chatUIState.
-      // For all other chains, fan out to the legacy LangChain stream.
-      if (currentChain !== ChainType.AGENT_MODE) {
-        const llmMessage = chatUIState.getLLMMessage(messageId);
-        if (llmMessage) {
-          await getAIResponse(
-            llmMessage,
-            chainManager,
-            addMessage,
-            safeSet.setCurrentAiMessage,
-            setAbortController,
-            { debug: settings.debug, updateLoadingMessage: safeSet.setLoadingMessage }
-          );
-        }
+      const llmMessage = chatUIState.getLLMMessage(messageId);
+      if (llmMessage) {
+        await getAIResponse(
+          llmMessage,
+          chainManager,
+          addMessage,
+          safeSet.setCurrentAiMessage,
+          setAbortController,
+          { debug: settings.debug, updateLoadingMessage: safeSet.setLoadingMessage }
+        );
       }
 
       // Autosave again after AI response
@@ -411,17 +393,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleStopGenerating = useCallback(
     (reason?: ABORT_REASON) => {
-      // Agent Mode owns its own AbortController inside the AgentSession.
-      // Cancel the ACP turn so opencode receives session/cancel — the local
-      // abortControllerRef may still exist for other reasons but isn't the
-      // source of truth for Agent Mode.
-      if (currentChain === ChainType.AGENT_MODE) {
-        logInfo(`stopping agent generation..., reason: ${reason}`);
-        plugin.agentSessionManager?.cancel().catch((e) => logError("agent cancel failed", e));
-        safeSet.setLoading(false);
-        safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
-        return;
-      }
       if (abortControllerRef.current) {
         logInfo(`stopping generation..., reason: ${reason}`);
         abortControllerRef.current.abort(reason);
@@ -431,7 +402,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         // Don't clear setCurrentAiMessage here
       }
     },
-    [currentChain, plugin.agentSessionManager, safeSet]
+    [safeSet]
   );
 
   // Cleanup on unmount - abort any ongoing streaming

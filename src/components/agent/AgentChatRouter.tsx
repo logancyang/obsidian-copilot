@@ -1,7 +1,9 @@
 import { useChainType } from "@/aiParams";
-import Chat from "@/components/Chat";
+import AgentChat from "@/components/agent/AgentChat";
+import { AgentChatControls } from "@/components/agent/AgentChatControls";
 import { AgentModeStatus } from "@/components/agent/AgentModeStatus";
 import { OpencodeInstallModal } from "@/components/agent/OpencodeInstallModal";
+import Chat from "@/components/Chat";
 import { ChainType } from "@/chainFactory";
 import { computeInstallState } from "@/LLMProviders/agentMode/backends/OpencodeBinaryManager";
 import { resolveOpencodeTarget } from "@/LLMProviders/agentMode/backends/platformResolver";
@@ -21,16 +23,14 @@ interface Props {
 }
 
 /**
- * Decides which `ChatUIState` `<Chat />` is rendered against:
- * - Legacy chains → `plugin.chatUIState` (ChatManager-backed).
- * - AGENT_MODE with a started session → the session's `AgentSessionChatUIState`.
- * - AGENT_MODE without a session yet → still `plugin.chatUIState` (the chat
- *   surface stays usable in case the user toggles back). The `AgentModeStatus`
- *   pill prompts them to install/start.
+ * Top-level router that decides which chat surface to render based on the
+ * current chain. Agent Mode renders a fully separate `<AgentChat />` tree
+ * backed by `AgentChatBackend`; all other chains render the legacy
+ * `<Chat />` against `ChatManagerChatUIState`.
  *
- * Re-renders when the chain type changes or the manager fires an active-
- * session change (post-spawn). We deliberately don't auto-spawn the backend
- * on chain change — the user needs to confirm via the install modal first.
+ * In Agent Mode without a started session (binary missing, booting, error),
+ * we render `<AgentModeStatus />` standalone — no `<Chat />` fallback so the
+ * user can't accidentally send into the legacy stack.
  */
 export const AgentChatRouter: React.FC<Props> = (props) => {
   const [chain] = useChainType();
@@ -58,20 +58,9 @@ export const AgentChatRouter: React.FC<Props> = (props) => {
     manager.getOrCreateActiveSession().catch((e) => {
       logError("[AgentMode] auto-start failed", e);
     });
-  }, [chain, manager, settings.agentMode, tick]);
-
-  const chatUIState = React.useMemo(() => {
-    if (chain === ChainType.AGENT_MODE && manager) {
-      const agent = manager.getActiveChatUIState();
-      if (agent) return agent;
-    }
-    return props.plugin.chatUIState;
     // tick forces re-evaluation when the manager's active session changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain, manager, tick, props.plugin.chatUIState]);
-
-  const isAgentMode = chain === ChainType.AGENT_MODE;
-  const isAgentReady = isAgentMode && !!manager?.getActiveChatUIState();
+  }, [chain, manager, settings.agentMode, tick]);
 
   const handleInstall = React.useCallback(async () => {
     const binMgr = props.plugin.opencodeBinaryManager;
@@ -83,18 +72,40 @@ export const AgentChatRouter: React.FC<Props> = (props) => {
     }).open();
   }, [props.plugin]);
 
+  if (chain === ChainType.AGENT_MODE) {
+    if (!manager) return null;
+    const backend = manager.getActiveChatUIState();
+    if (backend) {
+      return (
+        <AgentChat
+          backend={backend}
+          manager={manager}
+          plugin={props.plugin}
+          onSaveChat={props.onSaveChat}
+          updateUserMessageHistory={props.updateUserMessageHistory}
+        />
+      );
+    }
+    // No active backend (binary missing, booting, or boot error). Render the
+    // chain switcher above the status pill so the user can still leave Agent
+    // Mode without going through settings or the command palette.
+    return (
+      <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
+        <div className="tw-flex-1" />
+        <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
+        <AgentChatControls />
+      </div>
+    );
+  }
+
   return (
-    <>
-      {isAgentMode ? <AgentModeStatus manager={manager} onInstallClick={handleInstall} /> : null}
-      <Chat
-        chainManager={props.chainManager}
-        updateUserMessageHistory={props.updateUserMessageHistory}
-        fileParserManager={props.fileParserManager}
-        plugin={props.plugin}
-        onSaveChat={props.onSaveChat}
-        chatUIState={chatUIState}
-        isAgentReady={isAgentReady}
-      />
-    </>
+    <Chat
+      chainManager={props.chainManager}
+      updateUserMessageHistory={props.updateUserMessageHistory}
+      fileParserManager={props.fileParserManager}
+      plugin={props.plugin}
+      onSaveChat={props.onSaveChat}
+      chatUIState={props.plugin.chatUIState}
+    />
   );
 };

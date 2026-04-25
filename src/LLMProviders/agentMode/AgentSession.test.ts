@@ -46,7 +46,7 @@ describe("AgentSession.sendPrompt", () => {
     const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
     const { userMessageId, turn } = session.sendPrompt("Hi there");
 
-    const messages = session.repo.getDisplayMessages();
+    const messages = session.store.getDisplayMessages();
     expect(messages).toHaveLength(2);
     expect(messages[0]).toMatchObject({
       id: userMessageId,
@@ -96,7 +96,7 @@ describe("AgentSession.sendPrompt", () => {
       },
     });
 
-    const placeholder = session.repo.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
     expect(placeholder?.message).toBe("Hello, world.");
 
     resolvePrompt!({ stopReason: "end_turn" });
@@ -133,9 +133,9 @@ describe("AgentSession.sendPrompt", () => {
       },
     });
 
-    const placeholder = session.repo.getDisplayMessages().find((m) => m.sender === AI_SENDER);
-    expect(placeholder?.agentParts).toHaveLength(1);
-    expect(placeholder?.agentParts?.[0]).toMatchObject({
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.parts).toHaveLength(1);
+    expect(placeholder?.parts?.[0]).toMatchObject({
       kind: "tool_call",
       id: "tc1",
       title: "Read README",

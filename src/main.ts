@@ -42,7 +42,7 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import { ChatManagerChatUIState, ChatUIState } from "@/state/ChatUIState";
+import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
@@ -84,7 +84,7 @@ export default class CopilotPlugin extends Plugin {
   customCommandRegister: CustomCommandRegister;
   systemPromptRegister: SystemPromptRegister;
   settingsUnsubscriber?: () => void;
-  chatUIState: ChatUIState;
+  chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
   opencodeBinaryManager?: OpencodeBinaryManager;
   userMemoryManager: UserMemoryManager;

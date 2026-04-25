@@ -8,10 +8,11 @@ import { TFile } from "obsidian";
 export type ChatMessageContent = NonNullable<ChatMessage["content"]>;
 
 /**
- * Public surface used by `<Chat />`, `useChatManager`, and CopilotView. Two
- * implementations exist: `ChatManagerChatUIState` (legacy chains backed by
- * ChatManager) and `AgentSessionChatUIState` (Agent Mode). Components stay
- * polymorphic over both.
+ * Public surface used by `<Chat />`, `useChatManager`, and CopilotView for
+ * legacy chains (LLM_CHAIN, VAULT_QA_CHAIN, COPILOT_PLUS_CHAIN, PROJECT_CHAIN).
+ * Single implementation: `ChatManagerChatUIState`. Agent Mode uses the
+ * narrower `AgentChatBackend` (in `src/LLMProviders/agentMode/`) instead and
+ * never flows through this type.
  */
 export interface ChatUIState {
   subscribe(listener: () => void): () => void;

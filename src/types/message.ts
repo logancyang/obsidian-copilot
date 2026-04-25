@@ -106,65 +106,6 @@ export interface ResponseMetadata {
 }
 
 /**
- * Structured output produced by an Agent Mode tool call.
- * Mirrors a subset of ACP's `ToolCallContent` we render inline.
- */
-export type AgentToolCallOutput =
-  | { type: "text"; text: string }
-  | { type: "diff"; path: string; oldText: string | null; newText: string };
-
-/**
- * ACP tool kind, narrowed to the categories the UI styles. Matches
- * @agentclientprotocol/sdk's `ToolKind`.
- */
-export type AgentToolKind =
-  | "read"
-  | "edit"
-  | "delete"
-  | "move"
-  | "search"
-  | "execute"
-  | "think"
-  | "fetch"
-  | "switch_mode"
-  | "other";
-
-export type AgentToolStatus = "pending" | "in_progress" | "completed" | "failed";
-
-/**
- * Single entry of an Agent Mode plan list. Shape mirrors ACP `PlanEntry`.
- */
-export interface AgentPlanEntry {
-  content: string;
-  priority: "high" | "medium" | "low";
-  status: "pending" | "in_progress" | "completed";
-}
-
-/**
- * One structured part inside an Agent Mode assistant message. Used for
- * display only — never serialized into LLM context.
- */
-export type AgentMessagePart =
-  | {
-      kind: "tool_call";
-      id: string; // ACP toolCallId
-      title: string;
-      toolKind?: AgentToolKind;
-      status: AgentToolStatus;
-      input?: unknown;
-      output?: AgentToolCallOutput[];
-      locations?: { path: string; line?: number }[];
-    }
-  | {
-      kind: "thought";
-      text: string;
-    }
-  | {
-      kind: "plan";
-      entries: AgentPlanEntry[];
-    };
-
-/**
  * Streaming response result from chain runners
  * Similar to ResponseMetadata but with required fields and content
  */
@@ -222,12 +163,6 @@ export interface ChatMessage {
 
   /** Response metadata from LLM (for AI messages) */
   responseMetadata?: ResponseMetadata;
-
-  /**
-   * Agent Mode structured parts (tool calls, plans, thoughts). Only set on
-   * AI messages produced by Agent Mode; ignored by all other chains.
-   */
-  agentParts?: AgentMessagePart[];
 }
 
 /**
@@ -280,5 +215,4 @@ export interface StoredMessage {
   sources?: { title: string; path: string; score: number; explanation?: any }[];
   content?: any[];
   responseMetadata?: ResponseMetadata;
-  agentParts?: AgentMessagePart[];
 }

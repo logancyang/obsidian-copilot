@@ -1,14 +1,14 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { MessageRepository } from "@/core/MessageRepository";
 import { logInfo, logWarn } from "@/logger";
+import { AgentMessageStore } from "@/LLMProviders/agentMode/AgentMessageStore";
 import {
   AgentMessagePart,
   AgentToolCallOutput,
   AgentToolKind,
   AgentToolStatus,
-  ChatMessage,
-  MessageContext,
-} from "@/types/message";
+  NewAgentChatMessage,
+} from "@/LLMProviders/agentMode/types";
+import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import {
   ContentBlock,
@@ -30,12 +30,12 @@ export interface AgentSessionListener {
 }
 
 /**
- * Per-chat Agent Mode session. Owns its `MessageRepository`, the lifecycle
+ * Per-chat Agent Mode session. Owns its `AgentMessageStore`, the lifecycle
  * of one ACP session id on the shared backend, and the `AbortController` that
  * cancels in-flight turns.
  */
 export class AgentSession {
-  readonly repo = new MessageRepository();
+  readonly store = new AgentMessageStore();
   private status: AgentSessionStatus = "idle";
   private placeholderId: string | null = null;
   private abortController: AbortController | null = null;
@@ -81,14 +81,17 @@ export class AgentSession {
 
   /**
    * Submit a user prompt. Synchronously appends the user message + an empty
-   * assistant placeholder to the repository (so the UI can render
-   * immediately) and kicks off `session/prompt`. Streaming `session/update`
-   * notifications mutate the placeholder in place. Returns:
-   *   - `userMessageId`: id of the appended user `StoredMessage`.
+   * assistant placeholder to the store (so the UI can render immediately) and
+   * kicks off `session/prompt`. Streaming `session/update` notifications
+   * mutate the placeholder in place. Returns:
+   *   - `userMessageId`: id of the appended user message.
    *   - `turn`: promise that resolves with the ACP `StopReason` when the
    *     turn completes, or rejects on transport errors.
    */
   sendPrompt(
+    // TODO(agent-mode): forward `context` (notes, urls, web tabs) into
+    // `buildPromptBlocks` once ACP supports vault context plumbing. Today the
+    // parameter is stored on the user message for display only.
     displayText: string,
     context?: MessageContext,
     content?: any[]
@@ -100,25 +103,24 @@ export class AgentSession {
       throw new Error("Session is closed");
     }
 
-    const userMessage: ChatMessage = {
+    const userMessage: NewAgentChatMessage = {
       message: displayText,
-      originalMessage: displayText,
       sender: USER_SENDER,
       timestamp: formatDateTime(new Date()),
       isVisible: true,
       context,
       content,
     };
-    const userMessageId = this.repo.addMessage(userMessage);
+    const userMessageId = this.store.addMessage(userMessage);
 
-    const placeholder: ChatMessage = {
+    const placeholder: NewAgentChatMessage = {
       message: "",
       sender: AI_SENDER,
       timestamp: formatDateTime(new Date()),
       isVisible: true,
-      agentParts: [],
+      parts: [],
     };
-    this.placeholderId = this.repo.addMessage(placeholder);
+    this.placeholderId = this.store.addMessage(placeholder);
     this.notifyMessages();
 
     this.abortController = new AbortController();
@@ -149,7 +151,7 @@ export class AgentSession {
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
       if (placeholderId) {
-        this.repo.markMessageError(placeholderId, err2String(err));
+        this.store.markMessageError(placeholderId, err2String(err));
         this.notifyMessages();
       }
       this.setStatus("error");
@@ -196,19 +198,21 @@ export class AgentSession {
       case "agent_message_chunk": {
         const text = extractText(update.content);
         if (!text) return;
-        this.repo.appendDisplayText(placeholderId, text);
-        this.notifyMessages();
+        if (this.store.appendDisplayText(placeholderId, text)) {
+          this.notifyMessages();
+        }
         return;
       }
       case "agent_thought_chunk": {
         const text = extractText(update.content);
         if (!text) return;
-        this.repo.appendAgentThought(placeholderId, text);
-        this.notifyMessages();
+        if (this.store.appendAgentThought(placeholderId, text)) {
+          this.notifyMessages();
+        }
         return;
       }
       case "tool_call": {
-        if (this.repo.upsertAgentPart(placeholderId, toolCallToPart(update))) {
+        if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
           this.notifyMessages();
         }
         return;
@@ -216,13 +220,13 @@ export class AgentSession {
       case "tool_call_update": {
         const existing = this.findToolCallPart(placeholderId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
-        if (this.repo.upsertAgentPart(placeholderId, merged)) {
+        if (this.store.upsertAgentPart(placeholderId, merged)) {
           this.notifyMessages();
         }
         return;
       }
       case "plan": {
-        if (this.repo.upsertAgentPart(placeholderId, planToPart(update))) {
+        if (this.store.upsertAgentPart(placeholderId, planToPart(update))) {
           this.notifyMessages();
         }
         return;
@@ -234,8 +238,8 @@ export class AgentSession {
   }
 
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
-    const msg = this.repo.getMessage(messageId);
-    return msg?.agentParts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
+    const msg = this.store.getMessage(messageId);
+    return msg?.parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
   }
 
   private setStatus(next: AgentSessionStatus): void {
@@ -262,6 +266,9 @@ export class AgentSession {
 }
 
 function buildPromptBlocks(displayText: string, content?: any[]): ContentBlock[] {
+  // TODO(agent-mode): map `content` (image_url / etc.) to ACP `ContentBlock`
+  // image/resource entries so attachments aren't silently dropped. Today
+  // `AgentChat` strips them before calling sendMessage and surfaces a Notice.
   void content;
   return [{ type: "text", text: displayText }];
 }
