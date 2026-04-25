@@ -1,7 +1,10 @@
 import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
-import { MODAL_MIN_HEIGHT_COMPACT, MODAL_MIN_HEIGHT_EXPANDED } from "@/components/command-ui/constants";
+import {
+  MODAL_MIN_HEIGHT_COMPACT,
+  MODAL_MIN_HEIGHT_EXPANDED,
+} from "@/components/command-ui/constants";
 import { SelectionHighlight } from "@/editor/selectionHighlight";
 import { createHighlightReplaceGuard, type ReplaceGuard } from "@/editor/replaceGuard";
 import { logError, logWarn } from "@/logger";
@@ -520,7 +523,11 @@ export class CustomCommandChatModal {
    * - Space checks use scrollRect (editor visible area), not window.
    * - Horizontal clamp to scrollRect first, then viewport as safety net.
    */
-  private getInitialPosition(activeView: MarkdownView | null): { x: number; y: number; anchorBottom?: number } {
+  private getInitialPosition(activeView: MarkdownView | null): {
+    x: number;
+    y: number;
+    anchorBottom?: number;
+  } {
     const win = this.resolveWindow(activeView);
     const panelWidth = Math.min(500, win.innerWidth * 0.9);
     // Reason: The actual initial panel height depends on whether ContentArea is shown.
@@ -528,7 +535,9 @@ export class CustomCommandChatModal {
     // Custom Commands always show ContentArea (expanded).
     // Using the correct height prevents gaps (above) or overlaps (below).
     const hideContentAreaOnIdle = this.configs.behaviorConfig?.hideContentAreaOnIdle ?? false;
-    const panelHeight = hideContentAreaOnIdle ? MODAL_MIN_HEIGHT_COMPACT : MODAL_MIN_HEIGHT_EXPANDED;
+    const panelHeight = hideContentAreaOnIdle
+      ? MODAL_MIN_HEIGHT_COMPACT
+      : MODAL_MIN_HEIGHT_EXPANDED;
     const margin = 12;
     const gap = 6;
 
@@ -583,8 +592,11 @@ export class CustomCommandChatModal {
       (topCoords?.bottom ?? 0) - (topCoords?.top ?? 0),
       (bottomCoords?.bottom ?? 0) - (bottomCoords?.top ?? 0)
     );
-    const isVisualMultiLine = !isCursor && topCoords && bottomCoords
-      && Math.abs(topCoords.top - bottomCoords.top) > Math.max(caretHeight / 2, 2);
+    const isVisualMultiLine =
+      !isCursor &&
+      topCoords &&
+      bottomCoords &&
+      Math.abs(topCoords.top - bottomCoords.top) > Math.max(caretHeight / 2, 2);
 
     // --- Vertical positioning (decides placement first) ---
     // Reason: Extracted to a pure helper (computeVerticalPlacement) so the

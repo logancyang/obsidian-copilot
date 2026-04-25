@@ -95,7 +95,9 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
   if (message.role === "user") {
     return (
       <div className="tw-max-w-[85%] tw-self-end tw-rounded-lg tw-rounded-br-sm tw-bg-interactive-accent tw-px-3 tw-py-2 tw-text-on-accent">
-        <div data-quick-ask-selectable className="tw-whitespace-pre-wrap tw-break-words tw-text-sm">{message.content}</div>
+        <div data-quick-ask-selectable className="tw-whitespace-pre-wrap tw-break-words tw-text-sm">
+          {message.content}
+        </div>
       </div>
     );
   }
@@ -104,7 +106,10 @@ export const QuickAskMessageComponent = React.memo(function QuickAskMessageCompo
   if (isStreaming) {
     return (
       <div className="tw-max-w-[95%] tw-self-start tw-rounded-lg tw-rounded-bl-sm tw-bg-secondary tw-px-3 tw-py-2">
-        <div data-quick-ask-selectable className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-normal">
+        <div
+          data-quick-ask-selectable
+          className="tw-whitespace-pre-wrap tw-break-words tw-text-sm tw-text-normal"
+        >
           {message.content}
           <span className="tw-animate-pulse tw-text-accent">▊</span>
         </div>
