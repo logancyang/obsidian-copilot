@@ -1,7 +1,34 @@
 import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { formatDateTime } from "@/utils";
-import { ChatMessage, MessageContext, NewChatMessage, StoredMessage } from "@/types/message";
+import {
+  AgentMessagePart,
+  ChatMessage,
+  MessageContext,
+  NewChatMessage,
+  StoredMessage,
+} from "@/types/message";
 import { logInfo } from "@/logger";
+
+/**
+ * Returns the stable identity of an agent part for upsert lookups.
+ * Tool calls key on `id` (the ACP toolCallId); other kinds have at most one
+ * instance per message and key on their `kind`.
+ */
+function agentPartId(part: AgentMessagePart): string | undefined {
+  if (part.kind === "tool_call") return `tool:${part.id}`;
+  if (part.kind === "plan") return "plan";
+  return undefined;
+}
+
+/**
+ * Structural equality for agent parts. Avoids re-rendering the chat on
+ * `tool_call_update` notifications that don't actually change anything (the
+ * ACP transport sometimes resends the same tool-call snapshot).
+ */
+function agentPartsEqual(a: AgentMessagePart, b: AgentMessagePart): boolean {
+  if (a === b) return true;
+  return JSON.stringify(a) === JSON.stringify(b);
+}
 
 /**
  * MessageRepository - Single source of truth for all messages
@@ -62,6 +89,7 @@ export class MessageRepository {
         sources: message.sources,
         content: message.content,
         responseMetadata: message.responseMetadata,
+        agentParts: message.agentParts,
       };
 
       this.messages.push(storedMessage);
@@ -215,6 +243,7 @@ export class MessageRepository {
         sources: msg.sources,
         content: msg.content,
         responseMetadata: msg.responseMetadata,
+        agentParts: msg.agentParts,
       }));
   }
 
@@ -234,6 +263,9 @@ export class MessageRepository {
     const msg = this.messages.find((m) => m.id === id);
     if (!msg) return undefined;
 
+    // Note: agentParts is intentionally omitted from LLM views — Agent Mode
+    // never goes through the legacy LangChain path, and we don't want
+    // structured parts leaking into prompt construction.
     return {
       id: msg.id,
       message: msg.processedText, // TRANSITIONAL: Full context (legacy format)
@@ -293,6 +325,7 @@ export class MessageRepository {
       isErrorMessage: msg.isErrorMessage,
       sources: msg.sources,
       content: msg.content,
+      agentParts: msg.agentParts,
     };
   }
 
@@ -314,9 +347,78 @@ export class MessageRepository {
         isErrorMessage: msg.isErrorMessage,
         sources: msg.sources,
         content: msg.content,
+        agentParts: msg.agentParts,
       });
     });
     logInfo(`[MessageRepository] Loaded ${messages.length} messages`);
+  }
+
+  /**
+   * Append text to a message's display body. Used by Agent Mode to stream
+   * `agent_message_chunk` updates into the placeholder assistant message.
+   */
+  appendDisplayText(id: string, chunk: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.displayText += chunk;
+    msg.processedText = msg.displayText;
+    return true;
+  }
+
+  /**
+   * Replace an entire agent part by its `id`. If no part with that id exists,
+   * the part is appended. Returns false when nothing actually changed (so
+   * callers can skip notifying React) or when the message is missing.
+   */
+  upsertAgentPart(id: string, part: AgentMessagePart): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    if (!msg.agentParts) msg.agentParts = [];
+    const partId = agentPartId(part);
+    if (partId !== undefined) {
+      const idx = msg.agentParts.findIndex((p) => agentPartId(p) === partId);
+      if (idx !== -1) {
+        if (agentPartsEqual(msg.agentParts[idx], part)) return false;
+        msg.agentParts[idx] = part;
+        return true;
+      }
+    }
+    msg.agentParts.push(part);
+    return true;
+  }
+
+  /**
+   * Mark a message as an error and append the error text to its display
+   * body. Used by Agent Mode when a turn rejects mid-stream so the partial
+   * placeholder gets a visible error instead of looking like a normal
+   * truncated reply.
+   */
+  markMessageError(id: string, errorText: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.isErrorMessage = true;
+    const suffix = msg.displayText.length > 0 ? "\n\n" : "";
+    msg.displayText += `${suffix}**Error:** ${errorText}`;
+    msg.processedText = msg.displayText;
+    return true;
+  }
+
+  /**
+   * Append text to the trailing `thought` part, creating one if absent.
+   * Used to fold multiple `agent_thought_chunk` updates into a single
+   * collapsible block instead of one block per chunk.
+   */
+  appendAgentThought(id: string, text: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    if (!msg.agentParts) msg.agentParts = [];
+    const last = msg.agentParts[msg.agentParts.length - 1];
+    if (last && last.kind === "thought") {
+      last.text += text;
+    } else {
+      msg.agentParts.push({ kind: "thought", text });
+    }
+    return true;
   }
 
   /**

@@ -4,16 +4,65 @@ import { ChatManager } from "@/core/ChatManager";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 
+/** Rich content payload (images etc.) attached to a message. */
+export type ChatMessageContent = NonNullable<ChatMessage["content"]>;
+
 /**
- * ChatUIState - Clean UI-only state manager
+ * Public surface used by `<Chat />`, `useChatManager`, and CopilotView. Two
+ * implementations exist: `ChatManagerChatUIState` (legacy chains backed by
+ * ChatManager) and `AgentSessionChatUIState` (Agent Mode). Components stay
+ * polymorphic over both.
+ */
+export interface ChatUIState {
+  subscribe(listener: () => void): () => void;
+  sendMessage(
+    displayText: string,
+    context: MessageContext,
+    chainType: ChainType,
+    includeActiveNote?: boolean,
+    includeActiveWebTab?: boolean,
+    content?: ChatMessageContent,
+    updateLoadingMessage?: (message: string) => void
+  ): Promise<string>;
+  editMessage(
+    messageId: string,
+    newText: string,
+    chainType: ChainType,
+    includeActiveNote?: boolean
+  ): Promise<boolean>;
+  regenerateMessage(
+    messageId: string,
+    onUpdateCurrentMessage: (message: string) => void,
+    onAddMessage: (message: ChatMessage) => void
+  ): Promise<boolean>;
+  deleteMessage(messageId: string): Promise<boolean>;
+  clearMessages(): void;
+  truncateAfterMessageId(messageId: string): Promise<void>;
+  getMessages(): ChatMessage[];
+  getMessage(id: string): ChatMessage | undefined;
+  getLLMMessage(id: string): ChatMessage | undefined;
+  getLLMMessages(): ChatMessage[];
+  readonly chatHistory: ChatMessage[];
+  addMessage(message: ChatMessage): void;
+  clearChatHistory(): void;
+  replaceMessages(messages: ChatMessage[]): void;
+  getDebugInfo(): unknown;
+  loadMessages(messages: ChatMessage[]): Promise<void>;
+  handleProjectSwitch(): Promise<void>;
+  saveChat(modelKey: string): Promise<void>;
+  loadChatHistory(file: TFile): Promise<void>;
+}
+
+/**
+ * ChatManagerChatUIState - Clean UI-only state manager backed by ChatManager
+ * (legacy chains: chat, copilot-plus, autonomous, project).
  *
- * This replaces SharedState with a minimal, focused approach:
  * - Only handles UI state and React integration
  * - Delegates all business logic to ChatManager
  * - Provides subscription mechanism for React components
  * - No complex recovery or validation logic
  */
-export class ChatUIState {
+export class ChatManagerChatUIState implements ChatUIState {
   private listeners: Set<() => void> = new Set();
 
   constructor(private chatManager: ChatManager) {
@@ -63,7 +112,7 @@ export class ChatUIState {
     chainType: ChainType,
     includeActiveNote: boolean = false,
     includeActiveWebTab: boolean = false,
-    content?: any[],
+    content?: ChatMessageContent,
     updateLoadingMessage?: (message: string) => void
   ): Promise<string> {
     const messageId = await this.chatManager.sendMessage(

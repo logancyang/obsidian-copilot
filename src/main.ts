@@ -42,7 +42,7 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import { ChatUIState } from "@/state/ChatUIState";
+import { ChatManagerChatUIState, ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
@@ -147,7 +147,7 @@ export default class CopilotPlugin extends Plugin {
     const messageRepo = new MessageRepository();
     const chainManager = this.projectManager.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
-    this.chatUIState = new ChatUIState(chatManager);
+    this.chatUIState = new ChatManagerChatUIState(chatManager);
 
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);

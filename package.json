@@ -75,6 +75,7 @@
     "web-streams-polyfill": "^3.3.2"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.20.0",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",

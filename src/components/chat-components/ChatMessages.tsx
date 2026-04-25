@@ -1,3 +1,4 @@
+import { AgentToolCall } from "@/components/agent/AgentToolCall";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
@@ -101,6 +102,13 @@ const ChatMessages = memo(
                     minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
                   }}
                 >
+                  {message.agentParts && message.agentParts.length > 0 ? (
+                    <div className="tw-flex tw-flex-col tw-gap-1 tw-px-3 tw-pt-2">
+                      {message.agentParts.map((part, partIndex) => (
+                        <AgentToolCall key={partIndex} part={part} />
+                      ))}
+                    </div>
+                  ) : null}
                   <ChatSingleMessage
                     message={message}
                     app={app}
