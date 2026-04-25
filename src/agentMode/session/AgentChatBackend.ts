@@ -1,3 +1,4 @@
+import type { SessionModelState } from "@agentclientprotocol/sdk";
 import type { AgentChatMessage } from "./types";
 
 /**
@@ -17,4 +18,11 @@ export interface AgentChatBackend {
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
+
+  /** Latest known model state from ACP, or null when the agent doesn't report one. */
+  getModelState(): SessionModelState | null;
+  /** Switch the active model. Throws if the agent doesn't implement runtime model switching. */
+  setModel(modelId: string): Promise<void>;
+  /** Tri-state: null = not yet probed, true/false = result of first probe. */
+  isModelSwitchSupported(): boolean | null;
 }

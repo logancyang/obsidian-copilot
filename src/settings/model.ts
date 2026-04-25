@@ -224,6 +224,14 @@ export interface OpencodeBackendSettings {
    * when a `binaryPath` exists.
    */
   binarySource?: "managed" | "custom";
+  /**
+   * Sticky model preference for Agent Mode. Stored as Copilot's
+   * `"name|provider"` key for portability — the backend descriptor translates
+   * to OpenCode's `"providerId/modelName"` format when applying.
+   *
+   * Empty/unset = no preference, OpenCode picks its own default.
+   */
+  selectedModelKey?: string;
 }
 
 export const settingsStore = createStore();
@@ -699,7 +707,9 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
   } else {
     binarySource = binaryPath ? "managed" : undefined;
   }
-  return { binaryPath, binaryVersion, binarySource };
+  const selectedModelKey =
+    typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
+  return { binaryPath, binaryVersion, binarySource, selectedModelKey };
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

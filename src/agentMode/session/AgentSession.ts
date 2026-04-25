@@ -15,6 +15,7 @@ import {
   Plan,
   PromptRequest,
   SessionId,
+  SessionModelState,
   SessionNotification,
   StopReason,
   ToolCall,
@@ -27,6 +28,8 @@ export type AgentSessionStatus = "idle" | "running" | "awaiting_permission" | "e
 export interface AgentSessionListener {
   onMessagesChanged(): void;
   onStatusChanged(status: AgentSessionStatus): void;
+  /** Optional: fired when the active model changes (after `setModel` resolves). */
+  onModelChanged?(): void;
 }
 
 /**
@@ -41,22 +44,26 @@ export class AgentSession {
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
+  private modelState: SessionModelState | null = null;
 
   constructor(
     private readonly backend: AcpBackendProcess,
     readonly acpSessionId: SessionId,
-    readonly internalId: string
+    readonly internalId: string,
+    initialModelState: SessionModelState | null = null
   ) {
     this.unregisterSessionHandler = this.backend.registerSessionHandler(
       this.acpSessionId,
       (update) => this.handleSessionUpdate(update)
     );
+    this.modelState = initialModelState;
   }
 
   static async create(
     backend: AcpBackendProcess,
     cwd: string,
-    internalId: string
+    internalId: string,
+    preferredModelId?: string
   ): Promise<AgentSession> {
     const resp = await backend.newSession({ cwd, mcpServers: [] });
     if (resp.models) {
@@ -67,7 +74,61 @@ export class AgentSession {
     } else {
       logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
     }
-    return new AgentSession(backend, resp.sessionId, internalId);
+    const session = new AgentSession(backend, resp.sessionId, internalId, resp.models ?? null);
+
+    // Apply sticky preference if it's available and differs from the agent's
+    // current model. Failures here are non-fatal — the session is usable with
+    // whatever the agent picked by default.
+    if (
+      preferredModelId &&
+      resp.models &&
+      resp.models.currentModelId !== preferredModelId &&
+      resp.models.availableModels.some((m) => m.modelId === preferredModelId)
+    ) {
+      try {
+        await session.setModel(preferredModelId);
+      } catch (e) {
+        logWarn(`[AgentMode] could not apply preferred model ${preferredModelId}`, e);
+      }
+    }
+    return session;
+  }
+
+  /**
+   * Latest known model state for this session. `null` when the agent did not
+   * report any models in `NewSessionResponse` (older agents/backends).
+   */
+  getModelState(): SessionModelState | null {
+    return this.modelState;
+  }
+
+  /**
+   * Switch the active model on this session. Calls
+   * `unstable_setSessionModel`; on success, mutates the local
+   * `currentModelId` and notifies `onModelChanged` listeners.
+   *
+   * Throws `MethodUnsupportedError` if the agent does not implement the
+   * unstable RPC. Callers should treat that as "model switching is not
+   * available" and degrade the UI accordingly.
+   */
+  async setModel(modelId: string): Promise<void> {
+    if (this.status === "closed") throw new Error("Session is closed");
+    await this.backend.setSessionModel({ sessionId: this.acpSessionId, modelId });
+    if (this.modelState) {
+      this.modelState = { ...this.modelState, currentModelId: modelId };
+    } else {
+      this.modelState = { availableModels: [], currentModelId: modelId };
+    }
+    this.notifyModelChanged();
+  }
+
+  /**
+   * Whether `unstable_setSessionModel` is known to be supported. Mirrors
+   * `AcpBackendProcess.isSetSessionModelSupported()`. May be `null` until the
+   * first probe happens.
+   */
+  isModelSwitchSupported(): boolean | null {
+    return this.backend.isSetSessionModelSupported();
   }
 
   getStatus(): AgentSessionStatus {
@@ -260,6 +321,16 @@ export class AgentSession {
         l.onMessagesChanged();
       } catch (e) {
         logWarn(`[AgentMode] messages listener threw`, e);
+      }
+    }
+  }
+
+  private notifyModelChanged(): void {
+    for (const l of this.listeners) {
+      try {
+        l.onModelChanged?.();
+      } catch (e) {
+        logWarn(`[AgentMode] model listener threw`, e);
       }
     }
   }

@@ -11,6 +11,8 @@ import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 // or ui/.
 export { AgentChatRouter } from "./ui/AgentChatRouter";
 export { useActiveBackendDescriptor, useBackendInstallState } from "./ui/useBackendDescriptor";
+export { useAgentModelPicker } from "./ui/useAgentModelPicker";
+export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { BackendDescriptor, BackendId, InstallState } from "./session/types";
 export { getActiveBackendDescriptor } from "./backends/registry";

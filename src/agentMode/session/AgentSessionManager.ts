@@ -1,6 +1,7 @@
-import { logError, logInfo } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
+import { getSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter, Platform } from "obsidian";
@@ -76,7 +77,8 @@ export class AgentSessionManager {
 
     this.prepareSession = (async () => {
       const backend = await this.ensureBackend();
-      const session = await AgentSession.create(backend, vaultBasePath, uuidv4());
+      const preferredModelId = this.opts.descriptor.getPreferredModelId?.(getSettings());
+      const session = await AgentSession.create(backend, vaultBasePath, uuidv4(), preferredModelId);
       // Shutdown may have raced with us. If so, dispose the freshly-created
       // session instead of leaking it.
       if (this.disposed) {
@@ -139,6 +141,27 @@ export class AgentSessionManager {
   /** Cancel any in-flight turn on the active session. Backend stays up. */
   async cancel(): Promise<void> {
     await this.activeSession?.cancel();
+  }
+
+  /**
+   * Switch the active session to `modelId` and persist it as the user's
+   * sticky preference (so the next session boots with the same selection).
+   *
+   * `modelId` is the *agent-native* identifier (whatever the backend reports
+   * in `availableModels`). Mapping from a Copilot `CustomModel` to that id is
+   * the descriptor's responsibility.
+   *
+   * The persistence step is decoupled from the live switch — if persistence
+   * throws, the runtime change still sticks for the current session.
+   */
+  async setActiveSessionModel(modelId: string): Promise<void> {
+    if (!this.activeSession) throw new Error("No active session");
+    await this.activeSession.setModel(modelId);
+    try {
+      await this.opts.descriptor.persistModelSelection?.(modelId, this.plugin);
+    } catch (e) {
+      logWarn("[AgentMode] persistModelSelection failed", e);
+    }
   }
 
   /**

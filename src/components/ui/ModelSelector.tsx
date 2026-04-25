@@ -9,8 +9,19 @@ import {
 import { ModelDisplay } from "@/components/ui/model-display";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String } from "@/utils";
+import type { CustomModel } from "@/aiParams";
 import { ChevronDown } from "lucide-react";
 import { cn } from "@/lib/utils";
+
+/**
+ * Picker entry shape. The selector is normally driven by `settings.activeModels`,
+ * but callers can pass an explicit `models` list (e.g. Agent Mode merges
+ * Copilot-configured models with backend-reported ones). To surface a
+ * non-API-key reason for a disabled option, set `_disabledReason` on the
+ * synthetic entry; the selector will render the option disabled with the
+ * reason as a right-side label.
+ */
+export type ModelSelectorEntry = CustomModel & { _disabledReason?: string };
 
 interface ModelSelectorProps {
   disabled?: boolean;
@@ -20,6 +31,12 @@ interface ModelSelectorProps {
   // Always controlled
   value: string;
   onChange: (modelKey: string) => void;
+  /**
+   * Optional override for the list of models to show. When provided, the
+   * selector skips the BYOK API-key check — the caller is responsible for
+   * marking unusable entries via `_disabledReason`.
+   */
+  models?: ModelSelectorEntry[];
 }
 
 export function ModelSelector({
@@ -29,15 +46,18 @@ export function ModelSelector({
   className,
   value,
   onChange,
+  models,
 }: ModelSelectorProps) {
   const [modelError, setModelError] = useState<string | null>(null);
   const settings = useSettingsValue();
 
-  const currentModel = settings.activeModels.find(
-    (model) => model.enabled && getModelKeyFromModel(model) === value
+  const showModels: ModelSelectorEntry[] = models ?? settings.activeModels;
+  const skipApiKeyCheck = models !== undefined;
+
+  const currentModel = showModels.find(
+    (model) => (model.enabled ?? true) && getModelKeyFromModel(model) === value
   );
 
-  const showModels = settings.activeModels;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -62,15 +82,19 @@ export function ModelSelector({
 
       <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
         {showModels
-          .filter((model) => model.enabled)
+          .filter((model) => model.enabled !== false)
           .map((model) => {
-            const { hasApiKey } = checkModelApiKey(model, settings);
+            const disabledReason = model._disabledReason;
+            const hasApiKey = skipApiKeyCheck ? true : checkModelApiKey(model, settings).hasApiKey;
+            const itemDisabled = Boolean(disabledReason) || !hasApiKey;
+            const rightLabel = disabledReason ?? (!hasApiKey ? "Needs API key" : null);
             return (
               <DropdownMenuItem
                 key={getModelKeyFromModel(model)}
-                disabled={!hasApiKey}
+                disabled={itemDisabled}
+                title={disabledReason ?? undefined}
                 onSelect={async (event) => {
-                  if (!hasApiKey) {
+                  if (itemDisabled) {
                     event.preventDefault();
                     return;
                   }
@@ -83,18 +107,18 @@ export function ModelSelector({
                     setModelError(msg);
                     // Restore to the last valid model
                     const lastValidModel = showModels.find(
-                      (m) => m.enabled && getModelKeyFromModel(m) === value
+                      (m) => m.enabled !== false && getModelKeyFromModel(m) === value
                     );
                     if (lastValidModel) {
                       onChange(getModelKeyFromModel(lastValidModel));
                     }
                   }
                 }}
-                className={!hasApiKey ? "tw-cursor-not-allowed tw-opacity-50" : ""}
+                className={itemDisabled ? "tw-cursor-not-allowed tw-opacity-50" : ""}
               >
                 <ModelDisplay model={model} iconSize={12} />
-                {!hasApiKey && (
-                  <span className="tw-ml-auto tw-text-smallest tw-text-faint">Needs API key</span>
+                {rightLabel && (
+                  <span className="tw-ml-auto tw-text-smallest tw-text-faint">{rightLabel}</span>
                 )}
               </DropdownMenuItem>
             );

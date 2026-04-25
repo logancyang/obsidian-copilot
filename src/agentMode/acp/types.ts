@@ -26,3 +26,18 @@ export interface AcpBackend {
   /** Build the spawn descriptor (BYOK keys decrypted, env composed). */
   buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor>;
 }
+
+/**
+ * Thrown by `AcpBackendProcess.setSessionModel` when the connected agent does
+ * not implement `unstable_setSessionModel`. Callers should catch this and
+ * degrade gracefully (e.g. disable the model picker).
+ */
+export class MethodUnsupportedError extends Error {
+  constructor(method: string) {
+    super(`Agent does not implement ${method}`);
+    this.name = "MethodUnsupportedError";
+  }
+}
+
+/** JSON-RPC standard "Method not found" error code. */
+export const JSONRPC_METHOD_NOT_FOUND = -32601;

@@ -7,16 +7,32 @@ import {
   PROTOCOL_VERSION,
   PromptRequest,
   PromptResponse,
+  RequestError,
   RequestPermissionRequest,
   RequestPermissionResponse,
   SessionId,
   SessionNotification,
+  SetSessionModelRequest,
+  SetSessionModelResponse,
   ndJsonStream,
 } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
-import { AcpBackend } from "./types";
+import { AcpBackend, JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "./types";
+
+/**
+ * Detect a JSON-RPC -32601 (method not found) error from the ACP SDK. The SDK
+ * surfaces these as `RequestError` instances; we also tolerate plain objects
+ * shaped like `{ code: number }` defensively.
+ */
+function isMethodNotFoundError(err: unknown): boolean {
+  if (err instanceof RequestError) return err.code === JSONRPC_METHOD_NOT_FOUND;
+  if (typeof err === "object" && err !== null && "code" in err) {
+    return (err as { code: unknown }).code === JSONRPC_METHOD_NOT_FOUND;
+  }
+  return false;
+}
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
 
@@ -39,6 +55,8 @@ export class AcpBackendProcess {
     | ((req: RequestPermissionRequest) => Promise<RequestPermissionResponse>)
     | null = null;
   private exitListeners = new Set<() => void>();
+  /** Tri-state: null = not yet probed, true/false = result of first probe. */
+  private setSessionModelSupported: boolean | null = null;
 
   constructor(
     private readonly app: App,
@@ -79,6 +97,7 @@ export class AcpBackendProcess {
       this.connection = null;
       this.sessionHandlers.clear();
       this.permissionPrompter = null;
+      this.setSessionModelSupported = null;
       for (const fn of this.exitListeners) {
         try {
           fn();
@@ -169,6 +188,41 @@ export class AcpBackendProcess {
   }
 
   /**
+   * Switch the active model for an ACP session via `unstable_setSessionModel`.
+   *
+   * The capability is marked unstable in the spec — agents may not implement
+   * it. On the first JSON-RPC method-not-found (-32601), we cache the negative
+   * result and rethrow as a typed `MethodUnsupportedError` so callers can
+   * gracefully degrade. Subsequent calls short-circuit without hitting the
+   * wire.
+   */
+  async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
+    if (this.setSessionModelSupported === false) {
+      throw new MethodUnsupportedError("session/set_model");
+    }
+    try {
+      const resp = await this.requireConnection().unstable_setSessionModel(params);
+      this.setSessionModelSupported = true;
+      return resp;
+    } catch (err) {
+      if (isMethodNotFoundError(err)) {
+        this.setSessionModelSupported = false;
+        throw new MethodUnsupportedError("session/set_model");
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Whether `unstable_setSessionModel` is known to be supported. Returns
+   * `null` if no probe has happened yet — callers should attempt a call and
+   * catch `MethodUnsupportedError` to materialize the result.
+   */
+  isSetSessionModelSupported(): boolean | null {
+    return this.setSessionModelSupported;
+  }
+
+  /**
    * Tear down the subprocess. Cancels nothing on the agent side beyond
    * closing stdin (opencode self-exits when the parent goes away), so call
    * `cancel()` on each session first if you want graceful turn cancellation.
@@ -177,6 +231,7 @@ export class AcpBackendProcess {
     this.connection = null;
     this.sessionHandlers.clear();
     this.permissionPrompter = null;
+    this.setSessionModelSupported = null;
     if (this.process) {
       try {
         await this.process.shutdown();

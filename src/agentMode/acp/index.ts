@@ -2,3 +2,4 @@ export { AcpBackendProcess, type SessionUpdateHandler } from "./AcpBackendProces
 export { AcpProcessManager, type AcpProcessManagerOptions } from "./AcpProcessManager";
 export { VaultClient } from "./VaultClient";
 export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "./types";
+export { MethodUnsupportedError, JSONRPC_METHOD_NOT_FOUND } from "./types";

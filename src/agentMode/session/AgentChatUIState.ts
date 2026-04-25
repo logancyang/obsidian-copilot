@@ -2,6 +2,7 @@ import { logError, logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { SessionModelState } from "@agentclientprotocol/sdk";
 
 /**
  * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent
@@ -15,12 +16,13 @@ export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
 
   constructor(private readonly session: AgentSession) {
-    // Only forward message changes — status is consumed directly by
-    // `AgentModeStatus` via `session.subscribe`, so re-publishing it here
+    // Forward message changes and model changes. Status is consumed directly
+    // by `AgentModeStatus` via `session.subscribe`, so re-publishing it here
     // would cause spurious re-renders of the message list.
     this.session.subscribe({
       onMessagesChanged: () => this.notifyListeners(),
       onStatusChanged: () => {},
+      onModelChanged: () => this.notifyListeners(),
     });
   }
 
@@ -81,5 +83,17 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
+  }
+
+  getModelState(): SessionModelState | null {
+    return this.session.getModelState();
+  }
+
+  async setModel(modelId: string): Promise<void> {
+    await this.session.setModel(modelId);
+  }
+
+  isModelSwitchSupported(): boolean | null {
+    return this.session.isModelSwitchSupported();
   }
 }

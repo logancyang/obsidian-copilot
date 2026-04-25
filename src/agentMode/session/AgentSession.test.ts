@@ -1,5 +1,6 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AcpBackendProcess, SessionUpdateHandler } from "@/agentMode/acp/AcpBackendProcess";
+import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import { AgentSession } from "./AgentSession";
 
 jest.mock("@/logger", () => ({
@@ -14,6 +15,9 @@ interface MockBackend {
   emit: (update: unknown) => void;
   prompt: jest.Mock;
   cancel: jest.Mock;
+  newSession: jest.Mock;
+  setSessionModel: jest.Mock;
+  isSetSessionModelSupported: jest.Mock;
 }
 
 function makeMockBackend(): MockBackend {
@@ -26,16 +30,25 @@ function makeMockBackend(): MockBackend {
   });
   const prompt = jest.fn(async () => ({ stopReason: "end_turn" as const }));
   const cancel = jest.fn(async () => undefined);
+  const newSession = jest.fn(async () => ({ sessionId: "acp-1", models: null }));
+  const setSessionModel = jest.fn(async () => ({}));
+  const isSetSessionModelSupported = jest.fn(() => true);
   const backend = {
     registerSessionHandler: registerHandler,
     prompt,
     cancel,
+    newSession,
+    setSessionModel,
+    isSetSessionModelSupported,
   } as unknown as AcpBackendProcess;
   return {
     asBackend: backend,
     registerHandler,
     prompt,
     cancel,
+    newSession,
+    setSessionModel,
+    isSetSessionModelSupported,
     emit: (update) => handler?.(update as Parameters<SessionUpdateHandler>[0]),
   };
 }
@@ -159,5 +172,145 @@ describe("AgentSession.sendPrompt", () => {
     expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
     resolvePrompt!({ stopReason: "cancelled" });
     expect(await turn).toBe("cancelled");
+  });
+});
+
+describe("AgentSession.create", () => {
+  it("captures `models` from NewSessionResponse and exposes via getModelState", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({
+      sessionId: "acp-1",
+      models: {
+        currentModelId: "anthropic/sonnet",
+        availableModels: [
+          { modelId: "anthropic/sonnet", name: "Claude Sonnet" },
+          { modelId: "openai/gpt-5", name: "GPT-5" },
+        ],
+      },
+    });
+    const session = await AgentSession.create(mock.asBackend, "/vault", "internal-1");
+    expect(session.getModelState()?.currentModelId).toBe("anthropic/sonnet");
+    expect(session.getModelState()?.availableModels).toHaveLength(2);
+  });
+
+  it("getModelState returns null when the agent doesn't report models", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", models: null });
+    const session = await AgentSession.create(mock.asBackend, "/vault", "internal-1");
+    expect(session.getModelState()).toBeNull();
+  });
+
+  it("applies preferredModelId when it differs from current and is available", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({
+      sessionId: "acp-1",
+      models: {
+        currentModelId: "anthropic/sonnet",
+        availableModels: [
+          { modelId: "anthropic/sonnet", name: "Claude Sonnet" },
+          { modelId: "openai/gpt-5", name: "GPT-5" },
+        ],
+      },
+    });
+    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "openai/gpt-5");
+    expect(mock.setSessionModel).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      modelId: "openai/gpt-5",
+    });
+  });
+
+  it("does not switch when preferredModelId matches current", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({
+      sessionId: "acp-1",
+      models: {
+        currentModelId: "anthropic/sonnet",
+        availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
+      },
+    });
+    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "anthropic/sonnet");
+    expect(mock.setSessionModel).not.toHaveBeenCalled();
+  });
+
+  it("does not switch when preferredModelId is not in availableModels", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({
+      sessionId: "acp-1",
+      models: {
+        currentModelId: "anthropic/sonnet",
+        availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
+      },
+    });
+    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "ghost/model");
+    expect(mock.setSessionModel).not.toHaveBeenCalled();
+  });
+
+  it("survives a MethodUnsupportedError from preferred-model application", async () => {
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({
+      sessionId: "acp-1",
+      models: {
+        currentModelId: "anthropic/sonnet",
+        availableModels: [
+          { modelId: "anthropic/sonnet", name: "Claude Sonnet" },
+          { modelId: "openai/gpt-5", name: "GPT-5" },
+        ],
+      },
+    });
+    mock.setSessionModel.mockRejectedValueOnce(new MethodUnsupportedError("session/set_model"));
+    const session = await AgentSession.create(
+      mock.asBackend,
+      "/vault",
+      "internal-1",
+      "openai/gpt-5"
+    );
+    // Session is still usable; current model stays at the agent's default.
+    expect(session.getModelState()?.currentModelId).toBe("anthropic/sonnet");
+  });
+});
+
+describe("AgentSession.setModel", () => {
+  it("calls backend.setSessionModel and updates currentModelId on success", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", {
+      currentModelId: "a/b",
+      availableModels: [
+        { modelId: "a/b", name: "A B" },
+        { modelId: "x/y", name: "X Y" },
+      ],
+    });
+    await session.setModel("x/y");
+    expect(mock.setSessionModel).toHaveBeenCalledWith({ sessionId: "acp-1", modelId: "x/y" });
+    expect(session.getModelState()?.currentModelId).toBe("x/y");
+  });
+
+  it("rethrows MethodUnsupportedError without mutating local state", async () => {
+    const mock = makeMockBackend();
+    mock.setSessionModel.mockRejectedValueOnce(new MethodUnsupportedError("session/set_model"));
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", {
+      currentModelId: "a/b",
+      availableModels: [{ modelId: "a/b", name: "A B" }],
+    });
+    await expect(session.setModel("x/y")).rejects.toBeInstanceOf(MethodUnsupportedError);
+    expect(session.getModelState()?.currentModelId).toBe("a/b");
+  });
+
+  it("notifies onModelChanged listeners after successful switch", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", {
+      currentModelId: "a/b",
+      availableModels: [
+        { modelId: "a/b", name: "A B" },
+        { modelId: "x/y", name: "X Y" },
+      ],
+    });
+    const onModelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onModelChanged,
+    });
+    await session.setModel("x/y");
+    expect(onModelChanged).toHaveBeenCalledTimes(1);
   });
 });

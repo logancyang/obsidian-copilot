@@ -9,7 +9,7 @@ import {
 import { ChainType } from "@/chainFactory";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { Button } from "@/components/ui/button";
-import { ModelSelector } from "@/components/ui/ModelSelector";
+import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
 import { isPlusChain } from "@/utils";
@@ -60,6 +60,19 @@ interface ChatInputProps {
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   disableModelSwitch?: boolean;
+  /**
+   * Optional override that swaps the default model picker plumbing
+   * (`useModelKey()` + `settings.activeModels`) for a caller-supplied model
+   * list, value, and change handler. Used by Agent Mode to surface the
+   * agent's reported `availableModels` alongside Copilot-configured ones
+   * without `ChatInput` needing to know anything about Agent Mode.
+   */
+  modelPickerOverride?: {
+    models: ModelSelectorEntry[];
+    value: string;
+    onChange: (modelKey: string) => void;
+    disabled?: boolean;
+  };
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
@@ -101,6 +114,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   onAddImage,
   setSelectedImages,
   disableModelSwitch,
+  modelPickerOverride,
   selectedTextContexts,
   onRemoveSelectedText,
   showProgressCard,
@@ -805,15 +819,19 @@ const ChatInput: React.FC<ChatInputProps> = ({
             <ModelSelector
               variant="ghost2"
               size="fit"
-              disabled={disableModelSwitch}
-              value={getDisplayModelKey()}
-              onChange={(modelKey) => {
-                // In project mode, we don't update the global model key
-                // as the project model takes precedence
-                if (currentChain !== ChainType.PROJECT_CHAIN) {
-                  setCurrentModelKey(modelKey);
-                }
-              }}
+              disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
+              value={modelPickerOverride?.value ?? getDisplayModelKey()}
+              models={modelPickerOverride?.models}
+              onChange={
+                modelPickerOverride?.onChange ??
+                ((modelKey) => {
+                  // In project mode, we don't update the global model key
+                  // as the project model takes precedence
+                  if (currentChain !== ChainType.PROJECT_CHAIN) {
+                    setCurrentModelKey(modelKey);
+                  }
+                })
+              }
               className="tw-max-w-full tw-truncate"
             />
           </div>

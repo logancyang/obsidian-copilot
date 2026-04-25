@@ -2,6 +2,7 @@ import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { useActiveBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
+import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import ChatInput from "@/components/chat-components/ChatInput";
 import { EVENT_NAMES } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
@@ -165,6 +166,8 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
+  const modelPickerOverride = useAgentModelPicker(backend, manager);
+
   // Listen to global ABORT_STREAM events (used by Chat selection / new-chat triggers)
   useEffect(() => {
     const handleAbortStream = () => {
@@ -206,7 +209,8 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               selectedImages={selectedImages}
               onAddImage={handleAddImage}
               setSelectedImages={setSelectedImages}
-              disableModelSwitch={true}
+              disableModelSwitch={!modelPickerOverride}
+              modelPickerOverride={modelPickerOverride ?? undefined}
               showProgressCard={NOOP}
               showIndexingCard={NOOP}
             />

@@ -1,5 +1,6 @@
 import type { App } from "obsidian";
 import type React from "react";
+import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
@@ -41,6 +42,51 @@ export interface BackendDescriptor {
 
   /** Optional: reconcile install state on plugin load (e.g. clear stale managed install). */
   onPluginLoad?(plugin: CopilotPlugin): Promise<void>;
+
+  /**
+   * Optional: partition Copilot's `activeModels` into models this backend can
+   * route (`compatible`) and the ones it cannot (`incompatible`, surfaced
+   * disabled in the picker so users see why their Bedrock/Ollama models
+   * aren't selectable).
+   */
+  filterCopilotModels?(models: CustomModel[]): {
+    compatible: CustomModel[];
+    incompatible: CustomModel[];
+  };
+
+  /**
+   * Optional: resolve the user's sticky model preference, translated into the
+   * agent-native id (whatever appears in `SessionModelState.availableModels`).
+   * Returning `undefined` means "no preference, use whatever the agent picks
+   * by default".
+   */
+  getPreferredModelId?(settings: CopilotSettings): string | undefined;
+
+  /**
+   * Optional: persist the user's selection so the next session resumes it.
+   * `modelId` is the agent-native id passed to `unstable_setSessionModel`.
+   */
+  persistModelSelection?(modelId: string, plugin: CopilotPlugin): Promise<void>;
+
+  /**
+   * Optional: translate a Copilot `CustomModel` into the agent-native model id
+   * the backend will report in `availableModels`. Returns `undefined` when
+   * the model's provider isn't routable by this backend. The UI uses this for
+   * cross-referencing source attribution and computing the picker's value.
+   */
+  copilotModelKeyToAgentModelId?(model: CustomModel): string | undefined;
+
+  /**
+   * Optional: given an agent-reported modelId, return the Copilot provider id
+   * (matching `CustomModel.provider`) the model would route through. Returns
+   * `undefined` for agent-only models that don't correspond to any Copilot
+   * provider. The picker uses this to decide whether the user has curated a
+   * provider in Copilot — if they have configured any model for that
+   * provider, the agent's catalog for the same provider is hidden in favor
+   * of the user's explicit list (so a single configured OpenRouter model
+   * doesn't drag in OpenCode's full OpenRouter catalog).
+   */
+  agentModelIdToCopilotProvider?(modelId: string): string | undefined;
 }
 
 /**
