@@ -1013,6 +1013,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     enabled: false,
     byok: {},
     mcpServers: [],
+    activeBackend: "opencode",
+    backends: {},
   },
 };
 

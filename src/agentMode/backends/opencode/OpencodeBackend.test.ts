@@ -40,14 +40,19 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
     );
   });
 
-  it("uses settings.agentMode.binaryPath as command and passes cwd in args", async () => {
+  it("uses agentMode.backends.opencode.binaryPath as command and passes cwd in args", async () => {
     updateSetting("agentMode", {
       enabled: true,
       byok: {},
       mcpServers: [],
-      binaryPath: "/path/to/opencode",
-      binaryVersion: "1.3.17",
-      binarySource: "managed",
+      activeBackend: "opencode",
+      backends: {
+        opencode: {
+          binaryPath: "/path/to/opencode",
+          binaryVersion: "1.3.17",
+          binarySource: "managed",
+        },
+      },
     });
     updateSetting("anthropicApiKey", "anth-xyz");
     const backend = new OpencodeBackend();

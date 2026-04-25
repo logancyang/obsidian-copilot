@@ -1,5 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import { AgentChatRouter } from "@/components/agent/AgentChatRouter";
+import { AgentChatRouter } from "@/agentMode";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";

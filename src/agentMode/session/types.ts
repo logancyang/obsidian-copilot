@@ -1,4 +1,47 @@
+import type { App } from "obsidian";
+import type React from "react";
+import type CopilotPlugin from "@/main";
+import type { CopilotSettings } from "@/settings/model";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
+import type { AcpBackend, BackendId } from "@/agentMode/acp/types";
+
+// Re-export so consumers in session/ and ui/ can import a single types entry.
+export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/types";
+
+/** UI-facing install/setup state for a backend. */
+export type InstallState =
+  | { kind: "absent" }
+  | { kind: "ready"; version: string; source: "managed" | "custom" }
+  | { kind: "error"; message: string };
+
+/**
+ * Backend-agnostic descriptor consumed by `session/` and `ui/`. Each backend
+ * exports one of these from its own folder; the registry maps `BackendId →
+ * BackendDescriptor`. Adding a new backend is exactly: implement `AcpBackend`,
+ * export a `BackendDescriptor`, register it. No edits to session or UI.
+ */
+export interface BackendDescriptor {
+  readonly id: BackendId;
+  readonly displayName: string;
+
+  /** Sync read of install/setup state from settings + last-known disk reconcile. */
+  getInstallState(settings: CopilotSettings): InstallState;
+
+  /** Subscribe to settings/disk changes affecting install state. Returns unsubscribe. */
+  subscribeInstallState(plugin: CopilotPlugin, cb: () => void): () => void;
+
+  /** Open backend-specific install/setup modal. */
+  openInstallUI(plugin: CopilotPlugin): void;
+
+  /** Construct the `AcpBackend` the session manager will spawn. */
+  createBackend(plugin: CopilotPlugin): AcpBackend;
+
+  /** Optional: backend-specific settings panel. Rendered inside the Agent Mode tab. */
+  SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;
+
+  /** Optional: reconcile install state on plugin load (e.g. clear stale managed install). */
+  onPluginLoad?(plugin: CopilotPlugin): Promise<void>;
+}
 
 /**
  * Structured output produced by an Agent Mode tool call.

@@ -1,5 +1,5 @@
-import { formatAgentInput, renderDiff } from "@/components/agent/diffRender";
-import { AgentMessagePart, AgentPlanEntry, AgentToolStatus } from "@/LLMProviders/agentMode/types";
+import { formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
+import { AgentMessagePart, AgentPlanEntry, AgentToolStatus } from "@/agentMode/session/types";
 import React from "react";
 
 /**

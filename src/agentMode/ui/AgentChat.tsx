@@ -1,16 +1,15 @@
-import { AgentChatControls } from "@/components/agent/AgentChatControls";
-import AgentChatMessages from "@/components/agent/AgentChatMessages";
-import { AgentModeStatus } from "@/components/agent/AgentModeStatus";
-import { OpencodeInstallModal } from "@/components/agent/OpencodeInstallModal";
+import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
+import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
+import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import { useActiveBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import ChatInput from "@/components/chat-components/ChatInput";
 import { EVENT_NAMES } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
-import type { AgentChatBackend } from "@/LLMProviders/agentMode/AgentChatBackend";
-import { resolveOpencodeTarget } from "@/LLMProviders/agentMode/backends/platformResolver";
-import type { AgentSessionManager } from "@/LLMProviders/agentMode/AgentSessionManager";
-import type { AgentChatMessage } from "@/LLMProviders/agentMode/types";
+import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { AgentChatMessage } from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { Notice, TFile } from "obsidian";
@@ -161,15 +160,10 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     [backend]
   );
 
-  const handleInstall = useCallback(async () => {
-    const binMgr = plugin.opencodeBinaryManager;
-    if (!binMgr) return;
-    const target = await resolveOpencodeTarget();
-    new OpencodeInstallModal(plugin.app, binMgr, {
-      platform: target.target.platform,
-      arch: target.target.arch,
-    }).open();
-  }, [plugin]);
+  const descriptor = useActiveBackendDescriptor();
+  const handleInstall = useCallback(() => {
+    descriptor.openInstallUI(plugin);
+  }, [descriptor, plugin]);
 
   // Listen to global ABORT_STREAM events (used by Chat selection / new-chat triggers)
   useEffect(() => {

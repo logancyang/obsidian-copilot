@@ -1,17 +1,17 @@
 import { useChainType } from "@/aiParams";
-import AgentChat from "@/components/agent/AgentChat";
-import { AgentChatControls } from "@/components/agent/AgentChatControls";
-import { AgentModeStatus } from "@/components/agent/AgentModeStatus";
-import { OpencodeInstallModal } from "@/components/agent/OpencodeInstallModal";
+import AgentChat from "@/agentMode/ui/AgentChat";
+import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
+import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
+import {
+  useActiveBackendDescriptor,
+  useBackendInstallState,
+} from "@/agentMode/ui/useBackendDescriptor";
 import Chat from "@/components/Chat";
 import { ChainType } from "@/chainFactory";
-import { computeInstallState } from "@/LLMProviders/agentMode/backends/OpencodeBinaryManager";
-import { resolveOpencodeTarget } from "@/LLMProviders/agentMode/backends/platformResolver";
 import type CopilotPlugin from "@/main";
 import type ChainManager from "@/LLMProviders/chainManager";
 import type { FileParserManager } from "@/tools/FileParserManager";
 import { logError } from "@/logger";
-import { useSettingsValue } from "@/settings/model";
 import React from "react";
 
 interface Props {
@@ -35,7 +35,8 @@ interface Props {
 export const AgentChatRouter: React.FC<Props> = (props) => {
   const [chain] = useChainType();
   const manager = props.plugin.agentSessionManager;
-  const settings = useSettingsValue();
+  const descriptor = useActiveBackendDescriptor();
+  const installState = useBackendInstallState(descriptor);
   const [tick, setTick] = React.useState(0);
 
   React.useEffect(() => {
@@ -45,7 +46,7 @@ export const AgentChatRouter: React.FC<Props> = (props) => {
 
   // Auto-spawn the backend on chain switch. The manager de-dupes concurrent
   // callers via prepareSession, so this is safe to fire whenever the
-  // dependencies change. Skip if the binary isn't installed (the install pill
+  // dependencies change. Skip if the backend isn't installed (the install pill
   // takes over) or there's a prior boot error (Retry handles it).
   React.useEffect(() => {
     if (!manager) return;
@@ -53,24 +54,17 @@ export const AgentChatRouter: React.FC<Props> = (props) => {
     if (manager.getActiveSession()) return;
     if (manager.getIsStarting()) return;
     if (manager.getLastError()) return;
-    const installState = computeInstallState(settings.agentMode);
     if (installState.kind === "absent") return;
     manager.getOrCreateActiveSession().catch((e) => {
       logError("[AgentMode] auto-start failed", e);
     });
     // tick forces re-evaluation when the manager's active session changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chain, manager, settings.agentMode, tick]);
+  }, [chain, manager, installState.kind, tick]);
 
-  const handleInstall = React.useCallback(async () => {
-    const binMgr = props.plugin.opencodeBinaryManager;
-    if (!binMgr) return;
-    const target = await resolveOpencodeTarget();
-    new OpencodeInstallModal(props.plugin.app, binMgr, {
-      platform: target.target.platform,
-      arch: target.target.arch,
-    }).open();
-  }, [props.plugin]);
+  const handleInstall = React.useCallback(() => {
+    descriptor.openInstallUI(props.plugin);
+  }, [descriptor, props.plugin]);
 
   if (chain === ChainType.AGENT_MODE) {
     if (!manager) return null;

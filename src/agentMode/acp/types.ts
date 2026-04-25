@@ -1,3 +1,6 @@
+/** Stable identifier for a registered backend. New backends extend the registry; the type stays open. */
+export type BackendId = string;
+
 /**
  * Spawn descriptor for an ACP-speaking agent backend. Backends produce these
  * lazily because they may need to read settings (BYOK keys, MCP config) at
@@ -10,14 +13,14 @@ export interface AcpSpawnDescriptor {
 }
 
 /**
- * One pluggable agent backend. v1 ships only `OpencodeBackend`; future
- * backends (Claude Code, Codex) implement this same interface so the rest of
- * the Agent Mode plumbing — AcpBackendProcess, AgentSession, VaultClient —
- * stays backend-agnostic.
+ * One pluggable agent backend. Implementers (OpencodeBackend, future
+ * ClaudeCodeBackend, etc.) own the spawn-time contract. The rest of Agent
+ * Mode — AcpBackendProcess, AgentSession, VaultClient — stays
+ * backend-agnostic.
  */
 export interface AcpBackend {
   /** Stable identifier, used for logging and settings selection. */
-  readonly id: "opencode" | "claude-code" | "codex";
+  readonly id: BackendId;
   /** Human-readable name surfaced in the UI. */
   readonly displayName: string;
   /** Build the spawn descriptor (BYOK keys decrypted, env composed). */

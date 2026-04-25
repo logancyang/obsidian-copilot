@@ -1,22 +1,34 @@
-import { openAcpPermissionModal } from "@/components/agent/AcpPermissionModal";
 import { logError, logInfo } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { AgentChatUIState } from "@/LLMProviders/agentMode/AgentChatUIState";
+import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { err2String } from "@/utils";
+import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { AcpBackendProcess } from "./AcpBackendProcess";
+import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { AgentSession } from "./AgentSession";
-import { OpencodeBackend } from "./backends/OpencodeBackend";
+import type { BackendDescriptor } from "./types";
+
+export type PermissionPrompter = (
+  req: RequestPermissionRequest
+) => Promise<RequestPermissionResponse>;
+
+export interface AgentSessionManagerOptions {
+  descriptor: BackendDescriptor;
+  permissionPrompter: PermissionPrompter;
+}
 
 /**
  * Plugin-scoped coordinator for Agent Mode. Owns at most one `AgentSession`
  * and one shared `AcpBackendProcess`. Lazily spawns the backend on first
  * `getOrCreateActiveSession()`. Tear down on plugin unload via `shutdown()`.
+ *
+ * Backend pluggability is handled via `BackendDescriptor`: the manager calls
+ * `descriptor.createBackend(plugin)` and never imports a specific backend
+ * class. The permission prompter is injected so this file stays out of the UI
+ * layer.
  */
 export class AgentSessionManager {
-  private static instance: AgentSessionManager | null = null;
-
   private backend: AcpBackendProcess | null = null;
   private starting: Promise<AcpBackendProcess> | null = null;
   private activeSession: AgentSession | null = null;
@@ -27,19 +39,14 @@ export class AgentSessionManager {
   private isStarting = false;
   private lastError: string | null = null;
 
-  private constructor(
+  constructor(
     private readonly app: App,
-    private readonly plugin: CopilotPlugin
-  ) {}
-
-  static getInstance(app: App, plugin: CopilotPlugin): AgentSessionManager {
+    private readonly plugin: CopilotPlugin,
+    private readonly opts: AgentSessionManagerOptions
+  ) {
     if (Platform.isMobile) {
       throw new Error("AgentSessionManager is desktop only");
     }
-    if (!AgentSessionManager.instance) {
-      AgentSessionManager.instance = new AgentSessionManager(app, plugin);
-    }
-    return AgentSessionManager.instance;
   }
 
   /**
@@ -163,7 +170,6 @@ export class AgentSessionManager {
     this.backend = null;
     this.starting = null;
     this.listeners.clear();
-    AgentSessionManager.instance = null;
   }
 
   private async ensureBackend(): Promise<AcpBackendProcess> {
@@ -172,12 +178,12 @@ export class AgentSessionManager {
 
     const proc = new AcpBackendProcess(
       this.app,
-      new OpencodeBackend(),
+      this.opts.descriptor.createBackend(this.plugin),
       this.plugin.manifest.version
     );
     this.starting = (async () => {
       await proc.start();
-      proc.setPermissionPrompter((req) => openAcpPermissionModal(this.app, req));
+      proc.setPermissionPrompter(this.opts.permissionPrompter);
       proc.onExit(() => {
         // Backend died unexpectedly. Drop our refs so the next
         // getOrCreateActiveSession() will respawn. The active session is

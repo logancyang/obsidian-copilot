@@ -1,9 +1,5 @@
 import { logInfo } from "@/logger";
-import {
-  AgentChatMessage,
-  AgentMessagePart,
-  NewAgentChatMessage,
-} from "@/LLMProviders/agentMode/types";
+import { AgentChatMessage, AgentMessagePart, NewAgentChatMessage } from "@/agentMode/session/types";
 import { FormattedDateTime, MessageContext } from "@/types/message";
 import { formatDateTime } from "@/utils";
 

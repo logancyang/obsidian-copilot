@@ -14,18 +14,25 @@ jest.mock("@/logger", () => ({
 // In-memory settings store for the manager's getSettings/updateSetting calls.
 // Defined inside jest.mock so it's hoisted alongside the factory.
 jest.mock("@/settings/model", () => {
-  type AgentMode = {
+  type OpencodeSlice = {
     binaryPath?: string;
     binaryVersion?: string;
     binarySource?: "managed" | "custom";
   };
-  let store: { agentMode: AgentMode } = { agentMode: {} };
+  type AgentMode = {
+    enabled?: boolean;
+    activeBackend?: string;
+    backends?: { opencode?: OpencodeSlice };
+  };
+  let store: { agentMode: AgentMode } = {
+    agentMode: { backends: { opencode: {} } },
+  };
   return {
     __esModule: true,
-    __reset: (initial: AgentMode = {}) => {
-      store = { agentMode: { ...initial } };
+    __reset: (initial: OpencodeSlice = {}) => {
+      store = { agentMode: { backends: { opencode: { ...initial } } } };
     },
-    __get: () => store.agentMode,
+    __get: () => store.agentMode.backends?.opencode ?? {},
     getSettings: () => store,
     updateSetting: (key: "agentMode", value: AgentMode) => {
       store = { ...store, [key]: value };

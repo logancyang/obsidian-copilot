@@ -175,6 +175,117 @@ describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
   });
 });
 
+describe("sanitizeSettings - agentMode shape migration", () => {
+  it("creates a default agentMode slice when missing", () => {
+    const sanitized = sanitizeSettings({ ...DEFAULT_SETTINGS, agentMode: undefined as any });
+    expect(sanitized.agentMode).toEqual({
+      enabled: false,
+      byok: {},
+      mcpServers: [],
+      activeBackend: "opencode",
+      backends: {},
+    });
+  });
+
+  it("leaves backends empty when no legacy fields and no existing slice", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: { enabled: true, byok: {}, mcpServers: [] },
+    } as any);
+    expect(sanitized.agentMode.backends).toEqual({});
+  });
+
+  it("lifts legacy top-level binaryPath/binaryVersion/binarySource into backends.opencode", () => {
+    const legacy = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        binaryPath: "/legacy/opencode",
+        binaryVersion: "1.2.3",
+        binarySource: "managed",
+      },
+    } as any;
+
+    const sanitized = sanitizeSettings(legacy);
+
+    expect(sanitized.agentMode.activeBackend).toBe("opencode");
+    expect(sanitized.agentMode.backends.opencode).toEqual({
+      binaryPath: "/legacy/opencode",
+      binaryVersion: "1.2.3",
+      binarySource: "managed",
+    });
+    const slice = sanitized.agentMode as unknown as Record<string, unknown>;
+    expect("binaryPath" in slice).toBe(false);
+    expect("binaryVersion" in slice).toBe(false);
+    expect("binarySource" in slice).toBe(false);
+  });
+
+  it("preserves an already-migrated backends.opencode slice and ignores top-level legacy fields", () => {
+    const migrated = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        backends: {
+          opencode: { binaryPath: "/new/opencode", binaryVersion: "2.0.0", binarySource: "custom" },
+        },
+        binaryPath: "/legacy/opencode",
+        binaryVersion: "1.2.3",
+      },
+    } as any;
+
+    const sanitized = sanitizeSettings(migrated);
+
+    expect(sanitized.agentMode.backends.opencode).toEqual({
+      binaryPath: "/new/opencode",
+      binaryVersion: "2.0.0",
+      binarySource: "custom",
+    });
+  });
+
+  it("defaults binarySource to 'managed' when path is set but source is missing or invalid", () => {
+    const legacy = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        backends: {
+          opencode: { binaryPath: "/p", binaryVersion: "1.0.0", binarySource: "garbage" },
+        },
+      },
+    } as any;
+
+    const sanitized = sanitizeSettings(legacy);
+
+    expect(sanitized.agentMode.backends.opencode?.binarySource).toBe("managed");
+  });
+
+  it("clears binarySource when no binaryPath is set", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        backends: { opencode: { binarySource: "managed" } },
+      },
+    } as any;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.agentMode.backends.opencode).toEqual({
+      binaryPath: undefined,
+      binaryVersion: undefined,
+      binarySource: undefined,
+    });
+  });
+});
+
 describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
   it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
     const legacySettings = {

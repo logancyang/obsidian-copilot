@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import { extractDiffContents, formatAgentInput, renderDiff } from "@/components/agent/diffRender";
+import { extractDiffContents, formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
 import {
   PermissionOption,
   PermissionOptionKind,

@@ -2,7 +2,7 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "env": { "node": true },
-  "plugins": ["@typescript-eslint", "tailwindcss"],
+  "plugins": ["@typescript-eslint", "tailwindcss", "boundaries"],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
@@ -29,6 +29,21 @@
     "tailwindcss/no-arbitrary-value": "off",
     "tailwindcss/no-custom-classname": ["error"],
     "tailwindcss/no-contradicting-classname": "error",
+    "boundaries/dependencies": ["error", {
+      "default": "disallow",
+      "rules": [
+        { "from": { "type": "acp" },      "allow": { "to": { "type": ["acp", "host"] } } },
+        { "from": { "type": "session" },  "allow": { "to": { "type": ["session", "acp", "host"] } } },
+        { "from": { "type": "backend" },  "allow": [
+          { "to": { "type": ["acp", "session", "host"] } },
+          { "to": { "type": "backend", "captured": { "name": "{{from.captured.name}}" } } }
+        ]},
+        { "from": { "type": "registry" }, "allow": { "to": { "type": ["backend", "session", "host"] } } },
+        { "from": { "type": "ui" },       "allow": { "to": { "type": ["ui", "session", "acp", "registry", "host"] } } },
+        { "from": { "type": "barrel" },   "allow": { "to": { "type": ["acp", "session", "backend", "registry", "ui", "host"] } } },
+        { "from": { "type": "host" },     "allow": { "to": { "type": ["host", "barrel"] } } },
+      ],
+    }],
   },
   "overrides": [
     {
@@ -37,6 +52,10 @@
       "rules": {
         "jsonc/auto": "error",
       },
+    },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": { "boundaries/dependencies": "off" },
     },
   ],
   "settings": {
@@ -48,5 +67,19 @@
       "config": "./tailwind.config.js",
       "cssFiles": ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
     },
+    "import/resolver": {
+      "typescript": { "project": "./tsconfig.json" },
+      "node": true,
+    },
+    "boundaries/include": ["src/**/*"],
+    "boundaries/elements": [
+      { "type": "acp",      "pattern": "src/agentMode/acp" },
+      { "type": "session",  "pattern": "src/agentMode/session" },
+      { "type": "backend",  "pattern": "src/agentMode/backends/*", "capture": ["name"] },
+      { "type": "registry", "pattern": "src/agentMode/backends/registry.ts", "mode": "file" },
+      { "type": "ui",       "pattern": "src/agentMode/ui" },
+      { "type": "barrel",   "pattern": "src/agentMode/index.ts", "mode": "file" },
+      { "type": "host",     "pattern": "src/**" },
+    ],
   },
 }

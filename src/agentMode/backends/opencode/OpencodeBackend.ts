@@ -1,7 +1,7 @@
 import { getDecryptedKey } from "@/encryptionService";
 import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { AcpBackend, AcpSpawnDescriptor } from "./types";
+import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 
 /**
  * Spawns `opencode acp --cwd <vault>` with `OPENCODE_CONFIG_CONTENT`
@@ -15,8 +15,7 @@ export class OpencodeBackend implements AcpBackend {
   readonly displayName = "opencode";
 
   async buildSpawnDescriptor(ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
-    const settings = getSettings();
-    const binaryPath = settings.agentMode?.binaryPath;
+    const binaryPath = getSettings().agentMode?.backends?.opencode?.binaryPath;
     if (!binaryPath) {
       throw new Error(
         "opencode binary not installed. Open Agent Mode settings and install it before starting a session."

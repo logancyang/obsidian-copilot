@@ -204,16 +204,26 @@ export interface CopilotSettings {
     enabled: boolean;
     byok: { anthropic?: string; openai?: string; google?: string };
     mcpServers: unknown[];
-    binaryVersion?: string;
-    binaryPath?: string;
-    /**
-     * Whether the binary at `binaryPath` was installed by the plugin
-     * (`"managed"`) or pointed at by the user (`"custom"`). Undefined for
-     * legacy installs predating this field; sanitizer defaults to `"managed"`
-     * when a `binaryPath` exists.
-     */
-    binarySource?: "managed" | "custom";
+    /** Which registered backend to use. Defaults to "opencode". */
+    activeBackend: string;
+    /** Per-backend config slice, keyed by BackendId. Each backend owns its slice. */
+    backends: {
+      opencode?: OpencodeBackendSettings;
+    };
   };
+}
+
+/** Settings slice owned by the OpenCode backend. */
+export interface OpencodeBackendSettings {
+  binaryVersion?: string;
+  binaryPath?: string;
+  /**
+   * Whether the binary at `binaryPath` was installed by the plugin
+   * (`"managed"`) or pointed at by the user (`"custom"`). Undefined for
+   * legacy installs predating this field; sanitizer defaults to `"managed"`
+   * when a `binaryPath` exists.
+   */
+  binarySource?: "managed" | "custom";
 }
 
 export const settingsStore = createStore();
@@ -621,29 +631,75 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
 
-  if (!sanitizedSettings.agentMode || typeof sanitizedSettings.agentMode !== "object") {
-    sanitizedSettings.agentMode = { ...DEFAULT_SETTINGS.agentMode };
-  } else {
-    if (typeof sanitizedSettings.agentMode.binaryVersion !== "string") {
-      sanitizedSettings.agentMode.binaryVersion = undefined;
-    }
-    if (typeof sanitizedSettings.agentMode.binaryPath !== "string") {
-      sanitizedSettings.agentMode.binaryPath = undefined;
-    }
-    const rawSource = sanitizedSettings.agentMode.binarySource;
-    if (rawSource !== "managed" && rawSource !== "custom") {
-      // Default legacy installs (predating this field) and any garbled value
-      // to "managed" so the existing managed install keeps its UI affordances.
-      sanitizedSettings.agentMode.binarySource = sanitizedSettings.agentMode.binaryPath
-        ? "managed"
-        : undefined;
-    } else if (!sanitizedSettings.agentMode.binaryPath) {
-      // No path → no source. Keep the slice tidy.
-      sanitizedSettings.agentMode.binarySource = undefined;
-    }
-  }
+  sanitizedSettings.agentMode = sanitizeAgentMode(sanitizedSettings.agentMode);
 
   return sanitizedSettings;
+}
+
+/**
+ * Validate the agentMode slice and migrate legacy top-level OpenCode keys
+ * (`binaryPath`, `binaryVersion`, `binarySource`) into
+ * `agentMode.backends.opencode.*`. Legacy users keep their install pointer.
+ */
+function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_SETTINGS.agentMode };
+  }
+  const r = raw as Record<string, unknown>;
+  const enabled = typeof r.enabled === "boolean" ? r.enabled : DEFAULT_SETTINGS.agentMode.enabled;
+  const byok =
+    r.byok && typeof r.byok === "object"
+      ? (r.byok as { anthropic?: string; openai?: string; google?: string })
+      : {};
+  const mcpServers = Array.isArray(r.mcpServers) ? r.mcpServers : [];
+  const activeBackend =
+    typeof r.activeBackend === "string"
+      ? r.activeBackend
+      : DEFAULT_SETTINGS.agentMode.activeBackend;
+
+  const existingOpencode =
+    r.backends && typeof r.backends === "object"
+      ? ((r.backends as Record<string, unknown>).opencode as Record<string, unknown> | undefined)
+      : undefined;
+
+  // Lift legacy top-level fields when `backends.opencode` doesn't already hold them.
+  const legacyOpencode =
+    existingOpencode === undefined &&
+    (typeof r.binaryPath === "string" ||
+      typeof r.binaryVersion === "string" ||
+      r.binarySource === "managed" ||
+      r.binarySource === "custom")
+      ? { binaryPath: r.binaryPath, binaryVersion: r.binaryVersion, binarySource: r.binarySource }
+      : undefined;
+
+  const opencodeSlice = existingOpencode
+    ? sanitizeOpencodeBackendSettings(existingOpencode)
+    : legacyOpencode
+      ? sanitizeOpencodeBackendSettings(legacyOpencode)
+      : undefined;
+
+  return {
+    enabled,
+    byok,
+    mcpServers,
+    activeBackend,
+    backends: opencodeSlice ? { opencode: opencodeSlice } : {},
+  };
+}
+
+function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  const binaryPath = typeof r.binaryPath === "string" ? r.binaryPath : undefined;
+  const binaryVersion = typeof r.binaryVersion === "string" ? r.binaryVersion : undefined;
+  const rawSource = r.binarySource;
+  let binarySource: "managed" | "custom" | undefined;
+  if (rawSource === "managed" || rawSource === "custom") {
+    binarySource = binaryPath ? rawSource : undefined;
+  } else {
+    binarySource = binaryPath ? "managed" : undefined;
+  }
+  return { binaryPath, binaryVersion, binarySource };
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

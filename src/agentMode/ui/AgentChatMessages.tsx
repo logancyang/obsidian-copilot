@@ -1,8 +1,8 @@
-import { AgentToolCall } from "@/components/agent/AgentToolCall";
+import { AgentToolCall } from "@/agentMode/ui/AgentToolCall";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
-import type { AgentChatMessage } from "@/LLMProviders/agentMode/types";
+import type { AgentChatMessage } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";

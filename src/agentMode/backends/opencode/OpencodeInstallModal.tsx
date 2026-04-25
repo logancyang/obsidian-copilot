@@ -4,8 +4,8 @@ import {
   AbortError,
   InstallOptions,
   ProgressEvent,
-} from "@/LLMProviders/agentMode/backends/OpencodeBinaryManager";
-import type { OpencodeBinaryManager } from "@/LLMProviders/agentMode/backends/OpencodeBinaryManager";
+} from "@/agentMode/backends/opencode/OpencodeBinaryManager";
+import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import { OPENCODE_PINNED_VERSION } from "@/constants";
 import { App, Modal } from "obsidian";
 import React from "react";

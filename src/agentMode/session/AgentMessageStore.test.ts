@@ -1,5 +1,5 @@
 import { AI_SENDER } from "@/constants";
-import { AgentMessagePart } from "@/LLMProviders/agentMode/types";
+import { AgentMessagePart } from "@/agentMode/session/types";
 import { formatDateTime } from "@/utils";
 import { AgentMessageStore } from "./AgentMessageStore";
 

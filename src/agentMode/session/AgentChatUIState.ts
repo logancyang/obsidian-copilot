@@ -1,7 +1,7 @@
 import { logError, logWarn } from "@/logger";
-import type { AgentChatBackend } from "@/LLMProviders/agentMode/AgentChatBackend";
-import type { AgentSession } from "@/LLMProviders/agentMode/AgentSession";
-import type { AgentChatMessage } from "@/LLMProviders/agentMode/types";
+import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { AgentChatMessage } from "@/agentMode/session/types";
 
 /**
  * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent

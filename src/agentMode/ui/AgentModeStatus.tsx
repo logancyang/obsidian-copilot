@@ -1,15 +1,18 @@
 import { Button } from "@/components/ui/button";
-import { AgentSessionStatus } from "@/LLMProviders/agentMode/AgentSession";
-import { AgentSessionManager } from "@/LLMProviders/agentMode/AgentSessionManager";
-import { computeInstallState } from "@/LLMProviders/agentMode/backends/OpencodeBinaryManager";
+import {
+  useActiveBackendDescriptor,
+  useBackendInstallState,
+} from "@/agentMode/ui/useBackendDescriptor";
+import { AgentSessionStatus } from "@/agentMode/session/AgentSession";
+import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 import { logError } from "@/logger";
-import { useSettingsValue } from "@/settings/model";
 import React from "react";
 
 interface Props {
   /** Plugin's AgentSessionManager. May be undefined on mobile. */
   manager?: AgentSessionManager;
-  /** Click handler for the "Install opencode" CTA when no binary is found. */
+  /** Click handler for the "Install …" CTA when the backend isn't installed. */
   onInstallClick: () => void;
 }
 
@@ -17,13 +20,13 @@ interface Props {
  * Inline status pill rendered above the chat input in Agent Mode. Pure
  * observer: it never spawns the backend itself — `AgentChatRouter` does that
  * on chain switch. Surfaces install gaps, boot state, and per-turn status.
+ *
+ * Backend-agnostic: all backend-specific copy (display name, version) comes
+ * from the active `BackendDescriptor`.
  */
 export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) => {
-  const settings = useSettingsValue();
-  const installState = React.useMemo(
-    () => computeInstallState(settings.agentMode),
-    [settings.agentMode]
-  );
+  const descriptor = useActiveBackendDescriptor();
+  const installState = useBackendInstallState(descriptor);
 
   // Tick on any manager notify (active session set/cleared, isStarting flip,
   // lastError change). We re-read state inline below.
@@ -54,9 +57,9 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) =>
   if (installState.kind === "absent") {
     return (
       <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
-        <span className="tw-text-muted">opencode binary not installed</span>
+        <span className="tw-text-muted">{descriptor.displayName} not installed</span>
         <Button variant="default" size="sm" onClick={onInstallClick}>
-          Install opencode
+          Install {descriptor.displayName}
         </Button>
       </div>
     );
@@ -78,7 +81,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) =>
   return (
     <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
       <span className={statusClassName(sessionStatus, !!bootError, booting)}>
-        {statusLabel(sessionStatus, !!session, !!bootError, booting, installState.version)}
+        {statusLabel(descriptor, installState, sessionStatus, !!session, !!bootError, booting)}
       </span>
       {bootError ? (
         <Button variant="ghost" size="sm" onClick={handleRetry}>
@@ -90,18 +93,23 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) =>
 };
 
 function statusLabel(
+  descriptor: BackendDescriptor,
+  installState: InstallState,
   status: AgentSessionStatus,
   hasSession: boolean,
   errored: boolean,
-  booting: boolean,
-  version: string
+  booting: boolean
 ): string {
+  const versionTag =
+    installState.kind === "ready"
+      ? `${descriptor.displayName} v${installState.version}`
+      : descriptor.displayName;
   if (errored) return `Error — click Retry`;
-  if (booting) return `Starting opencode v${version}…`;
-  if (!hasSession) return `Initializing opencode v${version}…`;
+  if (booting) return `Starting ${versionTag}…`;
+  if (!hasSession) return `Initializing ${versionTag}…`;
   switch (status) {
     case "idle":
-      return `Ready — opencode v${version}`;
+      return `Ready — ${versionTag}`;
     case "running":
       return "Agent is running…";
     case "awaiting_permission":

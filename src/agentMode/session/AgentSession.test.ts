@@ -1,5 +1,5 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
-import { AcpBackendProcess, SessionUpdateHandler } from "./AcpBackendProcess";
+import { AcpBackendProcess, SessionUpdateHandler } from "@/agentMode/acp/AcpBackendProcess";
 import { AgentSession } from "./AgentSession";
 
 jest.mock("@/logger", () => ({

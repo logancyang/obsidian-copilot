@@ -1,7 +1,7 @@
 import { OPENCODE_PINNED_VERSION, OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { getSettings, updateSetting } from "@/settings/model";
+import { getSettings, updateSetting, type OpencodeBackendSettings } from "@/settings/model";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
@@ -84,17 +84,9 @@ export function pickMatchingAsset(release: GithubRelease, candidates: string[]):
   );
 }
 
-/** Derive the install state from the persisted `agentMode` settings slice. */
-export function computeInstallState(
-  agentMode:
-    | {
-        binaryPath?: string;
-        binaryVersion?: string;
-        binarySource?: "managed" | "custom";
-      }
-    | undefined
-): InstallState {
-  const s = agentMode ?? {};
+/** Derive the install state from the persisted `agentMode.backends.opencode` slice. */
+export function computeInstallState(opencode: OpencodeBackendSettings | undefined): InstallState {
+  const s = opencode ?? {};
   if (s.binaryPath && s.binaryVersion) {
     return {
       kind: "installed",
@@ -106,21 +98,27 @@ export function computeInstallState(
   return { kind: "absent" };
 }
 
+/** Read the OpenCode-specific settings slice from current settings. */
+export function readOpencodeSettings(): OpencodeBackendSettings {
+  return getSettings().agentMode?.backends?.opencode ?? {};
+}
+
 // R-M-W on settings is racy with concurrent edits but tolerable: every caller
 // is either a one-shot plugin-load reconcile or a user-initiated flow from
 // the settings panel, neither of which races with itself.
-function updateAgentModeFields(
-  partial: Partial<{
-    binaryVersion: string | undefined;
-    binaryPath: string | undefined;
-    binarySource: "managed" | "custom" | undefined;
-  }>
-): void {
-  updateSetting("agentMode", { ...getSettings().agentMode, ...partial });
+function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {
+  const cur = getSettings().agentMode;
+  updateSetting("agentMode", {
+    ...cur,
+    backends: {
+      ...cur.backends,
+      opencode: { ...(cur.backends?.opencode ?? {}), ...partial },
+    },
+  });
 }
 
-function clearAgentModeBinary(): void {
-  updateAgentModeFields({
+function clearOpencodeBinary(): void {
+  updateOpencodeFields({
     binaryVersion: undefined,
     binaryPath: undefined,
     binarySource: undefined,
@@ -136,7 +134,7 @@ export class OpencodeBinaryManager {
   constructor(private readonly plugin: CopilotPlugin) {}
 
   getInstallState(): InstallState {
-    return computeInstallState(getSettings().agentMode);
+    return computeInstallState(readOpencodeSettings());
   }
 
   /**
@@ -152,7 +150,7 @@ export class OpencodeBinaryManager {
     if (state.source !== "managed") return;
     if (await fileExists(state.path)) return;
     logWarn(`[AgentMode] persisted opencode binary missing at ${state.path}; clearing settings.`);
-    clearAgentModeBinary();
+    clearOpencodeBinary();
   }
 
   /** Absolute path to `<vault>/.obsidian/plugins/<id>/data/opencode`. */
@@ -198,13 +196,13 @@ export class OpencodeBinaryManager {
       logInfo(`[AgentMode] opencode ${version} already installed at ${finalBinPath}`);
       // Skip the write when settings already match — avoids spuriously waking
       // every settings subscriber on healthy plugin loads.
-      const cur = getSettings().agentMode;
+      const cur = readOpencodeSettings();
       if (
         cur.binaryVersion !== version ||
         cur.binaryPath !== finalBinPath ||
         cur.binarySource !== "managed"
       ) {
-        updateAgentModeFields({
+        updateOpencodeFields({
           binaryVersion: version,
           binaryPath: finalBinPath,
           binarySource: "managed",
@@ -282,7 +280,7 @@ export class OpencodeBinaryManager {
       await verifyOpencodeBinary(finalBinPath);
       this.throwIfAborted(opts.signal);
 
-      updateAgentModeFields({
+      updateOpencodeFields({
         binaryVersion: version,
         binaryPath: finalBinPath,
         binarySource: "managed",
@@ -304,14 +302,14 @@ export class OpencodeBinaryManager {
    * and we don't touch it. Other version dirs are kept either way.
    */
   async uninstall(): Promise<void> {
-    const s = getSettings().agentMode;
+    const s = readOpencodeSettings();
     if (s.binarySource === "managed" && s.binaryVersion) {
       const versionDir = path.join(this.getDataDir(), s.binaryVersion);
       await removeDir(versionDir).catch((e) =>
         logError(`[AgentMode] failed to remove ${versionDir}`, e)
       );
     }
-    clearAgentModeBinary();
+    clearOpencodeBinary();
   }
 
   /**
@@ -322,7 +320,7 @@ export class OpencodeBinaryManager {
    */
   async setCustomBinaryPath(p: string | null): Promise<void> {
     if (p === null) {
-      clearAgentModeBinary();
+      clearOpencodeBinary();
       return;
     }
     const stat = await fs.promises.stat(p).catch(() => null);
@@ -343,7 +341,7 @@ export class OpencodeBinaryManager {
         `${p} --version output didn't include a version number. Is this an opencode binary?`
       );
     }
-    updateAgentModeFields({ binaryVersion: version, binaryPath: p, binarySource: "custom" });
+    updateOpencodeFields({ binaryVersion: version, binaryPath: p, binarySource: "custom" });
   }
 
   private async fetchReleaseMetadata(version: string): Promise<GithubRelease> {

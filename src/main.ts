@@ -1,5 +1,4 @@
-import { AgentSessionManager } from "@/LLMProviders/agentMode/AgentSessionManager";
-import { OpencodeBinaryManager } from "@/LLMProviders/agentMode/backends/OpencodeBinaryManager";
+import { createAgentSessionManager, type AgentSessionManager } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -23,7 +22,7 @@ import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/c
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
-import { logError, logInfo, logWarn } from "@/logger";
+import { logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
@@ -86,7 +85,6 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
-  opencodeBinaryManager?: OpencodeBinaryManager;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
@@ -124,12 +122,7 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess support).
     if (!Platform.isMobile) {
-      this.agentSessionManager = AgentSessionManager.getInstance(this.app, this);
-      this.opencodeBinaryManager = new OpencodeBinaryManager(this);
-      // Reconcile persisted install state with disk; non-blocking on plugin load.
-      this.opencodeBinaryManager
-        .refreshInstallState()
-        .catch((e) => logError("[AgentMode] refreshInstallState failed", e));
+      this.agentSessionManager = createAgentSessionManager(this.app, this);
     }
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled

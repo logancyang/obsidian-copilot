@@ -1,6 +1,6 @@
 import { FileSystemAdapter, App } from "obsidian";
 import { AcpBackendProcess } from "./AcpBackendProcess";
-import type { AcpBackend } from "./backends/types";
+import type { AcpBackend } from "./types";
 import type { VaultClient } from "./VaultClient";
 
 jest.mock("@/logger", () => ({

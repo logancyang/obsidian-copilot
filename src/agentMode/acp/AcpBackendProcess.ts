@@ -16,7 +16,7 @@ import {
 import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
-import { AcpBackend } from "./backends/types";
+import { AcpBackend } from "./types";
 
 const COPILOT_CLIENT_NAME = "obsidian-copilot";
 

@@ -1,13 +1,13 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
-import { AgentMessageStore } from "@/LLMProviders/agentMode/AgentMessageStore";
+import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import {
   AgentMessagePart,
   AgentToolCallOutput,
   AgentToolKind,
   AgentToolStatus,
   NewAgentChatMessage,
-} from "@/LLMProviders/agentMode/types";
+} from "@/agentMode/session/types";
 import { MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import {
@@ -20,7 +20,7 @@ import {
   ToolCall,
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
-import { AcpBackendProcess } from "./AcpBackendProcess";
+import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 
 export type AgentSessionStatus = "idle" | "running" | "awaiting_permission" | "error" | "closed";
 
