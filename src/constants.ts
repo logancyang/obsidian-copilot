@@ -883,6 +883,13 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
+export const OPENCODE_PINNED_VERSION = "1.14.24";
+export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
+export const OPENCODE_RELEASE_URL_TEMPLATE =
+  "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
+export const OPENCODE_RELEASE_API_URL_TEMPLATE =
+  "https://api.github.com/repos/sst/opencode/releases/tags/v{version}";
+
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
   isPlusUser: false,
@@ -1002,6 +1009,11 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
+  agentMode: {
+    enabled: false,
+    byok: {},
+    mcpServers: [],
+  },
 };
 
 export const EVENT_NAMES = {

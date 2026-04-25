@@ -199,6 +199,14 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
+  /** Agent Mode (ACP-backed BYOK agent harness). Desktop only. */
+  agentMode: {
+    enabled: boolean;
+    byok: { anthropic?: string; openai?: string; google?: string };
+    mcpServers: unknown[];
+    binaryVersion?: string;
+    binaryPath?: string;
+  };
 }
 
 export const settingsStore = createStore();
@@ -605,6 +613,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
       : DEFAULT_SETTINGS.userSystemPromptsFolder;
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
+
+  if (!sanitizedSettings.agentMode || typeof sanitizedSettings.agentMode !== "object") {
+    sanitizedSettings.agentMode = { ...DEFAULT_SETTINGS.agentMode };
+  }
 
   return sanitizedSettings;
 }

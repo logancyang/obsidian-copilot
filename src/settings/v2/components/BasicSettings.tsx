@@ -9,6 +9,7 @@ import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
+import { AgentModeSettings } from "@/settings/v2/components/AgentModeSettings";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
 import { isSortStrategy } from "@/utils/recentUsageManager";
@@ -22,6 +23,7 @@ const ChainType2Label: Record<ChainType, string> = {
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
   [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
+  [ChainType.AGENT_MODE]: "Agent (alpha)",
 };
 
 export const BasicSettings: React.FC = () => {
@@ -218,10 +220,12 @@ export const BasicSettings: React.FC = () => {
             }
             value={settings.defaultChainType}
             onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
-            options={Object.entries(ChainType2Label).map(([key, value]) => ({
-              label: value,
-              value: key,
-            }))}
+            options={Object.entries(ChainType2Label)
+              .filter(([key]) => key !== ChainType.AGENT_MODE || settings.agentMode.enabled)
+              .map(([key, value]) => ({
+                label: value,
+                value: key,
+              }))}
           />
 
           <SettingItem
@@ -464,6 +468,8 @@ export const BasicSettings: React.FC = () => {
           />
         </div>
       </section>
+
+      <AgentModeSettings />
     </div>
   );
 };

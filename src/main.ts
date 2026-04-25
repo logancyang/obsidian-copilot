@@ -1,3 +1,4 @@
+import { AgentSessionManager } from "@/LLMProviders/agentMode/AgentSessionManager";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -83,6 +84,7 @@ export default class CopilotPlugin extends Plugin {
   systemPromptRegister: SystemPromptRegister;
   settingsUnsubscriber?: () => void;
   chatUIState: ChatUIState;
+  agentSessionManager?: AgentSessionManager;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
@@ -117,6 +119,11 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
+
+    // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess support).
+    if (!Platform.isMobile) {
+      this.agentSessionManager = AgentSessionManager.getInstance(this.app, this);
+    }
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
@@ -232,6 +239,8 @@ export default class CopilotPlugin extends Plugin {
     if (this.projectManager) {
       this.projectManager.onunload();
     }
+
+    await this.agentSessionManager?.shutdown();
 
     // Cleanup VaultDataManager event listeners
     const vaultDataManager = VaultDataManager.getInstance();
