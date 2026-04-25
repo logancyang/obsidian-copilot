@@ -7,6 +7,7 @@ import {
   flushRecordedPromptPayloadToLog,
 } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 
+import { CommentsListModal } from "@/components/comments/CommentsListModal";
 import { CustomCommandSettingsModal } from "@/commands/CustomCommandSettingsModal";
 import { EMPTY_COMMAND } from "@/commands/constants";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -630,6 +631,42 @@ export function registerCommands(
 
     const modal = new YoutubeTranscriptModal(plugin.app);
     modal.open();
+  });
+
+  // Add Copilot comment — attaches a threaded AI comment to the selected text.
+  addCheckCommand(plugin, COMMAND_IDS.COPILOT_ADD_COMMENT, (checking: boolean) => {
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    if (checking) {
+      return !!(
+        !isSourceModeOn() &&
+        activeView &&
+        activeView.editor &&
+        activeView.editor.getSelection().length > 0
+      );
+    }
+    if (isSourceModeOn()) {
+      new Notice("Copilot comments are not available in source mode.");
+      return false;
+    }
+    if (!activeView || !activeView.editor) {
+      new Notice("No active editor found.");
+      return false;
+    }
+    plugin.commentsController.startFromSelection(activeView.editor, activeView);
+    return true;
+  });
+
+  // Open the list of all comments on the active note.
+  addCheckCommand(plugin, COMMAND_IDS.COPILOT_SHOW_COMMENTS, (checking: boolean) => {
+    const activeView = plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    const file = activeView?.file;
+    if (checking) return !!file;
+    if (!file) {
+      new Notice("No active note.");
+      return false;
+    }
+    new CommentsListModal(plugin.app, file.path, plugin.commentsController).open();
+    return true;
   });
 
   // Add Quick Ask command (recommended shortcut: cmd/ctrl+K)

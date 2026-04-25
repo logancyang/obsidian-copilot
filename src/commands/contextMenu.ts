@@ -51,6 +51,12 @@ export function registerContextMenu(menu: Menu, obsidianApp: App): void {
     });
 
     submenu.addItem((subItem) => {
+      subItem.setTitle("Add Copilot comment").onClick(() => {
+        execute(`copilot:${COMMAND_IDS.COPILOT_ADD_COMMENT}`);
+      });
+    });
+
+    submenu.addItem((subItem) => {
       subItem.setTitle("Trigger quick command").onClick(() => {
         execute(`copilot:${COMMAND_IDS.TRIGGER_QUICK_COMMAND}`);
       });

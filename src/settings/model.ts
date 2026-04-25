@@ -199,6 +199,8 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
+  /** Folder where inline Copilot comment sidecars are saved */
+  commentsFolder: string;
 }
 
 export const settingsStore = createStore();
@@ -581,6 +583,10 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
   sanitizedSettings.customPromptsFolder =
     promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+
+  const commentsFolder = (settingsToSanitize.commentsFolder || "").trim();
+  sanitizedSettings.commentsFolder =
+    commentsFolder.length > 0 ? commentsFolder : DEFAULT_SETTINGS.commentsFolder;
 
   // Ensure chatHistorySortStrategy has a valid value (exclude "manual" which is only for custom commands)
   if (

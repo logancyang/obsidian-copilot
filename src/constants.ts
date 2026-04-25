@@ -16,6 +16,7 @@ export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conve
 export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
 export const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 export const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
+export const DEFAULT_COMMENTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-comments`;
 export const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
@@ -800,6 +801,8 @@ export const COMMAND_IDS = {
   CLEAR_LOG_FILE: "clear-log-file",
   DOWNLOAD_YOUTUBE_SCRIPT: "download-youtube-script",
   TRIGGER_QUICK_ASK: "trigger-quick-ask",
+  COPILOT_ADD_COMMENT: "copilot-add-comment",
+  COPILOT_SHOW_COMMENTS: "copilot-show-comments",
 } as const;
 
 export const COMMAND_NAMES: Record<CommandId, string> = {
@@ -829,6 +832,8 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.CLEAR_LOG_FILE]: "Clear log file",
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "Download YouTube Script (plus)",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "Quick Ask",
+  [COMMAND_IDS.COPILOT_ADD_COMMENT]: "Add Copilot comment",
+  [COMMAND_IDS.COPILOT_SHOW_COMMENTS]: "Show Copilot comments for this note",
 };
 
 export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
@@ -858,6 +863,8 @@ export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.OPEN_LOG_FILE]: "file-text",
   [COMMAND_IDS.CLEAR_LOG_FILE]: "file-x",
   [COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT]: "youtube",
+  [COMMAND_IDS.COPILOT_ADD_COMMENT]: "message-square-quote",
+  [COMMAND_IDS.COPILOT_SHOW_COMMENTS]: "messages-square",
 };
 
 /**
@@ -1002,6 +1009,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
+  commentsFolder: DEFAULT_COMMENTS_FOLDER,
 };
 
 export const EVENT_NAMES = {

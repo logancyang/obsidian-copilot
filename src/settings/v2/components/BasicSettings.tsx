@@ -346,6 +346,15 @@ export const BasicSettings: React.FC = () => {
 
           <SettingItem
             type="text"
+            title="Copilot Comments Folder"
+            description="Folder where inline Copilot comment threads are stored. Default is 'copilot/copilot-comments'"
+            value={settings.commentsFolder}
+            onChange={(value) => updateSetting("commentsFolder", value)}
+            placeholder="copilot/copilot-comments"
+          />
+
+          <SettingItem
+            type="text"
             title="Default Conversation Tag"
             description="The default tag to be used when saving a conversation. Default is 'ai-conversations'"
             value={settings.defaultConversationTag}

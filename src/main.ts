@@ -50,6 +50,9 @@ import {
   QuickAskController,
   SelectionHighlight,
 } from "@/editor";
+import { CommentsController } from "@/comments/CommentsController";
+import { commentStore } from "@/comments/CommentStore";
+import { CommentsListModal } from "@/components/comments/CommentsListModal";
 import {
   Editor,
   MarkdownView,
@@ -85,6 +88,7 @@ export default class CopilotPlugin extends Plugin {
   chatUIState: ChatUIState;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
+  commentsController: CommentsController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
@@ -141,6 +145,11 @@ export default class CopilotPlugin extends Plugin {
     // Initialize QuickAskController and register CM6 extension
     this.quickAskController = new QuickAskController(this);
     this.registerEditorExtension(this.quickAskController.createExtension());
+
+    // Initialize inline comments and register CM6 extension
+    this.commentsController = new CommentsController(this);
+    this.registerEditorExtension(this.commentsController.createExtension());
+    this.initCommentsStatusBar();
 
     // Initialize Chat selection highlight controller
     this.chatSelectionHighlightController = new ChatSelectionHighlightController(this, {
@@ -212,6 +221,9 @@ export default class CopilotPlugin extends Plugin {
       this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app.vault));
+
+      // Initialize inline comments feature (vault wiring, etc.)
+      void this.commentsController.init();
     });
 
     // Initialize automatic selection handler
@@ -228,6 +240,13 @@ export default class CopilotPlugin extends Plugin {
 
     // Cleanup chat selection highlight controller
     this.chatSelectionHighlightController?.cleanup();
+
+    // Flush and dispose inline comments feature
+    try {
+      await this.commentsController?.flushAndDispose();
+    } catch (error) {
+      logWarn("Failed to dispose CommentsController:", error);
+    }
 
     if (this.projectManager) {
       this.projectManager.onunload();
@@ -257,6 +276,45 @@ export default class CopilotPlugin extends Plugin {
     // Best-effort flush of log file
     await logFileManager.flush();
     logInfo("Copilot plugin unloaded");
+  }
+
+  /**
+   * Status bar showing the count of orphaned comments on the active note.
+   * Click opens the CommentsListModal.
+   */
+  private initCommentsStatusBar(): void {
+    const statusEl = this.addStatusBarItem();
+    statusEl.style.cursor = "pointer";
+    statusEl.addClass("copilot-comments-status");
+
+    const update = () => {
+      const activeFile = this.app.workspace.getActiveFile();
+      if (!activeFile) {
+        statusEl.empty();
+        statusEl.style.display = "none";
+        return;
+      }
+      const comments = commentStore.getCommentsForNote(activeFile.path);
+      const orphans = comments.filter((c) => c.state === "orphaned").length;
+      const active = comments.filter((c) => c.state === "active").length;
+      if (comments.length === 0) {
+        statusEl.empty();
+        statusEl.style.display = "none";
+        return;
+      }
+      statusEl.style.display = "";
+      statusEl.setText(orphans > 0 ? `💬 ${active} (${orphans} orphan)` : `💬 ${active}`);
+    };
+
+    statusEl.onclick = () => {
+      const activeFile = this.app.workspace.getActiveFile();
+      if (!activeFile) return;
+      new CommentsListModal(this.app, activeFile.path, this.commentsController).open();
+    };
+
+    commentStore.subscribe(update);
+    this.registerEvent(this.app.workspace.on("active-leaf-change", update));
+    update();
   }
 
   /**
