@@ -19,6 +19,7 @@ import {
 import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
+import { wrapStreamsForDebug } from "./debugTap";
 import { AcpBackend, JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "./types";
 
 /**
@@ -87,7 +88,8 @@ export class AcpBackendProcess {
     };
     const proc = new AcpProcessManager(procOpts);
     this.process = proc;
-    const { stdin, stdout } = proc.start();
+    const raw = proc.start();
+    const { stdin, stdout } = wrapStreamsForDebug(raw.stdin, raw.stdout, this.backend.id);
 
     proc.onExit(() => {
       logWarn(`[AgentMode] backend ${this.backend.id} exited`);
