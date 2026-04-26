@@ -1,5 +1,5 @@
 import ChainManager from "@/LLMProviders/chainManager";
-import { AgentChatRouter } from "@/agentMode";
+import { ChatRouter } from "@/components/ChatRouter";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_VIEWTYPE } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
@@ -171,7 +171,7 @@ export default class CopilotView extends ItemView {
       <AppContext.Provider value={this.app}>
         <EventTargetContext.Provider value={this.eventTarget}>
           <Tooltip.Provider delayDuration={0}>
-            <AgentChatRouter
+            <ChatRouter
               chainManager={this.chainManager}
               updateUserMessageHistory={updateUserMessageHistory}
               fileParserManager={this.fileParserManager}

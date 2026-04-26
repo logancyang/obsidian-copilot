@@ -18,6 +18,8 @@ interface MockBackend {
   newSession: jest.Mock;
   setSessionModel: jest.Mock;
   isSetSessionModelSupported: jest.Mock;
+  listSessions: jest.Mock;
+  isListSessionsSupported: jest.Mock;
 }
 
 function makeMockBackend(): MockBackend {
@@ -33,6 +35,8 @@ function makeMockBackend(): MockBackend {
   const newSession = jest.fn(async () => ({ sessionId: "acp-1", models: null }));
   const setSessionModel = jest.fn(async () => ({}));
   const isSetSessionModelSupported = jest.fn(() => true);
+  const listSessions = jest.fn(async () => ({ sessions: [] }));
+  const isListSessionsSupported = jest.fn(() => true);
   const backend = {
     registerSessionHandler: registerHandler,
     prompt,
@@ -40,6 +44,8 @@ function makeMockBackend(): MockBackend {
     newSession,
     setSessionModel,
     isSetSessionModelSupported,
+    listSessions,
+    isListSessionsSupported,
   } as unknown as AcpBackendProcess;
   return {
     asBackend: backend,
@@ -49,6 +55,8 @@ function makeMockBackend(): MockBackend {
     newSession,
     setSessionModel,
     isSetSessionModelSupported,
+    listSessions,
+    isListSessionsSupported,
     emit: (update) => handler?.(update as Parameters<SessionUpdateHandler>[0]),
   };
 }
@@ -312,5 +320,266 @@ describe("AgentSession.setModel", () => {
     });
     await session.setModel("x/y");
     expect(onModelChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AgentSession.setLabel", () => {
+  it("stores trimmed label and notifies onLabelChanged", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const onLabelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onLabelChanged,
+    });
+
+    session.setLabel("  My session  ");
+    expect(session.getLabel()).toBe("My session");
+    expect(onLabelChanged).toHaveBeenCalledTimes(1);
+
+    // Empty / whitespace clears the label.
+    session.setLabel("   ");
+    expect(session.getLabel()).toBeNull();
+    expect(onLabelChanged).toHaveBeenCalledTimes(2);
+
+    // Idempotent set is a no-op.
+    session.setLabel(null);
+    expect(onLabelChanged).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("AgentSession session_info_update", () => {
+  it("adopts the title pushed by the agent and notifies listeners", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const onLabelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onLabelChanged,
+    });
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "Refactor auth" },
+    });
+
+    expect(session.getLabel()).toBe("Refactor auth");
+    expect(onLabelChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores agent-pushed titles after the user has renamed the session", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    session.setLabel("My label");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "Agent-chosen title" },
+    });
+
+    expect(session.getLabel()).toBe("My label");
+  });
+
+  it("does not require an active turn placeholder", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    // No sendPrompt() — so placeholderId is null. Should still work.
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "Idle title" },
+    });
+    expect(session.getLabel()).toBe("Idle title");
+  });
+
+  it("a null/empty agent title clears the label and re-opens it for future agent updates", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "First" },
+    });
+    expect(session.getLabel()).toBe("First");
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: null },
+    });
+    expect(session.getLabel()).toBeNull();
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "session_info_update", title: "Second" },
+    });
+    expect(session.getLabel()).toBe("Second");
+  });
+});
+
+describe("AgentSession title poll after turn", () => {
+  // The poll is fire-and-forget inside runTurn — yield twice so the
+  // listSessions promise and its `.then` callback both run.
+  async function flushMicrotasks(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  it("pulls the title via session/list and applies it after end_turn", async () => {
+    const mock = makeMockBackend();
+    mock.listSessions.mockResolvedValueOnce({
+      sessions: [
+        { sessionId: "acp-1", cwd: "/vault", title: "Refactor auth", updatedAt: null },
+        { sessionId: "acp-other", cwd: "/vault", title: "Different session", updatedAt: null },
+      ],
+    });
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    const { turn } = session.sendPrompt("hi");
+    await turn;
+    await flushMicrotasks();
+
+    expect(mock.listSessions).toHaveBeenCalledWith({ cwd: "/vault" });
+    expect(session.getLabel()).toBe("Refactor auth");
+  });
+
+  it("ignores opencode's default 'New session - …' placeholder titles", async () => {
+    const mock = makeMockBackend();
+    mock.listSessions.mockResolvedValueOnce({
+      sessions: [
+        {
+          sessionId: "acp-1",
+          cwd: "/vault",
+          title: "New session - 2026-04-26T01:24:54.221Z",
+          updatedAt: null,
+        },
+      ],
+    });
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    await session.sendPrompt("hi").turn;
+    await flushMicrotasks();
+    expect(session.getLabel()).toBeNull();
+  });
+
+  it("does not poll when the user has already renamed the session", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    session.setLabel("My label");
+    await session.sendPrompt("hi").turn;
+    await flushMicrotasks();
+    expect(mock.listSessions).not.toHaveBeenCalled();
+    expect(session.getLabel()).toBe("My label");
+  });
+
+  it("does not poll on cancelled turns", async () => {
+    const mock = makeMockBackend();
+    mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    await session.sendPrompt("hi").turn;
+    await flushMicrotasks();
+    expect(mock.listSessions).not.toHaveBeenCalled();
+  });
+
+  it("silently no-ops when the agent doesn't support session/list", async () => {
+    const mock = makeMockBackend();
+    mock.listSessions.mockRejectedValueOnce(new MethodUnsupportedError("session/list"));
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    await session.sendPrompt("hi").turn;
+    await flushMicrotasks();
+    expect(session.getLabel()).toBeNull();
+  });
+
+  it("omits cwd filter when the session has no cwd recorded", async () => {
+    const mock = makeMockBackend();
+    mock.listSessions.mockResolvedValueOnce({
+      sessions: [{ sessionId: "acp-1", cwd: "/vault", title: "Found me", updatedAt: null }],
+    });
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    await session.sendPrompt("hi").turn;
+    await flushMicrotasks();
+    expect(mock.listSessions).toHaveBeenCalledWith({});
+    expect(session.getLabel()).toBe("Found me");
+  });
+});
+
+describe("AgentSession multi-session routing", () => {
+  it("two sessions on one backend each receive only their routed updates", async () => {
+    // Build a backend that supports a real per-session-id handler map (the
+    // shared makeMockBackend helper only stores one handler).
+    const handlers = new Map<string, (u: unknown) => void>();
+    const prompt = jest.fn(async () => ({ stopReason: "end_turn" as const }));
+    const backend = {
+      registerSessionHandler: (id: string, h: (u: unknown) => void) => {
+        handlers.set(id, h);
+        return () => {
+          if (handlers.get(id) === h) handlers.delete(id);
+        };
+      },
+      prompt,
+      cancel: jest.fn(async () => undefined),
+      newSession: jest.fn(),
+      setSessionModel: jest.fn(),
+      isSetSessionModelSupported: jest.fn(() => null),
+      listSessions: jest.fn(async () => ({ sessions: [] })),
+      isListSessionsSupported: jest.fn(() => true),
+    } as unknown as AcpBackendProcess;
+
+    const sessionA = new AgentSession(backend, "acp-A", "internal-A");
+    const sessionB = new AgentSession(backend, "acp-B", "internal-B");
+
+    let resolveA: ((v: { stopReason: string }) => void) | null = null;
+    let resolveB: ((v: { stopReason: string }) => void) | null = null;
+    prompt.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveA = resolve as typeof resolveA))
+    );
+    prompt.mockImplementationOnce(
+      () => new Promise((resolve) => (resolveB = resolve as typeof resolveB))
+    );
+
+    const turnA = sessionA.sendPrompt("hi A").turn;
+    const turnB = sessionB.sendPrompt("hi B").turn;
+
+    // Route a chunk to session A only.
+    handlers.get("acp-A")!({
+      sessionId: "acp-A",
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "fromA" } },
+    });
+    // Route a chunk to session B only.
+    handlers.get("acp-B")!({
+      sessionId: "acp-B",
+      update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "fromB" } },
+    });
+
+    const aiA = sessionA.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    const aiB = sessionB.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(aiA?.message).toBe("fromA");
+    expect(aiB?.message).toBe("fromB");
+
+    resolveA!({ stopReason: "end_turn" });
+    resolveB!({ stopReason: "end_turn" });
+    await Promise.all([turnA, turnB]);
+  });
+
+  it("dispose() unregisters the session handler", () => {
+    const handlers = new Map<string, (u: unknown) => void>();
+    const backend = {
+      registerSessionHandler: (id: string, h: (u: unknown) => void) => {
+        handlers.set(id, h);
+        return () => {
+          if (handlers.get(id) === h) handlers.delete(id);
+        };
+      },
+      prompt: jest.fn(),
+      cancel: jest.fn(),
+      newSession: jest.fn(),
+      setSessionModel: jest.fn(),
+      isSetSessionModelSupported: jest.fn(() => null),
+      listSessions: jest.fn(async () => ({ sessions: [] })),
+      isListSessionsSupported: jest.fn(() => true),
+    } as unknown as AcpBackendProcess;
+
+    const session = new AgentSession(backend, "acp-1", "internal-1");
+    expect(handlers.has("acp-1")).toBe(true);
+    session.dispose();
+    expect(handlers.has("acp-1")).toBe(false);
   });
 });

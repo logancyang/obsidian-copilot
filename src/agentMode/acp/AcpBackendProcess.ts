@@ -2,6 +2,8 @@ import { logError, logInfo, logWarn } from "@/logger";
 import {
   CancelNotification,
   ClientSideConnection,
+  ListSessionsRequest,
+  ListSessionsResponse,
   NewSessionRequest,
   NewSessionResponse,
   PROTOCOL_VERSION,
@@ -58,6 +60,8 @@ export class AcpBackendProcess {
   private exitListeners = new Set<() => void>();
   /** Tri-state: null = not yet probed, true/false = result of first probe. */
   private setSessionModelSupported: boolean | null = null;
+  /** Whether the agent advertised `sessionCapabilities.list` at initialize time. */
+  private listSessionsSupported = false;
 
   constructor(
     private readonly app: App,
@@ -100,6 +104,7 @@ export class AcpBackendProcess {
       this.sessionHandlers.clear();
       this.permissionPrompter = null;
       this.setSessionModelSupported = null;
+      this.listSessionsSupported = false;
       for (const fn of this.exitListeners) {
         try {
           fn();
@@ -127,8 +132,9 @@ export class AcpBackendProcess {
           version: this.clientVersion,
         },
       });
+      this.listSessionsSupported = init.agentCapabilities?.sessionCapabilities?.list != null;
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.listSessionsSupported})`
       );
     } catch (err) {
       // Initialize failed (bad binary, version mismatch, MCP boot error). The
@@ -225,6 +231,36 @@ export class AcpBackendProcess {
   }
 
   /**
+   * List sessions tracked by the agent (subset matching `cwd` /
+   * `additionalDirectories` filters). Throws `MethodUnsupportedError` if the
+   * agent did not advertise the `list` capability at initialize, or if the
+   * connection rejects with a JSON-RPC method-not-found.
+   *
+   * Used to pull agent-generated session titles for backends like opencode
+   * that persist titles internally but don't push `session_info_update`
+   * notifications.
+   */
+  async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
+    if (!this.listSessionsSupported) {
+      throw new MethodUnsupportedError("session/list");
+    }
+    try {
+      return await this.requireConnection().listSessions(params);
+    } catch (err) {
+      if (isMethodNotFoundError(err)) {
+        this.listSessionsSupported = false;
+        throw new MethodUnsupportedError("session/list");
+      }
+      throw err;
+    }
+  }
+
+  /** Whether the agent advertised the `session/list` capability. */
+  isListSessionsSupported(): boolean {
+    return this.listSessionsSupported;
+  }
+
+  /**
    * Tear down the subprocess. Cancels nothing on the agent side beyond
    * closing stdin (opencode self-exits when the parent goes away), so call
    * `cancel()` on each session first if you want graceful turn cancellation.
@@ -234,6 +270,7 @@ export class AcpBackendProcess {
     this.sessionHandlers.clear();
     this.permissionPrompter = null;
     this.setSessionModelSupported = null;
+    this.listSessionsSupported = false;
     if (this.process) {
       try {
         await this.process.shutdown();

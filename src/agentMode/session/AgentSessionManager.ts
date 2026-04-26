@@ -20,9 +20,10 @@ export interface AgentSessionManagerOptions {
 }
 
 /**
- * Plugin-scoped coordinator for Agent Mode. Owns at most one `AgentSession`
- * and one shared `AcpBackendProcess`. Lazily spawns the backend on first
- * `getOrCreateActiveSession()`. Tear down on plugin unload via `shutdown()`.
+ * Plugin-scoped coordinator for Agent Mode. Owns a pool of `AgentSession`s
+ * multiplexed on a single shared `AcpBackendProcess`. Lazily spawns the
+ * backend on first `createSession()` and tears down on plugin unload via
+ * `shutdown()`.
  *
  * Backend pluggability is handled via `BackendDescriptor`: the manager calls
  * `descriptor.createBackend(plugin)` and never imports a specific backend
@@ -32,9 +33,13 @@ export interface AgentSessionManagerOptions {
 export class AgentSessionManager {
   private backend: AcpBackendProcess | null = null;
   private starting: Promise<AcpBackendProcess> | null = null;
-  private activeSession: AgentSession | null = null;
-  private activeChatUIState: AgentChatUIState | null = null;
-  private prepareSession: Promise<AgentSession> | null = null;
+  private sessions = new Map<string, AgentSession>();
+  private chatUIStates = new Map<string, AgentChatUIState>();
+  private activeSessionId: string | null = null;
+  // Dedupe only the auto-spawn path. Direct `createSession()` calls (e.g. `+`
+  // clicks) are independent — concurrent ones each spawn their own session.
+  private firstSessionPromise: Promise<AgentSession> | null = null;
+  private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
   private isStarting = false;
@@ -51,19 +56,38 @@ export class AgentSessionManager {
   }
 
   /**
-   * Return the current `AgentSession`, creating one (and spawning the
-   * backend) on first call. Subsequent calls return the same instance until
-   * `shutdown()`. Throws if the binary isn't installed or the backend fails
-   * to start.
+   * Return the active `AgentSession` if one exists, otherwise create one.
+   * Used by the router to lazily seed the first session on chain switch.
+   * Subsequent `+` clicks should call `createSession()` directly.
    */
   async getOrCreateActiveSession(): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
-    if (this.activeSession && this.activeSession.getStatus() !== "closed") {
-      return this.activeSession;
+    const active = this.getActiveSession();
+    if (active && active.getStatus() !== "closed") return active;
+    // Dedupe rapid auto-spawn callers (e.g. the router effect re-running
+    // before the first create has populated the pool) so we don't seed two
+    // sessions when one was asked for.
+    if (this.firstSessionPromise) return this.firstSessionPromise;
+    this.firstSessionPromise = this.createSession();
+    try {
+      return await this.firstSessionPromise;
+    } finally {
+      this.firstSessionPromise = null;
     }
-    if (this.prepareSession) return this.prepareSession;
+  }
+
+  /**
+   * Spawn a fresh `AgentSession`. Lazily starts the shared backend on the
+   * first call. The new session becomes the active one. Concurrent calls each
+   * spawn their own session; the shared backend boot is serialized
+   * internally via `ensureBackend()`.
+   */
+  async createSession(): Promise<AgentSession> {
+    if (this.disposed) {
+      throw new Error("AgentSessionManager has been shut down");
+    }
 
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof FileSystemAdapter)) {
@@ -71,11 +95,11 @@ export class AgentSessionManager {
     }
     const vaultBasePath = adapter.getBasePath();
 
+    this.pendingCreates++;
     this.isStarting = true;
-    this.lastError = null;
     this.notify();
 
-    this.prepareSession = (async () => {
+    try {
       const backend = await this.ensureBackend();
       const preferredModelId = this.opts.descriptor.getPreferredModelId?.(getSettings());
       const session = await AgentSession.create(backend, vaultBasePath, uuidv4(), preferredModelId);
@@ -85,22 +109,74 @@ export class AgentSessionManager {
         await session.dispose().catch(() => {});
         throw new Error("AgentSessionManager was shut down during session creation");
       }
-      this.activeSession = session;
-      this.activeChatUIState = new AgentChatUIState(session);
-      logInfo(`[AgentMode] active session created (acpSessionId=${session.acpSessionId})`);
+      this.sessions.set(session.internalId, session);
+      this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
+      this.activeSessionId = session.internalId;
+      // Clear lastError on success — but not eagerly at the start of every
+      // create. Eager clearing would let a second concurrent create wipe the
+      // first's error before the user (or a retry handler) has seen it.
+      this.lastError = null;
+      logInfo(
+        `[AgentMode] session created (internal=${session.internalId} acp=${session.acpSessionId}); pool size=${this.sessions.size}`
+      );
       return session;
-    })();
-
-    try {
-      return await this.prepareSession;
     } catch (err) {
       this.lastError = err2String(err);
       throw err;
     } finally {
-      this.prepareSession = null;
-      this.isStarting = false;
+      this.pendingCreates--;
+      if (this.pendingCreates === 0) this.isStarting = false;
       this.notify();
     }
+  }
+
+  /**
+   * Cancel any in-flight turn, dispose the session, and remove it from the
+   * pool. If the closed session was active, picks the right neighbor (or the
+   * last remaining session) as the new active — `null` when none remain.
+   * Backend stays up.
+   */
+  async closeSession(id: string): Promise<void> {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    // Capture the closed tab's index BEFORE delete so we can pick the
+    // neighbor that currently sits to its right.
+    const idsBefore = Array.from(this.sessions.keys());
+    const closedIdx = idsBefore.indexOf(id);
+    try {
+      await session.cancel();
+    } catch (e) {
+      logWarn(`[AgentMode] cancel during closeSession failed`, e);
+    }
+    try {
+      await session.dispose();
+    } catch (e) {
+      logWarn(`[AgentMode] dispose during closeSession failed`, e);
+    }
+    this.sessions.delete(id);
+    this.chatUIStates.delete(id);
+    if (this.activeSessionId === id) {
+      const remaining = Array.from(this.sessions.keys());
+      this.activeSessionId =
+        remaining.length === 0 ? null : remaining[Math.min(closedIdx, remaining.length - 1)];
+    }
+    this.notify();
+  }
+
+  /** Move the active pointer to `id`. No-op if `id` is unknown. */
+  setActiveSession(id: string): void {
+    if (!this.sessions.has(id)) return;
+    if (this.activeSessionId === id) return;
+    this.activeSessionId = id;
+    this.notify();
+  }
+
+  /** Update a session's user-visible label. No-op if `id` is unknown. */
+  renameSession(id: string, label: string | null): void {
+    const session = this.sessions.get(id);
+    if (!session) return;
+    session.setLabel(label);
+    this.notify();
   }
 
   getIsStarting(): boolean {
@@ -111,17 +187,31 @@ export class AgentSessionManager {
     return this.lastError;
   }
 
+  getSession(id: string): AgentSession | null {
+    return this.sessions.get(id) ?? null;
+  }
+
+  getChatUIState(id: string): AgentChatUIState | null {
+    return this.chatUIStates.get(id) ?? null;
+  }
+
   getActiveSession(): AgentSession | null {
-    return this.activeSession;
+    return this.activeSessionId ? (this.sessions.get(this.activeSessionId) ?? null) : null;
   }
 
   getActiveChatUIState(): AgentChatUIState | null {
-    return this.activeChatUIState;
+    return this.activeSessionId ? (this.chatUIStates.get(this.activeSessionId) ?? null) : null;
+  }
+
+  /** All sessions in creation order (Map iteration order). */
+  getSessions(): AgentSession[] {
+    return Array.from(this.sessions.values());
   }
 
   /**
-   * Subscribe to lifecycle changes (active session set/cleared, backend
-   * exit). Returns an unsubscribe function. Listeners must not throw.
+   * Subscribe to lifecycle changes (session created/closed/active changed/
+   * label changed, backend exit, isStarting/lastError flips). Returns an
+   * unsubscribe function. Listeners must not throw.
    */
   subscribe(listener: () => void): () => void {
     this.listeners.add(listener);
@@ -140,7 +230,7 @@ export class AgentSessionManager {
 
   /** Cancel any in-flight turn on the active session. Backend stays up. */
   async cancel(): Promise<void> {
-    await this.activeSession?.cancel();
+    await this.getActiveSession()?.cancel();
   }
 
   /**
@@ -155,8 +245,9 @@ export class AgentSessionManager {
    * throws, the runtime change still sticks for the current session.
    */
   async setActiveSessionModel(modelId: string): Promise<void> {
-    if (!this.activeSession) throw new Error("No active session");
-    await this.activeSession.setModel(modelId);
+    const session = this.getActiveSession();
+    if (!session) throw new Error("No active session");
+    await session.setModel(modelId);
     try {
       await this.opts.descriptor.persistModelSelection?.(modelId, this.plugin);
     } catch (e) {
@@ -165,25 +256,30 @@ export class AgentSessionManager {
   }
 
   /**
-   * Tear down the active session and the shared backend subprocess. Safe to
-   * call when nothing was started; safe to call multiple times.
+   * Tear down every session and the shared backend subprocess. Safe to call
+   * when nothing was started; safe to call multiple times.
    */
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    logInfo("[AgentMode] shutdown");
-    try {
-      await this.activeSession?.cancel();
-    } catch (e) {
-      logError("[AgentMode] cancel during shutdown failed", e);
+    logInfo(`[AgentMode] shutdown (pool size=${this.sessions.size})`);
+
+    const all = Array.from(this.sessions.values());
+    for (const session of all) {
+      try {
+        await session.cancel();
+      } catch (e) {
+        logError("[AgentMode] cancel during shutdown failed", e);
+      }
+      try {
+        await session.dispose();
+      } catch (e) {
+        logError("[AgentMode] dispose during shutdown failed", e);
+      }
     }
-    try {
-      await this.activeSession?.dispose();
-    } catch (e) {
-      logError("[AgentMode] dispose during shutdown failed", e);
-    }
-    this.activeSession = null;
-    this.activeChatUIState = null;
+    this.sessions.clear();
+    this.chatUIStates.clear();
+    this.activeSessionId = null;
 
     try {
       await this.backend?.shutdown();
@@ -208,20 +304,25 @@ export class AgentSessionManager {
       await proc.start();
       proc.setPermissionPrompter(this.opts.permissionPrompter);
       proc.onExit(() => {
-        // Backend died unexpectedly. Drop our refs so the next
-        // getOrCreateActiveSession() will respawn. The active session is
-        // unusable without its backend's ACP session id, so dispose it and
-        // null both refs — otherwise the `status !== "closed"` guard in
-        // getOrCreateActiveSession would happily hand it back.
+        // Backend died unexpectedly. All sessions on this backend are now
+        // unusable (their acp session ids are dead). Dispose them and clear
+        // the pool — preserving message history across crashes is M5.
         if (this.backend === proc) this.backend = null;
-        const dead = this.activeSession;
-        if (dead) {
-          this.activeSession = null;
-          this.activeChatUIState = null;
-          dead.cancel().catch(() => {});
-          dead.dispose().catch(() => {});
-          this.notify();
+        const dead = Array.from(this.sessions.values());
+        if (dead.length === 0) return;
+        this.sessions.clear();
+        this.chatUIStates.clear();
+        this.activeSessionId = null;
+        // Surface the crash so the empty-state pill shows it and the
+        // router's auto-spawn effect (which bails on lastError) doesn't
+        // immediately respawn behind the user's back. The next explicit
+        // create call clears it.
+        this.lastError = "Agent Mode backend exited unexpectedly.";
+        for (const s of dead) {
+          s.cancel().catch(() => {});
+          s.dispose().catch(() => {});
         }
+        this.notify();
       });
       this.backend = proc;
       return proc;

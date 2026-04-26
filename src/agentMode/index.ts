@@ -9,7 +9,7 @@ import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 // Public surface for the rest of the plugin. External code should import from
 // `@/agentMode` (this file), never deep paths into acp/, session/, backends/,
 // or ui/.
-export { AgentChatRouter } from "./ui/AgentChatRouter";
+export { AgentModeChat } from "./ui/AgentModeChat";
 export { useActiveBackendDescriptor, useBackendInstallState } from "./ui/useBackendDescriptor";
 export { useAgentModelPicker } from "./ui/useAgentModelPicker";
 export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";

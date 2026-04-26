@@ -22,6 +22,14 @@ import {
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
+import { MethodUnsupportedError } from "@/agentMode/acp/types";
+
+/**
+ * Prefix opencode uses for placeholder titles before its title-summarizer
+ * agent runs. Treating these as "no title" prevents the tab from briefly
+ * showing "New session - 2026-…" before the LLM-generated label arrives.
+ */
+const DEFAULT_TITLE_PREFIX = "New session";
 
 export type AgentSessionStatus = "idle" | "running" | "awaiting_permission" | "error" | "closed";
 
@@ -30,6 +38,8 @@ export interface AgentSessionListener {
   onStatusChanged(status: AgentSessionStatus): void;
   /** Optional: fired when the active model changes (after `setModel` resolves). */
   onModelChanged?(): void;
+  /** Optional: fired when the user-visible label changes. */
+  onLabelChanged?(): void;
 }
 
 /**
@@ -45,12 +55,17 @@ export class AgentSession {
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
   private modelState: SessionModelState | null = null;
+  private label: string | null = null;
+  // Tracks who set the current label so an agent-pushed `session_info_update`
+  // can't clobber a label the user explicitly chose via Rename.
+  private labelSource: "user" | "agent" | null = null;
 
   constructor(
     private readonly backend: AcpBackendProcess,
     readonly acpSessionId: SessionId,
     readonly internalId: string,
-    initialModelState: SessionModelState | null = null
+    initialModelState: SessionModelState | null = null,
+    private readonly cwd: string | null = null
   ) {
     this.unregisterSessionHandler = this.backend.registerSessionHandler(
       this.acpSessionId,
@@ -74,7 +89,7 @@ export class AgentSession {
     } else {
       logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
     }
-    const session = new AgentSession(backend, resp.sessionId, internalId, resp.models ?? null);
+    const session = new AgentSession(backend, resp.sessionId, internalId, resp.models ?? null, cwd);
 
     // Apply sticky preference if it's available and differs from the agent's
     // current model. Failures here are non-fatal — the session is usable with
@@ -133,6 +148,47 @@ export class AgentSession {
 
   getStatus(): AgentSessionStatus {
     return this.status;
+  }
+
+  /**
+   * User-supplied label for this session (shown in the tab strip). `null`
+   * means "no label" — the UI falls back to a positional default like
+   * "Session N".
+   */
+  getLabel(): string | null {
+    return this.label;
+  }
+
+  setLabel(label: string | null): void {
+    const next = label?.trim() ? label.trim() : null;
+    if (next === this.label) return;
+    this.label = next;
+    this.labelSource = next ? "user" : null;
+    this.notifyLabelChanged();
+  }
+
+  /**
+   * Apply a label pushed by the backend agent (via `session_info_update`).
+   * No-op when the user has already renamed this session — Rename wins so
+   * later agent-side title revisions don't blow away the user's choice.
+   */
+  private applyAgentLabel(label: string | null | undefined): void {
+    if (this.labelSource === "user") return;
+    const next = label?.trim() ? label.trim() : null;
+    if (next === this.label) return;
+    this.label = next;
+    this.labelSource = next ? "agent" : null;
+    this.notifyLabelChanged();
+  }
+
+  private notifyLabelChanged(): void {
+    for (const l of this.listeners) {
+      try {
+        l.onLabelChanged?.();
+      } catch (e) {
+        logWarn(`[AgentMode] label listener threw`, e);
+      }
+    }
   }
 
   subscribe(listener: AgentSessionListener): () => void {
@@ -208,6 +264,10 @@ export class AgentSession {
       // message — per ACP, the agent can emit final updates around the
       // stopReason.
       if (this.placeholderId === placeholderId) this.placeholderId = null;
+      // Fire-and-forget title pull. Errors are swallowed (best-effort: the tab
+      // just stays at "Session N"). Skipped on cancelled turns where opencode
+      // hasn't run its title-summarizer yet.
+      if (resp.stopReason === "end_turn") void this.pollSessionTitle();
       return resp.stopReason;
     } catch (err) {
       logWarn(`[AgentMode] prompt failed`, err);
@@ -248,12 +308,20 @@ export class AgentSession {
   }
 
   private handleSessionUpdate(notification: SessionNotification): void {
+    const update = notification.update;
+
+    // Session-scoped updates aren't tied to a turn placeholder, so handle
+    // them before the placeholder check below.
+    if (update.sessionUpdate === "session_info_update") {
+      this.applyAgentLabel(update.title);
+      return;
+    }
+
     const placeholderId = this.placeholderId;
     if (!placeholderId) {
       logWarn(`[AgentMode] dropping session/update — no placeholder for ${this.internalId}`);
       return;
     }
-    const update = notification.update;
 
     switch (update.sessionUpdate) {
       case "agent_message_chunk": {
@@ -322,6 +390,30 @@ export class AgentSession {
       } catch (e) {
         logWarn(`[AgentMode] messages listener threw`, e);
       }
+    }
+  }
+
+  /**
+   * Pull the agent-generated title for this session via `session/list` and
+   * apply it as the tab label. Workaround for backends like opencode 1.14
+   * that summarize the first turn into a title, persist it, but don't push
+   * it through `session_info_update` notifications.
+   *
+   * Best-effort: silently no-ops when the agent doesn't support `session/list`
+   * or when the title is still the default placeholder.
+   */
+  private async pollSessionTitle(): Promise<void> {
+    if (this.labelSource === "user") return;
+    try {
+      const resp = await this.backend.listSessions(this.cwd ? { cwd: this.cwd } : {});
+      const entry = resp.sessions.find((s) => s.sessionId === this.acpSessionId);
+      const title = entry?.title?.trim();
+      if (!title) return;
+      if (title.startsWith(DEFAULT_TITLE_PREFIX)) return;
+      this.applyAgentLabel(title);
+    } catch (err) {
+      if (err instanceof MethodUnsupportedError) return;
+      logWarn(`[AgentMode] session/list title poll failed for ${this.internalId}`, err);
     }
   }
 

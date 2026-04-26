@@ -18,8 +18,8 @@ interface Props {
 
 /**
  * Inline status pill rendered above the chat input in Agent Mode. Pure
- * observer: it never spawns the backend itself — `AgentChatRouter` does that
- * on chain switch. Surfaces install gaps, boot state, and per-turn status.
+ * observer: it never spawns the backend itself — `AgentModeChat` does that
+ * on mount. Surfaces install gaps, boot state, and per-turn status.
  *
  * Backend-agnostic: all backend-specific copy (display name, version) comes
  * from the active `BackendDescriptor`.
