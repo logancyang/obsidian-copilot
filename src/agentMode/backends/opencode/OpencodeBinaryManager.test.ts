@@ -11,7 +11,7 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-// In-memory settings store for the manager's getSettings/updateSetting calls.
+// In-memory settings store for the manager's getSettings/setSettings calls.
 // Defined inside jest.mock so it's hoisted alongside the factory.
 jest.mock("@/settings/model", () => {
   type OpencodeSlice = {
@@ -24,7 +24,8 @@ jest.mock("@/settings/model", () => {
     activeBackend?: string;
     backends?: { opencode?: OpencodeSlice };
   };
-  let store: { agentMode: AgentMode } = {
+  type Store = { agentMode: AgentMode };
+  let store: Store = {
     agentMode: { backends: { opencode: {} } },
   };
   return {
@@ -34,8 +35,9 @@ jest.mock("@/settings/model", () => {
     },
     __get: () => store.agentMode.backends?.opencode ?? {},
     getSettings: () => store,
-    updateSetting: (key: "agentMode", value: AgentMode) => {
-      store = { ...store, [key]: value };
+    setSettings: (settings: Partial<Store> | ((current: Store) => Partial<Store>)) => {
+      const partial = typeof settings === "function" ? settings(store) : settings;
+      store = { ...store, ...partial };
     },
   };
 });

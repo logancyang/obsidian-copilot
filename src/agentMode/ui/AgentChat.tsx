@@ -1,7 +1,7 @@
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
-import { useActiveBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
+import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import ChatInput from "@/components/chat-components/ChatInput";
 import { EVENT_NAMES } from "@/constants";
@@ -161,7 +161,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     [backend]
   );
 
-  const descriptor = useActiveBackendDescriptor();
+  const descriptor = useSessionBackendDescriptor(manager);
   const handleInstall = useCallback(() => {
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);

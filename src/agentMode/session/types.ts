@@ -87,6 +87,21 @@ export interface BackendDescriptor {
    * doesn't drag in OpenCode's full OpenRouter catalog).
    */
   agentModelIdToCopilotProvider?(modelId: string): string | undefined;
+
+  /**
+   * Optional: previously-stored ACP sessionId of the backend's dedicated
+   * "probe session", used by `AgentModelPreloader` to enumerate live models
+   * across plugin reloads without accumulating one fresh agent-side session
+   * record per startup. Returns `undefined` when no probe has run yet.
+   */
+  getProbeSessionId?(settings: CopilotSettings): string | undefined;
+
+  /**
+   * Optional: persist the probe sessionId returned by a successful
+   * `session/new` probe so the next plugin load can reuse it via
+   * `session/resume` or `session/load`. Only called by `AgentModelPreloader`.
+   */
+  persistProbeSessionId?(sessionId: string, plugin: CopilotPlugin): Promise<void>;
 }
 
 /**

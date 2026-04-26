@@ -1,7 +1,7 @@
 import { Button } from "@/components/ui/button";
 import {
-  useActiveBackendDescriptor,
   useBackendInstallState,
+  useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
 import { AgentSessionStatus } from "@/agentMode/session/AgentSession";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
@@ -22,10 +22,12 @@ interface Props {
  * on mount. Surfaces install gaps, boot state, and per-turn status.
  *
  * Backend-agnostic: all backend-specific copy (display name, version) comes
- * from the active `BackendDescriptor`.
+ * from the *active session's* `BackendDescriptor` — that's the backend
+ * actually running the conversation, which can differ from the user's
+ * default backend after a cross-backend tab switch.
  */
 export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) => {
-  const descriptor = useActiveBackendDescriptor();
+  const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor);
 
   // Tick on any manager notify (active session set/cleared, isStarting flip,

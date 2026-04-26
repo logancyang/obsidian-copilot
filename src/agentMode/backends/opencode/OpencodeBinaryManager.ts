@@ -1,7 +1,7 @@
 import { OPENCODE_PINNED_VERSION, OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { getSettings, updateSetting, type OpencodeBackendSettings } from "@/settings/model";
+import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
 import { execFile, spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import * as fs from "node:fs";
@@ -103,18 +103,16 @@ export function readOpencodeSettings(): OpencodeBackendSettings {
   return getSettings().agentMode?.backends?.opencode ?? {};
 }
 
-// R-M-W on settings is racy with concurrent edits but tolerable: every caller
-// is either a one-shot plugin-load reconcile or a user-initiated flow from
-// the settings panel, neither of which races with itself.
 function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {
-  const cur = getSettings().agentMode;
-  updateSetting("agentMode", {
-    ...cur,
-    backends: {
-      ...cur.backends,
-      opencode: { ...(cur.backends?.opencode ?? {}), ...partial },
+  setSettings((cur) => ({
+    agentMode: {
+      ...cur.agentMode,
+      backends: {
+        ...cur.agentMode.backends,
+        opencode: { ...(cur.agentMode.backends?.opencode ?? {}), ...partial },
+      },
     },
-  });
+  }));
 }
 
 function clearOpencodeBinary(): void {

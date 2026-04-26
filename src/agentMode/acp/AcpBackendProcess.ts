@@ -4,6 +4,8 @@ import {
   ClientSideConnection,
   ListSessionsRequest,
   ListSessionsResponse,
+  LoadSessionRequest,
+  LoadSessionResponse,
   NewSessionRequest,
   NewSessionResponse,
   PROTOCOL_VERSION,
@@ -12,6 +14,8 @@ import {
   RequestError,
   RequestPermissionRequest,
   RequestPermissionResponse,
+  ResumeSessionRequest,
+  ResumeSessionResponse,
   SessionId,
   SessionNotification,
   SetSessionModelRequest,
@@ -62,6 +66,10 @@ export class AcpBackendProcess {
   private setSessionModelSupported: boolean | null = null;
   /** Whether the agent advertised `sessionCapabilities.list` at initialize time. */
   private listSessionsSupported = false;
+  /** Whether the agent advertised `sessionCapabilities.resume` at initialize time. */
+  private resumeSessionSupported = false;
+  /** Whether the agent advertised top-level `loadSession` at initialize time. */
+  private loadSessionSupported = false;
 
   constructor(
     private readonly app: App,
@@ -105,6 +113,8 @@ export class AcpBackendProcess {
       this.permissionPrompter = null;
       this.setSessionModelSupported = null;
       this.listSessionsSupported = false;
+      this.resumeSessionSupported = false;
+      this.loadSessionSupported = false;
       for (const fn of this.exitListeners) {
         try {
           fn();
@@ -133,8 +143,10 @@ export class AcpBackendProcess {
         },
       });
       this.listSessionsSupported = init.agentCapabilities?.sessionCapabilities?.list != null;
+      this.resumeSessionSupported = init.agentCapabilities?.sessionCapabilities?.resume != null;
+      this.loadSessionSupported = init.agentCapabilities?.loadSession === true;
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.listSessionsSupported})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.listSessionsSupported}, resumeSession=${this.resumeSessionSupported}, loadSession=${this.loadSessionSupported})`
       );
     } catch (err) {
       // Initialize failed (bad binary, version mismatch, MCP boot error). The
@@ -233,12 +245,7 @@ export class AcpBackendProcess {
   /**
    * List sessions tracked by the agent (subset matching `cwd` /
    * `additionalDirectories` filters). Throws `MethodUnsupportedError` if the
-   * agent did not advertise the `list` capability at initialize, or if the
-   * connection rejects with a JSON-RPC method-not-found.
-   *
-   * Used to pull agent-generated session titles for backends like opencode
-   * that persist titles internally but don't push `session_info_update`
-   * notifications.
+   * agent did not advertise the `list` capability.
    */
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
     if (!this.listSessionsSupported) {
@@ -261,6 +268,57 @@ export class AcpBackendProcess {
   }
 
   /**
+   * Resume a previously-created session by id. Per ACP, resume restores the
+   * session context *without* replaying message history; the response carries
+   * the same `models` field as `session/new`. Throws `MethodUnsupportedError`
+   * when the agent did not advertise `sessionCapabilities.resume`.
+   */
+  async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
+    if (!this.resumeSessionSupported) {
+      throw new MethodUnsupportedError("session/resume");
+    }
+    try {
+      return await this.requireConnection().resumeSession(params);
+    } catch (err) {
+      if (isMethodNotFoundError(err)) {
+        this.resumeSessionSupported = false;
+        throw new MethodUnsupportedError("session/resume");
+      }
+      throw err;
+    }
+  }
+
+  /** Whether the agent advertised the `session/resume` capability. */
+  isResumeSessionSupported(): boolean {
+    return this.resumeSessionSupported;
+  }
+
+  /**
+   * Load a previously-created session by id. Per ACP, load restores context
+   * *and* streams the entire conversation history back as `session/update`
+   * notifications. Returns the same `models` field as `session/new`.
+   */
+  async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
+    if (!this.loadSessionSupported) {
+      throw new MethodUnsupportedError("session/load");
+    }
+    try {
+      return await this.requireConnection().loadSession(params);
+    } catch (err) {
+      if (isMethodNotFoundError(err)) {
+        this.loadSessionSupported = false;
+        throw new MethodUnsupportedError("session/load");
+      }
+      throw err;
+    }
+  }
+
+  /** Whether the agent advertised the `loadSession` capability. */
+  isLoadSessionSupported(): boolean {
+    return this.loadSessionSupported;
+  }
+
+  /**
    * Tear down the subprocess. Cancels nothing on the agent side beyond
    * closing stdin (opencode self-exits when the parent goes away), so call
    * `cancel()` on each session first if you want graceful turn cancellation.
@@ -271,6 +329,8 @@ export class AcpBackendProcess {
     this.permissionPrompter = null;
     this.setSessionModelSupported = null;
     this.listSessionsSupported = false;
+    this.resumeSessionSupported = false;
+    this.loadSessionSupported = false;
     if (this.process) {
       try {
         await this.process.shutdown();

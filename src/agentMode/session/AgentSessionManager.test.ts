@@ -14,6 +14,13 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn(() => ({
+    agentMode: { activeBackend: "opencode", backends: {} },
+  })),
+  setSettings: jest.fn(),
+}));
+
 let mockBackendIsRunning = true;
 const mockBackendShutdown = jest.fn(async () => undefined);
 const mockBackendStart = jest.fn(async () => undefined);
@@ -37,10 +44,11 @@ const mockSessionDispose = jest.fn(async () => undefined);
 const mockSessionCancel = jest.fn(async () => undefined);
 let nextAcpSessionId = 1;
 const sessionCreateSpy = jest.spyOn(AgentSession, "create").mockImplementation(
-  async (_backend, _cwd, internalId) =>
+  async (_backend, _cwd, internalId, backendId) =>
     ({
       internalId,
       acpSessionId: `acp-${nextAcpSessionId++}`,
+      backendId,
       getStatus: () => "idle",
       cancel: mockSessionCancel,
       dispose: mockSessionDispose,
@@ -48,6 +56,7 @@ const sessionCreateSpy = jest.spyOn(AgentSession, "create").mockImplementation(
       getLabel: () => null,
       setLabel: jest.fn(),
       subscribe: () => () => {},
+      hasUserVisibleMessages: () => false,
     }) as unknown as AgentSession
 );
 
@@ -76,12 +85,13 @@ function buildDescriptor(): BackendDescriptor {
 }
 
 function buildManager(): AgentSessionManager {
+  const descriptor = buildDescriptor();
   return new AgentSessionManager(
     buildApp(),
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
-      descriptor: buildDescriptor(),
       permissionPrompter: jest.fn(),
+      resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
     }
   );
 }
@@ -146,10 +156,11 @@ describe("AgentSessionManager.createSession", () => {
         throw new Error("boom");
       })
       .mockImplementationOnce(
-        async (_b, _c, internalId) =>
+        async (_b, _c, internalId, backendId) =>
           ({
             internalId,
             acpSessionId: "acp-ok",
+            backendId,
             getStatus: () => "idle",
             cancel: mockSessionCancel,
             dispose: mockSessionDispose,
@@ -157,6 +168,7 @@ describe("AgentSessionManager.createSession", () => {
             getLabel: () => null,
             setLabel: jest.fn(),
             subscribe: () => () => {},
+            hasUserVisibleMessages: () => false,
           }) as unknown as AgentSession
       );
 

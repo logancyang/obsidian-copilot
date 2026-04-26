@@ -22,7 +22,7 @@ import {
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { MethodUnsupportedError, type BackendId } from "@/agentMode/acp/types";
 
 /**
  * Prefix opencode uses for placeholder titles before its title-summarizer
@@ -64,6 +64,8 @@ export class AgentSession {
     private readonly backend: AcpBackendProcess,
     readonly acpSessionId: SessionId,
     readonly internalId: string,
+    /** The backend this session was spawned on. */
+    readonly backendId: BackendId,
     initialModelState: SessionModelState | null = null,
     private readonly cwd: string | null = null
   ) {
@@ -78,6 +80,7 @@ export class AgentSession {
     backend: AcpBackendProcess,
     cwd: string,
     internalId: string,
+    backendId: BackendId,
     preferredModelId?: string
   ): Promise<AgentSession> {
     const resp = await backend.newSession({ cwd, mcpServers: [] });
@@ -89,7 +92,14 @@ export class AgentSession {
     } else {
       logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
     }
-    const session = new AgentSession(backend, resp.sessionId, internalId, resp.models ?? null, cwd);
+    const session = new AgentSession(
+      backend,
+      resp.sessionId,
+      internalId,
+      backendId,
+      resp.models ?? null,
+      cwd
+    );
 
     // Apply sticky preference if it's available and differs from the agent's
     // current model. Failures here are non-fatal — the session is usable with
@@ -148,6 +158,15 @@ export class AgentSession {
 
   getStatus(): AgentSessionStatus {
     return this.status;
+  }
+
+  /**
+   * Whether this session has at least one user-visible message. The model
+   * picker uses this to decide whether non-active backend entries should be
+   * hidden (mid-conversation) or shown (empty new tab).
+   */
+  hasUserVisibleMessages(): boolean {
+    return this.store.getDisplayMessages().length > 0;
   }
 
   /**

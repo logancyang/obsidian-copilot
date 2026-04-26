@@ -64,7 +64,7 @@ function makeMockBackend(): MockBackend {
 describe("AgentSession.sendPrompt", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     const { userMessageId, turn } = session.sendPrompt("Hi there");
 
     const messages = session.store.getDisplayMessages();
@@ -88,7 +88,7 @@ describe("AgentSession.sendPrompt", () => {
 
   it("rejects if a turn is already in flight", () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     session.sendPrompt("first");
     expect(() => session.sendPrompt("second")).toThrow(/in flight/);
   });
@@ -99,7 +99,7 @@ describe("AgentSession.sendPrompt", () => {
     mock.prompt.mockImplementation(
       () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
     );
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     const { turn } = session.sendPrompt("hi");
 
     mock.emit({
@@ -130,7 +130,7 @@ describe("AgentSession.sendPrompt", () => {
     mock.prompt.mockImplementation(
       () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
     );
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     const { turn } = session.sendPrompt("hi");
 
     mock.emit({
@@ -174,7 +174,7 @@ describe("AgentSession.sendPrompt", () => {
     mock.prompt.mockImplementation(
       () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
     );
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     const { turn } = session.sendPrompt("hi");
     await session.cancel();
     expect(mock.cancel).toHaveBeenCalledWith({ sessionId: "acp-1" });
@@ -196,7 +196,7 @@ describe("AgentSession.create", () => {
         ],
       },
     });
-    const session = await AgentSession.create(mock.asBackend, "/vault", "internal-1");
+    const session = await AgentSession.create(mock.asBackend, "/vault", "internal-1", "opencode");
     expect(session.getModelState()?.currentModelId).toBe("anthropic/sonnet");
     expect(session.getModelState()?.availableModels).toHaveLength(2);
   });
@@ -204,7 +204,7 @@ describe("AgentSession.create", () => {
   it("getModelState returns null when the agent doesn't report models", async () => {
     const mock = makeMockBackend();
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", models: null });
-    const session = await AgentSession.create(mock.asBackend, "/vault", "internal-1");
+    const session = await AgentSession.create(mock.asBackend, "/vault", "internal-1", "opencode");
     expect(session.getModelState()).toBeNull();
   });
 
@@ -220,7 +220,7 @@ describe("AgentSession.create", () => {
         ],
       },
     });
-    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "openai/gpt-5");
+    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "opencode", "openai/gpt-5");
     expect(mock.setSessionModel).toHaveBeenCalledWith({
       sessionId: "acp-1",
       modelId: "openai/gpt-5",
@@ -236,7 +236,13 @@ describe("AgentSession.create", () => {
         availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
       },
     });
-    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "anthropic/sonnet");
+    await AgentSession.create(
+      mock.asBackend,
+      "/vault",
+      "internal-1",
+      "opencode",
+      "anthropic/sonnet"
+    );
     expect(mock.setSessionModel).not.toHaveBeenCalled();
   });
 
@@ -249,7 +255,7 @@ describe("AgentSession.create", () => {
         availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
       },
     });
-    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "ghost/model");
+    await AgentSession.create(mock.asBackend, "/vault", "internal-1", "opencode", "ghost/model");
     expect(mock.setSessionModel).not.toHaveBeenCalled();
   });
 
@@ -270,6 +276,7 @@ describe("AgentSession.create", () => {
       mock.asBackend,
       "/vault",
       "internal-1",
+      "opencode",
       "openai/gpt-5"
     );
     // Session is still usable; current model stays at the agent's default.
@@ -280,7 +287,7 @@ describe("AgentSession.create", () => {
 describe("AgentSession.setModel", () => {
   it("calls backend.setSessionModel and updates currentModelId on success", async () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", {
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode", {
       currentModelId: "a/b",
       availableModels: [
         { modelId: "a/b", name: "A B" },
@@ -295,7 +302,7 @@ describe("AgentSession.setModel", () => {
   it("rethrows MethodUnsupportedError without mutating local state", async () => {
     const mock = makeMockBackend();
     mock.setSessionModel.mockRejectedValueOnce(new MethodUnsupportedError("session/set_model"));
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", {
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode", {
       currentModelId: "a/b",
       availableModels: [{ modelId: "a/b", name: "A B" }],
     });
@@ -305,7 +312,7 @@ describe("AgentSession.setModel", () => {
 
   it("notifies onModelChanged listeners after successful switch", async () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", {
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode", {
       currentModelId: "a/b",
       availableModels: [
         { modelId: "a/b", name: "A B" },
@@ -326,7 +333,7 @@ describe("AgentSession.setModel", () => {
 describe("AgentSession.setLabel", () => {
   it("stores trimmed label and notifies onLabelChanged", () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     const onLabelChanged = jest.fn();
     session.subscribe({
       onMessagesChanged: jest.fn(),
@@ -352,7 +359,7 @@ describe("AgentSession.setLabel", () => {
 describe("AgentSession session_info_update", () => {
   it("adopts the title pushed by the agent and notifies listeners", () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     const onLabelChanged = jest.fn();
     session.subscribe({
       onMessagesChanged: jest.fn(),
@@ -371,7 +378,7 @@ describe("AgentSession session_info_update", () => {
 
   it("ignores agent-pushed titles after the user has renamed the session", () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     session.setLabel("My label");
 
     mock.emit({
@@ -384,7 +391,7 @@ describe("AgentSession session_info_update", () => {
 
   it("does not require an active turn placeholder", () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     // No sendPrompt() — so placeholderId is null. Should still work.
     mock.emit({
       sessionId: "acp-1",
@@ -395,7 +402,7 @@ describe("AgentSession session_info_update", () => {
 
   it("a null/empty agent title clears the label and re-opens it for future agent updates", () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     mock.emit({
       sessionId: "acp-1",
       update: { sessionUpdate: "session_info_update", title: "First" },
@@ -433,7 +440,14 @@ describe("AgentSession title poll after turn", () => {
         { sessionId: "acp-other", cwd: "/vault", title: "Different session", updatedAt: null },
       ],
     });
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    const session = new AgentSession(
+      mock.asBackend,
+      "acp-1",
+      "internal-1",
+      "opencode",
+      null,
+      "/vault"
+    );
     const { turn } = session.sendPrompt("hi");
     await turn;
     await flushMicrotasks();
@@ -454,7 +468,14 @@ describe("AgentSession title poll after turn", () => {
         },
       ],
     });
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    const session = new AgentSession(
+      mock.asBackend,
+      "acp-1",
+      "internal-1",
+      "opencode",
+      null,
+      "/vault"
+    );
     await session.sendPrompt("hi").turn;
     await flushMicrotasks();
     expect(session.getLabel()).toBeNull();
@@ -462,7 +483,14 @@ describe("AgentSession title poll after turn", () => {
 
   it("does not poll when the user has already renamed the session", async () => {
     const mock = makeMockBackend();
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    const session = new AgentSession(
+      mock.asBackend,
+      "acp-1",
+      "internal-1",
+      "opencode",
+      null,
+      "/vault"
+    );
     session.setLabel("My label");
     await session.sendPrompt("hi").turn;
     await flushMicrotasks();
@@ -473,7 +501,14 @@ describe("AgentSession title poll after turn", () => {
   it("does not poll on cancelled turns", async () => {
     const mock = makeMockBackend();
     mock.prompt.mockResolvedValueOnce({ stopReason: "cancelled" });
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    const session = new AgentSession(
+      mock.asBackend,
+      "acp-1",
+      "internal-1",
+      "opencode",
+      null,
+      "/vault"
+    );
     await session.sendPrompt("hi").turn;
     await flushMicrotasks();
     expect(mock.listSessions).not.toHaveBeenCalled();
@@ -482,7 +517,14 @@ describe("AgentSession title poll after turn", () => {
   it("silently no-ops when the agent doesn't support session/list", async () => {
     const mock = makeMockBackend();
     mock.listSessions.mockRejectedValueOnce(new MethodUnsupportedError("session/list"));
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", null, "/vault");
+    const session = new AgentSession(
+      mock.asBackend,
+      "acp-1",
+      "internal-1",
+      "opencode",
+      null,
+      "/vault"
+    );
     await session.sendPrompt("hi").turn;
     await flushMicrotasks();
     expect(session.getLabel()).toBeNull();
@@ -493,7 +535,7 @@ describe("AgentSession title poll after turn", () => {
     mock.listSessions.mockResolvedValueOnce({
       sessions: [{ sessionId: "acp-1", cwd: "/vault", title: "Found me", updatedAt: null }],
     });
-    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1");
+    const session = new AgentSession(mock.asBackend, "acp-1", "internal-1", "opencode");
     await session.sendPrompt("hi").turn;
     await flushMicrotasks();
     expect(mock.listSessions).toHaveBeenCalledWith({});
@@ -523,8 +565,8 @@ describe("AgentSession multi-session routing", () => {
       isListSessionsSupported: jest.fn(() => true),
     } as unknown as AcpBackendProcess;
 
-    const sessionA = new AgentSession(backend, "acp-A", "internal-A");
-    const sessionB = new AgentSession(backend, "acp-B", "internal-B");
+    const sessionA = new AgentSession(backend, "acp-A", "internal-A", "opencode");
+    const sessionB = new AgentSession(backend, "acp-B", "internal-B", "opencode");
 
     let resolveA: ((v: { stopReason: string }) => void) | null = null;
     let resolveB: ((v: { stopReason: string }) => void) | null = null;
@@ -577,7 +619,7 @@ describe("AgentSession multi-session routing", () => {
       isListSessionsSupported: jest.fn(() => true),
     } as unknown as AcpBackendProcess;
 
-    const session = new AgentSession(backend, "acp-1", "internal-1");
+    const session = new AgentSession(backend, "acp-1", "internal-1", "opencode");
     expect(handlers.has("acp-1")).toBe(true);
     session.dispose();
     expect(handlers.has("acp-1")).toBe(false);

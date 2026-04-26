@@ -106,19 +106,18 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     // can't resolve (an OpenCode-native model with no Copilot entry), persist
     // the raw id under the same field.
     const selectedModelKey = agentModelIdToCopilotKey(modelId) ?? modelId;
-    const current = getSettings();
-    setSettings({
+    setSettings((cur) => ({
       agentMode: {
-        ...current.agentMode,
+        ...cur.agentMode,
         backends: {
-          ...current.agentMode.backends,
+          ...cur.agentMode.backends,
           opencode: {
-            ...(current.agentMode.backends?.opencode ?? {}),
+            ...(cur.agentMode.backends?.opencode ?? {}),
             selectedModelKey,
           },
         },
       },
-    });
+    }));
   },
 
   copilotModelKeyToAgentModelId(model: CustomModel): string | undefined {
@@ -133,6 +132,26 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       if (opencodeId === opencodeProviderId) return copilotProvider;
     }
     return undefined;
+  },
+
+  getProbeSessionId(settings: CopilotSettings): string | undefined {
+    const id = settings.agentMode?.backends?.opencode?.probeSessionId;
+    return id && id.length > 0 ? id : undefined;
+  },
+
+  async persistProbeSessionId(sessionId: string, _plugin: CopilotPlugin): Promise<void> {
+    setSettings((cur) => ({
+      agentMode: {
+        ...cur.agentMode,
+        backends: {
+          ...cur.agentMode.backends,
+          opencode: {
+            ...(cur.agentMode.backends?.opencode ?? {}),
+            probeSessionId: sessionId,
+          },
+        },
+      },
+    }));
   },
 };
 

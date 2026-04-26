@@ -1,0 +1,28 @@
+# ACP Agent Mode TODOs
+
+- P0: Chat history
+  - [ ] Load chat history from agents
+  - [ ] Save chat history to notes
+- [ ] P1: Provide copilot specific system prompt
+- [ ] P2: Subagent nested tool calls
+- [ ] P2: Better agent messages
+- [ ] P1: MCP
+- [ ] P1: Skills
+- [ ] P3: Rerun agent response
+- [ ] P2: Edit previous user message
+- [ ] P1: Permission UI
+- [ ] P1: Edit diff UI - https://agentclientprotocol.com/protocol/tool-calls#diffs
+- [ ] P2: Agent path auto-detect doesn't work well
+- [ ] P1: Agent mode (yolo, plan, safe) - https://agentclientprotocol.com/protocol/session-config-options
+- [ ] P2: Integrate copilot plus tool calls
+- [ ] P2: Keyboard shortcut
+- [ ] P2: New agent command (/new, /usage)
+- [ ] P1: How to support custom command and quick ask?
+- [ ] P1: Content type support (image, audio) - https://agentclientprotocol.com/protocol/content
+- [ ] P1: Better onboarding
+- [ ] P2: Claude code authentication
+- [ ] P1: Codex support
+- [ ] P1: Cancel chat
+- [ ] P1: Queue messages
+- [ ] P1: Test bash tool call, shall they work?
+- [ ] P3: Agent todo list

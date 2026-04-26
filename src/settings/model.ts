@@ -209,8 +209,29 @@ export interface CopilotSettings {
     /** Per-backend config slice, keyed by BackendId. Each backend owns its slice. */
     backends: {
       opencode?: OpencodeBackendSettings;
+      "claude-code"?: ClaudeCodeBackendSettings;
     };
   };
+}
+
+/** Settings slice owned by the Claude Code backend. */
+export interface ClaudeCodeBackendSettings {
+  /** Path to the user-provided `claude-agent-acp` binary. */
+  binaryPath?: string;
+  /**
+   * Sticky model preference. Stored as the raw agent model id reported by
+   * `claude-agent-acp` (e.g. `claude-sonnet-4-5-20250929`) — Claude Code does
+   * not pull from Copilot's `activeModels`, so no Copilot-key translation.
+   */
+  selectedModelKey?: string;
+  /**
+   * ACP sessionId of the dedicated "probe session" used by AgentModelPreloader
+   * to enumerate live models without disturbing user chats. Persisted across
+   * plugin reloads so subsequent loads can `session/resume` (or `session/load`)
+   * the same record instead of accumulating one new session per startup. Never
+   * surfaced in the Copilot tab strip or chat history.
+   */
+  probeSessionId?: string;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -232,6 +253,14 @@ export interface OpencodeBackendSettings {
    * Empty/unset = no preference, OpenCode picks its own default.
    */
   selectedModelKey?: string;
+  /**
+   * ACP sessionId of the dedicated "probe session" used by AgentModelPreloader
+   * to enumerate live models without disturbing user chats. Persisted across
+   * plugin reloads so subsequent loads can `session/resume` (or `session/load`)
+   * the same record instead of accumulating one new session per startup. Never
+   * surfaced in the Copilot tab strip or chat history.
+   */
+  probeSessionId?: string;
 }
 
 export const settingsStore = createStore();
@@ -256,12 +285,21 @@ function resolveEmbeddingModelKey(settings: CopilotSettings): string {
 }
 
 /**
- * Sets the settings in the atom.
+ * Sets the settings in the atom. Accepts either a partial object or an
+ * updater function `(prev) => partial`. Prefer the updater form for any
+ * read-modify-write — it routes through jotai's atom-setter callback so the
+ * read and write are atomic at the store level (no stale-snapshot races
+ * between concurrent writers, even across `await` boundaries in the caller).
  */
-export function setSettings(settings: Partial<CopilotSettings>) {
-  const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
-  newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
-  settingsStore.set(settingsAtom, newSettings);
+export function setSettings(
+  settings: Partial<CopilotSettings> | ((current: CopilotSettings) => Partial<CopilotSettings>)
+) {
+  settingsStore.set(settingsAtom, (prev) => {
+    const partial = typeof settings === "function" ? settings(prev) : settings;
+    const merged = mergeAllActiveModelsWithCoreModels({ ...prev, ...partial });
+    merged.embeddingModelKey = resolveEmbeddingModelKey(merged);
+    return merged;
+  });
 }
 
 /**
@@ -304,8 +342,7 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
  * Sets a single setting in the atom.
  */
 export function updateSetting<K extends keyof CopilotSettings>(key: K, value: CopilotSettings[K]) {
-  const settings = getSettings();
-  setSettings({ ...settings, [key]: value });
+  setSettings((cur) => ({ ...cur, [key]: value }));
 }
 
 /**
@@ -665,10 +702,10 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
       ? r.activeBackend
       : DEFAULT_SETTINGS.agentMode.activeBackend;
 
-  const existingOpencode =
-    r.backends && typeof r.backends === "object"
-      ? ((r.backends as Record<string, unknown>).opencode as Record<string, unknown> | undefined)
-      : undefined;
+  const backendsRaw =
+    r.backends && typeof r.backends === "object" ? (r.backends as Record<string, unknown>) : {};
+  const existingOpencode = backendsRaw.opencode as Record<string, unknown> | undefined;
+  const existingClaudeCode = backendsRaw["claude-code"] as Record<string, unknown> | undefined;
 
   // Lift legacy top-level fields when `backends.opencode` doesn't already hold them.
   const legacyOpencode =
@@ -685,14 +722,32 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     : legacyOpencode
       ? sanitizeOpencodeBackendSettings(legacyOpencode)
       : undefined;
+  const claudeCodeSlice = existingClaudeCode
+    ? sanitizeClaudeCodeBackendSettings(existingClaudeCode)
+    : undefined;
+
+  const backends: CopilotSettings["agentMode"]["backends"] = {};
+  if (opencodeSlice) backends.opencode = opencodeSlice;
+  if (claudeCodeSlice) backends["claude-code"] = claudeCodeSlice;
 
   return {
     enabled,
     byok,
     mcpServers,
     activeBackend,
-    backends: opencodeSlice ? { opencode: opencodeSlice } : {},
+    backends,
   };
+}
+
+function sanitizeClaudeCodeBackendSettings(raw: unknown): ClaudeCodeBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  const binaryPath = typeof r.binaryPath === "string" && r.binaryPath ? r.binaryPath : undefined;
+  const selectedModelKey =
+    typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
+  const probeSessionId =
+    typeof r.probeSessionId === "string" && r.probeSessionId ? r.probeSessionId : undefined;
+  return { binaryPath, selectedModelKey, probeSessionId };
 }
 
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {
@@ -709,7 +764,9 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
   }
   const selectedModelKey =
     typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
-  return { binaryPath, binaryVersion, binarySource, selectedModelKey };
+  const probeSessionId =
+    typeof r.probeSessionId === "string" && r.probeSessionId ? r.probeSessionId : undefined;
+  return { binaryPath, binaryVersion, binarySource, selectedModelKey, probeSessionId };
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

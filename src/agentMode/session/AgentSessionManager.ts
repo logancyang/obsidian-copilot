@@ -1,38 +1,44 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
-import { getSettings } from "@/settings/model";
+import { getSettings, setSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { AgentSession } from "./AgentSession";
-import type { BackendDescriptor } from "./types";
+import type { AgentModelPreloader } from "./AgentModelPreloader";
+import type { BackendDescriptor, BackendId } from "./types";
 
 export type PermissionPrompter = (
   req: RequestPermissionRequest
 ) => Promise<RequestPermissionResponse>;
 
+// Injected by the barrel so `session/` doesn't have to import
+// `backends/registry` directly (would breach the layer boundary).
+export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefined;
+
 export interface AgentSessionManagerOptions {
-  descriptor: BackendDescriptor;
   permissionPrompter: PermissionPrompter;
+  resolveDescriptor: DescriptorResolver;
 }
 
 /**
- * Plugin-scoped coordinator for Agent Mode. Owns a pool of `AgentSession`s
- * multiplexed on a single shared `AcpBackendProcess`. Lazily spawns the
- * backend on first `createSession()` and tears down on plugin unload via
- * `shutdown()`.
+ * Plugin-scoped coordinator for Agent Mode. Owns one `AcpBackendProcess` per
+ * registered backend (lazy-spawned on first `createSession(backendId)`) and a
+ * pool of `AgentSession`s, each tagged with the backend it was created on.
+ * Tears every backend down on plugin unload via `shutdown()`.
  *
- * Backend pluggability is handled via `BackendDescriptor`: the manager calls
- * `descriptor.createBackend(plugin)` and never imports a specific backend
- * class. The permission prompter is injected so this file stays out of the UI
- * layer.
+ * Backend pluggability is handled via `BackendDescriptor`: the manager
+ * resolves descriptors from `backendRegistry` and calls
+ * `descriptor.createBackend(plugin)` to construct each `AcpBackend` — it
+ * never imports a specific backend class. The permission prompter is
+ * injected so this file stays out of the UI layer.
  */
 export class AgentSessionManager {
-  private backend: AcpBackendProcess | null = null;
-  private starting: Promise<AcpBackendProcess> | null = null;
+  private backends = new Map<BackendId, AcpBackendProcess>();
+  private starting = new Map<BackendId, Promise<AcpBackendProcess>>();
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
@@ -44,6 +50,7 @@ export class AgentSessionManager {
   private disposed = false;
   private isStarting = false;
   private lastError: string | null = null;
+  private preloader: AgentModelPreloader | null = null;
 
   constructor(
     private readonly app: App,
@@ -79,12 +86,12 @@ export class AgentSessionManager {
   }
 
   /**
-   * Spawn a fresh `AgentSession`. Lazily starts the shared backend on the
-   * first call. The new session becomes the active one. Concurrent calls each
-   * spawn their own session; the shared backend boot is serialized
-   * internally via `ensureBackend()`.
+   * Spawn a fresh `AgentSession`. Lazily starts the requested backend on its
+   * first call. The new session becomes the active one. `backendId` defaults
+   * to `settings.agentMode.activeBackend` (the model-picker keeps that in
+   * sync with the user's most recently selected default model).
    */
-  async createSession(): Promise<AgentSession> {
+  async createSession(backendId?: BackendId): Promise<AgentSession> {
     if (this.disposed) {
       throw new Error("AgentSessionManager has been shut down");
     }
@@ -95,14 +102,23 @@ export class AgentSessionManager {
     }
     const vaultBasePath = adapter.getBasePath();
 
+    const resolvedId = backendId ?? getSettings().agentMode?.activeBackend ?? "opencode";
+    const descriptor = this.resolveDescriptor(resolvedId);
+
     this.pendingCreates++;
     this.isStarting = true;
     this.notify();
 
     try {
-      const backend = await this.ensureBackend();
-      const preferredModelId = this.opts.descriptor.getPreferredModelId?.(getSettings());
-      const session = await AgentSession.create(backend, vaultBasePath, uuidv4(), preferredModelId);
+      const backend = await this.ensureBackend(resolvedId, descriptor);
+      const preferredModelId = descriptor.getPreferredModelId?.(getSettings());
+      const session = await AgentSession.create(
+        backend,
+        vaultBasePath,
+        uuidv4(),
+        resolvedId,
+        preferredModelId
+      );
       // Shutdown may have raced with us. If so, dispose the freshly-created
       // session instead of leaking it.
       if (this.disposed) {
@@ -117,7 +133,7 @@ export class AgentSessionManager {
       // first's error before the user (or a retry handler) has seen it.
       this.lastError = null;
       logInfo(
-        `[AgentMode] session created (internal=${session.internalId} acp=${session.acpSessionId}); pool size=${this.sessions.size}`
+        `[AgentMode] session created (internal=${session.internalId} acp=${session.acpSessionId} backend=${resolvedId}); pool size=${this.sessions.size}`
       );
       return session;
     } catch (err) {
@@ -128,6 +144,41 @@ export class AgentSessionManager {
       if (this.pendingCreates === 0) this.isStarting = false;
       this.notify();
     }
+  }
+
+  private resolveDescriptor(backendId: BackendId): BackendDescriptor {
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    if (!descriptor) {
+      throw new Error(`Unknown backend "${backendId}". Did you forget to register it?`);
+    }
+    return descriptor;
+  }
+
+  setDefaultBackend(backendId: BackendId): void {
+    if (getSettings().agentMode?.activeBackend === backendId) return;
+    setSettings((cur) => ({
+      agentMode: { ...cur.agentMode, activeBackend: backendId },
+    }));
+    this.notify();
+  }
+
+  /** Persist a sticky model preference for `backendId` without touching any session. */
+  async persistModelSelectionFor(backendId: BackendId, modelId: string): Promise<void> {
+    const descriptor = this.resolveDescriptor(backendId);
+    if (!descriptor.persistModelSelection) return;
+    await descriptor.persistModelSelection(modelId, this.plugin);
+  }
+
+  getBackendProcess(backendId: BackendId): AcpBackendProcess | null {
+    return this.backends.get(backendId) ?? null;
+  }
+
+  attachModelPreloader(preloader: AgentModelPreloader): void {
+    this.preloader = preloader;
+  }
+
+  getModelPreloader(): AgentModelPreloader | null {
+    return this.preloader;
   }
 
   /**
@@ -241,31 +292,37 @@ export class AgentSessionManager {
    * in `availableModels`). Mapping from a Copilot `CustomModel` to that id is
    * the descriptor's responsibility.
    *
-   * The persistence step is decoupled from the live switch — if persistence
-   * throws, the runtime change still sticks for the current session.
+   * Persistence is routed through the *active session's* backend descriptor —
+   * with multi-backend, the global `activeBackend` may not match the session
+   * the user is interacting with. If persistence throws, the runtime change
+   * still sticks for the current session.
    */
   async setActiveSessionModel(modelId: string): Promise<void> {
     const session = this.getActiveSession();
     if (!session) throw new Error("No active session");
     await session.setModel(modelId);
     try {
-      await this.opts.descriptor.persistModelSelection?.(modelId, this.plugin);
+      const descriptor = this.resolveDescriptor(session.backendId);
+      if (descriptor.getPreferredModelId?.(getSettings()) === modelId) return;
+      await descriptor.persistModelSelection?.(modelId, this.plugin);
     } catch (e) {
       logWarn("[AgentMode] persistModelSelection failed", e);
     }
   }
 
   /**
-   * Tear down every session and the shared backend subprocess. Safe to call
-   * when nothing was started; safe to call multiple times.
+   * Tear down every session and every spawned backend subprocess. Safe to
+   * call when nothing was started; safe to call multiple times.
    */
   async shutdown(): Promise<void> {
     if (this.disposed) return;
     this.disposed = true;
-    logInfo(`[AgentMode] shutdown (pool size=${this.sessions.size})`);
+    logInfo(
+      `[AgentMode] shutdown (pool size=${this.sessions.size}, backends=${this.backends.size})`
+    );
 
-    const all = Array.from(this.sessions.values());
-    for (const session of all) {
+    const allSessions = Array.from(this.sessions.values());
+    for (const session of allSessions) {
       try {
         await session.cancel();
       } catch (e) {
@@ -281,56 +338,71 @@ export class AgentSessionManager {
     this.chatUIStates.clear();
     this.activeSessionId = null;
 
-    try {
-      await this.backend?.shutdown();
-    } catch (e) {
-      logError("[AgentMode] backend shutdown failed", e);
+    const allBackends = Array.from(this.backends.values());
+    for (const proc of allBackends) {
+      try {
+        await proc.shutdown();
+      } catch (e) {
+        logError("[AgentMode] backend shutdown failed", e);
+      }
     }
-    this.backend = null;
-    this.starting = null;
+    this.backends.clear();
+    this.starting.clear();
     this.listeners.clear();
+    this.preloader?.shutdown();
+    this.preloader = null;
   }
 
-  private async ensureBackend(): Promise<AcpBackendProcess> {
-    if (this.backend && this.backend.isRunning()) return this.backend;
-    if (this.starting) return this.starting;
+  private async ensureBackend(
+    backendId: BackendId,
+    descriptor: BackendDescriptor
+  ): Promise<AcpBackendProcess> {
+    const existing = this.backends.get(backendId);
+    if (existing && existing.isRunning()) return existing;
+    const inflight = this.starting.get(backendId);
+    if (inflight) return inflight;
 
     const proc = new AcpBackendProcess(
       this.app,
-      this.opts.descriptor.createBackend(this.plugin),
+      descriptor.createBackend(this.plugin),
       this.plugin.manifest.version
     );
-    this.starting = (async () => {
+    const startPromise = (async () => {
       await proc.start();
       proc.setPermissionPrompter(this.opts.permissionPrompter);
       proc.onExit(() => {
-        // Backend died unexpectedly. All sessions on this backend are now
-        // unusable (their acp session ids are dead). Dispose them and clear
-        // the pool — preserving message history across crashes is M5.
-        if (this.backend === proc) this.backend = null;
-        const dead = Array.from(this.sessions.values());
+        // Backend died unexpectedly. Sessions belonging to *this* backend
+        // are now unusable (their acp session ids are dead) — but other
+        // backends keep running. Preserving message history across crashes
+        // is M5.
+        if (this.backends.get(backendId) === proc) this.backends.delete(backendId);
+        const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
         if (dead.length === 0) return;
-        this.sessions.clear();
-        this.chatUIStates.clear();
-        this.activeSessionId = null;
+        for (const s of dead) {
+          this.sessions.delete(s.internalId);
+          this.chatUIStates.delete(s.internalId);
+          s.cancel().catch(() => {});
+          s.dispose().catch(() => {});
+        }
+        if (this.activeSessionId && !this.sessions.has(this.activeSessionId)) {
+          const remaining = Array.from(this.sessions.keys());
+          this.activeSessionId = remaining[0] ?? null;
+        }
         // Surface the crash so the empty-state pill shows it and the
         // router's auto-spawn effect (which bails on lastError) doesn't
         // immediately respawn behind the user's back. The next explicit
         // create call clears it.
-        this.lastError = "Agent Mode backend exited unexpectedly.";
-        for (const s of dead) {
-          s.cancel().catch(() => {});
-          s.dispose().catch(() => {});
-        }
+        this.lastError = `${descriptor.displayName} backend exited unexpectedly.`;
         this.notify();
       });
-      this.backend = proc;
+      this.backends.set(backendId, proc);
       return proc;
     })();
+    this.starting.set(backendId, startPromise);
     try {
-      return await this.starting;
+      return await startPromise;
     } finally {
-      this.starting = null;
+      this.starting.delete(backendId);
     }
   }
 }
