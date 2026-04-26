@@ -318,6 +318,17 @@ export class AgentSession {
     this.abortController?.abort();
   }
 
+  /**
+   * Replace the session's message history with `messages` and notify
+   * subscribers. Used by the history-load flow: the underlying ACP session is
+   * fresh (no prior context), but the user-visible transcript is restored from
+   * the saved file.
+   */
+  loadHistoryMessages(messages: NewAgentChatMessage[]): void {
+    this.store.loadMessages(messages);
+    this.notifyMessages();
+  }
+
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
     this.unregisterSessionHandler?.();

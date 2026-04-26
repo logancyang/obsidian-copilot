@@ -4,6 +4,7 @@ import { logError } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
+import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 
@@ -19,6 +20,8 @@ export {
 export { useAgentModelPicker } from "./ui/useAgentModelPicker";
 export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
+export { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
+export { AGENT_CHAT_FILE_PREFIX } from "./session/AgentChatPersistenceManager";
 export type { BackendDescriptor, BackendId, InstallState } from "./session/types";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
 
@@ -33,9 +36,11 @@ export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/r
  * the existing manager and call this again.
  */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
+  const persistence = new AgentChatPersistenceManager(app);
   const manager = new AgentSessionManager(app, plugin, {
     permissionPrompter: createDefaultPermissionPrompter(app),
     resolveDescriptor: (id) => backendRegistry[id],
+    persistence,
   });
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {

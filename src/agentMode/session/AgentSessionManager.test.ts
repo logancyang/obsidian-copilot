@@ -92,6 +92,13 @@ function buildManager(): AgentSessionManager {
     {
       permissionPrompter: jest.fn(),
       resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+      persistence: {
+        save: jest.fn().mockResolvedValue(null),
+        loadFile: jest.fn().mockResolvedValue(null),
+        listFiles: jest.fn().mockResolvedValue([]),
+        updateTopic: jest.fn().mockResolvedValue(undefined),
+        deleteFile: jest.fn().mockResolvedValue(undefined),
+      } as unknown as ConstructorParameters<typeof AgentSessionManager>[2]["persistence"],
     }
   );
 }

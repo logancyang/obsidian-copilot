@@ -1,4 +1,8 @@
-import { createAgentSessionManager, type AgentSessionManager } from "@/agentMode";
+import {
+  AGENT_CHAT_FILE_PREFIX,
+  createAgentSessionManager,
+  type AgentSessionManager,
+} from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -645,6 +649,12 @@ export default class CopilotPlugin extends Plugin {
     const folderFiles = await listMarkdownFiles(this.app, getSettings().defaultSaveFolder);
     if (folderFiles.length === 0) return [];
 
+    // Always exclude Agent Mode files — they have their own history list and
+    // share the same save folder via the `agent__` filename prefix.
+    const nonAgentFiles = folderFiles.filter(
+      (file) => !file.basename.startsWith(AGENT_CHAT_FILE_PREFIX)
+    );
+
     // Get current project ID if in a project
     const currentProject = getCurrentProject();
     const currentProjectId = currentProject?.id;
@@ -652,11 +662,11 @@ export default class CopilotPlugin extends Plugin {
     if (currentProjectId) {
       // In project mode: return only files with this project's ID prefix
       const projectPrefix = `${currentProjectId}__`;
-      return folderFiles.filter((file) => file.basename.startsWith(projectPrefix));
+      return nonAgentFiles.filter((file) => file.basename.startsWith(projectPrefix));
     } else {
       // In non-project mode: return only files without any project ID prefix
       // This assumes project IDs always use the format projectId__ as prefix
-      return folderFiles.filter((file) => {
+      return nonAgentFiles.filter((file) => {
         // Check if the filename has any projectId__ prefix pattern
         return !file.basename.match(/^[a-zA-Z0-9-]+__/);
       });
@@ -843,6 +853,73 @@ export default class CopilotPlugin extends Plugin {
     } else {
       throw new Error("Chat file not found.");
     }
+  }
+
+  /**
+   * List Agent Mode chat history items across all backends. Empty sessions
+   * never persist, so they never appear here. Backends share the same on-disk
+   * folder via the `agent__` filename prefix.
+   */
+  async getAgentChatHistoryItems(): Promise<ChatHistoryItem[]> {
+    if (!this.agentSessionManager) return [];
+    const persistence = this.agentSessionManager.getPersistenceManager();
+    const files = await persistence.listFiles();
+    return files.map((file) => {
+      const createdAt = extractChatDate(file);
+      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
+      const effectiveLastAccessedAtMs =
+        this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
+          file.path,
+          persistedLastAccessedAtMs ?? createdAt.getTime()
+        );
+      return {
+        id: file.path,
+        title: extractChatTitle(file),
+        createdAt,
+        lastAccessedAt: new Date(effectiveLastAccessedAtMs),
+      };
+    });
+  }
+
+  async loadAgentChatById(fileId: string): Promise<void> {
+    if (!this.agentSessionManager) {
+      throw new Error("Agent Mode is not initialized.");
+    }
+    const file = await resolveFileByPath(this.app, fileId);
+    if (!file) throw new Error("Agent chat file not found.");
+    await this.agentSessionManager.loadSessionFromHistory(file);
+    this.chatHistoryLastAccessedAtManager.touch(fileId);
+  }
+
+  async openAgentChatSourceFile(fileId: string): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(fileId);
+    if (file instanceof TFile) {
+      await this.app.workspace.getLeaf(true).openFile(file);
+      return;
+    }
+    if (await this.app.vault.adapter.exists(fileId)) {
+      new Notice(
+        "Cannot open source files from hidden directories. To open chat notes in the editor, save them to a non-hidden folder in settings."
+      );
+      return;
+    }
+    throw new Error("Agent chat file not found.");
+  }
+
+  async updateAgentChatTitle(fileId: string, newTitle: string): Promise<void> {
+    if (!this.agentSessionManager) {
+      throw new Error("Agent Mode is not initialized.");
+    }
+    await this.agentSessionManager.getPersistenceManager().updateTopic(fileId, newTitle);
+    new Notice("Chat title updated.");
+  }
+
+  async deleteAgentChatHistory(fileId: string): Promise<void> {
+    if (!this.agentSessionManager) {
+      throw new Error("Agent Mode is not initialized.");
+    }
+    await this.agentSessionManager.getPersistenceManager().deleteFile(fileId);
+    new Notice("Chat deleted.");
   }
 
   async handleNewChat() {

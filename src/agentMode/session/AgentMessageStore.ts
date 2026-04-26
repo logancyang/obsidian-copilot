@@ -172,20 +172,10 @@ export class AgentMessageStore {
     return msg ? this.toAgentChatMessage(msg) : undefined;
   }
 
-  loadMessages(messages: AgentChatMessage[]): void {
+  loadMessages(messages: NewAgentChatMessage[]): void {
     this.clear();
     for (const msg of messages) {
-      this.messages.push({
-        id: msg.id || this.generateId(),
-        displayText: msg.message,
-        sender: msg.sender,
-        timestamp: msg.timestamp || formatDateTime(new Date()),
-        context: msg.context,
-        isVisible: msg.isVisible !== false,
-        isErrorMessage: msg.isErrorMessage,
-        content: msg.content,
-        parts: msg.parts,
-      });
+      this.addMessage(msg);
     }
     logInfo(`[AgentMessageStore] Loaded ${messages.length} messages`);
   }

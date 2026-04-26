@@ -3,6 +3,7 @@ import AgentChatMessages from "@/agentMode/ui/AgentChatMessages";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
+import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import ChatInput from "@/components/chat-components/ChatInput";
 import { EVENT_NAMES } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
@@ -47,6 +48,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
 
   const isMountedRef = useRef(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -148,6 +150,68 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     setContextNotes([]);
   }, [backend, handleStopGenerating]);
 
+  const handleLoadChatHistory = useCallback(async () => {
+    try {
+      const items = await plugin.getAgentChatHistoryItems();
+      setChatHistoryItems(items);
+    } catch (error) {
+      logError("[AgentMode] failed to load chat history", error);
+      new Notice("Failed to load agent chat history.");
+    }
+  }, [plugin]);
+
+  const handleLoadChat = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.loadAgentChatById(id);
+      } catch (error) {
+        logError("[AgentMode] failed to load chat", error);
+        new Notice("Failed to load agent chat.");
+      }
+    },
+    [plugin]
+  );
+
+  const handleUpdateChatTitle = useCallback(
+    async (id: string, newTitle: string) => {
+      try {
+        await plugin.updateAgentChatTitle(id, newTitle);
+        setChatHistoryItems((prev) =>
+          prev.map((it) => (it.id === id ? { ...it, title: newTitle } : it))
+        );
+      } catch (error) {
+        logError("[AgentMode] failed to rename chat", error);
+        new Notice("Failed to rename agent chat.");
+      }
+    },
+    [plugin]
+  );
+
+  const handleDeleteChat = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.deleteAgentChatHistory(id);
+        setChatHistoryItems((prev) => prev.filter((it) => it.id !== id));
+      } catch (error) {
+        logError("[AgentMode] failed to delete chat", error);
+        new Notice("Failed to delete agent chat.");
+      }
+    },
+    [plugin]
+  );
+
+  const handleOpenSourceFile = useCallback(
+    async (id: string) => {
+      try {
+        await plugin.openAgentChatSourceFile(id);
+      } catch (error) {
+        logError("[AgentMode] failed to open chat source file", error);
+        new Notice("Failed to open chat source file.");
+      }
+    },
+    [plugin]
+  );
+
   const handleDelete = useCallback(
     async (messageId: string) => {
       try {
@@ -191,7 +255,15 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
           <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
             <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
             <AgentChatMessages messages={messages} app={app} onDelete={handleDelete} />
-            <AgentChatControls onNewChat={handleNewChat} />
+            <AgentChatControls
+              onNewChat={handleNewChat}
+              chatHistoryItems={chatHistoryItems}
+              onLoadHistory={handleLoadChatHistory}
+              onLoadChat={handleLoadChat}
+              onUpdateChatTitle={handleUpdateChatTitle}
+              onDeleteChat={handleDeleteChat}
+              onOpenSourceFile={handleOpenSourceFile}
+            />
             <ChatInput
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}
