@@ -1,12 +1,11 @@
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
+import { BinaryPathSetting } from "@/components/agent/BinaryPathSetting";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { useSettingsValue } from "@/settings/model";
-import { detectBinary } from "@/utils/detectBinary";
 import type { App } from "obsidian";
 import { Notice } from "obsidian";
 import React from "react";
@@ -42,10 +41,7 @@ function renderStatusDescription(state: InstallState): React.ReactNode {
 export const OpencodeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
   const settings = useSettingsValue();
   const manager = getOpencodeBinaryManager(plugin);
-  const [customPathInput, setCustomPathInput] = React.useState("");
-  const [customPathError, setCustomPathError] = React.useState<string | null>(null);
   const [showAdvanced, setShowAdvanced] = React.useState(false);
-  const [detecting, setDetecting] = React.useState(false);
 
   const installState = computeInstallState(settings.agentMode?.backends?.opencode);
 
@@ -74,51 +70,21 @@ export const OpencodeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
     ).open();
   };
 
-  const applyCustomPath = async (): Promise<void> => {
-    const trimmed = customPathInput.trim();
-    if (!trimmed) {
-      setCustomPathError("Path is required.");
-      return;
-    }
-    try {
-      await manager.setCustomBinaryPath(trimmed);
-      setCustomPathError(null);
+  const onSaveCustomPath = React.useCallback(
+    async (path: string): Promise<string | null> => {
+      try {
+        await manager.setCustomBinaryPath(path);
+      } catch (e) {
+        return e instanceof Error ? e.message : String(e);
+      }
       new Notice("Custom opencode binary path saved.");
-    } catch (e) {
-      setCustomPathError(e instanceof Error ? e.message : String(e));
-    }
-  };
+      return null;
+    },
+    [manager]
+  );
 
   const clearCustomPath = async (): Promise<void> => {
     await manager.setCustomBinaryPath(null);
-    setCustomPathError(null);
-    setCustomPathInput("");
-  };
-
-  const autoDetect = async (): Promise<void> => {
-    setDetecting(true);
-    setCustomPathError(null);
-    try {
-      const found = await detectBinary("opencode");
-      if (!found) {
-        setCustomPathError(
-          "opencode not found on PATH. Install it or paste a custom path manually."
-        );
-        return;
-      }
-      setCustomPathInput(found);
-      try {
-        await manager.setCustomBinaryPath(found);
-        new Notice(`Found opencode at ${found}`);
-      } catch (e) {
-        setCustomPathError(e instanceof Error ? e.message : String(e));
-      }
-    } catch (e) {
-      logError("[AgentMode] opencode auto-detect failed", e);
-      setCustomPathError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDetecting(false);
-    }
   };
 
   return (
@@ -168,27 +134,14 @@ export const OpencodeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
               title="Use custom opencode binary path"
               description="Skip the managed install and point Agent Mode at a binary you already have on disk. Useful for self-builders or air-gapped machines."
             >
-              <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 sm:tw-w-[360px]">
-                <div className="tw-flex tw-items-center tw-gap-2">
-                  <Input
-                    type="text"
-                    placeholder="/absolute/path/to/opencode"
-                    value={customPathInput}
-                    onChange={(e) => setCustomPathInput(e.target.value)}
-                  />
-                  <Button variant="secondary" size="sm" onClick={autoDetect} disabled={detecting}>
-                    Auto-detect
-                  </Button>
-                </div>
-                <div className="tw-flex tw-justify-end">
-                  <Button variant="default" onClick={applyCustomPath}>
-                    Apply
-                  </Button>
-                </div>
-                {customPathError && (
-                  <div className="tw-text-xs tw-text-error">{customPathError}</div>
-                )}
-              </div>
+              <BinaryPathSetting
+                binaryName="opencode"
+                placeholder="/absolute/path/to/opencode"
+                initialPath=""
+                notFoundHint="opencode not found on PATH. Install it or paste a custom path manually."
+                onSave={onSaveCustomPath}
+                persistOnAutoDetect
+              />
             </SettingItem>
           )}
         </div>

@@ -3,7 +3,11 @@ import type CopilotPlugin from "@/main";
 import { AgentChatUIState } from "@/agentMode/session/AgentChatUIState";
 import { getSettings, setSettings } from "@/settings/model";
 import { err2String } from "@/utils";
-import type { RequestPermissionRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk";
+import type {
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  SessionModelState,
+} from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
@@ -22,6 +26,7 @@ export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefine
 export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
   resolveDescriptor: DescriptorResolver;
+  modelPreloader: AgentModelPreloader;
 }
 
 /**
@@ -50,7 +55,7 @@ export class AgentSessionManager {
   private disposed = false;
   private isStarting = false;
   private lastError: string | null = null;
-  private preloader: AgentModelPreloader | null = null;
+  private readonly preloader: AgentModelPreloader;
 
   constructor(
     private readonly app: App,
@@ -60,6 +65,7 @@ export class AgentSessionManager {
     if (Platform.isMobile) {
       throw new Error("AgentSessionManager is desktop only");
     }
+    this.preloader = opts.modelPreloader;
   }
 
   /**
@@ -112,13 +118,13 @@ export class AgentSessionManager {
     try {
       const backend = await this.ensureBackend(resolvedId, descriptor);
       const preferredModelId = descriptor.getPreferredModelId?.(getSettings());
-      const session = await AgentSession.create(
+      const session = await AgentSession.create({
         backend,
-        vaultBasePath,
-        uuidv4(),
-        resolvedId,
-        preferredModelId
-      );
+        cwd: vaultBasePath,
+        internalId: uuidv4(),
+        backendId: resolvedId,
+        preferredModelId,
+      });
       // Shutdown may have raced with us. If so, dispose the freshly-created
       // session instead of leaking it.
       if (this.disposed) {
@@ -173,12 +179,19 @@ export class AgentSessionManager {
     return this.backends.get(backendId) ?? null;
   }
 
-  attachModelPreloader(preloader: AgentModelPreloader): void {
-    this.preloader = preloader;
+  /** Cached `availableModels` for `backendId`, populated by the model preloader. */
+  getCachedModels(backendId: BackendId): SessionModelState | null {
+    return this.preloader.getCachedModels(backendId);
   }
 
-  getModelPreloader(): AgentModelPreloader | null {
-    return this.preloader;
+  /** Subscribe to preloader cache updates. Used by the picker hook. */
+  subscribeModelCache(listener: () => void): () => void {
+    return this.preloader.subscribe(listener);
+  }
+
+  /** Kick off a (best-effort) model probe for `backendId`. */
+  preloadModels(backendId: BackendId): Promise<void> {
+    return this.preloader.preload(backendId);
   }
 
   /**
@@ -349,8 +362,7 @@ export class AgentSessionManager {
     this.backends.clear();
     this.starting.clear();
     this.listeners.clear();
-    this.preloader?.shutdown();
-    this.preloader = null;
+    this.preloader.shutdown();
   }
 
   private async ensureBackend(

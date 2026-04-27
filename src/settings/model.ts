@@ -778,11 +778,17 @@ function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotS
 }
 
 /**
- * Get a unique model key from a CustomModel instance
+ * Get a unique model key from a CustomModel instance.
  * Format: modelName|provider
+ *
+ * Agent Mode picker entries optionally carry `_backendId` (set by the picker
+ * for synthesized agent models). When present, the key is prefixed with
+ * the backend id so two backends reporting the same agent-native model id
+ * (e.g. both surfacing a `sonnet` alias) get distinct keys / React ids.
  */
-export function getModelKeyFromModel(model: CustomModel): string {
-  return `${model.name}|${model.provider}`;
+export function getModelKeyFromModel(model: CustomModel & { _backendId?: string }): string {
+  const base = `${model.name}|${model.provider}`;
+  return model._backendId ? `${model._backendId}:${base}` : base;
 }
 
 function mergeActiveModels(

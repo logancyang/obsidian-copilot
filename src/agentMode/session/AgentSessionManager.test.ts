@@ -43,22 +43,32 @@ jest.mock("@/agentMode/acp/AcpBackendProcess", () => ({
 const mockSessionDispose = jest.fn(async () => undefined);
 const mockSessionCancel = jest.fn(async () => undefined);
 let nextAcpSessionId = 1;
-const sessionCreateSpy = jest.spyOn(AgentSession, "create").mockImplementation(
-  async (_backend, _cwd, internalId, backendId) =>
-    ({
-      internalId,
-      acpSessionId: `acp-${nextAcpSessionId++}`,
-      backendId,
-      getStatus: () => "idle",
-      cancel: mockSessionCancel,
-      dispose: mockSessionDispose,
-      setModel: jest.fn(),
-      getLabel: () => null,
-      setLabel: jest.fn(),
-      subscribe: () => () => {},
-      hasUserVisibleMessages: () => false,
-    }) as unknown as AgentSession
-);
+
+function makeMockSession(overrides: {
+  internalId: string;
+  acpSessionId?: string;
+  backendId: string;
+}): AgentSession {
+  return {
+    internalId: overrides.internalId,
+    acpSessionId: overrides.acpSessionId ?? `acp-${nextAcpSessionId++}`,
+    backendId: overrides.backendId,
+    getStatus: () => "idle",
+    cancel: mockSessionCancel,
+    dispose: mockSessionDispose,
+    setModel: jest.fn(),
+    getLabel: () => null,
+    setLabel: jest.fn(),
+    subscribe: () => () => {},
+    hasUserVisibleMessages: () => false,
+  } as unknown as AgentSession;
+}
+
+const sessionCreateSpy = jest
+  .spyOn(AgentSession, "create")
+  .mockImplementation(async (opts) =>
+    makeMockSession({ internalId: opts.internalId, backendId: opts.backendId })
+  );
 
 function buildApp(basePath = "/vault"): App {
   const adapter = new (FileSystemAdapter as unknown as new (basePath: string) => unknown)(basePath);
@@ -86,12 +96,21 @@ function buildDescriptor(): BackendDescriptor {
 
 function buildManager(): AgentSessionManager {
   const descriptor = buildDescriptor();
+  const modelPreloader = {
+    getCachedModels: jest.fn(() => null),
+    preload: jest.fn(async () => undefined),
+    subscribe: jest.fn(() => () => {}),
+    shutdown: jest.fn(),
+  };
   return new AgentSessionManager(
     buildApp(),
     buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
     {
       permissionPrompter: jest.fn(),
       resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+      modelPreloader: modelPreloader as unknown as ConstructorParameters<
+        typeof AgentSessionManager
+      >[2]["modelPreloader"],
     }
   );
 }
@@ -155,21 +174,12 @@ describe("AgentSessionManager.createSession", () => {
         await Promise.resolve();
         throw new Error("boom");
       })
-      .mockImplementationOnce(
-        async (_b, _c, internalId, backendId) =>
-          ({
-            internalId,
-            acpSessionId: "acp-ok",
-            backendId,
-            getStatus: () => "idle",
-            cancel: mockSessionCancel,
-            dispose: mockSessionDispose,
-            setModel: jest.fn(),
-            getLabel: () => null,
-            setLabel: jest.fn(),
-            subscribe: () => () => {},
-            hasUserVisibleMessages: () => false,
-          }) as unknown as AgentSession
+      .mockImplementationOnce(async (opts) =>
+        makeMockSession({
+          internalId: opts.internalId,
+          acpSessionId: "acp-ok",
+          backendId: opts.backendId,
+        })
       );
 
     const failing = mgr.createSession().catch(() => undefined);

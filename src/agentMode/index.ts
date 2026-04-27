@@ -33,9 +33,11 @@ export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/r
  * the existing manager and call this again.
  */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
+  const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
   const manager = new AgentSessionManager(app, plugin, {
     permissionPrompter: createDefaultPermissionPrompter(app),
     resolveDescriptor: (id) => backendRegistry[id],
+    modelPreloader: preloader,
   });
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {
@@ -44,22 +46,14 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       .catch((e) => logError(`[AgentMode] backend ${descriptor.id} onPluginLoad failed`, e));
   }
 
-  // Spin up the preloader and kick off a probe per ready backend. We do this
-  // after the descriptor `onPluginLoad` calls (which may reconcile install
-  // state) so `getInstallState` returns the most current answer when the
-  // preloader checks readiness — but we don't await either step. The preload
-  // itself is fully async/best-effort: a slow/failing probe never blocks
-  // the UI (the picker section just stays empty until the cache is filled).
-  const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
-  manager.attachModelPreloader(preloader);
-  // Skip preloading entirely when Agent Mode is disabled. Probing spawns a
-  // subprocess per backend and the user has opted out of the feature.
   const settings = getSettings();
   if (!settings.agentMode?.enabled) return manager;
+  const activeBackendId = settings.agentMode.activeBackend;
   for (const descriptor of listBackendDescriptors()) {
+    if (descriptor.id === activeBackendId) continue;
     if (descriptor.getInstallState(settings).kind !== "ready") continue;
-    preloader
-      .preload(descriptor.id)
+    manager
+      .preloadModels(descriptor.id)
       .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e));
   }
   return manager;

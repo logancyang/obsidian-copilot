@@ -1,3 +1,4 @@
+import { ReactModal } from "@/components/modals/ReactModal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -7,9 +8,8 @@ import {
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import { OPENCODE_PINNED_VERSION } from "@/constants";
-import { App, Modal } from "obsidian";
+import { App } from "obsidian";
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
 
 type ModalState =
   | { kind: "confirm" }
@@ -185,38 +185,25 @@ const OpencodeInstallContent: React.FC<ContentProps> = ({
   );
 };
 
-export class OpencodeInstallModal extends Modal {
-  private root: Root | null = null;
-
+export class OpencodeInstallModal extends ReactModal {
   constructor(
     app: App,
     private readonly manager: OpencodeBinaryManager,
     private readonly hostInfo: { platform: string; arch: string }
   ) {
-    super(app);
-    // @ts-expect-error - setTitle is part of Obsidian's Modal but missing from older type defs
-    this.setTitle("Install opencode (BYOK Agent backend)");
+    super(app, "Install opencode (BYOK Agent backend)");
   }
 
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.empty();
-    this.root = createRoot(contentEl);
-    this.root.render(
+  protected renderContent(close: () => void): React.ReactElement {
+    return (
       <OpencodeInstallContent
         manager={this.manager}
         hostPlatform={this.hostInfo.platform}
         hostArch={this.hostInfo.arch}
         pinnedVersion={OPENCODE_PINNED_VERSION}
         destinationDir={this.manager.getDataDir()}
-        onClose={() => this.close()}
+        onClose={close}
       />
     );
-  }
-
-  onClose(): void {
-    this.root?.unmount();
-    this.root = null;
-    this.contentEl.empty();
   }
 }

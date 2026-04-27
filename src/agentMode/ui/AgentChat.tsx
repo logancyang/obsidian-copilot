@@ -166,7 +166,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
-  const modelPickerOverride = useAgentModelPicker(backend, manager);
+  const modelPickerOverride = useAgentModelPicker(manager);
 
   // Listen to global ABORT_STREAM events (used by Chat selection / new-chat triggers)
   useEffect(() => {

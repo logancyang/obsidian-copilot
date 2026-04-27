@@ -42,6 +42,24 @@ export interface AgentSessionListener {
   onLabelChanged?(): void;
 }
 
+export interface AgentSessionOptions {
+  backend: AcpBackendProcess;
+  acpSessionId: SessionId;
+  internalId: string;
+  /** The backend this session was spawned on. */
+  backendId: BackendId;
+  initialModelState?: SessionModelState | null;
+  cwd?: string | null;
+}
+
+export interface AgentSessionCreateOptions {
+  backend: AcpBackendProcess;
+  cwd: string;
+  internalId: string;
+  backendId: BackendId;
+  preferredModelId?: string;
+}
+
 /**
  * Per-chat Agent Mode session. Owns its `AgentMessageStore`, the lifecycle
  * of one ACP session id on the shared backend, and the `AbortController` that
@@ -49,6 +67,11 @@ export interface AgentSessionListener {
  */
 export class AgentSession {
   readonly store = new AgentMessageStore();
+  readonly acpSessionId: SessionId;
+  readonly internalId: string;
+  readonly backendId: BackendId;
+  private readonly backend: AcpBackendProcess;
+  private readonly cwd: string | null;
   private status: AgentSessionStatus = "idle";
   private placeholderId: string | null = null;
   private abortController: AbortController | null = null;
@@ -60,29 +83,21 @@ export class AgentSession {
   // can't clobber a label the user explicitly chose via Rename.
   private labelSource: "user" | "agent" | null = null;
 
-  constructor(
-    private readonly backend: AcpBackendProcess,
-    readonly acpSessionId: SessionId,
-    readonly internalId: string,
-    /** The backend this session was spawned on. */
-    readonly backendId: BackendId,
-    initialModelState: SessionModelState | null = null,
-    private readonly cwd: string | null = null
-  ) {
+  constructor(opts: AgentSessionOptions) {
+    this.backend = opts.backend;
+    this.acpSessionId = opts.acpSessionId;
+    this.internalId = opts.internalId;
+    this.backendId = opts.backendId;
+    this.cwd = opts.cwd ?? null;
+    this.modelState = opts.initialModelState ?? null;
     this.unregisterSessionHandler = this.backend.registerSessionHandler(
       this.acpSessionId,
       (update) => this.handleSessionUpdate(update)
     );
-    this.modelState = initialModelState;
   }
 
-  static async create(
-    backend: AcpBackendProcess,
-    cwd: string,
-    internalId: string,
-    backendId: BackendId,
-    preferredModelId?: string
-  ): Promise<AgentSession> {
+  static async create(opts: AgentSessionCreateOptions): Promise<AgentSession> {
+    const { backend, cwd, internalId, backendId, preferredModelId } = opts;
     const resp = await backend.newSession({ cwd, mcpServers: [] });
     if (resp.models) {
       const ids = resp.models.availableModels.map((m) => m.modelId).join(", ");
@@ -92,14 +107,14 @@ export class AgentSession {
     } else {
       logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
     }
-    const session = new AgentSession(
+    const session = new AgentSession({
       backend,
-      resp.sessionId,
+      acpSessionId: resp.sessionId,
       internalId,
       backendId,
-      resp.models ?? null,
-      cwd
-    );
+      initialModelState: resp.models ?? null,
+      cwd,
+    });
 
     // Apply sticky preference if it's available and differs from the agent's
     // current model. Failures here are non-fatal — the session is usable with

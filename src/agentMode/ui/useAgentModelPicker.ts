@@ -1,13 +1,12 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Notice } from "obsidian";
 import type { CustomModel } from "@/aiParams";
 import { logError } from "@/logger";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
-import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { MethodUnsupportedError, type BackendId } from "@/agentMode/acp/types";
+import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 
 export interface AgentModelPickerOverride {
@@ -30,25 +29,80 @@ const AGENT_PROVIDER = "agent";
  * tab for a fresh session on the target backend.
  */
 export function useAgentModelPicker(
-  backend: AgentChatBackend | null,
   manager: AgentSessionManager | null
 ): AgentModelPickerOverride | null {
   const settings = useSettingsValue();
   const descriptors = useMemo(() => listBackendDescriptors(), []);
 
-  // Re-render on active-session model-state changes, manager lifecycle
-  // changes, and preloader cache updates — all three drive picker contents.
+  // Re-render only when picker-relevant state changes. The chat UI state
+  // notifies on every streamed chunk during a turn, but none of those change
+  // the picker's view of the world — short-circuiting via a signature keeps
+  // the dropdown's `useMemo` from rebuilding on every tick.
   const [, forceRender] = useState(0);
-  const preloader = manager?.getModelPreloader() ?? null;
+  const sigRef = useRef<string>("");
   useEffect(() => {
-    const tick = () => forceRender((n) => n + 1);
-    const unsubs = [backend?.subscribe(tick), manager?.subscribe(tick), preloader?.subscribe(tick)];
-    return () => unsubs.forEach((u) => u?.());
-  }, [backend, manager, preloader]);
+    if (!manager) return;
 
-  const activeModelState = backend?.getModelState() ?? null;
-  const isModelSwitchSupported = backend?.isModelSwitchSupported() ?? null;
+    const computeSignature = (): string => {
+      const session = manager.getActiveSession();
+      const ui = manager.getActiveChatUIState();
+      const running = descriptors
+        .map((d) => `${d.id}:${manager.getBackendProcess(d.id)?.isRunning() ? "1" : "0"}`)
+        .join(",");
+      const cached = descriptors
+        .map((d) => {
+          const c = manager.getCachedModels(d.id);
+          return `${d.id}=${c?.currentModelId ?? ""}/${c?.availableModels.length ?? 0}`;
+        })
+        .join(",");
+      return [
+        session?.internalId ?? "",
+        session?.backendId ?? "",
+        session?.hasUserVisibleMessages() ? "1" : "0",
+        ui?.getModelState()?.currentModelId ?? "",
+        ui?.isModelSwitchSupported() ?? "",
+        running,
+        cached,
+      ].join("|");
+    };
+
+    const tick = (): void => {
+      const next = computeSignature();
+      if (next === sigRef.current) return;
+      sigRef.current = next;
+      forceRender((n) => n + 1);
+    };
+
+    // Active chat UI state can change identity on session swap. Re-wire the
+    // per-turn subscription whenever the manager fires a lifecycle event.
+    let unsubActive: (() => void) | null = null;
+    let lastUI: ReturnType<typeof manager.getActiveChatUIState> = null;
+    const rewireActive = (): void => {
+      const cur = manager.getActiveChatUIState();
+      if (cur === lastUI) return;
+      unsubActive?.();
+      lastUI = cur;
+      unsubActive = cur?.subscribe(tick) ?? null;
+    };
+    rewireActive();
+
+    const unsubs = [
+      manager.subscribe(() => {
+        rewireActive();
+        tick();
+      }),
+      manager.subscribeModelCache(tick),
+    ];
+    return () => {
+      unsubs.forEach((u) => u());
+      unsubActive?.();
+    };
+  }, [manager, descriptors]);
+
+  const activeChatUIState = manager?.getActiveChatUIState() ?? null;
   const activeSession = manager?.getActiveSession() ?? null;
+  const activeModelState = activeChatUIState?.getModelState() ?? null;
+  const isModelSwitchSupported = activeChatUIState?.isModelSwitchSupported() ?? null;
   const activeBackendId = activeSession?.backendId ?? null;
   const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
 
@@ -63,7 +117,7 @@ export function useAgentModelPicker(
 
       const liveAvailable = isActiveBackend
         ? (activeModelState?.availableModels ?? null)
-        : (preloader?.getCachedModels(descriptor.id)?.availableModels ?? null);
+        : (manager.getCachedModels(descriptor.id)?.availableModels ?? null);
       const isRunning = manager.getBackendProcess(descriptor.id)?.isRunning() ?? false;
 
       appendBackendSection(entries, descriptor, settings.activeModels ?? [], {
@@ -171,7 +225,6 @@ export function useAgentModelPicker(
     isModelSwitchSupported,
     activeSession,
     activeSessionHasHistory,
-    preloader,
   ]);
 }
 
@@ -231,27 +284,22 @@ function appendBackendSection(
   }
 }
 
-// Backend-scoped so two backends reporting the same `sonnet` don't collide
-// on React key / dropdown value `<name>|<provider>`. Raw id is preserved in
-// `_agentModelId` for outbound resolution.
-function scopedSynthName(backendId: BackendId, modelId: string): string {
-  return `${backendId}:${modelId}`;
-}
-
 function synthesizeAgentEntry(
   modelId: string,
   humanName: string,
   descriptor: BackendDescriptor
 ): ModelSelectorEntry {
+  // `name` is the agent-native model id verbatim; uniqueness across backends
+  // comes from `_backendId`, which `getModelKeyFromModel` prefixes into the
+  // returned key.
   return {
-    name: scopedSynthName(descriptor.id, modelId),
+    name: modelId,
     provider: AGENT_PROVIDER,
     enabled: true,
     isBuiltIn: false,
     displayName: humanName || modelId,
     _group: descriptor.displayName,
     _backendId: descriptor.id,
-    _agentModelId: modelId,
   };
 }
 
@@ -269,7 +317,11 @@ function computeValueKeyForActive(
     const match = partition.compatible.find((m) => translateFn(m) === currentModelId);
     if (match) return getModelKeyFromModel(match);
   }
-  return `${scopedSynthName(descriptor.id, currentModelId)}|${AGENT_PROVIDER}`;
+  return getModelKeyFromModel({
+    name: currentModelId,
+    provider: AGENT_PROVIDER,
+    _backendId: descriptor.id,
+  } as CustomModel & { _backendId: string });
 }
 
 function resolveAgentId(
@@ -277,7 +329,8 @@ function resolveAgentId(
   descriptor: BackendDescriptor,
   activeModels: CustomModel[]
 ): string | undefined {
-  if (entry._agentModelId) return entry._agentModelId;
+  // Synthesized agent entries store the raw agent model id directly in `name`.
+  if (entry.provider === AGENT_PROVIDER) return entry.name;
   if (!descriptor.copilotModelKeyToAgentModelId) return undefined;
   const match = activeModels.find((m) => m.name === entry.name && m.provider === entry.provider);
   if (!match) return undefined;

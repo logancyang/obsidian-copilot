@@ -126,13 +126,13 @@ export class AgentModelPreloader {
       run: () => Promise<{ models?: SessionModelState | null }>;
     };
     const strategies: Strategy[] = [];
-    if (storedId && proc.isResumeSessionSupported()) {
+    if (storedId && proc.hasCapability("session/resume")) {
       strategies.push({
         label: `resumed probe session ${storedId}`,
         run: () => proc.resumeSession({ sessionId: storedId, cwd, mcpServers: [] }),
       });
     }
-    if (storedId && proc.isLoadSessionSupported()) {
+    if (storedId && proc.hasCapability("session/load")) {
       strategies.push({
         label: `loaded probe session ${storedId}`,
         run: () => proc.loadSession({ sessionId: storedId, cwd, mcpServers: [] }),

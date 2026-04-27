@@ -29,18 +29,15 @@ import { cn } from "@/lib/utils";
  * compatible — entries without `_group` render flat as today.
  *
  * Agent Mode tags every entry with `_backendId` so the selector can route
- * the selected key back to the right backend, and so the React key /
- * dropdown value can stay unique even when two backends report the same
- * agent-native model id (e.g. both surface a `sonnet` alias). Synthesized
- * agent entries (no Copilot `CustomModel` backing) also carry the raw
- * agent model id in `_agentModelId` so callers can resolve the original id
- * after we scope `name` for uniqueness.
+ * the selected key back to the right backend. `getModelKeyFromModel`
+ * prefixes the key with the backend id when set, keeping React keys /
+ * dropdown values unique even when two backends report the same
+ * agent-native model id (e.g. both surface a `sonnet` alias).
  */
 export type ModelSelectorEntry = CustomModel & {
   _disabledReason?: string;
   _group?: string;
   _backendId?: string;
-  _agentModelId?: string;
 };
 
 interface ModelSelectorProps {

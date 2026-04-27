@@ -29,6 +29,17 @@ import { wrapStreamsForDebug } from "./debugTap";
 import { AcpBackend, JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "./types";
 
 /**
+ * Capabilities the agent may or may not implement. Tracked in a single Set so
+ * adding a new capability is one constant + one branch in the unsupported
+ * handler instead of touching reset / probe / getter sites.
+ */
+export type AcpCapability =
+  | "session/list"
+  | "session/resume"
+  | "session/load"
+  | "session/set_model";
+
+/**
  * Detect a JSON-RPC -32601 (method not found) error from the ACP SDK. The SDK
  * surfaces these as `RequestError` instances; we also tolerate plain objects
  * shaped like `{ code: number }` defensively.
@@ -62,14 +73,17 @@ export class AcpBackendProcess {
     | ((req: RequestPermissionRequest) => Promise<RequestPermissionResponse>)
     | null = null;
   private exitListeners = new Set<() => void>();
-  /** Tri-state: null = not yet probed, true/false = result of first probe. */
-  private setSessionModelSupported: boolean | null = null;
-  /** Whether the agent advertised `sessionCapabilities.list` at initialize time. */
-  private listSessionsSupported = false;
-  /** Whether the agent advertised `sessionCapabilities.resume` at initialize time. */
-  private resumeSessionSupported = false;
-  /** Whether the agent advertised top-level `loadSession` at initialize time. */
-  private loadSessionSupported = false;
+  /**
+   * Set of capabilities currently believed supported. Populated at
+   * `initialize` time (from `agentCapabilities`) and on first probe for
+   * unstable methods. A `MethodNotFound` reply removes the entry.
+   *
+   * `setSessionModelProbed` distinguishes "we haven't tried yet" from "we
+   * tried and it's unsupported" for the unstable session/set_model RPC, which
+   * has no initialize-time capability flag.
+   */
+  private capabilities = new Set<AcpCapability>();
+  private setSessionModelProbed = false;
 
   constructor(
     private readonly app: App,
@@ -111,10 +125,8 @@ export class AcpBackendProcess {
       this.connection = null;
       this.sessionHandlers.clear();
       this.permissionPrompter = null;
-      this.setSessionModelSupported = null;
-      this.listSessionsSupported = false;
-      this.resumeSessionSupported = false;
-      this.loadSessionSupported = false;
+      this.capabilities.clear();
+      this.setSessionModelProbed = false;
       for (const fn of this.exitListeners) {
         try {
           fn();
@@ -142,11 +154,17 @@ export class AcpBackendProcess {
           version: this.clientVersion,
         },
       });
-      this.listSessionsSupported = init.agentCapabilities?.sessionCapabilities?.list != null;
-      this.resumeSessionSupported = init.agentCapabilities?.sessionCapabilities?.resume != null;
-      this.loadSessionSupported = init.agentCapabilities?.loadSession === true;
+      if (init.agentCapabilities?.sessionCapabilities?.list != null) {
+        this.capabilities.add("session/list");
+      }
+      if (init.agentCapabilities?.sessionCapabilities?.resume != null) {
+        this.capabilities.add("session/resume");
+      }
+      if (init.agentCapabilities?.loadSession === true) {
+        this.capabilities.add("session/load");
+      }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.listSessionsSupported}, resumeSession=${this.resumeSessionSupported}, loadSession=${this.loadSessionSupported})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")})`
       );
     } catch (err) {
       // Initialize failed (bad binary, version mismatch, MCP boot error). The
@@ -207,6 +225,11 @@ export class AcpBackendProcess {
     return this.requireConnection().cancel(params);
   }
 
+  /** Whether the agent currently supports `cap`. */
+  hasCapability(cap: AcpCapability): boolean {
+    return this.capabilities.has(cap);
+  }
+
   /**
    * Switch the active model for an ACP session via `unstable_setSessionModel`.
    *
@@ -217,16 +240,18 @@ export class AcpBackendProcess {
    * wire.
    */
   async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
-    if (this.setSessionModelSupported === false) {
+    if (this.setSessionModelProbed && !this.capabilities.has("session/set_model")) {
       throw new MethodUnsupportedError("session/set_model");
     }
     try {
       const resp = await this.requireConnection().unstable_setSessionModel(params);
-      this.setSessionModelSupported = true;
+      this.capabilities.add("session/set_model");
+      this.setSessionModelProbed = true;
       return resp;
     } catch (err) {
       if (isMethodNotFoundError(err)) {
-        this.setSessionModelSupported = false;
+        this.capabilities.delete("session/set_model");
+        this.setSessionModelProbed = true;
         throw new MethodUnsupportedError("session/set_model");
       }
       throw err;
@@ -234,12 +259,12 @@ export class AcpBackendProcess {
   }
 
   /**
-   * Whether `unstable_setSessionModel` is known to be supported. Returns
-   * `null` if no probe has happened yet — callers should attempt a call and
-   * catch `MethodUnsupportedError` to materialize the result.
+   * Tri-state probe result for the unstable session/set_model RPC: `null`
+   * before the first probe, `true`/`false` after.
    */
   isSetSessionModelSupported(): boolean | null {
-    return this.setSessionModelSupported;
+    if (!this.setSessionModelProbed) return null;
+    return this.capabilities.has("session/set_model");
   }
 
   /**
@@ -248,23 +273,7 @@ export class AcpBackendProcess {
    * agent did not advertise the `list` capability.
    */
   async listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse> {
-    if (!this.listSessionsSupported) {
-      throw new MethodUnsupportedError("session/list");
-    }
-    try {
-      return await this.requireConnection().listSessions(params);
-    } catch (err) {
-      if (isMethodNotFoundError(err)) {
-        this.listSessionsSupported = false;
-        throw new MethodUnsupportedError("session/list");
-      }
-      throw err;
-    }
-  }
-
-  /** Whether the agent advertised the `session/list` capability. */
-  isListSessionsSupported(): boolean {
-    return this.listSessionsSupported;
+    return this.callCapability("session/list", () => this.requireConnection().listSessions(params));
   }
 
   /**
@@ -274,23 +283,9 @@ export class AcpBackendProcess {
    * when the agent did not advertise `sessionCapabilities.resume`.
    */
   async resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse> {
-    if (!this.resumeSessionSupported) {
-      throw new MethodUnsupportedError("session/resume");
-    }
-    try {
-      return await this.requireConnection().resumeSession(params);
-    } catch (err) {
-      if (isMethodNotFoundError(err)) {
-        this.resumeSessionSupported = false;
-        throw new MethodUnsupportedError("session/resume");
-      }
-      throw err;
-    }
-  }
-
-  /** Whether the agent advertised the `session/resume` capability. */
-  isResumeSessionSupported(): boolean {
-    return this.resumeSessionSupported;
+    return this.callCapability("session/resume", () =>
+      this.requireConnection().resumeSession(params)
+    );
   }
 
   /**
@@ -299,23 +294,22 @@ export class AcpBackendProcess {
    * notifications. Returns the same `models` field as `session/new`.
    */
   async loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse> {
-    if (!this.loadSessionSupported) {
-      throw new MethodUnsupportedError("session/load");
+    return this.callCapability("session/load", () => this.requireConnection().loadSession(params));
+  }
+
+  private async callCapability<T>(cap: AcpCapability, run: () => Promise<T>): Promise<T> {
+    if (!this.capabilities.has(cap)) {
+      throw new MethodUnsupportedError(cap);
     }
     try {
-      return await this.requireConnection().loadSession(params);
+      return await run();
     } catch (err) {
       if (isMethodNotFoundError(err)) {
-        this.loadSessionSupported = false;
-        throw new MethodUnsupportedError("session/load");
+        this.capabilities.delete(cap);
+        throw new MethodUnsupportedError(cap);
       }
       throw err;
     }
-  }
-
-  /** Whether the agent advertised the `loadSession` capability. */
-  isLoadSessionSupported(): boolean {
-    return this.loadSessionSupported;
   }
 
   /**
@@ -327,10 +321,8 @@ export class AcpBackendProcess {
     this.connection = null;
     this.sessionHandlers.clear();
     this.permissionPrompter = null;
-    this.setSessionModelSupported = null;
-    this.listSessionsSupported = false;
-    this.resumeSessionSupported = false;
-    this.loadSessionSupported = false;
+    this.capabilities.clear();
+    this.setSessionModelProbed = false;
     if (this.process) {
       try {
         await this.process.shutdown();
