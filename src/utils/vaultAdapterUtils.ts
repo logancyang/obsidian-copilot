@@ -115,6 +115,21 @@ export async function readFrontmatterViaAdapter(
   return result;
 }
 
+/** True when an error message indicates an existing-file conflict from vault.create. */
+export function isFileAlreadyExistsError(error: unknown): boolean {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  return message.toLowerCase().includes("already exists");
+}
+
+/** True when an error message indicates an ENAMETOOLONG filesystem failure. */
+export function isNameTooLongError(error: unknown): boolean {
+  if (!error) return false;
+  const message = error instanceof Error ? error.message : String(error);
+  const normalized = message.toLowerCase();
+  return normalized.includes("enametoolong") || normalized.includes("name too long");
+}
+
 /**
  * Create a synthetic TFile object from adapter stat data.
  * Used for files in hidden directories not indexed by Obsidian's vault cache.

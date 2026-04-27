@@ -15,8 +15,8 @@ let mockProcessIsRunning = true;
 jest.mock("./AcpProcessManager", () => ({
   AcpProcessManager: jest.fn().mockImplementation(() => ({
     start: () => ({
-      stdin: {} as WritableStream<Uint8Array>,
-      stdout: {} as ReadableStream<Uint8Array>,
+      stdin: new WritableStream<Uint8Array>(),
+      stdout: new ReadableStream<Uint8Array>(),
     }),
     onExit: (fn: () => void) => {
       exitListeners.add(fn);

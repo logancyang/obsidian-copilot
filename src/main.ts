@@ -1,4 +1,4 @@
-import { createAgentSessionManager, type AgentSessionManager } from "@/agentMode";
+import { AGENT_CHAT_MODE, createAgentSessionManager, type AgentSessionManager } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -62,11 +62,7 @@ import {
   WorkspaceLeaf,
 } from "obsidian";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import {
-  extractChatDate,
-  extractChatLastAccessedAtMs,
-  extractChatTitle,
-} from "@/utils/chatHistoryUtils";
+import { extractChatLastAccessedAtMs, fileToHistoryItem } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { listMarkdownFiles, patchFrontmatter, resolveFileByPath } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
@@ -665,25 +661,7 @@ export default class CopilotPlugin extends Plugin {
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
     const files = await this.getChatHistoryFiles();
-    return files.map((file) => {
-      const createdAt = extractChatDate(file);
-      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
-
-      // Use effective last used time (prefers in-memory value for immediate UI updates)
-      const effectiveLastAccessedAtMs =
-        this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
-          file.path,
-          persistedLastAccessedAtMs ?? createdAt.getTime()
-        );
-      const lastAccessedAt = new Date(effectiveLastAccessedAtMs);
-
-      return {
-        id: file.path,
-        title: extractChatTitle(file),
-        createdAt,
-        lastAccessedAt,
-      };
-    });
+    return files.map((file) => fileToHistoryItem(file, this.chatHistoryLastAccessedAtManager));
   }
 
   /**
@@ -774,11 +752,29 @@ export default class CopilotPlugin extends Plugin {
 
   async loadChatById(fileId: string): Promise<void> {
     const file = await resolveFileByPath(this.app, fileId);
-    if (file) {
-      await this.loadChatHistory(file);
-    } else {
-      throw new Error("Chat file not found.");
+    if (!file) throw new Error("Chat file not found.");
+
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (frontmatter?.mode === AGENT_CHAT_MODE) {
+      await this.loadAgentChatHistory(file);
+      return;
     }
+    await this.loadChatHistory(file);
+  }
+
+  private async loadAgentChatHistory(file: TFile): Promise<void> {
+    if (!this.agentSessionManager) {
+      throw new Error("Agent Mode is not initialized.");
+    }
+    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
+    if (!existingView) this.activateView();
+
+    await this.agentSessionManager.loadSessionFromHistory(file);
+    void this.touchChatHistoryLastAccessedAt(file);
+
+    const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])
+      ?.view as CopilotView | undefined;
+    copilotView?.updateView();
   }
 
   async openChatSourceFile(fileId: string): Promise<void> {

@@ -224,14 +224,6 @@ export interface ClaudeCodeBackendSettings {
    * not pull from Copilot's `activeModels`, so no Copilot-key translation.
    */
   selectedModelKey?: string;
-  /**
-   * ACP sessionId of the dedicated "probe session" used by AgentModelPreloader
-   * to enumerate live models without disturbing user chats. Persisted across
-   * plugin reloads so subsequent loads can `session/resume` (or `session/load`)
-   * the same record instead of accumulating one new session per startup. Never
-   * surfaced in the Copilot tab strip or chat history.
-   */
-  probeSessionId?: string;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -745,9 +737,7 @@ function sanitizeClaudeCodeBackendSettings(raw: unknown): ClaudeCodeBackendSetti
   const binaryPath = typeof r.binaryPath === "string" && r.binaryPath ? r.binaryPath : undefined;
   const selectedModelKey =
     typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
-  const probeSessionId =
-    typeof r.probeSessionId === "string" && r.probeSessionId ? r.probeSessionId : undefined;
-  return { binaryPath, selectedModelKey, probeSessionId };
+  return { binaryPath, selectedModelKey };
 }
 
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {

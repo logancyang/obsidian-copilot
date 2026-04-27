@@ -4,6 +4,7 @@ import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import ChatInput from "@/components/chat-components/ChatInput";
+import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { EVENT_NAMES } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import { ChatInputProvider } from "@/context/ChatInputContext";
@@ -47,6 +48,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
 
   const isMountedRef = useRef(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -166,6 +168,69 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
+  // Wrap an async action so a failure logs and surfaces a Notice consistently.
+  // `rethrow` is on for callbacks the popover uses to revert inline edits
+  // (rename, delete) and off for fire-and-forget loads.
+  const runWithNotice = useCallback(
+    async <T,>(label: string, action: () => Promise<T>, rethrow = false): Promise<T | void> => {
+      try {
+        return await action();
+      } catch (error) {
+        logError(`[AgentMode] ${label} failed`, error);
+        new Notice(`Failed to ${label}.`);
+        if (rethrow) throw error;
+      }
+    },
+    []
+  );
+
+  const handleLoadChatHistory = useCallback(
+    () =>
+      runWithNotice("load chat history", async () => {
+        const items = await manager.getChatHistoryItems();
+        if (isMountedRef.current) setChatHistoryItems(items);
+      }),
+    [manager, runWithNotice]
+  );
+
+  const handleLoadChat = useCallback(
+    (id: string) => runWithNotice("load chat", () => plugin.loadChatById(id)),
+    [plugin, runWithNotice]
+  );
+
+  const handleUpdateChatTitle = useCallback(
+    async (id: string, newTitle: string) => {
+      await runWithNotice(
+        "update chat title",
+        async () => {
+          await manager.updateChatTitle(id, newTitle);
+          await handleLoadChatHistory();
+        },
+        true
+      );
+    },
+    [manager, handleLoadChatHistory, runWithNotice]
+  );
+
+  const handleDeleteChat = useCallback(
+    async (id: string) => {
+      await runWithNotice(
+        "delete chat",
+        async () => {
+          await manager.deleteChatHistory(id);
+          await handleLoadChatHistory();
+        },
+        true
+      );
+    },
+    [manager, handleLoadChatHistory, runWithNotice]
+  );
+
+  const handleOpenSourceFile = useCallback(
+    (id: string) => runWithNotice("open chat source", () => plugin.openChatSourceFile(id)),
+    [plugin, runWithNotice]
+  );
+
   const modelPickerOverride = useAgentModelPicker(manager);
 
   // Listen to global ABORT_STREAM events (used by Chat selection / new-chat triggers)
@@ -191,7 +256,15 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
           <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
             <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
             <AgentChatMessages messages={messages} app={app} onDelete={handleDelete} />
-            <AgentChatControls onNewChat={handleNewChat} />
+            <AgentChatControls
+              onNewChat={handleNewChat}
+              chatHistoryItems={chatHistoryItems}
+              onLoadHistory={handleLoadChatHistory}
+              onLoadChat={handleLoadChat}
+              onUpdateChatTitle={handleUpdateChatTitle}
+              onDeleteChat={handleDeleteChat}
+              onOpenSourceFile={handleOpenSourceFile}
+            />
             <ChatInput
               inputMessage={inputMessage}
               setInputMessage={setInputMessage}

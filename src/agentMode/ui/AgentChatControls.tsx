@@ -1,5 +1,9 @@
 import { useChainType } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
+import {
+  ChatHistoryItem,
+  ChatHistoryPopover,
+} from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -10,6 +14,7 @@ import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu
 import {
   Bot,
   ChevronDown,
+  History,
   LibraryBig,
   MessageCirclePlus,
   Sparkles,
@@ -22,6 +27,15 @@ interface AgentChatControlsProps {
    * button is hidden — clicking it would be a no-op since there's nothing to
    * clear. */
   onNewChat?: () => void;
+  /** Items rendered inside the chat-history popover. */
+  chatHistoryItems?: ChatHistoryItem[];
+  /** Refresh the popover items (called when the user opens the button). */
+  onLoadHistory?: () => void | Promise<void>;
+  /** Open a saved chat by id (file path). */
+  onLoadChat?: (id: string) => Promise<void>;
+  onUpdateChatTitle?: (id: string, newTitle: string) => Promise<void>;
+  onDeleteChat?: (id: string) => Promise<void>;
+  onOpenSourceFile?: (id: string) => Promise<void>;
 }
 
 /**
@@ -31,10 +45,21 @@ interface AgentChatControlsProps {
  * Agent Mode does not honor those (ACP owns model/conversation state, no
  * persistence yet).
  */
-export const AgentChatControls: React.FC<AgentChatControlsProps> = ({ onNewChat }) => {
+export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
+  onNewChat,
+  chatHistoryItems,
+  onLoadHistory,
+  onLoadChat,
+  onUpdateChatTitle,
+  onDeleteChat,
+  onOpenSourceFile,
+}) => {
   const settings = useSettingsValue();
   const [, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
+  const historyAvailable = Boolean(
+    chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
+  );
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
@@ -101,6 +126,31 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({ onNewChat 
               </Button>
             </TooltipTrigger>
             <TooltipContent>New Chat</TooltipContent>
+          </Tooltip>
+        )}
+        {historyAvailable && (
+          <Tooltip>
+            <ChatHistoryPopover
+              chatHistory={chatHistoryItems!}
+              onUpdateTitle={onUpdateChatTitle!}
+              onDeleteChat={onDeleteChat!}
+              onLoadChat={onLoadChat!}
+              onOpenSourceFile={onOpenSourceFile}
+            >
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost2"
+                  size="icon"
+                  title="Chat History"
+                  onClick={() => {
+                    void onLoadHistory?.();
+                  }}
+                >
+                  <History className="tw-size-4" />
+                </Button>
+              </TooltipTrigger>
+            </ChatHistoryPopover>
+            <TooltipContent>Chat History</TooltipContent>
           </Tooltip>
         )}
       </div>

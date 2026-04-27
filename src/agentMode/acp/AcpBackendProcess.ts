@@ -69,6 +69,17 @@ export class AcpBackendProcess {
   private process: AcpProcessManager | null = null;
   private connection: ClientSideConnection | null = null;
   private readonly sessionHandlers = new Map<SessionId, SessionUpdateHandler>();
+  /**
+   * Per-session FIFO of `session/update` notifications that arrived before a
+   * handler was registered. Some agents (e.g. claude-agent-acp) emit
+   * notifications for a freshly-created session *before* the `session/new`
+   * response on the wire — by the time the caller learns the sessionId and
+   * registers a handler, the notification has already been routed. Buffer it
+   * here and replay on registration. Bounded to avoid leaking when no handler
+   * ever registers (e.g. preloader probe).
+   */
+  private readonly pendingUpdates = new Map<SessionId, SessionNotification[]>();
+  private static readonly PENDING_UPDATE_LIMIT = 32;
   private permissionPrompter:
     | ((req: RequestPermissionRequest) => Promise<RequestPermissionResponse>)
     | null = null;
@@ -124,6 +135,7 @@ export class AcpBackendProcess {
       // throwing through a half-dead `ClientSideConnection`.
       this.connection = null;
       this.sessionHandlers.clear();
+      this.pendingUpdates.clear();
       this.permissionPrompter = null;
       this.capabilities.clear();
       this.setSessionModelProbed = false;
@@ -206,6 +218,17 @@ export class AcpBackendProcess {
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
     this.sessionHandlers.set(sessionId, handler);
+    const buffered = this.pendingUpdates.get(sessionId);
+    if (buffered) {
+      this.pendingUpdates.delete(sessionId);
+      for (const update of buffered) {
+        try {
+          handler(update);
+        } catch (e) {
+          logWarn(`[AgentMode] replay of buffered session/update threw for ${sessionId}`, e);
+        }
+      }
+    }
     return () => {
       if (this.sessionHandlers.get(sessionId) === handler) {
         this.sessionHandlers.delete(sessionId);
@@ -320,6 +343,7 @@ export class AcpBackendProcess {
   async shutdown(): Promise<void> {
     this.connection = null;
     this.sessionHandlers.clear();
+    this.pendingUpdates.clear();
     this.permissionPrompter = null;
     this.capabilities.clear();
     this.setSessionModelProbed = false;
@@ -347,7 +371,22 @@ export class AcpBackendProcess {
   private routeSessionUpdate(sessionId: SessionId, update: SessionNotification): void {
     const handler = this.sessionHandlers.get(sessionId);
     if (!handler) {
-      logWarn(`[AgentMode] dropping session/update for unknown session ${sessionId}`);
+      let queue = this.pendingUpdates.get(sessionId);
+      if (!queue) {
+        queue = [];
+        this.pendingUpdates.set(sessionId, queue);
+      }
+      if (queue.length >= AcpBackendProcess.PENDING_UPDATE_LIMIT) {
+        // Include the update kind so a future investigator can tell *which*
+        // notification got lost (e.g. session_info_update vs. message chunk).
+        const kind =
+          (update as { update?: { sessionUpdate?: string } }).update?.sessionUpdate ?? "unknown";
+        logWarn(
+          `[AgentMode] dropping session/update for ${sessionId}: pending buffer full (${queue.length}, kind=${kind})`
+        );
+        return;
+      }
+      queue.push(update);
       return;
     }
     handler(update);

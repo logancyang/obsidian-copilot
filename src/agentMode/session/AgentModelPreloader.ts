@@ -89,8 +89,11 @@ export class AgentModelPreloader {
     try {
       await proc.start();
       const storedId = descriptor.getProbeSessionId?.(getSettings());
-      // No registerSessionHandler: probe is models-only, so any session/update
-      // frames (history replay from session/load) are intentionally dropped.
+      // The probe is models-only — we don't act on session/update frames.
+      // A handler is still registered (no-op) for each touched sessionId so
+      // notifications the agent emits for the probe session (e.g. claude-
+      // agent-acp's session_info_update, or session/load history replay) are
+      // silently swallowed instead of logging "unknown session" warnings.
       const models = await this.fetchModels(proc, descriptor, backendId, storedId, cwd);
       if (this.disposed) return;
       if (models) {
@@ -123,24 +126,28 @@ export class AgentModelPreloader {
   ): Promise<SessionModelState | null> {
     type Strategy = {
       label: string;
+      sessionId: string;
       run: () => Promise<{ models?: SessionModelState | null }>;
     };
     const strategies: Strategy[] = [];
     if (storedId && proc.hasCapability("session/resume")) {
       strategies.push({
         label: `resumed probe session ${storedId}`,
+        sessionId: storedId,
         run: () => proc.resumeSession({ sessionId: storedId, cwd, mcpServers: [] }),
       });
     }
     if (storedId && proc.hasCapability("session/load")) {
       strategies.push({
         label: `loaded probe session ${storedId}`,
+        sessionId: storedId,
         run: () => proc.loadSession({ sessionId: storedId, cwd, mcpServers: [] }),
       });
     }
 
-    for (const { label, run } of strategies) {
+    for (const { label, sessionId, run } of strategies) {
       try {
+        proc.registerSessionHandler(sessionId, () => {});
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);
         return resp.models ?? null;
@@ -152,6 +159,7 @@ export class AgentModelPreloader {
     }
 
     const resp = await proc.newSession({ cwd, mcpServers: [] });
+    proc.registerSessionHandler(resp.sessionId, () => {});
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);
     if (descriptor.persistProbeSessionId) {
       try {

@@ -8,12 +8,17 @@ import type {
   RequestPermissionResponse,
   SessionModelState,
 } from "@agentclientprotocol/sdk";
-import { App, FileSystemAdapter, Platform } from "obsidian";
+import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
+import { fileToHistoryItem } from "@/utils/chatHistoryUtils";
+import { App, FileSystemAdapter, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { AgentSession } from "./AgentSession";
+import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import type { BackendDescriptor, BackendId } from "./types";
+
+const AUTOSAVE_DEBOUNCE_MS = 500;
 
 export type PermissionPrompter = (
   req: RequestPermissionRequest
@@ -27,6 +32,12 @@ export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
   resolveDescriptor: DescriptorResolver;
   modelPreloader: AgentModelPreloader;
+  /**
+   * Persistence layer for Agent Mode chats. Optional only so legacy callers
+   * (tests) can omit it; production wiring always supplies one via the
+   * barrel in `agentMode/index.ts`.
+   */
+  persistenceManager?: AgentChatPersistenceManager;
 }
 
 /**
@@ -53,9 +64,17 @@ export class AgentSessionManager {
   private pendingCreates = 0;
   private listeners = new Set<() => void>();
   private disposed = false;
-  private isStarting = false;
+  private startingBackendId: BackendId | null = null;
   private lastError: string | null = null;
   private readonly preloader: AgentModelPreloader;
+  // Per-session bookkeeping for auto-save: persisted file path (set after
+  // first successful save), pending debounce timer, last serialized snapshot
+  // signature for no-op skipping, and the unsubscribe returned by
+  // `session.subscribe()` so we tear it down on close/shutdown.
+  private readonly persistedPaths = new Map<string, string>();
+  private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
+  private readonly persistenceUnsubs = new Map<string, () => void>();
+  private readonly lastSavedSignatures = new Map<string, string>();
 
   constructor(
     private readonly app: App,
@@ -66,6 +85,33 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager is desktop only");
     }
     this.preloader = opts.modelPreloader;
+  }
+
+  /**
+   * List every persisted Agent Mode chat as a `ChatHistoryItem` ranked using
+   * the plugin's shared in-memory `lastAccessedAt` tracker. Returns `[]` when
+   * persistence isn't configured.
+   */
+  async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) return [];
+    const files = await persistence.getAgentChatHistoryFiles();
+    const tracker = this.plugin.getChatHistoryLastAccessedAtManager();
+    return files.map((file) => fileToHistoryItem(file, tracker));
+  }
+
+  /** Update the user-visible title (frontmatter `topic`) of a saved chat. */
+  async updateChatTitle(fileId: string, newTitle: string): Promise<void> {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) throw new Error("Agent chat persistence is not configured.");
+    await persistence.updateTopic(fileId, newTitle);
+  }
+
+  /** Delete a saved chat by file path. */
+  async deleteChatHistory(fileId: string): Promise<void> {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) throw new Error("Agent chat persistence is not configured.");
+    await persistence.deleteFile(fileId);
   }
 
   /**
@@ -112,7 +158,7 @@ export class AgentSessionManager {
     const descriptor = this.resolveDescriptor(resolvedId);
 
     this.pendingCreates++;
-    this.isStarting = true;
+    this.startingBackendId = resolvedId;
     this.notify();
 
     try {
@@ -134,6 +180,7 @@ export class AgentSessionManager {
       this.sessions.set(session.internalId, session);
       this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
       this.activeSessionId = session.internalId;
+      this.attachAutoSave(session);
       // Clear lastError on success — but not eagerly at the start of every
       // create. Eager clearing would let a second concurrent create wipe the
       // first's error before the user (or a retry handler) has seen it.
@@ -147,7 +194,7 @@ export class AgentSessionManager {
       throw err;
     } finally {
       this.pendingCreates--;
-      if (this.pendingCreates === 0) this.isStarting = false;
+      if (this.pendingCreates === 0) this.startingBackendId = null;
       this.notify();
     }
   }
@@ -212,11 +259,15 @@ export class AgentSessionManager {
     } catch (e) {
       logWarn(`[AgentMode] cancel during closeSession failed`, e);
     }
+    // Drain any pending debounced auto-save before tearing the session
+    // down — otherwise the last few tokens of a fast turn never reach disk.
+    await this.drainAutoSave(session);
     try {
       await session.dispose();
     } catch (e) {
       logWarn(`[AgentMode] dispose during closeSession failed`, e);
     }
+    this.detachAutoSave(id);
     this.sessions.delete(id);
     this.chatUIStates.delete(id);
     if (this.activeSessionId === id) {
@@ -244,7 +295,12 @@ export class AgentSessionManager {
   }
 
   getIsStarting(): boolean {
-    return this.isStarting;
+    return this.startingBackendId !== null;
+  }
+
+  /** Backend id currently being booted, or null when no create is in flight. */
+  getStartingBackendId(): BackendId | null {
+    return this.startingBackendId;
   }
 
   getLastError(): string | null {
@@ -335,6 +391,16 @@ export class AgentSessionManager {
     );
 
     const allSessions = Array.from(this.sessions.values());
+    // Drain pending auto-saves for every session before disposing — same
+    // reasoning as `closeSession`. Done before the per-session unsubscribe so
+    // the timers don't fire with a half-disposed session.
+    for (const session of allSessions) {
+      await this.drainAutoSave(session);
+    }
+    for (const id of Array.from(this.persistenceUnsubs.keys())) {
+      this.detachAutoSave(id);
+    }
+
     for (const session of allSessions) {
       try {
         await session.cancel();
@@ -361,8 +427,124 @@ export class AgentSessionManager {
     }
     this.backends.clear();
     this.starting.clear();
+    this.startingBackendId = null;
     this.listeners.clear();
     this.preloader.shutdown();
+  }
+
+  /**
+   * Open a previously-saved Agent Mode chat. If a live session is already
+   * bound to that file (because the user opened it earlier this run), focus
+   * its tab instead of spawning a duplicate. Otherwise, spin up a fresh
+   * session on the saved backend, seed its store with the persisted display
+   * messages, and pin the persisted-path map so subsequent turns update the
+   * same file.
+   */
+  async loadSessionFromHistory(file: TFile): Promise<AgentSession> {
+    if (!this.opts.persistenceManager) {
+      throw new Error("Agent chat persistence is not configured.");
+    }
+    if (this.disposed) {
+      throw new Error("AgentSessionManager has been shut down");
+    }
+
+    for (const [internalId, path] of this.persistedPaths.entries()) {
+      if (path !== file.path) continue;
+      const existing = this.sessions.get(internalId);
+      if (existing && existing.getStatus() !== "closed") {
+        this.setActiveSession(internalId);
+        return existing;
+      }
+      this.persistedPaths.delete(internalId);
+    }
+
+    const loaded = await this.opts.persistenceManager.loadFile(file);
+    const session = await this.createSession(loaded.backendId);
+    session.store.loadMessages(loaded.messages);
+    if (loaded.label) session.setLabel(loaded.label);
+    this.persistedPaths.set(session.internalId, file.path);
+    this.notify();
+    return session;
+  }
+
+  private attachAutoSave(session: AgentSession): void {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) return;
+
+    const trigger = () => this.scheduleAutoSave(session);
+    const unsubscribe = session.subscribe({
+      onMessagesChanged: trigger,
+      onStatusChanged: () => {},
+      onLabelChanged: trigger,
+    });
+    this.persistenceUnsubs.set(session.internalId, unsubscribe);
+  }
+
+  private scheduleAutoSave(session: AgentSession): void {
+    const existingTimer = this.saveTimers.get(session.internalId);
+    if (existingTimer) clearTimeout(existingTimer);
+    const timer = setTimeout(() => {
+      this.saveTimers.delete(session.internalId);
+      this.flushAutoSave(session).catch((e) =>
+        logWarn(`[AgentMode] auto-save failed for ${session.internalId}`, e)
+      );
+    }, AUTOSAVE_DEBOUNCE_MS);
+    this.saveTimers.set(session.internalId, timer);
+  }
+
+  private async flushAutoSave(session: AgentSession): Promise<void> {
+    const persistence = this.opts.persistenceManager;
+    if (!persistence) return;
+    if (!this.sessions.has(session.internalId)) return;
+
+    const messages = session.store.getDisplayMessages();
+    if (messages.length === 0) return;
+
+    const label = session.getLabel();
+    // Skip the write when nothing user-visible has changed since the last
+    // save. Streaming token updates and idempotent label notifications
+    // otherwise rewrite the entire file on every debounce tick.
+    const signature = `${label ?? ""} ${messages.length} ${
+      messages[messages.length - 1]?.message ?? ""
+    }`;
+    if (this.lastSavedSignatures.get(session.internalId) === signature) return;
+
+    const result = await persistence.saveSession(messages, session.backendId, {
+      label,
+      existingPath: this.persistedPaths.get(session.internalId),
+    });
+    if (result) {
+      this.persistedPaths.set(session.internalId, result.path);
+      this.lastSavedSignatures.set(session.internalId, signature);
+    }
+  }
+
+  /**
+   * Cancel any pending debounced auto-save for `session` and run it
+   * synchronously, so the on-disk file reflects the final state before the
+   * session is disposed. Safe to call when no save is pending.
+   */
+  private async drainAutoSave(session: AgentSession): Promise<void> {
+    const timer = this.saveTimers.get(session.internalId);
+    if (!timer) return;
+    clearTimeout(timer);
+    this.saveTimers.delete(session.internalId);
+    try {
+      await this.flushAutoSave(session);
+    } catch (e) {
+      logWarn(`[AgentMode] drain auto-save failed for ${session.internalId}`, e);
+    }
+  }
+
+  private detachAutoSave(internalId: string): void {
+    const timer = this.saveTimers.get(internalId);
+    if (timer) clearTimeout(timer);
+    this.saveTimers.delete(internalId);
+    const unsubscribe = this.persistenceUnsubs.get(internalId);
+    if (unsubscribe) unsubscribe();
+    this.persistenceUnsubs.delete(internalId);
+    this.persistedPaths.delete(internalId);
+    this.lastSavedSignatures.delete(internalId);
   }
 
   private async ensureBackend(
@@ -391,6 +573,7 @@ export class AgentSessionManager {
         const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
         if (dead.length === 0) return;
         for (const s of dead) {
+          this.detachAutoSave(s.internalId);
           this.sessions.delete(s.internalId);
           this.chatUIStates.delete(s.internalId);
           s.cancel().catch(() => {});

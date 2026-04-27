@@ -28,7 +28,8 @@ export function useSessionBackendDescriptor(
     if (!manager) return;
     return manager.subscribe(() => forceRender((n) => n + 1));
   }, [manager]);
-  const sessionBackendId = manager?.getActiveSession()?.backendId;
+  const sessionBackendId =
+    manager?.getStartingBackendId() ?? manager?.getActiveSession()?.backendId;
   if (sessionBackendId) {
     const desc = backendRegistry[sessionBackendId];
     if (desc) return desc;

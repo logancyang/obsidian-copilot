@@ -3,6 +3,7 @@ import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
+import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
@@ -10,6 +11,7 @@ import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 // Public surface for the rest of the plugin. External code should import from
 // `@/agentMode` (this file), never deep paths into acp/, session/, backends/,
 // or ui/.
+export { AGENT_CHAT_MODE } from "./session/AgentChatPersistenceManager";
 export { AgentModeChat } from "./ui/AgentModeChat";
 export {
   useActiveBackendDescriptor,
@@ -34,10 +36,12 @@ export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/r
  */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
+  const persistenceManager = new AgentChatPersistenceManager(app);
   const manager = new AgentSessionManager(app, plugin, {
     permissionPrompter: createDefaultPermissionPrompter(app),
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
+    persistenceManager,
   });
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {

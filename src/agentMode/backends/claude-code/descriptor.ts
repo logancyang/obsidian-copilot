@@ -78,12 +78,7 @@ export const ClaudeCodeBackendDescriptor: BackendDescriptor = {
     updateClaudeCodeFields({ selectedModelKey: modelId });
   },
 
-  getProbeSessionId(settings: CopilotSettings): string | undefined {
-    const id = settings.agentMode?.backends?.["claude-code"]?.probeSessionId;
-    return id && id.length > 0 ? id : undefined;
-  },
-
-  async persistProbeSessionId(sessionId: string, _plugin: CopilotPlugin): Promise<void> {
-    updateClaudeCodeFields({ probeSessionId: sessionId });
-  },
+  // No probeSessionId persistence: claude-agent-acp only writes session JSONL
+  // after a prompt exchange, so a models-only probe never persists — storing
+  // the id would log "Resource not found" on every reload's session/load.
 };
