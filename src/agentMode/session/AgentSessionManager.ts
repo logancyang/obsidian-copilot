@@ -16,6 +16,7 @@ import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { AgentSession } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
+import type { EffortApplyContext } from "./effortAdapter";
 import type { BackendDescriptor, BackendId } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -181,6 +182,16 @@ export class AgentSessionManager {
       this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
       this.activeSessionId = session.internalId;
       this.attachAutoSave(session);
+      // Replay any backend-specific persisted state (claude-code's effort,
+      // future config-option preferences). Failures are non-fatal — the
+      // session is usable with whatever defaults the agent picked.
+      if (descriptor.applyInitialSessionConfig) {
+        try {
+          await descriptor.applyInitialSessionConfig(session, getSettings());
+        } catch (e) {
+          logWarn(`[AgentMode] applyInitialSessionConfig failed for ${resolvedId}; continuing`, e);
+        }
+      }
       // Clear lastError on success — but not eagerly at the start of every
       // create. Eager clearing would let a second concurrent create wipe the
       // first's error before the user (or a retry handler) has seen it.
@@ -220,6 +231,30 @@ export class AgentSessionManager {
     const descriptor = this.resolveDescriptor(backendId);
     if (!descriptor.persistModelSelection) return;
     await descriptor.persistModelSelection(modelId, this.plugin);
+  }
+
+  /** Persist a sticky effort preference for `backendId`. No-op if the descriptor doesn't opt in. */
+  async persistEffortFor(backendId: BackendId, value: string): Promise<void> {
+    const descriptor = this.resolveDescriptor(backendId);
+    if (!descriptor.persistEffortSelection) return;
+    await descriptor.persistEffortSelection(value, this.plugin);
+  }
+
+  /**
+   * Build an `EffortApplyContext` for the active session. Returns `null`
+   * when the active session isn't on `backendId` — callers must avoid
+   * cross-backend effort apply. Closures over the manager + active session
+   * so descriptors don't import session APIs directly.
+   */
+  buildEffortApplyContext(backendId: BackendId): EffortApplyContext | null {
+    const session = this.getActiveSession();
+    if (!session || session.backendId !== backendId) return null;
+    return {
+      setSessionModel: (modelId) => session.setModel(modelId),
+      setSessionConfigOption: (configId, value) => session.setConfigOption(configId, value),
+      persistModelSelection: (modelId) => this.persistModelSelectionFor(backendId, modelId),
+      persistEffort: (value) => this.persistEffortFor(backendId, value),
+    };
   }
 
   getBackendProcess(backendId: BackendId): AcpBackendProcess | null {

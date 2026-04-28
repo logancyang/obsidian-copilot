@@ -25,6 +25,14 @@ import type { BackendDescriptor, InstallState } from "@/agentMode/session/types"
 let managerRef: OpencodeBinaryManager | null = null;
 
 /**
+ * Effort suffixes opencode appends to model ids for reasoning-effort variants.
+ * Used by `parseEffortFromModelId` to disambiguate genuine variants from
+ * 3-segment ids whose third segment is part of the model name (e.g.
+ * OpenRouter's `openrouter/anthropic/claude-sonnet-4-5`).
+ */
+const KNOWN_OPENCODE_EFFORTS = new Set(["minimal", "low", "medium", "high"]);
+
+/**
  * Resolve the lazy `OpencodeBinaryManager` instance owned by this descriptor.
  * The plugin no longer holds a top-level reference — ownership lives next to
  * the backend that uses it.
@@ -92,6 +100,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   getPreferredModelId(settings: CopilotSettings): string | undefined {
     const key = settings.agentMode?.backends?.opencode?.selectedModelKey;
     if (!key) return undefined;
+    // Copilot keys use `name|provider`; raw opencode ids never contain `|`
+    // (they're `<provider>/<model>[/<variant>]`). Route accordingly so
+    // effort-variant ids round-trip across reloads.
+    if (!key.includes("|")) return key;
     try {
       const model = findCustomModel(key, settings.activeModels ?? []);
       return copilotModelToOpencodeId(model);
@@ -132,6 +144,26 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       if (opencodeId === opencodeProviderId) return copilotProvider;
     }
     return undefined;
+  },
+
+  /**
+   * The 3-segment shape is ambiguous on its own — an OpenRouter id like
+   * `openrouter/anthropic/claude-sonnet-4-5` looks like a variant id but
+   * isn't one. Gate the variant interpretation on a known effort vocabulary
+   * so unrelated 3-seg ids fall through to `null`.
+   */
+  parseEffortFromModelId(modelId: string): { baseId: string; effort: string | null } | null {
+    if (!modelId) return null;
+    const segments = modelId.split("/");
+    if (segments.length === 2) return { baseId: modelId, effort: null };
+    if (segments.length === 3 && KNOWN_OPENCODE_EFFORTS.has(segments[2])) {
+      return { baseId: `${segments[0]}/${segments[1]}`, effort: segments[2] };
+    }
+    return null;
+  },
+
+  composeModelId(baseId: string, effort: string | null): string {
+    return effort ? `${baseId}/${effort}` : baseId;
   },
 
   getProbeSessionId(settings: CopilotSettings): string | undefined {

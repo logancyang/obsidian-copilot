@@ -18,6 +18,8 @@ import {
   ResumeSessionResponse,
   SessionId,
   SessionNotification,
+  SetSessionConfigOptionRequest,
+  SetSessionConfigOptionResponse,
   SetSessionModelRequest,
   SetSessionModelResponse,
   ndJsonStream,
@@ -38,6 +40,7 @@ export type AcpCapability =
   | "session/resume"
   | "session/load"
   | "session/set_model"
+  | "session/set_config_option"
   | "mcp/http"
   | "mcp/sse";
 
@@ -91,12 +94,12 @@ export class AcpBackendProcess {
    * `initialize` time (from `agentCapabilities`) and on first probe for
    * unstable methods. A `MethodNotFound` reply removes the entry.
    *
-   * `setSessionModelProbed` distinguishes "we haven't tried yet" from "we
-   * tried and it's unsupported" for the unstable session/set_model RPC, which
-   * has no initialize-time capability flag.
+   * `probedCapabilities` distinguishes "we haven't tried yet" from "we
+   * tried and it's unsupported" for unstable RPCs (set_model,
+   * set_config_option) that have no initialize-time capability flag.
    */
   private capabilities = new Set<AcpCapability>();
-  private setSessionModelProbed = false;
+  private probedCapabilities = new Set<AcpCapability>();
 
   constructor(
     private readonly app: App,
@@ -140,7 +143,7 @@ export class AcpBackendProcess {
       this.pendingUpdates.clear();
       this.permissionPrompter = null;
       this.capabilities.clear();
-      this.setSessionModelProbed = false;
+      this.probedCapabilities.clear();
       for (const fn of this.exitListeners) {
         try {
           fn();
@@ -264,39 +267,62 @@ export class AcpBackendProcess {
 
   /**
    * Switch the active model for an ACP session via `unstable_setSessionModel`.
-   *
-   * The capability is marked unstable in the spec — agents may not implement
-   * it. On the first JSON-RPC method-not-found (-32601), we cache the negative
-   * result and rethrow as a typed `MethodUnsupportedError` so callers can
-   * gracefully degrade. Subsequent calls short-circuit without hitting the
-   * wire.
+   * Capability is marked unstable in the spec — see `probedCall`.
    */
   async setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse> {
-    if (this.setSessionModelProbed && !this.capabilities.has("session/set_model")) {
-      throw new MethodUnsupportedError("session/set_model");
+    return this.probedCall("session/set_model", (c) => c.unstable_setSessionModel(params));
+  }
+
+  isSetSessionModelSupported(): boolean | null {
+    return this.probedCapabilitySupported("session/set_model");
+  }
+
+  /**
+   * Set a session configuration option (e.g. claude-code's "effort" select).
+   * Not all agents implement `session/set_config_option` — see `probedCall`.
+   */
+  async setSessionConfigOption(
+    params: SetSessionConfigOptionRequest
+  ): Promise<SetSessionConfigOptionResponse> {
+    return this.probedCall("session/set_config_option", (c) => c.setSessionConfigOption(params));
+  }
+
+  isSetSessionConfigOptionSupported(): boolean | null {
+    return this.probedCapabilitySupported("session/set_config_option");
+  }
+
+  /**
+   * Run an unstable RPC that has no initialize-time capability flag. On the
+   * first JSON-RPC method-not-found (-32601), cache the negative result and
+   * rethrow as `MethodUnsupportedError` so subsequent calls short-circuit
+   * without hitting the wire.
+   */
+  private async probedCall<T>(
+    capability: AcpCapability,
+    run: (c: ClientSideConnection) => Promise<T>
+  ): Promise<T> {
+    if (this.probedCapabilities.has(capability) && !this.capabilities.has(capability)) {
+      throw new MethodUnsupportedError(capability);
     }
     try {
-      const resp = await this.requireConnection().unstable_setSessionModel(params);
-      this.capabilities.add("session/set_model");
-      this.setSessionModelProbed = true;
+      const resp = await run(this.requireConnection());
+      this.capabilities.add(capability);
+      this.probedCapabilities.add(capability);
       return resp;
     } catch (err) {
       if (isMethodNotFoundError(err)) {
-        this.capabilities.delete("session/set_model");
-        this.setSessionModelProbed = true;
-        throw new MethodUnsupportedError("session/set_model");
+        this.capabilities.delete(capability);
+        this.probedCapabilities.add(capability);
+        throw new MethodUnsupportedError(capability);
       }
       throw err;
     }
   }
 
-  /**
-   * Tri-state probe result for the unstable session/set_model RPC: `null`
-   * before the first probe, `true`/`false` after.
-   */
-  isSetSessionModelSupported(): boolean | null {
-    if (!this.setSessionModelProbed) return null;
-    return this.capabilities.has("session/set_model");
+  /** Tri-state: `null` before first probe, `true`/`false` after. */
+  private probedCapabilitySupported(capability: AcpCapability): boolean | null {
+    if (!this.probedCapabilities.has(capability)) return null;
+    return this.capabilities.has(capability);
   }
 
   /**
@@ -355,7 +381,7 @@ export class AcpBackendProcess {
     this.pendingUpdates.clear();
     this.permissionPrompter = null;
     this.capabilities.clear();
-    this.setSessionModelProbed = false;
+    this.probedCapabilities.clear();
     if (this.process) {
       try {
         await this.process.shutdown();

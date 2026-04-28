@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Notice } from "obsidian";
+import type { ModelInfo } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import { logError } from "@/logger";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
@@ -7,6 +8,12 @@ import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import {
+  buildEffortAdapter,
+  dedupeAvailableModels,
+  stripEffortSuffix,
+  type EffortAdapter,
+} from "@/agentMode/session/effortAdapter";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 
 export interface AgentModelPickerOverride {
@@ -14,6 +21,17 @@ export interface AgentModelPickerOverride {
   value: string;
   onChange: (modelKey: string) => void;
   disabled?: boolean;
+  /**
+   * Sibling effort picker, present only when the active model belongs to a
+   * group with multiple efforts (opencode-style modelId variants) or
+   * exposes an effort `SessionConfigOption` (claude-code-style).
+   */
+  effort?: {
+    options: { label: string; value: string | null }[];
+    value: string | null;
+    onChange: (value: string | null) => void;
+    disabled?: boolean;
+  };
 }
 
 /** A pseudo-provider value used for agent-only synthesized entries. */
@@ -55,6 +73,12 @@ export function useAgentModelPicker(
           return `${d.id}=${c?.currentModelId ?? ""}/${c?.availableModels.length ?? 0}`;
         })
         .join(",");
+      // configOptions: hash by id + currentValue. Picker re-renders when the
+      // effort adapter would change shape — adding/removing the option,
+      // flipping its currentValue, or shifting select choices.
+      const configOpts = (ui?.getConfigOptions() ?? [])
+        .map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`)
+        .join(",");
       return [
         session?.internalId ?? "",
         session?.backendId ?? "",
@@ -63,6 +87,7 @@ export function useAgentModelPicker(
         ui?.isModelSwitchSupported() ?? "",
         running,
         cached,
+        configOpts,
       ].join("|");
     };
 
@@ -102,7 +127,9 @@ export function useAgentModelPicker(
   const activeChatUIState = manager?.getActiveChatUIState() ?? null;
   const activeSession = manager?.getActiveSession() ?? null;
   const activeModelState = activeChatUIState?.getModelState() ?? null;
+  const activeConfigOptions = activeChatUIState?.getConfigOptions() ?? null;
   const isModelSwitchSupported = activeChatUIState?.isModelSwitchSupported() ?? null;
+  const isSetConfigOptionSupported = activeChatUIState?.isSetSessionConfigOptionSupported() ?? null;
   const activeBackendId = activeSession?.backendId ?? null;
   const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
 
@@ -143,8 +170,30 @@ export function useAgentModelPicker(
         (m) => m.modelId === activeModelState.currentModelId
       );
       if (currentInfo && !entries.some((e) => getModelKeyFromModel(e) === valueKey)) {
-        entries.unshift(
-          synthesizeAgentEntry(currentInfo.modelId, currentInfo.name, activeDescriptor)
+        // Surface effort-variant rows under their baseId so the picker shows
+        // the same entry regardless of which effort is currently active.
+        const parsed = activeDescriptor.parseEffortFromModelId?.(currentInfo.modelId);
+        const synthesizedId = parsed?.baseId ?? currentInfo.modelId;
+        const cleanName = stripEffortSuffix(currentInfo.name, parsed?.effort) || currentInfo.name;
+        entries.unshift(synthesizeAgentEntry(synthesizedId, cleanName, activeDescriptor));
+      }
+    }
+
+    // Effort picker — built from either modelId-suffix variants (opencode)
+    // or a SessionConfigOption (claude-code), normalized to one shape.
+    let effortBlock: AgentModelPickerOverride["effort"] | undefined;
+    if (activeBackendId && activeDescriptor && (activeModelState || activeConfigOptions)) {
+      const adapter = buildEffortAdapter(activeDescriptor, {
+        modelState: activeModelState,
+        configOptions: activeConfigOptions,
+      });
+      if (adapter) {
+        effortBlock = buildEffortOverride(
+          adapter,
+          activeBackendId,
+          manager,
+          isModelSwitchSupported,
+          isSetConfigOptionSupported
         );
       }
     }
@@ -155,6 +204,7 @@ export function useAgentModelPicker(
       // Cross-backend picks are valid even when the active session can't
       // switch models at runtime; intra-backend support is checked per-call.
       disabled: false,
+      effort: effortBlock,
       onChange: (modelKey: string) => {
         const entry = entries.find((e) => getModelKeyFromModel(e) === modelKey);
         if (!entry) return;
@@ -222,10 +272,56 @@ export function useAgentModelPicker(
     settings.activeModels,
     activeBackendId,
     activeModelState,
+    activeConfigOptions,
     isModelSwitchSupported,
+    isSetConfigOptionSupported,
     activeSession,
     activeSessionHasHistory,
   ]);
+}
+
+/**
+ * Wire an `EffortAdapter` into the picker override block. Routes user picks
+ * through `manager.buildEffortApplyContext` so the descriptor decides which
+ * ACP call (setSessionModel vs setSessionConfigOption) to make.
+ *
+ * Capability gating is keyed off `adapter.kind` rather than descriptor
+ * shape — a descriptor that defines both `parseEffortFromModelId` and
+ * `findEffortConfigOption` and falls through to the configOption path must
+ * still gate on `set_config_option`, not `set_model`.
+ */
+function buildEffortOverride(
+  adapter: EffortAdapter,
+  backendId: string,
+  manager: AgentSessionManager,
+  isModelSwitchSupported: boolean | null,
+  isSetConfigOptionSupported: boolean | null
+): NonNullable<AgentModelPickerOverride["effort"]> {
+  const disabled =
+    adapter.kind === "model"
+      ? isModelSwitchSupported === false
+      : isSetConfigOptionSupported === false;
+
+  return {
+    options: adapter.options,
+    value: adapter.currentValue,
+    disabled: disabled || adapter.disabled,
+    onChange: (value: string | null) => {
+      const ctx = manager.buildEffortApplyContext(backendId);
+      if (!ctx) {
+        new Notice("Active session is not on this backend.");
+        return;
+      }
+      adapter.applyEffort(value, ctx).catch((err) => {
+        if (err instanceof MethodUnsupportedError) {
+          new Notice("This agent doesn't support runtime effort switching.");
+          return;
+        }
+        logError("[AgentMode] effort apply failed", err);
+        new Notice("Failed to switch effort. See console for details.");
+      });
+    },
+  };
 }
 
 function appendBackendSection(
@@ -233,7 +329,7 @@ function appendBackendSection(
   descriptor: BackendDescriptor,
   activeModels: CustomModel[],
   ctx: {
-    liveAvailable: ReadonlyArray<{ modelId: string; name: string }> | null;
+    liveAvailable: ReadonlyArray<ModelInfo> | null;
     isRunning: boolean;
     isActiveBackend: boolean;
   }
@@ -245,17 +341,23 @@ function appendBackendSection(
     ? filterFn(activeModels)
     : { compatible: [] as CustomModel[], incompatible: [] as CustomModel[] };
 
-  const liveIds = new Set((ctx.liveAvailable ?? []).map((m) => m.modelId));
+  // Collapse opencode-style per-variant entries before any iteration so the
+  // dropdown shows one row per base model and the curated/synthesized
+  // dedupe checks operate on the same id surface.
+  const dedupedLive = ctx.liveAvailable
+    ? dedupeAvailableModels(ctx.liveAvailable, descriptor)
+    : null;
+
+  const liveIds = new Set((dedupedLive ?? []).map((m) => m.modelId));
   const curatedProviders = new Set<string>();
   const curatedAgentIds = new Set<string>();
-  for (const m of partition.compatible) {
+  const compiled = partition.compatible.map((m) => ({ m, agentId: translateFn?.(m) }));
+  for (const { m, agentId } of compiled) {
     curatedProviders.add(m.provider);
-    const agentId = translateFn?.(m);
     if (agentId) curatedAgentIds.add(agentId);
   }
 
-  for (const m of partition.compatible) {
-    const agentId = translateFn?.(m);
+  for (const { m, agentId } of compiled) {
     const isAvailable = ctx.isRunning && agentId !== undefined && liveIds.has(agentId);
     const disabledReason = ctx.isActiveBackend
       ? ctx.isRunning
@@ -275,8 +377,8 @@ function appendBackendSection(
 
   // Live entries — surface uncurated models. Skip providers the user has
   // already curated; those should not be drowned out by the agent catalog.
-  if (!ctx.liveAvailable) return;
-  for (const m of ctx.liveAvailable) {
+  if (!dedupedLive) return;
+  for (const m of dedupedLive) {
     if (curatedAgentIds.has(m.modelId)) continue;
     const copilotProvider = reverseProviderFn?.(m.modelId);
     if (copilotProvider && curatedProviders.has(copilotProvider)) continue;
@@ -315,10 +417,18 @@ function computeValueKeyForActive(
       ? filterFn(activeModels)
       : { compatible: activeModels, incompatible: [] };
     const match = partition.compatible.find((m) => translateFn(m) === currentModelId);
-    if (match) return getModelKeyFromModel(match);
+    // Curated entries pushed by `appendBackendSection` carry `_backendId`,
+    // so their keys are prefixed (`<backend>:<name>|<provider>`). The match
+    // comes straight from `activeModels` and lacks the prefix — re-attach it
+    // here so the returned key compares equal to the entry the picker stored.
+    if (match) return getModelKeyFromModel({ ...match, _backendId: descriptor.id });
   }
+  // For effort-variant backends, the synthesized entry is keyed under the
+  // baseId — strip the variant suffix so the picker stays highlighted on
+  // the collapsed row regardless of which effort is active.
+  const baseId = descriptor.parseEffortFromModelId?.(currentModelId)?.baseId ?? currentModelId;
   return getModelKeyFromModel({
-    name: currentModelId,
+    name: baseId,
     provider: AGENT_PROVIDER,
     _backendId: descriptor.id,
   } as CustomModel & { _backendId: string });

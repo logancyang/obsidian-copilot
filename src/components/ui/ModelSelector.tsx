@@ -157,3 +157,54 @@ export function ModelSelector({
     </DropdownMenu>
   );
 }
+
+export interface EffortSelectorProps {
+  options: { label: string; value: string | null }[];
+  value: string | null;
+  onChange: (value: string | null) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+/**
+ * Sibling effort picker rendered next to `ModelSelector` in Agent Mode when
+ * the active model has multiple effort variants (opencode-style modelId
+ * suffixes) or exposes a `SessionConfigOption` for effort
+ * (claude-code-style). Stays hidden when the override doesn't include an
+ * `effort` block — kept in this file so the visual styling tracks
+ * `ModelSelector`. `value: null` represents the bare/"Default" entry and is
+ * only present for mechanisms that support an unsuffixed selection.
+ */
+export function EffortSelector({
+  options,
+  value,
+  onChange,
+  disabled = false,
+  className,
+}: EffortSelectorProps) {
+  const current = options.find((o) => o.value === value);
+  const label = current?.label ?? "Default";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost2"
+          size="sm"
+          disabled={disabled}
+          className={cn("tw-shrink-0 tw-text-muted", className)}
+          title="Reasoning effort"
+        >
+          <span className="tw-truncate">{label}</span>
+          {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
+        {options.map((opt) => (
+          <DropdownMenuItem key={opt.value ?? "__default__"} onSelect={() => onChange(opt.value)}>
+            {opt.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

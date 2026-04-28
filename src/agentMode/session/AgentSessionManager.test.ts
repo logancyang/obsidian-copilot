@@ -322,3 +322,29 @@ describe("AgentSessionManager.subscribe / shutdown", () => {
     expect(listener).toHaveBeenCalled();
   });
 });
+
+describe("AgentSessionManager.buildEffortApplyContext", () => {
+  it("returns null when no session is active", () => {
+    const mgr = buildManager();
+    expect(mgr.buildEffortApplyContext("opencode")).toBeNull();
+  });
+
+  it("returns null when the active session is on a different backend", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+    // Active session is on `opencode`; asking for a different backend
+    // must refuse so a stray cross-backend effort apply can't slip through.
+    expect(mgr.buildEffortApplyContext("claude-code")).toBeNull();
+  });
+
+  it("returns a context bound to the active session for the matching backend", async () => {
+    const mgr = buildManager();
+    await mgr.createSession();
+    const ctx = mgr.buildEffortApplyContext("opencode");
+    expect(ctx).not.toBeNull();
+    expect(typeof ctx!.setSessionModel).toBe("function");
+    expect(typeof ctx!.setSessionConfigOption).toBe("function");
+    expect(typeof ctx!.persistModelSelection).toBe("function");
+    expect(typeof ctx!.persistEffort).toBe("function");
+  });
+});

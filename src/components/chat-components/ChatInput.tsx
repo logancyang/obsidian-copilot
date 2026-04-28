@@ -9,7 +9,11 @@ import {
 import { ChainType } from "@/chainFactory";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { Button } from "@/components/ui/button";
-import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import {
+  EffortSelector,
+  ModelSelector,
+  type ModelSelectorEntry,
+} from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ChatToolControls } from "./ChatToolControls";
 import { isPlusChain } from "@/utils";
@@ -72,6 +76,17 @@ interface ChatInputProps {
     value: string;
     onChange: (modelKey: string) => void;
     disabled?: boolean;
+    /**
+     * Optional sibling effort picker. Surface only when the active model
+     * supports effort (modelId-suffix variants or a SessionConfigOption).
+     * `value: null` represents the bare/"Default" variant.
+     */
+    effort?: {
+      options: { label: string; value: string | null }[];
+      value: string | null;
+      onChange: (value: string | null) => void;
+      disabled?: boolean;
+    };
   };
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
@@ -815,7 +830,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
             <span>Generating...</span>
           </div>
         ) : (
-          <div className="tw-min-w-0 tw-flex-1">
+          <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
             <ModelSelector
               variant="ghost2"
               size="fit"
@@ -832,8 +847,16 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   }
                 })
               }
-              className="tw-max-w-full tw-truncate"
+              className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
+            {modelPickerOverride?.effort && (
+              <EffortSelector
+                options={modelPickerOverride.effort.options}
+                value={modelPickerOverride.effort.value}
+                onChange={modelPickerOverride.effort.onChange}
+                disabled={modelPickerOverride.effort.disabled}
+              />
+            )}
           </div>
         )}
 

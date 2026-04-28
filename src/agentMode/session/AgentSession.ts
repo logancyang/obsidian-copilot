@@ -14,6 +14,7 @@ import {
   ContentBlock,
   Plan,
   PromptRequest,
+  SessionConfigOption,
   SessionId,
   SessionModelState,
   SessionNotification,
@@ -51,6 +52,7 @@ export interface AgentSessionOptions {
   /** The backend this session was spawned on. */
   backendId: BackendId;
   initialModelState?: SessionModelState | null;
+  initialConfigOptions?: SessionConfigOption[] | null;
   cwd?: string | null;
 }
 
@@ -80,6 +82,7 @@ export class AgentSession {
   private listeners = new Set<AgentSessionListener>();
   private unregisterSessionHandler: (() => void) | null = null;
   private modelState: SessionModelState | null = null;
+  private configOptions: SessionConfigOption[] | null = null;
   private label: string | null = null;
   // Tracks who set the current label so an agent-pushed `session_info_update`
   // can't clobber a label the user explicitly chose via Rename.
@@ -92,6 +95,7 @@ export class AgentSession {
     this.backendId = opts.backendId;
     this.cwd = opts.cwd ?? null;
     this.modelState = opts.initialModelState ?? null;
+    this.configOptions = opts.initialConfigOptions ?? null;
     this.unregisterSessionHandler = this.backend.registerSessionHandler(
       this.acpSessionId,
       (update) => this.handleSessionUpdate(update)
@@ -118,6 +122,7 @@ export class AgentSession {
       internalId,
       backendId,
       initialModelState: resp.models ?? null,
+      initialConfigOptions: resp.configOptions ?? null,
       cwd,
     });
 
@@ -174,6 +179,32 @@ export class AgentSession {
    */
   isModelSwitchSupported(): boolean | null {
     return this.backend.isSetSessionModelSupported();
+  }
+
+  getConfigOptions(): SessionConfigOption[] | null {
+    return this.configOptions;
+  }
+
+  /**
+   * Set a session configuration option (e.g. effort). The response carries
+   * the **full** post-update option list per spec, which we cache verbatim.
+   * Reuses `notifyModelChanged` because the picker treats model and
+   * configOption changes as one channel.
+   */
+  async setConfigOption(configId: string, value: string): Promise<void> {
+    if (this.status === "closed") throw new Error("Session is closed");
+    const resp = await this.backend.setSessionConfigOption({
+      sessionId: this.acpSessionId,
+      configId,
+      value,
+    });
+    this.configOptions = resp.configOptions;
+    this.notifyModelChanged();
+  }
+
+  /** Tri-state mirror of `AcpBackendProcess.isSetSessionConfigOptionSupported()`. */
+  isSetSessionConfigOptionSupported(): boolean | null {
+    return this.backend.isSetSessionConfigOptionSupported();
   }
 
   getStatus(): AgentSessionStatus {

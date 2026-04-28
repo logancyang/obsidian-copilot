@@ -236,6 +236,12 @@ export interface ClaudeCodeBackendSettings {
    * not pull from Copilot's `activeModels`, so no Copilot-key translation.
    */
   selectedModelKey?: string;
+  /**
+   * Sticky effort preference, matched against `SessionConfigOption` values
+   * (e.g. `"medium"`). Replayed via `setConfigOption("effort", ...)` after
+   * each new session resolves. Unset = follow the agent's default.
+   */
+  selectedEffort?: string;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -755,7 +761,9 @@ function sanitizeClaudeCodeBackendSettings(raw: unknown): ClaudeCodeBackendSetti
   const binaryPath = typeof r.binaryPath === "string" && r.binaryPath ? r.binaryPath : undefined;
   const selectedModelKey =
     typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
-  return { binaryPath, selectedModelKey };
+  const selectedEffort =
+    typeof r.selectedEffort === "string" && r.selectedEffort ? r.selectedEffort : undefined;
+  return { binaryPath, selectedModelKey, selectedEffort };
 }
 
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {

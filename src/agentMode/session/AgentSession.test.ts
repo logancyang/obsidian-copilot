@@ -18,6 +18,8 @@ interface MockBackend {
   newSession: jest.Mock;
   setSessionModel: jest.Mock;
   isSetSessionModelSupported: jest.Mock;
+  setSessionConfigOption: jest.Mock;
+  isSetSessionConfigOptionSupported: jest.Mock;
   listSessions: jest.Mock;
   isListSessionsSupported: jest.Mock;
 }
@@ -35,6 +37,8 @@ function makeMockBackend(): MockBackend {
   const newSession = jest.fn(async () => ({ sessionId: "acp-1", models: null }));
   const setSessionModel = jest.fn(async () => ({}));
   const isSetSessionModelSupported = jest.fn(() => true);
+  const setSessionConfigOption = jest.fn(async () => ({ configOptions: [] }));
+  const isSetSessionConfigOptionSupported = jest.fn(() => true);
   const listSessions = jest.fn(async () => ({ sessions: [] }));
   const isListSessionsSupported = jest.fn(() => true);
   const backend = {
@@ -44,6 +48,8 @@ function makeMockBackend(): MockBackend {
     newSession,
     setSessionModel,
     isSetSessionModelSupported,
+    setSessionConfigOption,
+    isSetSessionConfigOptionSupported,
     listSessions,
     isListSessionsSupported,
   } as unknown as AcpBackendProcess;
@@ -55,6 +61,8 @@ function makeMockBackend(): MockBackend {
     newSession,
     setSessionModel,
     isSetSessionModelSupported,
+    setSessionConfigOption,
+    isSetSessionConfigOptionSupported,
     listSessions,
     isListSessionsSupported,
     emit: (update) => handler?.(update as Parameters<SessionUpdateHandler>[0]),
@@ -392,6 +400,99 @@ describe("AgentSession.setModel", () => {
     });
     await session.setModel("x/y");
     expect(onModelChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AgentSession.setConfigOption", () => {
+  it("forwards to backend and replaces local cache from response", async () => {
+    const mock = makeMockBackend();
+    mock.setSessionConfigOption.mockResolvedValueOnce({
+      configOptions: [
+        {
+          id: "effort",
+          category: "effort",
+          type: "select",
+          name: "Effort",
+          currentValue: "high",
+          options: [{ value: "high", name: "High" }],
+        },
+      ],
+    });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialConfigOptions: [
+        {
+          id: "effort",
+          category: "effort",
+          type: "select",
+          name: "Effort",
+          currentValue: "medium",
+          options: [
+            { value: "medium", name: "Medium" },
+            { value: "high", name: "High" },
+          ],
+        },
+      ],
+    });
+    await session.setConfigOption("effort", "high");
+    expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      configId: "effort",
+      value: "high",
+    });
+    const opts = session.getConfigOptions();
+    expect(opts).toHaveLength(1);
+    expect(opts![0]).toMatchObject({ id: "effort", currentValue: "high" });
+  });
+
+  it("notifies onModelChanged subscribers on success", async () => {
+    const mock = makeMockBackend();
+    mock.setSessionConfigOption.mockResolvedValueOnce({ configOptions: [] });
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+    const onModelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onModelChanged,
+    });
+    await session.setConfigOption("effort", "low");
+    expect(onModelChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("rethrows MethodUnsupportedError without mutating cache", async () => {
+    const mock = makeMockBackend();
+    mock.setSessionConfigOption.mockRejectedValueOnce(
+      new MethodUnsupportedError("session/set_config_option")
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialConfigOptions: [
+        {
+          id: "effort",
+          category: "effort",
+          type: "select",
+          name: "Effort",
+          currentValue: "medium",
+          options: [{ value: "medium", name: "Medium" }],
+        },
+      ],
+    });
+    await expect(session.setConfigOption("effort", "high")).rejects.toBeInstanceOf(
+      MethodUnsupportedError
+    );
+    const opts = session.getConfigOptions();
+    expect(opts![0]).toMatchObject({ currentValue: "medium" });
   });
 });
 

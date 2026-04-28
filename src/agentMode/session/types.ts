@@ -1,10 +1,12 @@
 import type { App } from "obsidian";
 import type React from "react";
+import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 import type { AcpBackend, BackendId } from "@/agentMode/acp/types";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
 
 // Re-export so consumers in session/ and ui/ can import a single types entry.
 export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/types";
@@ -87,6 +89,40 @@ export interface BackendDescriptor {
    * doesn't drag in OpenCode's full OpenRouter catalog).
    */
   agentModelIdToCopilotProvider?(modelId: string): string | undefined;
+
+  /**
+   * Optional: parse an agent-native modelId into (baseId, effort). Used by
+   * the picker to collapse opencode-style `<provider>/<model>/<variant>`
+   * entries into one row plus a sibling effort picker. Effort is `null` for
+   * the bare/"Default" variant. Return `null` when the id has no parseable
+   * shape (the picker treats it as a standalone entry).
+   */
+  parseEffortFromModelId?(modelId: string): { baseId: string; effort: string | null } | null;
+
+  /** Inverse of `parseEffortFromModelId`. `effort: null` → bare base id. */
+  composeModelId?(baseId: string, effort: string | null): string;
+
+  /**
+   * Optional: identify the `SessionConfigOption` that represents effort
+   * (claude-code-style). Returning a select option lets the picker build an
+   * effort dropdown and apply changes via `setSessionConfigOption`.
+   * Different agents use different ids/categories — the descriptor owns the
+   * match.
+   */
+  findEffortConfigOption?(opts: SessionConfigOption[] | null): SessionConfigOption | null;
+
+  /**
+   * Optional: persist the user's chosen effort so the next session can
+   * replay it. Used only by configOption-style backends — opencode round-
+   * trips effort through `selectedModelKey`.
+   */
+  persistEffortSelection?(value: string, plugin: CopilotPlugin): Promise<void>;
+
+  /**
+   * Optional: replay persisted state on a freshly created session. Runs
+   * once after `createSession` resolves.
+   */
+  applyInitialSessionConfig?(session: AgentSession, settings: CopilotSettings): Promise<void>;
 
   /**
    * Optional: previously-stored ACP sessionId of the backend's dedicated

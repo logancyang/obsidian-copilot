@@ -1,4 +1,4 @@
-import type { SessionModelState } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, SessionModelState } from "@agentclientprotocol/sdk";
 import type { AgentChatMessage } from "./types";
 
 /**
@@ -25,4 +25,11 @@ export interface AgentChatBackend {
   setModel(modelId: string): Promise<void>;
   /** Tri-state: null = not yet probed, true/false = result of first probe. */
   isModelSwitchSupported(): boolean | null;
+
+  /** Latest known session configuration options (effort, mode, etc.). */
+  getConfigOptions(): SessionConfigOption[] | null;
+  /** Set a session config option (e.g. effort). Throws if unsupported. */
+  setConfigOption(configId: string, value: string): Promise<void>;
+  /** Tri-state: null = not yet probed, true/false = result of first probe. */
+  isSetSessionConfigOptionSupported(): boolean | null;
 }
