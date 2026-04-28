@@ -16,7 +16,7 @@
 - [ ] P1: Edit diff UI - https://agentclientprotocol.com/protocol/tool-calls#diffs
 - [ ] P2: Agent path auto-detect doesn't work well
 - [ ] P1: Agent mode selector (yolo, plan, safe) - https://agentclientprotocol.com/protocol/session-config-options
-- [ ] P1: Agent effort selector
+- [x] P1: Agent effort selector
 - [ ] P2: Integrate copilot plus tool calls
 - [ ] P2: Keyboard shortcut
 - [ ] P2: New agent command (/new, /usage)
@@ -32,3 +32,4 @@
 - [ ] P2: Auto-save chat history controls
 - [ ] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
 - [ ] P2: Slash command support. Revamp current slash command to function like skills.
+- [ ] P2: Token counter
