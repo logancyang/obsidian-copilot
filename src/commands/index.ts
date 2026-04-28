@@ -28,7 +28,7 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
-import { Editor, MarkdownView, Notice, TFile } from "obsidian";
+import { Editor, MarkdownView, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "../constants";
 import { setSelectedTextContexts } from "@/aiParams";
@@ -116,6 +116,22 @@ export function registerCommands(
     clearRecordedPromptPayload();
     plugin.newChat();
   });
+
+  // Agent Chat commands. Gated by `agentMode.enabled` and desktop because the
+  // ACP backend needs subprocess support. The settings-change subscription in
+  // main.ts re-runs `registerCommands` so toggling the setting reflects in the
+  // command palette.
+  if (Platform.isDesktopApp && next.agentMode?.enabled) {
+    addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
+      plugin.activateAgentView();
+    });
+    addCommand(plugin, COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW, () => {
+      plugin.toggleAgentView();
+    });
+    addCommand(plugin, COMMAND_IDS.NEW_AGENT_CHAT, () => {
+      plugin.newAgentChat();
+    });
+  }
 
   // Quick Command - opens a modal dialog for quick interactions
   // Note: For inline floating panel experience, use Quick Ask instead

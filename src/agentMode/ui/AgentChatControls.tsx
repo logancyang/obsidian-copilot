@@ -1,25 +1,10 @@
-import { useChainType } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
 import {
   ChatHistoryItem,
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { Button } from "@/components/ui/button";
-import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { PLUS_UTM_MEDIUMS } from "@/constants";
-import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
-import { useSettingsValue } from "@/settings/model";
-import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
-import {
-  Bot,
-  ChevronDown,
-  History,
-  LibraryBig,
-  MessageCirclePlus,
-  Sparkles,
-  SquareArrowOutUpRight,
-} from "lucide-react";
+import { Bot, History, MessageCirclePlus } from "lucide-react";
 import React from "react";
 
 interface AgentChatControlsProps {
@@ -39,11 +24,11 @@ interface AgentChatControlsProps {
 }
 
 /**
- * Minimal control bar for Agent Mode. Renders only the chain switcher (so the
- * user can leave Agent Mode) and a New Chat button. Intentionally omits the
- * model picker, project picker, save-as-note, history, and settings popover —
- * Agent Mode does not honor those (ACP owns model/conversation state, no
- * persistence yet).
+ * Minimal control bar for the Agent Chat view. The agent view stands alone
+ * (no chain switcher needed), so this only renders New Chat and the chat
+ * history popover. Intentionally omits the model picker, project picker,
+ * save-as-note, and settings popover — Agent Mode owns its own model/conversation
+ * state via ACP.
  */
 export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onNewChat,
@@ -54,68 +39,15 @@ export const AgentChatControls: React.FC<AgentChatControlsProps> = ({
   onDeleteChat,
   onOpenSourceFile,
 }) => {
-  const settings = useSettingsValue();
-  const [, setSelectedChain] = useChainType();
-  const isPlusUser = useIsPlusUser();
   const historyAvailable = Boolean(
     chatHistoryItems && onLoadChat && onUpdateChatTitle && onDeleteChat
   );
 
   return (
     <div className="tw-flex tw-w-full tw-items-center tw-justify-between tw-p-1">
-      <div className="tw-flex-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost2" size="fit" className="tw-ml-1 tw-text-sm tw-text-muted">
-              <div className="tw-flex tw-items-center tw-gap-1">
-                <Bot className="tw-size-4" />
-                agent (alpha)
-              </div>
-              <ChevronDown className="tw-mt-0.5 tw-size-5" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-            <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.LLM_CHAIN)}>
-              chat (free)
-            </DropdownMenuItem>
-            <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.VAULT_QA_CHAIN)}>
-              vault QA (free)
-            </DropdownMenuItem>
-            {isPlusUser ? (
-              <DropdownMenuItem onSelect={() => setSelectedChain(ChainType.COPILOT_PLUS_CHAIN)}>
-                <div className="tw-flex tw-items-center tw-gap-1">
-                  <Sparkles className="tw-size-4" />
-                  copilot plus
-                </div>
-              </DropdownMenuItem>
-            ) : (
-              <DropdownMenuItem
-                onSelect={() => navigateToPlusPage(PLUS_UTM_MEDIUMS.CHAT_MODE_SELECT)}
-              >
-                copilot plus
-                <SquareArrowOutUpRight className="tw-size-3" />
-              </DropdownMenuItem>
-            )}
-            {isPlusUser && (
-              <DropdownMenuItem
-                className="tw-flex tw-items-center tw-gap-1"
-                onSelect={() => setSelectedChain(ChainType.PROJECT_CHAIN)}
-              >
-                <LibraryBig className="tw-size-4" />
-                projects (alpha)
-              </DropdownMenuItem>
-            )}
-            {settings.agentMode.enabled && (
-              <DropdownMenuItem
-                className="tw-flex tw-items-center tw-gap-1"
-                onSelect={() => setSelectedChain(ChainType.AGENT_MODE)}
-              >
-                <Bot className="tw-size-4" />
-                agent (alpha)
-              </DropdownMenuItem>
-            )}
-          </DropdownMenuContent>
-        </DropdownMenu>
+      <div className="tw-ml-1 tw-flex tw-flex-1 tw-items-center tw-gap-1 tw-text-sm tw-text-muted">
+        <Bot className="tw-size-4" />
+        agent (alpha)
       </div>
       <div className="tw-flex tw-items-center tw-gap-1">
         {onNewChat && (

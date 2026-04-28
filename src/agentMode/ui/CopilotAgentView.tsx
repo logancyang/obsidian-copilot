@@ -1,22 +1,15 @@
-import ChainManager from "@/LLMProviders/chainManager";
-import Chat from "@/components/Chat";
+import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
 import { attachChatViewLayoutObservers } from "@/components/chat-components/attachChatViewLayoutObservers";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
-import { CHAT_VIEWTYPE } from "@/constants";
+import { CHAT_AGENT_VIEWTYPE } from "@/constants";
 import { AppContext, EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
-import { FileParserManager } from "@/tools/FileParserManager";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
 import { createRoot, Root } from "react-dom/client";
 
-export default class CopilotView extends ItemView {
-  private get chainManager(): ChainManager {
-    return this.plugin.projectManager.getCurrentChainManager();
-  }
-
-  private fileParserManager: FileParserManager;
+export default class CopilotAgentView extends ItemView {
   private root: Root | null = null;
   private handleSaveAsNote: (() => Promise<void>) | null = null;
   private layout: ChatViewLayout | null = null;
@@ -29,25 +22,24 @@ export default class CopilotView extends ItemView {
   ) {
     super(leaf);
     this.app = plugin.app;
-    this.fileParserManager = plugin.fileParserManager;
     this.eventTarget = new EventTarget();
     this.plugin = plugin;
   }
 
   getViewType(): string {
-    return CHAT_VIEWTYPE;
+    return CHAT_AGENT_VIEWTYPE;
   }
 
   getIcon(): string {
-    return "message-square";
+    return "bot";
   }
 
   getTitle(): string {
-    return "Copilot Chat";
+    return "Copilot Agent Chat";
   }
 
   getDisplayText(): string {
-    return "Copilot";
+    return "Copilot Agent";
   }
 
   async onOpen(): Promise<void> {
@@ -58,10 +50,6 @@ export default class CopilotView extends ItemView {
     const observers = attachChatViewLayoutObservers(this.containerEl);
     this.disposeLayoutObservers = observers.dispose;
 
-    // Reason: The view can move between containers (e.g. editor tab → drawer)
-    // without onOpen firing again. Re-bind the drawer observer on layout changes
-    // so it always watches the correct drawer element. Deferred to next frame
-    // so the current observer can catch in-flight class mutations before we rebind.
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
         requestAnimationFrame(() => observers.rebindDrawerObserver());
@@ -76,15 +64,12 @@ export default class CopilotView extends ItemView {
       <AppContext.Provider value={this.app}>
         <EventTargetContext.Provider value={this.eventTarget}>
           <Tooltip.Provider delayDuration={0}>
-            <Chat
-              chainManager={this.chainManager}
-              updateUserMessageHistory={(msg) => this.plugin.updateUserMessageHistory(msg)}
-              fileParserManager={this.fileParserManager}
+            <AgentModeChat
               plugin={this.plugin}
               onSaveChat={(fn) => {
                 this.handleSaveAsNote = fn;
               }}
-              chatUIState={this.plugin.chatUIState}
+              updateUserMessageHistory={(msg) => this.plugin.updateUserMessageHistory(msg)}
             />
           </Tooltip.Provider>
         </EventTargetContext.Provider>

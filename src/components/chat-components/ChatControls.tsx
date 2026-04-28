@@ -16,7 +16,6 @@ import { isRateLimitError } from "@/utils/rateLimitUtils";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   AlertTriangle,
-  Bot,
   CheckCircle,
   ChevronDown,
   Download,
@@ -307,18 +306,6 @@ export function ChatControls({
               >
                 copilot plus
                 <SquareArrowOutUpRight className="tw-size-3" />
-              </DropdownMenuItem>
-            )}
-
-            {settings.agentMode.enabled && (
-              <DropdownMenuItem
-                className="tw-flex tw-items-center tw-gap-1"
-                onSelect={() => {
-                  handleModeChange(ChainType.AGENT_MODE);
-                }}
-              >
-                <Bot className="tw-size-4" />
-                agent (alpha)
               </DropdownMenuItem>
             )}
           </DropdownMenuContent>

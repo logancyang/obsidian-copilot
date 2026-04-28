@@ -18,9 +18,9 @@ interface Props {
 
 /**
  * Agent Mode chat surface. Owns session-manager subscription, auto-spawn of the
- * first session on mount, and the no-session fallback (status pill + chain
- * switcher). Mounted by `ChatRouter` only when the active chain is Agent Mode,
- * so this component never has to check chain type itself.
+ * first session on mount, and the no-session fallback (status pill + minimal
+ * controls). Mounted by `CopilotAgentView` (the dedicated agent pane), so this
+ * component is only rendered when the agent view is open.
  */
 export const AgentModeChat: React.FC<Props> = ({
   plugin,

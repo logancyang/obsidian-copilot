@@ -1,4 +1,9 @@
-import { AGENT_CHAT_MODE, createAgentSessionManager, type AgentSessionManager } from "@/agentMode";
+import {
+  AGENT_CHAT_MODE,
+  CopilotAgentView,
+  createAgentSessionManager,
+  type AgentSessionManager,
+} from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -18,7 +23,13 @@ import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
-import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import {
+  ABORT_REASON,
+  CHAT_AGENT_VIEWTYPE,
+  CHAT_VIEWTYPE,
+  DEFAULT_OPEN_AREA,
+  EVENT_NAMES,
+} from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
@@ -58,6 +69,7 @@ import {
   Notice,
   Platform,
   Plugin,
+  setIcon,
   TFile,
   WorkspaceLeaf,
 } from "obsidian";
@@ -81,6 +93,7 @@ export default class CopilotPlugin extends Plugin {
   settingsUnsubscriber?: () => void;
   chatUIState: ChatManagerChatUIState;
   agentSessionManager?: AgentSessionManager;
+  private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
@@ -99,6 +112,9 @@ export default class CopilotPlugin extends Plugin {
         await this.saveData(next);
       }
       registerCommands(this, prev, next);
+      if (prev && prev.agentMode?.enabled !== next.agentMode?.enabled) {
+        this.refreshRibbonIcon();
+      }
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
@@ -164,12 +180,18 @@ export default class CopilotPlugin extends Plugin {
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
+    if (!Platform.isMobile) {
+      this.registerView(
+        CHAT_AGENT_VIEWTYPE,
+        (leaf: WorkspaceLeaf) => new CopilotAgentView(leaf, this)
+      );
+    }
 
     this.initActiveLeafChangeHandler();
 
-    this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
-      this.activateView();
-    });
+    this.ribbonIconEl = this.addRibbonIcon(this.getRibbonIconName(), this.getRibbonTooltip(), () =>
+      this.handleRibbonClick()
+    );
 
     registerCommands(this, undefined, getSettings());
 
@@ -565,22 +587,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async activateView(): Promise<void> {
-    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
-    if (leaves.length === 0) {
-      if (getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
-        await this.app.workspace.getRightLeaf(false).setViewState({
-          type: CHAT_VIEWTYPE,
-          active: true,
-        });
-      } else {
-        await this.app.workspace.getLeaf(true).setViewState({
-          type: CHAT_VIEWTYPE,
-          active: true,
-        });
-      }
-    } else {
-      this.app.workspace.revealLeaf(leaves[0]);
-    }
+    await this.openOrRevealView(CHAT_VIEWTYPE);
     // Small delay to ensure React component is ready to receive the focus event
     setTimeout(() => {
       this.emitChatIsVisible();
@@ -589,6 +596,97 @@ export default class CopilotPlugin extends Plugin {
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
+  }
+
+  toggleAgentView() {
+    if (!this.canUseAgentView()) {
+      this.notifyAgentUnavailable();
+      return;
+    }
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE);
+    if (leaves.length > 0) {
+      this.deactivateAgentView();
+    } else {
+      this.activateAgentView();
+    }
+  }
+
+  async activateAgentView(): Promise<WorkspaceLeaf | null> {
+    if (!this.canUseAgentView()) {
+      this.notifyAgentUnavailable();
+      return null;
+    }
+    return this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
+  }
+
+  async deactivateAgentView() {
+    this.app.workspace.detachLeavesOfType(CHAT_AGENT_VIEWTYPE);
+  }
+
+  async newAgentChat(): Promise<void> {
+    if (!this.canUseAgentView() || !this.agentSessionManager) {
+      this.notifyAgentUnavailable();
+      return;
+    }
+    await this.activateAgentView();
+    try {
+      await this.agentSessionManager.createSession();
+    } catch (error) {
+      logWarn("[CopilotPlugin] Failed to create agent session", error);
+      new Notice("Failed to create agent session. Check Copilot logs.");
+    }
+  }
+
+  private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf> {
+    const leaves = this.app.workspace.getLeavesOfType(viewType);
+    if (leaves.length > 0) {
+      this.app.workspace.revealLeaf(leaves[0]);
+      return leaves[0];
+    }
+    const leaf =
+      getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
+        ? this.app.workspace.getRightLeaf(false)
+        : this.app.workspace.getLeaf(true);
+    await leaf.setViewState({ type: viewType, active: true });
+    return leaf;
+  }
+
+  private canUseAgentView(): boolean {
+    return !Platform.isMobile && !!this.agentSessionManager && !!getSettings().agentMode?.enabled;
+  }
+
+  private notifyAgentUnavailable() {
+    if (Platform.isMobile) {
+      new Notice("Agent Chat is not available on mobile.");
+    } else if (!getSettings().agentMode?.enabled) {
+      new Notice("Enable Agent Mode in Copilot settings first.");
+    } else {
+      new Notice("Agent Chat is not initialized.");
+    }
+  }
+
+  private getRibbonIconName(): string {
+    return this.canUseAgentView() ? "bot" : "message-square";
+  }
+
+  private getRibbonTooltip(): string {
+    return this.canUseAgentView() ? "Open Copilot Agent Chat" : "Open Copilot Chat";
+  }
+
+  private handleRibbonClick() {
+    if (this.canUseAgentView()) {
+      this.activateAgentView();
+    } else {
+      this.activateView();
+    }
+  }
+
+  private refreshRibbonIcon() {
+    if (!this.ribbonIconEl) return;
+    setIcon(this.ribbonIconEl, this.getRibbonIconName());
+    const tooltip = this.getRibbonTooltip();
+    this.ribbonIconEl.setAttribute("aria-label", tooltip);
+    this.ribbonIconEl.setAttribute("title", tooltip);
   }
 
   async loadSettings() {
@@ -763,18 +861,17 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async loadAgentChatHistory(file: TFile): Promise<void> {
-    if (!this.agentSessionManager) {
-      throw new Error("Agent Mode is not initialized.");
+    if (!this.canUseAgentView() || !this.agentSessionManager) {
+      this.notifyAgentUnavailable();
+      return;
     }
-    const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
-    if (!existingView) this.activateView();
+    const leaf = await this.activateAgentView();
+    if (!leaf) return;
 
     await this.agentSessionManager.loadSessionFromHistory(file);
     void this.touchChatHistoryLastAccessedAt(file);
 
-    const copilotView = (existingView || this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0])
-      ?.view as CopilotView | undefined;
-    copilotView?.updateView();
+    (leaf.view as CopilotAgentView | undefined)?.updateView();
   }
 
   async openChatSourceFile(fileId: string): Promise<void> {

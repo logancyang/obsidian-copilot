@@ -23,7 +23,6 @@ const ChainType2Label: Record<ChainType, string> = {
   [ChainType.VAULT_QA_CHAIN]: "Vault QA (Basic)",
   [ChainType.COPILOT_PLUS_CHAIN]: "Copilot Plus",
   [ChainType.PROJECT_CHAIN]: "Projects (alpha)",
-  [ChainType.AGENT_MODE]: "Agent (alpha)",
 };
 
 export const BasicSettings: React.FC = () => {
@@ -220,12 +219,10 @@ export const BasicSettings: React.FC = () => {
             }
             value={settings.defaultChainType}
             onChange={(value) => updateSetting("defaultChainType", value as ChainType)}
-            options={Object.entries(ChainType2Label)
-              .filter(([key]) => key !== ChainType.AGENT_MODE || settings.agentMode.enabled)
-              .map(([key, value]) => ({
-                label: value,
-                value: key,
-              }))}
+            options={Object.entries(ChainType2Label).map(([key, value]) => ({
+              label: value,
+              value: key,
+            }))}
           />
 
           <SettingItem
