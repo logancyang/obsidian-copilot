@@ -7,6 +7,8 @@
 - [ ] P2: Subagent nested tool calls
 - [ ] P2: Better agent messages
 - [ ] P1: MCP
+  - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
+  - [ ] P1: Support oauth for MCP servers (the one example that I tested didn't work)
 - [ ] P1: Skills
 - [ ] P3: Rerun agent response
 - [ ] P2: Edit previous user message
@@ -29,3 +31,4 @@
 - [ ] P3: Agent todo list
 - [ ] P2: Auto-save chat history controls
 - [ ] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
+- [ ] P2: Slash command support. Revamp current slash command to function like skills.

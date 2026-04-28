@@ -22,6 +22,9 @@ export { useAgentModelPicker } from "./ui/useAgentModelPicker";
 export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { BackendDescriptor, BackendId, InstallState } from "./session/types";
+export type { StoredMcpServer, McpTransport } from "./session/mcpResolver";
+export { sanitizeStoredMcpServers } from "./session/mcpResolver";
+export { McpServersPanel } from "./ui/McpServersPanel";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
 
 /**

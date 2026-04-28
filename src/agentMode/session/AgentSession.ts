@@ -23,6 +23,8 @@ import {
 } from "@agentclientprotocol/sdk";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { MethodUnsupportedError, type BackendId } from "@/agentMode/acp/types";
+import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
+import { getSettings } from "@/settings/model";
 
 /**
  * Prefix opencode uses for placeholder titles before its title-summarizer
@@ -98,7 +100,10 @@ export class AgentSession {
 
   static async create(opts: AgentSessionCreateOptions): Promise<AgentSession> {
     const { backend, cwd, internalId, backendId, preferredModelId } = opts;
-    const resp = await backend.newSession({ cwd, mcpServers: [] });
+    const resp = await backend.newSession({
+      cwd,
+      mcpServers: resolveMcpServers(backend, getSettings().agentMode?.mcpServers),
+    });
     if (resp.models) {
       const ids = resp.models.availableModels.map((m) => m.modelId).join(", ");
       logInfo(

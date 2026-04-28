@@ -1,4 +1,4 @@
-import { listBackendDescriptors } from "@/agentMode";
+import { McpServersPanel, listBackendDescriptors } from "@/agentMode";
 import { SettingItem } from "@/components/ui/setting-item";
 import { usePlugin } from "@/contexts/PluginContext";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -46,6 +46,8 @@ export const AgentModeSettings: React.FC = () => {
             options={descriptors.map((d) => ({ label: d.displayName, value: d.id }))}
           />
         )}
+
+        {settings.agentMode.enabled && <McpServersPanel />}
 
         {settings.agentMode.enabled &&
           descriptors.map((descriptor) => {

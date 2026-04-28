@@ -130,6 +130,8 @@ export class AgentModelPreloader {
       run: () => Promise<{ models?: SessionModelState | null }>;
     };
     const strategies: Strategy[] = [];
+    // Probe sessions are non-interactive — boot with no MCP servers to avoid
+    // spawning user-configured tool processes for a models-only ping.
     if (storedId && proc.hasCapability("session/resume")) {
       strategies.push({
         label: `resumed probe session ${storedId}`,
@@ -158,6 +160,7 @@ export class AgentModelPreloader {
       }
     }
 
+    // Same reasoning as the resume/load probes above: skip user MCP servers.
     const resp = await proc.newSession({ cwd, mcpServers: [] });
     proc.registerSessionHandler(resp.sessionId, () => {});
     logInfo(`[AgentMode] preload ${backendId}: created probe session ${resp.sessionId}`);

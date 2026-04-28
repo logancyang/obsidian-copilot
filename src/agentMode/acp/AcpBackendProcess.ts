@@ -37,7 +37,9 @@ export type AcpCapability =
   | "session/list"
   | "session/resume"
   | "session/load"
-  | "session/set_model";
+  | "session/set_model"
+  | "mcp/http"
+  | "mcp/sse";
 
 /**
  * Detect a JSON-RPC -32601 (method not found) error from the ACP SDK. The SDK
@@ -175,8 +177,15 @@ export class AcpBackendProcess {
       if (init.agentCapabilities?.loadSession === true) {
         this.capabilities.add("session/load");
       }
+      // Stdio MCP transport is required by ACP (no flag); http/sse are opt-in.
+      if (init.agentCapabilities?.mcpCapabilities?.http === true) {
+        this.capabilities.add("mcp/http");
+      }
+      if (init.agentCapabilities?.mcpCapabilities?.sse === true) {
+        this.capabilities.add("mcp/sse");
+      }
       logInfo(
-        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")})`
+        `[AgentMode] initialized backend ${this.backend.id} (negotiated protocol v${init.protocolVersion}, listSessions=${this.hasCapability("session/list")}, resumeSession=${this.hasCapability("session/resume")}, loadSession=${this.hasCapability("session/load")}, mcp.http=${this.hasCapability("mcp/http")}, mcp.sse=${this.hasCapability("mcp/sse")})`
       );
     } catch (err) {
       // Initialize failed (bad binary, version mismatch, MCP boot error). The
