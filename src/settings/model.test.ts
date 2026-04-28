@@ -184,6 +184,7 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       mcpServers: [],
       activeBackend: "opencode",
       backends: {},
+      debugFullFrames: false,
     });
   });
 

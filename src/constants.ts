@@ -1015,6 +1015,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     mcpServers: [],
     activeBackend: "opencode",
     backends: {},
+    debugFullFrames: false,
   },
 };
 

@@ -68,3 +68,47 @@ interface BackendDescriptor {
 Each method is the contract `session/` and `ui/` rely on. If a UI component
 needs something the descriptor doesn't expose, **add it to the descriptor**;
 don't reach into a specific backend.
+
+## Debugging tips
+
+### Inspect full ACP JSON-RPC frames
+
+The default ACP debug log truncates each frame's payload to 400 chars. For full
+payloads — large tool results, MCP responses, attachments — turn on
+**Settings → Advanced → Log Full ACP Frames**.
+
+When enabled, every parsed frame is appended as one NDJSON line to:
+
+```
+<vault>/copilot/acp-frames.ndjson
+```
+
+Each line is a `FrameRecord` (`src/agentMode/acp/frameSink.ts`):
+
+```ts
+{ ts, dir: "→" | "←", tag, kind: "request" | "notif" | "result" | "error" | "raw",
+  method, id, payload }
+```
+
+`dir` is from the plugin's perspective: `→` = sent to the agent,
+`←` = received from the agent. `tag` is the backend id (e.g. `claude-code`,
+`opencode`).
+
+Useful queries:
+
+```bash
+# count frames by method
+jq -r .method copilot/acp-frames.ndjson | sort | uniq -c | sort -rn
+
+# inspect every session/update payload
+jq -c 'select(.method=="session/update") | .payload' copilot/acp-frames.ndjson
+
+# only frames for one backend
+jq -c 'select(.tag=="claude-code")' copilot/acp-frames.ndjson
+```
+
+The file is append-only and bounded — at 50 MB it rotates to
+`copilot/acp-frames.old.ndjson` (overwriting any prior `.old`). Use the
+**Open** / **Clear** buttons in the same settings section, or delete the
+files directly. Disable the toggle when not actively debugging — the writes
+are cheap but the file grows fast under heavy tool use.

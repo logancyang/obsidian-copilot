@@ -26,6 +26,7 @@ export type { StoredMcpServer, McpTransport } from "./session/mcpResolver";
 export { sanitizeStoredMcpServers } from "./session/mcpResolver";
 export { McpServersPanel } from "./ui/McpServersPanel";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
+export { frameSink as acpFrameSink } from "./acp/frameSink";
 
 /**
  * Single seam between the plugin host (`main.ts`) and Agent Mode. Wires the

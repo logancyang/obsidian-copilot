@@ -179,6 +179,7 @@ describe("buildOpencodeConfig", () => {
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
+        debugFullFrames: false,
         backends: {
           opencode: {
             binaryPath: "/x",
@@ -250,6 +251,7 @@ describe("buildOpencodeConfig", () => {
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
+        debugFullFrames: false,
         backends: {
           opencode: {
             binaryPath: "/x",
@@ -271,6 +273,7 @@ describe("buildOpencodeConfig", () => {
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
+        debugFullFrames: false,
         backends: {
           opencode: {
             binaryPath: "/x",
@@ -303,6 +306,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       byok: {},
       mcpServers: [],
       activeBackend: "opencode",
+      debugFullFrames: false,
       backends: {
         opencode: {
           binaryPath: "/path/to/opencode",

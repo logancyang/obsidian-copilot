@@ -4,7 +4,9 @@ import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { updateSetting, useSettingsValue } from "@/settings/model";
+import { acpFrameSink } from "@/agentMode";
 import { ArrowUpRight, Plus } from "lucide-react";
+import { Notice } from "obsidian";
 import React from "react";
 import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
 import { useSystemPrompts } from "@/system-prompts/state";
@@ -131,6 +133,55 @@ export const AdvancedSettings: React.FC = () => {
           >
             Create Log File
           </Button>
+        </SettingItem>
+
+        <SettingItem
+          type="switch"
+          title="Log Full ACP Frames"
+          description={`Writes full untruncated ACP frames — including prompts, tool inputs/outputs, and attachments — as NDJSON to ${acpFrameSink.getPath()}. Sensitive content lands on disk in plaintext; produces large files. Leave off unless actively debugging.`}
+          checked={settings.agentMode.debugFullFrames}
+          onCheckedChange={(checked) => {
+            updateSetting("agentMode", {
+              ...settings.agentMode,
+              debugFullFrames: checked,
+            });
+          }}
+        />
+
+        <SettingItem
+          type="custom"
+          title="ACP Frame Log"
+          description={`Open or clear the full ACP frame log (${acpFrameSink.getPath()}).`}
+        >
+          <div className="tw-flex tw-gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await acpFrameSink.open();
+                } catch {
+                  new Notice("Failed to open ACP frame log.");
+                }
+              }}
+            >
+              Open
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await acpFrameSink.clear();
+                  new Notice("ACP frame log cleared.");
+                } catch {
+                  new Notice("Failed to clear ACP frame log.");
+                }
+              }}
+            >
+              Clear
+            </Button>
+          </div>
         </SettingItem>
       </section>
     </div>

@@ -1,4 +1,6 @@
 import { logInfo } from "@/logger";
+import { getSettings } from "@/settings/model";
+import { frameSink, type FrameRecord } from "./frameSink";
 
 const MAX_PAYLOAD_CHARS = 400;
 
@@ -129,11 +131,28 @@ function logFrame(
   /** Pending requests originated by the *other* side of this stream. */
   peerPending: Map<string, string>
 ): void {
+  // Read once per frame so the hot path doesn't allocate a record + timestamp
+  // when the toggle is off.
+  const fullFramesOn = !!getSettings().agentMode?.debugFullFrames;
+  const emit = fullFramesOn
+    ? (kind: FrameRecord["kind"], method: string, id: string | null, payload: unknown) =>
+        frameSink.append({
+          ts: new Date().toISOString(),
+          dir: arrow,
+          tag,
+          kind,
+          method,
+          id,
+          payload,
+        })
+    : null;
+
   let frame: JsonRpcFrame;
   try {
     frame = JSON.parse(line);
   } catch {
     logInfo(`[ACP ${arrow}][${tag}] (unparsed) ${truncate(line)}`);
+    emit?.("raw", "(unparsed)", null, { raw: line });
     return;
   }
 
@@ -145,6 +164,7 @@ function logFrame(
     const idLabel = idStr !== null ? `#${idStr}` : "(notif)";
     if (idStr !== null) ownPending.set(idStr, method);
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.params)}`);
+    emit?.(idStr !== null ? "request" : "notif", method, idStr, frame.params);
     return;
   }
 
@@ -156,8 +176,10 @@ function logFrame(
   const idLabel = idStr !== null ? `#${idStr}` : "(no-id)";
   if (frame.error) {
     logInfo(`[ACP ${arrow}][${tag}] (error) ${method}  ${idLabel}  ${formatPayload(frame.error)}`);
+    emit?.("error", method, idStr, frame.error);
   } else {
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.result)}`);
+    emit?.("result", method, idStr, frame.result);
   }
 }
 

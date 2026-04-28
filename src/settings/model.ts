@@ -217,6 +217,12 @@ export interface CopilotSettings {
       opencode?: OpencodeBackendSettings;
       "claude-code"?: ClaudeCodeBackendSettings;
     };
+    /**
+     * Opt-in: write the full untruncated ACP JSON-RPC frames as NDJSON to
+     * `<vault>/copilot/acp-frames.ndjson`. Heavyweight — leaves the existing
+     * 400-char summary log unchanged.
+     */
+    debugFullFrames: boolean;
   };
 }
 
@@ -728,12 +734,18 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   if (opencodeSlice) backends.opencode = opencodeSlice;
   if (claudeCodeSlice) backends["claude-code"] = claudeCodeSlice;
 
+  const debugFullFrames =
+    typeof r.debugFullFrames === "boolean"
+      ? r.debugFullFrames
+      : DEFAULT_SETTINGS.agentMode.debugFullFrames;
+
   return {
     enabled,
     byok,
     mcpServers,
     activeBackend,
     backends,
+    debugFullFrames,
   };
 }
 
