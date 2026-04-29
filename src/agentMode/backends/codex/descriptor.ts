@@ -46,7 +46,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   getInstallState(settings: CopilotSettings): InstallState {
     const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
     if (!binaryPath) return { kind: "absent" };
-    return { kind: "ready", version: "custom", source: "custom" };
+    return { kind: "ready", source: "custom" };
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {

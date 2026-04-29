@@ -63,7 +63,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   getInstallState(settings: CopilotSettings): InstallState {
     const raw = computeInstallState(settings.agentMode?.backends?.opencode);
     if (raw.kind === "absent") return { kind: "absent" };
-    return { kind: "ready", version: raw.version, source: raw.source };
+    return { kind: "ready", source: raw.source };
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {

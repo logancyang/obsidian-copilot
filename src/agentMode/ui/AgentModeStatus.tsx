@@ -5,7 +5,7 @@ import {
 } from "@/agentMode/ui/useBackendDescriptor";
 import { AgentSessionStatus } from "@/agentMode/session/AgentSession";
 import { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import type { BackendDescriptor } from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import React from "react";
 
@@ -83,7 +83,7 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) =>
   return (
     <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
       <span className={statusClassName(sessionStatus, !!bootError, booting)}>
-        {statusLabel(descriptor, installState, sessionStatus, !!session, !!bootError, booting)}
+        {statusLabel(descriptor, sessionStatus, !!session, !!bootError, booting)}
       </span>
       {bootError ? (
         <Button variant="ghost" size="sm" onClick={handleRetry}>
@@ -96,24 +96,20 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) =>
 
 function statusLabel(
   descriptor: BackendDescriptor,
-  installState: InstallState,
   status: AgentSessionStatus,
   hasSession: boolean,
   errored: boolean,
   booting: boolean
 ): string {
-  const versionTag =
-    installState.kind === "ready"
-      ? `${descriptor.displayName} v${installState.version}`
-      : descriptor.displayName;
+  const name = descriptor.displayName;
   if (errored) return `Error — click Retry`;
-  if (booting) return `Starting ${versionTag}…`;
-  if (!hasSession) return `Initializing ${versionTag}…`;
+  if (booting) return `Starting ${name}…`;
+  if (!hasSession) return `Initializing ${name}…`;
   switch (status) {
     case "starting":
-      return `Starting ${versionTag}…`;
+      return `Starting ${name}…`;
     case "idle":
-      return `Ready — ${versionTag}`;
+      return `Ready — ${name}`;
     case "running":
       return "Agent is running…";
     case "awaiting_permission":

@@ -15,7 +15,7 @@ export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/
 /** UI-facing install/setup state for a backend. */
 export type InstallState =
   | { kind: "absent" }
-  | { kind: "ready"; version: string; source: "managed" | "custom" }
+  | { kind: "ready"; source: "managed" | "custom" }
   | { kind: "error"; message: string };
 
 /**
