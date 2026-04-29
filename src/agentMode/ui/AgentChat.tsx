@@ -257,11 +257,23 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   }, []);
 
   const handleNewChat = useCallback(async () => {
-    await handleStopGenerating();
-    backend.clearMessages();
-    setContextNotes([]);
-    clearSelectedTextContexts();
-  }, [backend, handleStopGenerating]);
+    if (manager.getIsStarting()) return;
+    const active = manager.getActiveSession();
+    // Already on a fresh session — no-op so the user doesn't churn ACP
+    // sessions just by clicking the button repeatedly.
+    if (!active || !active.hasUserVisibleMessages()) return;
+    const oldId = active.internalId;
+    try {
+      await manager.createSession();
+      await manager.closeSession(oldId);
+      // Local input state resets via AgentChat's `key={internalId}` remount,
+      // but selectedTextContexts is a global atom — clear it explicitly.
+      clearSelectedTextContexts();
+    } catch (e) {
+      logError("[AgentMode] new chat failed", e);
+      new Notice("Failed to start a new chat. Please try again.");
+    }
+  }, [manager]);
 
   const handleDelete = useCallback(
     async (messageId: string) => {
