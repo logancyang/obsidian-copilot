@@ -677,6 +677,76 @@ describe("AgentSession current_mode_update", () => {
   });
 });
 
+describe("AgentSession config_option_update", () => {
+  it("mirrors agent-pushed config option changes into local state and notifies", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialConfigOptions: [],
+    });
+    const onModelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onModelChanged,
+    });
+    const newOpts = [
+      {
+        id: "effort",
+        category: "effort",
+        type: "select" as const,
+        name: "Effort",
+        currentValue: "high",
+        options: [
+          { value: "medium", name: "Medium" },
+          { value: "high", name: "High" },
+        ],
+      },
+    ];
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "config_option_update", configOptions: newOpts },
+    });
+    expect(session.getConfigOptions()).toEqual(newOpts);
+    expect(onModelChanged).toHaveBeenCalledTimes(1);
+  });
+
+  it("dedupes by signature: re-emitting the same configOptions does not notify", () => {
+    const mock = makeMockBackend();
+    const initial = [
+      {
+        id: "effort",
+        category: "effort",
+        type: "select" as const,
+        name: "Effort",
+        currentValue: "high",
+        options: [{ value: "high", name: "High" }],
+      },
+    ];
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialConfigOptions: initial,
+    });
+    const onModelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onModelChanged,
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "config_option_update", configOptions: initial },
+    });
+    expect(onModelChanged).not.toHaveBeenCalled();
+  });
+});
+
 describe("AgentSession.setLabel", () => {
   it("stores trimmed label and notifies onLabelChanged", () => {
     const mock = makeMockBackend();

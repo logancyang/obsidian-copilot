@@ -513,6 +513,21 @@ export class AgentSession {
       this.notifyModelChanged();
       return;
     }
+    if (update.sessionUpdate === "config_option_update") {
+      // Agent rebuilt its config option list — most often after a model
+      // switch, since (e.g.) claude-agent-acp's effort vocabulary depends on
+      // the selected model. Mirror the full post-update list locally
+      // (per spec: ConfigOptionUpdate.configOptions is the full set, not a
+      // delta) so the picker reflects reality without a round trip.
+      // `attachModelCacheSync` listens to the same `notifyModelChanged`
+      // channel and will refresh the preloader cache as a side-effect.
+      if (configOptionsSig(this.configOptions) === configOptionsSig(update.configOptions)) {
+        return;
+      }
+      this.configOptions = update.configOptions;
+      this.notifyModelChanged();
+      return;
+    }
 
     const placeholderId = this.placeholderId;
     if (!placeholderId) {
@@ -671,6 +686,11 @@ function buildContextEnvelope(context: MessageContext | undefined): string | nul
 function extractText(content: ContentBlock): string {
   if (content.type === "text") return content.text;
   return "";
+}
+
+function configOptionsSig(opts: SessionConfigOption[] | null): string {
+  if (!opts) return "";
+  return opts.map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`).join(",");
 }
 
 function toolCallToPart(call: ToolCall & { sessionUpdate: "tool_call" }): AgentMessagePart {
