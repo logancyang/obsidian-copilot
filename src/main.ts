@@ -637,7 +637,7 @@ export default class CopilotPlugin extends Plugin {
     }
   }
 
-  private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf> {
+  private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf | null> {
     const leaves = this.app.workspace.getLeavesOfType(viewType);
     if (leaves.length > 0) {
       this.app.workspace.revealLeaf(leaves[0]);
@@ -647,6 +647,7 @@ export default class CopilotPlugin extends Plugin {
       getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
         ? this.app.workspace.getRightLeaf(false)
         : this.app.workspace.getLeaf(true);
+    if (!leaf) return null;
     await leaf.setViewState({ type: viewType, active: true });
     return leaf;
   }

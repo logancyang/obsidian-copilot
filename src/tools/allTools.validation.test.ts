@@ -22,7 +22,7 @@ function hasWeakTyping(schema: z.ZodType): boolean {
   }
 
   if (schema instanceof z.ZodArray) {
-    return hasWeakTyping(schema._def.element);
+    return hasWeakTyping(schema._def.element as z.ZodType);
   }
 
   if (
@@ -30,7 +30,7 @@ function hasWeakTyping(schema: z.ZodType): boolean {
     schema instanceof z.ZodNullable ||
     schema instanceof z.ZodDefault
   ) {
-    return hasWeakTyping(schema._def.innerType);
+    return hasWeakTyping(schema._def.innerType as z.ZodType);
   }
 
   return false;

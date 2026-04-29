@@ -113,7 +113,6 @@ class AcpPermissionModal extends Modal {
     private readonly onSettle: (response: RequestPermissionResponse) => void
   ) {
     super(app);
-    // @ts-expect-error - setTitle is part of Obsidian's Modal but missing from older type defs
     this.setTitle("Agent Mode — Permission required");
   }
 

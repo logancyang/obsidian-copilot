@@ -13,7 +13,6 @@ export abstract class ReactModal extends Modal {
   constructor(app: App, title?: string) {
     super(app);
     if (title) {
-      // @ts-expect-error - setTitle is part of Obsidian's Modal but missing from older type defs
       this.setTitle(title);
     }
   }
