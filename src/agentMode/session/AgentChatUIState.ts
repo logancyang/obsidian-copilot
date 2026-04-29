@@ -1,7 +1,12 @@
 import { logError, logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type {
+  AgentChatMessage,
+  BackendDescriptor,
+  CurrentPlan,
+  PlanDecisionAction,
+} from "@/agentMode/session/types";
 import type {
   SessionConfigOption,
   SessionModelState,
@@ -20,7 +25,10 @@ import type { MessageContext } from "@/types/message";
 export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
 
-  constructor(private readonly session: AgentSession) {
+  constructor(
+    private readonly session: AgentSession,
+    private readonly descriptor: BackendDescriptor
+  ) {
     // Forward message, status, and model changes. The chat UI gates the
     // send button on `isStarting()`, so it needs to re-render when status
     // transitions out of `"starting"`.
@@ -28,6 +36,7 @@ export class AgentChatUIState implements AgentChatBackend {
       onMessagesChanged: () => this.notifyListeners(),
       onStatusChanged: () => this.notifyListeners(),
       onModelChanged: () => this.notifyListeners(),
+      onCurrentPlanChanged: () => this.notifyListeners(),
     });
   }
 
@@ -132,5 +141,84 @@ export class AgentChatUIState implements AgentChatBackend {
 
   isSetModeSupported(): boolean | null {
     return this.session.isSetModeSupported();
+  }
+
+  hasPendingPlanPermission(): boolean {
+    return this.session.hasPendingPlanPermission();
+  }
+
+  getCurrentPlan(): CurrentPlan | null {
+    return this.session.getCurrentPlan();
+  }
+
+  async resolvePlanProposal(
+    proposalId: string,
+    decision: PlanDecisionAction,
+    feedbackText?: string
+  ): Promise<void> {
+    const plan = this.session.getCurrentPlan();
+    if (!plan || plan.id !== proposalId || plan.decision !== "pending") return;
+    const trimmedFeedback = decision === "feedback" ? feedbackText?.trim() : undefined;
+
+    if (plan.permissionGated && plan.pendingToolCallId) {
+      // Resolve the underlying ACP permission first; the agent unblocks and
+      // (for approve) continues the same turn.
+      this.session.resolvePlanProposalPermission(plan.pendingToolCallId, decision === "approve");
+
+      if (trimmedFeedback) {
+        // Wait for the agent to settle the now-denied turn before queuing the
+        // follow-up — `sendPrompt` rejects when a turn is in flight.
+        await this.session.waitForIdle();
+        this.tryFollowUp(trimmedFeedback);
+      }
+    } else {
+      // Non-gated path: OpenCode end-of-turn proposals, or Claude Code
+      // post-rejection plan-file revisions where the underlying permission
+      // was already resolved. Approve switches to canonical build and queues
+      // a follow-up; Feedback sends the typed text; Reject is informational.
+      if (decision === "approve") {
+        await this.applyCanonicalBuildMode();
+        this.tryFollowUp("Proceed with the plan.");
+      } else if (trimmedFeedback) {
+        this.tryFollowUp(trimmedFeedback);
+      }
+    }
+
+    this.session.finalizePlanDecision(plan.id);
+    this.notifyListeners();
+  }
+
+  private tryFollowUp(text: string): void {
+    try {
+      this.session.sendPrompt(text);
+    } catch (e) {
+      logWarn("[AgentChatUIState] failed to send plan follow-up", e);
+    }
+  }
+
+  /**
+   * Switch the session to canonical "build" mode by consulting the backend
+   * descriptor's mode mapping. No-op when the descriptor doesn't advertise a
+   * mapping (older/simpler backends) or when the build native id isn't
+   * available. Errors are logged but never throw — the follow-up proceed
+   * message still goes out.
+   */
+  private async applyCanonicalBuildMode(): Promise<void> {
+    try {
+      const mapping = this.descriptor.getModeMapping?.(
+        this.session.getModeState(),
+        this.session.getConfigOptions()
+      );
+      if (!mapping) return;
+      const native = mapping.canonical.build;
+      if (!native) return;
+      if (mapping.kind === "setMode") {
+        await this.session.setMode(native);
+      } else if (mapping.configId) {
+        await this.session.setConfigOption(mapping.configId, native);
+      }
+    } catch (e) {
+      logWarn("[AgentChatUIState] could not switch to build mode after approve", e);
+    }
   }
 }

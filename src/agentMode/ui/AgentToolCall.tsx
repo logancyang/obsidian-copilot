@@ -1,12 +1,20 @@
 import { formatAgentInput, renderDiff } from "@/agentMode/ui/diffRender";
-import { AgentMessagePart, AgentPlanEntry, AgentToolStatus } from "@/agentMode/session/types";
+import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
+import { AgentMessagePart, AgentToolStatus } from "@/agentMode/session/types";
 import React from "react";
+
+interface AgentToolCallProps {
+  part: AgentMessagePart;
+}
 
 /**
  * Renders one structured part of an Agent Mode assistant message — a tool
- * call, a folded thought, or a plan list.
+ * call, a folded thought, or an inline plan checklist. Plan proposals
+ * (the approve/reject/feedback card) are not message parts; they live on
+ * the session-level `currentPlan` and are rendered inline at the tail of
+ * the chat stream by `PlanProposalCard`.
  */
-export const AgentToolCall: React.FC<{ part: AgentMessagePart }> = ({ part }) => {
+export const AgentToolCall: React.FC<AgentToolCallProps> = ({ part }) => {
   if (part.kind === "thought") {
     return (
       <details className="tw-my-1 tw-rounded tw-border tw-border-border tw-bg-secondary tw-px-2 tw-py-1">
@@ -22,7 +30,7 @@ export const AgentToolCall: React.FC<{ part: AgentMessagePart }> = ({ part }) =>
         <ul className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm">
           {part.entries.map((e, i) => (
             <li key={i} className="tw-flex tw-items-start tw-gap-2">
-              <span aria-hidden="true">{planIcon(e.status)}</span>
+              <span aria-hidden="true">{planEntryIcon(e.status)}</span>
               <span className={planEntryClass(e.status)}>{e.content}</span>
             </li>
           ))}
@@ -107,20 +115,4 @@ function toolCallBg(s: AgentToolStatus): string {
     default:
       return "tw-bg-secondary";
   }
-}
-
-function planIcon(s: AgentPlanEntry["status"]): string {
-  switch (s) {
-    case "completed":
-      return "●";
-    case "in_progress":
-      return "◐";
-    default:
-      return "○";
-  }
-}
-
-function planEntryClass(s: AgentPlanEntry["status"]): string {
-  if (s === "completed") return "tw-text-muted tw-line-through";
-  return "";
 }

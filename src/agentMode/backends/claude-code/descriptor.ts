@@ -11,6 +11,7 @@ import {
 import { ClaudeCodeBackend } from "./ClaudeCodeBackend";
 import { ClaudeCodeInstallModal } from "./ClaudeCodeInstallModal";
 import { ClaudeCodeSettingsPanel } from "./ClaudeCodeSettingsPanel";
+import { claudeCodeMetaParser } from "./meta";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import type { ModeMapping } from "@/agentMode/session/modeAdapter";
@@ -32,6 +33,7 @@ export function updateClaudeCodeFields(partial: Partial<ClaudeCodeBackendSetting
 export const ClaudeCodeBackendDescriptor: BackendDescriptor = {
   id: "claude-code",
   displayName: "Claude Code",
+  meta: claudeCodeMetaParser,
 
   getInstallState(settings: CopilotSettings): InstallState {
     const binaryPath = settings.agentMode?.backends?.["claude-code"]?.binaryPath;

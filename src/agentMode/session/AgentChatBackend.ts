@@ -4,7 +4,7 @@ import type {
   SessionModeState,
 } from "@agentclientprotocol/sdk";
 import type { MessageContext } from "@/types/message";
-import type { AgentChatMessage } from "./types";
+import type { AgentChatMessage, CurrentPlan, PlanDecisionAction } from "./types";
 
 /**
  * Narrow interface the Agent Mode UI tree consumes. Implemented by
@@ -51,4 +51,40 @@ export interface AgentChatBackend {
   setMode(modeId: string): Promise<void>;
   /** Tri-state: null = not yet probed, true/false = result of first probe. */
   isSetModeSupported(): boolean | null;
+
+  /**
+   * Resolve the current plan proposal the user has decided on. Branches on
+   * `currentPlan.permissionGated`:
+   *   - gated (Claude Code ExitPlanMode): resolves the underlying ACP
+   *     permission as allow/deny. Approve auto-continues the agent's turn;
+   *     Reject ends the turn; Feedback denies + queues `feedbackText` as a
+   *     follow-up user turn after the agent settles.
+   *   - non-gated (Claude Code post-rejection plan-file edits, OpenCode
+   *     end-of-turn): Approve switches to canonical `build` mode (when the
+   *     descriptor advertises one) and sends a `Proceed with the plan.`
+   *     follow-up; Reject is informational; Feedback sends `feedbackText`
+   *     as the next user turn (mode stays in plan).
+   *
+   * `proposalId` must match the current `getCurrentPlan().id` — stale
+   * resolutions (the user clicked a card that has since been replaced)
+   * are silently ignored.
+   */
+  resolvePlanProposal(
+    proposalId: string,
+    decision: PlanDecisionAction,
+    feedbackText?: string
+  ): Promise<void>;
+
+  /**
+   * Singleton plan-mode review state, or `null` when there's nothing to
+   * surface. The floating plan card and the editor preview tab read this.
+   */
+  getCurrentPlan(): CurrentPlan | null;
+
+  /**
+   * True when an ExitPlanMode permission is currently pending. The chat input
+   * disables itself while one is outstanding so the user is funneled to the
+   * proposal card's actions.
+   */
+  hasPendingPlanPermission(): boolean;
 }

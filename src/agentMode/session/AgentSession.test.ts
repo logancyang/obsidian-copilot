@@ -2,7 +2,8 @@ import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AcpBackendProcess, SessionUpdateHandler } from "@/agentMode/acp/AcpBackendProcess";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import type { TFile } from "obsidian";
-import { AgentSession, buildPromptBlocks } from "./AgentSession";
+import { AgentSession, buildPromptBlocks, tryReadExitPlanModeCall } from "./AgentSession";
+import type { BackendMetaParser } from "./backendMeta";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -1080,5 +1081,75 @@ describe("AgentSession multi-session routing", () => {
     expect(handlers.has("acp-1")).toBe(true);
     session.dispose();
     expect(handlers.has("acp-1")).toBe(false);
+  });
+});
+
+describe("tryReadExitPlanModeCall", () => {
+  const flaggingParser: BackendMetaParser = {
+    parseToolCallMeta: () => ({ isPlanProposal: true }),
+  };
+  const inertParser: BackendMetaParser = {
+    parseToolCallMeta: () => null,
+  };
+
+  it("returns the plan body when the meta parser flags isPlanProposal", () => {
+    const out = tryReadExitPlanModeCall({
+      kind: "other",
+      rawInput: { plan: "# do the thing" },
+      meta: { claudeCode: { toolName: "ExitPlanMode" } },
+      parser: flaggingParser,
+    });
+    expect(out).toEqual({ plan: "# do the thing", planFilePath: undefined });
+  });
+
+  it("falls back to ACP kind=switch_mode when the parser doesn't flag", () => {
+    const out = tryReadExitPlanModeCall({
+      kind: "switch_mode",
+      rawInput: { plan: "## plan body", planFilePath: "/abs/plan.md" },
+      parser: inertParser,
+    });
+    expect(out).toEqual({ plan: "## plan body", planFilePath: "/abs/plan.md" });
+  });
+
+  it("returns null when rawInput.plan is missing — content gate is load-bearing", () => {
+    expect(
+      tryReadExitPlanModeCall({
+        kind: "switch_mode",
+        rawInput: { planFilePath: "/abs/plan.md" },
+        parser: flaggingParser,
+      })
+    ).toBeNull();
+  });
+
+  it("returns null when rawInput.plan is not a string", () => {
+    expect(
+      tryReadExitPlanModeCall({
+        kind: "switch_mode",
+        rawInput: { plan: 42 },
+      })
+    ).toBeNull();
+  });
+
+  it("returns null when neither parser flag nor switch_mode kind matches", () => {
+    expect(
+      tryReadExitPlanModeCall({
+        kind: "edit",
+        rawInput: { plan: "looks like a plan but isn't tagged as one" },
+        parser: inertParser,
+      })
+    ).toBeNull();
+  });
+
+  it("ignores planFilePath when it isn't a string", () => {
+    const out = tryReadExitPlanModeCall({
+      kind: "switch_mode",
+      rawInput: { plan: "body", planFilePath: 12 },
+    });
+    expect(out).toEqual({ plan: "body", planFilePath: undefined });
+  });
+
+  it("handles null/undefined rawInput without throwing", () => {
+    expect(tryReadExitPlanModeCall({ kind: "switch_mode", rawInput: null })).toBeNull();
+    expect(tryReadExitPlanModeCall({ kind: "switch_mode", rawInput: undefined })).toBeNull();
   });
 });

@@ -23,8 +23,10 @@ import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import type { ChatModelProviders } from "@/constants";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
 import type { ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import * as path from "node:path";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
@@ -59,6 +61,42 @@ export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryM
 export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
   displayName: "opencode",
+  // OpenCode's `_meta` carries `modelId` / `variant` / `availableVariants`,
+  // but none of those map to a `NormalizedToolCallMeta` field today —
+  // opencode's plan signal flows through `emitsPlanProposalOnEndOfTurn`
+  // and the plan-file matcher, not `_meta`.
+  meta: noopBackendMetaParser,
+
+  // OpenCode's plan agent has no permission-gated finalization tool —
+  // `plan_exit` is CLI-only, never registered for ACP clients (see
+  // opencode `tool/registry.ts`'s `OPENCODE_CLIENT === "cli"` gate). The
+  // canonical signal is a successful write to one of the plan-mode plan
+  // paths (`<cwd>/.opencode/plans/*.md` for VCS-tracked projects,
+  // `<xdgData>/opencode/plans/*.md` otherwise — see opencode
+  // `session/session.ts:plan()`). The session bootstraps the plan card
+  // off that write via `isPlanModePlanFilePath`.
+  //
+  // `emitsPlanProposalOnEndOfTurn` stays on as a fallback for runs where
+  // the agent uses `todowrite` instead of (or in addition to) writing a
+  // plan file — opencode translates `todowrite` output into a structured
+  // `kind: "plan"` part (`acp/agent.ts:382`). The end-of-turn handler
+  // skips this promotion when a markdown-body plan was already published
+  // mid-turn, so the more authoritative file body wins.
+  emitsPlanProposalOnEndOfTurn: true,
+
+  isPlanModePlanFilePath(absolutePath, cwd) {
+    if (!absolutePath.endsWith(".md")) return false;
+    const dir = path.dirname(absolutePath);
+    // VCS-project case: <cwd>/.opencode/plans/*.md.
+    if (cwd && dir === path.join(cwd, ".opencode", "plans")) return true;
+    // Data-dir case: <xdgData>/opencode/plans/*.md (and any sibling
+    // platform-default — Windows LOCALAPPDATA, etc.). The plan agent's
+    // own permission system already restricts edits to these two
+    // directories, so a successful write whose dirname ends in
+    // `opencode/plans` is by construction a plan file.
+    if (dir.endsWith(path.join("opencode", "plans"))) return true;
+    return false;
+  },
 
   getInstallState(settings: CopilotSettings): InstallState {
     const raw = computeInstallState(settings.agentMode?.backends?.opencode);

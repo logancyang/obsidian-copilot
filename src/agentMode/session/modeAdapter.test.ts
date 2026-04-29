@@ -5,12 +5,14 @@ import {
   type ModeApplyContext,
   type ModeMapping,
 } from "./modeAdapter";
+import { noopBackendMetaParser } from "./backendMeta";
 import type { BackendDescriptor } from "./types";
 
 function stubDescriptor(getModeMapping: BackendDescriptor["getModeMapping"]): BackendDescriptor {
   return {
     id: "stub",
     displayName: "Stub",
+    meta: noopBackendMetaParser,
     getInstallState: () => ({ kind: "absent" }),
     subscribeInstallState: () => () => {},
     openInstallUI: () => {},
@@ -224,6 +226,7 @@ describe("buildModeAdapter — descriptor with no mapping", () => {
     const desc: BackendDescriptor = {
       id: "stub",
       displayName: "Stub",
+      meta: noopBackendMetaParser,
       getInstallState: () => ({ kind: "absent" }),
       subscribeInstallState: () => () => {},
       openInstallUI: () => {},

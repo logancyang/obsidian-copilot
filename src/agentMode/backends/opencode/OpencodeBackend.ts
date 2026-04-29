@@ -91,6 +91,16 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+        // Enable opencode's plan-file workflow. Without this, plan mode
+        // injects a read-only "FORBIDDEN to edit" prompt and the agent
+        // chats the plan out as text — there's no structured signal to
+        // promote into the plan card. With it on, opencode tells the
+        // agent to author the plan as markdown under
+        // `<cwd>/.opencode/plans/*.md`, which the session detects via
+        // `OpencodeBackendDescriptor.isPlanModePlanFilePath`. Scoped to
+        // plan-mode prompt selection only (verified against opencode
+        // `core/flag/flag.ts` and `session/prompt.ts:232`).
+        OPENCODE_EXPERIMENTAL_PLAN_MODE: "true",
       },
     };
   }

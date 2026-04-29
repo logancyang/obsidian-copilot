@@ -4,11 +4,13 @@ import {
   dedupeAvailableModels,
   type EffortApplyContext,
 } from "./effortAdapter";
+import { noopBackendMetaParser } from "./backendMeta";
 import type { BackendDescriptor } from "./types";
 
 const opencodeStub: BackendDescriptor = {
   id: "opencode",
   displayName: "opencode",
+  meta: noopBackendMetaParser,
   getInstallState: () => ({ kind: "absent" }),
   subscribeInstallState: () => () => {},
   openInstallUI: () => {},
@@ -30,6 +32,7 @@ const opencodeStub: BackendDescriptor = {
 const claudeCodeStub: BackendDescriptor = {
   id: "claude-code",
   displayName: "Claude Code",
+  meta: noopBackendMetaParser,
   getInstallState: () => ({ kind: "absent" }),
   subscribeInstallState: () => () => {},
   openInstallUI: () => {},

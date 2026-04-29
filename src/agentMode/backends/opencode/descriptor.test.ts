@@ -66,3 +66,29 @@ describe("OpencodeBackendDescriptor.composeModelId", () => {
     }
   });
 });
+
+describe("OpencodeBackendDescriptor.isPlanModePlanFilePath", () => {
+  const match = OpencodeBackendDescriptor.isPlanModePlanFilePath!;
+
+  it("matches files in <cwd>/.opencode/plans/", () => {
+    expect(match("/Users/me/vault/.opencode/plans/123-foo.md", "/Users/me/vault")).toBe(true);
+  });
+
+  it("matches files in <data-dir>/opencode/plans/ regardless of cwd", () => {
+    expect(match("/Users/me/.local/share/opencode/plans/123-foo.md", null)).toBe(true);
+    expect(match("/Users/me/.local/share/opencode/plans/123-foo.md", "/some/cwd")).toBe(true);
+  });
+
+  it("rejects non-.md files", () => {
+    expect(match("/Users/me/vault/.opencode/plans/notes.txt", "/Users/me/vault")).toBe(false);
+  });
+
+  it("rejects sibling directories", () => {
+    expect(match("/Users/me/vault/notes/123-foo.md", "/Users/me/vault")).toBe(false);
+    expect(match("/Users/me/vault/.opencode/notes/foo.md", "/Users/me/vault")).toBe(false);
+  });
+
+  it("rejects nested subdirectories of plans/", () => {
+    expect(match("/Users/me/vault/.opencode/plans/sub/foo.md", "/Users/me/vault")).toBe(false);
+  });
+});

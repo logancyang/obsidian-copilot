@@ -12,6 +12,7 @@ import { CodexInstallModal } from "./CodexInstallModal";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
 import type { ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 
@@ -42,6 +43,8 @@ export function updateCodexFields(partial: Partial<CodexBackendSettings>): void 
 export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
   displayName: "Codex",
+  // codex-acp emits no `_meta` on tool_call notifications today.
+  meta: noopBackendMetaParser,
 
   getInstallState(settings: CopilotSettings): InstallState {
     const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
@@ -93,22 +96,24 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   /**
-   * Codex exposes only sandbox/approval presets via ACP setMode: `read-only`,
-   * `auto`, and `full-access`. Map the two we care about and skip plan. The
-   * mode adapter filters against the agent's advertised list.
+   * Codex exposes sandbox/approval presets via ACP setMode: `read-only`,
+   * `auto`, and `full-access`. We surface all three:
+   *   - build       → "auto"           (workspace-write, on-request approvals)
+   *   - plan        → "read-only"      (no writes, no exec; closest ACP analog)
+   *   - auto-build  → "full-access"    (no sandbox, no approvals)
    *
-   * NOTE: Codex CLI has a real `ModeKind::Plan` reachable via its app-server
-   * JSON-RPC (`turn/start.collaborationMode`), but `@zed-industries/codex-acp`
-   * links codex_core as a Rust library and translates ACP modes to
-   * `Op::OverrideTurnContext { approval_policy, sandbox_policy }` — there's
-   * no `collaborationMode` field in `Op`. Plan is unreachable through this
-   * adapter. Tracking issue: depends on upstream codex-acp adoption of
-   * collaboration modes.
+   * Note: this is a sandbox restriction, not Codex CLI's real `ModeKind::Plan`
+   * (which would draft a plan artifact). That mode lives behind the app-server
+   * `turn/start.collaborationMode` field, which `@zed-industries/codex-acp`
+   * does not forward — it translates ACP modes to
+   * `Op::OverrideTurnContext { approval_policy, sandbox_policy }` only.
+   * Read-only is the closest available analog: the agent can read and reason
+   * but cannot mutate the vault, which matches user intent for "Plan".
    */
   getModeMapping(): ModeMapping {
     return {
       kind: "setMode",
-      canonical: { build: "auto", "auto-build": "full-access" },
+      canonical: { build: "auto", plan: "read-only", "auto-build": "full-access" },
     };
   },
 
@@ -118,8 +123,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   /**
    * Replay the persisted mode on a freshly created session. Skipped when
-   * the agent doesn't advertise modes. Plan is silently dropped (Codex
-   * adapter doesn't expose it; see `getModeMapping`).
+   * the agent doesn't advertise modes, or when the persisted mode's native
+   * id isn't currently in `availableModes` (filtered out by `getModeMapping`).
    */
   async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
     const persistedMode = settings.agentMode?.backends?.codex?.selectedMode;

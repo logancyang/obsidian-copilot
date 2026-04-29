@@ -27,17 +27,23 @@
 - [x] P1: Codex support
 - [x] P1: Cancel chat
 - [ ] P1: Test bash tool call, shall they work?
+- [ ] P1: Claude ACP seems to switch between 1M and 200K model randomly
 - [x] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
 - [x] P1: Clicking new chat should reset the tab label
 - [ ] P1: Agent survey (asking for user input)
+  - Not possible with ACP, need more digging
 - [ ] P1: Agent message is not rendered in the correct order with the tool calls
-- [ ] P1: Plan mode preview display
+- [x] P1: Plan mode preview display
 - [x] P1: Support note context input
   - [[note]], the "+ Note" picker, "include active note", and right-click
     "Add to Copilot context" now forward vault-relative paths / inlined
     excerpts in a `<copilot-context>` envelope so the agent's Read tool
     can fetch them via `VaultClient.readTextFile`.
 - [ ] P1: Model, effort, and mode is not persisted across sessions
+- [ ] P1: Detect legacy ACP binaries
+  - Some features may not work if using legacy binaries
+- [ ] P2: Claude vscode plugin add comment to plan capability
+  - It makes iterating on plan a lot easier
 - [x] P2: Rebrand chat send button
   - Make it a send icon to save space and get rid of "chat" label which no longer applies
 - [ ] P2: Forward web-source context to the agent

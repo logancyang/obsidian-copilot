@@ -1,8 +1,10 @@
 import { AgentToolCall } from "@/agentMode/ui/AgentToolCall";
+import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
+import type { AgentChatMessage, CurrentPlan } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
@@ -11,6 +13,8 @@ interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
   app: App;
   onDelete: (messageId: string) => void;
+  currentPlan: CurrentPlan | null;
+  chatBackend: AgentChatBackend;
 }
 
 /**
@@ -31,58 +35,74 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
   };
 }
 
-const AgentChatMessages = memo(({ messages, app, onDelete }: AgentChatMessagesProps) => {
-  const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
-  const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
-  const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
-    chatHistory: adapted,
-  });
+const AgentChatMessages = memo(
+  ({ messages, app, onDelete, currentPlan, chatBackend }: AgentChatMessagesProps) => {
+    const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
+    const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
+    const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
+      chatHistory: adapted,
+    });
 
-  if (visible.length === 0) {
-    return <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto" />;
-  }
+    const showPlanCard = currentPlan != null && currentPlan.decision === "pending";
+    const inlinePlanCard = showPlanCard ? (
+      <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
+    ) : null;
 
-  return (
-    <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
-      <div
-        ref={scrollContainerCallbackRef}
-        data-testid="chat-messages"
-        className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
-      >
-        {visible.map((message, index) => {
-          const isLastMessage = index === visible.length - 1;
-          const shouldApplyMinHeight = isLastMessage && message.sender !== USER_SENDER;
-          const adaptedMessage = adapted[index];
+    if (visible.length === 0) {
+      return (
+        <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
+          {inlinePlanCard}
+        </div>
+      );
+    }
 
-          return (
-            <div
-              key={getMessageKey(adaptedMessage, index)}
-              data-message-key={getMessageKey(adaptedMessage, index)}
-              className="tw-w-full"
-              style={{
-                minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
-              }}
-            >
-              {message.parts && message.parts.length > 0 ? (
-                <div className="tw-flex tw-flex-col tw-gap-1 tw-px-3 tw-pt-2">
-                  {message.parts.map((part, partIndex) => (
-                    <AgentToolCall key={partIndex} part={part} />
-                  ))}
-                </div>
-              ) : null}
-              <ChatSingleMessage
-                message={adaptedMessage}
-                app={app}
-                isStreaming={false}
-                onDelete={() => onDelete(message.id)}
-              />
-            </div>
-          );
-        })}
+    return (
+      <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
+        <div
+          ref={scrollContainerCallbackRef}
+          data-testid="chat-messages"
+          className="tw-relative tw-flex tw-w-full tw-flex-1 tw-select-text tw-flex-col tw-items-start tw-justify-start tw-overflow-y-auto tw-scroll-smooth tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)]"
+        >
+          {visible.map((message, index) => {
+            const isLastMessage = index === visible.length - 1;
+            // Reserve scroll headroom only when the last message is the
+            // assistant AND there's no inline plan card below it — the card
+            // already provides visible content at the tail of the stream.
+            const shouldApplyMinHeight =
+              isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
+            const adaptedMessage = adapted[index];
+
+            return (
+              <div
+                key={getMessageKey(adaptedMessage, index)}
+                data-message-key={getMessageKey(adaptedMessage, index)}
+                className="tw-w-full"
+                style={{
+                  minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
+                }}
+              >
+                {message.parts && message.parts.length > 0 ? (
+                  <div className="tw-flex tw-flex-col tw-gap-1 tw-px-3 tw-pt-2">
+                    {message.parts.map((part, partIndex) => (
+                      <AgentToolCall key={partIndex} part={part} />
+                    ))}
+                  </div>
+                ) : null}
+                <ChatSingleMessage
+                  message={adaptedMessage}
+                  app={app}
+                  isStreaming={false}
+                  onDelete={() => onDelete(message.id)}
+                />
+              </div>
+            );
+          })}
+          {inlinePlanCard}
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  }
+);
 
 AgentChatMessages.displayName = "AgentChatMessages";
 

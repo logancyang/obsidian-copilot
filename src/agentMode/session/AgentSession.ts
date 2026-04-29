@@ -6,14 +6,22 @@ import {
   AgentToolCallOutput,
   AgentToolKind,
   AgentToolStatus,
+  BackendDescriptor,
+  CurrentPlan,
   NewAgentChatMessage,
+  planBodyEquals,
+  planEntriesToMarkdown,
 } from "@/agentMode/session/types";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { isNoteSelectedTextContext, MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import {
   ContentBlock,
   Plan,
   PromptRequest,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
   SessionConfigOption,
   SessionId,
   SessionModelState,
@@ -25,6 +33,7 @@ import {
 } from "@agentclientprotocol/sdk";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { MethodUnsupportedError, type BackendId } from "@/agentMode/acp/types";
+import type { BackendMetaParser } from "@/agentMode/session/backendMeta";
 import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
 import { getSettings } from "@/settings/model";
 
@@ -54,6 +63,12 @@ export interface AgentSessionListener {
   onModelChanged?(): void;
   /** Optional: fired when the user-visible label changes. */
   onLabelChanged?(): void;
+  /**
+   * Optional: fired when the singleton `currentPlan` changes (created,
+   * revised in place, or cleared). The floating plan card / preview tab
+   * subscribe to this channel.
+   */
+  onCurrentPlanChanged?(): void;
 }
 
 export interface AgentSessionStartOptions {
@@ -62,6 +77,12 @@ export interface AgentSessionStartOptions {
   internalId: string;
   backendId: BackendId;
   preferredModelId?: string;
+  /**
+   * Optional descriptor accessor. The session uses it to read static behavior
+   * flags (e.g. `emitsPlanProposalOnEndOfTurn`) and to resolve mode mappings
+   * without coupling to specific backends. Manager-supplied; tests omit it.
+   */
+  getDescriptor?: () => BackendDescriptor | undefined;
 }
 
 /**
@@ -77,6 +98,7 @@ export interface AgentSessionStateOptions {
   initialConfigOptions?: SessionConfigOption[] | null;
   initialModeState?: SessionModeState | null;
   cwd?: string | null;
+  getDescriptor?: () => BackendDescriptor | undefined;
 }
 
 /**
@@ -100,6 +122,7 @@ export class AgentSession {
   private acpSessionId: SessionId | null = null;
   private readonly backend: AcpBackendProcess;
   private readonly cwd: string | null;
+  private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private status: AgentSessionStatus = "starting";
   private placeholderId: string | null = null;
   private abortController: AbortController | null = null;
@@ -113,6 +136,23 @@ export class AgentSession {
   // can't clobber a label the user explicitly chose via Rename.
   private labelSource: "user" | "agent" | null = null;
   private disposed = false;
+  // Pending ACP permission resolvers keyed by toolCallId. Populated when an
+  // ExitPlanMode permission request arrives (via the wrapped prompter); the
+  // chat card resolves them through `resolvePlanProposalPermission`.
+  private pendingPlanResolvers = new Map<
+    string,
+    {
+      request: RequestPermissionRequest;
+      resolve: (resp: RequestPermissionResponse) => void;
+    }
+  >();
+  // Singleton "current plan" for the floating card. At most one per session
+  // while in canonical plan mode and a plan has been proposed; cleared on a
+  // terminal user decision or when the canonical mode flips out of plan.
+  private currentPlan: CurrentPlan | null = null;
+  // Monotonic counter for `currentPlan.id` so the React tree can detect a
+  // *new* plan-mode review (vs. an in-place revision that bumps `revision`).
+  private planSeq = 0;
 
   /**
    * Tests and `loadSessionFromHistory` use this constructor with a
@@ -124,6 +164,7 @@ export class AgentSession {
     this.internalId = opts.internalId;
     this.backendId = opts.backendId;
     this.cwd = opts.cwd ?? null;
+    this.getDescriptor = opts.getDescriptor ?? null;
     if ("acpSessionId" in opts) {
       this.acpSessionId = opts.acpSessionId;
       this.modelState = opts.initialModelState ?? null;
@@ -272,6 +313,7 @@ export class AgentSession {
     });
     this.configOptions = resp.configOptions;
     this.notifyModelChanged();
+    this.clearCurrentPlanIfModeLeft();
   }
 
   /** Tri-state mirror of `AcpBackendProcess.isSetSessionConfigOptionSupported()`. */
@@ -305,6 +347,7 @@ export class AgentSession {
       currentModeId: modeId,
     };
     this.notifyModelChanged();
+    this.clearCurrentPlanIfModeLeft();
   }
 
   /** Tri-state mirror of `AcpBackendProcess.isSetSessionModeSupported()`. */
@@ -439,6 +482,13 @@ export class AgentSession {
       };
       const resp = await this.backend.prompt(req);
       this.setStatus("idle");
+      // Publish any structured plan as the floating plan card when
+      // the descriptor opted in (OpenCode-style end-of-turn). Done before
+      // clearing the placeholder reference so the new part still routes to
+      // the same assistant message.
+      if (resp.stopReason === "end_turn" && placeholderId) {
+        this.maybePromotePlanToProposal(placeholderId);
+      }
       // Clear the placeholder reference now that the turn is done. We do this
       // here (and in the catch branch) instead of in `finally` so that
       // trailing `session/update` notifications that may arrive between
@@ -487,8 +537,145 @@ export class AgentSession {
     this.disposed = true;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
+    // Drain any unresolved plan-proposal permissions with deny so the agent
+    // doesn't leak a pending RPC.
+    for (const { request, resolve } of this.pendingPlanResolvers.values()) {
+      resolve(permissionResponseFor(request, REJECT_KINDS));
+    }
+    this.pendingPlanResolvers.clear();
+    this.currentPlan = null;
     this.setStatus("closed");
     this.listeners.clear();
+  }
+
+  /**
+   * Called by the wrapped permission prompter when an ExitPlanMode permission
+   * request arrives. Returns a promise the ACP backend will await for the
+   * outcome; resolved by the chat card via `resolvePlanProposalPermission`.
+   */
+  handlePlanProposalPermission(
+    request: RequestPermissionRequest
+  ): Promise<RequestPermissionResponse> {
+    const toolCallId = request.toolCall.toolCallId;
+    return new Promise<RequestPermissionResponse>((resolve) => {
+      this.pendingPlanResolvers.set(toolCallId, { request, resolve });
+      // Notify so the chat input can disable itself in response to the new
+      // pending permission. Re-uses the messages channel because the
+      // proposal card is part of the same UI tree.
+      this.notifyMessages();
+    });
+  }
+
+  /**
+   * Resolve a pending ExitPlanMode permission. `allow: true` selects the
+   * first allow_once option; `false` selects the first reject option (or
+   * cancels when no reject option is offered). No-op when no permission is
+   * pending for the given id (e.g. non-gated OpenCode proposals).
+   */
+  resolvePlanProposalPermission(toolCallId: string, allow: boolean): void {
+    const entry = this.pendingPlanResolvers.get(toolCallId);
+    if (!entry) return;
+    this.pendingPlanResolvers.delete(toolCallId);
+    entry.resolve(permissionResponseFor(entry.request, allow ? ALLOW_KINDS : REJECT_KINDS));
+    // Pending state changed — re-enable the chat input in the UI.
+    this.notifyMessages();
+  }
+
+  /** Snapshot of the singleton plan, or `null` if there's nothing to review. */
+  getCurrentPlan(): CurrentPlan | null {
+    return this.currentPlan;
+  }
+
+  /**
+   * Drop the current plan once the user has decided. The UI gates the card
+   * render on `decision === "pending"`, so a terminal state is never visible
+   * to the user — clearing synchronously is fine.
+   */
+  finalizePlanDecision(proposalId: string): boolean {
+    if (!this.currentPlan || this.currentPlan.id !== proposalId) return false;
+    this.currentPlan = null;
+    this.notifyCurrentPlanChanged();
+    return true;
+  }
+
+  /**
+   * Replace the current plan body in place, keeping the same id and bumping
+   * `revision`. Mints a fresh id when no plan is active. Skips the notify
+   * when the new body is identical to the existing one (agent rewriting the
+   * same plan file content) so MarkdownRenderer doesn't churn.
+   *
+   * `permissionGated` follows the source: gated for live ExitPlanMode
+   * permissions, non-gated for everything else.
+   */
+  private setCurrentPlan(next: Omit<CurrentPlan, "id" | "revision" | "decision">): void {
+    if (this.currentPlan && planBodyEquals(this.currentPlan.body, next.body)) {
+      return;
+    }
+    if (!this.currentPlan) {
+      this.planSeq += 1;
+      this.currentPlan = {
+        ...next,
+        id: `plan-${this.internalId}-${this.planSeq}`,
+        revision: 1,
+        decision: "pending",
+      };
+    } else {
+      this.currentPlan = {
+        ...this.currentPlan,
+        ...next,
+        revision: this.currentPlan.revision + 1,
+        decision: "pending",
+      };
+    }
+    this.notifyCurrentPlanChanged();
+  }
+
+  /** Public — used by mode-picker plumbing to clear the card on mode switch. */
+  clearCurrentPlanIfModeLeft(): void {
+    if (!this.currentPlan) return;
+    const descriptor = this.getDescriptor?.();
+    if (!descriptor) return;
+    // Without a mode mapping there's no canonical "plan" to compare against —
+    // any plan that exists is necessarily orphaned from this check, so leave
+    // it alone rather than clearing on every config tick.
+    if (!descriptor.getModeMapping) return;
+    if (this.isCurrentlyInPlanMode(descriptor)) return;
+    // If a permission was still pending, reject it so the agent's RPC
+    // doesn't hang waiting for a card that no longer exists.
+    const pending = this.currentPlan.pendingToolCallId;
+    if (pending) this.resolvePlanProposalPermission(pending, false);
+    this.currentPlan = null;
+    this.notifyCurrentPlanChanged();
+  }
+
+  /**
+   * Resolve once the session reaches a terminal state for the current turn
+   * (`idle`, `error`, or `closed`). Used by the UI orchestrator to await
+   * completion of a permission-resolution-then-followup sequence.
+   */
+  waitForIdle(): Promise<void> {
+    const terminal = (s: AgentSessionStatus) => s === "idle" || s === "error" || s === "closed";
+    if (this.disposed || terminal(this.status)) return Promise.resolve();
+    return new Promise((resolve) => {
+      const unsub = this.subscribe({
+        onMessagesChanged: () => {},
+        onStatusChanged: (s) => {
+          if (terminal(s)) {
+            unsub();
+            resolve();
+          }
+        },
+      });
+    });
+  }
+
+  /**
+   * Whether this session has any pending ExitPlanMode permission. The chat
+   * input disables itself while one is outstanding so the user is funneled
+   * toward the proposal card's actions.
+   */
+  hasPendingPlanPermission(): boolean {
+    return this.pendingPlanResolvers.size > 0;
   }
 
   private handleSessionUpdate(notification: SessionNotification): void {
@@ -511,6 +698,7 @@ export class AgentSession {
         currentModeId: update.currentModeId,
       };
       this.notifyModelChanged();
+      this.clearCurrentPlanIfModeLeft();
       return;
     }
     if (update.sessionUpdate === "config_option_update") {
@@ -526,6 +714,7 @@ export class AgentSession {
       }
       this.configOptions = update.configOptions;
       this.notifyModelChanged();
+      this.clearCurrentPlanIfModeLeft();
       return;
     }
 
@@ -553,6 +742,22 @@ export class AgentSession {
         return;
       }
       case "tool_call": {
+        const parser = this.getDescriptor?.()?.meta;
+        const exitPlan = tryReadExitPlanModeCall({
+          kind: update.kind,
+          rawInput: update.rawInput,
+          meta: update._meta,
+          parser,
+        });
+        if (exitPlan) {
+          this.publishGatedPlan(update.toolCallId, exitPlan);
+          // Still record the tool call so the chat shows what triggered the
+          // gated card (avoids a "the agent did something invisible" feel).
+          if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
+            this.notifyMessages();
+          }
+          return;
+        }
         if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
           this.notifyMessages();
         }
@@ -561,8 +766,32 @@ export class AgentSession {
       case "tool_call_update": {
         const existing = this.findToolCallPart(placeholderId, update.toolCallId);
         const merged = mergeToolCallUpdate(existing, update);
+        const parser = this.getDescriptor?.()?.meta;
+        // The plan body may arrive on an update rather than the initial
+        // tool_call. Re-check after merging and publish if so.
+        if (merged.kind === "tool_call") {
+          const exitPlan = tryReadExitPlanModeCall({
+            kind: update.kind ?? merged.toolKind,
+            rawInput: merged.input,
+            meta: update._meta,
+            parser,
+          });
+          if (exitPlan) {
+            this.publishGatedPlan(merged.id, exitPlan);
+          }
+        }
         if (this.store.upsertAgentPart(placeholderId, merged)) {
           this.notifyMessages();
+        }
+        // Plan-file promotion on a successful edit-class tool call:
+        // - bootstrap a fresh plan card from a write to a backend-managed
+        //   plan path (opencode-style — no permission-gated tool to hook
+        //   off, the file IS the plan)
+        // - refresh the existing card's body when the agent revises the
+        //   plan file in place (Claude Code post-rejection behavior)
+        if (merged.kind === "tool_call" && merged.status === "completed") {
+          this.maybePromotePlanFileWrite(merged);
+          this.maybePromotePlanFileEdit(merged);
         }
         return;
       }
@@ -581,6 +810,156 @@ export class AgentSession {
   private findToolCallPart(messageId: string, toolCallId: string): AgentMessagePart | undefined {
     const msg = this.store.getMessage(messageId);
     return msg?.parts?.find((p) => p.kind === "tool_call" && p.id === toolCallId);
+  }
+
+  /**
+   * Handle a fresh `ExitPlanMode` tool_call: open or revise the floating
+   * plan card with the new body and route the gated permission resolver
+   * id at it. When this fires while a non-gated plan was already on
+   * screen (e.g. an OpenCode review followed by a re-issue), reuse the
+   * same card identity — same review session, just gated now.
+   */
+  private publishGatedPlan(
+    toolCallId: string,
+    info: { plan: string; planFilePath?: string }
+  ): void {
+    // Defensive: if a different gated permission was already pending on this
+    // card, reject it now so the agent's prior RPC doesn't hang.
+    const stale = this.currentPlan?.pendingToolCallId;
+    if (stale && stale !== toolCallId) this.resolvePlanProposalPermission(stale, false);
+    const title = derivePlanTitleFromMarkdown(info.plan);
+    this.setCurrentPlan({
+      body: { type: "markdown", text: info.plan },
+      title,
+      sourceFilePath: info.planFilePath,
+      permissionGated: true,
+      pendingToolCallId: toolCallId,
+    });
+  }
+
+  /**
+   * Refresh the existing plan card's body when the agent revises the plan
+   * file in place (Claude Code post-rejection behavior, or any backend
+   * iterating on the plan markdown). Same plan id, bumped revision;
+   * permissionGated drops to `false` because the underlying gating
+   * permission was already resolved.
+   *
+   * No-op when there's no current plan, no `sourceFilePath`, the tool
+   * isn't ACP-canonical edit-class, or the file path doesn't match.
+   */
+  private maybePromotePlanFileEdit(part: Extract<AgentMessagePart, { kind: "tool_call" }>): void {
+    const plan = this.currentPlan;
+    if (!plan?.sourceFilePath) return;
+    const descriptor = this.getDescriptor?.();
+    if (!descriptor) return;
+    if (!this.isCurrentlyInPlanMode(descriptor)) return;
+    if (part.toolKind !== "edit") return;
+    const targetPath = extractToolCallPath(part);
+    if (!targetPath) return;
+    const absPath = resolveAbsolute(targetPath, this.cwd);
+    if (absPath !== plan.sourceFilePath) return;
+    fs.promises.readFile(absPath, "utf8").then(
+      (text) => {
+        // The plan may have been resolved or the mode flipped while the
+        // read was in flight. Bail rather than resurrecting a stale card.
+        if (!this.currentPlan || this.currentPlan.id !== plan.id) return;
+        this.setCurrentPlan({
+          body: { type: "markdown", text },
+          title: derivePlanTitleFromMarkdown(text),
+          sourceFilePath: plan.sourceFilePath,
+          permissionGated: false,
+        });
+      },
+      (e) => logWarn(`[AgentMode] could not re-read plan file ${absPath}`, e)
+    );
+  }
+
+  /**
+   * Bootstrap a brand-new plan card from a successful edit-class tool
+   * call writing to a backend-managed plan-file path (opencode-style:
+   * `<cwd>/.opencode/plans/*.md` etc.). The plan markdown body comes
+   * from disk; `permissionGated` is `false` since there's no permission
+   * to gate on.
+   *
+   * Hands off to `maybePromotePlanFileEdit` for in-place revisions —
+   * once a plan with this `sourceFilePath` is on screen, subsequent
+   * writes to the same path are revisions, not bootstraps.
+   */
+  private maybePromotePlanFileWrite(part: Extract<AgentMessagePart, { kind: "tool_call" }>): void {
+    const descriptor = this.getDescriptor?.();
+    if (!descriptor?.isPlanModePlanFilePath) return;
+    if (!this.isCurrentlyInPlanMode(descriptor)) return;
+    if (part.toolKind !== "edit") return;
+    const targetPath = extractToolCallPath(part);
+    if (!targetPath) return;
+    const absPath = resolveAbsolute(targetPath, this.cwd);
+    if (!descriptor.isPlanModePlanFilePath(absPath, this.cwd)) return;
+    // Revision case: the existing card's path matches → let the edit
+    // handler refresh the body so we don't mint a duplicate plan id.
+    if (this.currentPlan?.sourceFilePath === absPath) return;
+    fs.promises.readFile(absPath, "utf8").then(
+      (text) => {
+        // Race: the mode flipped or another bootstrap landed first while
+        // the read was in flight. Bail if we're no longer the right hook.
+        if (!this.isCurrentlyInPlanMode(descriptor)) return;
+        if (this.currentPlan?.sourceFilePath === absPath) return;
+        this.setCurrentPlan({
+          body: { type: "markdown", text },
+          title: derivePlanTitleFromMarkdown(text),
+          sourceFilePath: absPath,
+          permissionGated: false,
+        });
+      },
+      (e) => logWarn(`[AgentMode] could not read plan file ${absPath}`, e)
+    );
+  }
+
+  /**
+   * If the descriptor advertises end-of-turn proposal emission AND the
+   * session is currently in canonical "plan" mode AND the placeholder
+   * message contains a structured `kind: "plan"` part, publish it as
+   * the floating plan card (entries body, not gated). No-op for backends
+   * that handle plan completion via a permission-gated tool — those
+   * routes already published a gated card via `publishGatedPlan`.
+   *
+   * Skips when a markdown-body plan was already published mid-turn (via
+   * `maybePromotePlanFileWrite`). The plan-file body is more
+   * authoritative than a `todowrite`-derived checklist; overwriting it
+   * with the entries body would lose detail.
+   */
+  private maybePromotePlanToProposal(placeholderId: string): void {
+    const descriptor = this.getDescriptor?.();
+    if (!descriptor?.emitsPlanProposalOnEndOfTurn) return;
+    if (!this.isCurrentlyInPlanMode(descriptor)) return;
+    if (this.currentPlan?.body.type === "markdown") return;
+    const msg = this.store.getMessage(placeholderId);
+    const planPart = msg?.parts?.find((p) => p.kind === "plan");
+    if (!planPart || planPart.kind !== "plan") return;
+    const markdown = planEntriesToMarkdown(planPart.entries);
+    this.setCurrentPlan({
+      body: { type: "entries", entries: planPart.entries },
+      title: derivePlanTitleFromMarkdown(markdown),
+      permissionGated: false,
+    });
+  }
+
+  /**
+   * Resolve the descriptor's canonical "plan" mode against the current
+   * session state. Mirrors the dispatch logic in modeAdapter (configOption-
+   * vs setMode-style backends) without importing it, to keep the session
+   * layer free of UI/picker concerns.
+   */
+  private isCurrentlyInPlanMode(descriptor: BackendDescriptor): boolean {
+    const mapping = descriptor.getModeMapping?.(this.modeState, this.configOptions);
+    if (!mapping) return false;
+    const planNative = mapping.canonical.plan;
+    if (!planNative) return false;
+    if (mapping.kind === "configOption") {
+      const opt = this.configOptions?.find((o) => o.id === mapping.configId);
+      if (!opt || !("currentValue" in opt)) return false;
+      return String(opt.currentValue) === planNative;
+    }
+    return this.modeState?.currentModeId === planNative;
   }
 
   private setStatus(next: AgentSessionStatus): void {
@@ -635,6 +1014,16 @@ export class AgentSession {
         l.onModelChanged?.();
       } catch (e) {
         logWarn(`[AgentMode] model listener threw`, e);
+      }
+    }
+  }
+
+  private notifyCurrentPlanChanged(): void {
+    for (const l of this.listeners) {
+      try {
+        l.onCurrentPlanChanged?.();
+      } catch (e) {
+        logWarn(`[AgentMode] plan listener threw`, e);
       }
     }
   }
@@ -706,6 +1095,77 @@ function toolCallToPart(call: ToolCall & { sessionUpdate: "tool_call" }): AgentM
   };
 }
 
+/**
+ * Pull the file path off an edit-class tool call. Prefers the ACP-canonical
+ * `locations[0].path`, falls back to common rawInput shapes (`file_path`
+ * for Claude Code, `filePath` for opencode). Returns `undefined` when the
+ * tool call carries no path — caller should bail.
+ */
+function extractToolCallPath(
+  part: Extract<AgentMessagePart, { kind: "tool_call" }>
+): string | undefined {
+  const fromLoc = part.locations?.[0]?.path;
+  if (typeof fromLoc === "string" && fromLoc.length > 0) return fromLoc;
+  const input = part.input as { file_path?: unknown; filePath?: unknown } | null | undefined;
+  if (typeof input?.file_path === "string") return input.file_path;
+  if (typeof input?.filePath === "string") return input.filePath;
+  return undefined;
+}
+
+/**
+ * Resolve a possibly-relative path to an absolute one against `cwd` (the
+ * session's working directory, typically the vault root). ACP doesn't
+ * require absolute paths but most backends emit them; this is the
+ * defensive fallback.
+ */
+function resolveAbsolute(filePath: string, cwd: string | null): string {
+  if (path.isAbsolute(filePath)) return filePath;
+  if (cwd) return path.resolve(cwd, filePath);
+  return filePath;
+}
+
+/**
+ * Detect whether a tool_call / tool_call_update represents the agent's
+ * plan-finalization signal (Claude Code's `ExitPlanMode`, or any future
+ * backend that follows the standard ACP `switch_mode` ToolKind convention).
+ * Returns the parsed payload (`plan`, optional `planFilePath`) when so, or
+ * `null` otherwise.
+ *
+ * Layered detection — the content gate is load-bearing:
+ *   1. `rawInput.plan: string` — without it there's nothing to render.
+ *   2. Backend's typed `_meta` parser flags `isPlanProposal` (primary,
+ *      vendor-specific path; lives in `backends/<id>/meta.ts`).
+ *   3. Standard ACP `kind === "switch_mode"` (backend-agnostic fallback).
+ */
+export function tryReadExitPlanModeCall(args: {
+  kind?: string;
+  rawInput: unknown;
+  meta?: unknown;
+  parser?: BackendMetaParser;
+}): { plan: string; planFilePath?: string } | null {
+  const raw = args.rawInput as { plan?: unknown; planFilePath?: unknown } | null | undefined;
+  const plan = raw?.plan;
+  if (typeof plan !== "string") return null;
+  const flagged = args.parser?.parseToolCallMeta(args.meta)?.isPlanProposal;
+  if (!flagged && args.kind !== "switch_mode") return null;
+  const planFilePath = typeof raw?.planFilePath === "string" ? raw.planFilePath : undefined;
+  return { plan, planFilePath };
+}
+
+/**
+ * Derive a short title for the plan card / preview tab from a markdown
+ * body. Uses the first non-empty line, stripping leading `#`s. Falls back
+ * to a generic label when the body is blank.
+ */
+function derivePlanTitleFromMarkdown(md: string): string {
+  for (const line of md.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    return trimmed.replace(/^#+\s*/, "").slice(0, 80);
+  }
+  return "Plan proposal";
+}
+
 function mergeToolCallUpdate(
   existing: AgentMessagePart | undefined,
   upd: ToolCallUpdate & { sessionUpdate: "tool_call_update" }
@@ -756,6 +1216,25 @@ function extractToolCallOutputs(
   }
   return outputs.length > 0 ? outputs : undefined;
 }
+
+/**
+ * Pick the first option matching one of the given kinds (in order) and return
+ * a `selected` response. Falls back to `cancelled` (spec-safe no-decision)
+ * when the agent offers no matching option.
+ */
+function permissionResponseFor(
+  req: RequestPermissionRequest,
+  kinds: ReadonlyArray<"allow_once" | "allow_always" | "reject_once" | "reject_always">
+): RequestPermissionResponse {
+  for (const k of kinds) {
+    const opt = req.options.find((o) => o.kind === k);
+    if (opt) return { outcome: { outcome: "selected", optionId: opt.optionId } };
+  }
+  return { outcome: { outcome: "cancelled" } };
+}
+
+const ALLOW_KINDS = ["allow_once", "allow_always"] as const;
+const REJECT_KINDS = ["reject_once", "reject_always"] as const;
 
 function planToPart(plan: Plan & { sessionUpdate: "plan" }): AgentMessagePart {
   return {

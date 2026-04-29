@@ -11,7 +11,7 @@ import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import type { AgentChatMessage } from "@/agentMode/session/types";
+import type { AgentChatMessage, CurrentPlan } from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
@@ -114,6 +114,12 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isStarting, setIsStarting] = useState(() => backend.isStarting());
+  const [hasPendingPlanPermission, setHasPendingPlanPermission] = useState(() =>
+    backend.hasPendingPlanPermission()
+  );
+  const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(() =>
+    backend.getCurrentPlan()
+  );
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAgentMessage[]>([]);
   const [selectedTextContexts] = useSelectedTextContexts();
@@ -132,10 +138,14 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   useEffect(() => {
     setMessages(backend.getMessages());
     setIsStarting(backend.isStarting());
+    setHasPendingPlanPermission(backend.hasPendingPlanPermission());
+    setCurrentPlan(backend.getCurrentPlan());
     return backend.subscribe(() => {
       if (!isMountedRef.current) return;
       setMessages(backend.getMessages());
       setIsStarting(backend.isStarting());
+      setHasPendingPlanPermission(backend.hasPendingPlanPermission());
+      setCurrentPlan(backend.getCurrentPlan());
     });
   }, [backend]);
 
@@ -389,7 +399,13 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
           )}
           <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
             <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
-            <AgentChatMessages messages={messages} app={app} onDelete={handleDelete} />
+            <AgentChatMessages
+              messages={messages}
+              app={app}
+              onDelete={handleDelete}
+              currentPlan={currentPlan}
+              chatBackend={backend}
+            />
             {queuedMessages.length > 0 && (
               <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
             )}
@@ -402,30 +418,37 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               onDeleteChat={handleDeleteChat}
               onOpenSourceFile={handleOpenSourceFile}
             />
-            <ChatInput
-              inputMessage={inputMessage}
-              setInputMessage={setInputMessage}
-              handleSendMessage={() => handleSendMessage()}
-              isGenerating={loading}
-              onStopGenerating={() => handleStopGenerating()}
-              app={app}
-              contextNotes={contextNotes}
-              setContextNotes={setContextNotes}
-              includeActiveNote={includeActiveNote}
-              setIncludeActiveNote={setIncludeActiveNote}
-              includeActiveWebTab={includeActiveWebTab}
-              setIncludeActiveWebTab={setIncludeActiveWebTab}
-              activeWebTab={null}
-              selectedImages={selectedImages}
-              onAddImage={handleAddImage}
-              setSelectedImages={setSelectedImages}
-              disableModelSwitch={!modelPickerOverride}
-              modelPickerOverride={modelPickerOverride ?? undefined}
-              selectedTextContexts={selectedTextContexts}
-              onRemoveSelectedText={removeSelectedTextContext}
-              showProgressCard={NOOP}
-              showIndexingCard={NOOP}
-            />
+            <div
+              className={
+                hasPendingPlanPermission ? "tw-pointer-events-none tw-opacity-50" : undefined
+              }
+              aria-disabled={hasPendingPlanPermission || undefined}
+            >
+              <ChatInput
+                inputMessage={inputMessage}
+                setInputMessage={setInputMessage}
+                handleSendMessage={() => handleSendMessage()}
+                isGenerating={loading}
+                onStopGenerating={() => handleStopGenerating()}
+                app={app}
+                contextNotes={contextNotes}
+                setContextNotes={setContextNotes}
+                includeActiveNote={includeActiveNote}
+                setIncludeActiveNote={setIncludeActiveNote}
+                includeActiveWebTab={includeActiveWebTab}
+                setIncludeActiveWebTab={setIncludeActiveWebTab}
+                activeWebTab={null}
+                selectedImages={selectedImages}
+                onAddImage={handleAddImage}
+                setSelectedImages={setSelectedImages}
+                disableModelSwitch={!modelPickerOverride}
+                modelPickerOverride={modelPickerOverride ?? undefined}
+                selectedTextContexts={selectedTextContexts}
+                onRemoveSelectedText={removeSelectedTextContext}
+                showProgressCard={NOOP}
+                showIndexingCard={NOOP}
+              />
+            </div>
           </div>
         </div>
       </div>

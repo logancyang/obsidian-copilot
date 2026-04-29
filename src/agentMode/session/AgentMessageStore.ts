@@ -22,7 +22,7 @@ interface StoredAgentMessage {
 
 /**
  * Stable identity for an agent part. Tool calls key on `tool:<toolCallId>` so
- * an `tool_call_update` notification can find and replace the right entry.
+ * a `tool_call_update` notification can find and replace the right entry.
  * `plan` parts are singletons per message so they key on the literal `"plan"`.
  * Thoughts have no key — they're folded by `appendAgentThought`.
  */

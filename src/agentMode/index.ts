@@ -26,6 +26,8 @@ export type { BackendDescriptor, BackendId, InstallState } from "./session/types
 export type { StoredMcpServer, McpTransport } from "./session/mcpResolver";
 export { sanitizeStoredMcpServers } from "./session/mcpResolver";
 export { McpServersPanel } from "./ui/McpServersPanel";
+export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
+export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
 export { frameSink as acpFrameSink } from "./acp/frameSink";
 
@@ -42,12 +44,20 @@ export { frameSink as acpFrameSink } from "./acp/frameSink";
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
   const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
   const persistenceManager = new AgentChatPersistenceManager(app);
+  // The prompter needs to look up sessions by ACP id (to route ExitPlanMode
+  // permissions into the chat card), but the manager isn't constructed until
+  // the line below. Invariant: the prompter is only invoked once a session
+  // exists, which can't happen before `manager` is assigned, so the closure
+  // is guaranteed to see a non-null reference at call time.
+  let managerRef: AgentSessionManager | null = null;
+  const prompter = createDefaultPermissionPrompter(app, () => managerRef);
   const manager = new AgentSessionManager(app, plugin, {
-    permissionPrompter: createDefaultPermissionPrompter(app),
+    permissionPrompter: prompter,
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
     persistenceManager,
   });
+  managerRef = manager;
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {
     descriptor

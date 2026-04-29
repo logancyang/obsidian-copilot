@@ -2,6 +2,8 @@ import {
   AGENT_CHAT_MODE,
   CopilotAgentView,
   createAgentSessionManager,
+  PlanPreviewView,
+  PLAN_PREVIEW_VIEW_TYPE,
   type AgentSessionManager,
 } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -185,6 +187,7 @@ export default class CopilotPlugin extends Plugin {
         CHAT_AGENT_VIEWTYPE,
         (leaf: WorkspaceLeaf) => new CopilotAgentView(leaf, this)
       );
+      this.registerView(PLAN_PREVIEW_VIEW_TYPE, (leaf: WorkspaceLeaf) => new PlanPreviewView(leaf));
     }
 
     this.initActiveLeafChangeHandler();

@@ -188,9 +188,10 @@ export class AgentSessionManager {
       internalId: uuidv4(),
       backendId: resolvedId,
       preferredModelId,
+      getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
     });
     this.sessions.set(session.internalId, session);
-    this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
+    this.chatUIStates.set(session.internalId, new AgentChatUIState(session, descriptor));
     this.activeSessionId = session.internalId;
     this.attachAutoSave(session);
     this.attachModelCacheSync(session);
@@ -397,6 +398,19 @@ export class AgentSessionManager {
 
   getSession(id: string): AgentSession | null {
     return this.sessions.get(id) ?? null;
+  }
+
+  /**
+   * Find a session by its ACP `sessionId` (the agent-side identifier embedded
+   * in `requestPermission` / `session/update` notifications). Distinct from
+   * the internal id keying our own pool. Returns null while the session is
+   * still starting (no ACP id yet) or when no session matches.
+   */
+  getSessionByAcpId(acpSessionId: string): AgentSession | null {
+    for (const session of this.sessions.values()) {
+      if (session.getAcpSessionId() === acpSessionId) return session;
+    }
+    return null;
   }
 
   getChatUIState(id: string): AgentChatUIState | null {
