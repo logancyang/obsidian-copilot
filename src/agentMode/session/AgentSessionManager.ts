@@ -17,7 +17,9 @@ import { AgentSession } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import type { EffortApplyContext } from "./effortAdapter";
+import type { ModeApplyContext } from "./modeAdapter";
 import type { BackendDescriptor, BackendId } from "./types";
+import type { CopilotMode } from "@/settings/model";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -242,6 +244,13 @@ export class AgentSessionManager {
     await descriptor.persistEffortSelection(value, this.plugin);
   }
 
+  /** Persist a sticky mode preference for `backendId`. No-op if the descriptor doesn't opt in. */
+  async persistModeFor(backendId: BackendId, value: CopilotMode): Promise<void> {
+    const descriptor = this.resolveDescriptor(backendId);
+    if (!descriptor.persistModeSelection) return;
+    await descriptor.persistModeSelection(value, this.plugin);
+  }
+
   /**
    * Build an `EffortApplyContext` for the active session. Returns `null`
    * when the active session isn't on `backendId` — callers must avoid
@@ -256,6 +265,20 @@ export class AgentSessionManager {
       setSessionConfigOption: (configId, value) => session.setConfigOption(configId, value),
       persistModelSelection: (modelId) => this.persistModelSelectionFor(backendId, modelId),
       persistEffort: (value) => this.persistEffortFor(backendId, value),
+    };
+  }
+
+  /**
+   * Build a `ModeApplyContext` for the active session. Returns `null` when
+   * the active session isn't on `backendId`.
+   */
+  buildModeApplyContext(backendId: BackendId): ModeApplyContext | null {
+    const session = this.getActiveSession();
+    if (!session || session.backendId !== backendId) return null;
+    return {
+      setSessionMode: (modeId) => session.setMode(modeId),
+      setSessionConfigOption: (configId, value) => session.setConfigOption(configId, value),
+      persistMode: (value) => this.persistModeFor(backendId, value),
     };
   }
 

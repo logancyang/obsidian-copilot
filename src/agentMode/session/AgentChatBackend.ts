@@ -1,4 +1,8 @@
-import type { SessionConfigOption, SessionModelState } from "@agentclientprotocol/sdk";
+import type {
+  SessionConfigOption,
+  SessionModelState,
+  SessionModeState,
+} from "@agentclientprotocol/sdk";
 import type { AgentChatMessage } from "./types";
 
 /**
@@ -32,4 +36,11 @@ export interface AgentChatBackend {
   setConfigOption(configId: string, value: string): Promise<void>;
   /** Tri-state: null = not yet probed, true/false = result of first probe. */
   isSetSessionConfigOptionSupported(): boolean | null;
+
+  /** Latest known session mode state (ACP `availableModes`/`currentModeId`). */
+  getModeState(): SessionModeState | null;
+  /** Switch the active mode via `session/set_mode`. Throws if unsupported. */
+  setMode(modeId: string): Promise<void>;
+  /** Tri-state: null = not yet probed, true/false = result of first probe. */
+  isSetModeSupported(): boolean | null;
 }

@@ -227,6 +227,19 @@ export interface CopilotSettings {
   };
 }
 
+/**
+ * Canonical Copilot Agent Mode operational mode. Mapped per-backend to a
+ * native ACP mode id (Claude Code permission modes, Codex sandbox presets,
+ * OpenCode managed agents). Picked in `ChatInput`; replayed on fresh
+ * sessions.
+ *
+ *   - `build`     — default; agent may write/exec but the user must approve
+ *                   each permission request.
+ *   - `plan`      — agent drafts a plan; no writes.
+ *   - `auto-build`— same as build, but bypass all permission prompts.
+ */
+export type CopilotMode = "build" | "plan" | "auto-build";
+
 /** Settings slice owned by the Claude Code backend. */
 export interface ClaudeCodeBackendSettings {
   /** Path to the user-provided `claude-agent-acp` binary. */
@@ -243,6 +256,8 @@ export interface ClaudeCodeBackendSettings {
    * each new session resolves. Unset = follow the agent's default.
    */
   selectedEffort?: string;
+  /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
+  selectedMode?: CopilotMode;
 }
 
 /** Settings slice owned by the Codex backend. */
@@ -257,6 +272,8 @@ export interface CodexBackendSettings {
    * effort through this single field, no separate `selectedEffort` needed.
    */
   selectedModelKey?: string;
+  /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
+  selectedMode?: CopilotMode;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -286,6 +303,8 @@ export interface OpencodeBackendSettings {
    * surfaced in the Copilot tab strip or chat history.
    */
   probeSessionId?: string;
+  /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
+  selectedMode?: CopilotMode;
 }
 
 export const settingsStore = createStore();

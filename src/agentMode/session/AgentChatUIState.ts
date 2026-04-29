@@ -2,7 +2,11 @@ import { logError, logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { AgentChatMessage } from "@/agentMode/session/types";
-import type { SessionConfigOption, SessionModelState } from "@agentclientprotocol/sdk";
+import type {
+  SessionConfigOption,
+  SessionModelState,
+  SessionModeState,
+} from "@agentclientprotocol/sdk";
 
 /**
  * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent
@@ -107,5 +111,17 @@ export class AgentChatUIState implements AgentChatBackend {
 
   isSetSessionConfigOptionSupported(): boolean | null {
     return this.session.isSetSessionConfigOptionSupported();
+  }
+
+  getModeState(): SessionModeState | null {
+    return this.session.getModeState();
+  }
+
+  async setMode(modeId: string): Promise<void> {
+    await this.session.setMode(modeId);
+  }
+
+  isSetModeSupported(): boolean | null {
+    return this.session.isSetModeSupported();
   }
 }

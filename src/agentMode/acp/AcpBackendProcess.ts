@@ -22,6 +22,8 @@ import {
   SetSessionConfigOptionResponse,
   SetSessionModelRequest,
   SetSessionModelResponse,
+  SetSessionModeRequest,
+  SetSessionModeResponse,
   ndJsonStream,
 } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter } from "obsidian";
@@ -40,6 +42,7 @@ export type AcpCapability =
   | "session/resume"
   | "session/load"
   | "session/set_model"
+  | "session/set_mode"
   | "session/set_config_option"
   | "mcp/http"
   | "mcp/sse";
@@ -275,6 +278,20 @@ export class AcpBackendProcess {
 
   isSetSessionModelSupported(): boolean | null {
     return this.probedCapabilitySupported("session/set_model");
+  }
+
+  /**
+   * Switch the active session mode via `session/set_mode`. Mode is the ACP
+   * session-mode concept (Claude Code permission modes, Codex sandbox
+   * presets, etc.) — not a session config option. Probed because not every
+   * agent implements it.
+   */
+  async setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse> {
+    return this.probedCall("session/set_mode", (c) => c.setSessionMode(params));
+  }
+
+  isSetSessionModeSupported(): boolean | null {
+    return this.probedCapabilitySupported("session/set_mode");
   }
 
   /**

@@ -4,36 +4,44 @@
   - [x] Load chat history from agents
   - [x] Save chat history to notes
 - [ ] P1: Provide copilot specific system prompt
-- [ ] P2: Subagent nested tool calls
-- [ ] P2: Better agent messages
 - [ ] P1: MCP
   - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
   - [ ] P1: Support oauth for MCP servers (the one example that I tested didn't work)
 - [ ] P1: Skills
-- [ ] P3: Rerun agent response
-- [ ] P2: Edit previous user message
 - [ ] P1: Permission UI
 - [ ] P1: Edit diff UI - https://agentclientprotocol.com/protocol/tool-calls#diffs
-- [ ] P2: Agent path auto-detect doesn't work well
 - [ ] P1: Agent mode selector (yolo, plan, safe) - https://agentclientprotocol.com/protocol/session-config-options
+  - Basic functionality is added but doesn't work well yet. Need thorough test.
 - [x] P1: Agent effort selector
-- [ ] P2: Integrate copilot plus tool calls
-- [ ] P2: Keyboard shortcut
-- [ ] P2: New agent command (/new, /usage)
 - [ ] P1: How to support custom command and quick ask?
 - [ ] P1: Content type support (image, audio) - https://agentclientprotocol.com/protocol/content
 - [ ] P1: Better onboarding
-- [ ] P2: Claude code authentication
-- [ ] P1: Codex support
+- [x] P1: Codex support
 - [ ] P1: Cancel chat
 - [ ] P1: Queue messages
 - [ ] P1: Test bash tool call, shall they work?
-- [ ] P3: Agent todo list
-- [ ] P2: Auto-save chat history controls
-- [ ] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
-- [ ] P2: Slash command support. Revamp current slash command to function like skills.
-- [ ] P2: Token counter
+- [x] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
 - [ ] P1: Better agent settings
   - Shall they be placed in a different tabs?
   - What we should enable users to edit?
 - [ ] P1: Control which models are available in which agent
+  - Add a settings control to configure what agent models are available in the model selector
+- [ ] P1: Clicking new chat should reset the tab label
+- [ ] P1: Agent survey (asking for user input)
+- [ ] P1: Agent message is not rendered in the correct order with the tool calls
+- [ ] P1: Plan mode preview display
+- [ ] P1: Support note context input
+  - [[note]] doesn't work right now
+- [ ] P2: Subagent nested tool calls
+- [ ] P2: Better agent messages
+- [ ] P2: Edit previous user message
+- [ ] P2: Agent path auto-detect doesn't work well
+- [ ] P2: Integrate copilot plus tool calls
+- [ ] P2: Keyboard shortcut
+- [ ] P2: New agent command (/new, /usage)
+- [ ] P2: Claude code authentication
+- [ ] P2: Auto-save chat history controls
+- [ ] P2: Slash command support. Revamp current slash command to function like skills.
+- [ ] P2: Token counter
+- [ ] P3: Rerun agent response
+- [ ] P3: Agent todo list

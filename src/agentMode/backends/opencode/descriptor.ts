@@ -1,15 +1,18 @@
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import type { CustomModel } from "@/aiParams";
+import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
   getModelKeyFromModel,
   getSettings,
   setSettings,
   subscribeToSettingsChange,
+  type CopilotMode,
   type CopilotSettings,
 } from "@/settings/model";
 import { findCustomModel } from "@/utils";
 import {
+  OPENCODE_CANONICAL_MODE_AGENT_IDS,
   OpencodeBackend,
   OPENCODE_PROVIDER_MAP,
   copilotModelToOpencodeId,
@@ -18,7 +21,13 @@ import { computeInstallState, OpencodeBinaryManager } from "./OpencodeBinaryMana
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import type { ChatModelProviders } from "@/constants";
+import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import type { ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+
+/** Config option id OpenCode uses to switch the active agent at runtime. */
+const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
 
 // Lazy-created singleton manager. The first plugin to ask for it wins; in a
 // running Obsidian instance there's exactly one CopilotPlugin so this is safe.
@@ -184,6 +193,69 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
         },
       },
     }));
+  },
+
+  /**
+   * OpenCode doesn't use ACP `availableModes` — its "modes" are agents,
+   * switched at runtime via `session/set_config_option` with `configId:
+   * "mode"`. The `copilot-build` agent is provisioned in the spawn-time
+   * config (see `OpencodeBackend.buildOpencodeConfig`); `build` and `plan`
+   * are OpenCode built-ins.
+   */
+  getModeMapping(_modeState, configOptions): ModeMapping | null {
+    if (!configOptions) return null;
+    const opt = configOptions.find((o) => o.id === OPENCODE_MODE_CONFIG_OPTION_ID);
+    if (!opt) return null;
+    return {
+      kind: "configOption",
+      configId: OPENCODE_MODE_CONFIG_OPTION_ID,
+      canonical: { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
+    };
+  },
+
+  async persistModeSelection(value: CopilotMode, _plugin: CopilotPlugin): Promise<void> {
+    setSettings((cur) => ({
+      agentMode: {
+        ...cur.agentMode,
+        backends: {
+          ...cur.agentMode.backends,
+          opencode: {
+            ...(cur.agentMode.backends?.opencode ?? {}),
+            selectedMode: value,
+          },
+        },
+      },
+    }));
+  },
+
+  /**
+   * Defense-in-depth replay of the persisted mode on a freshly created
+   * session. The primary path is `default_agent` baked into the spawn-time
+   * `OPENCODE_CONFIG_CONTENT` (see `OpencodeBackend.buildOpencodeConfig`),
+   * which guarantees the very first turn runs in the right agent. This
+   * runtime call only fires if the spawn-time default didn't take and the
+   * `mode` configOption is already registered.
+   */
+  async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
+    const persistedMode = settings.agentMode?.backends?.opencode?.selectedMode;
+    if (!persistedMode) return;
+    const mapping = OpencodeBackendDescriptor.getModeMapping?.(
+      session.getModeState(),
+      session.getConfigOptions()
+    );
+    if (!mapping || mapping.kind !== "configOption" || !mapping.configId) return;
+    const native = mapping.canonical[persistedMode];
+    if (!native) return;
+    const opt = session.getConfigOptions()?.find((o) => o.id === mapping.configId);
+    if (!opt || opt.type !== "select") return;
+    if (String(opt.currentValue) === native) return;
+    try {
+      await session.setConfigOption(mapping.configId, native);
+    } catch (e) {
+      if (!(e instanceof MethodUnsupportedError)) {
+        logWarn(`[AgentMode] could not apply preferred mode ${persistedMode}`, e);
+      }
+    }
   },
 };
 

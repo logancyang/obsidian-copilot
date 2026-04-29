@@ -3,7 +3,7 @@ import { BREVILABS_MODELS_BASE_URL, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logInfo, logWarn } from "@/logger";
 import { findCustomModel } from "@/utils";
-import { getSettings } from "@/settings/model";
+import { getSettings, type CopilotMode } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 
 /**
@@ -31,6 +31,31 @@ export const OPENCODE_PROVIDER_MAP: Partial<Record<ChatModelProviders, string>> 
 
 /** OpenCode provider id reserved for Copilot Plus's brevilabs proxy. */
 const COPILOT_PLUS_PROVIDER_ID = "copilot-plus";
+
+/**
+ * Custom OpenCode agent id provisioned via `OPENCODE_CONFIG_CONTENT`. Maps
+ * to Copilot's canonical `build` mode (writes/exec allowed, but the user
+ * approves each request). The built-in `build` agent doesn't ask.
+ */
+export const OPENCODE_COPILOT_BUILD_AGENT_ID = "copilot-build";
+
+/** OpenCode's built-in plan agent id (read-only + can write plan markdown). */
+export const OPENCODE_BUILTIN_PLAN_AGENT_ID = "plan";
+/** OpenCode's built-in build agent id (full perms, no permission asks). */
+export const OPENCODE_BUILTIN_BUILD_AGENT_ID = "build";
+
+/**
+ * Shared canonical→native agent-id mapping for OpenCode. Used both at spawn
+ * time (`buildOpencodeConfig` sets `default_agent`) and at runtime (the
+ * descriptor's `getModeMapping` for `session/set_config_option`). Keeping
+ * one source of truth so the spawn-time default and the runtime picker
+ * never disagree.
+ */
+export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Record<CopilotMode, string> = {
+  build: OPENCODE_COPILOT_BUILD_AGENT_ID,
+  plan: OPENCODE_BUILTIN_PLAN_AGENT_ID,
+  "auto-build": OPENCODE_BUILTIN_BUILD_AGENT_ID,
+};
 
 /** OpenCode-style model id: `<providerId>/<modelName>`. */
 export function copilotModelToOpencodeId(model: CustomModel): string | undefined {
@@ -176,6 +201,18 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
 
   const config: Record<string, unknown> = { provider };
 
+  // Inject a managed `copilot-build` agent so the mode picker can offer a
+  // "build with ask-before-write" option. The built-in `build` agent never
+  // asks (used as our `auto-build` mode) and `plan` is read-only (our `plan`
+  // mode), but neither covers the canonical `build` semantic of "let me edit,
+  // but ask first" — hence the custom agent.
+  config.agent = {
+    [OPENCODE_COPILOT_BUILD_AGENT_ID]: {
+      mode: "primary",
+      permission: { bash: "ask", edit: "ask" },
+    },
+  };
+
   // Apply sticky model preference at spawn so the very first turn (before
   // `unstable_setSessionModel` lands) uses the user's pick.
   const selectedKey = s.agentMode?.backends?.opencode?.selectedModelKey;
@@ -188,6 +225,16 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
       // Stale `selectedModelKey` (model was deleted) — ignore, fall back to
       // OpenCode's default.
     }
+  }
+
+  // Apply sticky mode preference at spawn via OpenCode's `default_agent` so
+  // the first turn already runs in the user's chosen agent. The runtime
+  // picker still calls `session/set_config_option` for in-session switches;
+  // this just closes the cold-start gap where the `mode` configOption isn't
+  // registered until after `applyInitialSessionConfig` runs.
+  const selectedMode = s.agentMode?.backends?.opencode?.selectedMode;
+  if (selectedMode) {
+    config.default_agent = OPENCODE_CANONICAL_MODE_AGENT_IDS[selectedMode];
   }
 
   return config;

@@ -208,3 +208,52 @@ export function EffortSelector({
     </DropdownMenu>
   );
 }
+
+export interface ModeSelectorProps<TValue extends string> {
+  options: { label: string; value: TValue }[];
+  value: TValue | null;
+  onChange: (value: TValue) => void;
+  disabled?: boolean;
+  className?: string;
+}
+
+/**
+ * Sibling mode picker rendered next to `ModelSelector` in Agent Mode. Surfaces
+ * Copilot-canonical operational modes (build/plan/auto-build) when the
+ * active backend supports them. Stays hidden when the override doesn't
+ * include a `mode` block. Generic over the canonical mode type so callers
+ * own the value vocabulary.
+ */
+export function ModeSelector<TValue extends string>({
+  options,
+  value,
+  onChange,
+  disabled = false,
+  className,
+}: ModeSelectorProps<TValue>) {
+  const current = options.find((o) => o.value === value);
+  const label = current?.label ?? "Mode";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost2"
+          size="sm"
+          disabled={disabled}
+          className={cn("tw-shrink-0 tw-text-muted", className)}
+          title="Operational mode"
+        >
+          <span className="tw-truncate">{label}</span>
+          {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
+        {options.map((opt) => (
+          <DropdownMenuItem key={opt.value} onSelect={() => onChange(opt.value)}>
+            {opt.label}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}

@@ -23,6 +23,8 @@ interface MockBackend {
   isSetSessionModelSupported: jest.Mock;
   setSessionConfigOption: jest.Mock;
   isSetSessionConfigOptionSupported: jest.Mock;
+  setSessionMode: jest.Mock;
+  isSetSessionModeSupported: jest.Mock;
   listSessions: jest.Mock;
   isListSessionsSupported: jest.Mock;
 }
@@ -42,6 +44,8 @@ function makeMockBackend(): MockBackend {
   const isSetSessionModelSupported = jest.fn(() => true);
   const setSessionConfigOption = jest.fn(async () => ({ configOptions: [] }));
   const isSetSessionConfigOptionSupported = jest.fn(() => true);
+  const setSessionMode = jest.fn(async () => ({}));
+  const isSetSessionModeSupported = jest.fn(() => true);
   const listSessions = jest.fn(async () => ({ sessions: [] }));
   const isListSessionsSupported = jest.fn(() => true);
   const backend = {
@@ -53,6 +57,8 @@ function makeMockBackend(): MockBackend {
     isSetSessionModelSupported,
     setSessionConfigOption,
     isSetSessionConfigOptionSupported,
+    setSessionMode,
+    isSetSessionModeSupported,
     listSessions,
     isListSessionsSupported,
   } as unknown as AcpBackendProcess;
@@ -66,6 +72,8 @@ function makeMockBackend(): MockBackend {
     isSetSessionModelSupported,
     setSessionConfigOption,
     isSetSessionConfigOptionSupported,
+    setSessionMode,
+    isSetSessionModeSupported,
     listSessions,
     isListSessionsSupported,
     emit: (update) => handler?.(update as Parameters<SessionUpdateHandler>[0]),
@@ -496,6 +504,101 @@ describe("AgentSession.setConfigOption", () => {
     );
     const opts = session.getConfigOptions();
     expect(opts![0]).toMatchObject({ currentValue: "medium" });
+  });
+});
+
+describe("AgentSession.setMode", () => {
+  it("calls backend.setSessionMode and updates currentModeId on success", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialModeState: {
+        currentModeId: "default",
+        availableModes: [
+          { id: "default", name: "Default" },
+          { id: "plan", name: "Plan" },
+        ],
+      },
+    });
+    await session.setMode("plan");
+    expect(mock.setSessionMode).toHaveBeenCalledWith({ sessionId: "acp-1", modeId: "plan" });
+    expect(session.getModeState()?.currentModeId).toBe("plan");
+  });
+
+  it("rethrows MethodUnsupportedError without mutating local state", async () => {
+    const mock = makeMockBackend();
+    mock.setSessionMode.mockRejectedValueOnce(new MethodUnsupportedError("session/set_mode"));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialModeState: {
+        currentModeId: "default",
+        availableModes: [{ id: "default", name: "Default" }],
+      },
+    });
+    await expect(session.setMode("plan")).rejects.toBeInstanceOf(MethodUnsupportedError);
+    expect(session.getModeState()?.currentModeId).toBe("default");
+  });
+
+  it("notifies onModelChanged listeners after successful switch", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialModeState: {
+        currentModeId: "default",
+        availableModes: [
+          { id: "default", name: "Default" },
+          { id: "plan", name: "Plan" },
+        ],
+      },
+    });
+    const onModelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onModelChanged,
+    });
+    await session.setMode("plan");
+    expect(onModelChanged).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AgentSession current_mode_update", () => {
+  it("mirrors agent-pushed mode changes into local state and notifies", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      initialModeState: {
+        currentModeId: "default",
+        availableModes: [
+          { id: "default", name: "Default" },
+          { id: "plan", name: "Plan" },
+        ],
+      },
+    });
+    const onModelChanged = jest.fn();
+    session.subscribe({
+      onMessagesChanged: jest.fn(),
+      onStatusChanged: jest.fn(),
+      onModelChanged,
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "current_mode_update", currentModeId: "plan" },
+    });
+    expect(session.getModeState()?.currentModeId).toBe("plan");
+    expect(onModelChanged).toHaveBeenCalledTimes(1);
   });
 });
 

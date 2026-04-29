@@ -264,6 +264,56 @@ describe("buildOpencodeConfig", () => {
     expect(cfg.model).toBe("copilot-plus/copilot-plus-flash");
   });
 
+  it("sets default_agent from persisted selectedMode (canonical → native id)", async () => {
+    setSettings({
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        debugFullFrames: false,
+        backends: {
+          opencode: {
+            selectedMode: "build",
+          },
+        },
+      },
+    });
+    const buildCfg = (await buildOpencodeConfig()) as { default_agent?: string };
+    expect(buildCfg.default_agent).toBe("copilot-build");
+
+    setSettings({
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        debugFullFrames: false,
+        backends: { opencode: { selectedMode: "plan" } },
+      },
+    });
+    const planCfg = (await buildOpencodeConfig()) as { default_agent?: string };
+    expect(planCfg.default_agent).toBe("plan");
+
+    setSettings({
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        debugFullFrames: false,
+        backends: { opencode: { selectedMode: "auto-build" } },
+      },
+    });
+    const autoCfg = (await buildOpencodeConfig()) as { default_agent?: string };
+    expect(autoCfg.default_agent).toBe("build");
+  });
+
+  it("omits default_agent when no mode is persisted", async () => {
+    const cfg = (await buildOpencodeConfig()) as { default_agent?: string };
+    expect(cfg.default_agent).toBeUndefined();
+  });
+
   it("ignores stale selectedModelKey that doesn't resolve to an active model", async () => {
     updateSetting("anthropicApiKey", "anth-123");
     setSettings({

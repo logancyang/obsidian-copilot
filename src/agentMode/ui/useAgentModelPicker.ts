@@ -14,6 +14,11 @@ import {
   stripEffortSuffix,
   type EffortAdapter,
 } from "@/agentMode/session/effortAdapter";
+import {
+  buildModeAdapter,
+  type CopilotMode,
+  type ModeAdapter,
+} from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 
 export interface AgentModelPickerOverride {
@@ -30,6 +35,18 @@ export interface AgentModelPickerOverride {
     options: { label: string; value: string | null }[];
     value: string | null;
     onChange: (value: string | null) => void;
+    disabled?: boolean;
+  };
+  /**
+   * Sibling mode picker — Copilot-canonical operational modes (build/plan/
+   * auto-build) mapped per-backend to native ACP modes (Claude permission
+   * modes, Codex sandbox presets) or to OpenCode's managed agents. Absent
+   * when the active backend doesn't support any canonical mode.
+   */
+  mode?: {
+    options: { label: string; value: CopilotMode }[];
+    value: CopilotMode | null;
+    onChange: (value: CopilotMode) => void;
     disabled?: boolean;
   };
 }
@@ -91,14 +108,20 @@ export function useAgentModelPicker(
       const configOpts = (ui?.getConfigOptions() ?? [])
         .map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`)
         .join(",");
+      const modeState = ui?.getModeState();
+      const modeSig = modeState
+        ? `${modeState.currentModeId}#${modeState.availableModes.map((m) => m.id).join(",")}`
+        : "";
       return [
         session?.internalId ?? "",
         session?.backendId ?? "",
         session?.hasUserVisibleMessages() ? "1" : "0",
         ui?.getModelState()?.currentModelId ?? "",
         ui?.isModelSwitchSupported() ?? "",
+        ui?.isSetModeSupported() ?? "",
         running,
         configOpts,
+        modeSig,
       ].join("|");
     };
 
@@ -136,8 +159,10 @@ export function useAgentModelPicker(
   const activeSession = manager?.getActiveSession() ?? null;
   const activeModelState = activeChatUIState?.getModelState() ?? null;
   const activeConfigOptions = activeChatUIState?.getConfigOptions() ?? null;
+  const activeModeState = activeChatUIState?.getModeState() ?? null;
   const isModelSwitchSupported = activeChatUIState?.isModelSwitchSupported() ?? null;
   const isSetConfigOptionSupported = activeChatUIState?.isSetSessionConfigOptionSupported() ?? null;
+  const isSetModeSupported = activeChatUIState?.isSetModeSupported() ?? null;
   const activeBackendId = activeSession?.backendId ?? null;
   const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
 
@@ -213,6 +238,25 @@ export function useAgentModelPicker(
       }
     }
 
+    // Mode picker — Copilot-canonical operational modes (build/plan/auto-build)
+    // mapped per-backend to native ACP modes or OpenCode managed agents.
+    let modeBlock: AgentModelPickerOverride["mode"] | undefined;
+    if (activeBackendId && activeDescriptor && (activeModeState || activeConfigOptions)) {
+      const adapter = buildModeAdapter(activeDescriptor, {
+        modeState: activeModeState,
+        configOptions: activeConfigOptions,
+      });
+      if (adapter) {
+        modeBlock = buildModeOverride(
+          adapter,
+          activeBackendId,
+          manager,
+          isSetModeSupported,
+          isSetConfigOptionSupported
+        );
+      }
+    }
+
     return {
       models: entries,
       value: valueKey,
@@ -220,6 +264,7 @@ export function useAgentModelPicker(
       // switch models at runtime; intra-backend support is checked per-call.
       disabled: false,
       effort: effortBlock,
+      mode: modeBlock,
       onChange: (modelKey: string) => {
         const entry = entries.find((e) => getModelKeyFromModel(e) === modelKey);
         if (!entry) return;
@@ -292,8 +337,10 @@ export function useAgentModelPicker(
     activeBackendId,
     activeModelState,
     activeConfigOptions,
+    activeModeState,
     isModelSwitchSupported,
     isSetConfigOptionSupported,
+    isSetModeSupported,
     activeSession,
     activeSessionHasHistory,
     cacheSnapshot,
@@ -339,6 +386,49 @@ function buildEffortOverride(
         }
         logError("[AgentMode] effort apply failed", err);
         new Notice("Failed to switch effort. See console for details.");
+      });
+    },
+  };
+}
+
+/**
+ * Wire a `ModeAdapter` into the picker override block. Routes user picks
+ * through `manager.buildModeApplyContext` so the descriptor's mapping
+ * decides which native id and ACP call to use.
+ *
+ * Capability gating is keyed off `adapter.kind` — `setMode` adapters check
+ * `isSetModeSupported`, `configOption` adapters check
+ * `isSetConfigOptionSupported`.
+ */
+function buildModeOverride(
+  adapter: ModeAdapter,
+  backendId: string,
+  manager: AgentSessionManager,
+  isSetModeSupported: boolean | null,
+  isSetConfigOptionSupported: boolean | null
+): NonNullable<AgentModelPickerOverride["mode"]> {
+  const disabled =
+    adapter.kind === "setMode"
+      ? isSetModeSupported === false
+      : isSetConfigOptionSupported === false;
+
+  return {
+    options: adapter.options,
+    value: adapter.currentValue,
+    disabled: disabled || adapter.disabled,
+    onChange: (value: CopilotMode) => {
+      const ctx = manager.buildModeApplyContext(backendId);
+      if (!ctx) {
+        new Notice("Active session is not on this backend.");
+        return;
+      }
+      adapter.applyMode(value, ctx).catch((err) => {
+        if (err instanceof MethodUnsupportedError) {
+          new Notice("This agent doesn't support runtime mode switching.");
+          return;
+        }
+        logError("[AgentMode] mode apply failed", err);
+        new Notice("Failed to switch mode. See console for details.");
       });
     },
   };

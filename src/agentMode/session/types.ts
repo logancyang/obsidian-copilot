@@ -1,12 +1,13 @@
 import type { App } from "obsidian";
 import type React from "react";
-import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import type { SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
-import type { CopilotSettings } from "@/settings/model";
+import type { CopilotMode, CopilotSettings } from "@/settings/model";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 import type { AcpBackend, BackendId } from "@/agentMode/acp/types";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import type { ModeMapping } from "@/agentMode/session/modeAdapter";
 
 // Re-export so consumers in session/ and ui/ can import a single types entry.
 export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/types";
@@ -117,6 +118,23 @@ export interface BackendDescriptor {
    * trips effort through `selectedModelKey`.
    */
   persistEffortSelection?(value: string, plugin: CopilotPlugin): Promise<void>;
+
+  /**
+   * Optional: return the canonical → native mode mapping for this backend
+   * given the current session state. Returning `null` hides the mode picker
+   * for this backend. The mode adapter dispatches on `mapping.kind` to pick
+   * between `session/set_mode` and `session/set_config_option`.
+   */
+  getModeMapping?(
+    modeState: SessionModeState | null,
+    configOptions: SessionConfigOption[] | null
+  ): ModeMapping | null;
+
+  /**
+   * Optional: persist the user's chosen mode so the next session can replay
+   * it. Called by `AgentSessionManager.persistModeFor`.
+   */
+  persistModeSelection?(value: CopilotMode, plugin: CopilotPlugin): Promise<void>;
 
   /**
    * Optional: replay persisted state on a freshly created session. Runs

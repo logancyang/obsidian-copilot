@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button";
 import {
   EffortSelector,
   ModelSelector,
+  ModeSelector,
   type ModelSelectorEntry,
 } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import type { CopilotMode } from "@/settings/model";
 import { isPlusChain } from "@/utils";
 import {
   mergeWebTabContexts,
@@ -90,6 +92,18 @@ export interface ChatInputProps {
       options: { label: string; value: string | null }[];
       value: string | null;
       onChange: (value: string | null) => void;
+      disabled?: boolean;
+    };
+    /**
+     * Optional sibling operational-mode picker (Agent Mode). Surfaces
+     * Copilot-canonical modes (build/plan/auto-build) when the active
+     * backend exposes them. The picker hook owns the mapping to native
+     * ACP ids; ChatInput just renders.
+     */
+    mode?: {
+      options: { label: string; value: CopilotMode }[];
+      value: CopilotMode | null;
+      onChange: (value: CopilotMode) => void;
       disabled?: boolean;
     };
   };
@@ -794,6 +808,14 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 value={modelPickerOverride.effort.value}
                 onChange={modelPickerOverride.effort.onChange}
                 disabled={modelPickerOverride.effort.disabled}
+              />
+            )}
+            {modelPickerOverride?.mode && (
+              <ModeSelector
+                options={modelPickerOverride.mode.options}
+                value={modelPickerOverride.mode.value}
+                onChange={modelPickerOverride.mode.onChange}
+                disabled={modelPickerOverride.mode.disabled}
               />
             )}
           </div>

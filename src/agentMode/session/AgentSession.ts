@@ -17,6 +17,7 @@ import {
   SessionConfigOption,
   SessionId,
   SessionModelState,
+  SessionModeState,
   SessionNotification,
   StopReason,
   ToolCall,
@@ -39,7 +40,11 @@ export type AgentSessionStatus = "idle" | "running" | "awaiting_permission" | "e
 export interface AgentSessionListener {
   onMessagesChanged(): void;
   onStatusChanged(status: AgentSessionStatus): void;
-  /** Optional: fired when the active model changes (after `setModel` resolves). */
+  /**
+   * Optional: fired when model, configOption, or mode state changes. The
+   * picker treats all three as one notification channel — they all cause it
+   * to rebuild and there's no value in fanning out separate callbacks.
+   */
   onModelChanged?(): void;
   /** Optional: fired when the user-visible label changes. */
   onLabelChanged?(): void;
@@ -53,6 +58,7 @@ export interface AgentSessionOptions {
   backendId: BackendId;
   initialModelState?: SessionModelState | null;
   initialConfigOptions?: SessionConfigOption[] | null;
+  initialModeState?: SessionModeState | null;
   cwd?: string | null;
 }
 
@@ -83,6 +89,7 @@ export class AgentSession {
   private unregisterSessionHandler: (() => void) | null = null;
   private modelState: SessionModelState | null = null;
   private configOptions: SessionConfigOption[] | null = null;
+  private modeState: SessionModeState | null = null;
   private label: string | null = null;
   // Tracks who set the current label so an agent-pushed `session_info_update`
   // can't clobber a label the user explicitly chose via Rename.
@@ -96,6 +103,7 @@ export class AgentSession {
     this.cwd = opts.cwd ?? null;
     this.modelState = opts.initialModelState ?? null;
     this.configOptions = opts.initialConfigOptions ?? null;
+    this.modeState = opts.initialModeState ?? null;
     this.unregisterSessionHandler = this.backend.registerSessionHandler(
       this.acpSessionId,
       (update) => this.handleSessionUpdate(update)
@@ -123,6 +131,7 @@ export class AgentSession {
       backendId,
       initialModelState: resp.models ?? null,
       initialConfigOptions: resp.configOptions ?? null,
+      initialModeState: resp.modes ?? null,
       cwd,
     });
 
@@ -205,6 +214,38 @@ export class AgentSession {
   /** Tri-state mirror of `AcpBackendProcess.isSetSessionConfigOptionSupported()`. */
   isSetSessionConfigOptionSupported(): boolean | null {
     return this.backend.isSetSessionConfigOptionSupported();
+  }
+
+  /**
+   * Latest known mode state for this session. `null` when the agent did not
+   * report any modes in `NewSessionResponse` (older agents/backends).
+   */
+  getModeState(): SessionModeState | null {
+    return this.modeState;
+  }
+
+  /**
+   * Switch the active session mode (claude-code permission mode, codex
+   * sandbox preset, etc.) via `session/set_mode`. On success, mutates the
+   * local `currentModeId` and notifies `onModelChanged` listeners.
+   *
+   * Throws `MethodUnsupportedError` when the agent doesn't implement the
+   * RPC. Callers should treat that as "mode switching is not available" and
+   * degrade the UI accordingly.
+   */
+  async setMode(modeId: string): Promise<void> {
+    if (this.status === "closed") throw new Error("Session is closed");
+    await this.backend.setSessionMode({ sessionId: this.acpSessionId, modeId });
+    this.modeState = {
+      ...(this.modeState ?? { availableModes: [] }),
+      currentModeId: modeId,
+    };
+    this.notifyModelChanged();
+  }
+
+  /** Tri-state mirror of `AcpBackendProcess.isSetSessionModeSupported()`. */
+  isSetModeSupported(): boolean | null {
+    return this.backend.isSetSessionModeSupported();
   }
 
   getStatus(): AgentSessionStatus {
@@ -384,6 +425,19 @@ export class AgentSession {
     // them before the placeholder check below.
     if (update.sessionUpdate === "session_info_update") {
       this.applyAgentLabel(update.title);
+      return;
+    }
+    if (update.sessionUpdate === "current_mode_update") {
+      // Agent flipped its own mode (e.g. an in-prompt marker, or a server-
+      // side default kicking in). Mirror it locally so the picker reflects
+      // reality without having to resync via setMode. Skip when the id
+      // didn't actually change to avoid spurious re-renders.
+      if (this.modeState?.currentModeId === update.currentModeId) return;
+      this.modeState = {
+        ...(this.modeState ?? { availableModes: [] }),
+        currentModeId: update.currentModeId,
+      };
+      this.notifyModelChanged();
       return;
     }
 
