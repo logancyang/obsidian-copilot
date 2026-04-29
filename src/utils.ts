@@ -1181,6 +1181,38 @@ export function isGPT5Model(model: BaseChatModel | string): boolean {
 }
 
 /**
+ * Checks whether a model belongs to the Codex family.
+ * Codex model identifiers consistently include the "codex" token.
+ * @param model - Model instance or model name string.
+ * @returns True when the model name indicates a Codex model.
+ */
+export function isCodexModel(model: BaseChatModel | string): boolean {
+  const modelName =
+    typeof model === "string" ? model : (model as any).modelName || (model as any).model || "";
+  return modelName.toLowerCase().includes("codex");
+}
+
+/**
+ * Determines whether a GitHub Copilot model should use the Responses API.
+ * Copilot Codex models reject `/chat/completions` and must be sent to `/responses`.
+ * @param model - Minimal model configuration used for routing.
+ * @returns True when the model should be routed to `/responses`.
+ */
+export function shouldUseGitHubCopilotResponsesApi(
+  model: Pick<CustomModel, "provider" | "name" | "useResponsesApi">
+): boolean {
+  if (model.provider !== ChatModelProviders.GITHUB_COPILOT) {
+    return false;
+  }
+
+  if (model.useResponsesApi === true) {
+    return true;
+  }
+
+  return isCodexModel(model.name);
+}
+
+/**
  * Utility for determining model characteristics
  * Note: Most of this is handled by LangChain 0.6.6+ internally
  */

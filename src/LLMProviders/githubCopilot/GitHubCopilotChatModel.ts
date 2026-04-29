@@ -1,6 +1,7 @@
 import type { BaseMessageChunk, MessageContent } from "@langchain/core/messages";
 import { ChatOpenAICompletions } from "@langchain/openai";
 import { COPILOT_API_BASE, GitHubCopilotProvider } from "./GitHubCopilotProvider";
+import { buildGitHubCopilotAuthedFetch } from "./GitHubCopilotResponsesModel";
 import type { FetchImplementation } from "@/utils";
 import { extractTextFromChunk } from "@/utils";
 
@@ -16,6 +17,8 @@ const CHARS_PER_TOKEN = 4;
  * ChatOpenAICompletions' `_streamResponseChunks` skips chunks with non-string
  * content, causing all text to be silently dropped. This normalizer ensures
  * content is always a string before it reaches that check.
+ * @param content - Raw delta content from the transport layer.
+ * @returns Normalized plain-text content.
  */
 function normalizeDeltaContent(content: unknown): string {
   if (typeof content === "string") return content;
@@ -38,7 +41,9 @@ function normalizeDeltaContent(content: unknown): string {
 }
 
 /** Extract the constructor fields type from ChatOpenAICompletions. */
-type ChatOpenAICompletionsFields = NonNullable<ConstructorParameters<typeof ChatOpenAICompletions>[0]>;
+type ChatOpenAICompletionsFields = NonNullable<
+  ConstructorParameters<typeof ChatOpenAICompletions>[0]
+>;
 
 /**
  * Constructor params for GitHubCopilotChatModel.
@@ -52,6 +57,9 @@ export type GitHubCopilotChatModelParams = ChatOpenAICompletionsFields & {
 
 /**
  * GitHub Copilot ChatModel built on top of ChatOpenAICompletions.
+ *
+ * This class is kept for Copilot models that still speak the Chat Completions API.
+ * Codex models are routed separately through GitHubCopilotResponsesModel.
  *
  * Reason: We extend ChatOpenAICompletions instead of ChatOpenAI because:
  * 1. ChatOpenAI routes between Completions API and Responses API internally.
@@ -72,67 +80,21 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
   /**
    * Build a fetch wrapper that injects a valid Copilot token and custom headers
    * on every request, with automatic 401 retry after token refresh.
-   *
-   * @param provider - GitHubCopilotProvider singleton for token management
-   * @param baseFetch - Underlying fetch implementation (native or CORS-safe)
-   * @returns A fetch-compatible function with Copilot auth injected
+   * @param provider - GitHubCopilotProvider singleton for token management.
+   * @param baseFetch - Underlying fetch implementation (native or CORS-safe).
+   * @returns A fetch-compatible function with Copilot auth injected.
    */
   private static buildAuthedFetch(
     provider: GitHubCopilotProvider,
     baseFetch: FetchImplementation
   ): (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> {
-    return async (input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> => {
-      // Reason: OpenAI SDK v6 always calls fetch(urlString, init), so we only need
-      // to handle string and URL inputs. Request objects are not used by the SDK,
-      // but we extract the URL defensively to avoid silent failures.
-      // Note: If a future SDK version passes Request objects, this wrapper would
-      // need to clone the Request to preserve method/body/headers and support retry.
-      // Reason: Guard `typeof Request` to avoid ReferenceError in environments
-      // where the Request global may not exist (e.g., some Obsidian mobile runtimes).
-      const url =
-        typeof input === "string"
-          ? input
-          : typeof Request !== "undefined" && input instanceof Request
-            ? input.url
-            : input.toString();
-
-      const doRequest = async (token: string): Promise<Response> => {
-        const copilotHeaders = provider.buildCopilotRequestHeaders(token);
-        const mergedHeaders = new Headers(init.headers);
-        // Copilot headers take precedence (especially Authorization)
-        for (const [key, value] of Object.entries(copilotHeaders)) {
-          mergedHeaders.set(key, value);
-        }
-
-        return baseFetch(url, { ...init, headers: mergedHeaders });
-      };
-
-      let token = await provider.getValidCopilotToken();
-      let response = await doRequest(token);
-
-      // 401: invalidate cached token and retry once with a fresh one.
-      // Reason: Only retry on 401 (Unauthorized / expired token). 403 means
-      // "Forbidden" (e.g., no Copilot subscription) — a permanent condition
-      // where token refresh won't help. This matches GitHubCopilotProvider's
-      // own retry logic which also limits retries to 401.
-      if (response.status === 401) {
-        try {
-          await response.body?.cancel();
-        } catch {
-          // Ignore cancellation errors — body may already be closed
-        }
-        provider.invalidateCopilotToken();
-        token = await provider.getValidCopilotToken();
-        response = await doRequest(token);
-      }
-
-      return response;
-    };
+    return buildGitHubCopilotAuthedFetch(provider, baseFetch);
   }
 
   /**
    * Create a Copilot-backed ChatOpenAICompletions instance.
    * Wires up dynamic token refresh and Copilot headers via a custom fetch wrapper.
+   * @param fields - LangChain/OpenAI constructor fields with Copilot fetch options.
    */
   constructor(fields: GitHubCopilotChatModelParams) {
     const { fetchImplementation, configuration, apiKey, ...rest } = fields;
@@ -175,6 +137,10 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
    * 2. Non-string content: Claude models may return delta.content as an array of
    *    content parts. The parent's _streamResponseChunks skips chunks where
    *    `typeof content !== "string"`, silently dropping all text.
+   * @param delta - Streaming delta payload.
+   * @param rawResponse - Raw transport response chunk.
+   * @param defaultRole - Fallback role inferred by LangChain.
+   * @returns A normalized LangChain message chunk.
    */
   protected override _convertCompletionsDeltaToBaseMessageChunk(
     delta: Record<string, any>,
@@ -204,6 +170,8 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
   /**
    * Simple token estimation based on character count.
    * Kept as a safe fallback for direct usage outside ChatModelManager.
+   * @param content - Message content to estimate.
+   * @returns Approximate token count.
    */
   override async getNumTokens(content: MessageContent): Promise<number> {
     const text = extractTextFromChunk(content);
