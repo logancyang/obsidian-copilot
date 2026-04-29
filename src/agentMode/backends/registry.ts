@@ -1,5 +1,6 @@
 import type { CopilotSettings } from "@/settings/model";
 import { ClaudeCodeBackendDescriptor } from "./claude-code/descriptor";
+import { CodexBackendDescriptor } from "./codex/descriptor";
 import { OpencodeBackendDescriptor } from "./opencode/descriptor";
 import type { BackendDescriptor, BackendId } from "@/agentMode/session/types";
 
@@ -16,6 +17,7 @@ import type { BackendDescriptor, BackendId } from "@/agentMode/session/types";
 export const backendRegistry: Record<BackendId, BackendDescriptor> = {
   opencode: OpencodeBackendDescriptor,
   "claude-code": ClaudeCodeBackendDescriptor,
+  codex: CodexBackendDescriptor,
 };
 
 /** Resolve the active backend descriptor from settings. Falls back to `opencode`. */

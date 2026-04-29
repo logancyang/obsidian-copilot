@@ -216,6 +216,7 @@ export interface CopilotSettings {
     backends: {
       opencode?: OpencodeBackendSettings;
       "claude-code"?: ClaudeCodeBackendSettings;
+      codex?: CodexBackendSettings;
     };
     /**
      * Opt-in: write the full untruncated ACP JSON-RPC frames as NDJSON to
@@ -242,6 +243,20 @@ export interface ClaudeCodeBackendSettings {
    * each new session resolves. Unset = follow the agent's default.
    */
   selectedEffort?: string;
+}
+
+/** Settings slice owned by the Codex backend. */
+export interface CodexBackendSettings {
+  /** Path to the user-provided `codex-acp` binary. */
+  binaryPath?: string;
+  /**
+   * Sticky model preference. Stored as the raw agent model id reported by
+   * `codex-acp` (e.g. `gpt-5-codex/high`) — Codex does not pull from
+   * Copilot's `activeModels`, so no Copilot-key translation. The
+   * `<base>/<effort>` shape lets the runtime effort picker round-trip
+   * effort through this single field, no separate `selectedEffort` needed.
+   */
+  selectedModelKey?: string;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -353,6 +368,24 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
  */
 export function updateSetting<K extends keyof CopilotSettings>(key: K, value: CopilotSettings[K]) {
   setSettings((cur) => ({ ...cur, [key]: value }));
+}
+
+/**
+ * Patch one slice of `agentMode.backends` without forcing every caller to
+ * spread four levels of nested objects.
+ */
+export function updateAgentModeBackendFields<
+  K extends keyof CopilotSettings["agentMode"]["backends"],
+>(key: K, partial: Partial<NonNullable<CopilotSettings["agentMode"]["backends"][K]>>): void {
+  setSettings((cur) => ({
+    agentMode: {
+      ...cur.agentMode,
+      backends: {
+        ...cur.agentMode.backends,
+        [key]: { ...(cur.agentMode.backends?.[key] ?? {}), ...partial },
+      },
+    },
+  }));
 }
 
 /**
@@ -716,6 +749,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     r.backends && typeof r.backends === "object" ? (r.backends as Record<string, unknown>) : {};
   const existingOpencode = backendsRaw.opencode as Record<string, unknown> | undefined;
   const existingClaudeCode = backendsRaw["claude-code"] as Record<string, unknown> | undefined;
+  const existingCodex = backendsRaw.codex as Record<string, unknown> | undefined;
 
   // Lift legacy top-level fields when `backends.opencode` doesn't already hold them.
   const legacyOpencode =
@@ -735,10 +769,12 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   const claudeCodeSlice = existingClaudeCode
     ? sanitizeClaudeCodeBackendSettings(existingClaudeCode)
     : undefined;
+  const codexSlice = existingCodex ? sanitizeCodexBackendSettings(existingCodex) : undefined;
 
   const backends: CopilotSettings["agentMode"]["backends"] = {};
   if (opencodeSlice) backends.opencode = opencodeSlice;
   if (claudeCodeSlice) backends["claude-code"] = claudeCodeSlice;
+  if (codexSlice) backends.codex = codexSlice;
 
   const debugFullFrames =
     typeof r.debugFullFrames === "boolean"
@@ -755,15 +791,28 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   };
 }
 
+/** Truthy-string coerce: keep only non-empty string values. */
+function nonEmptyString(v: unknown): string | undefined {
+  return typeof v === "string" && v ? v : undefined;
+}
+
 function sanitizeClaudeCodeBackendSettings(raw: unknown): ClaudeCodeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
-  const binaryPath = typeof r.binaryPath === "string" && r.binaryPath ? r.binaryPath : undefined;
-  const selectedModelKey =
-    typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
-  const selectedEffort =
-    typeof r.selectedEffort === "string" && r.selectedEffort ? r.selectedEffort : undefined;
-  return { binaryPath, selectedModelKey, selectedEffort };
+  return {
+    binaryPath: nonEmptyString(r.binaryPath),
+    selectedModelKey: nonEmptyString(r.selectedModelKey),
+    selectedEffort: nonEmptyString(r.selectedEffort),
+  };
+}
+
+function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    binaryPath: nonEmptyString(r.binaryPath),
+    selectedModelKey: nonEmptyString(r.selectedModelKey),
+  };
 }
 
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {

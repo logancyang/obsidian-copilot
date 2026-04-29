@@ -1,7 +1,7 @@
 import { McpServersPanel, listBackendDescriptors } from "@/agentMode";
 import { SettingItem } from "@/components/ui/setting-item";
 import { usePlugin } from "@/contexts/PluginContext";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { setSettings, useSettingsValue } from "@/settings/model";
 import { Platform } from "obsidian";
 import React from "react";
 
@@ -30,7 +30,7 @@ export const AgentModeSettings: React.FC = () => {
           description="BYOK agent harness backed by a local ACP subprocess. Desktop only."
           checked={settings.agentMode.enabled}
           onCheckedChange={(checked) =>
-            updateSetting("agentMode", { ...settings.agentMode, enabled: checked })
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, enabled: checked } }))
           }
         />
 
@@ -41,7 +41,7 @@ export const AgentModeSettings: React.FC = () => {
             description="Used when you click `+` to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
             value={settings.agentMode.activeBackend}
             onChange={(value) =>
-              updateSetting("agentMode", { ...settings.agentMode, activeBackend: value })
+              setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
             }
             options={descriptors.map((d) => ({ label: d.displayName, value: d.id }))}
           />

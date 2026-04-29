@@ -2,8 +2,8 @@ import type { SessionConfigOption } from "@agentclientprotocol/sdk";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
-  setSettings,
   subscribeToSettingsChange,
+  updateAgentModeBackendFields,
   type ClaudeCodeBackendSettings,
   type CopilotSettings,
 } from "@/settings/model";
@@ -17,23 +17,8 @@ import type { BackendDescriptor, InstallState } from "@/agentMode/session/types"
 export const CLAUDE_CODE_BINARY_NAME = "claude-agent-acp";
 export const CLAUDE_CODE_INSTALL_COMMAND = "npm install -g @agentclientprotocol/claude-agent-acp";
 
-/**
- * Read-modify-write helper for the `agentMode.backends["claude-code"]` slice.
- * Centralizes the nested spread so callers don't repeat the four-level onion.
- */
 export function updateClaudeCodeFields(partial: Partial<ClaudeCodeBackendSettings>): void {
-  setSettings((cur) => ({
-    agentMode: {
-      ...cur.agentMode,
-      backends: {
-        ...cur.agentMode.backends,
-        "claude-code": {
-          ...(cur.agentMode.backends?.["claude-code"] ?? {}),
-          ...partial,
-        },
-      },
-    },
-  }));
+  updateAgentModeBackendFields("claude-code", partial);
 }
 
 /**

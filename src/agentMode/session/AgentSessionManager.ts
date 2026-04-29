@@ -76,6 +76,7 @@ export class AgentSessionManager {
   private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private readonly persistenceUnsubs = new Map<string, () => void>();
   private readonly lastSavedSignatures = new Map<string, string>();
+  private readonly modelCacheUnsubs = new Map<string, () => void>();
 
   constructor(
     private readonly app: App,
@@ -182,6 +183,7 @@ export class AgentSessionManager {
       this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
       this.activeSessionId = session.internalId;
       this.attachAutoSave(session);
+      this.attachModelCacheSync(session);
       // Replay any backend-specific persisted state (claude-code's effort,
       // future config-option preferences). Failures are non-fatal — the
       // session is usable with whatever defaults the agent picked.
@@ -580,6 +582,29 @@ export class AgentSessionManager {
     this.persistenceUnsubs.delete(internalId);
     this.persistedPaths.delete(internalId);
     this.lastSavedSignatures.delete(internalId);
+    const cacheUnsub = this.modelCacheUnsubs.get(internalId);
+    if (cacheUnsub) cacheUnsub();
+    this.modelCacheUnsubs.delete(internalId);
+  }
+
+  /**
+   * Mirror this session's model state into the preloader cache so the backend
+   * keeps showing entries in the picker after it becomes non-active. The
+   * preloader otherwise skips the active backend at startup, leaving its
+   * cache empty when the user later switches to a different backend.
+   */
+  private attachModelCacheSync(session: AgentSession): void {
+    const initial = session.getModelState();
+    if (initial) this.preloader.setCached(session.backendId, initial);
+    const unsubscribe = session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: () => {},
+      onModelChanged: () => {
+        const next = session.getModelState();
+        if (next) this.preloader.setCached(session.backendId, next);
+      },
+    });
+    this.modelCacheUnsubs.set(session.internalId, unsubscribe);
   }
 
   private async ensureBackend(

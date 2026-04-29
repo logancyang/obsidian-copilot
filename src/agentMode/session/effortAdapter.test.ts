@@ -79,13 +79,13 @@ describe("dedupeAvailableModels", () => {
     ]);
   });
 
-  it("strips the variant suffix when no bare entry exists", () => {
+  it("strips the variant suffix without inventing a bare id when no bare entry exists", () => {
     const input = [
       model("openai/gpt-5/low", "OpenAI/GPT-5 (low)"),
       model("openai/gpt-5/high", "OpenAI/GPT-5 (high)"),
     ];
     const out = dedupeAvailableModels(input, opencodeStub);
-    expect(out).toEqual([{ modelId: "openai/gpt-5", name: "OpenAI/GPT-5" }]);
+    expect(out).toEqual([{ modelId: "openai/gpt-5/low", name: "OpenAI/GPT-5" }]);
   });
 
   it("returns input unchanged when descriptor has no parser", () => {

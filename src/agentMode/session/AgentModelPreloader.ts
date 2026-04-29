@@ -33,6 +33,21 @@ export class AgentModelPreloader {
     return this.cache.get(backendId) ?? null;
   }
 
+  /**
+   * Mirror a known model state into the cache. Used by `AgentSessionManager`
+   * to write a live session's models into the cache so the backend keeps
+   * showing its entries in the picker after it becomes non-active. Skipping
+   * the notify when nothing material changed keeps the picker `useMemo` from
+   * rebuilding on every per-turn `onModelChanged` for an unchanged state.
+   */
+  setCached(backendId: BackendId, state: SessionModelState): void {
+    if (this.disposed) return;
+    const prev = this.cache.get(backendId);
+    if (prev && isSameModelState(prev, state)) return;
+    this.cache.set(backendId, state);
+    this.notify();
+  }
+
   /** Best-effort probe; failures are logged and swallowed. Dedupes per backend. */
   preload(backendId: BackendId): Promise<void> {
     if (this.disposed) return Promise.resolve();
@@ -173,4 +188,15 @@ export class AgentModelPreloader {
     }
     return resp.models ?? null;
   }
+}
+
+function isSameModelState(a: SessionModelState, b: SessionModelState): boolean {
+  if (a.currentModelId !== b.currentModelId) return false;
+  if (a.availableModels.length !== b.availableModels.length) return false;
+  for (let i = 0; i < a.availableModels.length; i++) {
+    const ma = a.availableModels[i];
+    const mb = b.availableModels[i];
+    if (ma.modelId !== mb.modelId || ma.name !== mb.name) return false;
+  }
+  return true;
 }

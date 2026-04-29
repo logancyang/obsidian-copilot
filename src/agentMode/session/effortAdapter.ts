@@ -75,8 +75,10 @@ export function buildEffortAdapter(
  * identity transform.
  *
  * Bucket survivor: prefer the bare entry when present (so its `name` is
- * the clean display name); otherwise fall back to the first variant in
- * observation order, with its trailing " (effort)" suffix stripped.
+ * the clean display name); otherwise fall back to the first advertised
+ * variant in observation order, with its trailing " (effort)" suffix
+ * stripped. The fallback keeps the concrete variant `modelId` because some
+ * backends never advertise the unsuffixed base id.
  */
 export function dedupeAvailableModels(
   models: ReadonlyArray<ModelInfo>,
@@ -113,7 +115,7 @@ export function dedupeAvailableModels(
     const b = buckets.get(baseId)!;
     if (b.bare) return b.bare;
     const cleaned = stripEffortSuffix(b.first.name, b.firstEffort);
-    return { ...b.first, modelId: baseId, name: cleaned || baseId };
+    return { ...b.first, name: cleaned || baseId };
   });
 }
 

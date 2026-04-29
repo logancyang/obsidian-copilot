@@ -8,6 +8,9 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+jest.mock("@/settings/model", () => ({
+  getSettings: jest.fn().mockReturnValue({ agentMode: { mcpServers: [] } }),
+}));
 
 interface MockBackend {
   asBackend: AcpBackendProcess;

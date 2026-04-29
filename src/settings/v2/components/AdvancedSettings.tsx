@@ -3,7 +3,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { setSettings, updateSetting, useSettingsValue } from "@/settings/model";
 import { acpFrameSink } from "@/agentMode";
 import { ArrowUpRight, Plus } from "lucide-react";
 import { Notice } from "obsidian";
@@ -141,10 +141,9 @@ export const AdvancedSettings: React.FC = () => {
           description={`Writes full untruncated ACP frames — including prompts, tool inputs/outputs, and attachments — as NDJSON to ${acpFrameSink.getPath()}. Sensitive content lands on disk in plaintext; produces large files. Leave off unless actively debugging.`}
           checked={settings.agentMode.debugFullFrames}
           onCheckedChange={(checked) => {
-            updateSetting("agentMode", {
-              ...settings.agentMode,
-              debugFullFrames: checked,
-            });
+            setSettings((cur) => ({
+              agentMode: { ...cur.agentMode, debugFullFrames: checked },
+            }));
           }}
         />
 

@@ -33,3 +33,7 @@
 - [ ] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
 - [ ] P2: Slash command support. Revamp current slash command to function like skills.
 - [ ] P2: Token counter
+- [ ] P1: Better agent settings
+  - Shall they be placed in a different tabs?
+  - What we should enable users to edit?
+- [ ] P1: Control which models are available in which agent

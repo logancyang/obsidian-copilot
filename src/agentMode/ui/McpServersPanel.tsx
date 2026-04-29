@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
 import { SettingSwitch } from "@/components/ui/setting-switch";
 import { Textarea } from "@/components/ui/textarea";
-import { updateSetting, useSettingsValue } from "@/settings/model";
+import { setSettings, useSettingsValue } from "@/settings/model";
 import { type StoredMcpServer, sanitizeStoredMcpServers } from "@/agentMode/session/mcpResolver";
 import { Plus, Trash2 } from "lucide-react";
 import React from "react";
@@ -28,7 +28,7 @@ export const McpServersPanel: React.FC = () => {
   );
 
   const persist = (next: StoredMcpServer[]) => {
-    updateSetting("agentMode", { ...settings.agentMode, mcpServers: next });
+    setSettings((cur) => ({ agentMode: { ...cur.agentMode, mcpServers: next } }));
   };
 
   const update = (id: string, patch: Partial<StoredMcpServer>) => {

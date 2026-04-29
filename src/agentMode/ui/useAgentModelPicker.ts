@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Notice } from "obsidian";
 import type { ModelInfo } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
@@ -52,6 +52,24 @@ export function useAgentModelPicker(
   const settings = useSettingsValue();
   const descriptors = useMemo(() => listBackendDescriptors(), []);
 
+  // Subscribe to preloader cache updates as a useMemo dep, so the picker
+  // rebuilds when models arrive after first render. Snapshot is a string
+  // keyed off cached counts and current id per backend.
+  const subscribeCache = useCallback(
+    (cb: () => void) => manager?.subscribeModelCache(cb) ?? (() => {}),
+    [manager]
+  );
+  const getCacheSnapshot = useCallback(() => {
+    if (!manager) return "";
+    return descriptors
+      .map((d) => {
+        const c = manager.getCachedModels(d.id);
+        return `${d.id}=${c?.currentModelId ?? ""}/${c?.availableModels.length ?? 0}`;
+      })
+      .join(",");
+  }, [manager, descriptors]);
+  const cacheSnapshot = useSyncExternalStore(subscribeCache, getCacheSnapshot, getCacheSnapshot);
+
   // Re-render only when picker-relevant state changes. The chat UI state
   // notifies on every streamed chunk during a turn, but none of those change
   // the picker's view of the world — short-circuiting via a signature keeps
@@ -67,12 +85,6 @@ export function useAgentModelPicker(
       const running = descriptors
         .map((d) => `${d.id}:${manager.getBackendProcess(d.id)?.isRunning() ? "1" : "0"}`)
         .join(",");
-      const cached = descriptors
-        .map((d) => {
-          const c = manager.getCachedModels(d.id);
-          return `${d.id}=${c?.currentModelId ?? ""}/${c?.availableModels.length ?? 0}`;
-        })
-        .join(",");
       // configOptions: hash by id + currentValue. Picker re-renders when the
       // effort adapter would change shape — adding/removing the option,
       // flipping its currentValue, or shifting select choices.
@@ -86,7 +98,6 @@ export function useAgentModelPicker(
         ui?.getModelState()?.currentModelId ?? "",
         ui?.isModelSwitchSupported() ?? "",
         running,
-        cached,
         configOpts,
       ].join("|");
     };
@@ -111,15 +122,12 @@ export function useAgentModelPicker(
     };
     rewireActive();
 
-    const unsubs = [
-      manager.subscribe(() => {
-        rewireActive();
-        tick();
-      }),
-      manager.subscribeModelCache(tick),
-    ];
+    const unsub = manager.subscribe(() => {
+      rewireActive();
+      tick();
+    });
     return () => {
-      unsubs.forEach((u) => u());
+      unsub();
       unsubActive?.();
     };
   }, [manager, descriptors]);
@@ -157,10 +165,19 @@ export function useAgentModelPicker(
     // Surface the session's current model if a curated/synthesized entry for
     // it isn't already present (stale selectedModelKey, or filtered out).
     const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
+    const collapsedActiveId =
+      activeDescriptor && activeModelState?.currentModelId
+        ? resolveCollapsedModelId(
+            activeModelState.currentModelId,
+            activeModelState.availableModels,
+            activeDescriptor
+          )
+        : null;
     const valueKey =
       activeBackendId && activeDescriptor && activeModelState
         ? computeValueKeyForActive(
             activeModelState.currentModelId,
+            collapsedActiveId ?? activeModelState.currentModelId,
             activeDescriptor,
             settings.activeModels ?? []
           )
@@ -170,10 +187,8 @@ export function useAgentModelPicker(
         (m) => m.modelId === activeModelState.currentModelId
       );
       if (currentInfo && !entries.some((e) => getModelKeyFromModel(e) === valueKey)) {
-        // Surface effort-variant rows under their baseId so the picker shows
-        // the same entry regardless of which effort is currently active.
         const parsed = activeDescriptor.parseEffortFromModelId?.(currentInfo.modelId);
-        const synthesizedId = parsed?.baseId ?? currentInfo.modelId;
+        const synthesizedId = collapsedActiveId ?? currentInfo.modelId;
         const cleanName = stripEffortSuffix(currentInfo.name, parsed?.effort) || currentInfo.name;
         entries.unshift(synthesizeAgentEntry(synthesizedId, cleanName, activeDescriptor));
       }
@@ -266,6 +281,10 @@ export function useAgentModelPicker(
         });
       },
     };
+    // cacheSnapshot is intentionally referenced as a dep — it changes when
+    // the preloader cache updates, which is read inside this memo via
+    // `manager.getCachedModels(...)`. Eslint can't see the indirection.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     manager,
     descriptors,
@@ -277,6 +296,7 @@ export function useAgentModelPicker(
     isSetConfigOptionSupported,
     activeSession,
     activeSessionHasHistory,
+    cacheSnapshot,
   ]);
 }
 
@@ -407,6 +427,7 @@ function synthesizeAgentEntry(
 
 function computeValueKeyForActive(
   currentModelId: string,
+  collapsedId: string,
   descriptor: BackendDescriptor,
   activeModels: CustomModel[]
 ): string {
@@ -423,15 +444,36 @@ function computeValueKeyForActive(
     // here so the returned key compares equal to the entry the picker stored.
     if (match) return getModelKeyFromModel({ ...match, _backendId: descriptor.id });
   }
-  // For effort-variant backends, the synthesized entry is keyed under the
-  // baseId — strip the variant suffix so the picker stays highlighted on
-  // the collapsed row regardless of which effort is active.
-  const baseId = descriptor.parseEffortFromModelId?.(currentModelId)?.baseId ?? currentModelId;
+  // For effort-variant backends, match the id retained by
+  // `dedupeAvailableModels`: bare id when advertised, otherwise the first
+  // concrete variant observed for this base.
   return getModelKeyFromModel({
-    name: baseId,
+    name: collapsedId,
     provider: AGENT_PROVIDER,
     _backendId: descriptor.id,
   } as CustomModel & { _backendId: string });
+}
+
+/**
+ * Resolve the model id used for a collapsed picker row while preserving an
+ * advertised id for effort-only catalogs.
+ */
+function resolveCollapsedModelId(
+  modelId: string,
+  availableModels: ReadonlyArray<ModelInfo>,
+  descriptor: BackendDescriptor
+): string {
+  const parsedCurrent = descriptor.parseEffortFromModelId?.(modelId);
+  if (!parsedCurrent) return modelId;
+
+  let firstVariant: string | null = null;
+  for (const m of availableModels) {
+    const parsed = descriptor.parseEffortFromModelId?.(m.modelId);
+    if (!parsed || parsed.baseId !== parsedCurrent.baseId) continue;
+    if (parsed.effort === null) return m.modelId;
+    firstVariant ??= m.modelId;
+  }
+  return firstVariant ?? modelId;
 }
 
 function resolveAgentId(

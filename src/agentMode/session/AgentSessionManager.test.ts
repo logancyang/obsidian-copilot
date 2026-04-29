@@ -61,6 +61,7 @@ function makeMockSession(overrides: {
     setLabel: jest.fn(),
     subscribe: () => () => {},
     hasUserVisibleMessages: () => false,
+    getModelState: () => null,
   } as unknown as AgentSession;
 }
 
@@ -101,6 +102,7 @@ function buildManager(): AgentSessionManager {
     preload: jest.fn(async () => undefined),
     subscribe: jest.fn(() => () => {}),
     shutdown: jest.fn(),
+    setCached: jest.fn(),
   };
   return new AgentSessionManager(
     buildApp(),
@@ -159,6 +161,45 @@ describe("AgentSessionManager.createSession", () => {
     await mgr.createSession();
     await mgr.createSession();
     expect(mockBackendStart).toHaveBeenCalledTimes(1);
+  });
+
+  it("mirrors the new session's model state into the preloader cache", async () => {
+    const cache = new Map<string, unknown>();
+    const modelPreloader = {
+      getCachedModels: jest.fn((id: string) => cache.get(id) ?? null),
+      preload: jest.fn(async () => undefined),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn((id: string, state: unknown) => {
+        cache.set(id, state);
+      }),
+    };
+    const descriptor = buildDescriptor();
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    const modelState = {
+      currentModelId: "anthropic/sonnet",
+      availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
+    };
+    sessionCreateSpy.mockImplementationOnce(async (opts) => {
+      const s = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
+      (s as unknown as { getModelState: () => unknown }).getModelState = () => modelState;
+      return s;
+    });
+
+    await mgr.createSession();
+    expect(modelPreloader.setCached).toHaveBeenCalledWith("opencode", modelState);
+    expect(mgr.getCachedModels("opencode")).toBe(modelState);
   });
 
   it("a concurrent create that succeeds does not wipe a sibling create's lastError", async () => {
