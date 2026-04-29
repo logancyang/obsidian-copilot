@@ -19,9 +19,16 @@ import {
   removeSelectedTextContext,
   useSelectedTextContexts,
 } from "@/aiParams";
-import { isWebSelectedTextContext, type MessageContext } from "@/types/message";
+import {
+  isWebSelectedTextContext,
+  type MessageContext,
+  type SelectedTextContext,
+} from "@/types/message";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import { Clock, X } from "lucide-react";
+import { v4 as uuidv4 } from "uuid";
+import { Button } from "@/components/ui/button";
 
 interface AgentChatProps {
   backend: AgentChatBackend;
@@ -35,6 +42,58 @@ interface AgentChatProps {
 // (project progress card, vault indexing card). Module-scoped so they don't
 // create new function references on every AgentChat render.
 const NOOP = () => {};
+
+// Snapshotted at enqueue time so context (active note, selections) doesn't
+// drift between when the user queues the message and when it actually flushes.
+interface QueuedAgentMessage {
+  id: string;
+  text: string;
+  rawInput: string;
+  context?: MessageContext;
+  hadUnsupportedAttachments: boolean;
+}
+
+const dedupeBy = <T,>(items: Iterable<T>, key: (item: T) => string): T[] => {
+  const seen = new Set<string>();
+  const out: T[] = [];
+  for (const item of items) {
+    const k = key(item);
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push(item);
+  }
+  return out;
+};
+
+const buildMessageContext = (
+  notes: TFile[],
+  selected: readonly SelectedTextContext[]
+): MessageContext | undefined => {
+  if (notes.length === 0 && selected.length === 0) return undefined;
+  return {
+    notes,
+    urls: [],
+    selectedTextContexts: selected.length > 0 ? [...selected] : undefined,
+  };
+};
+
+const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage => {
+  if (items.length === 1) return items[0];
+
+  const allNotes = items.flatMap((i) => i.context?.notes ?? []);
+  const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
+
+  return {
+    id: `queued-combined-${uuidv4()}`,
+    text: items.map((i) => i.text).join("\n\n"),
+    rawInput: items.map((i) => i.rawInput).join("\n\n"),
+    context: buildMessageContext(
+      dedupeBy(allNotes, (n) => n.path),
+      dedupeBy(allSelected, (s) => s.id)
+    ),
+    hadUnsupportedAttachments: items.some((i) => i.hadUnsupportedAttachments),
+  };
+};
 
 const AgentChatInternal: React.FC<AgentChatProps> = ({
   backend,
@@ -55,6 +114,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
+  const [queuedMessages, setQueuedMessages] = useState<QueuedAgentMessage[]>([]);
   const [selectedTextContexts] = useSelectedTextContexts();
 
   const isMountedRef = useRef(false);
@@ -103,76 +163,98 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     } catch (e) {
       logError("[AgentMode] cancel failed", e);
     }
+    // Stop = user is bailing on the current turn; don't auto-flush queued
+    // follow-ups they composed while the agent was running.
+    setQueuedMessages([]);
     if (isMountedRef.current) setLoading(false);
   }, [backend]);
 
+  const runSend = useCallback(
+    async (item: QueuedAgentMessage) => {
+      if (item.hadUnsupportedAttachments) {
+        new Notice("Image and web attachments aren't supported in Agent Mode yet.");
+      }
+      setLoading(true);
+      try {
+        const { turn } = backend.sendMessage(item.text, item.context);
+        if (item.rawInput) updateUserMessageHistory(item.rawInput);
+        await turn;
+      } catch (error) {
+        logError("Error sending agent message:", error);
+        new Notice("Failed to send message. Please try again.");
+      } finally {
+        if (isMountedRef.current) setLoading(false);
+      }
+    },
+    [backend, updateUserMessageHistory]
+  );
+
   const handleSendMessage = useCallback(async () => {
-    if (!inputMessage) return;
+    const text = inputMessage.trim();
+    if (!text) return;
+    const rawInput = inputMessage;
 
     // Image and web attachments aren't wired through ACP content blocks yet
     // (see buildPromptBlocks TODO in AgentSession.ts).
     const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
-    if (selectedImages.length > 0 || includeActiveWebTab || hasWebExcerpt) {
-      new Notice("Image and web attachments aren't supported in Agent Mode yet.");
+    const hadUnsupportedAttachments =
+      selectedImages.length > 0 || includeActiveWebTab || hasWebExcerpt;
+
+    const candidateNotes: TFile[] = [];
+    if (includeActiveNote) {
+      const active = app.workspace.getActiveFile();
+      if (active) candidateNotes.push(active);
+    }
+    candidateNotes.push(...contextNotes);
+    const notes = dedupeBy(candidateNotes, (n) => n.path);
+
+    const item: QueuedAgentMessage = {
+      id: `queued-${uuidv4()}`,
+      text,
+      rawInput,
+      context: buildMessageContext(notes, selectedTextContexts),
+      hadUnsupportedAttachments,
+    };
+
+    setInputMessage("");
+    setSelectedImages([]);
+    setContextNotes([]);
+    setIncludeActiveNote(false);
+    setIncludeActiveWebTab(false);
+    clearSelectedTextContexts();
+
+    if (loading) {
+      setQueuedMessages((q) => [...q, item]);
+      return;
     }
 
-    try {
-      const text = inputMessage.trim();
-      const rawInput = inputMessage;
-
-      const notes: TFile[] = [];
-      const seen = new Set<string>();
-      if (includeActiveNote) {
-        const active = app.workspace.getActiveFile();
-        if (active && !seen.has(active.path)) {
-          seen.add(active.path);
-          notes.push(active);
-        }
-      }
-      for (const n of contextNotes) {
-        if (!seen.has(n.path)) {
-          seen.add(n.path);
-          notes.push(n);
-        }
-      }
-      const hasContext = notes.length > 0 || selectedTextContexts.length > 0;
-      const messageContext: MessageContext | undefined = hasContext
-        ? {
-            notes,
-            urls: [],
-            selectedTextContexts:
-              selectedTextContexts.length > 0 ? selectedTextContexts : undefined,
-          }
-        : undefined;
-
-      setInputMessage("");
-      setSelectedImages([]);
-      setContextNotes([]);
-      setIncludeActiveNote(false);
-      setIncludeActiveWebTab(false);
-      clearSelectedTextContexts();
-      setLoading(true);
-
-      const { turn } = backend.sendMessage(text, messageContext);
-      if (rawInput) updateUserMessageHistory(rawInput);
-      await turn;
-    } catch (error) {
-      logError("Error sending agent message:", error);
-      new Notice("Failed to send message. Please try again.");
-    } finally {
-      if (isMountedRef.current) setLoading(false);
-    }
+    await runSend(item);
   }, [
     app,
-    backend,
     inputMessage,
     selectedImages,
     contextNotes,
     includeActiveNote,
     includeActiveWebTab,
     selectedTextContexts,
-    updateUserMessageHistory,
+    loading,
+    runSend,
   ]);
+
+  // When a turn ends, flush the queue as one combined message. The
+  // `loading` and `queuedMessages.length` guards prevent re-entry: the
+  // synchronous `setQueuedMessages([])` + `setLoading(true)` inside
+  // runSend are batched, so the next effect run sees both updates.
+  useEffect(() => {
+    if (loading || queuedMessages.length === 0) return;
+    const combined = combineQueuedMessages(queuedMessages);
+    setQueuedMessages([]);
+    runSend(combined);
+  }, [loading, queuedMessages, runSend]);
+
+  const handleRemoveQueuedMessage = useCallback((id: string) => {
+    setQueuedMessages((q) => q.filter((m) => m.id !== id));
+  }, []);
 
   const handleNewChat = useCallback(async () => {
     await handleStopGenerating();
@@ -287,6 +369,9 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
           <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
             <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
             <AgentChatMessages messages={messages} app={app} onDelete={handleDelete} />
+            {queuedMessages.length > 0 && (
+              <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />
+            )}
             <AgentChatControls
               onNewChat={handleNewChat}
               chatHistoryItems={chatHistoryItems}
@@ -319,6 +404,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               onRemoveSelectedText={removeSelectedTextContext}
               showProgressCard={NOOP}
               showIndexingCard={NOOP}
+              canSubmitWhileGenerating
             />
           </div>
         </div>
@@ -332,6 +418,39 @@ const AgentChat: React.FC<AgentChatProps> = (props) => {
     <ChatInputProvider>
       <AgentChatInternal {...props} />
     </ChatInputProvider>
+  );
+};
+
+interface QueuedMessageListProps {
+  messages: QueuedAgentMessage[];
+  onRemove: (id: string) => void;
+}
+
+const QueuedMessageList: React.FC<QueuedMessageListProps> = ({ messages, onRemove }) => {
+  return (
+    <div className="tw-flex tw-max-h-24 tw-flex-col tw-gap-1 tw-overflow-y-auto tw-px-2 tw-pb-1">
+      {messages.map((m) => (
+        <div
+          key={m.id}
+          className="tw-flex tw-min-w-0 tw-items-center tw-gap-2 tw-rounded-md tw-bg-secondary-alt tw-px-2 tw-py-1 tw-text-ui-smaller"
+          title={m.text}
+        >
+          <Clock className="tw-size-3 tw-shrink-0 tw-text-muted" />
+          <span className="tw-min-w-0 tw-flex-1 tw-truncate tw-whitespace-nowrap tw-text-normal">
+            {m.text}
+          </span>
+          <Button
+            variant="ghost2"
+            size="fit"
+            className="tw-shrink-0 tw-text-muted hover:tw-text-error"
+            onClick={() => onRemove(m.id)}
+            aria-label="Remove queued message"
+          >
+            <X className="tw-size-3" />
+          </Button>
+        </div>
+      ))}
+    </div>
   );
 };
 

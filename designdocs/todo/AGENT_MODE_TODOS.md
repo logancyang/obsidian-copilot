@@ -5,7 +5,7 @@
   - [x] Save chat history to notes
 - [ ] P1: Create sample vaults for test cases.
 - [ ] P1: Provide copilot specific system prompt
-- [ ] P1: Queue messages
+- [x] P1: Queue messages
 - [ ] P1: MCP
   - Basic functionality is ready
   - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
