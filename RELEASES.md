@@ -1,5 +1,24 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.2.8 🔍
+
+A small but handy patch release adding a **global search toggle for Miyo** so you can search across everything you've indexed, not just your current vault!
+
+- 🔍 **Search everything in Miyo, not just your vault** — A new "Search everything in Miyo" toggle (on by default) lets Miyo search across all indexed content instead of scoping results to your current vault folder. When you turn it off, searches are scoped to your vault and you'll see the folder identifier displayed so you know exactly what's being searched. (@wenzhengjiang)
+
+More details in the changelog:
+
+### Improvements
+
+- #2353 feat(miyo): add toggle to search all indexed content @wenzhengjiang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.2.7 🔧
 
 A focused patch release with **Miyo server compatibility fixes** and a small **debug table cleanup**!
