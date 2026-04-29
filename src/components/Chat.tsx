@@ -18,7 +18,7 @@ import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
-import ChatInput from "@/components/chat-components/ChatInput";
+import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";

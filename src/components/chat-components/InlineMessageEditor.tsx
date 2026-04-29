@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from "react";
 import { TFile, App } from "obsidian";
-import ChatInput from "./ChatInput";
+import ChatInput from "./ChatModeInput";
 import { ChatMessage } from "@/types/message";
 import { useActiveWebTabState } from "./hooks/useActiveWebTabState";
 
