@@ -7,6 +7,7 @@ import type {
   SessionModelState,
   SessionModeState,
 } from "@agentclientprotocol/sdk";
+import type { MessageContext } from "@/types/message";
 
 /**
  * `AgentChatBackend` implementation backed by an `AgentSession`. The Agent
@@ -50,8 +51,12 @@ export class AgentChatUIState implements AgentChatBackend {
    * message id synchronously plus a `turn` promise the caller can await for
    * loading-state lifecycle (Stop button, input lock).
    */
-  sendMessage(text: string, content?: any[]): { id: string; turn: Promise<void> } {
-    const { userMessageId, turn } = this.session.sendPrompt(text, undefined, content);
+  sendMessage(
+    text: string,
+    context?: MessageContext,
+    content?: any[]
+  ): { id: string; turn: Promise<void> } {
+    const { userMessageId, turn } = this.session.sendPrompt(text, context, content);
     this.notifyListeners();
     const wrapped = turn.then(
       () => undefined,

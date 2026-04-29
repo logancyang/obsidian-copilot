@@ -8,7 +8,7 @@ import {
   AgentToolStatus,
   NewAgentChatMessage,
 } from "@/agentMode/session/types";
-import { MessageContext } from "@/types/message";
+import { isNoteSelectedTextContext, MessageContext } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
 import {
   ContentBlock,
@@ -317,9 +317,6 @@ export class AgentSession {
    *     turn completes, or rejects on transport errors.
    */
   sendPrompt(
-    // TODO(agent-mode): forward `context` (notes, urls, web tabs) into
-    // `buildPromptBlocks` once ACP supports vault context plumbing. Today the
-    // parameter is stored on the user message for display only.
     displayText: string,
     context?: MessageContext,
     content?: any[]
@@ -354,14 +351,18 @@ export class AgentSession {
     this.abortController = new AbortController();
     this.setStatus("running");
 
-    const turn = this.runTurn(displayText, content);
+    const turn = this.runTurn(displayText, context, content);
     return { userMessageId, turn };
   }
 
-  private async runTurn(displayText: string, content?: any[]): Promise<StopReason> {
+  private async runTurn(
+    displayText: string,
+    context: MessageContext | undefined,
+    content?: any[]
+  ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     try {
-      const promptBlocks = buildPromptBlocks(displayText, content);
+      const promptBlocks = buildPromptBlocks(displayText, context, content);
       const req: PromptRequest = {
         sessionId: this.acpSessionId,
         prompt: promptBlocks,
@@ -552,12 +553,47 @@ export class AgentSession {
   }
 }
 
-function buildPromptBlocks(displayText: string, content?: any[]): ContentBlock[] {
+export function buildPromptBlocks(
+  displayText: string,
+  context?: MessageContext,
+  content?: any[]
+): ContentBlock[] {
   // TODO(agent-mode): map `content` (image_url / etc.) to ACP `ContentBlock`
   // image/resource entries so attachments aren't silently dropped. Today
-  // `AgentChat` strips them before calling sendMessage and surfaces a Notice.
+  // `AgentChat` strips images before calling sendMessage and surfaces a Notice.
   void content;
-  return [{ type: "text", text: displayText }];
+  const envelope = buildContextEnvelope(context);
+  if (!envelope) return [{ type: "text", text: displayText }];
+  return [{ type: "text", text: `${envelope}\n\n<user-message>\n${displayText}\n</user-message>` }];
+}
+
+/**
+ * Build the `<copilot-context>` envelope listing attached vault paths and
+ * inlining note excerpts. Returns `null` when there's nothing to attach.
+ */
+function buildContextEnvelope(context: MessageContext | undefined): string | null {
+  if (!context) return null;
+  const notePaths = (context.notes ?? []).map((n) => n.path).filter(Boolean);
+  const excerpts = (context.selectedTextContexts ?? []).filter(isNoteSelectedTextContext);
+  if (notePaths.length === 0 && excerpts.length === 0) return null;
+
+  const lines: string[] = [
+    "<copilot-context>",
+    "The user attached the following vault items. The vault is your current working directory; use the Read tool to inspect them when relevant.",
+  ];
+  if (notePaths.length > 0) {
+    lines.push("", "Notes:");
+    for (const p of notePaths) lines.push(`- ${p}`);
+  }
+  if (excerpts.length > 0) {
+    lines.push("", "Selected excerpts (already inlined; no need to re-read):");
+    for (const e of excerpts) {
+      lines.push(`- ${e.notePath} (lines ${e.startLine}-${e.endLine}):`);
+      for (const l of e.content.split("\n")) lines.push(`  ${l}`);
+    }
+  }
+  lines.push("</copilot-context>");
+  return lines.join("\n");
 }
 
 function extractText(content: ContentBlock): string {

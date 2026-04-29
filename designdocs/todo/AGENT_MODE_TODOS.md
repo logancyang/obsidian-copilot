@@ -32,8 +32,17 @@
 - [ ] P1: Agent survey (asking for user input)
 - [ ] P1: Agent message is not rendered in the correct order with the tool calls
 - [ ] P1: Plan mode preview display
-- [ ] P1: Support note context input
-  - [[note]] doesn't work right now
+- [x] P1: Support note context input
+  - [[note]], the "+ Note" picker, "include active note", and right-click
+    "Add to Copilot context" now forward vault-relative paths / inlined
+    excerpts in a `<copilot-context>` envelope so the agent's Read tool
+    can fetch them via `VaultClient.readTextFile`.
+- [ ] P2: Forward web-source context to the agent
+  - Right-click "Add to Copilot context" excerpts from web tabs and the
+    "include active web tab" toggle currently surface a Notice and are
+    dropped before the prompt is built. Wire them into the
+    `<copilot-context>` envelope (e.g. a `Web excerpts:` section with
+    `title (url): content`) so the agent can actually read them.
 - [ ] P2: Token counter
 - [ ] P2: Subagent nested tool calls
 - [ ] P2: Better agent messages

@@ -3,6 +3,7 @@ import type {
   SessionModelState,
   SessionModeState,
 } from "@agentclientprotocol/sdk";
+import type { MessageContext } from "@/types/message";
 import type { AgentChatMessage } from "./types";
 
 /**
@@ -17,7 +18,11 @@ import type { AgentChatMessage } from "./types";
  */
 export interface AgentChatBackend {
   subscribe(listener: () => void): () => void;
-  sendMessage(text: string, content?: any[]): { id: string; turn: Promise<void> };
+  sendMessage(
+    text: string,
+    context?: MessageContext,
+    content?: any[]
+  ): { id: string; turn: Promise<void> };
   cancel(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;
   clearMessages(): void;

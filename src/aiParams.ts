@@ -282,6 +282,7 @@ export function removeSelectedTextContext(id: string) {
 }
 
 export function clearSelectedTextContexts() {
+  if (getSelectedTextContexts().length === 0) return;
   setSelectedTextContexts([]);
 }
 

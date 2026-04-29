@@ -1,7 +1,8 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AcpBackendProcess, SessionUpdateHandler } from "@/agentMode/acp/AcpBackendProcess";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
-import { AgentSession } from "./AgentSession";
+import type { TFile } from "obsidian";
+import { AgentSession, buildPromptBlocks } from "./AgentSession";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -79,6 +80,74 @@ function makeMockBackend(): MockBackend {
     emit: (update) => handler?.(update as Parameters<SessionUpdateHandler>[0]),
   };
 }
+
+describe("buildPromptBlocks", () => {
+  const makeFile = (path: string) => ({ path }) as unknown as TFile;
+
+  it("returns plain text when no context is attached", () => {
+    expect(buildPromptBlocks("hello")).toEqual([{ type: "text", text: "hello" }]);
+  });
+
+  it("returns plain text when context has no notes or excerpts", () => {
+    const blocks = buildPromptBlocks("hello", { notes: [], urls: [] });
+    expect(blocks).toEqual([{ type: "text", text: "hello" }]);
+  });
+
+  it("wraps the message with note paths when contextNotes are attached", () => {
+    const blocks = buildPromptBlocks("summarize them", {
+      notes: [makeFile("daily/2026-04-28.md"), makeFile("projects/copilot.md")],
+      urls: [],
+    });
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0].type).toBe("text");
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("<copilot-context>");
+    expect(text).toContain("- daily/2026-04-28.md");
+    expect(text).toContain("- projects/copilot.md");
+    expect(text).toContain("</copilot-context>");
+    expect(text).toContain("<user-message>\nsummarize them\n</user-message>");
+  });
+
+  it("inlines selected text excerpts with path and line range", () => {
+    const blocks = buildPromptBlocks("explain", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "s1",
+          sourceType: "note",
+          notePath: "projects/copilot.md",
+          noteTitle: "copilot",
+          startLine: 12,
+          endLine: 18,
+          content: "line one\nline two",
+        },
+      ],
+    });
+    const text = (blocks[0] as { type: "text"; text: string }).text;
+    expect(text).toContain("Selected excerpts");
+    expect(text).toContain("- projects/copilot.md (lines 12-18):");
+    expect(text).toContain("  line one");
+    expect(text).toContain("  line two");
+  });
+
+  it("ignores web-source selected text excerpts", () => {
+    const blocks = buildPromptBlocks("explain", {
+      notes: [],
+      urls: [],
+      selectedTextContexts: [
+        {
+          id: "w1",
+          sourceType: "web",
+          title: "Example",
+          url: "https://example.com",
+          content: "web snippet",
+        },
+      ],
+    });
+    expect(blocks).toEqual([{ type: "text", text: "explain" }]);
+  });
+});
 
 describe("AgentSession.sendPrompt", () => {
   it("appends user + placeholder synchronously and resolves on stopReason", async () => {

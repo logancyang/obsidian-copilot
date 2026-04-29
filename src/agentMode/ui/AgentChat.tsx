@@ -14,6 +14,12 @@ import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManage
 import type { AgentChatMessage } from "@/agentMode/session/types";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
+import {
+  clearSelectedTextContexts,
+  removeSelectedTextContext,
+  useSelectedTextContexts,
+} from "@/aiParams";
+import { isWebSelectedTextContext, type MessageContext } from "@/types/message";
 import { Notice, TFile } from "obsidian";
 import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 
@@ -49,6 +55,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
+  const [selectedTextContexts] = useSelectedTextContexts();
 
   const isMountedRef = useRef(false);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -102,30 +109,51 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const handleSendMessage = useCallback(async () => {
     if (!inputMessage) return;
 
-    // Agent Mode (M0) only supports plain text. Surface a Notice and drop any
-    // attachments so the user message bubble stays consistent with what the
-    // agent actually receives. Remove this once ACP content blocks / vault
-    // context are wired through `buildPromptBlocks` in AgentSession.
-    const hasAttachments =
-      selectedImages.length > 0 ||
-      contextNotes.length > 0 ||
-      includeActiveNote ||
-      includeActiveWebTab;
-    if (hasAttachments) {
-      new Notice("Attachments aren't supported in Agent Mode yet — sending text only.");
+    // Image and web attachments aren't wired through ACP content blocks yet
+    // (see buildPromptBlocks TODO in AgentSession.ts).
+    const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
+    if (selectedImages.length > 0 || includeActiveWebTab || hasWebExcerpt) {
+      new Notice("Image and web attachments aren't supported in Agent Mode yet.");
     }
 
     try {
       const text = inputMessage.trim();
       const rawInput = inputMessage;
+
+      const notes: TFile[] = [];
+      const seen = new Set<string>();
+      if (includeActiveNote) {
+        const active = app.workspace.getActiveFile();
+        if (active && !seen.has(active.path)) {
+          seen.add(active.path);
+          notes.push(active);
+        }
+      }
+      for (const n of contextNotes) {
+        if (!seen.has(n.path)) {
+          seen.add(n.path);
+          notes.push(n);
+        }
+      }
+      const hasContext = notes.length > 0 || selectedTextContexts.length > 0;
+      const messageContext: MessageContext | undefined = hasContext
+        ? {
+            notes,
+            urls: [],
+            selectedTextContexts:
+              selectedTextContexts.length > 0 ? selectedTextContexts : undefined,
+          }
+        : undefined;
+
       setInputMessage("");
       setSelectedImages([]);
       setContextNotes([]);
       setIncludeActiveNote(false);
       setIncludeActiveWebTab(false);
+      clearSelectedTextContexts();
       setLoading(true);
 
-      const { turn } = backend.sendMessage(text);
+      const { turn } = backend.sendMessage(text, messageContext);
       if (rawInput) updateUserMessageHistory(rawInput);
       await turn;
     } catch (error) {
@@ -135,12 +163,14 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
       if (isMountedRef.current) setLoading(false);
     }
   }, [
+    app,
     backend,
     inputMessage,
     selectedImages,
     contextNotes,
     includeActiveNote,
     includeActiveWebTab,
+    selectedTextContexts,
     updateUserMessageHistory,
   ]);
 
@@ -148,6 +178,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     await handleStopGenerating();
     backend.clearMessages();
     setContextNotes([]);
+    clearSelectedTextContexts();
   }, [backend, handleStopGenerating]);
 
   const handleDelete = useCallback(
@@ -284,6 +315,8 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               setSelectedImages={setSelectedImages}
               disableModelSwitch={!modelPickerOverride}
               modelPickerOverride={modelPickerOverride ?? undefined}
+              selectedTextContexts={selectedTextContexts}
+              onRemoveSelectedText={removeSelectedTextContext}
               showProgressCard={NOOP}
               showIndexingCard={NOOP}
             />
