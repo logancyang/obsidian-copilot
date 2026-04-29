@@ -119,9 +119,6 @@ export interface ChatInputProps {
    */
   toolControls?: React.ReactNode;
 
-  /** If true, show a "queue" Send button alongside Stop while generating. */
-  canSubmitWhileGenerating?: boolean;
-
   /**
    * Fires whenever the set of tool pills (`@vault`, `@websearch`, `@composer`)
    * inside the editor changes. Lets a wrapper mirror toggle state from pills.
@@ -183,7 +180,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     showProgressCard,
     showIndexingCard,
     toolControls,
-    canSubmitWhileGenerating = false,
     onToolPillsChange,
     onTagSelected,
     editMode = false,
@@ -837,17 +833,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                 <StopCircle className="tw-size-4" />
                 Stop
               </Button>
-              {canSubmitWhileGenerating && (
-                <Button
-                  variant="ghost2"
-                  size="fit"
-                  className="tw-text-muted"
-                  onClick={() => onSendMessage()}
-                >
-                  <CornerDownLeft className="!tw-size-3" />
-                  <span>queue</span>
-                </Button>
-              )}
             </>
           ) : (
             <>
@@ -879,15 +864,17 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
                   <span>cancel</span>
                 </Button>
               )}
-              <Button
-                variant="ghost2"
-                size="fit"
-                className="tw-text-muted"
-                onClick={() => onSendMessage()}
-              >
-                <CornerDownLeft className="!tw-size-3" />
-                <span>{editMode ? "save" : "chat"}</span>
-              </Button>
+              {editMode && (
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  className="tw-text-muted"
+                  onClick={() => onSendMessage()}
+                >
+                  <CornerDownLeft className="!tw-size-3" />
+                  <span>save</span>
+                </Button>
+              )}
             </>
           )}
         </div>

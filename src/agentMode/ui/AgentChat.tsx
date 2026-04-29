@@ -425,7 +425,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               onRemoveSelectedText={removeSelectedTextContext}
               showProgressCard={NOOP}
               showIndexingCard={NOOP}
-              canSubmitWhileGenerating
             />
           </div>
         </div>

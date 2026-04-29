@@ -38,6 +38,8 @@
     excerpts in a `<copilot-context>` envelope so the agent's Read tool
     can fetch them via `VaultClient.readTextFile`.
 - [ ] P1: Model, effort, and mode is not persisted across sessions
+- [x] P2: Rebrand chat send button
+  - Make it a send icon to save space and get rid of "chat" label which no longer applies
 - [ ] P2: Forward web-source context to the agent
   - Right-click "Add to Copilot context" excerpts from web tabs and the
     "include active web tab" toggle currently surface a Notice and are
