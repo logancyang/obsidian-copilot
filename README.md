@@ -101,35 +101,6 @@ Read the [Changelog](https://github.com/logancyang/obsidian-copilot/releases/tag
 
 ## Usage
 
-### Table of Contents
-
-- [The What](#the-what)
-- [The Why](#the-why)
-- [Key Features](#key-features)
-- [Table of Contents](#table-of-contents)
-- [Copilot V3 is a New Era 🔥](#copilot-v3-is-a-new-era-)
-- [Why People Love It ❤️](#why-people-love-it-️)
-- [Get Started](#get-started)
-  - [Install Obsidian Copilot](#install-obsidian-copilot)
-  - [Set API Keys](#set-api-keys)
-- [Usage](#usage)
-  - [Table of Contents](#table-of-contents-1)
-  - [Free User](#free-user)
-    - [**Chat Mode: reference notes and discuss ideas with Copilot**](#chat-mode-reference-notes-and-discuss-ideas-with-copilot)
-    - [**Vault QA Mode: chat with your entire vault**](#vault-qa-mode-chat-with-your-entire-vault)
-    - [Copilot's Command Palette](#copilots-command-palette)
-    - [**Relevant Notes: notes suggestions based on semantic similarity and links**](#relevant-notes-notes-suggestions-based-on-semantic-similarity-and-links)
-  - [Copilot Plus/Believer](#copilot-plusbeliever)
-    - [**Get Precision Insights From a Specific Time Window**](#get-precision-insights-from-a-specific-time-window)
-    - [**Agent Mode: Autonomous Tool Calling**](#agent-mode-autonomous-tool-calling)
-    - [**Understand Images in Your Notes**](#understand-images-in-your-notes)
-    - [**One Prompt, Every Source—Instant Summaries from PDFs, Videos, and Web**](#one-prompt-every-sourceinstant-summaries-from-pdfs-videos-and-web)
-- [**Need Help?**](#need-help)
-- [**FAQ**](#faq)
-- [**🙏 Thank You**](#-thank-you)
-- [**Copilot Plus Disclosure**](#copilot-plus-disclosure)
-- [**Authors**](#authors)
-
 ### Free User
 
 #### **Chat Mode: reference notes and discuss ideas with Copilot**
