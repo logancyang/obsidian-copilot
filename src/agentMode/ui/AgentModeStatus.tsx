@@ -110,6 +110,8 @@ function statusLabel(
   if (booting) return `Starting ${versionTag}…`;
   if (!hasSession) return `Initializing ${versionTag}…`;
   switch (status) {
+    case "starting":
+      return `Starting ${versionTag}…`;
     case "idle":
       return `Ready — ${versionTag}`;
     case "running":

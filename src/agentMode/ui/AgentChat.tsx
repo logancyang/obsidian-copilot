@@ -113,6 +113,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isStarting, setIsStarting] = useState(() => backend.isStarting());
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAgentMessage[]>([]);
   const [selectedTextContexts] = useSelectedTextContexts();
@@ -130,8 +131,11 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   // Subscribe to backend updates for re-renders.
   useEffect(() => {
     setMessages(backend.getMessages());
+    setIsStarting(backend.isStarting());
     return backend.subscribe(() => {
-      if (isMountedRef.current) setMessages(backend.getMessages());
+      if (!isMountedRef.current) return;
+      setMessages(backend.getMessages());
+      setIsStarting(backend.isStarting());
     });
   }, [backend]);
 
@@ -223,7 +227,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     setIncludeActiveWebTab(false);
     clearSelectedTextContexts();
 
-    if (loading) {
+    if (loading || isStarting) {
       setQueuedMessages((q) => [...q, item]);
       return;
     }
@@ -238,6 +242,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     includeActiveWebTab,
     selectedTextContexts,
     loading,
+    isStarting,
     runSend,
   ]);
 
@@ -246,33 +251,37 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   // synchronous `setQueuedMessages([])` + `setLoading(true)` inside
   // runSend are batched, so the next effect run sees both updates.
   useEffect(() => {
-    if (loading || queuedMessages.length === 0) return;
+    if (loading || isStarting || queuedMessages.length === 0) return;
     const combined = combineQueuedMessages(queuedMessages);
     setQueuedMessages([]);
     runSend(combined);
-  }, [loading, queuedMessages, runSend]);
+  }, [loading, isStarting, queuedMessages, runSend]);
 
   const handleRemoveQueuedMessage = useCallback((id: string) => {
     setQueuedMessages((q) => q.filter((m) => m.id !== id));
   }, []);
 
-  const handleNewChat = useCallback(async () => {
+  const handleNewChat = useCallback(() => {
     if (manager.getIsStarting()) return;
     const active = manager.getActiveSession();
     // Already on a fresh session — no-op so the user doesn't churn ACP
     // sessions just by clicking the button repeatedly.
     if (!active || !active.hasUserVisibleMessages()) return;
     const oldId = active.internalId;
-    try {
-      await manager.createSession();
-      await manager.closeSession(oldId);
-      // Local input state resets via AgentChat's `key={internalId}` remount,
-      // but selectedTextContexts is a global atom — clear it explicitly.
-      clearSelectedTextContexts();
-    } catch (e) {
-      logError("[AgentMode] new chat failed", e);
-      new Notice("Failed to start a new chat. Please try again.");
-    }
+    void (async () => {
+      try {
+        await manager.createSession();
+        void manager
+          .closeSession(oldId)
+          .catch((e) => logError("[AgentMode] closeSession of old chat failed", e));
+      } catch (e) {
+        logError("[AgentMode] new chat failed", e);
+        new Notice("Failed to start a new chat. Please try again.");
+      }
+    })();
+    // selectedTextContexts is a global atom — clear it explicitly. (Local
+    // input state is reset by AgentChat's `key={internalId}` remount.)
+    clearSelectedTextContexts();
   }, [manager]);
 
   const handleDelete = useCallback(

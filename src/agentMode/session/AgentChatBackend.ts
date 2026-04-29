@@ -28,6 +28,9 @@ export interface AgentChatBackend {
   clearMessages(): void;
   getMessages(): AgentChatMessage[];
 
+  /** True while ACP `session/new` is still in flight. Send is gated on this. */
+  isStarting(): boolean;
+
   /** Latest known model state from ACP, or null when the agent doesn't report one. */
   getModelState(): SessionModelState | null;
   /** Switch the active model. Throws if the agent doesn't implement runtime model switching. */

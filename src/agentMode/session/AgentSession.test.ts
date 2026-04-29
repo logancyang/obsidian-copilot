@@ -309,12 +309,13 @@ describe("AgentSession.create", () => {
         ],
       },
     });
-    const session = await AgentSession.create({
+    const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
     });
+    await session.ready;
     expect(session.getModelState()?.currentModelId).toBe("anthropic/sonnet");
     expect(session.getModelState()?.availableModels).toHaveLength(2);
   });
@@ -322,12 +323,13 @@ describe("AgentSession.create", () => {
   it("getModelState returns null when the agent doesn't report models", async () => {
     const mock = makeMockBackend();
     mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", models: null });
-    const session = await AgentSession.create({
+    const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
     });
+    await session.ready;
     expect(session.getModelState()).toBeNull();
   });
 
@@ -343,13 +345,14 @@ describe("AgentSession.create", () => {
         ],
       },
     });
-    await AgentSession.create({
+    const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
       preferredModelId: "openai/gpt-5",
     });
+    await session.ready;
     expect(mock.setSessionModel).toHaveBeenCalledWith({
       sessionId: "acp-1",
       modelId: "openai/gpt-5",
@@ -365,13 +368,14 @@ describe("AgentSession.create", () => {
         availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
       },
     });
-    await AgentSession.create({
+    const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
       preferredModelId: "anthropic/sonnet",
     });
+    await session.ready;
     expect(mock.setSessionModel).not.toHaveBeenCalled();
   });
 
@@ -384,13 +388,14 @@ describe("AgentSession.create", () => {
         availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
       },
     });
-    await AgentSession.create({
+    const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
       preferredModelId: "ghost/model",
     });
+    await session.ready;
     expect(mock.setSessionModel).not.toHaveBeenCalled();
   });
 
@@ -407,13 +412,14 @@ describe("AgentSession.create", () => {
       },
     });
     mock.setSessionModel.mockRejectedValueOnce(new MethodUnsupportedError("session/set_model"));
-    const session = await AgentSession.create({
+    const session = AgentSession.start({
       backend: mock.asBackend,
       cwd: "/vault",
       internalId: "internal-1",
       backendId: "opencode",
       preferredModelId: "openai/gpt-5",
     });
+    await session.ready;
     // Session is still usable; current model stays at the agent's default.
     expect(session.getModelState()?.currentModelId).toBe("anthropic/sonnet");
   });

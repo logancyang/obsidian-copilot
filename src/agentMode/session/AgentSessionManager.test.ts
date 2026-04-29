@@ -48,11 +48,14 @@ function makeMockSession(overrides: {
   internalId: string;
   acpSessionId?: string;
   backendId: string;
+  ready?: Promise<void>;
 }): AgentSession {
+  const acpId = overrides.acpSessionId ?? `acp-${nextAcpSessionId++}`;
   return {
     internalId: overrides.internalId,
-    acpSessionId: overrides.acpSessionId ?? `acp-${nextAcpSessionId++}`,
     backendId: overrides.backendId,
+    ready: overrides.ready ?? Promise.resolve(),
+    getAcpSessionId: () => acpId,
     getStatus: () => "idle",
     cancel: mockSessionCancel,
     dispose: mockSessionDispose,
@@ -62,12 +65,14 @@ function makeMockSession(overrides: {
     subscribe: () => () => {},
     hasUserVisibleMessages: () => false,
     getModelState: () => null,
+    getModeState: () => null,
+    getConfigOptions: () => null,
   } as unknown as AgentSession;
 }
 
 const sessionCreateSpy = jest
-  .spyOn(AgentSession, "create")
-  .mockImplementation(async (opts) =>
+  .spyOn(AgentSession, "start")
+  .mockImplementation((opts) =>
     makeMockSession({ internalId: opts.internalId, backendId: opts.backendId })
   );
 
@@ -164,15 +169,24 @@ describe("AgentSessionManager.createSession", () => {
   });
 
   it("mirrors the new session's model state into the preloader cache", async () => {
-    const cache = new Map<string, unknown>();
+    const cache = new Map<string, { models: unknown; modes: unknown; configOptions: unknown }>();
     const modelPreloader = {
-      getCachedModels: jest.fn((id: string) => cache.get(id) ?? null),
+      getCachedModels: jest.fn((id: string) => cache.get(id)?.models ?? null),
+      getCachedModes: jest.fn((id: string) => cache.get(id)?.modes ?? null),
+      getCachedConfigOptions: jest.fn((id: string) => cache.get(id)?.configOptions ?? null),
       preload: jest.fn(async () => undefined),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
-      setCached: jest.fn((id: string, state: unknown) => {
-        cache.set(id, state);
-      }),
+      setCached: jest.fn(
+        (id: string, partial: { models?: unknown; modes?: unknown; configOptions?: unknown }) => {
+          const prev = cache.get(id) ?? { models: null, modes: null, configOptions: null };
+          cache.set(id, {
+            models: "models" in partial ? partial.models : prev.models,
+            modes: "modes" in partial ? partial.modes : prev.modes,
+            configOptions: "configOptions" in partial ? partial.configOptions : prev.configOptions,
+          });
+        }
+      ),
     };
     const descriptor = buildDescriptor();
     const mgr = new AgentSessionManager(
@@ -191,14 +205,27 @@ describe("AgentSessionManager.createSession", () => {
       currentModelId: "anthropic/sonnet",
       availableModels: [{ modelId: "anthropic/sonnet", name: "Claude Sonnet" }],
     };
-    sessionCreateSpy.mockImplementationOnce(async (opts) => {
+    sessionCreateSpy.mockImplementationOnce((opts) => {
       const s = makeMockSession({ internalId: opts.internalId, backendId: opts.backendId });
       (s as unknown as { getModelState: () => unknown }).getModelState = () => modelState;
       return s;
     });
 
     await mgr.createSession();
-    expect(modelPreloader.setCached).toHaveBeenCalledWith("opencode", modelState);
+    // Only non-null fields are passed; null modes/configOptions would otherwise
+    // clobber the previous session's cached entries when starting a new tab.
+    expect(modelPreloader.setCached).toHaveBeenCalledWith("opencode", {
+      models: modelState,
+    });
+    expect(mgr.getCachedModels("opencode")).toBe(modelState);
+
+    // Spawning a second session before its session/new resolves must not
+    // overwrite the cached state with nulls — otherwise the picker shows
+    // "select model" until the new session finishes starting.
+    sessionCreateSpy.mockImplementationOnce((opts) =>
+      makeMockSession({ internalId: opts.internalId, backendId: opts.backendId })
+    );
+    await mgr.createSession();
     expect(mgr.getCachedModels("opencode")).toBe(modelState);
   });
 
@@ -208,14 +235,21 @@ describe("AgentSessionManager.createSession", () => {
     // pre-fix code would have cleared `lastError` at the second call's start
     // and the failure surfaced by the first would be lost.
     sessionCreateSpy
-      .mockImplementationOnce(async () => {
-        // Yield so the second create can begin and (used to) clear lastError
-        // before this one rejects.
-        await Promise.resolve();
-        await Promise.resolve();
-        throw new Error("boom");
-      })
-      .mockImplementationOnce(async (opts) =>
+      .mockImplementationOnce((opts) =>
+        makeMockSession({
+          internalId: opts.internalId,
+          backendId: opts.backendId,
+          // Failing session: ready rejects after a microtask. The second
+          // create's ready resolves immediately; with concurrent flushing,
+          // we still want the first failure to win in lastError.
+          ready: (async () => {
+            await Promise.resolve();
+            await Promise.resolve();
+            throw new Error("boom");
+          })(),
+        })
+      )
+      .mockImplementationOnce((opts) =>
         makeMockSession({
           internalId: opts.internalId,
           acpSessionId: "acp-ok",
@@ -223,9 +257,14 @@ describe("AgentSessionManager.createSession", () => {
         })
       );
 
-    const failing = mgr.createSession().catch(() => undefined);
-    const succeeding = mgr.createSession();
-    await Promise.all([failing, succeeding]);
+    const failingSession = await mgr.createSession();
+    const succeedingSession = await mgr.createSession();
+    // Drain the ready continuations so lastError is populated.
+    await failingSession.ready.catch(() => undefined);
+    await succeedingSession.ready;
+    // Allow the manager's `.finally` continuation to run.
+    await Promise.resolve();
+    await Promise.resolve();
 
     expect(mgr.getLastError()).toMatch(/boom/);
   });

@@ -57,9 +57,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
 
   const settings = getSettings();
   if (!settings.agentMode?.enabled) return manager;
-  const activeBackendId = settings.agentMode.activeBackend;
   for (const descriptor of listBackendDescriptors()) {
-    if (descriptor.id === activeBackendId) continue;
     if (descriptor.getInstallState(settings).kind !== "ready") continue;
     manager
       .preloadModels(descriptor.id)

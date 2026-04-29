@@ -6,6 +6,8 @@ import { err2String } from "@/utils";
 import type {
   RequestPermissionRequest,
   RequestPermissionResponse,
+  SessionConfigOption,
+  SessionModeState,
   SessionModelState,
 } from "@agentclientprotocol/sdk";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -165,53 +167,69 @@ export class AgentSessionManager {
     this.startingBackendId = resolvedId;
     this.notify();
 
+    let backend: AcpBackendProcess;
     try {
-      const backend = await this.ensureBackend(resolvedId, descriptor);
-      const preferredModelId = descriptor.getPreferredModelId?.(getSettings());
-      const session = await AgentSession.create({
-        backend,
-        cwd: vaultBasePath,
-        internalId: uuidv4(),
-        backendId: resolvedId,
-        preferredModelId,
-      });
-      // Shutdown may have raced with us. If so, dispose the freshly-created
-      // session instead of leaking it.
-      if (this.disposed) {
-        await session.dispose().catch(() => {});
-        throw new Error("AgentSessionManager was shut down during session creation");
-      }
-      this.sessions.set(session.internalId, session);
-      this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
-      this.activeSessionId = session.internalId;
-      this.attachAutoSave(session);
-      this.attachModelCacheSync(session);
-      // Replay any backend-specific persisted state (claude-code's effort,
-      // future config-option preferences). Failures are non-fatal — the
-      // session is usable with whatever defaults the agent picked.
-      if (descriptor.applyInitialSessionConfig) {
-        try {
-          await descriptor.applyInitialSessionConfig(session, getSettings());
-        } catch (e) {
-          logWarn(`[AgentMode] applyInitialSessionConfig failed for ${resolvedId}; continuing`, e);
-        }
-      }
-      // Clear lastError on success — but not eagerly at the start of every
-      // create. Eager clearing would let a second concurrent create wipe the
-      // first's error before the user (or a retry handler) has seen it.
-      this.lastError = null;
-      logInfo(
-        `[AgentMode] session created (internal=${session.internalId} acp=${session.acpSessionId} backend=${resolvedId}); pool size=${this.sessions.size}`
-      );
-      return session;
+      backend = await this.ensureBackend(resolvedId, descriptor);
     } catch (err) {
       this.lastError = err2String(err);
+      this.finishPendingCreate();
       throw err;
-    } finally {
-      this.pendingCreates--;
-      if (this.pendingCreates === 0) this.startingBackendId = null;
-      this.notify();
     }
+
+    if (this.disposed) {
+      this.finishPendingCreate();
+      throw new Error("AgentSessionManager was shut down during session creation");
+    }
+
+    const preferredModelId = descriptor.getPreferredModelId?.(getSettings());
+    const session = AgentSession.start({
+      backend,
+      cwd: vaultBasePath,
+      internalId: uuidv4(),
+      backendId: resolvedId,
+      preferredModelId,
+    });
+    this.sessions.set(session.internalId, session);
+    this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
+    this.activeSessionId = session.internalId;
+    this.attachAutoSave(session);
+    this.attachModelCacheSync(session);
+    this.notify();
+
+    // Once the ACP session is ready, apply backend-specific persisted state
+    // (claude-code's effort, future config-option preferences) and clear the
+    // "starting" pill. On failure, capture into `lastError` so the status
+    // surface and retry handler can react. The session itself transitions to
+    // status "error" inside its own `initialize`.
+    void session.ready
+      .then(async () => {
+        if (descriptor.applyInitialSessionConfig) {
+          try {
+            await descriptor.applyInitialSessionConfig(session, getSettings());
+          } catch (e) {
+            logWarn(
+              `[AgentMode] applyInitialSessionConfig failed for ${resolvedId}; continuing`,
+              e
+            );
+          }
+        }
+        this.lastError = null;
+        logInfo(
+          `[AgentMode] session ready (internal=${session.internalId} acp=${session.getAcpSessionId()} backend=${resolvedId}); pool size=${this.sessions.size}`
+        );
+      })
+      .catch((err) => {
+        this.lastError = err2String(err);
+      })
+      .finally(() => this.finishPendingCreate());
+
+    return session;
+  }
+
+  private finishPendingCreate(): void {
+    this.pendingCreates--;
+    if (this.pendingCreates === 0) this.startingBackendId = null;
+    this.notify();
   }
 
   private resolveDescriptor(backendId: BackendId): BackendDescriptor {
@@ -289,6 +307,16 @@ export class AgentSessionManager {
   /** Cached `availableModels` for `backendId`, populated by the model preloader. */
   getCachedModels(backendId: BackendId): SessionModelState | null {
     return this.preloader.getCachedModels(backendId);
+  }
+
+  /** Cached `SessionModeState` for `backendId`, populated by the model preloader. */
+  getCachedModes(backendId: BackendId): SessionModeState | null {
+    return this.preloader.getCachedModes(backendId);
+  }
+
+  /** Cached `SessionConfigOption[]` for `backendId`, populated by the model preloader. */
+  getCachedConfigOptions(backendId: BackendId): SessionConfigOption[] | null {
+    return this.preloader.getCachedConfigOptions(backendId);
   }
 
   /** Subscribe to preloader cache updates. Used by the picker hook. */
@@ -611,21 +639,28 @@ export class AgentSessionManager {
   }
 
   /**
-   * Mirror this session's model state into the preloader cache so the backend
-   * keeps showing entries in the picker after it becomes non-active. The
-   * preloader otherwise skips the active backend at startup, leaving its
-   * cache empty when the user later switches to a different backend.
+   * Mirror this session's models/modes/configOptions into the preloader cache
+   * so the picker reflects current state. Only writes non-null fields — during
+   * a session's `"starting"` window every getter returns null, and a naive
+   * sync would clobber the previous session's cached entries.
    */
   private attachModelCacheSync(session: AgentSession): void {
-    const initial = session.getModelState();
-    if (initial) this.preloader.setCached(session.backendId, initial);
+    const sync = (): void => {
+      const models = session.getModelState();
+      const modes = session.getModeState();
+      const configOptions = session.getConfigOptions();
+      if (!models && !modes && !configOptions) return;
+      this.preloader.setCached(session.backendId, {
+        ...(models && { models }),
+        ...(modes && { modes }),
+        ...(configOptions && { configOptions }),
+      });
+    };
+    sync();
     const unsubscribe = session.subscribe({
       onMessagesChanged: () => {},
       onStatusChanged: () => {},
-      onModelChanged: () => {
-        const next = session.getModelState();
-        if (next) this.preloader.setCached(session.backendId, next);
-      },
+      onModelChanged: () => sync(),
     });
     this.modelCacheUnsubs.set(session.internalId, unsubscribe);
   }

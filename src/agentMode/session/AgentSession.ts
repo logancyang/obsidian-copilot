@@ -35,7 +35,13 @@ import { getSettings } from "@/settings/model";
  */
 const DEFAULT_TITLE_PREFIX = "New session";
 
-export type AgentSessionStatus = "idle" | "running" | "awaiting_permission" | "error" | "closed";
+export type AgentSessionStatus =
+  | "starting"
+  | "idle"
+  | "running"
+  | "awaiting_permission"
+  | "error"
+  | "closed";
 
 export interface AgentSessionListener {
   onMessagesChanged(): void;
@@ -50,19 +56,7 @@ export interface AgentSessionListener {
   onLabelChanged?(): void;
 }
 
-export interface AgentSessionOptions {
-  backend: AcpBackendProcess;
-  acpSessionId: SessionId;
-  internalId: string;
-  /** The backend this session was spawned on. */
-  backendId: BackendId;
-  initialModelState?: SessionModelState | null;
-  initialConfigOptions?: SessionConfigOption[] | null;
-  initialModeState?: SessionModeState | null;
-  cwd?: string | null;
-}
-
-export interface AgentSessionCreateOptions {
+export interface AgentSessionStartOptions {
   backend: AcpBackendProcess;
   cwd: string;
   internalId: string;
@@ -71,18 +65,42 @@ export interface AgentSessionCreateOptions {
 }
 
 /**
+ * Pre-resolved state used by tests and by `loadSessionFromHistory` to
+ * construct a session that bypasses the async ACP startup.
+ */
+export interface AgentSessionStateOptions {
+  backend: AcpBackendProcess;
+  acpSessionId: SessionId;
+  internalId: string;
+  backendId: BackendId;
+  initialModelState?: SessionModelState | null;
+  initialConfigOptions?: SessionConfigOption[] | null;
+  initialModeState?: SessionModeState | null;
+  cwd?: string | null;
+}
+
+/**
  * Per-chat Agent Mode session. Owns its `AgentMessageStore`, the lifecycle
  * of one ACP session id on the shared backend, and the `AbortController` that
  * cancels in-flight turns.
+ *
+ * Construction is split: `AgentSession.start()` returns synchronously with
+ * status `"starting"` so the UI can swap to the new (empty) chat immediately.
+ * The ACP `session/new` RPC runs in the background; once it resolves the
+ * session transitions to `"idle"` and `sendPrompt` becomes usable. While
+ * starting, `sendPrompt` throws — the chat UI gates the send button on
+ * `getStatus() === "starting"`.
  */
 export class AgentSession {
   readonly store = new AgentMessageStore();
-  readonly acpSessionId: SessionId;
   readonly internalId: string;
   readonly backendId: BackendId;
+  /** Resolves when `session/new` succeeds; rejects when it fails. */
+  readonly ready: Promise<void>;
+  private acpSessionId: SessionId | null = null;
   private readonly backend: AcpBackendProcess;
   private readonly cwd: string | null;
-  private status: AgentSessionStatus = "idle";
+  private status: AgentSessionStatus = "starting";
   private placeholderId: string | null = null;
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
@@ -94,63 +112,106 @@ export class AgentSession {
   // Tracks who set the current label so an agent-pushed `session_info_update`
   // can't clobber a label the user explicitly chose via Rename.
   private labelSource: "user" | "agent" | null = null;
+  private disposed = false;
 
-  constructor(opts: AgentSessionOptions) {
+  /**
+   * Tests and `loadSessionFromHistory` use this constructor with a
+   * pre-resolved `acpSessionId`. Production code should use
+   * `AgentSession.start(...)` so the ACP startup runs in the background.
+   */
+  constructor(opts: AgentSessionStateOptions | AgentSessionStartOptions) {
     this.backend = opts.backend;
-    this.acpSessionId = opts.acpSessionId;
     this.internalId = opts.internalId;
     this.backendId = opts.backendId;
     this.cwd = opts.cwd ?? null;
-    this.modelState = opts.initialModelState ?? null;
-    this.configOptions = opts.initialConfigOptions ?? null;
-    this.modeState = opts.initialModeState ?? null;
-    this.unregisterSessionHandler = this.backend.registerSessionHandler(
-      this.acpSessionId,
-      (update) => this.handleSessionUpdate(update)
-    );
+    if ("acpSessionId" in opts) {
+      this.acpSessionId = opts.acpSessionId;
+      this.modelState = opts.initialModelState ?? null;
+      this.configOptions = opts.initialConfigOptions ?? null;
+      this.modeState = opts.initialModeState ?? null;
+      this.unregisterSessionHandler = this.backend.registerSessionHandler(
+        opts.acpSessionId,
+        (update) => this.handleSessionUpdate(update)
+      );
+      this.status = "idle";
+      this.ready = Promise.resolve();
+    } else {
+      this.status = "starting";
+      this.ready = this.initialize(opts);
+    }
   }
 
-  static async create(opts: AgentSessionCreateOptions): Promise<AgentSession> {
-    const { backend, cwd, internalId, backendId, preferredModelId } = opts;
-    const resp = await backend.newSession({
-      cwd,
-      mcpServers: resolveMcpServers(backend, getSettings().agentMode?.mcpServers),
-    });
-    if (resp.models) {
-      const ids = resp.models.availableModels.map((m) => m.modelId).join(", ");
-      logInfo(
-        `[AgentMode] session ${resp.sessionId} model=${resp.models.currentModelId} (available: ${ids})`
-      );
-    } else {
-      logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
-    }
-    const session = new AgentSession({
-      backend,
-      acpSessionId: resp.sessionId,
-      internalId,
-      backendId,
-      initialModelState: resp.models ?? null,
-      initialConfigOptions: resp.configOptions ?? null,
-      initialModeState: resp.modes ?? null,
-      cwd,
-    });
+  /**
+   * Construct an `AgentSession` synchronously and kick off ACP
+   * initialization in the background. The returned session is immediately
+   * registerable with the manager and renderable in the UI; `sendPrompt`
+   * is gated until `ready` resolves.
+   */
+  static start(opts: AgentSessionStartOptions): AgentSession {
+    return new AgentSession(opts);
+  }
 
-    // Apply sticky preference if it's available and differs from the agent's
-    // current model. Failures here are non-fatal — the session is usable with
-    // whatever the agent picked by default.
-    if (
-      preferredModelId &&
-      resp.models &&
-      resp.models.currentModelId !== preferredModelId &&
-      resp.models.availableModels.some((m) => m.modelId === preferredModelId)
-    ) {
-      try {
-        await session.setModel(preferredModelId);
-      } catch (e) {
-        logWarn(`[AgentMode] could not apply preferred model ${preferredModelId}`, e);
+  /** The ACP session id, or null while still starting. */
+  getAcpSessionId(): SessionId | null {
+    return this.acpSessionId;
+  }
+
+  private async initialize(opts: AgentSessionStartOptions): Promise<void> {
+    const { backend, cwd, preferredModelId } = opts;
+    try {
+      const resp = await backend.newSession({
+        cwd,
+        mcpServers: resolveMcpServers(backend, getSettings().agentMode?.mcpServers),
+      });
+      if (this.disposed) return;
+      if (resp.models) {
+        const ids = resp.models.availableModels.map((m) => m.modelId).join(", ");
+        logInfo(
+          `[AgentMode] session ${resp.sessionId} model=${resp.models.currentModelId} (available: ${ids})`
+        );
+      } else {
+        logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
       }
+      this.acpSessionId = resp.sessionId;
+      this.modelState = resp.models ?? null;
+      this.configOptions = resp.configOptions ?? null;
+      this.modeState = resp.modes ?? null;
+      this.unregisterSessionHandler = this.backend.registerSessionHandler(
+        resp.sessionId,
+        (update) => this.handleSessionUpdate(update)
+      );
+      // dispose() may have run between newSession resolving and now. If so,
+      // tear the handler down — without this, the agent-side session id is
+      // live with no local consumer.
+      if (this.disposed) {
+        this.unregisterSessionHandler();
+        this.unregisterSessionHandler = null;
+        return;
+      }
+      this.setStatus("idle");
+      this.notifyModelChanged();
+
+      // Apply sticky preference if it's available and differs from the agent's
+      // current model. Failures here are non-fatal — the session is usable with
+      // whatever the agent picked by default.
+      if (
+        preferredModelId &&
+        resp.models &&
+        resp.models.currentModelId !== preferredModelId &&
+        resp.models.availableModels.some((m) => m.modelId === preferredModelId)
+      ) {
+        try {
+          await this.setModel(preferredModelId);
+        } catch (e) {
+          logWarn(`[AgentMode] could not apply preferred model ${preferredModelId}`, e);
+        }
+      }
+    } catch (err) {
+      if (this.disposed) return;
+      logWarn(`[AgentMode] session/new failed for ${this.internalId}`, err);
+      this.setStatus("error");
+      throw err instanceof Error ? err : new Error(err2String(err));
     }
-    return session;
   }
 
   /**
@@ -172,6 +233,7 @@ export class AgentSession {
    */
   async setModel(modelId: string): Promise<void> {
     if (this.status === "closed") throw new Error("Session is closed");
+    if (!this.acpSessionId) throw new Error("Session is still starting");
     await this.backend.setSessionModel({ sessionId: this.acpSessionId, modelId });
     if (this.modelState) {
       this.modelState = { ...this.modelState, currentModelId: modelId };
@@ -202,6 +264,7 @@ export class AgentSession {
    */
   async setConfigOption(configId: string, value: string): Promise<void> {
     if (this.status === "closed") throw new Error("Session is closed");
+    if (!this.acpSessionId) throw new Error("Session is still starting");
     const resp = await this.backend.setSessionConfigOption({
       sessionId: this.acpSessionId,
       configId,
@@ -235,6 +298,7 @@ export class AgentSession {
    */
   async setMode(modeId: string): Promise<void> {
     if (this.status === "closed") throw new Error("Session is closed");
+    if (!this.acpSessionId) throw new Error("Session is still starting");
     await this.backend.setSessionMode({ sessionId: this.acpSessionId, modeId });
     this.modeState = {
       ...(this.modeState ?? { availableModes: [] }),
@@ -321,6 +385,9 @@ export class AgentSession {
     context?: MessageContext,
     content?: any[]
   ): { userMessageId: string; turn: Promise<StopReason> } {
+    if (this.status === "starting") {
+      throw new Error("Session is still starting");
+    }
     if (this.status === "running" || this.status === "awaiting_permission") {
       throw new Error("Session already has a turn in flight");
     }
@@ -361,10 +428,13 @@ export class AgentSession {
     content?: any[]
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
+    // sendPrompt's status guard guarantees acpSessionId is set; the assertion
+    // is for the type narrower since status and acpSessionId are independent.
+    const sessionId = this.acpSessionId!;
     try {
       const promptBlocks = buildPromptBlocks(displayText, context, content);
       const req: PromptRequest = {
-        sessionId: this.acpSessionId,
+        sessionId,
         prompt: promptBlocks,
       };
       const resp = await this.backend.prompt(req);
@@ -403,6 +473,7 @@ export class AgentSession {
    */
   async cancel(): Promise<void> {
     if (this.status !== "running" && this.status !== "awaiting_permission") return;
+    if (!this.acpSessionId) return;
     try {
       await this.backend.cancel({ sessionId: this.acpSessionId });
     } catch (e) {
@@ -413,6 +484,7 @@ export class AgentSession {
 
   /** Detach from the backend. Does not cancel — call `cancel()` first. */
   async dispose(): Promise<void> {
+    this.disposed = true;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
     this.setStatus("closed");

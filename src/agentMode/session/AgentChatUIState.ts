@@ -21,12 +21,12 @@ export class AgentChatUIState implements AgentChatBackend {
   private listeners = new Set<() => void>();
 
   constructor(private readonly session: AgentSession) {
-    // Forward message changes and model changes. Status is consumed directly
-    // by `AgentModeStatus` via `session.subscribe`, so re-publishing it here
-    // would cause spurious re-renders of the message list.
+    // Forward message, status, and model changes. The chat UI gates the
+    // send button on `isStarting()`, so it needs to re-render when status
+    // transitions out of `"starting"`.
     this.session.subscribe({
       onMessagesChanged: () => this.notifyListeners(),
-      onStatusChanged: () => {},
+      onStatusChanged: () => this.notifyListeners(),
       onModelChanged: () => this.notifyListeners(),
     });
   }
@@ -92,6 +92,10 @@ export class AgentChatUIState implements AgentChatBackend {
 
   getMessages(): AgentChatMessage[] {
     return this.session.store.getDisplayMessages();
+  }
+
+  isStarting(): boolean {
+    return this.session.getStatus() === "starting";
   }
 
   getModelState(): SessionModelState | null {

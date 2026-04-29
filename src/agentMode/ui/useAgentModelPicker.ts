@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { Notice } from "obsidian";
-import type { ModelInfo } from "@agentclientprotocol/sdk";
+import type { ModelInfo, SessionModelState } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import { logError } from "@/logger";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
@@ -81,7 +81,12 @@ export function useAgentModelPicker(
     return descriptors
       .map((d) => {
         const c = manager.getCachedModels(d.id);
-        return `${d.id}=${c?.currentModelId ?? ""}/${c?.availableModels.length ?? 0}`;
+        const m = manager.getCachedModes(d.id);
+        const o = manager.getCachedConfigOptions(d.id);
+        const cfgSig = (o ?? [])
+          .map((opt) => `${opt.id}=${"currentValue" in opt ? String(opt.currentValue) : ""}`)
+          .join(";");
+        return `${d.id}=${c?.currentModelId ?? ""}/${c?.availableModels.length ?? 0}|${m?.currentModeId ?? ""}/${m?.availableModes.length ?? 0}|${cfgSig}`;
       })
       .join(",");
   }, [manager, descriptors]);
@@ -170,14 +175,31 @@ export function useAgentModelPicker(
     if (!manager) return null;
 
     const entries: ModelSelectorEntry[] = [];
+    const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
+
+    // Fall back to preloader cache during session/new so the picker doesn't
+    // blink empty. The live response replaces the cached state once it arrives.
+    const optimisticModelState = resolveOptimisticModelState(
+      activeModelState,
+      activeBackendId,
+      activeDescriptor,
+      manager.getCachedModels.bind(manager),
+      settings
+    );
+    const optimisticModeState =
+      activeModeState ?? (activeBackendId ? manager.getCachedModes(activeBackendId) : null);
+    const optimisticConfigOptions =
+      activeConfigOptions ??
+      (activeBackendId ? manager.getCachedConfigOptions(activeBackendId) : null);
 
     for (const descriptor of descriptors) {
       const isActiveBackend = descriptor.id === activeBackendId;
       if (!isActiveBackend && activeSessionHasHistory) continue;
 
+      const cachedAvailable = manager.getCachedModels(descriptor.id)?.availableModels ?? null;
       const liveAvailable = isActiveBackend
-        ? (activeModelState?.availableModels ?? null)
-        : (manager.getCachedModels(descriptor.id)?.availableModels ?? null);
+        ? (optimisticModelState?.availableModels ?? cachedAvailable)
+        : cachedAvailable;
       const isRunning = manager.getBackendProcess(descriptor.id)?.isRunning() ?? false;
 
       appendBackendSection(entries, descriptor, settings.activeModels ?? [], {
@@ -189,27 +211,26 @@ export function useAgentModelPicker(
 
     // Surface the session's current model if a curated/synthesized entry for
     // it isn't already present (stale selectedModelKey, or filtered out).
-    const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
     const collapsedActiveId =
-      activeDescriptor && activeModelState?.currentModelId
+      activeDescriptor && optimisticModelState?.currentModelId
         ? resolveCollapsedModelId(
-            activeModelState.currentModelId,
-            activeModelState.availableModels,
+            optimisticModelState.currentModelId,
+            optimisticModelState.availableModels,
             activeDescriptor
           )
         : null;
     const valueKey =
-      activeBackendId && activeDescriptor && activeModelState
+      activeBackendId && activeDescriptor && optimisticModelState
         ? computeValueKeyForActive(
-            activeModelState.currentModelId,
-            collapsedActiveId ?? activeModelState.currentModelId,
+            optimisticModelState.currentModelId,
+            collapsedActiveId ?? optimisticModelState.currentModelId,
             activeDescriptor,
             settings.activeModels ?? []
           )
         : "";
-    if (activeBackendId && activeDescriptor && activeModelState?.currentModelId) {
-      const currentInfo = activeModelState.availableModels.find(
-        (m) => m.modelId === activeModelState.currentModelId
+    if (activeBackendId && activeDescriptor && optimisticModelState?.currentModelId) {
+      const currentInfo = optimisticModelState.availableModels.find(
+        (m) => m.modelId === optimisticModelState.currentModelId
       );
       if (currentInfo && !entries.some((e) => getModelKeyFromModel(e) === valueKey)) {
         const parsed = activeDescriptor.parseEffortFromModelId?.(currentInfo.modelId);
@@ -222,10 +243,10 @@ export function useAgentModelPicker(
     // Effort picker — built from either modelId-suffix variants (opencode)
     // or a SessionConfigOption (claude-code), normalized to one shape.
     let effortBlock: AgentModelPickerOverride["effort"] | undefined;
-    if (activeBackendId && activeDescriptor && (activeModelState || activeConfigOptions)) {
+    if (activeBackendId && activeDescriptor && (optimisticModelState || optimisticConfigOptions)) {
       const adapter = buildEffortAdapter(activeDescriptor, {
-        modelState: activeModelState,
-        configOptions: activeConfigOptions,
+        modelState: optimisticModelState,
+        configOptions: optimisticConfigOptions,
       });
       if (adapter) {
         effortBlock = buildEffortOverride(
@@ -241,10 +262,10 @@ export function useAgentModelPicker(
     // Mode picker — Copilot-canonical operational modes (build/plan/auto-build)
     // mapped per-backend to native ACP modes or OpenCode managed agents.
     let modeBlock: AgentModelPickerOverride["mode"] | undefined;
-    if (activeBackendId && activeDescriptor && (activeModeState || activeConfigOptions)) {
+    if (activeBackendId && activeDescriptor && (optimisticModeState || optimisticConfigOptions)) {
       const adapter = buildModeAdapter(activeDescriptor, {
-        modeState: activeModeState,
-        configOptions: activeConfigOptions,
+        modeState: optimisticModeState,
+        configOptions: optimisticConfigOptions,
       });
       if (adapter) {
         modeBlock = buildModeOverride(
@@ -286,9 +307,10 @@ export function useAgentModelPicker(
 
         if (!activeSession || activeSession.backendId !== targetBackendId) {
           // Cross-backend pick: persist model first so the new session's
-          // getPreferredModelId sees it, then spawn, then close the old empty
-          // tab. Default-backend flip waits until the new session resolves so
-          // a failed start doesn't leave the user pointing at a broken backend.
+          // getPreferredModelId sees it, then spawn — `createSession` is sync
+          // (returns once the session is registered as active; ACP startup
+          // continues in the background). Close the old empty tab in the
+          // background so the UI swap is instant.
           const emptyId = activeSession?.internalId;
           void (async () => {
             try {
@@ -296,7 +318,7 @@ export function useAgentModelPicker(
               await manager.createSession(targetBackendId);
               manager.setDefaultBackend(targetBackendId);
               if (emptyId) {
-                await manager
+                void manager
                   .closeSession(emptyId)
                   .catch((e) => logError("[AgentMode] closeSession of empty tab failed", e));
               }
@@ -345,6 +367,32 @@ export function useAgentModelPicker(
     activeSessionHasHistory,
     cacheSnapshot,
   ]);
+}
+
+/**
+ * Resolve an optimistic `SessionModelState` for the active backend: prefer
+ * live, fall back to preloader cache. When the cached `currentModelId` isn't
+ * actually in `availableModels` (rare — stale probe), prefer the user's
+ * persisted preference if present.
+ */
+function resolveOptimisticModelState(
+  live: SessionModelState | null,
+  backendId: string | null,
+  descriptor: BackendDescriptor | undefined,
+  getCached: (id: string) => SessionModelState | null,
+  settings: ReturnType<typeof useSettingsValue>
+): SessionModelState | null {
+  if (live) return live;
+  if (!backendId) return null;
+  const cached = getCached(backendId);
+  if (!cached) return null;
+  const ids = new Set(cached.availableModels.map((m) => m.modelId));
+  if (ids.has(cached.currentModelId)) return cached;
+  const preferred = descriptor?.getPreferredModelId?.(settings);
+  if (preferred && ids.has(preferred)) {
+    return { availableModels: cached.availableModels, currentModelId: preferred };
+  }
+  return cached;
 }
 
 /**

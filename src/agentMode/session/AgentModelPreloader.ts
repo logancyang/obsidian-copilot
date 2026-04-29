@@ -1,16 +1,33 @@
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
-import type { SessionModelState } from "@agentclientprotocol/sdk";
+import type {
+  SessionConfigOption,
+  SessionModeState,
+  SessionModelState,
+} from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import type { BackendDescriptor, BackendId } from "./types";
 
 /**
- * Plugin-lifetime cache of per-backend `availableModels`. ACP exposes models
- * only as a side-effect of session creation/resume/load, so without this
- * preload the picker would show no entries for non-active backends.
+ * Per-backend snapshot of the initial state ACP returns from
+ * `session/new` (or `resume`/`load`): models, modes, and configOptions.
+ * Used as an optimistic placeholder for the picker during session startup.
+ */
+export interface BackendInitialState {
+  models: SessionModelState | null;
+  modes: SessionModeState | null;
+  configOptions: SessionConfigOption[] | null;
+}
+
+/**
+ * Plugin-lifetime cache of per-backend initial session state. ACP exposes
+ * models, modes, and configOptions only as a side-effect of session
+ * creation/resume/load, so without this preload the picker would show no
+ * entries for non-active backends and would blink empty during the
+ * `session/new` round-trip on a fresh session.
  *
  * Probes once per backend at startup: prefer resume of a persisted probe
  * sessionId, fall back to load, then to new (and persist the new id so the
@@ -18,7 +35,7 @@ import type { BackendDescriptor, BackendId } from "./types";
  * entry per machine instead of growing with each reload).
  */
 export class AgentModelPreloader {
-  private readonly cache = new Map<BackendId, SessionModelState>();
+  private readonly cache = new Map<BackendId, BackendInitialState>();
   private readonly inflight = new Map<BackendId, Promise<void>>();
   private readonly listeners = new Set<() => void>();
   private disposed = false;
@@ -30,21 +47,34 @@ export class AgentModelPreloader {
   ) {}
 
   getCachedModels(backendId: BackendId): SessionModelState | null {
-    return this.cache.get(backendId) ?? null;
+    return this.cache.get(backendId)?.models ?? null;
+  }
+
+  getCachedModes(backendId: BackendId): SessionModeState | null {
+    return this.cache.get(backendId)?.modes ?? null;
+  }
+
+  getCachedConfigOptions(backendId: BackendId): SessionConfigOption[] | null {
+    return this.cache.get(backendId)?.configOptions ?? null;
   }
 
   /**
-   * Mirror a known model state into the cache. Used by `AgentSessionManager`
-   * to write a live session's models into the cache so the backend keeps
-   * showing its entries in the picker after it becomes non-active. Skipping
-   * the notify when nothing material changed keeps the picker `useMemo` from
-   * rebuilding on every per-turn `onModelChanged` for an unchanged state.
+   * Mirror a known initial-state snapshot into the cache. Skipping the notify
+   * when nothing material changed keeps the picker `useMemo` from rebuilding
+   * on every per-turn `onModelChanged` for an unchanged state.
    */
-  setCached(backendId: BackendId, state: SessionModelState): void {
+  setCached(backendId: BackendId, partial: Partial<BackendInitialState>): void {
     if (this.disposed) return;
-    const prev = this.cache.get(backendId);
-    if (prev && isSameModelState(prev, state)) return;
-    this.cache.set(backendId, state);
+    const prev = this.cache.get(backendId) ?? EMPTY_STATE;
+    const next: BackendInitialState = { ...prev, ...partial };
+    if (
+      isSameOrNull(prev.models, next.models, modelStateSig) &&
+      isSameOrNull(prev.modes, next.modes, modeStateSig) &&
+      isSameOrNull(prev.configOptions, next.configOptions, configOptionsSig)
+    ) {
+      return;
+    }
+    this.cache.set(backendId, next);
     this.notify();
   }
 
@@ -104,22 +134,24 @@ export class AgentModelPreloader {
     try {
       await proc.start();
       const storedId = descriptor.getProbeSessionId?.(getSettings());
-      // The probe is models-only — we don't act on session/update frames.
+      // The probe is read-only — we don't act on session/update frames.
       // A handler is still registered (no-op) for each touched sessionId so
       // notifications the agent emits for the probe session (e.g. claude-
       // agent-acp's session_info_update, or session/load history replay) are
       // silently swallowed instead of logging "unknown session" warnings.
-      const models = await this.fetchModels(proc, descriptor, backendId, storedId, cwd);
+      const snapshot = await this.fetchInitialState(proc, descriptor, backendId, storedId, cwd);
       if (this.disposed) return;
-      if (models) {
-        this.cache.set(backendId, models);
-        const ids = models.availableModels.map((m) => m.modelId).join(", ");
+      if (snapshot.models || snapshot.modes || snapshot.configOptions) {
+        this.cache.set(backendId, snapshot);
+        const ids = snapshot.models?.availableModels.map((m) => m.modelId).join(", ") ?? "";
+        const modeIds = snapshot.modes?.availableModes.map((m) => m.id).join(", ") ?? "";
+        const cfgIds = snapshot.configOptions?.map((o) => o.id).join(", ") ?? "";
         logInfo(
-          `[AgentMode] preload ${backendId}: cached ${models.availableModels.length} models (current=${models.currentModelId}, available=[${ids}])`
+          `[AgentMode] preload ${backendId}: cached models=[${ids}] (current=${snapshot.models?.currentModelId ?? "-"}), modes=[${modeIds}] (current=${snapshot.modes?.currentModeId ?? "-"}), configOptions=[${cfgIds}]`
         );
         this.notify();
       } else {
-        logInfo(`[AgentMode] preload ${backendId}: agent did not report any models`);
+        logInfo(`[AgentMode] preload ${backendId}: agent did not report any initial state`);
       }
     } catch (err) {
       logError(`[AgentMode] preload ${backendId} failed`, err);
@@ -132,21 +164,22 @@ export class AgentModelPreloader {
     }
   }
 
-  private async fetchModels(
+  private async fetchInitialState(
     proc: AcpBackendProcess,
     descriptor: BackendDescriptor,
     backendId: BackendId,
     storedId: string | undefined,
     cwd: string
-  ): Promise<SessionModelState | null> {
+  ): Promise<BackendInitialState> {
+    type ProbeResponse = Partial<BackendInitialState>;
     type Strategy = {
       label: string;
       sessionId: string;
-      run: () => Promise<{ models?: SessionModelState | null }>;
+      run: () => Promise<ProbeResponse>;
     };
     const strategies: Strategy[] = [];
     // Probe sessions are non-interactive — boot with no MCP servers to avoid
-    // spawning user-configured tool processes for a models-only ping.
+    // spawning user-configured tool processes for a read-only ping.
     if (storedId && proc.hasCapability("session/resume")) {
       strategies.push({
         label: `resumed probe session ${storedId}`,
@@ -162,12 +195,18 @@ export class AgentModelPreloader {
       });
     }
 
+    const toSnapshot = (resp: ProbeResponse): BackendInitialState => ({
+      models: resp.models ?? null,
+      modes: resp.modes ?? null,
+      configOptions: resp.configOptions ?? null,
+    });
+
     for (const { label, sessionId, run } of strategies) {
       try {
         proc.registerSessionHandler(sessionId, () => {});
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);
-        return resp.models ?? null;
+        return toSnapshot(resp);
       } catch (err) {
         if (!(err instanceof MethodUnsupportedError)) {
           logWarn(`[AgentMode] preload ${backendId}: ${label} failed (will fall back)`, err);
@@ -186,17 +225,26 @@ export class AgentModelPreloader {
         logWarn(`[AgentMode] preload ${backendId}: persistProbeSessionId failed`, e);
       }
     }
-    return resp.models ?? null;
+    return toSnapshot(resp);
   }
 }
 
-function isSameModelState(a: SessionModelState, b: SessionModelState): boolean {
-  if (a.currentModelId !== b.currentModelId) return false;
-  if (a.availableModels.length !== b.availableModels.length) return false;
-  for (let i = 0; i < a.availableModels.length; i++) {
-    const ma = a.availableModels[i];
-    const mb = b.availableModels[i];
-    if (ma.modelId !== mb.modelId || ma.name !== mb.name) return false;
-  }
-  return true;
+const EMPTY_STATE: BackendInitialState = { models: null, modes: null, configOptions: null };
+
+function isSameOrNull<T>(a: T | null, b: T | null, sig: (x: T) => string): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return sig(a) === sig(b);
+}
+
+function modelStateSig(s: SessionModelState): string {
+  return `${s.currentModelId}|${s.availableModels.map((m) => `${m.modelId}=${m.name}`).join(",")}`;
+}
+
+function modeStateSig(s: SessionModeState): string {
+  return `${s.currentModeId}|${s.availableModes.map((m) => m.id).join(",")}`;
+}
+
+function configOptionsSig(opts: SessionConfigOption[]): string {
+  return opts.map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`).join(",");
 }
