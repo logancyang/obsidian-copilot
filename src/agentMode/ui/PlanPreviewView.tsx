@@ -165,6 +165,7 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
   useEffect(() => {
     const target = renderTargetRef.current;
     if (!target) return;
+    target.classList.add("markdown-rendered");
     target.empty();
     // `MarkdownRenderer` requires a `Component` for cleanup of internal
     // listeners (links, embeds). We own this lifecycle for the duration of
@@ -227,10 +228,7 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
           Plan no longer pending. Switch back to plan mode to start a new review.
         </div>
       ) : (
-        <div
-          ref={renderTargetRef}
-          className="markdown-rendered tw-flex-1 tw-overflow-auto tw-px-6 tw-py-4"
-        />
+        <div ref={renderTargetRef} className="tw-flex-1 tw-overflow-auto tw-px-6 tw-py-4" />
       )}
     </div>
   );
