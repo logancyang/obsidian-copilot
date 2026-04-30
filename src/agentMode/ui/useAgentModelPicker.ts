@@ -1,27 +1,27 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useSyncExternalStore } from "react";
 import { Notice } from "obsidian";
-import type { ModelInfo, SessionModelState } from "@agentclientprotocol/sdk";
-import type { CustomModel } from "@/aiParams";
 import { logError } from "@/logger";
 import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
-import {
-  buildEffortAdapter,
-  dedupeAvailableModels,
-  stripEffortSuffix,
-  type EffortAdapter,
-} from "@/agentMode/session/effortAdapter";
-import { isAgentModelEnabledOrKept } from "@/agentMode/session/modelEnable";
+import { buildEffortAdapter, type EffortAdapter } from "@/agentMode/session/effortAdapter";
 import { getBackendModelOverrides } from "@/agentMode/session/backendSettingsAccess";
 import {
   buildModeAdapter,
   type CopilotMode,
   type ModeAdapter,
 } from "@/agentMode/session/modeAdapter";
-import type { BackendDescriptor } from "@/agentMode/session/types";
+import {
+  appendBackendSection,
+  buildSynthesizedActiveEntry,
+  computeValueKeyForActive,
+  preserveSavedEffort,
+  resolveAgentId,
+  resolveCollapsedModelId,
+  resolveOptimisticModelState,
+} from "./agentModelPickerHelpers";
 
 export interface AgentModelPickerOverride {
   models: ModelSelectorEntry[];
@@ -52,9 +52,6 @@ export interface AgentModelPickerOverride {
     disabled?: boolean;
   };
 }
-
-/** A pseudo-provider value used for agent-only synthesized entries. */
-const AGENT_PROVIDER = "agent";
 
 /**
  * Build the `modelPickerOverride` for `ChatInput` — one grouped section per
@@ -94,87 +91,78 @@ export function useAgentModelPicker(
   }, [manager, descriptors]);
   const cacheSnapshot = useSyncExternalStore(subscribeCache, getCacheSnapshot, getCacheSnapshot);
 
-  // Re-render only when picker-relevant state changes. The chat UI state
-  // notifies on every streamed chunk during a turn, but none of those change
-  // the picker's view of the world — short-circuiting via a signature keeps
-  // the dropdown's `useMemo` from rebuilding on every tick.
-  const [, forceRender] = useState(0);
-  const sigRef = useRef<string>("");
-  useEffect(() => {
-    if (!manager) return;
-
-    const computeSignature = (): string => {
-      const session = manager.getActiveSession();
-      const ui = manager.getActiveChatUIState();
-      const running = descriptors
-        .map((d) => `${d.id}:${manager.getBackendProcess(d.id)?.isRunning() ? "1" : "0"}`)
-        .join(",");
-      // configOptions: hash by id + currentValue. Picker re-renders when the
-      // effort adapter would change shape — adding/removing the option,
-      // flipping its currentValue, or shifting select choices.
-      const configOpts = (ui?.getConfigOptions() ?? [])
-        .map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`)
-        .join(",");
-      const modeState = ui?.getModeState();
-      const modeSig = modeState
-        ? `${modeState.currentModeId}#${modeState.availableModes.map((m) => m.id).join(",")}`
-        : "";
-      return [
-        session?.internalId ?? "",
-        session?.backendId ?? "",
-        session?.hasUserVisibleMessages() ? "1" : "0",
-        ui?.getModelState()?.currentModelId ?? "",
-        ui?.isModelSwitchSupported() ?? "",
-        ui?.isSetModeSupported() ?? "",
-        running,
-        configOpts,
-        modeSig,
-      ].join("|");
-    };
-
-    const tick = (): void => {
-      const next = computeSignature();
-      if (next === sigRef.current) return;
-      sigRef.current = next;
-      forceRender((n) => n + 1);
-    };
-
-    // Active chat UI state can change identity on session swap. Re-wire the
-    // per-turn subscription whenever the manager fires a lifecycle event.
-    let unsubActive: (() => void) | null = null;
-    let lastUI: ReturnType<typeof manager.getActiveChatUIState> = null;
-    const rewireActive = (): void => {
-      const cur = manager.getActiveChatUIState();
-      if (cur === lastUI) return;
-      unsubActive?.();
-      lastUI = cur;
-      unsubActive = cur?.subscribe(tick) ?? null;
-    };
-    rewireActive();
-
-    const unsub = manager.subscribe(() => {
+  // Picker-relevant session state, as a signature string. Re-subscribes
+  // automatically when the active session changes.
+  const subscribeSession = useCallback(
+    (cb: () => void) => {
+      if (!manager) return () => {};
+      let unsubActive: (() => void) | null = null;
+      let lastUI: ReturnType<typeof manager.getActiveChatUIState> = null;
+      const rewireActive = (): void => {
+        const cur = manager.getActiveChatUIState();
+        if (cur === lastUI) return;
+        unsubActive?.();
+        lastUI = cur;
+        unsubActive = cur?.subscribe(cb) ?? null;
+      };
       rewireActive();
-      tick();
-    });
-    return () => {
-      unsub();
-      unsubActive?.();
-    };
+      const unsub = manager.subscribe(() => {
+        rewireActive();
+        cb();
+      });
+      return () => {
+        unsub();
+        unsubActive?.();
+      };
+    },
+    [manager]
+  );
+  const getSessionSignature = useCallback((): string => {
+    if (!manager) return "";
+    const session = manager.getActiveSession();
+    const ui = manager.getActiveChatUIState();
+    const running = descriptors
+      .map((d) => `${d.id}:${manager.getBackendProcess(d.id)?.isRunning() ? "1" : "0"}`)
+      .join(",");
+    const configOpts = (ui?.getConfigOptions() ?? [])
+      .map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`)
+      .join(",");
+    const modeState = ui?.getModeState();
+    const modeSig = modeState
+      ? `${modeState.currentModeId}#${modeState.availableModes.map((m) => m.id).join(",")}`
+      : "";
+    return [
+      session?.internalId ?? "",
+      session?.backendId ?? "",
+      session?.hasUserVisibleMessages() ? "1" : "0",
+      ui?.getModelState()?.currentModelId ?? "",
+      ui?.isModelSwitchSupported() ?? "",
+      ui?.isSetModeSupported() ?? "",
+      running,
+      configOpts,
+      modeSig,
+    ].join("|");
   }, [manager, descriptors]);
-
-  const activeChatUIState = manager?.getActiveChatUIState() ?? null;
-  const activeSession = manager?.getActiveSession() ?? null;
-  const activeModelState = activeChatUIState?.getModelState() ?? null;
-  const activeConfigOptions = activeChatUIState?.getConfigOptions() ?? null;
-  const activeModeState = activeChatUIState?.getModeState() ?? null;
-  const isModelSwitchSupported = activeChatUIState?.isModelSwitchSupported() ?? null;
-  const isSetConfigOptionSupported = activeChatUIState?.isSetSessionConfigOptionSupported() ?? null;
-  const isSetModeSupported = activeChatUIState?.isSetModeSupported() ?? null;
-  const activeBackendId = activeSession?.backendId ?? null;
-  const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
+  const sessionSignature = useSyncExternalStore(
+    subscribeSession,
+    getSessionSignature,
+    getSessionSignature
+  );
 
   return useMemo<AgentModelPickerOverride | null>(() => {
     if (!manager) return null;
+
+    const activeChatUIState = manager.getActiveChatUIState();
+    const activeSession = manager.getActiveSession();
+    const activeModelState = activeChatUIState?.getModelState() ?? null;
+    const activeConfigOptions = activeChatUIState?.getConfigOptions() ?? null;
+    const activeModeState = activeChatUIState?.getModeState() ?? null;
+    const isModelSwitchSupported = activeChatUIState?.isModelSwitchSupported() ?? null;
+    const isSetConfigOptionSupported =
+      activeChatUIState?.isSetSessionConfigOptionSupported() ?? null;
+    const isSetModeSupported = activeChatUIState?.isSetModeSupported() ?? null;
+    const activeBackendId = activeSession?.backendId ?? null;
+    const activeSessionHasHistory = activeSession?.hasUserVisibleMessages() ?? false;
 
     const entries: ModelSelectorEntry[] = [];
     const activeDescriptor = activeBackendId ? backendRegistry[activeBackendId] : undefined;
@@ -251,10 +239,9 @@ export function useAgentModelPicker(
         (m) => m.modelId === optimisticModelState.currentModelId
       );
       if (currentInfo && !entries.some((e) => getModelKeyFromModel(e) === valueKey)) {
-        const parsed = activeDescriptor.parseEffortFromModelId?.(currentInfo.modelId);
-        const synthesizedId = collapsedActiveId ?? currentInfo.modelId;
-        const cleanName = stripEffortSuffix(currentInfo.name, parsed?.effort) || currentInfo.name;
-        entries.unshift(synthesizeAgentEntry(synthesizedId, cleanName, activeDescriptor));
+        entries.unshift(
+          buildSynthesizedActiveEntry(currentInfo, collapsedActiveId, activeDescriptor)
+        );
       }
     }
 
@@ -367,53 +354,11 @@ export function useAgentModelPicker(
         });
       },
     };
-    // cacheSnapshot is intentionally referenced as a dep — it changes when
-    // the preloader cache updates, which is read inside this memo via
-    // `manager.getCachedModels(...)`. Eslint can't see the indirection.
+    // sessionSignature + cacheSnapshot are intentional deps: they change
+    // when the manager / preloader fires updates, and the memo body reads
+    // those stores via `manager.*` methods that eslint can't see through.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    manager,
-    descriptors,
-    settings.activeModels,
-    // Per-backend slice carries `modelEnabledOverrides` — rebuild when toggles change.
-    settings.agentMode?.backends,
-    activeBackendId,
-    activeModelState,
-    activeConfigOptions,
-    activeModeState,
-    isModelSwitchSupported,
-    isSetConfigOptionSupported,
-    isSetModeSupported,
-    activeSession,
-    activeSessionHasHistory,
-    cacheSnapshot,
-  ]);
-}
-
-/**
- * Resolve an optimistic `SessionModelState` for the active backend: prefer
- * live, fall back to preloader cache. When the cached `currentModelId` isn't
- * actually in `availableModels` (rare — stale probe), prefer the user's
- * persisted preference if present.
- */
-function resolveOptimisticModelState(
-  live: SessionModelState | null,
-  backendId: string | null,
-  descriptor: BackendDescriptor | undefined,
-  getCached: (id: string) => SessionModelState | null,
-  settings: ReturnType<typeof useSettingsValue>
-): SessionModelState | null {
-  if (live) return live;
-  if (!backendId) return null;
-  const cached = getCached(backendId);
-  if (!cached) return null;
-  const ids = new Set(cached.availableModels.map((m) => m.modelId));
-  if (ids.has(cached.currentModelId)) return cached;
-  const preferred = descriptor?.getPreferredModelId?.(settings);
-  if (preferred && ids.has(preferred)) {
-    return { availableModels: cached.availableModels, currentModelId: preferred };
-  }
-  return cached;
+  }, [manager, descriptors, settings, sessionSignature, cacheSnapshot]);
 }
 
 /**
@@ -464,10 +409,6 @@ function buildEffortOverride(
  * Wire a `ModeAdapter` into the picker override block. Routes user picks
  * through `manager.buildModeApplyContext` so the descriptor's mapping
  * decides which native id and ACP call to use.
- *
- * Capability gating is keyed off `adapter.kind` — `setMode` adapters check
- * `isSetModeSupported`, `configOption` adapters check
- * `isSetConfigOptionSupported`.
  */
 function buildModeOverride(
   adapter: ModeAdapter,
@@ -501,194 +442,4 @@ function buildModeOverride(
       });
     },
   };
-}
-
-function appendBackendSection(
-  entries: ModelSelectorEntry[],
-  descriptor: BackendDescriptor,
-  activeModels: CustomModel[],
-  ctx: {
-    liveAvailable: ReadonlyArray<ModelInfo> | null;
-    isRunning: boolean;
-    isActiveBackend: boolean;
-    overrides: Record<string, boolean> | undefined;
-    /** Agent-native modelId of the active session — never filtered out. */
-    keepModelId: string | null;
-  }
-): void {
-  const filterFn = descriptor.filterCopilotModels;
-  const translateFn = descriptor.copilotModelKeyToAgentModelId;
-  const reverseProviderFn = descriptor.agentModelIdToCopilotProvider;
-  const partition = filterFn
-    ? filterFn(activeModels)
-    : { compatible: [] as CustomModel[], incompatible: [] as CustomModel[] };
-
-  // Collapse opencode-style per-variant entries before any iteration so the
-  // dropdown shows one row per base model and the curated/synthesized
-  // dedupe checks operate on the same id surface.
-  const dedupedLive = ctx.liveAvailable
-    ? dedupeAvailableModels(ctx.liveAvailable, descriptor)
-    : null;
-
-  // Apply the user's enable/disable overrides. The collapsed `dedupedLive`
-  // entries are matched by `modelId`, which is the same key written by the
-  // settings tab toggles. `keepModelId` carves out the user's current
-  // selection so curation never strands it.
-  const filteredLive = dedupedLive
-    ? dedupedLive.filter((m) =>
-        isAgentModelEnabledOrKept(descriptor, m, ctx.overrides, ctx.keepModelId)
-      )
-    : null;
-
-  const liveIds = new Set((filteredLive ?? []).map((m) => m.modelId));
-  const curatedProviders = new Set<string>();
-  const curatedAgentIds = new Set<string>();
-  const compiled = partition.compatible
-    .map((m) => ({ m, agentId: translateFn?.(m) }))
-    // Curated entries inherit the same toggle. We can only check overrides
-    // when we know the agent-native id for the model — entries without one
-    // can't be filtered (no key to look up) and pass through. Use the
-    // CustomModel's display name so a backend's default policy that pattern-
-    // matches on `name` (e.g. opencode "Big Pickle") still sees the curated
-    // human label even when `agentId` is opaque.
-    .filter(({ m, agentId }) => {
-      if (!agentId) return true;
-      const synthetic: ModelInfo = { modelId: agentId, name: m.name || agentId };
-      return isAgentModelEnabledOrKept(descriptor, synthetic, ctx.overrides, ctx.keepModelId);
-    });
-  for (const { m, agentId } of compiled) {
-    curatedProviders.add(m.provider);
-    if (agentId) curatedAgentIds.add(agentId);
-  }
-
-  for (const { m, agentId } of compiled) {
-    const isAvailable = ctx.isRunning && agentId !== undefined && liveIds.has(agentId);
-    let disabledReason: string | undefined;
-    if (ctx.isActiveBackend && !ctx.isRunning) {
-      disabledReason = `Start ${descriptor.displayName} session to use`;
-    } else if (ctx.isActiveBackend && !isAvailable) {
-      disabledReason = "Restart agent to load";
-    }
-    entries.push({
-      ...m,
-      enabled: true,
-      _group: descriptor.displayName,
-      _backendId: descriptor.id,
-      _disabledReason: disabledReason,
-    });
-  }
-
-  // Live entries — surface uncurated models. Skip providers the user has
-  // already curated; those should not be drowned out by the agent catalog.
-  if (!filteredLive) return;
-  for (const m of filteredLive) {
-    if (curatedAgentIds.has(m.modelId)) continue;
-    const copilotProvider = reverseProviderFn?.(m.modelId);
-    if (copilotProvider && curatedProviders.has(copilotProvider)) continue;
-    entries.push(synthesizeAgentEntry(m.modelId, m.name, descriptor));
-  }
-}
-
-function synthesizeAgentEntry(
-  modelId: string,
-  humanName: string,
-  descriptor: BackendDescriptor
-): ModelSelectorEntry {
-  // `name` is the agent-native model id verbatim; uniqueness across backends
-  // comes from `_backendId`, which `getModelKeyFromModel` prefixes into the
-  // returned key.
-  return {
-    name: modelId,
-    provider: AGENT_PROVIDER,
-    enabled: true,
-    isBuiltIn: false,
-    displayName: humanName || modelId,
-    _group: descriptor.displayName,
-    _backendId: descriptor.id,
-  };
-}
-
-function computeValueKeyForActive(
-  currentModelId: string,
-  collapsedId: string,
-  descriptor: BackendDescriptor,
-  activeModels: CustomModel[]
-): string {
-  const translateFn = descriptor.copilotModelKeyToAgentModelId;
-  if (translateFn) {
-    const filterFn = descriptor.filterCopilotModels;
-    const partition = filterFn
-      ? filterFn(activeModels)
-      : { compatible: activeModels, incompatible: [] };
-    const match = partition.compatible.find((m) => translateFn(m) === currentModelId);
-    // Curated entries pushed by `appendBackendSection` carry `_backendId`,
-    // so their keys are prefixed (`<backend>:<name>|<provider>`). The match
-    // comes straight from `activeModels` and lacks the prefix — re-attach it
-    // here so the returned key compares equal to the entry the picker stored.
-    if (match) return getModelKeyFromModel({ ...match, _backendId: descriptor.id });
-  }
-  // For effort-variant backends, match the id retained by
-  // `dedupeAvailableModels`: bare id when advertised, otherwise the first
-  // concrete variant observed for this base.
-  return getModelKeyFromModel({
-    name: collapsedId,
-    provider: AGENT_PROVIDER,
-    _backendId: descriptor.id,
-  } as CustomModel & { _backendId: string });
-}
-
-/**
- * Resolve the model id used for a collapsed picker row while preserving an
- * advertised id for effort-only catalogs.
- */
-function resolveCollapsedModelId(
-  modelId: string,
-  availableModels: ReadonlyArray<ModelInfo>,
-  descriptor: BackendDescriptor
-): string {
-  const parsedCurrent = descriptor.parseEffortFromModelId?.(modelId);
-  if (!parsedCurrent) return modelId;
-
-  let firstVariant: string | null = null;
-  for (const m of availableModels) {
-    const parsed = descriptor.parseEffortFromModelId?.(m.modelId);
-    if (!parsed || parsed.baseId !== parsedCurrent.baseId) continue;
-    if (parsed.effort === null) return m.modelId;
-    firstVariant ??= m.modelId;
-  }
-  return firstVariant ?? modelId;
-}
-
-/**
- * For effort-in-modelId backends (codex/opencode), recompose a picker-
- * resolved agent id with the user's saved effort. The picker collapses
- * per-effort variants into one row per base, so the surviving entry's
- * effort is whichever variant `dedupeAvailableModels` happened to keep —
- * not necessarily what the user picked.
- */
-function preserveSavedEffort(
-  agentId: string,
-  descriptor: BackendDescriptor,
-  settings: ReturnType<typeof useSettingsValue>
-): string {
-  if (!descriptor.parseEffortFromModelId || !descriptor.composeModelId) return agentId;
-  const parsedNew = descriptor.parseEffortFromModelId(agentId);
-  if (!parsedNew) return agentId;
-  const savedId = descriptor.getPreferredModelId?.(settings);
-  const savedEffort = savedId ? descriptor.parseEffortFromModelId(savedId)?.effort : null;
-  if (!savedEffort) return agentId;
-  return descriptor.composeModelId(parsedNew.baseId, savedEffort);
-}
-
-function resolveAgentId(
-  entry: ModelSelectorEntry,
-  descriptor: BackendDescriptor,
-  activeModels: CustomModel[]
-): string | undefined {
-  // Synthesized agent entries store the raw agent model id directly in `name`.
-  if (entry.provider === AGENT_PROVIDER) return entry.name;
-  if (!descriptor.copilotModelKeyToAgentModelId) return undefined;
-  const match = activeModels.find((m) => m.name === entry.name && m.provider === entry.provider);
-  if (!match) return undefined;
-  return descriptor.copilotModelKeyToAgentModelId(match);
 }

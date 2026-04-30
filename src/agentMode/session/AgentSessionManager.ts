@@ -71,15 +71,31 @@ export class AgentSessionManager {
   private startingBackendId: BackendId | null = null;
   private lastError: string | null = null;
   private readonly preloader: AgentModelPreloader;
-  // Per-session bookkeeping for auto-save: persisted file path (set after
-  // first successful save), pending debounce timer, last serialized snapshot
-  // signature for no-op skipping, and the unsubscribe returned by
-  // `session.subscribe()` so we tear it down on close/shutdown.
-  private readonly persistedPaths = new Map<string, string>();
-  private readonly saveTimers = new Map<string, ReturnType<typeof setTimeout>>();
-  private readonly persistenceUnsubs = new Map<string, () => void>();
-  private readonly lastSavedSignatures = new Map<string, string>();
-  private readonly modelCacheUnsubs = new Map<string, () => void>();
+  // Per-session bookkeeping, all keyed by `internalId`:
+  // - `path`: persisted file (set after first successful save)
+  // - `timer`: pending debounce timer
+  // - `unsub`: tear-down for the auto-save `session.subscribe()`
+  // - `signature`: last serialized snapshot, for no-op skipping
+  // - `modelCacheUnsub`: tear-down for the model-cache mirror subscription
+  private readonly persistState = new Map<
+    string,
+    {
+      path?: string;
+      timer?: ReturnType<typeof setTimeout>;
+      unsub?: () => void;
+      signature?: string;
+      modelCacheUnsub?: () => void;
+    }
+  >();
+
+  private getPersistState(internalId: string) {
+    let entry = this.persistState.get(internalId);
+    if (!entry) {
+      entry = {};
+      this.persistState.set(internalId, entry);
+    }
+    return entry;
+  }
 
   constructor(
     private readonly app: App,
@@ -498,7 +514,7 @@ export class AgentSessionManager {
     for (const session of allSessions) {
       await this.drainAutoSave(session);
     }
-    for (const id of Array.from(this.persistenceUnsubs.keys())) {
+    for (const id of Array.from(this.persistState.keys())) {
       this.detachAutoSave(id);
     }
 
@@ -549,21 +565,21 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager has been shut down");
     }
 
-    for (const [internalId, path] of this.persistedPaths.entries()) {
-      if (path !== file.path) continue;
+    for (const [internalId, state] of this.persistState.entries()) {
+      if (state.path !== file.path) continue;
       const existing = this.sessions.get(internalId);
       if (existing && existing.getStatus() !== "closed") {
         this.setActiveSession(internalId);
         return existing;
       }
-      this.persistedPaths.delete(internalId);
+      state.path = undefined;
     }
 
     const loaded = await this.opts.persistenceManager.loadFile(file);
     const session = await this.createSession(loaded.backendId);
     session.store.loadMessages(loaded.messages);
     if (loaded.label) session.setLabel(loaded.label);
-    this.persistedPaths.set(session.internalId, file.path);
+    this.getPersistState(session.internalId).path = file.path;
     this.notify();
     return session;
   }
@@ -578,19 +594,18 @@ export class AgentSessionManager {
       onStatusChanged: () => {},
       onLabelChanged: trigger,
     });
-    this.persistenceUnsubs.set(session.internalId, unsubscribe);
+    this.getPersistState(session.internalId).unsub = unsubscribe;
   }
 
   private scheduleAutoSave(session: AgentSession): void {
-    const existingTimer = this.saveTimers.get(session.internalId);
-    if (existingTimer) clearTimeout(existingTimer);
-    const timer = setTimeout(() => {
-      this.saveTimers.delete(session.internalId);
+    const state = this.getPersistState(session.internalId);
+    if (state.timer) clearTimeout(state.timer);
+    state.timer = setTimeout(() => {
+      state.timer = undefined;
       this.flushAutoSave(session).catch((e) =>
         logWarn(`[AgentMode] auto-save failed for ${session.internalId}`, e)
       );
     }, AUTOSAVE_DEBOUNCE_MS);
-    this.saveTimers.set(session.internalId, timer);
   }
 
   private async flushAutoSave(session: AgentSession): Promise<void> {
@@ -608,15 +623,16 @@ export class AgentSessionManager {
     const signature = `${label ?? ""} ${messages.length} ${
       messages[messages.length - 1]?.message ?? ""
     }`;
-    if (this.lastSavedSignatures.get(session.internalId) === signature) return;
+    const state = this.getPersistState(session.internalId);
+    if (state.signature === signature) return;
 
     const result = await persistence.saveSession(messages, session.backendId, {
       label,
-      existingPath: this.persistedPaths.get(session.internalId),
+      existingPath: state.path,
     });
     if (result) {
-      this.persistedPaths.set(session.internalId, result.path);
-      this.lastSavedSignatures.set(session.internalId, signature);
+      state.path = result.path;
+      state.signature = signature;
     }
   }
 
@@ -626,10 +642,10 @@ export class AgentSessionManager {
    * session is disposed. Safe to call when no save is pending.
    */
   private async drainAutoSave(session: AgentSession): Promise<void> {
-    const timer = this.saveTimers.get(session.internalId);
-    if (!timer) return;
-    clearTimeout(timer);
-    this.saveTimers.delete(session.internalId);
+    const state = this.persistState.get(session.internalId);
+    if (!state?.timer) return;
+    clearTimeout(state.timer);
+    state.timer = undefined;
     try {
       await this.flushAutoSave(session);
     } catch (e) {
@@ -638,17 +654,12 @@ export class AgentSessionManager {
   }
 
   private detachAutoSave(internalId: string): void {
-    const timer = this.saveTimers.get(internalId);
-    if (timer) clearTimeout(timer);
-    this.saveTimers.delete(internalId);
-    const unsubscribe = this.persistenceUnsubs.get(internalId);
-    if (unsubscribe) unsubscribe();
-    this.persistenceUnsubs.delete(internalId);
-    this.persistedPaths.delete(internalId);
-    this.lastSavedSignatures.delete(internalId);
-    const cacheUnsub = this.modelCacheUnsubs.get(internalId);
-    if (cacheUnsub) cacheUnsub();
-    this.modelCacheUnsubs.delete(internalId);
+    const state = this.persistState.get(internalId);
+    if (!state) return;
+    if (state.timer) clearTimeout(state.timer);
+    state.unsub?.();
+    state.modelCacheUnsub?.();
+    this.persistState.delete(internalId);
   }
 
   /**
@@ -675,7 +686,7 @@ export class AgentSessionManager {
       onStatusChanged: () => {},
       onModelChanged: () => sync(),
     });
-    this.modelCacheUnsubs.set(session.internalId, unsubscribe);
+    this.getPersistState(session.internalId).modelCacheUnsub = unsubscribe;
   }
 
   private async ensureBackend(

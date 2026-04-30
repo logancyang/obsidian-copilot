@@ -158,81 +158,34 @@ export function ModelSelector({
   );
 }
 
-export interface EffortSelectorProps {
-  options: { label: string; value: string | null }[];
-  value: string | null;
-  onChange: (value: string | null) => void;
-  disabled?: boolean;
-  className?: string;
-}
-
-/**
- * Sibling effort picker rendered next to `ModelSelector` in Agent Mode when
- * the active model has multiple effort variants (opencode-style modelId
- * suffixes) or exposes a `SessionConfigOption` for effort
- * (claude-code-style). Stays hidden when the override doesn't include an
- * `effort` block — kept in this file so the visual styling tracks
- * `ModelSelector`. `value: null` represents the bare/"Default" entry and is
- * only present for mechanisms that support an unsuffixed selection.
- */
-export function EffortSelector({
-  options,
-  value,
-  onChange,
-  disabled = false,
-  className,
-}: EffortSelectorProps) {
-  const current = options.find((o) => o.value === value);
-  const label = current?.label ?? "Default";
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost2"
-          size="sm"
-          disabled={disabled}
-          className={cn("tw-shrink-0 tw-text-muted", className)}
-          title="Reasoning effort"
-        >
-          <span className="tw-truncate">{label}</span>
-          {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
-        {options.map((opt) => (
-          <DropdownMenuItem key={opt.value ?? "__default__"} onSelect={() => onChange(opt.value)}>
-            {opt.label}
-          </DropdownMenuItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
-}
-
-export interface ModeSelectorProps<TValue extends string> {
+export interface PickerDropdownProps<TValue> {
   options: { label: string; value: TValue }[];
   value: TValue | null;
   onChange: (value: TValue) => void;
+  /** Label shown when nothing matches (e.g. "Default" for effort, "Mode"). */
+  fallbackLabel: string;
+  /** Tooltip on the trigger button. */
+  title: string;
   disabled?: boolean;
   className?: string;
 }
 
 /**
- * Sibling mode picker rendered next to `ModelSelector` in Agent Mode. Surfaces
- * Copilot-canonical operational modes (build/plan/auto-build) when the
- * active backend supports them. Stays hidden when the override doesn't
- * include a `mode` block. Generic over the canonical mode type so callers
- * own the value vocabulary.
+ * Sibling picker rendered next to `ModelSelector` in Agent Mode (effort,
+ * mode, ...). Generic over the value type so callers own the vocabulary —
+ * effort uses `string | null` (the "Default" row), mode uses a canonical
+ * union. Stays hidden when the override doesn't include the relevant block.
  */
-export function ModeSelector<TValue extends string>({
+export function PickerDropdown<TValue>({
   options,
   value,
   onChange,
+  fallbackLabel,
+  title,
   disabled = false,
   className,
-}: ModeSelectorProps<TValue>) {
+}: PickerDropdownProps<TValue>) {
   const current = options.find((o) => o.value === value);
-  const label = current?.label ?? "Mode";
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
@@ -241,15 +194,18 @@ export function ModeSelector<TValue extends string>({
           size="sm"
           disabled={disabled}
           className={cn("tw-shrink-0 tw-text-muted", className)}
-          title="Operational mode"
+          title={title}
         >
-          <span className="tw-truncate">{label}</span>
+          <span className="tw-truncate">{current?.label ?? fallbackLabel}</span>
           {!disabled && <ChevronDown className="tw-mt-0.5 tw-size-4 tw-shrink-0" />}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="start" className="tw-max-h-64 tw-overflow-y-auto">
         {options.map((opt) => (
-          <DropdownMenuItem key={opt.value} onSelect={() => onChange(opt.value)}>
+          <DropdownMenuItem
+            key={String(opt.value ?? "__default__")}
+            onSelect={() => onChange(opt.value)}
+          >
             {opt.label}
           </DropdownMenuItem>
         ))}

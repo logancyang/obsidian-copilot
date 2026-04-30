@@ -1,6 +1,6 @@
 import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
+import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/_shared/simpleBinaryBackend";
 
 /**
  * Spawns the user-provided `codex-acp` binary
@@ -16,19 +16,9 @@ export class CodexBackend implements AcpBackend {
   readonly displayName = "Codex";
 
   async buildSpawnDescriptor(_ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
-    const binaryPath = getSettings().agentMode?.backends?.codex?.binaryPath;
-    if (!binaryPath) {
-      throw new Error(
-        "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp."
-      );
-    }
-    return {
-      command: binaryPath,
-      args: [],
-      env: {
-        ...process.env,
-        PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
-      },
-    };
+    return buildSimpleSpawnDescriptor(
+      getSettings().agentMode?.backends?.codex?.binaryPath,
+      "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp."
+    );
   }
 }

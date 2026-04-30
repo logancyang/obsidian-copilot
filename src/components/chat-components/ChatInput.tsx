@@ -10,9 +10,8 @@ import { ChainType } from "@/chainFactory";
 import { AddImageModal } from "@/components/modals/AddImageModal";
 import { Button } from "@/components/ui/button";
 import {
-  EffortSelector,
   ModelSelector,
-  ModeSelector,
+  PickerDropdown,
   type ModelSelectorEntry,
 } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -812,19 +811,23 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
               className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
             {modelPickerOverride?.effort && (
-              <EffortSelector
+              <PickerDropdown
                 options={modelPickerOverride.effort.options}
                 value={modelPickerOverride.effort.value}
                 onChange={modelPickerOverride.effort.onChange}
                 disabled={modelPickerOverride.effort.disabled}
+                fallbackLabel="Default"
+                title="Reasoning effort"
               />
             )}
             {modelPickerOverride?.mode && (
-              <ModeSelector
+              <PickerDropdown
                 options={modelPickerOverride.mode.options}
                 value={modelPickerOverride.mode.value}
                 onChange={modelPickerOverride.mode.onChange}
                 disabled={modelPickerOverride.mode.disabled}
+                fallbackLabel="Mode"
+                title="Operational mode"
               />
             )}
           </div>
@@ -832,17 +835,15 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
 
         <div className="tw-flex tw-items-center tw-gap-1">
           {isGenerating ? (
-            <>
-              <Button
-                variant="ghost2"
-                size="fit"
-                className="tw-text-muted"
-                onClick={() => onStopGenerating()}
-              >
-                <StopCircle className="tw-size-4" />
-                Stop
-              </Button>
-            </>
+            <Button
+              variant="ghost2"
+              size="fit"
+              className="tw-text-muted"
+              onClick={() => onStopGenerating()}
+            >
+              <StopCircle className="tw-size-4" />
+              Stop
+            </Button>
           ) : (
             <>
               {toolControls}

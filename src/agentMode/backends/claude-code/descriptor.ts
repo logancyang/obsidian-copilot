@@ -1,4 +1,5 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk";
+import { z } from "zod";
 import { logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
@@ -10,11 +11,36 @@ import {
 import { ClaudeCodeBackend } from "./ClaudeCodeBackend";
 import { ClaudeCodeInstallModal } from "./ClaudeCodeInstallModal";
 import { ClaudeCodeSettingsPanel } from "./ClaudeCodeSettingsPanel";
-import { claudeCodeMetaParser } from "./meta";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { binaryPathInstallState } from "@/agentMode/backends/_shared/simpleBinaryBackend";
+import type { BackendMetaParser, NormalizedToolCallMeta } from "@/agentMode/session/backendMeta";
 import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+
+// Wire shape of `_meta` on Claude Code's session/update notifications. All
+// fields are optional — not every frame carries every key (e.g.
+// `parentToolUseId` only appears on sub-tool calls spawned by `Task`).
+const ClaudeCodeMetaSchema = z.object({
+  claudeCode: z.object({
+    toolName: z.string().optional(),
+    parentToolUseId: z.string().optional(),
+    toolResponse: z.unknown().optional(),
+  }),
+});
+
+const claudeCodeMetaParser: BackendMetaParser = {
+  parseToolCallMeta(meta): NormalizedToolCallMeta | null {
+    const parsed = ClaudeCodeMetaSchema.safeParse(meta);
+    if (!parsed.success) return null;
+    const cc = parsed.data.claudeCode;
+    return {
+      vendorToolName: cc.toolName,
+      isPlanProposal: cc.toolName === "ExitPlanMode",
+      parentToolCallId: cc.parentToolUseId,
+    };
+  },
+};
 
 export const CLAUDE_CODE_BINARY_NAME = "claude-agent-acp";
 export const CLAUDE_CODE_INSTALL_COMMAND = "npm install -g @agentclientprotocol/claude-agent-acp";
@@ -35,9 +61,7 @@ export const ClaudeCodeBackendDescriptor: BackendDescriptor = {
   meta: claudeCodeMetaParser,
 
   getInstallState(settings: CopilotSettings): InstallState {
-    const binaryPath = settings.agentMode?.backends?.["claude-code"]?.binaryPath;
-    if (!binaryPath) return { kind: "absent" };
-    return { kind: "ready", source: "custom" };
+    return binaryPathInstallState(settings.agentMode?.backends?.["claude-code"]?.binaryPath);
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {

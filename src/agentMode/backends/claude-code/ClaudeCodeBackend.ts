@@ -1,6 +1,6 @@
 import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import { augmentPathForNodeShebang } from "@/agentMode/acp/nodeShebangPath";
+import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/_shared/simpleBinaryBackend";
 
 /**
  * Spawns the user-provided `claude-agent-acp` binary
@@ -19,19 +19,9 @@ export class ClaudeCodeBackend implements AcpBackend {
   readonly displayName = "Claude Code";
 
   async buildSpawnDescriptor(_ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
-    const binaryPath = getSettings().agentMode?.backends?.["claude-code"]?.binaryPath;
-    if (!binaryPath) {
-      throw new Error(
-        "Claude Code binary path not configured. Open Agent Mode settings and set the path to claude-agent-acp."
-      );
-    }
-    return {
-      command: binaryPath,
-      args: [],
-      env: {
-        ...process.env,
-        PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
-      },
-    };
+    return buildSimpleSpawnDescriptor(
+      getSettings().agentMode?.backends?.["claude-code"]?.binaryPath,
+      "Claude Code binary path not configured. Open Agent Mode settings and set the path to claude-agent-acp."
+    );
   }
 }

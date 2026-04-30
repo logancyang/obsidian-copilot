@@ -192,8 +192,11 @@ export default class CopilotPlugin extends Plugin {
 
     this.initActiveLeafChangeHandler();
 
-    this.ribbonIconEl = this.addRibbonIcon(this.getRibbonIconName(), this.getRibbonTooltip(), () =>
-      this.handleRibbonClick()
+    const agentReady = this.canUseAgentView();
+    this.ribbonIconEl = this.addRibbonIcon(
+      agentReady ? "bot" : "message-square",
+      agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat",
+      () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
     registerCommands(this, undefined, getSettings());
@@ -602,10 +605,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   toggleAgentView() {
-    if (!this.canUseAgentView()) {
-      this.notifyAgentUnavailable();
-      return;
-    }
+    if (!this.requireAgentView()) return;
     const leaves = this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE);
     if (leaves.length > 0) {
       this.deactivateAgentView();
@@ -615,10 +615,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async activateAgentView(): Promise<WorkspaceLeaf | null> {
-    if (!this.canUseAgentView()) {
-      this.notifyAgentUnavailable();
-      return null;
-    }
+    if (!this.requireAgentView()) return null;
     return this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
   }
 
@@ -627,13 +624,11 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async newAgentChat(): Promise<void> {
-    if (!this.canUseAgentView() || !this.agentSessionManager) {
-      this.notifyAgentUnavailable();
-      return;
-    }
+    const manager = this.requireAgentView();
+    if (!manager) return;
     await this.activateAgentView();
     try {
-      await this.agentSessionManager.createSession();
+      await manager.createSession();
     } catch (error) {
       logWarn("[CopilotPlugin] Failed to create agent session", error);
       new Notice("Failed to create agent session. Check Copilot logs.");
@@ -655,40 +650,32 @@ export default class CopilotPlugin extends Plugin {
     return leaf;
   }
 
+  private requireAgentView(): AgentSessionManager | null {
+    if (Platform.isMobile) {
+      new Notice("Agent Chat is not available on mobile.");
+      return null;
+    }
+    if (!getSettings().agentMode?.enabled) {
+      new Notice("Enable Agent Mode in Copilot settings first.");
+      return null;
+    }
+    if (!this.agentSessionManager) {
+      new Notice("Agent Chat is not initialized.");
+      return null;
+    }
+    return this.agentSessionManager;
+  }
+
   private canUseAgentView(): boolean {
     return !Platform.isMobile && !!this.agentSessionManager && !!getSettings().agentMode?.enabled;
   }
 
-  private notifyAgentUnavailable() {
-    if (Platform.isMobile) {
-      new Notice("Agent Chat is not available on mobile.");
-    } else if (!getSettings().agentMode?.enabled) {
-      new Notice("Enable Agent Mode in Copilot settings first.");
-    } else {
-      new Notice("Agent Chat is not initialized.");
-    }
-  }
-
-  private getRibbonIconName(): string {
-    return this.canUseAgentView() ? "bot" : "message-square";
-  }
-
-  private getRibbonTooltip(): string {
-    return this.canUseAgentView() ? "Open Copilot Agent Chat" : "Open Copilot Chat";
-  }
-
-  private handleRibbonClick() {
-    if (this.canUseAgentView()) {
-      this.activateAgentView();
-    } else {
-      this.activateView();
-    }
-  }
-
   private refreshRibbonIcon() {
     if (!this.ribbonIconEl) return;
-    setIcon(this.ribbonIconEl, this.getRibbonIconName());
-    const tooltip = this.getRibbonTooltip();
+    const agentReady = this.canUseAgentView();
+    const icon = agentReady ? "bot" : "message-square";
+    const tooltip = agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat";
+    setIcon(this.ribbonIconEl, icon);
     this.ribbonIconEl.setAttribute("aria-label", tooltip);
     this.ribbonIconEl.setAttribute("title", tooltip);
   }
@@ -865,14 +852,12 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private async loadAgentChatHistory(file: TFile): Promise<void> {
-    if (!this.canUseAgentView() || !this.agentSessionManager) {
-      this.notifyAgentUnavailable();
-      return;
-    }
+    const manager = this.requireAgentView();
+    if (!manager) return;
     const leaf = await this.activateAgentView();
     if (!leaf) return;
 
-    await this.agentSessionManager.loadSessionFromHistory(file);
+    await manager.loadSessionFromHistory(file);
     void this.touchChatHistoryLastAccessedAt(file);
 
     (leaf.view as CopilotAgentView | undefined)?.updateView();

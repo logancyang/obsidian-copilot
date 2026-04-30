@@ -51,17 +51,12 @@ class ClientSideConnection {
   cancel = jest.fn(async () => undefined);
 }
 
-class AgentSideConnection {
-  constructor() {}
-}
-
 const ndJsonStream = jest.fn(() => ({}));
 const PROTOCOL_VERSION = 1;
 
 module.exports = {
   RequestError,
   ClientSideConnection,
-  AgentSideConnection,
   ndJsonStream,
   PROTOCOL_VERSION,
 };

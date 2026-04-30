@@ -11,6 +11,7 @@ import { CodexInstallModal } from "./CodexInstallModal";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { binaryPathInstallState } from "@/agentMode/backends/_shared/simpleBinaryBackend";
 import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
 import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
@@ -46,9 +47,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   meta: noopBackendMetaParser,
 
   getInstallState(settings: CopilotSettings): InstallState {
-    const binaryPath = settings.agentMode?.backends?.codex?.binaryPath;
-    if (!binaryPath) return { kind: "absent" };
-    return { kind: "ready", source: "custom" };
+    return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
   },
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {

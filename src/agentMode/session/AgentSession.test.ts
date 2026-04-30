@@ -4,6 +4,7 @@ import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import type { TFile } from "obsidian";
 import { AgentSession, buildPromptBlocks, tryReadExitPlanModeCall } from "./AgentSession";
 import type { BackendMetaParser } from "./backendMeta";
+import type { BackendDescriptor } from "./types";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -1089,11 +1090,7 @@ describe("AgentSession plan proposal lifecycle", () => {
     meta: {
       parseToolCallMeta: () => ({ isPlanProposal: true }),
     } as BackendMetaParser,
-  } as unknown as Parameters<typeof AgentSession>[0] extends { getDescriptor?: infer F }
-    ? F extends () => infer R
-      ? R
-      : never
-    : never;
+  } as unknown as BackendDescriptor;
 
   it("does not resurrect the plan card when a late tool_call_update arrives for a finalized proposal", async () => {
     const mock = makeMockBackend();
