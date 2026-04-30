@@ -16,7 +16,7 @@ import {
   type ModelSelectorEntry,
 } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import type { CopilotMode } from "@/settings/model";
+import type { CopilotMode } from "@/agentMode";
 import { isPlusChain } from "@/utils";
 import {
   mergeWebTabContexts,

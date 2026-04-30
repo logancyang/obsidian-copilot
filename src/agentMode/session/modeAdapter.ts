@@ -1,8 +1,17 @@
 import type { SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
-import type { CopilotMode } from "@/settings/model";
 import type { BackendDescriptor } from "@/agentMode/session/types";
 
-export type { CopilotMode } from "@/settings/model";
+/**
+ * Copilot's canonical operational modes for Agent Mode. Each backend's
+ * `getModeMapping` projects these onto its own native mode/agent ids.
+ *
+ *   - `default` — balanced; agent may write/exec but the user must approve
+ *                 each permission request. Picked when the user hasn't
+ *                 explicitly selected a mode.
+ *   - `plan`    — agent drafts a plan; no writes.
+ *   - `auto`    — same as default, but bypass all permission prompts.
+ */
+export type CopilotMode = "default" | "plan" | "auto";
 
 /** One option in the mode picker — a Copilot-canonical mode the backend supports. */
 export interface ModeOption {
@@ -34,7 +43,7 @@ export interface ModeMapping {
  */
 export interface ModeAdapter {
   kind: "setMode" | "configOption";
-  /** Display order: build → plan → auto-build, filtered to supported entries. */
+  /** Display order: default → plan → auto, filtered to supported entries. */
   options: ModeOption[];
   /** Canonical projection of the agent's current mode, or `null` if not mapped. */
   currentValue: CopilotMode | null;
@@ -50,11 +59,11 @@ export interface ModeApplyContext {
   persistMode(value: CopilotMode): Promise<void>;
 }
 
-const CANONICAL_ORDER: CopilotMode[] = ["build", "plan", "auto-build"];
+const CANONICAL_ORDER: CopilotMode[] = ["default", "plan", "auto"];
 const CANONICAL_LABELS: Record<CopilotMode, string> = {
-  build: "Build",
+  default: "Default",
   plan: "Plan",
-  "auto-build": "Auto-build",
+  auto: "Auto",
 };
 
 /**

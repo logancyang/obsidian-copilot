@@ -19,9 +19,8 @@ import { AgentSession } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import type { EffortApplyContext } from "./effortAdapter";
-import type { ModeApplyContext } from "./modeAdapter";
+import type { CopilotMode, ModeApplyContext } from "./modeAdapter";
 import type { BackendDescriptor, BackendId } from "./types";
-import type { CopilotMode } from "@/settings/model";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 

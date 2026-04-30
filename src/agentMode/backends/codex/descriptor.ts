@@ -4,7 +4,6 @@ import {
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
   type CodexBackendSettings,
-  type CopilotMode,
   type CopilotSettings,
 } from "@/settings/model";
 import { CodexBackend } from "./CodexBackend";
@@ -13,7 +12,7 @@ import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
-import type { ModeMapping } from "@/agentMode/session/modeAdapter";
+import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 
 export const CODEX_BINARY_NAME = "codex-acp";
@@ -120,7 +119,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   getModeMapping(): ModeMapping {
     return {
       kind: "setMode",
-      canonical: { build: "auto", plan: "read-only", "auto-build": "full-access" },
+      canonical: { default: "auto", plan: "read-only", auto: "full-access" },
     };
   },
 
@@ -134,8 +133,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
    * id isn't currently in `availableModes` (filtered out by `getModeMapping`).
    */
   async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
-    const persistedMode = settings.agentMode?.backends?.codex?.selectedMode;
-    if (!persistedMode) return;
+    const persistedMode = settings.agentMode?.backends?.codex?.selectedMode ?? "default";
     const modeState = session.getModeState();
     if (!modeState) return;
     const native = CodexBackendDescriptor.getModeMapping?.(modeState, session.getConfigOptions())

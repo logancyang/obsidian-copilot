@@ -237,7 +237,7 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
 /**
  * Close any open plan-preview tab(s) bound to the given proposal id. Used
  * after the user approves the plan so the read-only preview doesn't linger
- * once the agent has switched into build mode.
+ * once the agent has switched to `default` mode.
  */
 export function closePlanPreview(app: App, proposalId: string): void {
   for (const leaf of app.workspace.getLeavesOfType(PLAN_PREVIEW_VIEW_TYPE)) {

@@ -2,6 +2,12 @@ import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
+// Type-only import: `CopilotMode` is owned by Agent Mode (its canonical
+// vocabulary lives in `@/agentMode/session/modeAdapter`). We persist the
+// chosen value here and validate it locally — going through the barrel
+// at runtime would create an init-time cycle (settings → agentMode →
+// backends → constants → settings).
+import type { CopilotMode } from "@/agentMode";
 import { type ChainType } from "@/chainFactory";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
@@ -227,19 +233,6 @@ export interface CopilotSettings {
   };
 }
 
-/**
- * Canonical Copilot Agent Mode operational mode. Mapped per-backend to a
- * native ACP mode id (Claude Code permission modes, Codex sandbox presets,
- * OpenCode managed agents). Picked in `ChatInput`; replayed on fresh
- * sessions.
- *
- *   - `build`     — default; agent may write/exec but the user must approve
- *                   each permission request.
- *   - `plan`      — agent drafts a plan; no writes.
- *   - `auto-build`— same as build, but bypass all permission prompts.
- */
-export type CopilotMode = "build" | "plan" | "auto-build";
-
 /** Settings slice owned by the Claude Code backend. */
 export interface ClaudeCodeBackendSettings {
   /** Path to the user-provided `claude-agent-acp` binary. */
@@ -256,7 +249,7 @@ export interface ClaudeCodeBackendSettings {
    * each new session resolves. Unset = follow the agent's default.
    */
   selectedEffort?: string;
-  /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
+  /** Sticky operational mode. Unset = fall back to canonical `default`. */
   selectedMode?: CopilotMode;
   /**
    * Sparse user overrides for which agent-reported models should appear in
@@ -278,7 +271,7 @@ export interface CodexBackendSettings {
    * effort through this single field, no separate `selectedEffort` needed.
    */
   selectedModelKey?: string;
-  /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
+  /** Sticky operational mode. Unset = fall back to canonical `default`. */
   selectedMode?: CopilotMode;
   /** Sparse user overrides; see `ClaudeCodeBackendSettings.modelEnabledOverrides`. */
   modelEnabledOverrides?: Record<string, boolean>;
@@ -311,7 +304,7 @@ export interface OpencodeBackendSettings {
    * surfaced in the Copilot tab strip or chat history.
    */
   probeSessionId?: string;
-  /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
+  /** Sticky operational mode. Unset = fall back to canonical `default`. */
   selectedMode?: CopilotMode;
   /** Sparse user overrides; see `ClaudeCodeBackendSettings.modelEnabledOverrides`. */
   modelEnabledOverrides?: Record<string, boolean>;
@@ -825,8 +818,11 @@ function nonEmptyString(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined;
 }
 
+/** Validate a persisted `CopilotMode`, migrating legacy `build`/`auto-build`. */
 function sanitizeCopilotMode(v: unknown): CopilotMode | undefined {
-  return v === "build" || v === "plan" || v === "auto-build" ? v : undefined;
+  if (v === "build") return "default";
+  if (v === "auto-build") return "auto";
+  return v === "default" || v === "plan" || v === "auto" ? v : undefined;
 }
 
 function sanitizeModelEnabledOverrides(raw: unknown): Record<string, boolean> | undefined {

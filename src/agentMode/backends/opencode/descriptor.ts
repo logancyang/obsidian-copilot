@@ -7,7 +7,6 @@ import {
   getSettings,
   setSettings,
   subscribeToSettingsChange,
-  type CopilotMode,
   type CopilotSettings,
 } from "@/settings/model";
 import { findCustomModel } from "@/utils";
@@ -24,7 +23,7 @@ import type { ChatModelProviders } from "@/constants";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
 import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
-import type { ModeMapping } from "@/agentMode/session/modeAdapter";
+import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 import * as path from "node:path";
 
@@ -282,8 +281,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
    * `mode` configOption is already registered.
    */
   async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
-    const persistedMode = settings.agentMode?.backends?.opencode?.selectedMode;
-    if (!persistedMode) return;
+    const persistedMode = settings.agentMode?.backends?.opencode?.selectedMode ?? "default";
     const mapping = OpencodeBackendDescriptor.getModeMapping?.(
       session.getModeState(),
       session.getConfigOptions()

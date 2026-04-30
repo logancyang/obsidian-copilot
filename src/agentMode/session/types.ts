@@ -3,12 +3,12 @@ import type React from "react";
 import type { ModelInfo, SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
-import type { CopilotMode, CopilotSettings } from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 import type { AcpBackend, BackendId } from "@/agentMode/acp/types";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendMetaParser } from "@/agentMode/session/backendMeta";
-import type { ModeMapping } from "@/agentMode/session/modeAdapter";
+import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 
 // Re-export so consumers in session/ and ui/ can import a single types entry.
 export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/types";

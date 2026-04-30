@@ -3,8 +3,9 @@ import { BREVILABS_MODELS_BASE_URL, ChatModelProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { logInfo, logWarn } from "@/logger";
 import { findCustomModel } from "@/utils";
-import { getSettings, type CopilotMode } from "@/settings/model";
+import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
+import type { CopilotMode } from "@/agentMode/session/modeAdapter";
 
 /**
  * Map from Copilot's `ChatModelProviders` enum value (as stored in
@@ -34,7 +35,7 @@ const COPILOT_PLUS_PROVIDER_ID = "copilot-plus";
 
 /**
  * Custom OpenCode agent id provisioned via `OPENCODE_CONFIG_CONTENT`. Maps
- * to Copilot's canonical `build` mode (writes/exec allowed, but the user
+ * to Copilot's canonical `default` mode (writes/exec allowed, but the user
  * approves each request). The built-in `build` agent doesn't ask.
  */
 export const OPENCODE_COPILOT_BUILD_AGENT_ID = "copilot-build";
@@ -52,9 +53,9 @@ export const OPENCODE_BUILTIN_BUILD_AGENT_ID = "build";
  * never disagree.
  */
 export const OPENCODE_CANONICAL_MODE_AGENT_IDS: Record<CopilotMode, string> = {
-  build: OPENCODE_COPILOT_BUILD_AGENT_ID,
+  default: OPENCODE_COPILOT_BUILD_AGENT_ID,
   plan: OPENCODE_BUILTIN_PLAN_AGENT_ID,
-  "auto-build": OPENCODE_BUILTIN_BUILD_AGENT_ID,
+  auto: OPENCODE_BUILTIN_BUILD_AGENT_ID,
 };
 
 /** OpenCode-style model id: `<providerId>/<modelName>`. */
@@ -211,11 +212,11 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
 
   const config: Record<string, unknown> = { provider };
 
-  // Inject a managed `copilot-build` agent so the mode picker can offer a
-  // "build with ask-before-write" option. The built-in `build` agent never
-  // asks (used as our `auto-build` mode) and `plan` is read-only (our `plan`
-  // mode), but neither covers the canonical `build` semantic of "let me edit,
-  // but ask first" — hence the custom agent.
+  // Inject a managed `copilot-build` agent so the mode picker can offer the
+  // canonical "default" semantic — let the agent edit, but ask first. The
+  // built-in `build` agent never asks (used as our `auto` mode) and `plan`
+  // is read-only (our `plan` mode); neither covers ask-before-write, hence
+  // the custom agent.
   config.agent = {
     [OPENCODE_COPILOT_BUILD_AGENT_ID]: {
       mode: "primary",
@@ -238,14 +239,12 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
   }
 
   // Apply sticky mode preference at spawn via OpenCode's `default_agent` so
-  // the first turn already runs in the user's chosen agent. The runtime
-  // picker still calls `session/set_config_option` for in-session switches;
-  // this just closes the cold-start gap where the `mode` configOption isn't
-  // registered until after `applyInitialSessionConfig` runs.
-  const selectedMode = s.agentMode?.backends?.opencode?.selectedMode;
-  if (selectedMode) {
-    config.default_agent = OPENCODE_CANONICAL_MODE_AGENT_IDS[selectedMode];
-  }
+  // the first turn already runs in the user's chosen agent — closes the
+  // cold-start gap where the `mode` configOption isn't yet registered.
+  // Falls back to canonical `default` (ask-before-write `copilot-build`);
+  // otherwise OpenCode would land on its no-ask built-in `build` agent.
+  const selectedMode = s.agentMode?.backends?.opencode?.selectedMode ?? "default";
+  config.default_agent = OPENCODE_CANONICAL_MODE_AGENT_IDS[selectedMode];
 
   return config;
 }

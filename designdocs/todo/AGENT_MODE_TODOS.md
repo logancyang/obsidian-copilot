@@ -24,7 +24,7 @@
   - prompt user to download opencode or auto detect path
   - make agent mode toggle more obvious
   - make agent mode the default for new users
-  - Control which models are available in which agent
+  - [x] Control which models are available in which agent
     - Add a settings control to configure what agent models are available in the model selector
 - [x] P1: Codex support
 - [x] P1: Cancel chat

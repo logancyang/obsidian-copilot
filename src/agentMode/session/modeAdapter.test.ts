@@ -57,7 +57,7 @@ describe("buildModeAdapter — setMode kind (Claude/Codex style)", () => {
     const desc = stubDescriptor(
       (): ModeMapping => ({
         kind: "setMode",
-        canonical: { build: "default", plan: "plan", "auto-build": "bypassPermissions" },
+        canonical: { default: "default", plan: "plan", auto: "bypassPermissions" },
       })
     );
     const adapter = buildModeAdapter(desc, {
@@ -65,15 +65,15 @@ describe("buildModeAdapter — setMode kind (Claude/Codex style)", () => {
       configOptions: null,
     });
     expect(adapter).not.toBeNull();
-    expect(adapter!.options.map((o) => o.value)).toEqual(["build", "plan"]);
-    expect(adapter!.currentValue).toBe("build");
+    expect(adapter!.options.map((o) => o.value)).toEqual(["default", "plan"]);
+    expect(adapter!.currentValue).toBe("default");
   });
 
   it("returns null when no canonical option resolves", () => {
     const desc = stubDescriptor(
       (): ModeMapping => ({
         kind: "setMode",
-        canonical: { build: "auto", "auto-build": "full-access" },
+        canonical: { default: "auto", auto: "full-access" },
       })
     );
     const adapter = buildModeAdapter(desc, {
@@ -87,7 +87,7 @@ describe("buildModeAdapter — setMode kind (Claude/Codex style)", () => {
     const desc = stubDescriptor(
       (): ModeMapping => ({
         kind: "setMode",
-        canonical: { build: "default", plan: "plan" },
+        canonical: { default: "default", plan: "plan" },
       })
     );
     const adapter = buildModeAdapter(desc, {
@@ -99,25 +99,25 @@ describe("buildModeAdapter — setMode kind (Claude/Codex style)", () => {
     expect(adapter!.currentValue).toBeNull();
   });
 
-  it("orders options canonically: build → plan → auto-build", () => {
+  it("orders options canonically: default → plan → auto", () => {
     const desc = stubDescriptor(
       (): ModeMapping => ({
         kind: "setMode",
-        canonical: { "auto-build": "bypassPermissions", build: "default", plan: "plan" },
+        canonical: { auto: "bypassPermissions", default: "default", plan: "plan" },
       })
     );
     const adapter = buildModeAdapter(desc, {
       modeState: modeState("default", ["default", "plan", "bypassPermissions"]),
       configOptions: null,
     });
-    expect(adapter!.options.map((o) => o.value)).toEqual(["build", "plan", "auto-build"]);
+    expect(adapter!.options.map((o) => o.value)).toEqual(["default", "plan", "auto"]);
   });
 
   it("applyMode dispatches to setSessionMode and persists", async () => {
     const desc = stubDescriptor(
       (): ModeMapping => ({
         kind: "setMode",
-        canonical: { build: "default", plan: "plan", "auto-build": "bypassPermissions" },
+        canonical: { default: "default", plan: "plan", auto: "bypassPermissions" },
       })
     );
     const adapter = buildModeAdapter(desc, {
@@ -135,7 +135,7 @@ describe("buildModeAdapter — setMode kind (Claude/Codex style)", () => {
     const desc = stubDescriptor(
       (): ModeMapping => ({
         kind: "setMode",
-        canonical: { build: "default" },
+        canonical: { default: "default" },
       })
     );
     expect(buildModeAdapter(desc, { modeState: null, configOptions: null })).toBeNull();
@@ -149,9 +149,9 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
         kind: "configOption",
         configId: "mode",
         canonical: {
-          build: "copilot-build",
+          default: "copilot-build",
           plan: "plan",
-          "auto-build": "build",
+          auto: "build",
         },
       })
     );
@@ -160,8 +160,8 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
       configOptions: [selectOption("mode", "copilot-build", ["copilot-build", "plan", "build"])],
     });
     expect(adapter).not.toBeNull();
-    expect(adapter!.options.map((o) => o.value)).toEqual(["build", "plan", "auto-build"]);
-    expect(adapter!.currentValue).toBe("build");
+    expect(adapter!.options.map((o) => o.value)).toEqual(["default", "plan", "auto"]);
+    expect(adapter!.currentValue).toBe("default");
   });
 
   it("hides canonical options whose native id isn't offered yet", () => {
@@ -170,9 +170,9 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
         kind: "configOption",
         configId: "mode",
         canonical: {
-          build: "copilot-build",
+          default: "copilot-build",
           plan: "plan",
-          "auto-build": "build",
+          auto: "build",
         },
       })
     );
@@ -180,7 +180,7 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
       modeState: null,
       configOptions: [selectOption("mode", "build", ["build", "plan"])],
     });
-    expect(adapter!.options.map((o) => o.value)).toEqual(["plan", "auto-build"]);
+    expect(adapter!.options.map((o) => o.value)).toEqual(["plan", "auto"]);
   });
 
   it("applyMode dispatches to setSessionConfigOption and persists", async () => {
@@ -189,8 +189,8 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
         kind: "configOption",
         configId: "mode",
         canonical: {
-          build: "copilot-build",
-          "auto-build": "build",
+          default: "copilot-build",
+          auto: "build",
         },
       })
     );
@@ -199,9 +199,9 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
       configOptions: [selectOption("mode", "copilot-build", ["copilot-build", "build"])],
     })!;
     const ctx = makeApplyCtx();
-    await adapter.applyMode("auto-build" as CopilotMode, ctx);
+    await adapter.applyMode("auto" as CopilotMode, ctx);
     expect(ctx.setSessionConfigOption).toHaveBeenCalledWith("mode", "build");
-    expect(ctx.persistMode).toHaveBeenCalledWith("auto-build");
+    expect(ctx.persistMode).toHaveBeenCalledWith("auto");
     expect(ctx.setSessionMode).not.toHaveBeenCalled();
   });
 
@@ -210,7 +210,7 @@ describe("buildModeAdapter — configOption kind (OpenCode style)", () => {
       (): ModeMapping => ({
         kind: "configOption",
         configId: "mode",
-        canonical: { build: "copilot-build" },
+        canonical: { default: "copilot-build" },
       })
     );
     const adapter = buildModeAdapter(desc, {

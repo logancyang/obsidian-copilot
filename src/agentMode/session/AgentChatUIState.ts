@@ -174,10 +174,11 @@ export class AgentChatUIState implements AgentChatBackend {
     } else {
       // Non-gated path: OpenCode end-of-turn proposals, or Claude Code
       // post-rejection plan-file revisions where the underlying permission
-      // was already resolved. Approve switches to canonical build and queues
-      // a follow-up; Feedback sends the typed text; Reject is informational.
+      // was already resolved. Approve switches to canonical default and
+      // queues a follow-up; Feedback sends the typed text; Reject is
+      // informational.
       if (decision === "approve") {
-        await this.applyCanonicalBuildMode();
+        await this.applyCanonicalDefaultMode();
         this.tryFollowUp("Proceed with the plan.");
       } else if (trimmedFeedback) {
         this.tryFollowUp(trimmedFeedback);
@@ -197,20 +198,20 @@ export class AgentChatUIState implements AgentChatBackend {
   }
 
   /**
-   * Switch the session to canonical "build" mode by consulting the backend
+   * Switch the session to canonical `default` mode by consulting the backend
    * descriptor's mode mapping. No-op when the descriptor doesn't advertise a
-   * mapping (older/simpler backends) or when the build native id isn't
+   * mapping (older/simpler backends) or when the default native id isn't
    * available. Errors are logged but never throw — the follow-up proceed
    * message still goes out.
    */
-  private async applyCanonicalBuildMode(): Promise<void> {
+  private async applyCanonicalDefaultMode(): Promise<void> {
     try {
       const mapping = this.descriptor.getModeMapping?.(
         this.session.getModeState(),
         this.session.getConfigOptions()
       );
       if (!mapping) return;
-      const native = mapping.canonical.build;
+      const native = mapping.canonical.default;
       if (!native) return;
       if (mapping.kind === "setMode") {
         await this.session.setMode(native);
@@ -218,7 +219,7 @@ export class AgentChatUIState implements AgentChatBackend {
         await this.session.setConfigOption(mapping.configId, native);
       }
     } catch (e) {
-      logWarn("[AgentChatUIState] could not switch to build mode after approve", e);
+      logWarn("[AgentChatUIState] could not switch to default mode after approve", e);
     }
   }
 }

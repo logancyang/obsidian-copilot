@@ -40,10 +40,10 @@ export interface AgentModelPickerOverride {
     disabled?: boolean;
   };
   /**
-   * Sibling mode picker — Copilot-canonical operational modes (build/plan/
-   * auto-build) mapped per-backend to native ACP modes (Claude permission
-   * modes, Codex sandbox presets) or to OpenCode's managed agents. Absent
-   * when the active backend doesn't support any canonical mode.
+   * Sibling mode picker — Copilot-canonical operational modes (default/plan/
+   * auto) mapped per-backend to native ACP modes (Claude permission modes,
+   * Codex sandbox presets) or to OpenCode's managed agents. Absent when the
+   * active backend doesn't support any canonical mode.
    */
   mode?: {
     options: { label: string; value: CopilotMode }[];
@@ -277,7 +277,7 @@ export function useAgentModelPicker(
       }
     }
 
-    // Mode picker — Copilot-canonical operational modes (build/plan/auto-build)
+    // Mode picker — Copilot-canonical operational modes (default/plan/auto)
     // mapped per-backend to native ACP modes or OpenCode managed agents.
     let modeBlock: AgentModelPickerOverride["mode"] | undefined;
     if (activeBackendId && activeDescriptor && (optimisticModeState || optimisticConfigOptions)) {

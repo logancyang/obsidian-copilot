@@ -274,13 +274,13 @@ describe("buildOpencodeConfig", () => {
         debugFullFrames: false,
         backends: {
           opencode: {
-            selectedMode: "build",
+            selectedMode: "default",
           },
         },
       },
     });
-    const buildCfg = (await buildOpencodeConfig()) as { default_agent?: string };
-    expect(buildCfg.default_agent).toBe("copilot-build");
+    const defaultCfg = (await buildOpencodeConfig()) as { default_agent?: string };
+    expect(defaultCfg.default_agent).toBe("copilot-build");
 
     setSettings({
       agentMode: {
@@ -302,16 +302,16 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
-        backends: { opencode: { selectedMode: "auto-build" } },
+        backends: { opencode: { selectedMode: "auto" } },
       },
     });
     const autoCfg = (await buildOpencodeConfig()) as { default_agent?: string };
     expect(autoCfg.default_agent).toBe("build");
   });
 
-  it("omits default_agent when no mode is persisted", async () => {
+  it("falls back to canonical default (copilot-build) when no mode is persisted", async () => {
     const cfg = (await buildOpencodeConfig()) as { default_agent?: string };
-    expect(cfg.default_agent).toBeUndefined();
+    expect(cfg.default_agent).toBe("copilot-build");
   });
 
   it("ignores stale selectedModelKey that doesn't resolve to an active model", async () => {

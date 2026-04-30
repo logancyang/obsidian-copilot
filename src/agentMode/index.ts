@@ -27,6 +27,7 @@ export { isAgentModelEnabled } from "./session/modelEnable";
 export { getBackendModelOverrides } from "./session/backendSettingsAccess";
 export { dedupeAvailableModels, buildEffortAdapter } from "./session/effortAdapter";
 export type { EffortAdapter, EffortOption } from "./session/effortAdapter";
+export type { CopilotMode } from "./session/modeAdapter";
 export type { StoredMcpServer, McpTransport } from "./session/mcpResolver";
 export { sanitizeStoredMcpServers } from "./session/mcpResolver";
 export { McpServersPanel } from "./ui/McpServersPanel";

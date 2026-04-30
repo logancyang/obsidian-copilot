@@ -5,7 +5,6 @@ import {
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
   type ClaudeCodeBackendSettings,
-  type CopilotMode,
   type CopilotSettings,
 } from "@/settings/model";
 import { ClaudeCodeBackend } from "./ClaudeCodeBackend";
@@ -14,7 +13,7 @@ import { ClaudeCodeSettingsPanel } from "./ClaudeCodeSettingsPanel";
 import { claudeCodeMetaParser } from "./meta";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
-import type { ModeMapping } from "@/agentMode/session/modeAdapter";
+import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
 
 export const CLAUDE_CODE_BINARY_NAME = "claude-agent-acp";
@@ -101,9 +100,9 @@ export const ClaudeCodeBackendDescriptor: BackendDescriptor = {
     return {
       kind: "setMode",
       canonical: {
-        build: "default",
+        default: "default",
         plan: "plan",
-        "auto-build": "bypassPermissions",
+        auto: "bypassPermissions",
       },
     };
   },
@@ -121,7 +120,7 @@ export const ClaudeCodeBackendDescriptor: BackendDescriptor = {
     const claudeSettings = settings.agentMode?.backends?.["claude-code"];
     await Promise.all([
       replayPersistedEffort(session, claudeSettings?.selectedEffort),
-      replayPersistedMode(session, claudeSettings?.selectedMode),
+      replayPersistedMode(session, claudeSettings?.selectedMode ?? "default"),
     ]);
   },
 
@@ -152,9 +151,8 @@ async function replayPersistedEffort(
 
 async function replayPersistedMode(
   session: AgentSession,
-  persistedMode: CopilotMode | undefined
+  persistedMode: CopilotMode
 ): Promise<void> {
-  if (!persistedMode) return;
   const modeState = session.getModeState();
   if (!modeState) return;
   const mapping = ClaudeCodeBackendDescriptor.getModeMapping?.(
