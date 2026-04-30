@@ -129,6 +129,13 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     await getOpencodeBinaryManager(plugin).refreshInstallState();
   },
 
+  isModelEnabledByDefault(model) {
+    // Default-enable only "Big Pickle"; users widen the catalog via the
+    // per-model toggles in the Agents tab.
+    const re = /big[\s_-]*pickle/i;
+    return re.test(model.name) || re.test(model.modelId);
+  },
+
   filterCopilotModels(models: CustomModel[]) {
     const compatible: CustomModel[] = [];
     const incompatible: CustomModel[] = [];

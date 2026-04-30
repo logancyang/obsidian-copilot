@@ -67,6 +67,26 @@ describe("OpencodeBackendDescriptor.composeModelId", () => {
   });
 });
 
+describe("OpencodeBackendDescriptor.isModelEnabledByDefault", () => {
+  const fn = OpencodeBackendDescriptor.isModelEnabledByDefault!;
+
+  it("matches 'Big Pickle' in name", () => {
+    expect(fn({ modelId: "anthropic/foo", name: "Big Pickle" })).toBe(true);
+    expect(fn({ modelId: "anthropic/foo", name: "BIG PICKLE" })).toBe(true);
+    expect(fn({ modelId: "anthropic/foo", name: "big-pickle" })).toBe(true);
+  });
+
+  it("matches 'big-pickle' in modelId", () => {
+    expect(fn({ modelId: "openai/big-pickle", name: "Some Display" })).toBe(true);
+    expect(fn({ modelId: "openai/big_pickle", name: "Some Display" })).toBe(true);
+  });
+
+  it("returns false for unrelated models", () => {
+    expect(fn({ modelId: "anthropic/claude-sonnet-4-5", name: "Claude Sonnet 4.5" })).toBe(false);
+    expect(fn({ modelId: "openai/gpt-5", name: "GPT-5" })).toBe(false);
+  });
+});
+
 describe("OpencodeBackendDescriptor.isPlanModePlanFilePath", () => {
   const match = OpencodeBackendDescriptor.isPlanModePlanFilePath!;
 

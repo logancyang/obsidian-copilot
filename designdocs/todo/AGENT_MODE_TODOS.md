@@ -15,6 +15,8 @@
 - [ ] P1: Edit diff UI - https://agentclientprotocol.com/protocol/tool-calls#diffs
 - [ ] P1: Agent mode selector (yolo, plan, safe) - https://agentclientprotocol.com/protocol/session-config-options
   - Basic functionality is added but doesn't work well yet. Need thorough test.
+- [ ] P1: Merge copilot models with opencode models
+  - How to design the settings to configure this?
 - [x] P1: Agent effort selector
 - [ ] P1: How to support custom command and quick ask?
 - [ ] P1: Content type support (image, audio) - https://agentclientprotocol.com/protocol/content
@@ -42,6 +44,10 @@
 - [ ] P1: Model, effort, and mode is not persisted across sessions
 - [ ] P1: Detect legacy ACP binaries
   - Some features may not work if using legacy binaries
+- [ ] P1: Agent update management
+  - what if the ACP package changes
+  - how to update ACP packages?
+  - how to update downloaded binary?
 - [ ] P2: Claude vscode plugin add comment to plan capability
   - It makes iterating on plan a lot easier
 - [x] P2: Rebrand chat send button

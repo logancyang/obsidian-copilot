@@ -9,7 +9,6 @@ import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
 import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/settings/model";
-import { AgentModeSettings } from "@/settings/v2/components/AgentModeSettings";
 import { PlusSettings } from "@/settings/v2/components/PlusSettings";
 import { checkModelApiKey, formatDateTime } from "@/utils";
 import { isSortStrategy } from "@/utils/recentUsageManager";
@@ -465,8 +464,6 @@ export const BasicSettings: React.FC = () => {
           />
         </div>
       </section>
-
-      <AgentModeSettings />
     </div>
   );
 };

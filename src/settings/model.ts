@@ -258,6 +258,12 @@ export interface ClaudeCodeBackendSettings {
   selectedEffort?: string;
   /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
   selectedMode?: CopilotMode;
+  /**
+   * Sparse user overrides for which agent-reported models should appear in
+   * the model picker. Keyed by agent-native modelId. Absent → fall back to
+   * the descriptor's `isModelEnabledByDefault` policy.
+   */
+  modelEnabledOverrides?: Record<string, boolean>;
 }
 
 /** Settings slice owned by the Codex backend. */
@@ -274,6 +280,8 @@ export interface CodexBackendSettings {
   selectedModelKey?: string;
   /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
   selectedMode?: CopilotMode;
+  /** Sparse user overrides; see `ClaudeCodeBackendSettings.modelEnabledOverrides`. */
+  modelEnabledOverrides?: Record<string, boolean>;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -305,6 +313,8 @@ export interface OpencodeBackendSettings {
   probeSessionId?: string;
   /** Sticky operational mode. Unset = use whatever native mode the agent picks. */
   selectedMode?: CopilotMode;
+  /** Sparse user overrides; see `ClaudeCodeBackendSettings.modelEnabledOverrides`. */
+  modelEnabledOverrides?: Record<string, boolean>;
 }
 
 export const settingsStore = createStore();
@@ -815,6 +825,21 @@ function nonEmptyString(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined;
 }
 
+function sanitizeCopilotMode(v: unknown): CopilotMode | undefined {
+  return v === "build" || v === "plan" || v === "auto-build" ? v : undefined;
+}
+
+function sanitizeModelEnabledOverrides(raw: unknown): Record<string, boolean> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof k === "string" && k.length > 0 && k.length <= 256 && typeof v === "boolean") {
+      out[k] = v;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function sanitizeClaudeCodeBackendSettings(raw: unknown): ClaudeCodeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
@@ -822,6 +847,8 @@ function sanitizeClaudeCodeBackendSettings(raw: unknown): ClaudeCodeBackendSetti
     binaryPath: nonEmptyString(r.binaryPath),
     selectedModelKey: nonEmptyString(r.selectedModelKey),
     selectedEffort: nonEmptyString(r.selectedEffort),
+    selectedMode: sanitizeCopilotMode(r.selectedMode),
+    modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
   };
 }
 
@@ -831,14 +858,16 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
   return {
     binaryPath: nonEmptyString(r.binaryPath),
     selectedModelKey: nonEmptyString(r.selectedModelKey),
+    selectedMode: sanitizeCopilotMode(r.selectedMode),
+    modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
   };
 }
 
 function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
-  const binaryPath = typeof r.binaryPath === "string" ? r.binaryPath : undefined;
-  const binaryVersion = typeof r.binaryVersion === "string" ? r.binaryVersion : undefined;
+  const binaryPath = nonEmptyString(r.binaryPath);
+  const binaryVersion = nonEmptyString(r.binaryVersion);
   const rawSource = r.binarySource;
   let binarySource: "managed" | "custom" | undefined;
   if (rawSource === "managed" || rawSource === "custom") {
@@ -846,11 +875,15 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
   } else {
     binarySource = binaryPath ? "managed" : undefined;
   }
-  const selectedModelKey =
-    typeof r.selectedModelKey === "string" && r.selectedModelKey ? r.selectedModelKey : undefined;
-  const probeSessionId =
-    typeof r.probeSessionId === "string" && r.probeSessionId ? r.probeSessionId : undefined;
-  return { binaryPath, binaryVersion, binarySource, selectedModelKey, probeSessionId };
+  return {
+    binaryPath,
+    binaryVersion,
+    binarySource,
+    selectedModelKey: nonEmptyString(r.selectedModelKey),
+    probeSessionId: nonEmptyString(r.probeSessionId),
+    selectedMode: sanitizeCopilotMode(r.selectedMode),
+    modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+  };
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {

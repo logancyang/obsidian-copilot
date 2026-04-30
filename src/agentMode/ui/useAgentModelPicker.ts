@@ -14,6 +14,8 @@ import {
   stripEffortSuffix,
   type EffortAdapter,
 } from "@/agentMode/session/effortAdapter";
+import { isAgentModelEnabledOrKept } from "@/agentMode/session/modelEnable";
+import { getBackendModelOverrides } from "@/agentMode/session/backendSettingsAccess";
 import {
   buildModeAdapter,
   type CopilotMode,
@@ -202,10 +204,26 @@ export function useAgentModelPicker(
         : cachedAvailable;
       const isRunning = manager.getBackendProcess(descriptor.id)?.isRunning() ?? false;
 
+      const overrides = getBackendModelOverrides(settings, descriptor.id);
+      // Carve out the user's current pick so curation never strands it. For
+      // the active backend that's the live session model; for inactive
+      // backends, the persisted preference (base-id only, to match
+      // `dedupedLive`).
+      let keepModelId: string | null = null;
+      if (isActiveBackend) {
+        keepModelId = optimisticModelState?.currentModelId ?? null;
+      } else {
+        const persisted = descriptor.getPreferredModelId?.(settings);
+        if (persisted) {
+          keepModelId = descriptor.parseEffortFromModelId?.(persisted)?.baseId ?? persisted;
+        }
+      }
       appendBackendSection(entries, descriptor, settings.activeModels ?? [], {
         liveAvailable,
         isRunning,
         isActiveBackend,
+        overrides,
+        keepModelId,
       });
     }
 
@@ -356,6 +374,8 @@ export function useAgentModelPicker(
     manager,
     descriptors,
     settings.activeModels,
+    // Per-backend slice carries `modelEnabledOverrides` — rebuild when toggles change.
+    settings.agentMode?.backends,
     activeBackendId,
     activeModelState,
     activeConfigOptions,
@@ -490,6 +510,9 @@ function appendBackendSection(
     liveAvailable: ReadonlyArray<ModelInfo> | null;
     isRunning: boolean;
     isActiveBackend: boolean;
+    overrides: Record<string, boolean> | undefined;
+    /** Agent-native modelId of the active session — never filtered out. */
+    keepModelId: string | null;
   }
 ): void {
   const filterFn = descriptor.filterCopilotModels;
@@ -506,10 +529,32 @@ function appendBackendSection(
     ? dedupeAvailableModels(ctx.liveAvailable, descriptor)
     : null;
 
-  const liveIds = new Set((dedupedLive ?? []).map((m) => m.modelId));
+  // Apply the user's enable/disable overrides. The collapsed `dedupedLive`
+  // entries are matched by `modelId`, which is the same key written by the
+  // settings tab toggles. `keepModelId` carves out the user's current
+  // selection so curation never strands it.
+  const filteredLive = dedupedLive
+    ? dedupedLive.filter((m) =>
+        isAgentModelEnabledOrKept(descriptor, m, ctx.overrides, ctx.keepModelId)
+      )
+    : null;
+
+  const liveIds = new Set((filteredLive ?? []).map((m) => m.modelId));
   const curatedProviders = new Set<string>();
   const curatedAgentIds = new Set<string>();
-  const compiled = partition.compatible.map((m) => ({ m, agentId: translateFn?.(m) }));
+  const compiled = partition.compatible
+    .map((m) => ({ m, agentId: translateFn?.(m) }))
+    // Curated entries inherit the same toggle. We can only check overrides
+    // when we know the agent-native id for the model — entries without one
+    // can't be filtered (no key to look up) and pass through. Use the
+    // CustomModel's display name so a backend's default policy that pattern-
+    // matches on `name` (e.g. opencode "Big Pickle") still sees the curated
+    // human label even when `agentId` is opaque.
+    .filter(({ m, agentId }) => {
+      if (!agentId) return true;
+      const synthetic: ModelInfo = { modelId: agentId, name: m.name || agentId };
+      return isAgentModelEnabledOrKept(descriptor, synthetic, ctx.overrides, ctx.keepModelId);
+    });
   for (const { m, agentId } of compiled) {
     curatedProviders.add(m.provider);
     if (agentId) curatedAgentIds.add(agentId);
@@ -517,13 +562,12 @@ function appendBackendSection(
 
   for (const { m, agentId } of compiled) {
     const isAvailable = ctx.isRunning && agentId !== undefined && liveIds.has(agentId);
-    const disabledReason = ctx.isActiveBackend
-      ? ctx.isRunning
-        ? isAvailable
-          ? undefined
-          : "Restart agent to load"
-        : `Start ${descriptor.displayName} session to use`
-      : undefined;
+    let disabledReason: string | undefined;
+    if (ctx.isActiveBackend && !ctx.isRunning) {
+      disabledReason = `Start ${descriptor.displayName} session to use`;
+    } else if (ctx.isActiveBackend && !isAvailable) {
+      disabledReason = "Restart agent to load";
+    }
     entries.push({
       ...m,
       enabled: true,
@@ -535,8 +579,8 @@ function appendBackendSection(
 
   // Live entries — surface uncurated models. Skip providers the user has
   // already curated; those should not be drowned out by the agent catalog.
-  if (!dedupedLive) return;
-  for (const m of dedupedLive) {
+  if (!filteredLive) return;
+  for (const m of filteredLive) {
     if (curatedAgentIds.has(m.modelId)) continue;
     const copilotProvider = reverseProviderFn?.(m.modelId);
     if (copilotProvider && curatedProviders.has(copilotProvider)) continue;

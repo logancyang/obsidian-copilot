@@ -1,6 +1,6 @@
 import type { App } from "obsidian";
 import type React from "react";
-import type { SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
+import type { ModelInfo, SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
 import type { CopilotMode, CopilotSettings } from "@/settings/model";
@@ -178,6 +178,18 @@ export interface BackendDescriptor {
    * (the matcher should still recognize absolute data-dir paths).
    */
   isPlanModePlanFilePath?(absolutePath: string, cwd: string | null | undefined): boolean;
+
+  /**
+   * Optional: default enable/disable policy for an agent-reported model when
+   * the user has no explicit `modelEnabledOverrides` entry. Returning `true`
+   * surfaces the model in the chat picker and the settings tab; `false`
+   * hides it. Omit to default-enable every agent-reported model.
+   *
+   * Used as a no-config curation knob — Codex and Opencode advertise large
+   * catalogs and we ship with one-model defaults; Claude Code defaults to
+   * showing all reported models.
+   */
+  isModelEnabledByDefault?(model: ModelInfo): boolean;
 
   /**
    * Optional: previously-stored ACP sessionId of the backend's dedicated

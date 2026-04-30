@@ -72,6 +72,13 @@ export const CodexBackendDescriptor: BackendDescriptor = {
 
   SettingsPanel: CodexSettingsPanel,
 
+  isModelEnabledByDefault(model) {
+    // Default-enable only gpt-5.5; digit-boundary on each side avoids
+    // matching `15.5` or `5.50`. Users widen via the Agents tab toggles.
+    const re = /(^|[^0-9])5\.5([^0-9]|$)/;
+    return re.test(model.name) || re.test(model.modelId);
+  },
+
   getPreferredModelId(settings: CopilotSettings): string | undefined {
     const key = settings.agentMode?.backends?.codex?.selectedModelKey;
     return key && key.length > 0 ? key : undefined;

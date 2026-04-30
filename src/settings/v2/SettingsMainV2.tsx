@@ -7,21 +7,23 @@ import { useLatestVersion } from "@/hooks/useLatestVersion";
 import CopilotPlugin from "@/main";
 import { resetSettings } from "@/settings/model";
 import { CommandSettings } from "@/settings/v2/components/CommandSettings";
-import { Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
+import { Bot, Cog, Command, Cpu, Database, Sparkles, Wrench } from "lucide-react";
 import React from "react";
 import { AdvancedSettings } from "./components/AdvancedSettings";
+import { AgentSettings } from "./components/AgentSettings";
 import { BasicSettings } from "./components/BasicSettings";
 import { CopilotPlusSettings } from "./components/CopilotPlusSettings";
 import { ModelSettings } from "./components/ModelSettings";
 import { QASettings } from "./components/QASettings";
 
-const TAB_IDS = ["basic", "model", "QA", "command", "plus", "advanced"] as const;
+const TAB_IDS = ["basic", "model", "agent", "QA", "command", "plus", "advanced"] as const;
 type TabId = (typeof TAB_IDS)[number];
 
 // tab icons
 const icons: Record<TabId, JSX.Element> = {
   basic: <Cog className="tw-size-5" />,
   model: <Cpu className="tw-size-5" />,
+  agent: <Bot className="tw-size-5" />,
   QA: <Database className="tw-size-5" />,
   command: <Command className="tw-size-5" />,
   plus: <Sparkles className="tw-size-5" />,
@@ -32,17 +34,30 @@ const icons: Record<TabId, JSX.Element> = {
 const components: Record<TabId, React.FC> = {
   basic: () => <BasicSettings />,
   model: () => <ModelSettings />,
+  agent: () => <AgentSettings />,
   QA: () => <QASettings />,
   command: () => <CommandSettings />,
   plus: () => <CopilotPlusSettings />,
   advanced: () => <AdvancedSettings />,
 };
 
+// Tab labels — most tabs derive from the id, but "agent" capitalizes to a
+// human-friendly label.
+const TAB_LABELS: Record<TabId, string> = {
+  basic: "Basic",
+  model: "Model",
+  agent: "Agents",
+  QA: "QA",
+  command: "Command",
+  plus: "Plus",
+  advanced: "Advanced",
+};
+
 // tabs
 const tabs: TabItemType[] = TAB_IDS.map((id) => ({
   id,
   icon: icons[id],
-  label: id.charAt(0).toUpperCase() + id.slice(1),
+  label: TAB_LABELS[id],
 }));
 
 const SettingsContent: React.FC = () => {
