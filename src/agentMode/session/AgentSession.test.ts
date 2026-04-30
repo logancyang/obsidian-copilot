@@ -1084,6 +1084,75 @@ describe("AgentSession multi-session routing", () => {
   });
 });
 
+describe("AgentSession plan proposal lifecycle", () => {
+  const planParserDescriptor = {
+    meta: {
+      parseToolCallMeta: () => ({ isPlanProposal: true }),
+    } as BackendMetaParser,
+  } as unknown as Parameters<typeof AgentSession>[0] extends { getDescriptor?: infer F }
+    ? F extends () => infer R
+      ? R
+      : never
+    : never;
+
+  it("does not resurrect the plan card when a late tool_call_update arrives for a finalized proposal", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: string }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+      getDescriptor: () => planParserDescriptor,
+    });
+    const { turn } = session.sendPrompt("plan something");
+
+    // Initial tool_call: agent emits ExitPlanMode → publishGatedPlan runs.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-plan-1",
+        title: "ExitPlanMode",
+        kind: "other",
+        status: "pending",
+        rawInput: { plan: "# proposed plan body" },
+        _meta: { claudeCode: { toolName: "ExitPlanMode" } },
+      },
+    });
+    const initialPlan = session.getCurrentPlan();
+    expect(initialPlan).not.toBeNull();
+    expect(initialPlan?.decision).toBe("pending");
+    expect(initialPlan?.pendingToolCallId).toBe("tc-plan-1");
+
+    // User decides — finalize clears the singleton.
+    expect(session.finalizePlanDecision(initialPlan!.id)).toBe(true);
+    expect(session.getCurrentPlan()).toBeNull();
+
+    // Late tool_call_update for the same ExitPlanMode arrives (e.g. status →
+    // completed after the agent received the allow). Without the
+    // decided-toolCallId guard, this would re-fire publishGatedPlan and
+    // resurrect a fresh pending card with a new id.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc-plan-1",
+        status: "completed",
+        rawInput: { plan: "# proposed plan body" },
+        _meta: { claudeCode: { toolName: "ExitPlanMode" } },
+      },
+    });
+    expect(session.getCurrentPlan()).toBeNull();
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+  });
+});
+
 describe("tryReadExitPlanModeCall", () => {
   const flaggingParser: BackendMetaParser = {
     parseToolCallMeta: () => ({ isPlanProposal: true }),

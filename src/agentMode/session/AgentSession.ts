@@ -153,6 +153,13 @@ export class AgentSession {
   // Monotonic counter for `currentPlan.id` so the React tree can detect a
   // *new* plan-mode review (vs. an in-place revision that bumps `revision`).
   private planSeq = 0;
+  // Tool-call ids the user has already finalized a decision on. Late
+  // `tool_call_update` notifications for the same ExitPlanMode tool (e.g.
+  // status → "completed" after the agent received the allow/deny) carry the
+  // original plan body and would otherwise re-trigger `publishGatedPlan`
+  // after `currentPlan` was cleared, resurrecting a "ghost" pending card the
+  // user just dismissed.
+  private decidedPlanToolCallIds = new Set<string>();
 
   /**
    * Tests and `loadSessionFromHistory` use this constructor with a
@@ -543,6 +550,7 @@ export class AgentSession {
       resolve(permissionResponseFor(request, REJECT_KINDS));
     }
     this.pendingPlanResolvers.clear();
+    this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
     this.setStatus("closed");
     this.listeners.clear();
@@ -593,6 +601,9 @@ export class AgentSession {
    */
   finalizePlanDecision(proposalId: string): boolean {
     if (!this.currentPlan || this.currentPlan.id !== proposalId) return false;
+    if (this.currentPlan.pendingToolCallId) {
+      this.decidedPlanToolCallIds.add(this.currentPlan.pendingToolCallId);
+    }
     this.currentPlan = null;
     this.notifyCurrentPlanChanged();
     return true;
@@ -643,7 +654,10 @@ export class AgentSession {
     // If a permission was still pending, reject it so the agent's RPC
     // doesn't hang waiting for a card that no longer exists.
     const pending = this.currentPlan.pendingToolCallId;
-    if (pending) this.resolvePlanProposalPermission(pending, false);
+    if (pending) {
+      this.resolvePlanProposalPermission(pending, false);
+      this.decidedPlanToolCallIds.add(pending);
+    }
     this.currentPlan = null;
     this.notifyCurrentPlanChanged();
   }
@@ -823,6 +837,13 @@ export class AgentSession {
     toolCallId: string,
     info: { plan: string; planFilePath?: string }
   ): void {
+    // Skip if the user already finalized a decision on this tool call. The
+    // agent's `tool_call_update` for the same ExitPlanMode (status →
+    // completed after allow/deny) still carries the original plan body, so
+    // without this guard `setCurrentPlan` would mint a fresh pending card
+    // into the slot we just cleared — visibly resurrecting a card the user
+    // just dismissed.
+    if (this.decidedPlanToolCallIds.has(toolCallId)) return;
     // Defensive: if a different gated permission was already pending on this
     // card, reject it now so the agent's prior RPC doesn't hang.
     const stale = this.currentPlan?.pendingToolCallId;
