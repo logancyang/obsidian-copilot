@@ -19,175 +19,272 @@ global.TextEncoder = TextEncoder as any;
 global.TextDecoder = TextDecoder as any;
 
 // Now we can import our modules
-import { encryptAllKeys, getDecryptedKey, getEncryptedKey } from "@/encryptionService";
-import { type CopilotSettings } from "@/settings/model";
-import { Platform } from "obsidian";
+import { getDecryptedKey, isEncryptedValue, isSensitiveKey } from "@/encryptionService";
 import { Buffer } from "buffer";
 
-// Mock window.btoa and window.atob for base64 encoding/decoding
-global.btoa = jest.fn().mockImplementation((str) => Buffer.from(str).toString("base64"));
-global.atob = jest.fn().mockImplementation((str) => Buffer.from(str, "base64").toString());
+// Mock btoa/atob for base64 encoding/decoding (binary-safe).
+global.btoa = jest.fn().mockImplementation((str) => Buffer.from(str, "latin1").toString("base64"));
+global.atob = jest.fn().mockImplementation((str) => Buffer.from(str, "base64").toString("latin1"));
+
+/**
+ * Ensure `globalThis.localStorage` is usable for tests.
+ */
+function ensureTestLocalStorage(): { clear: () => void } {
+  try {
+    const storage = globalThis.localStorage;
+    storage.setItem("__copilot_test__", "1");
+    storage.removeItem("__copilot_test__");
+    return { clear: () => globalThis.localStorage.clear() };
+  } catch {
+    const data = new Map<string, string>();
+    const shim = {
+      getItem: jest.fn((key: string) => data.get(key) ?? null),
+      setItem: jest.fn((key: string, value: string) => {
+        data.set(key, value);
+      }),
+      removeItem: jest.fn((key: string) => {
+        data.delete(key);
+      }),
+      clear: jest.fn(() => data.clear()),
+    };
+    try {
+      Object.defineProperty(globalThis, "localStorage", { value: shim, configurable: true });
+    } catch {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globalThis as any).localStorage = shim;
+    }
+    return { clear: () => data.clear() };
+  }
+}
+
+const testLocalStorage = ensureTestLocalStorage();
+
+let randomCounter = 1;
+Object.defineProperty(global.crypto, "getRandomValues", {
+  value: jest.fn((arr: Uint8Array) => {
+    for (let i = 0; i < arr.length; i++) arr[i] = (randomCounter++ & 0xff) as number;
+    return arr;
+  }),
+  configurable: true,
+});
 
 const mockSubtle = {
+  digest: jest.fn().mockImplementation(() => Promise.resolve(new Uint8Array(32).buffer)),
   importKey: jest.fn().mockResolvedValue("mockCryptoKey"),
   encrypt: jest.fn().mockImplementation((algorithm, key, data) => {
     const originalText = new TextDecoder().decode(data);
-    const encryptedText = `${originalText}_encrypted`;
+    const iv = (algorithm as { iv?: Uint8Array })?.iv;
+    const ivTag = iv ? Array.from(iv.slice(0, 4)).join(",") : "noiv";
+    const encryptedText = `${originalText}_encrypted_${ivTag}`;
     return Promise.resolve(new TextEncoder().encode(encryptedText).buffer);
   }),
   decrypt: jest.fn().mockImplementation((algorithm, key, data) => {
     const encryptedText = new TextDecoder().decode(new Uint8Array(data));
-    const originalText = encryptedText.replace("_encrypted", "");
+    const originalText = encryptedText.replace(/_encrypted_.+$/, "");
     return Promise.resolve(new TextEncoder().encode(originalText).buffer);
   }),
 };
 
-// Mock crypto.subtle instead of the entire crypto object
 Object.defineProperty(global.crypto, "subtle", {
   value: mockSubtle,
   configurable: true,
 });
 
-describe("Platform-specific Tests", () => {
-  it("should recognize the platform as desktop", () => {
-    expect(Platform.isDesktop).toBe(true); // Directly using the mocked value
-  });
-
-  // Example of a conditional test based on the platform
-  it("should only run certain logic on desktop", () => {
-    if (Platform.isDesktop) {
-      // Your desktop-specific logic here
-      expect(true).toBe(true); // Replace with actual assertions
-    } else {
-      expect(true).toBe(false); // This line is just for demonstration and should be replaced
-    }
-  });
-});
-
 describe("EncryptionService", () => {
   beforeEach(() => {
-    jest.resetModules();
-  });
-
-  describe("getEncryptedKey", () => {
-    it("should encrypt an API key", async () => {
-      const apiKey = "testApiKey";
-      const encryptedKey = await getEncryptedKey(apiKey);
-      // The key is base64 encoded, so we should expect that format
-      expect(encryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-      // Verify we can decrypt it back
-      const decryptedKey = await getDecryptedKey(encryptedKey);
-      expect(decryptedKey).toBe(apiKey);
-    });
-
-    it("should return the original key if already encrypted", async () => {
-      const apiKey = "enc_testApiKey";
-      const encryptedKey = await getEncryptedKey(apiKey);
-      expect(encryptedKey).toBe(apiKey);
-    });
+    jest.clearAllMocks();
+    randomCounter = 1;
+    testLocalStorage.clear();
+    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(true);
   });
 
   describe("getDecryptedKey", () => {
-    it("should decrypt an encrypted API key", async () => {
-      const apiKey = "testApiKey";
-      const encryptedKey = await getEncryptedKey(apiKey);
-      const decryptedKey = await getDecryptedKey(encryptedKey);
-      expect(decryptedKey).toBe(apiKey);
-    });
-
     it("should return the original key if it is in plain text", async () => {
       const apiKey = "testApiKey";
       const decryptedKey = await getDecryptedKey(apiKey);
       expect(decryptedKey).toBe(apiKey);
     });
+
+    it("should decrypt CP00 portable payloads", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+
+      const plaintext = "legacyPortableSecret";
+      const iv = new Uint8Array(12);
+      iv[0] = 1;
+
+      const ciphertext = new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv },
+          "mockCryptoKey" as any,
+          new TextEncoder().encode(plaintext)
+        )
+      );
+
+      const cp00 = new Uint8Array([0x43, 0x50, 0x30, 0x30]); // "CP00"
+      const payload = new Uint8Array(cp00.length + iv.length + ciphertext.length);
+      payload.set(cp00, 0);
+      payload.set(iv, cp00.length);
+      payload.set(ciphertext, cp00.length + iv.length);
+
+      const base64 = Buffer.from(payload).toString("base64");
+      const decrypted = await getDecryptedKey(`enc_web_${base64}`);
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it("should decrypt legacy fixed-IV enc_web_ payloads", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+
+      const plaintext = "legacyFixedIvSecret";
+      const legacyIv = new Uint8Array(12);
+      const ciphertext = new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: legacyIv },
+          "mockCryptoKey" as any,
+          new TextEncoder().encode(plaintext)
+        )
+      );
+
+      const base64 = Buffer.from(ciphertext).toString("base64");
+      const decrypted = await getDecryptedKey(`enc_web_${base64}`);
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it("should decrypt CP01 per-device payloads when localStorage key exists", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+
+      // Reason: CP01 uses a per-device AES key stored in localStorage.
+      // Seed it so getExistingWebCryptoKey() returns a usable key.
+      const keyBytes = new Uint8Array(32);
+      globalThis.localStorage.setItem(
+        "obsidian-copilot:webcrypto-key:v1",
+        Buffer.from(keyBytes).toString("base64")
+      );
+
+      const plaintext = "cp01DeviceSecret";
+      const iv = new Uint8Array(12);
+      iv[0] = 2;
+
+      const ciphertext = new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv },
+          "mockCryptoKey" as any,
+          new TextEncoder().encode(plaintext)
+        )
+      );
+
+      const cp01 = new Uint8Array([0x43, 0x50, 0x30, 0x31]); // "CP01"
+      const payload = new Uint8Array(cp01.length + iv.length + ciphertext.length);
+      payload.set(cp01, 0);
+      payload.set(iv, cp01.length);
+      payload.set(ciphertext, cp01.length + iv.length);
+
+      const base64 = Buffer.from(payload).toString("base64");
+      const decrypted = await getDecryptedKey(`enc_web_${base64}`);
+      expect(decrypted).toBe(plaintext);
+    });
+
+    it("should return empty string for CP01 when localStorage key is missing", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+      // Reason: no key in localStorage — CP01 decryption should fail gracefully.
+
+      const cp01 = new Uint8Array([0x43, 0x50, 0x30, 0x31]); // "CP01"
+      const iv = new Uint8Array(12);
+      const fakeCiphertext = new Uint8Array([1, 2, 3, 4]);
+      const payload = new Uint8Array(cp01.length + iv.length + fakeCiphertext.length);
+      payload.set(cp01, 0);
+      payload.set(iv, cp01.length);
+      payload.set(fakeCiphertext, cp01.length + iv.length);
+
+      const base64 = Buffer.from(payload).toString("base64");
+      const result = await getDecryptedKey(`enc_web_${base64}`);
+      expect(result).toBe("");
+    });
+
+    it("should decrypt legacy enc_ prefix payloads via WebCrypto fallback", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+
+      const plaintext = "legacyEncPrefixSecret";
+      const legacyIv = new Uint8Array(12);
+      const ciphertext = new Uint8Array(
+        await crypto.subtle.encrypt(
+          { name: "AES-GCM", iv: legacyIv },
+          "mockCryptoKey" as any,
+          new TextEncoder().encode(plaintext)
+        )
+      );
+
+      const base64 = Buffer.from(ciphertext).toString("base64");
+      const decrypted = await getDecryptedKey(`enc_${base64}`);
+      expect(decrypted).toBe(plaintext);
+    });
   });
 
-  describe("encryptAllKeys", () => {
-    it("should encrypt all keys containing 'apikey'", async () => {
-      const settings = {
-        enableEncryption: true,
-        openAIApiKey: "testApiKey",
-        cohereApiKey: "anotherTestApiKey",
-        userSystemPrompt: "shouldBeIgnored",
-      } as unknown as CopilotSettings;
-
-      const newSettings = await encryptAllKeys(settings);
-      expect(newSettings.openAIApiKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-      expect(newSettings.cohereApiKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-      expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
-
-      // Verify we can decrypt the keys back
-      const decryptedOpenAI = await getDecryptedKey(newSettings.openAIApiKey);
-      const decryptedCohere = await getDecryptedKey(newSettings.cohereApiKey);
-      expect(decryptedOpenAI).toBe("testApiKey");
-      expect(decryptedCohere).toBe("anotherTestApiKey");
+  describe("getDecryptedKey — failure returns empty string", () => {
+    it("should return empty string when safeStorage is unavailable for desktop key", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+      const result = await getDecryptedKey("enc_desk_" + Buffer.from("test").toString("base64"));
+      expect(result).toBe("");
     });
 
-    it("should not encrypt keys when encryption is not enabled", async () => {
-      const newSettings = await encryptAllKeys({
-        enableEncryption: false,
-        openAIApiKey: "testApiKey",
-        cohereApiKey: "anotherTestApiKey",
-        userSystemPrompt: "shouldBeIgnored",
-      } as unknown as CopilotSettings);
-      expect(newSettings.openAIApiKey).toBe("testApiKey");
-      expect(newSettings.cohereApiKey).toBe("anotherTestApiKey");
-      expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
+    it("should return empty string when WebCrypto decryption throws", async () => {
+      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+      const originalDecrypt = mockSubtle.decrypt.getMockImplementation();
+      mockSubtle.decrypt.mockImplementation(() => {
+        throw new Error("decrypt boom");
+      });
+
+      const result = await getDecryptedKey("enc_web_" + Buffer.from("garbage").toString("base64"));
+      expect(result).toBe("");
+
+      mockSubtle.decrypt.mockImplementation(originalDecrypt!);
     });
+  });
+
+  describe("isEncryptedValue", () => {
+    it.each(["enc_desk_abc123", "enc_web_abc123", "enc_abc123"])(
+      'should return true for encrypted value "%s"',
+      (val) => {
+        expect(isEncryptedValue(val)).toBe(true);
+      }
+    );
+
+    it.each(["sk-abc123", "plaintext-key", ""])(
+      'should return false for non-encrypted value "%s"',
+      (val) => {
+        expect(isEncryptedValue(val)).toBe(false);
+      }
+    );
   });
 });
 
-describe("Cross-platform compatibility", () => {
-  let originalConsoleError: typeof console.error;
+// ---------------------------------------------------------------------------
+// isSensitiveKey (pure function — no mocks needed)
+// ---------------------------------------------------------------------------
 
-  beforeEach(() => {
-    jest.clearAllMocks();
-    // Save original console.error
-    originalConsoleError = console.error;
-    // Mock console.error to suppress expected encryption fallback messages
-    console.error = jest.fn();
+describe("isSensitiveKey", () => {
+  it.each([
+    "openAIApiKey",
+    "cohereApiKey",
+    "anthropicApiKey",
+    "plusLicenseKey",
+    "githubCopilotAccessToken",
+    "githubCopilotToken",
+    "clientSecret",
+    "refreshToken",
+    "apiPassword",
+  ])('should return true for sensitive key "%s"', (key) => {
+    expect(isSensitiveKey(key)).toBe(true);
   });
 
-  afterEach(() => {
-    // Restore original console.error
-    console.error = originalConsoleError;
-  });
-
-  it("should encrypt and decrypt consistently on mobile", async () => {
-    // Mock as mobile by making safeStorage unavailable
-    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
-
-    const originalKey = "testApiKey";
-    const encryptedKey = await getEncryptedKey(originalKey);
-    expect(encryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-
-    // Reset the mock counts before decryption
-    mockSubtle.encrypt.mockClear();
-    mockSubtle.decrypt.mockClear();
-
-    const decryptedKey = await getDecryptedKey(encryptedKey);
-    expect(decryptedKey).toBe(originalKey);
-
-    // On mobile, we should use Web Crypto API for decryption
-    expect(mockSubtle.decrypt).toHaveBeenCalled();
-  });
-
-  it("should be able to decrypt mobile-encrypted keys on desktop", async () => {
-    // First encrypt on mobile
-    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
-
-    const originalKey = "testApiKey";
-    const mobileEncryptedKey = await getEncryptedKey(originalKey);
-    expect(mobileEncryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-    expect(mockSubtle.encrypt).toHaveBeenCalled();
-
-    // Reset the mock counts before desktop decryption
-    mockSubtle.encrypt.mockClear();
-    mockSubtle.decrypt.mockClear();
-
-    // Then decrypt on desktop
-    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(true);
-    const decryptedKey = await getDecryptedKey(mobileEncryptedKey);
-    expect(decryptedKey).toBe(originalKey);
+  it.each([
+    "temperature",
+    "userSystemPrompt",
+    "defaultModelKey",
+    "activeModels",
+    "maxTokens",
+    "githubCopilotTokenExpiresAt",
+    "openAIOrgId",
+  ])('should return false for non-sensitive key "%s"', (key) => {
+    expect(isSensitiveKey(key)).toBe(false);
   });
 });

@@ -97,7 +97,8 @@ export interface CopilotSettings {
   chatNoteContextTags: string[];
   enableIndexSync: boolean;
   debug: boolean;
-  enableEncryption: boolean;
+  /** @deprecated Removed — keychain is now the sole encryption mechanism. */
+  enableEncryption?: never;
   maxSourceChunks: number;
   enableInlineCitations: boolean;
   qaExclusions: string;
@@ -199,6 +200,28 @@ export interface CopilotSettings {
   autoCompactThreshold: number;
   /** Folder where converted document markdown files are saved */
   convertedDocOutputFolder: string;
+  /**
+   * When `true`, the user confirmed all devices are upgraded and data.json
+   * secrets should be stripped on every save. Set by the migration modal
+   * "clear now" button or the "Forget All Secrets" action.
+   */
+  _diskSecretsCleared?: boolean;
+  /**
+   * Stable namespace ID for keychain entries, persisted once on first use.
+   * Reason: using a persisted ID (instead of deriving from vault path) means
+   * renaming or moving the vault folder does not orphan keychain entries.
+   */
+  _keychainVaultId?: string;
+  /**
+   * ISO 8601 timestamp of the first successful keychain backfill.
+   * Used to calculate the 7-day auto-clear deadline for data.json secrets.
+   */
+  _keychainMigratedAt?: string;
+  /**
+   * Set to `true` when the user dismissed the migration modal
+   * (clicked "Keep for now" → "OK"). Prevents the modal from showing again.
+   */
+  _migrationModalDismissed?: boolean;
 }
 
 export const settingsStore = createStore();
@@ -320,6 +343,14 @@ export function useSettingsValue(): Readonly<CopilotSettings> {
 }
 
 /**
+ * Normalize persisted model provider values so identity keys stay stable across migrations.
+ * Reason: Legacy data may store "azure_openai" while runtime uses "azure-openai".
+ */
+export function normalizeModelProvider(provider: string): string {
+  return provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : provider;
+}
+
+/**
  * Sanitizes the settings to ensure they are valid.
  * Note: This will be better handled by Zod in the future.
  */
@@ -349,7 +380,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
     settingsToSanitize.activeEmbeddingModels = settingsToSanitize.activeEmbeddingModels.map((m) => {
       return {
         ...m,
-        provider: m.provider === "azure_openai" ? EmbeddingModelProviders.AZURE_OPENAI : m.provider,
+        provider: normalizeModelProvider(m.provider),
       };
     });
   }
