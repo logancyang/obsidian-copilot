@@ -376,6 +376,14 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   );
 
   const modelPickerOverride = useAgentModelPicker(manager);
+  const mode = modelPickerOverride?.mode;
+
+  const handleCycleMode = useCallback(() => {
+    if (!mode || mode.disabled || mode.options.length === 0) return;
+    const currentIdx = mode.options.findIndex((o) => o.value === mode.value);
+    const next = mode.options[(currentIdx + 1) % mode.options.length];
+    if (next.value !== mode.value) mode.onChange(next.value);
+  }, [mode]);
 
   // Listen to global ABORT_STREAM events (used by Chat selection / new-chat triggers)
   useEffect(() => {
@@ -429,7 +437,9 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
                 setInputMessage={setInputMessage}
                 handleSendMessage={() => handleSendMessage()}
                 isGenerating={loading}
-                onStopGenerating={() => handleStopGenerating()}
+                onStopGenerating={handleStopGenerating}
+                onEscape={loading ? handleStopGenerating : undefined}
+                onShiftTab={mode ? handleCycleMode : undefined}
                 app={app}
                 contextNotes={contextNotes}
                 setContextNotes={setContextNotes}

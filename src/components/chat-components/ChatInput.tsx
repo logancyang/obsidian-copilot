@@ -128,6 +128,11 @@ export interface ChatInputProps {
   /** Fires when the user picks a `#tag` from typeahead. */
   onTagSelected?: () => void;
 
+  /** Optional ESC handler invoked when the editor has focus. */
+  onEscape?: () => void;
+  /** Optional Shift+Tab handler invoked when the editor has focus. */
+  onShiftTab?: () => void;
+
   // Edit mode props
   editMode?: boolean;
   onEditSave?: (
@@ -182,6 +187,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
     toolControls,
     onToolPillsChange,
     onTagSelected,
+    onEscape,
+    onShiftTab,
     editMode = false,
     onEditSave,
     onEditCancel,
@@ -773,6 +780,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           isCopilotPlus={isCopilotPlus}
           currentActiveFile={currentActiveNote}
           currentChain={currentChain}
+          onEscape={onEscape}
+          onShiftTab={onShiftTab}
         />
       </div>
 

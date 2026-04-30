@@ -32,7 +32,7 @@
 - [ ] P1: Claude ACP seems to switch between 1M and 200K model randomly
 - [x] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
 - [x] P1: Clicking new chat should reset the tab label
-- [ ] P1: Agent survey (asking for user input)
+- [ ] P2: Agent survey (asking for user input)
   - Not possible with ACP, need more digging
 - [ ] P1: Agent message is not rendered in the correct order with the tool calls
 - [x] P1: Plan mode preview display
@@ -41,9 +41,7 @@
     "Add to Copilot context" now forward vault-relative paths / inlined
     excerpts in a `<copilot-context>` envelope so the agent's Read tool
     can fetch them via `VaultClient.readTextFile`.
-- [ ] P1: Model, effort, and mode is not persisted across sessions
-- [ ] P1: Detect legacy ACP binaries
-  - Some features may not work if using legacy binaries
+- [x] P1: Model, effort, and mode is not persisted across sessions
 - [ ] P1: Agent update management
   - what if the ACP package changes
   - how to update ACP packages?
@@ -63,7 +61,7 @@
 - [ ] P2: Better agent messages
 - [ ] P2: Edit previous user message
 - [ ] P2: Integrate copilot plus tool calls
-- [ ] P2: Keyboard shortcut
+- [x] P2: Keyboard shortcut
 - [ ] P2: New agent command (/new, /usage)
 - [ ] P2: Claude code authentication
 - [ ] P2: Auto-save chat history controls

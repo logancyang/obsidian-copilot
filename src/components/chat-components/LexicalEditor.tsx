@@ -65,6 +65,8 @@ interface LexicalEditorProps {
   isCopilotPlus?: boolean;
   currentActiveFile?: TFile | null;
   currentChain?: ChainType;
+  onEscape?: () => void;
+  onShiftTab?: () => void;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -94,6 +96,8 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   isCopilotPlus = false,
   currentActiveFile = null,
   currentChain,
+  onEscape,
+  onShiftTab,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -181,7 +185,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           />
           <OnChangePlugin onChange={handleEditorChange} />
           <HistoryPlugin />
-          <KeyboardPlugin onSubmit={onSubmit} sendShortcut={settings.defaultSendShortcut} />
+          <KeyboardPlugin
+            onSubmit={onSubmit}
+            sendShortcut={settings.defaultSendShortcut}
+            onEscape={onEscape}
+            onShiftTab={onShiftTab}
+          />
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
