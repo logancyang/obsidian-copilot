@@ -317,11 +317,12 @@ export function useAgentModelPicker(
           logError("[AgentMode] picker entry references unknown backend", targetBackendId);
           return;
         }
-        const agentId = resolveAgentId(entry, targetDescriptor, settings.activeModels ?? []);
-        if (!agentId) {
+        const rawAgentId = resolveAgentId(entry, targetDescriptor, settings.activeModels ?? []);
+        if (!rawAgentId) {
           new Notice("Could not resolve a model id for this selection.");
           return;
         }
+        const agentId = preserveSavedEffort(rawAgentId, targetDescriptor, settings);
 
         if (!activeSession || activeSession.backendId !== targetBackendId) {
           // Cross-backend pick: persist model first so the new session's
@@ -656,6 +657,27 @@ function resolveCollapsedModelId(
     firstVariant ??= m.modelId;
   }
   return firstVariant ?? modelId;
+}
+
+/**
+ * For effort-in-modelId backends (codex/opencode), recompose a picker-
+ * resolved agent id with the user's saved effort. The picker collapses
+ * per-effort variants into one row per base, so the surviving entry's
+ * effort is whichever variant `dedupeAvailableModels` happened to keep —
+ * not necessarily what the user picked.
+ */
+function preserveSavedEffort(
+  agentId: string,
+  descriptor: BackendDescriptor,
+  settings: ReturnType<typeof useSettingsValue>
+): string {
+  if (!descriptor.parseEffortFromModelId || !descriptor.composeModelId) return agentId;
+  const parsedNew = descriptor.parseEffortFromModelId(agentId);
+  if (!parsedNew) return agentId;
+  const savedId = descriptor.getPreferredModelId?.(settings);
+  const savedEffort = savedId ? descriptor.parseEffortFromModelId(savedId)?.effort : null;
+  if (!savedEffort) return agentId;
+  return descriptor.composeModelId(parsedNew.baseId, savedEffort);
 }
 
 function resolveAgentId(

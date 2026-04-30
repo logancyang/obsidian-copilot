@@ -239,20 +239,22 @@ const DefaultModelPicker: React.FC<{
   const settings = useSettingsValue();
   const plugin = usePlugin();
 
+  // For backends that encode effort in the modelId (codex, opencode), the
+  // dedupe survivor's `modelId` is a concrete variant (e.g. `gpt-5.5/low`),
+  // not the bare base. Normalize so the option value, current-entry lookup,
+  // and `currentBaseId` match on the same surface.
+  const baseIdOf = (modelId: string): string =>
+    descriptor.parseEffortFromModelId?.(modelId)?.baseId ?? modelId;
+
   const currentPreferredAgentId = descriptor.getPreferredModelId?.(settings);
-  // Translate the preferred id (which may include an effort suffix) back to
-  // its base so the dropdown matches one of the collapsed rows.
-  const currentBaseId = currentPreferredAgentId
-    ? (descriptor.parseEffortFromModelId?.(currentPreferredAgentId)?.baseId ??
-      currentPreferredAgentId)
-    : "";
+  const currentBaseId = currentPreferredAgentId ? baseIdOf(currentPreferredAgentId) : "";
 
   // If the persisted default is currently disabled by override/policy, keep
   // it visible in the dropdown so the user isn't stranded — picking it
   // again has no effect, but switching off it works as expected.
   const currentEntry =
-    currentBaseId && !enabled.some((m) => m.modelId === currentBaseId)
-      ? collapsed.find((m) => m.modelId === currentBaseId)
+    currentBaseId && !enabled.some((m) => baseIdOf(m.modelId) === currentBaseId)
+      ? collapsed.find((m) => baseIdOf(m.modelId) === currentBaseId)
       : undefined;
   const dropdownEntries = currentEntry ? [currentEntry, ...enabled] : enabled;
   if (dropdownEntries.length === 0) return null;
@@ -281,7 +283,7 @@ const DefaultModelPicker: React.FC<{
       onChange={handleChange}
       options={[
         { label: "Use agent default", value: "" },
-        ...dropdownEntries.map((m) => ({ label: m.name || m.modelId, value: m.modelId })),
+        ...dropdownEntries.map((m) => ({ label: m.name || m.modelId, value: baseIdOf(m.modelId) })),
       ]}
     />
   );
