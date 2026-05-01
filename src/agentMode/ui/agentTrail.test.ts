@@ -182,6 +182,18 @@ describe("buildAgentTrail", () => {
     expect(tree.map((n) => n.type)).toEqual(["text", "action", "text"]);
   });
 
+  it("drops empty/whitespace-only text parts so they don't add a flex-gap row", () => {
+    const parts: AgentMessagePart[] = [
+      thought("thinking..."),
+      text(""),
+      tool("a", { vendorToolName: "Read" }),
+      text("   \n  "),
+      text("real prose"),
+    ];
+    const tree = buildAgentTrail(parts);
+    expect(tree.map((n) => n.type)).toEqual(["reasoning", "action", "text"]);
+  });
+
   it("a streamed text part between root-level edits breaks compaction", () => {
     // Text parts always live at the root and have no parent linkage. A
     // streamed text chunk between same-tool peers acts as a separator: the

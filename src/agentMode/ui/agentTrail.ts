@@ -116,6 +116,9 @@ function foldNodes(
       // part between two same-tool calls disqualifies grouping. Pushing
       // straight to `out` here naturally enforces that — the next tool_call
       // can't see a prior aggregate/action of the same key as `prev`.
+      // Skip empty/whitespace-only text parts so they don't become a flex
+      // child contributing `gap-1` plus their own padding to the trail.
+      if (p.text.trim().length === 0) continue;
       out.push({ type: "text", part: p });
       continue;
     }

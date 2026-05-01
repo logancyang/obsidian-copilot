@@ -63,21 +63,10 @@ const AgentChatMessages = memo(
       return undefined;
     }, [isLoading, visible]);
 
-    // Show the bottom loader only when the turn is in flight and nothing
-    // structured has streamed yet — otherwise the reasoning block, action
-    // cards, or streamed text already signal progress.
-    const showBottomLoader = useMemo(() => {
-      if (!isLoading) return false;
-      const streaming = streamingMessageId
-        ? visible.find((m) => m.id === streamingMessageId)
-        : undefined;
-      return (streaming?.parts?.length ?? 0) === 0;
-    }, [isLoading, streamingMessageId, visible]);
-
     if (visible.length === 0) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
-          {showBottomLoader && <BottomLoadingIndicator />}
+          {isLoading && <BottomLoadingIndicator />}
           {inlinePlanCard}
         </div>
       );
@@ -102,7 +91,13 @@ const AgentChatMessages = memo(
             // its entire body — `text` parts already cover streamed prose, so
             // an additional `ChatSingleMessage` would duplicate it.
             const isAssistant = message.sender !== USER_SENDER;
-            const renderTrail = isAssistant && (message.parts?.length ?? 0) > 0;
+            const hasParts = (message.parts?.length ?? 0) > 0;
+            const renderTrail = isAssistant && hasParts;
+            // The streaming placeholder (empty body, no parts) renders as a
+            // thinking spinner in-place, so the user sees progress the moment
+            // they hit send rather than an empty assistant bubble.
+            const isStreamingPlaceholder =
+              isAssistant && message.id === streamingMessageId && !hasParts && !message.message;
 
             return (
               <div
@@ -113,7 +108,11 @@ const AgentChatMessages = memo(
                   minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
                 }}
               >
-                {renderTrail ? (
+                {isStreamingPlaceholder ? (
+                  <div className="tw-px-3 tw-pt-2">
+                    <BottomLoadingIndicator />
+                  </div>
+                ) : renderTrail ? (
                   <div className="tw-px-3 tw-pt-2">
                     <AgentTrail
                       parts={message.parts!}
@@ -132,7 +131,6 @@ const AgentChatMessages = memo(
               </div>
             );
           })}
-          {showBottomLoader && <BottomLoadingIndicator />}
           {inlinePlanCard}
         </div>
       </div>

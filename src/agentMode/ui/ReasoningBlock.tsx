@@ -18,7 +18,10 @@ interface ReasoningBlockProps {
  */
 export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreaming }) => {
   const startedAtRef = useRef<number | null>(null);
-  const completedAtRef = useRef<number | null>(null);
+  // State (not ref) so the freeze triggers a re-render — without it the
+  // component renders one frame with `isStreaming=false` and a still-null
+  // completion mark, collapsing the timer to "0s" and never recovering.
+  const [frozenAt, setFrozenAt] = useState<number | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   // Initialize start timestamp on first mount when the thought has content.
@@ -28,16 +31,15 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreamin
     }
   }, [part.text]);
 
-  // Freeze elapsed time when streaming flips off.
+  // Freeze elapsed time when streaming flips off; reset when it resumes.
   useEffect(() => {
-    if (!isStreaming && completedAtRef.current === null && startedAtRef.current !== null) {
-      completedAtRef.current = Date.now();
+    if (!isStreaming && frozenAt === null && startedAtRef.current !== null) {
+      setFrozenAt(Date.now());
     }
-    if (isStreaming) {
-      // Reset completion when we resume streaming (e.g. retry on the same part).
-      completedAtRef.current = null;
+    if (isStreaming && frozenAt !== null) {
+      setFrozenAt(null);
     }
-  }, [isStreaming]);
+  }, [isStreaming, frozenAt]);
 
   // Tick the clock while streaming.
   useEffect(() => {
@@ -47,7 +49,7 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreamin
   }, [isStreaming]);
 
   const startedAt = startedAtRef.current ?? Date.now();
-  const endedAt = completedAtRef.current ?? (isStreaming ? now : startedAt);
+  const endedAt = frozenAt ?? (isStreaming ? now : startedAt);
   const elapsedSeconds = Math.max(0, Math.round((endedAt - startedAt) / 1000));
 
   const steps = part.text

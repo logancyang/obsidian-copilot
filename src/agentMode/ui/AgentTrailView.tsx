@@ -20,9 +20,18 @@ interface AgentTrailProps {
 
 export const AgentTrail: React.FC<AgentTrailProps> = ({ parts, isStreaming, app }) => {
   const tree = buildAgentTrail(parts);
+  // A reasoning block is "still active" only while the turn is in flight AND
+  // its `thought` part is the trailing entry of `msg.parts[]`. Anything later
+  // (a tool_call, a sibling thought split by a tool_call, an `agent_message_chunk`)
+  // proves the agent has moved on — even though ACP itself emits no explicit
+  // "reasoning ended" notification. Comparing by reference against the last
+  // part is robust to the hidden-tool filter inside `buildAgentTrail`: if the
+  // last part is hidden, no reasoning node will match, so all reasoning blocks
+  // freeze — which is the right outcome.
+  const lastPart = parts.length > 0 ? parts[parts.length - 1] : undefined;
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
-      {tree.map((node, i) => renderNode(node, i, isStreaming, app))}
+      {tree.map((node, i) => renderNode(node, i, isStreaming, app, lastPart))}
     </div>
   );
 };
@@ -31,7 +40,8 @@ function renderNode(
   node: RenderNode,
   key: string | number,
   isStreaming: boolean,
-  app: App
+  app: App,
+  lastPart: AgentMessagePart | undefined
 ): React.ReactNode {
   switch (node.type) {
     case "action":
@@ -46,11 +56,13 @@ function renderNode(
           childNodes={node.children}
           truncated={node.truncated}
           app={app}
-          renderNode={(n, k) => renderNode(n, k, isStreaming, app)}
+          renderNode={(n, k) => renderNode(n, k, isStreaming, app, lastPart)}
         />
       );
-    case "reasoning":
-      return <ReasoningBlock key={key} part={node.part} isStreaming={isStreaming} />;
+    case "reasoning": {
+      const isActive = isStreaming && node.part === lastPart;
+      return <ReasoningBlock key={key} part={node.part} isStreaming={isActive} />;
+    }
     case "text":
       return <AgentMarkdownText key={key} text={node.part.text} app={app} />;
     case "plan":

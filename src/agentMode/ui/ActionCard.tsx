@@ -4,7 +4,6 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
-import { getVaultBase, toVaultRelative } from "@/agentMode/ui/vaultPath";
 
 interface ActionCardProps {
   part: ToolCallPart;
@@ -21,7 +20,7 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
   const outcome = summary.outcome(part);
   const outputs = part.output ?? [];
   const isEmpty = part.status === "completed" && outputs.length === 0;
-  const expandable = !inline && (outputs.length > 0 || (part.locations?.length ?? 0) > 0);
+  const expandable = !inline && outputs.length > 0;
 
   const headerClasses = inline
     ? "tw-flex tw-items-center tw-gap-2 tw-text-sm"
@@ -51,37 +50,23 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
       {outcome ? <div className="tw-pl-6 tw-text-xs tw-text-muted">{outcome}</div> : null}
       {expandable && open ? (
         <div className="tw-mt-1 tw-flex tw-flex-col tw-gap-1 tw-pl-6">
-          {part.locations && part.locations.length > 0 ? (
-            <ul className="tw-text-xs tw-text-muted">
-              {part.locations.map((loc, i) => (
-                <li key={i} className="tw-font-mono">
-                  {toVaultRelative(loc.path, getVaultBase())}
-                  {loc.line != null ? `:${loc.line}` : ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          {outputs.length > 0 ? (
-            <div className="tw-flex tw-flex-col tw-gap-1">
-              {outputs.map((o, i) =>
-                o.type === "text" ? (
-                  <pre
-                    key={i}
-                    className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
-                  >
-                    {o.text}
-                  </pre>
-                ) : (
-                  <div key={i} className="tw-rounded tw-bg-secondary-alt tw-p-1">
-                    <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
-                    <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
-                      {renderDiff(o.oldText, o.newText)}
-                    </pre>
-                  </div>
-                )
-              )}
-            </div>
-          ) : null}
+          {outputs.map((o, i) =>
+            o.type === "text" ? (
+              <pre
+                key={i}
+                className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs"
+              >
+                {o.text}
+              </pre>
+            ) : (
+              <div key={i} className="tw-rounded tw-bg-secondary-alt tw-p-1">
+                <p className="tw-font-mono tw-text-xs tw-text-muted">{o.path}</p>
+                <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
+                  {renderDiff(o.oldText, o.newText)}
+                </pre>
+              </div>
+            )
+          )}
         </div>
       ) : null}
     </div>
