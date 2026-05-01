@@ -785,53 +785,44 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
       </div>
 
       <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
-        {isGenerating ? (
-          <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-muted">
-            <Loader2 className="tw-size-3 tw-animate-spin" />
-            <span>Generating...</span>
-          </div>
-        ) : (
-          <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
-            <ModelSelector
-              variant="ghost2"
-              size="fit"
-              disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
-              value={modelPickerOverride?.value ?? getDisplayModelKey()}
-              models={modelPickerOverride?.models}
-              onChange={
-                modelPickerOverride?.onChange ??
-                ((modelKey) => {
-                  // In project mode, we don't update the global model key
-                  // as the project model takes precedence
-                  if (currentChain !== ChainType.PROJECT_CHAIN) {
-                    setCurrentModelKey(modelKey);
-                  }
-                })
-              }
-              className="tw-min-w-0 tw-max-w-full tw-truncate"
+        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
+          <ModelSelector
+            variant="ghost2"
+            size="fit"
+            disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
+            value={modelPickerOverride?.value ?? getDisplayModelKey()}
+            models={modelPickerOverride?.models}
+            onChange={
+              modelPickerOverride?.onChange ??
+              ((modelKey) => {
+                if (currentChain !== ChainType.PROJECT_CHAIN) {
+                  setCurrentModelKey(modelKey);
+                }
+              })
+            }
+            className="tw-min-w-0 tw-max-w-full tw-truncate"
+          />
+          {modelPickerOverride?.effort && (
+            <PickerDropdown
+              options={modelPickerOverride.effort.options}
+              value={modelPickerOverride.effort.value}
+              onChange={modelPickerOverride.effort.onChange}
+              disabled={modelPickerOverride.effort.disabled}
+              fallbackLabel="Default"
+              title="Reasoning effort"
             />
-            {modelPickerOverride?.effort && (
-              <PickerDropdown
-                options={modelPickerOverride.effort.options}
-                value={modelPickerOverride.effort.value}
-                onChange={modelPickerOverride.effort.onChange}
-                disabled={modelPickerOverride.effort.disabled}
-                fallbackLabel="Default"
-                title="Reasoning effort"
-              />
-            )}
-            {modelPickerOverride?.mode && (
-              <PickerDropdown
-                options={modelPickerOverride.mode.options}
-                value={modelPickerOverride.mode.value}
-                onChange={modelPickerOverride.mode.onChange}
-                disabled={modelPickerOverride.mode.disabled}
-                fallbackLabel="Mode"
-                title="Operational mode"
-              />
-            )}
-          </div>
-        )}
+          )}
+          {modelPickerOverride?.mode && (
+            <PickerDropdown
+              options={modelPickerOverride.mode.options}
+              value={modelPickerOverride.mode.value}
+              onChange={modelPickerOverride.mode.onChange}
+              disabled={modelPickerOverride.mode.disabled}
+              fallbackLabel="Mode"
+              title="Operational mode"
+            />
+          )}
+        </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">
           {isGenerating ? (

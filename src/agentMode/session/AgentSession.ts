@@ -742,7 +742,7 @@ export class AgentSession {
       case "agent_message_chunk": {
         const text = extractText(update.content);
         if (!text) return;
-        if (this.store.appendDisplayText(placeholderId, text)) {
+        if (this.store.appendAgentText(placeholderId, text)) {
           this.notifyMessages();
         }
         return;
@@ -767,20 +767,20 @@ export class AgentSession {
           this.publishGatedPlan(update.toolCallId, exitPlan);
           // Still record the tool call so the chat shows what triggered the
           // gated card (avoids a "the agent did something invisible" feel).
-          if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
+          if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update, parser))) {
             this.notifyMessages();
           }
           return;
         }
-        if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update))) {
+        if (this.store.upsertAgentPart(placeholderId, toolCallToPart(update, parser))) {
           this.notifyMessages();
         }
         return;
       }
       case "tool_call_update": {
         const existing = this.findToolCallPart(placeholderId, update.toolCallId);
-        const merged = mergeToolCallUpdate(existing, update);
         const parser = this.getDescriptor?.()?.meta;
+        const merged = mergeToolCallUpdate(existing, update, parser);
         // The plan body may arrive on an update rather than the initial
         // tool_call. Re-check after merging and publish if so.
         if (merged.kind === "tool_call") {
@@ -1103,7 +1103,11 @@ function configOptionsSig(opts: SessionConfigOption[] | null): string {
   return opts.map((o) => `${o.id}=${"currentValue" in o ? String(o.currentValue) : ""}`).join(",");
 }
 
-function toolCallToPart(call: ToolCall & { sessionUpdate: "tool_call" }): AgentMessagePart {
+function toolCallToPart(
+  call: ToolCall & { sessionUpdate: "tool_call" },
+  parser?: BackendMetaParser
+): AgentMessagePart {
+  const meta = parser?.parseToolCallMeta(call._meta) ?? null;
   return {
     kind: "tool_call",
     id: call.toolCallId,
@@ -1113,6 +1117,8 @@ function toolCallToPart(call: ToolCall & { sessionUpdate: "tool_call" }): AgentM
     input: call.rawInput,
     output: extractToolCallOutputs(call.content),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
+    vendorToolName: meta?.vendorToolName,
+    parentToolCallId: meta?.parentToolCallId,
   };
 }
 
@@ -1189,7 +1195,8 @@ function derivePlanTitleFromMarkdown(md: string): string {
 
 function mergeToolCallUpdate(
   existing: AgentMessagePart | undefined,
-  upd: ToolCallUpdate & { sessionUpdate: "tool_call_update" }
+  upd: ToolCallUpdate & { sessionUpdate: "tool_call_update" },
+  parser?: BackendMetaParser
 ): AgentMessagePart {
   const base: AgentMessagePart =
     existing && existing.kind === "tool_call"
@@ -1201,6 +1208,11 @@ function mergeToolCallUpdate(
           status: "pending",
         };
   if (base.kind !== "tool_call") return base;
+  // Late-arriving `_meta` (some backends only attach it on updates) can fill
+  // in vendor identity / parent linkage that was empty on the initial part.
+  // Existing values win — once set, vendorToolName / parentToolCallId don't
+  // change between updates for the same tool call.
+  const meta = upd._meta !== undefined ? (parser?.parseToolCallMeta(upd._meta) ?? null) : null;
   return {
     ...base,
     title: upd.title ?? base.title,
@@ -1215,6 +1227,8 @@ function mergeToolCallUpdate(
       upd.locations !== undefined && upd.locations !== null
         ? upd.locations.map((l) => ({ path: l.path, line: l.line ?? undefined }))
         : base.locations,
+    vendorToolName: base.vendorToolName ?? meta?.vendorToolName,
+    parentToolCallId: base.parentToolCallId ?? meta?.parentToolCallId,
   };
 }
 

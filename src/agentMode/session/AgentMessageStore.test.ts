@@ -31,6 +31,41 @@ describe("AgentMessageStore", () => {
     expect(store.appendDisplayText("missing", "x")).toBe(false);
   });
 
+  it("appendAgentText folds successive chunks into one trailing text part", () => {
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    store.appendAgentText(id, "Hello, ");
+    store.appendAgentText(id, "world.");
+    const msg = store.getMessage(id);
+    const parts = msg?.parts ?? [];
+    expect(parts).toHaveLength(1);
+    expect(parts[0]).toEqual({ kind: "text", text: "Hello, world." });
+    // Flat body stays in sync for persistence / search / error append.
+    expect(msg?.message).toBe("Hello, world.");
+  });
+
+  it("appendAgentText starts a new text part when interrupted by a tool call", () => {
+    const store = new AgentMessageStore();
+    const id = store.addMessage(placeholder());
+    store.appendAgentText(id, "before");
+    store.upsertAgentPart(id, {
+      kind: "tool_call",
+      id: "tc1",
+      title: "Read README",
+      status: "completed",
+    });
+    store.appendAgentText(id, "after");
+    const parts = store.getMessage(id)?.parts ?? [];
+    expect(parts.map((p) => p.kind)).toEqual(["text", "tool_call", "text"]);
+    expect(parts[0]).toEqual({ kind: "text", text: "before" });
+    expect(parts[2]).toEqual({ kind: "text", text: "after" });
+  });
+
+  it("appendAgentText returns false for unknown message", () => {
+    const store = new AgentMessageStore();
+    expect(store.appendAgentText("missing", "x")).toBe(false);
+  });
+
   it("appendAgentThought folds successive chunks into one part", () => {
     const store = new AgentMessageStore();
     const id = store.addMessage(placeholder());

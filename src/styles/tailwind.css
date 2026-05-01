@@ -491,6 +491,29 @@ If your plugin does not need CSS, delete this file.
   }
 }
 
+@keyframes copilot-text-shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.copilot-shimmer-text {
+  background: linear-gradient(
+    90deg,
+    var(--text-muted) 0%,
+    var(--text-normal) 50%,
+    var(--text-muted) 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: copilot-text-shimmer 2.5s ease-in-out infinite;
+}
+
 .copilot-command-input-container {
   width: 90%;
   margin: auto;

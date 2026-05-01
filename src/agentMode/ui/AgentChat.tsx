@@ -413,6 +413,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               onDelete={handleDelete}
               currentPlan={currentPlan}
               chatBackend={backend}
+              isLoading={loading}
             />
             {queuedMessages.length > 0 && (
               <QueuedMessageList messages={queuedMessages} onRemove={handleRemoveQueuedMessage} />

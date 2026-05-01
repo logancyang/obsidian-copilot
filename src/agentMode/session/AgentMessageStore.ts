@@ -90,6 +90,28 @@ export class AgentMessageStore {
   }
 
   /**
+   * Append assistant prose to the trailing `text` part, creating one if the
+   * last part is a different kind. Mirrors `appendAgentThought` so streamed
+   * `agent_message_chunk`s interleave chronologically with tool calls and
+   * thoughts inside `parts[]`. Also keeps `displayText` in sync so callers
+   * that read the flattened body (persistence, search, error append) stay
+   * correct.
+   */
+  appendAgentText(id: string, text: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    msg.displayText += text;
+    if (!msg.parts) msg.parts = [];
+    const last = msg.parts[msg.parts.length - 1];
+    if (last && last.kind === "text") {
+      last.text += text;
+    } else {
+      msg.parts.push({ kind: "text", text });
+    }
+    return true;
+  }
+
+  /**
    * Append text to the trailing `thought` part, creating one if absent. Folds
    * multiple `agent_thought_chunk` updates into a single collapsible block
    * instead of one block per chunk.

@@ -322,9 +322,30 @@ export type AgentMessagePart =
       input?: unknown;
       output?: AgentToolCallOutput[];
       locations?: { path: string; line?: number }[];
+      /**
+       * Vendor tool identity (e.g. "Read", "Edit", "Task", "ExitPlanMode")
+       * lifted from the backend's `_meta` parser. Used by the trail UI to
+       * pick a richer tool-aware summary than the ACP `toolKind` enum
+       * affords. Absent for backends that don't emit `_meta` (opencode,
+       * codex).
+       */
+      vendorToolName?: string;
+      /**
+       * Parent tool-call id for sub-agent children. Today only Claude
+       * Code emits this (Task → child tool calls carry `parentToolUseId`
+       * in `_meta`). Absent → the part is top-level.
+       */
+      parentToolCallId?: string;
     }
   | {
       kind: "thought";
+      text: string;
+    }
+  | {
+      // Streamed assistant prose. Each interruption by a tool_call or thought
+      // closes the current text part and opens a new one, so `parts[]` keeps
+      // chronological interleaving instead of collapsing prose into one block.
+      kind: "text";
       text: string;
     }
   | {

@@ -1,5 +1,6 @@
-import { AgentToolCall } from "@/agentMode/ui/AgentToolCall";
+import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
+import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
@@ -15,6 +16,9 @@ interface AgentChatMessagesProps {
   onDelete: (messageId: string) => void;
   currentPlan: CurrentPlan | null;
   chatBackend: AgentChatBackend;
+  /** True while a turn is in flight. The last assistant message in the
+   *  visible list is treated as the streaming placeholder. */
+  isLoading: boolean;
 }
 
 /**
@@ -36,7 +40,7 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
 }
 
 const AgentChatMessages = memo(
-  ({ messages, app, onDelete, currentPlan, chatBackend }: AgentChatMessagesProps) => {
+  ({ messages, app, onDelete, currentPlan, chatBackend, isLoading }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
     const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
@@ -48,9 +52,32 @@ const AgentChatMessages = memo(
       <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
     ) : null;
 
+    // The last visible assistant message is the streaming placeholder while
+    // a turn is in flight. Used to drive the reasoning-block timer / spinner
+    // for the matching message only.
+    const streamingMessageId = useMemo(() => {
+      if (!isLoading) return undefined;
+      for (let i = visible.length - 1; i >= 0; i--) {
+        if (visible[i].sender !== USER_SENDER) return visible[i].id;
+      }
+      return undefined;
+    }, [isLoading, visible]);
+
+    // Show the bottom loader only when the turn is in flight and nothing
+    // structured has streamed yet — otherwise the reasoning block, action
+    // cards, or streamed text already signal progress.
+    const showBottomLoader = useMemo(() => {
+      if (!isLoading) return false;
+      const streaming = streamingMessageId
+        ? visible.find((m) => m.id === streamingMessageId)
+        : undefined;
+      return (streaming?.parts?.length ?? 0) === 0;
+    }, [isLoading, streamingMessageId, visible]);
+
     if (visible.length === 0) {
       return (
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto">
+          {showBottomLoader && <BottomLoadingIndicator />}
           {inlinePlanCard}
         </div>
       );
@@ -71,6 +98,11 @@ const AgentChatMessages = memo(
             const shouldApplyMinHeight =
               isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
             const adaptedMessage = adapted[index];
+            // When an assistant message has structured parts, the trail owns
+            // its entire body — `text` parts already cover streamed prose, so
+            // an additional `ChatSingleMessage` would duplicate it.
+            const isAssistant = message.sender !== USER_SENDER;
+            const renderTrail = isAssistant && (message.parts?.length ?? 0) > 0;
 
             return (
               <div
@@ -81,22 +113,26 @@ const AgentChatMessages = memo(
                   minHeight: shouldApplyMinHeight ? `${containerMinHeight}px` : "auto",
                 }}
               >
-                {message.parts && message.parts.length > 0 ? (
-                  <div className="tw-flex tw-flex-col tw-gap-1 tw-px-3 tw-pt-2">
-                    {message.parts.map((part, partIndex) => (
-                      <AgentToolCall key={partIndex} part={part} />
-                    ))}
+                {renderTrail ? (
+                  <div className="tw-px-3 tw-pt-2">
+                    <AgentTrail
+                      parts={message.parts!}
+                      isStreaming={message.id === streamingMessageId}
+                      app={app}
+                    />
                   </div>
-                ) : null}
-                <ChatSingleMessage
-                  message={adaptedMessage}
-                  app={app}
-                  isStreaming={false}
-                  onDelete={() => onDelete(message.id)}
-                />
+                ) : (
+                  <ChatSingleMessage
+                    message={adaptedMessage}
+                    app={app}
+                    isStreaming={false}
+                    onDelete={() => onDelete(message.id)}
+                  />
+                )}
               </div>
             );
           })}
+          {showBottomLoader && <BottomLoadingIndicator />}
           {inlinePlanCard}
         </div>
       </div>
