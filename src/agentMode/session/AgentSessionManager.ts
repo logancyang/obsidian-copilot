@@ -20,7 +20,7 @@ import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager"
 import type { AgentModelPreloader } from "./AgentModelPreloader";
 import type { EffortApplyContext } from "./effortAdapter";
 import type { CopilotMode, ModeApplyContext } from "./modeAdapter";
-import type { BackendDescriptor, BackendId } from "./types";
+import type { BackendDescriptor, BackendId, BackendProcess } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
 
@@ -57,8 +57,8 @@ export interface AgentSessionManagerOptions {
  * injected so this file stays out of the UI layer.
  */
 export class AgentSessionManager {
-  private backends = new Map<BackendId, AcpBackendProcess>();
-  private starting = new Map<BackendId, Promise<AcpBackendProcess>>();
+  private backends = new Map<BackendId, BackendProcess>();
+  private starting = new Map<BackendId, Promise<BackendProcess>>();
   private sessions = new Map<string, AgentSession>();
   private chatUIStates = new Map<string, AgentChatUIState>();
   private activeSessionId: string | null = null;
@@ -182,7 +182,7 @@ export class AgentSessionManager {
     this.startingBackendId = resolvedId;
     this.notify();
 
-    let backend: AcpBackendProcess;
+    let backend: BackendProcess;
     try {
       backend = await this.ensureBackend(resolvedId, descriptor);
     } catch (err) {
@@ -316,7 +316,7 @@ export class AgentSessionManager {
     };
   }
 
-  getBackendProcess(backendId: BackendId): AcpBackendProcess | null {
+  getBackendProcess(backendId: BackendId): BackendProcess | null {
     return this.backends.get(backendId) ?? null;
   }
 
@@ -692,19 +692,35 @@ export class AgentSessionManager {
   private async ensureBackend(
     backendId: BackendId,
     descriptor: BackendDescriptor
-  ): Promise<AcpBackendProcess> {
+  ): Promise<BackendProcess> {
     const existing = this.backends.get(backendId);
     if (existing && existing.isRunning()) return existing;
     const inflight = this.starting.get(backendId);
     if (inflight) return inflight;
 
-    const proc = new AcpBackendProcess(
-      this.app,
-      descriptor.createBackend(this.plugin),
-      this.plugin.manifest.version
-    );
+    const proc = (() => {
+      if (descriptor.createBackendProcess) {
+        return descriptor.createBackendProcess({
+          plugin: this.plugin,
+          app: this.app,
+          clientVersion: this.plugin.manifest.version,
+        });
+      }
+      if (descriptor.createBackend) {
+        return new AcpBackendProcess(
+          this.app,
+          descriptor.createBackend(this.plugin),
+          this.plugin.manifest.version
+        );
+      }
+      throw new Error(
+        `Backend descriptor "${backendId}" implements neither createBackendProcess nor createBackend`
+      );
+    })();
     const startPromise = (async () => {
-      await proc.start();
+      // ACP backends declare `start()` to spawn the subprocess and run the
+      // initialize handshake. In-process adapters (Claude SDK) omit it.
+      if (proc.start) await proc.start();
       proc.setPermissionPrompter(this.opts.permissionPrompter);
       proc.onExit(() => {
         // Backend died unexpectedly. Sessions belonging to *this* backend

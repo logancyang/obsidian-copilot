@@ -137,8 +137,8 @@ export const AdvancedSettings: React.FC = () => {
 
         <SettingItem
           type="switch"
-          title="Log Full ACP Frames"
-          description={`Writes full untruncated ACP frames — including prompts, tool inputs/outputs, and attachments — as NDJSON to ${acpFrameSink.getPath()}. Sensitive content lands on disk in plaintext; produces large files. Leave off unless actively debugging.`}
+          title="Log Full Agent Mode Frames"
+          description={`Writes full untruncated Agent Mode frames — ACP JSON-RPC traffic for opencode/codex and Claude SDK message/RPC traffic, including prompts, tool inputs/outputs, and attachments — as NDJSON to ${acpFrameSink.getPath()}. Sensitive content lands on disk in plaintext; produces large files. Leave off unless actively debugging.`}
           checked={settings.agentMode.debugFullFrames}
           onCheckedChange={(checked) => {
             setSettings((cur) => ({
@@ -149,8 +149,8 @@ export const AdvancedSettings: React.FC = () => {
 
         <SettingItem
           type="custom"
-          title="ACP Frame Log"
-          description={`Open or clear the full ACP frame log (${acpFrameSink.getPath()}).`}
+          title="Agent Mode Frame Log"
+          description={`Open or clear the full Agent Mode frame log (${acpFrameSink.getPath()}).`}
         >
           <div className="tw-flex tw-gap-2">
             <Button
@@ -160,7 +160,7 @@ export const AdvancedSettings: React.FC = () => {
                 try {
                   await acpFrameSink.open();
                 } catch {
-                  new Notice("Failed to open ACP frame log.");
+                  new Notice("Failed to open Agent Mode frame log.");
                 }
               }}
             >
@@ -172,9 +172,9 @@ export const AdvancedSettings: React.FC = () => {
               onClick={async () => {
                 try {
                   await acpFrameSink.clear();
-                  new Notice("ACP frame log cleared.");
+                  new Notice("Agent Mode frame log cleared.");
                 } catch {
-                  new Notice("Failed to clear ACP frame log.");
+                  new Notice("Failed to clear Agent Mode frame log.");
                 }
               }}
             >

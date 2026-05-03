@@ -113,6 +113,39 @@ describe("lookupToolSummary", () => {
     expect(s).toBe(taskEquiv);
   });
 
+  it("maps vault MCP tools onto built-in Read/Edit/Search summaries", () => {
+    const read = tool({
+      vendorToolName: "vault_read",
+      toolKind: "read",
+      title: "vault_read Daily/2026-05-01.md",
+      input: { path: "Daily/2026-05-01.md" },
+    });
+    expect(lookupToolSummary(read).collapsedLine(read)).toBe("Read Daily/2026-05-01.md");
+
+    const edit = tool({
+      vendorToolName: "vault_edit",
+      toolKind: "edit",
+      title: "vault_edit notes/x.md",
+      input: { path: "notes/x.md" },
+      output: [{ type: "diff", path: "notes/x.md", oldText: "a", newText: "b\nc" }],
+    });
+    expect(lookupToolSummary(edit).collapsedLine(edit)).toBe("Edited notes/x.md");
+
+    const list = tool({
+      vendorToolName: "vault_list",
+      title: "vault_list Daily",
+      input: { path: "Daily" },
+    });
+    expect(lookupToolSummary(list).collapsedLine(list)).toBe("Listed Daily");
+
+    const grep = tool({
+      vendorToolName: "vault_grep",
+      title: "vault_grep TODO",
+      input: { pattern: "TODO" },
+    });
+    expect(lookupToolSummary(grep).collapsedLine(grep)).toBe('Searched vault · "TODO"');
+  });
+
   it("falls back to ACP toolKind when vendor is missing", () => {
     const t = tool({ toolKind: "edit", title: "wrote thing" });
     const s = lookupToolSummary(t);

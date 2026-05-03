@@ -7,6 +7,7 @@ import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
 import { AgentMarkdownText } from "@/agentMode/ui/AgentMarkdownText";
 import { planEntryClass, planEntryIcon } from "@/agentMode/ui/planEntryStyles";
+import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import { App } from "obsidian";
 
 interface AgentTrailProps {
@@ -14,11 +15,21 @@ interface AgentTrailProps {
   /** True iff this message is the one currently being streamed by the
    *  agent. Drives reasoning-block spinner / timer. */
   isStreaming: boolean;
+  /** When true, render a "Thinking" shimmer as the last item of the trail.
+   *  Anchors the in-flight indicator to the streaming message's own bubble
+   *  (e.g., directly under a populating SubAgentCard) instead of pinning it
+   *  to the bottom of the chat container. */
+  showThinkingTail?: boolean;
   /** Obsidian `App` for the markdown renderer used by `text` parts. */
   app: App;
 }
 
-export const AgentTrail: React.FC<AgentTrailProps> = ({ parts, isStreaming, app }) => {
+export const AgentTrail: React.FC<AgentTrailProps> = ({
+  parts,
+  isStreaming,
+  showThinkingTail,
+  app,
+}) => {
   const tree = buildAgentTrail(parts);
   // A reasoning block is "still active" only while the turn is in flight AND
   // its `thought` part is the trailing entry of `msg.parts[]`. Anything later
@@ -32,6 +43,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({ parts, isStreaming, app 
   return (
     <div className="tw-flex tw-flex-col tw-gap-1">
       {tree.map((node, i) => renderNode(node, i, isStreaming, app, lastPart))}
+      {showThinkingTail ? <BottomLoadingIndicator /> : null}
     </div>
   );
 };

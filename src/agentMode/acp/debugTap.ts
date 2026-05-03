@@ -183,7 +183,7 @@ function logFrame(
   }
 }
 
-function formatPayload(value: unknown): string {
+export function formatPayload(value: unknown): string {
   if (value === undefined) return "";
   let s: string;
   try {

@@ -14,9 +14,9 @@ jest.mock("@/logger", () => ({
 
 function fakeProc(supports: { http?: boolean; sse?: boolean }) {
   return {
-    hasCapability: (cap: string) => {
-      if (cap === "mcp/http") return supports.http === true;
-      if (cap === "mcp/sse") return supports.sse === true;
+    supportsMcpTransport: (transport: "http" | "sse") => {
+      if (transport === "http") return supports.http === true;
+      if (transport === "sse") return supports.sse === true;
       return false;
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

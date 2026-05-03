@@ -622,6 +622,47 @@ describe("AgentSession.setMode", () => {
     expect(session.getModeState()?.currentModeId).toBe("default");
   });
 
+  it("preserves availableModes from the descriptor's static catalog when modeState was null", async () => {
+    // Repro for the "picker disappears after picking a mode" bug: the Claude
+    // SDK backend doesn't surface modes via ACP, so `newSession` returns no
+    // modes and the session would otherwise spread `{ availableModes: [] }`
+    // into the new state — the picker's mode adapter then sees an empty
+    // advertised set and returns null, hiding itself.
+    const mock = makeMockBackend();
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1" });
+    const staticModes = {
+      currentModeId: "default",
+      availableModes: [
+        { id: "default", name: "Default" },
+        { id: "plan", name: "Plan" },
+        { id: "bypassPermissions", name: "Auto" },
+      ],
+    };
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "claude",
+      getDescriptor: () =>
+        ({
+          id: "claude",
+          getStaticInitialState: () => ({ modes: staticModes }),
+        }) as unknown as ReturnType<
+          NonNullable<Parameters<typeof AgentSession.start>[0]["getDescriptor"]>
+        >,
+    });
+    await session.ready;
+    await session.setMode("plan");
+    const modeState = session.getModeState();
+    expect(modeState?.currentModeId).toBe("plan");
+    expect(modeState?.availableModes).toHaveLength(3);
+    expect(modeState?.availableModes.map((m) => m.id)).toEqual([
+      "default",
+      "plan",
+      "bypassPermissions",
+    ]);
+  });
+
   it("notifies onModelChanged listeners after successful switch", async () => {
     const mock = makeMockBackend();
     const session = new AgentSession({

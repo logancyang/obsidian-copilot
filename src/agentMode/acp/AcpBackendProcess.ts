@@ -263,6 +263,10 @@ export class AcpBackendProcess {
     return this.capabilities.get(cap) === true;
   }
 
+  supportsMcpTransport(transport: "http" | "sse"): boolean {
+    return this.hasCapability(transport === "http" ? "mcp/http" : "mcp/sse");
+  }
+
   /**
    * Switch the active model for an ACP session via `unstable_setSessionModel`.
    * Capability is unstable — probed on first call.

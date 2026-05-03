@@ -1,7 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import type { McpServer } from "@agentclientprotocol/sdk";
 import { v4 as uuidv4 } from "uuid";
-import type { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
+import type { BackendProcess } from "@/agentMode/session/types";
 
 /** Transport mechanisms supported by the ACP MCP integration. */
 export type McpTransport = "stdio" | "http" | "sse";
@@ -117,7 +117,7 @@ function sanitizeKvList(raw: unknown): Array<{ name: string; value: string }> {
  * to keep this module independent of `CopilotSettings` and avoid a
  * settings ⇆ agentMode-barrel type cycle.
  */
-export function resolveMcpServers(proc: AcpBackendProcess, rawMcpServers: unknown): McpServer[] {
+export function resolveMcpServers(proc: BackendProcess, rawMcpServers: unknown): McpServer[] {
   const stored = sanitizeStoredMcpServers(rawMcpServers);
   const out: McpServer[] = [];
   for (const s of stored) {
@@ -140,11 +140,11 @@ export function resolveMcpServers(proc: AcpBackendProcess, rawMcpServers: unknow
       );
       continue;
     }
-    if (s.transport === "http" && !proc.hasCapability("mcp/http")) {
+    if (s.transport === "http" && !proc.supportsMcpTransport("http")) {
       logWarn(`[AgentMode] skipping MCP server "${s.name}": agent does not support http transport`);
       continue;
     }
-    if (s.transport === "sse" && !proc.hasCapability("mcp/sse")) {
+    if (s.transport === "sse" && !proc.supportsMcpTransport("sse")) {
       logWarn(`[AgentMode] skipping MCP server "${s.name}": agent does not support sse transport`);
       continue;
     }

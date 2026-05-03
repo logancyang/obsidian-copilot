@@ -24,10 +24,10 @@ import { Platform } from "obsidian";
 import React from "react";
 
 /**
- * Explicit ordering for backend sections. Keeps Opencode → Claude Code →
- * Codex regardless of what `listBackendDescriptors()` returns.
+ * Explicit ordering for backend sections. Keeps Opencode → Claude → Codex
+ * regardless of what `listBackendDescriptors()` returns.
  */
-const BACKEND_ORDER: BackendId[] = ["opencode", "claude-code", "codex"];
+const BACKEND_ORDER: BackendId[] = ["opencode", "claude", "codex"];
 
 /**
  * Top-level "Agents" settings tab. Owns the master agent-mode toggle, the
@@ -292,7 +292,7 @@ const DefaultModelPicker: React.FC<{
 /**
  * Default-effort dropdown — uses the same `EffortAdapter` shape as the chat
  * picker. For opencode/codex this recomposes the model id and persists via
- * `persistModelSelection`; for claude-code it persists via
+ * `persistModelSelection`; for claude-code-style descriptors it persists via
  * `persistEffortSelection`. Hidden when the backend doesn't expose effort.
  */
 const DefaultEffortPicker: React.FC<{

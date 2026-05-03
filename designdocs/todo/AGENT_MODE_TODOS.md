@@ -3,6 +3,7 @@
 - P0: Chat history
   - [x] Load chat history from agents
   - [x] Save chat history to notes
+- P0: Thoroughly assess whether migrating to Anthropic agent SDK is worth it.
 - [ ] P1: Create sample vaults for test cases.
 - [ ] P1: Provide copilot specific system prompt
 - [x] P1: Queue messages
@@ -10,9 +11,15 @@
   - Basic functionality is ready
   - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
   - [ ] P1: Support oauth for MCP servers (the one example that I tested didn't work)
+  - [ ] P1: Support setting MCP by copy pasting JSON blobs
 - [ ] P1: Skills
+  - Check out cc-switch to understand how to make skills compatible cross other agents https://github.com/farion1231/cc-switch
+  - [ ] P1: Block skills configured at the user level
+  - [ ] P1: Block remote agent
+  - [ ] P2: Support creating skills with the claude skill creator
 - [ ] P1: Permission UI
 - [ ] P1: Edit diff UI - https://agentclientprotocol.com/protocol/tool-calls#diffs
+  - The edit diff should be based on well rendered markdown, not raw markdown file. For example, table is impossible to understand the diff with the raw format
 - [ ] P1: Agent mode selector (yolo, plan, safe) - https://agentclientprotocol.com/protocol/session-config-options
   - Basic functionality is added but doesn't work well yet. Need thorough test.
 - [ ] P1: Merge copilot models with opencode models
@@ -66,5 +73,8 @@
 - [ ] P2: Claude code authentication
 - [ ] P2: Auto-save chat history controls
 - [ ] P2: Slash command support. Revamp current slash command to function like skills.
+- [ ] P2: Steering conversation (instead of queue)
+- [ ] P2: Rollback everything to the state of previous message
+- [ ] P2: Compaction
 - [ ] P3: Rerun agent response
 - [ ] P3: Agent todo list

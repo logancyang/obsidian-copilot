@@ -10,6 +10,7 @@ module.exports = {
     "^@/(.*)$": "<rootDir>/src/$1",
     "^obsidian$": "<rootDir>/__mocks__/obsidian.js",
     "^@agentclientprotocol/sdk$": "<rootDir>/__mocks__/@agentclientprotocol/sdk.js",
+    "^@anthropic-ai/claude-agent-sdk$": "<rootDir>/__mocks__/@anthropic-ai/claude-agent-sdk.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],

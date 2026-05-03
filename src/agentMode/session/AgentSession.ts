@@ -31,7 +31,7 @@ import {
   ToolCall,
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
-import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
+import type { BackendProcess } from "@/agentMode/session/types";
 import { MethodUnsupportedError, type BackendId } from "@/agentMode/acp/types";
 import type { BackendMetaParser } from "@/agentMode/session/backendMeta";
 import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
@@ -72,7 +72,7 @@ export interface AgentSessionListener {
 }
 
 export interface AgentSessionStartOptions {
-  backend: AcpBackendProcess;
+  backend: BackendProcess;
   cwd: string;
   internalId: string;
   backendId: BackendId;
@@ -90,7 +90,7 @@ export interface AgentSessionStartOptions {
  * construct a session that bypasses the async ACP startup.
  */
 export interface AgentSessionStateOptions {
-  backend: AcpBackendProcess;
+  backend: BackendProcess;
   acpSessionId: SessionId;
   internalId: string;
   backendId: BackendId;
@@ -120,7 +120,7 @@ export class AgentSession {
   /** Resolves when `session/new` succeeds; rejects when it fails. */
   readonly ready: Promise<void>;
   private acpSessionId: SessionId | null = null;
-  private readonly backend: AcpBackendProcess;
+  private readonly backend: BackendProcess;
   private readonly cwd: string | null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
   private status: AgentSessionStatus = "starting";
@@ -221,9 +221,14 @@ export class AgentSession {
         logInfo(`[AgentMode] session ${resp.sessionId} created — agent did not report model state`);
       }
       this.acpSessionId = resp.sessionId;
-      this.modelState = resp.models ?? null;
-      this.configOptions = resp.configOptions ?? null;
-      this.modeState = resp.modes ?? null;
+      // Backends like the Claude SDK don't surface modes/models via ACP and
+      // instead publish a static catalog through `getStaticInitialState`.
+      // Seed session-level state from it so `setMode` / `setModel` mutations
+      // don't strip `availableModes` / `availableModels` to empty.
+      const staticInitial = this.getDescriptor?.()?.getStaticInitialState?.() ?? null;
+      this.modelState = resp.models ?? staticInitial?.models ?? null;
+      this.configOptions = resp.configOptions ?? staticInitial?.configOptions ?? null;
+      this.modeState = resp.modes ?? staticInitial?.modes ?? null;
       this.unregisterSessionHandler = this.backend.registerSessionHandler(
         resp.sessionId,
         (update) => this.handleSessionUpdate(update)
@@ -350,7 +355,7 @@ export class AgentSession {
     if (!this.acpSessionId) throw new Error("Session is still starting");
     await this.backend.setSessionMode({ sessionId: this.acpSessionId, modeId });
     this.modeState = {
-      ...(this.modeState ?? { availableModes: [] }),
+      ...this.seedModeState(),
       currentModeId: modeId,
     };
     this.notifyModelChanged();
@@ -708,7 +713,7 @@ export class AgentSession {
       // didn't actually change to avoid spurious re-renders.
       if (this.modeState?.currentModeId === update.currentModeId) return;
       this.modeState = {
-        ...(this.modeState ?? { availableModes: [] }),
+        ...this.seedModeState(),
         currentModeId: update.currentModeId,
       };
       this.notifyModelChanged();
@@ -970,6 +975,19 @@ export class AgentSession {
    * vs setMode-style backends) without importing it, to keep the session
    * layer free of UI/picker concerns.
    */
+  /**
+   * Source the spread base for `modeState` mutations. When `this.modeState`
+   * is null (backends like the Claude SDK that don't surface modes via ACP),
+   * fall back to the descriptor's static catalog so `availableModes` stays
+   * populated — otherwise the mode picker's adapter sees an empty list and
+   * hides itself.
+   */
+  private seedModeState(): SessionModeState {
+    if (this.modeState) return this.modeState;
+    const seeded = this.getDescriptor?.()?.getStaticInitialState?.()?.modes;
+    return seeded ?? { availableModes: [], currentModeId: "" };
+  }
+
   private isCurrentlyInPlanMode(descriptor: BackendDescriptor): boolean {
     const mapping = descriptor.getModeMapping?.(this.modeState, this.configOptions);
     if (!mapping) return false;

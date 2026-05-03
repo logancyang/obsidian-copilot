@@ -87,9 +87,13 @@ function targetFromPath(part: ToolCallPart): string | null {
   const base = getVaultBase();
   const loc = part.locations?.[0]?.path;
   if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, base);
-  const input = part.input as { file_path?: unknown; filePath?: unknown } | null | undefined;
+  const input = part.input as
+    | { file_path?: unknown; filePath?: unknown; path?: unknown }
+    | null
+    | undefined;
   if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, base);
   if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, base);
+  if (typeof input?.path === "string") return toVaultRelative(input.path, base);
   return null;
 }
 
@@ -142,6 +146,19 @@ const READ_SUMMARY: ToolSummary = {
       outcome: tokens > 0 ? `~${formatTokens(tokens)} tokens` : "",
     };
   },
+};
+
+const LIST_SUMMARY: ToolSummary = {
+  icon: pickToolIcon({ vendorToolName: "vault_list" }),
+  collapsedLine: (p) => {
+    const path = targetFromPath(p);
+    return path ? `Listed ${path}` : "Listed vault root";
+  },
+  outcome: () => null,
+  aggregate: (parts) => ({
+    line: `Listed ${pluralize(parts.length, "folder")}${statusSuffix(parts)}`,
+    outcome: "",
+  }),
 };
 
 const EDIT_SUMMARY: ToolSummary = {
@@ -291,6 +308,14 @@ const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   Agent: TASK_SUMMARY,
   TodoWrite: TODO_SUMMARY,
   ExitPlanMode: EXIT_PLAN_SUMMARY,
+  // First-party Obsidian vault MCP — render with the same verbs/icons as
+  // Claude's built-in Read/Edit/Glob/Grep so the trail stays consistent.
+  vault_read: READ_SUMMARY,
+  vault_write: EDIT_SUMMARY,
+  vault_edit: EDIT_SUMMARY,
+  vault_glob: SEARCH_VAULT_SUMMARY,
+  vault_grep: SEARCH_VAULT_SUMMARY,
+  vault_list: LIST_SUMMARY,
 };
 
 // ---- ACP-kind fallbacks (work for opencode, codex, future backends) ----

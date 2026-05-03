@@ -2,6 +2,7 @@ import {
   Bot,
   ClipboardList,
   FileText,
+  FolderTree,
   Globe,
   Hammer,
   ListChecks,
@@ -38,6 +39,13 @@ const VENDOR_ICONS: Record<string, LucideIcon> = {
   Agent: Bot,
   TodoWrite: ListChecks,
   ExitPlanMode: ClipboardList,
+  // First-party Obsidian vault MCP tools.
+  vault_read: FileText,
+  vault_write: Pencil,
+  vault_edit: Pencil,
+  vault_glob: Search,
+  vault_grep: Search,
+  vault_list: FolderTree,
 };
 
 const KIND_ICONS: Record<string, LucideIcon> = {

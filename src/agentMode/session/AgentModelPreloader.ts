@@ -9,18 +9,9 @@ import type {
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { MethodUnsupportedError } from "@/agentMode/acp/types";
-import type { BackendDescriptor, BackendId } from "./types";
+import type { BackendDescriptor, BackendId, BackendInitialState } from "./types";
 
-/**
- * Per-backend snapshot of the initial state ACP returns from
- * `session/new` (or `resume`/`load`): models, modes, and configOptions.
- * Used as an optimistic placeholder for the picker during session startup.
- */
-export interface BackendInitialState {
-  models: SessionModelState | null;
-  modes: SessionModeState | null;
-  configOptions: SessionConfigOption[] | null;
-}
+export type { BackendInitialState } from "./types";
 
 /**
  * Plugin-lifetime cache of per-backend initial session state. ACP exposes
@@ -125,6 +116,21 @@ export class AgentModelPreloader {
     }
     if (descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
+    // Non-ACP backends (Claude SDK adapter) don't expose a probe-friendly
+    // session model — their model list comes from the SDK directly when the
+    // first real session starts. Caching whatever the descriptor declares
+    // statically (if anything) is the descriptor's responsibility; we simply
+    // skip the ACP probe path here.
+    if (descriptor.createBackendProcess) {
+      const staticState = descriptor.getStaticInitialState?.();
+      if (staticState) this.setCached(backendId, staticState);
+      return;
+    }
+
+    if (!descriptor.createBackend) {
+      logWarn(`[AgentMode] preload skipped: ${backendId} declares no backend factory`);
+      return;
+    }
     const proc = new AcpBackendProcess(
       this.app,
       descriptor.createBackend(this.plugin),

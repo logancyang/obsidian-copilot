@@ -53,14 +53,27 @@ const AgentChatMessages = memo(
     ) : null;
 
     // The last visible assistant message is the streaming placeholder while
-    // a turn is in flight. Used to drive the reasoning-block timer / spinner
-    // for the matching message only.
-    const streamingMessageId = useMemo(() => {
-      if (!isLoading) return undefined;
+    // a turn is in flight — drives the reasoning-block timer/spinner and the
+    // persistent "Thinking" loader below it. The bottom loader is suppressed
+    // when the streaming message's tail part is a `thought` (the reasoning
+    // block already spins) and when the bubble is still entirely empty (the
+    // in-place `isStreamingPlaceholder` spinner covers that).
+    const { streamingMessageId, showBottomLoader } = useMemo(() => {
+      if (!isLoading) return { streamingMessageId: undefined, showBottomLoader: false };
+      let streaming: AgentChatMessage | undefined;
       for (let i = visible.length - 1; i >= 0; i--) {
-        if (visible[i].sender !== USER_SENDER) return visible[i].id;
+        if (visible[i].sender !== USER_SENDER) {
+          streaming = visible[i];
+          break;
+        }
       }
-      return undefined;
+      if (!streaming) return { streamingMessageId: undefined, showBottomLoader: false };
+      const parts = streaming.parts ?? [];
+      const last = parts[parts.length - 1];
+      const hasParts = parts.length > 0;
+      const hasBody = !!streaming.message;
+      const showLoader = last?.kind !== "thought" && (hasParts || hasBody);
+      return { streamingMessageId: streaming.id, showBottomLoader: showLoader };
     }, [isLoading, visible]);
 
     if (visible.length === 0) {
@@ -117,6 +130,7 @@ const AgentChatMessages = memo(
                     <AgentTrail
                       parts={message.parts!}
                       isStreaming={message.id === streamingMessageId}
+                      showThinkingTail={message.id === streamingMessageId && showBottomLoader}
                       app={app}
                     />
                   </div>

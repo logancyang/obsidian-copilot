@@ -1,6 +1,31 @@
 import type { App } from "obsidian";
 import type React from "react";
-import type { ModelInfo, SessionConfigOption, SessionModeState } from "@agentclientprotocol/sdk";
+import type {
+  CancelNotification,
+  ListSessionsRequest,
+  ListSessionsResponse,
+  LoadSessionRequest,
+  LoadSessionResponse,
+  ModelInfo,
+  NewSessionRequest,
+  NewSessionResponse,
+  PromptRequest,
+  PromptResponse,
+  RequestPermissionRequest,
+  RequestPermissionResponse,
+  ResumeSessionRequest,
+  ResumeSessionResponse,
+  SessionConfigOption,
+  SessionId,
+  SessionModeState,
+  SessionNotification,
+  SetSessionConfigOptionRequest,
+  SetSessionConfigOptionResponse,
+  SetSessionModelRequest,
+  SetSessionModelResponse,
+  SetSessionModeRequest,
+  SetSessionModeResponse,
+} from "@agentclientprotocol/sdk";
 import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
@@ -12,6 +37,64 @@ import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 
 // Re-export so consumers in session/ and ui/ can import a single types entry.
 export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/types";
+
+/**
+ * Per-backend snapshot of the initial state ACP returns from `session/new`
+ * (or `resume`/`load`): models, modes, and configOptions. Cached by
+ * `AgentModelPreloader` and surfaced as an optimistic placeholder for the
+ * picker during session startup.
+ */
+export interface BackendInitialState {
+  models: import("@agentclientprotocol/sdk").SessionModelState | null;
+  modes: SessionModeState | null;
+  configOptions: SessionConfigOption[] | null;
+}
+
+/**
+ * Generic backend-process surface consumed by `AgentSession`. The ACP runtime
+ * (`AcpBackendProcess`) is one implementation; the Claude SDK adapter
+ * (`ClaudeSdkBackendProcess`) is another. Keeping this in `session/types.ts`
+ * lets `AgentSession` stay backend-agnostic — it depends on the interface,
+ * never on a concrete class.
+ */
+export type SessionUpdateHandler = (update: SessionNotification) => void;
+
+export interface BackendProcess {
+  /**
+   * Optional bring-up step. ACP backends spawn the subprocess and run the
+   * `initialize` handshake here; in-process adapters (Claude SDK) leave this
+   * undefined because they have no async startup phase — their first
+   * `newSession`/`prompt` does the bring-up lazily.
+   */
+  start?(): Promise<void>;
+  isRunning(): boolean;
+  onExit(listener: () => void): () => void;
+  setPermissionPrompter(
+    fn: (req: RequestPermissionRequest) => Promise<RequestPermissionResponse>
+  ): void;
+  registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
+  newSession(params: NewSessionRequest): Promise<NewSessionResponse>;
+  prompt(params: PromptRequest): Promise<PromptResponse>;
+  cancel(params: CancelNotification): Promise<void>;
+  setSessionModel(params: SetSessionModelRequest): Promise<SetSessionModelResponse>;
+  isSetSessionModelSupported(): boolean | null;
+  setSessionMode(params: SetSessionModeRequest): Promise<SetSessionModeResponse>;
+  isSetSessionModeSupported(): boolean | null;
+  setSessionConfigOption(
+    params: SetSessionConfigOptionRequest
+  ): Promise<SetSessionConfigOptionResponse>;
+  isSetSessionConfigOptionSupported(): boolean | null;
+  listSessions(params: ListSessionsRequest): Promise<ListSessionsResponse>;
+  resumeSession(params: ResumeSessionRequest): Promise<ResumeSessionResponse>;
+  loadSession(params: LoadSessionRequest): Promise<LoadSessionResponse>;
+  /**
+   * Whether the backend can route MCP servers of the given transport.
+   * ACP runtime probes this from the agent's advertised capabilities; the
+   * Claude SDK adapter accepts http/sse natively.
+   */
+  supportsMcpTransport(transport: "http" | "sse"): boolean;
+  shutdown(): Promise<void>;
+}
 
 /** UI-facing install/setup state for a backend. */
 export type InstallState =
@@ -46,8 +129,35 @@ export interface BackendDescriptor {
   /** Open backend-specific install/setup modal. */
   openInstallUI(plugin: CopilotPlugin): void;
 
-  /** Construct the `AcpBackend` the session manager will spawn. */
-  createBackend(plugin: CopilotPlugin): AcpBackend;
+  /**
+   * Construct the `AcpBackend` the session manager will spawn. ACP-style
+   * backends implement this; in-process adapters omit it and implement
+   * `createBackendProcess` instead. Exactly one of the two must be present
+   * — `AgentSessionManager.ensureBackend` throws if neither is.
+   */
+  createBackend?(plugin: CopilotPlugin): AcpBackend;
+
+  /**
+   * Construct the entire backend process directly. When present, the session
+   * manager uses it instead of wrapping `createBackend()` in an
+   * `AcpBackendProcess`. Entry point for non-ACP backends (e.g. the Claude
+   * Agent SDK adapter, which talks to the SDK in-process via an async
+   * generator rather than a JSON-RPC subprocess).
+   */
+  createBackendProcess?(args: {
+    plugin: CopilotPlugin;
+    app: App;
+    clientVersion: string;
+  }): BackendProcess;
+
+  /**
+   * Optional: declare the initial model/mode/configOption snapshot the picker
+   * should see before any real session has been created. Used by non-ACP
+   * backends whose model list is statically known (e.g. the Claude SDK
+   * adapter). Returning `null` (or omitting) leaves the cache empty until the
+   * first session populates it.
+   */
+  getStaticInitialState?(): BackendInitialState | null;
 
   /** Optional: backend-specific settings panel. Rendered inside the Agent Mode tab. */
   SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;
