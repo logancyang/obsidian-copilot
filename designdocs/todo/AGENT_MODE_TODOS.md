@@ -58,6 +58,10 @@
   - how to update ACP packages?
   - how to update downloaded binary?
 - [ ] P2: Rebuild agent session tabs and right click context menu
+- [ ] P1: Adopt anthropic agent sdk
+- [ ] P2: Add agent brand indicator in chat
+  - so user can know which agent harness they are interacting with
+- [ ] P2: Support web
 - [ ] P2: Claude vscode plugin add comment to plan capability
   - It makes iterating on plan a lot easier
 - [x] P2: Rebrand chat send button
