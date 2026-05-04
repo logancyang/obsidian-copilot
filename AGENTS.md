@@ -27,6 +27,38 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 - `npm run test:integration` - Run integration tests (requires API keys)
 - Run single test: `npm test -- -t "test name"`
 
+### Obsidian CLI (Live Testing)
+
+The Obsidian desktop app includes a CLI for plugin development. Use the full path:
+
+```bash
+/Applications/Obsidian.app/Contents/MacOS/obsidian <command>
+```
+
+**Plugin reload** (after `npm run build`):
+
+```bash
+/Applications/Obsidian.app/Contents/MacOS/obsidian plugin:reload id=copilot
+```
+
+**Console debugging** (requires attaching debugger first):
+
+```bash
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:debug on
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:console limit=30
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:console level=error limit=10
+/Applications/Obsidian.app/Contents/MacOS/obsidian dev:errors
+```
+
+**Other useful dev commands**:
+
+- `dev:dom selector=<css>` — Query DOM elements
+- `dev:screenshot path=<file>` — Take a screenshot
+- `eval code=<js>` — Execute JS in the app context
+- `plugin:disable id=copilot` / `plugin:enable id=copilot`
+
+Run `obsidian help` for the full command list.
+
 ## High-Level Architecture
 
 ### Core Systems
@@ -191,7 +223,15 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
   - `logWarn()` for warnings
   - `logError()` for errors
 - Import from logger: `import { logInfo, logWarn, logError } from "@/logger"`
-- These utilities already respect the debug flag internally — never wrap them in `if (getSettings().debug)`
+
+### CSS & Styling
+
+- **NEVER edit `styles.css` directly** - This is a generated file
+- **Source file**: `src/styles/tailwind.css` - Edit this file for custom CSS
+- **Build process**: `npm run build:tailwind` compiles `src/styles/tailwind.css` → `styles.css`
+- **Tailwind classes**: Use Tailwind utility classes in components (see `tailwind.config.js` for available classes)
+- **Custom CSS**: Add custom styles to `src/styles/tailwind.css` after the `@import` statements
+- After editing CSS, always run `npm run build` to regenerate `styles.css`
 
 ## Testing Guidelines
 
@@ -200,6 +240,17 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 - Integration tests require API keys in `.env.test`
 - Test files adjacent to implementation (`.test.ts`)
 - Use `@testing-library/react` for component testing
+
+### Avoiding Deep Dependency Chains in Tests
+
+This codebase has deep transitive import chains (e.g. a utility → cache → searchUtils → embeddingManager → brevilabsClient → plusUtils → Modal). Importing any module in this chain from a test requires mocking the entire tree, which is brittle and verbose.
+
+**Rules for new code:**
+
+1. **Pass data, not services** — If a function only needs a string (like `outputFolder`), accept it as a parameter. Don't give it access to the entire settings singleton.
+2. **Singletons at the edges only** — `getSettings()`, `PDFCache.getInstance()`, `BrevilabsClient.getInstance()` should only be called in top-level orchestration (constructors, main entry points). Inner functions receive what they need as parameters.
+3. **Pure logic in leaf modules** — Extract testable logic into small files with minimal imports. The orchestration file (which has heavy imports) calls the leaf function and passes in the dependencies. See `src/tools/convertedDocOutput.ts` as an example.
+4. **Litmus test before writing a function** — "Can I test this by calling it directly with plain arguments?" If the answer is no because of an import, that dependency should be a parameter instead.
 
 ## Development Session Planning
 
@@ -262,6 +313,34 @@ The TODO.md should be:
 - For technical debt and known issues, see [`TECHDEBT.md`](./designdocs/todo/TECHDEBT.md)
 - For current development session planning, see [`TODO.md`](./TODO.md)
 
+## User-Facing Documentation
+
+- **When modifying user-facing behavior** (new features, changed settings, removed functionality), **update the corresponding doc in `docs/`**. The doc filenames match their topics (e.g., `llm-providers.md` for provider changes, `agent-mode-and-tools.md` for tool changes).
+- Docs are written for non-technical users — no source code references, explain behavior and concepts.
+- If a change affects multiple docs, update all of them.
+- If you're unsure which doc to update, check `docs/index.md` for the full list with descriptions.
+
+### AWS Bedrock Usage
+
+**IMPORTANT**: When using AWS Bedrock, always use **cross-region inference profile IDs** for better reliability and availability:
+
+- **Global** (recommended): `global.anthropic.claude-sonnet-4-5-20250929-v1:0`
+  - Routes to any commercial AWS region automatically
+  - Best for reliability and performance
+- **US**: `us.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **EU**: `eu.anthropic.claude-sonnet-4-5-20250929-v1:0`
+- **APAC**: `apac.anthropic.claude-sonnet-4-5-20250929-v1:0`
+
+❌ **Avoid regional model IDs** (without prefix): `anthropic.claude-sonnet-4-5-20250929-v1:0`
+
+- These only work in specific regions and often fail
+- Not recommended for production use
+
+**References:**
+
+- [AWS Bedrock Cross-Region Inference](https://docs.aws.amazon.com/bedrock/latest/userguide/cross-region-inference.html)
+- [Supported Inference Profiles](https://docs.aws.amazon.com/bedrock/latest/userguide/inference-profiles-support.html)
+
 ### Obsidian Plugin Environment
 
 - **Global `app` variable**: In Obsidian plugins, `app` is a globally available variable that provides access to the Obsidian API. It's automatically available in all files without needing to import or declare it.
@@ -279,3 +358,4 @@ The TODO.md should be:
   - Non-project chats stored in default repository
   - Backwards compatible - loads existing messages from ProjectManager cache
   - Zero configuration required - works automatically
+- Check @tailwind.config.js to understand what tailwind css classnames are available
