@@ -1188,6 +1188,8 @@ export interface ModelInfo {
   isOSeries: boolean;
   isGPT5: boolean;
   isThinkingEnabled: boolean;
+  /** True for claude-opus-4-7+ which use thinking.type="adaptive" instead of type="enabled"+budget_tokens */
+  usesAdaptiveThinking: boolean;
 }
 
 export function getModelInfo(model: BaseChatModel | string): ModelInfo {
@@ -1201,10 +1203,17 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
     modelName.startsWith("claude-sonnet-4") ||
     modelName.startsWith("claude-opus-4");
 
+  // claude-opus-4-7 and later versions dropped support for thinking.type="enabled"+budget_tokens
+  // in favour of thinking.type="adaptive" (the model decides when to use extended thinking).
+  // Extract the minor version from the model name and treat >= 7 as using the new adaptive API.
+  const opusMinorMatch = modelName.match(/^claude-opus-4-(\d+)/);
+  const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
+
   return {
     isOSeries,
     isGPT5,
     isThinkingEnabled,
+    usesAdaptiveThinking,
   };
 }
 
