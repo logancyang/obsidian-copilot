@@ -1,5 +1,6 @@
 import { CustomError } from "@/error";
 import EmbeddingsManager from "@/LLMProviders/embeddingManager";
+import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { logFileManager } from "@/logFileManager";
 import { getTagsFromNote, stripHash } from "@/utils";
@@ -25,12 +26,12 @@ export async function getVectorLength(embeddingInstance: Embeddings | undefined)
       throw new CustomError("Failed to get valid embedding vector length");
     }
 
-    console.log(
+    logInfo(
       `Detected vector length: ${sampleEmbedding.length} for model: ${EmbeddingsManager.getModelName(embeddingInstance)}`
     );
     return sampleEmbedding.length;
   } catch (error) {
-    console.error("Error getting vector length:", error);
+    logError("Error getting vector length:", error);
     throw new CustomError(
       "Failed to determine embedding vector length. Please check your Copilot settings to make sure you have a working embedding model."
     );
@@ -356,7 +357,7 @@ export function extractAppIgnoreSettings(app: App): string[] {
   } catch (e) {
     // Only log in non-test environments
     if (process.env.NODE_ENV !== "test") {
-      console.warn("Error getting userIgnoreFilters from Obsidian config", e);
+      logWarn("Error getting userIgnoreFilters from Obsidian config", e);
     }
   }
 
@@ -382,19 +383,52 @@ export function getExtensionPattern(extension: string): string {
 
 /**
  * Get a list of internal Copilot file paths that must be excluded from searches.
- * Currently includes the rolling log file path (e.g., "copilot/copilot-log.md").
+ * Includes the rolling log file path (e.g., "copilot/copilot-log.md").
  */
 export function getInternalExcludePaths(): string[] {
   return [logFileManager.getLogPath()];
 }
 
 /**
+ * Get a list of internal Copilot folder prefixes that must be excluded from searches.
+ * Any file whose path starts with one of these prefixes is considered internal.
+ */
+export function getInternalExcludeFolderPrefixes(): string[] {
+  const settings = getSettings();
+  const projectsFolder = (settings.projectsFolder || "").trim();
+  if (projectsFolder) {
+    // Reason: normalize to forward slashes, collapse duplicates, strip trailing slash,
+    // then append exactly one "/" for prefix matching. Mirrors normalizePath behavior
+    // without depending on Obsidian runtime (needed for testability).
+    const normalized = projectsFolder.replace(/\\/g, "/").replace(/\/+/g, "/").replace(/\/+$/, "");
+    return [`${normalized}/`];
+  }
+  return [];
+}
+
+/**
  * Check whether a file path is an internal Copilot file that should be excluded from searches.
+ * Checks both exact path matches (log file) and folder prefix matches (projects folder).
  * @param filePath - Full path to the file in the vault
  */
 export function isInternalExcludedPath(filePath: string): boolean {
   const excludes = new Set(getInternalExcludePaths());
-  return excludes.has(filePath);
+  if (excludes.has(filePath)) return true;
+
+  // Reason: only exclude internal project files (project.md configs and unsupported/ backups),
+  // not user-created files that may live alongside project configs in the projects folder.
+  // Check exact depth: only <projectsFolder>/<folderName>/project.md (one level deep).
+  const prefixes = getInternalExcludeFolderPrefixes();
+  if (prefixes.length === 0) return false;
+  for (const prefix of prefixes) {
+    if (!filePath.startsWith(prefix)) continue;
+    const relativePath = filePath.slice(prefix.length);
+    const parts = relativePath.split("/");
+    // Exact match: <folderName>/project.md (2 segments, second is "project.md")
+    if (parts.length === 2 && parts[1] === "project.md") return true;
+    if (relativePath.startsWith("unsupported/") || relativePath === "unsupported") return true;
+  }
+  return false;
 }
 
 /**

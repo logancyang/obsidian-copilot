@@ -109,6 +109,8 @@ export interface CopilotSettings {
   promptSortStrategy: string;
   chatHistorySortStrategy: SortStrategy;
   projectListSortStrategy: SortStrategy;
+  /** Projects config root folder in vault (default: "copilot/projects"). */
+  projectsFolder: string;
   embeddingRequestsPerMin: number;
   embeddingBatchSize: number;
   defaultOpenArea: DEFAULT_OPEN_AREA;
@@ -581,6 +583,18 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   const promptsFolder = (settingsToSanitize.customPromptsFolder || "").trim();
   sanitizedSettings.customPromptsFolder =
     promptsFolder.length > 0 ? promptsFolder : DEFAULT_SETTINGS.customPromptsFolder;
+
+  // Ensure projectsFolder falls back to default when empty/whitespace.
+  // Reason: reject path traversal segments ("..") and absolute paths to prevent
+  // writes outside the vault root.
+  const projectsFolder = (settingsToSanitize.projectsFolder || "").trim();
+  // Reason: also reject Unix absolute paths (/foo) and UNC paths (\\server\share)
+  const hasTraversal =
+    /(^|[/\\])\.\.[/\\]?/.test(projectsFolder) ||
+    /^[a-zA-Z]:/.test(projectsFolder) ||
+    /^[/\\]/.test(projectsFolder);
+  sanitizedSettings.projectsFolder =
+    projectsFolder.length > 0 && !hasTraversal ? projectsFolder : DEFAULT_SETTINGS.projectsFolder;
 
   // Ensure chatHistorySortStrategy has a valid value (exclude "manual" which is only for custom commands)
   if (

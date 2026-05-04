@@ -165,113 +165,124 @@ export class CanvasParser implements FileParser {
   }
 }
 
+/**
+ * All file extensions supported by Docs4LLMParser.
+ * Extracted as a module-level constant so FileParserManager.getProjectSupportedExtensions()
+ * can read the list statically without constructing a full Docs4LLMParser instance.
+ *
+ * Reason: The static method needs these extensions at UI layer (before any real API client exists),
+ * so we can't safely construct Docs4LLMParser just to read a property.
+ */
+export const DOCS4LLM_SUPPORTED_EXTENSIONS: readonly string[] = [
+  // Base types
+  "pdf",
+
+  // Documents and presentations
+  "602",
+  "abw",
+  "cgm",
+  "cwk",
+  "doc",
+  "docx",
+  "docm",
+  "dot",
+  "dotm",
+  "hwp",
+  "key",
+  "lwp",
+  "mw",
+  "mcw",
+  "pages",
+  "pbd",
+  "ppt",
+  "pptm",
+  "pptx",
+  "pot",
+  "potm",
+  "potx",
+  "rtf",
+  "sda",
+  "sdd",
+  "sdp",
+  "sdw",
+  "sgl",
+  "sti",
+  "sxi",
+  "sxw",
+  "stw",
+  "sxg",
+  "txt",
+  "uof",
+  "uop",
+  "uot",
+  "vor",
+  "wpd",
+  "wps",
+  "xml",
+  "zabw",
+  "epub",
+
+  // Images
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "bmp",
+  "svg",
+  "tiff",
+  "webp",
+  "web",
+  "htm",
+  "html",
+
+  // Spreadsheets
+  "xlsx",
+  "xls",
+  "xlsm",
+  "xlsb",
+  "xlw",
+  "csv",
+  "dif",
+  "sylk",
+  "slk",
+  "prn",
+  "numbers",
+  "et",
+  "ods",
+  "fods",
+  "uos1",
+  "uos2",
+  "dbf",
+  "wk1",
+  "wk2",
+  "wk3",
+  "wk4",
+  "wks",
+  "123",
+  "wq1",
+  "wq2",
+  "wb1",
+  "wb2",
+  "wb3",
+  "qpw",
+  "xlr",
+  "eth",
+  "tsv",
+
+  // Audio (limited to 20MB)
+  "mp3",
+  "mp4",
+  "mpeg",
+  "mpga",
+  "m4a",
+  "wav",
+  "webm",
+];
+
 export class Docs4LLMParser implements FileParser {
-  // Support various document and media file types
-  supportedExtensions = [
-    // Base types
-    "pdf",
-
-    // Documents and presentations
-    "602",
-    "abw",
-    "cgm",
-    "cwk",
-    "doc",
-    "docx",
-    "docm",
-    "dot",
-    "dotm",
-    "hwp",
-    "key",
-    "lwp",
-    "mw",
-    "mcw",
-    "pages",
-    "pbd",
-    "ppt",
-    "pptm",
-    "pptx",
-    "pot",
-    "potm",
-    "potx",
-    "rtf",
-    "sda",
-    "sdd",
-    "sdp",
-    "sdw",
-    "sgl",
-    "sti",
-    "sxi",
-    "sxw",
-    "stw",
-    "sxg",
-    "txt",
-    "uof",
-    "uop",
-    "uot",
-    "vor",
-    "wpd",
-    "wps",
-    "xml",
-    "zabw",
-    "epub",
-
-    // Images
-    "jpg",
-    "jpeg",
-    "png",
-    "gif",
-    "bmp",
-    "svg",
-    "tiff",
-    "webp",
-    "web",
-    "htm",
-    "html",
-
-    // Spreadsheets
-    "xlsx",
-    "xls",
-    "xlsm",
-    "xlsb",
-    "xlw",
-    "csv",
-    "dif",
-    "sylk",
-    "slk",
-    "prn",
-    "numbers",
-    "et",
-    "ods",
-    "fods",
-    "uos1",
-    "uos2",
-    "dbf",
-    "wk1",
-    "wk2",
-    "wk3",
-    "wk4",
-    "wks",
-    "123",
-    "wq1",
-    "wq2",
-    "wb1",
-    "wb2",
-    "wb3",
-    "qpw",
-    "xlr",
-    "eth",
-    "tsv",
-
-    // Audio (limited to 20MB)
-    "mp3",
-    "mp4",
-    "mpeg",
-    "mpga",
-    "m4a",
-    "wav",
-    "webm",
-  ];
+  // Reason: Reference the shared constant so getProjectSupportedExtensions() stays in sync
+  // with the actual parser registrations without duplicating the list.
+  supportedExtensions = [...DOCS4LLM_SUPPORTED_EXTENSIONS];
   private brevilabsClient: BrevilabsClient;
   private projectContextCache: ProjectContextCache;
   private selfHostPdfParser: SelfHostPdfParser;
@@ -447,6 +458,34 @@ class DocxParser implements FileParser {
 
 export class FileParserManager {
   private parsers: Map<string, FileParser> = new Map();
+
+  /**
+   * Returns the set of file extensions supported in project mode (isProjectMode=true).
+   *
+   * Reason: The UI status panel needs to distinguish between "pending" (will be processed)
+   * and "unsupported" (will never be processed) for non-markdown files. This method
+   * exposes the exact extension set used when constructing a project-mode FileParserManager,
+   * without requiring a full instantiation with real BrevilabsClient/Vault dependencies.
+   *
+   * Project mode registers: MarkdownParser + Docs4LLMParser + CanvasParser
+   * (PDFParser is skipped because Docs4LLMParser already handles PDFs in project mode)
+   */
+  public static getProjectSupportedExtensions(): Set<string> {
+    const extensions = new Set<string>();
+
+    // MarkdownParser: ["md"]
+    extensions.add("md");
+
+    // Docs4LLMParser: all document/image/spreadsheet/audio types (read from shared constant)
+    for (const ext of DOCS4LLM_SUPPORTED_EXTENSIONS) {
+      extensions.add(ext);
+    }
+
+    // CanvasParser: ["canvas"]
+    extensions.add("canvas");
+
+    return extensions;
+  }
 
   constructor(
     brevilabsClient: BrevilabsClient,

@@ -6,6 +6,7 @@
  */
 
 import { logError, logInfo, logWarn } from "@/logger";
+import { getYouTubeVideoId } from "@/utils/youtubeUrl";
 import {
   requireWebview,
   type SaveToVaultResult,
@@ -215,46 +216,10 @@ export async function getHtml(leaf: WebViewerLeaf, includeDocumentElement = true
 // YouTube Transcript Extraction
 // ============================================================================
 
-/**
- * Extract YouTube video ID from various URL formats.
- * Supports: youtube.com/watch, youtu.be, youtube.com/shorts, m.youtube.com, embed
- * @returns video ID or null if not a valid YouTube video URL
- */
-export function getYouTubeVideoId(url: string): string | null {
-  try {
-    const u = new URL(url);
-    const hostname = u.hostname.replace(/^www\./, "").replace(/^m\./, "");
-
-    // youtube.com/watch?v=xxx or youtube.com/watch?v=xxx&t=120
-    if (hostname === "youtube.com" && u.pathname === "/watch") {
-      return u.searchParams.get("v");
-    }
-
-    // youtu.be/xxx or youtu.be/xxx?t=120
-    if (hostname === "youtu.be" && u.pathname.length > 1) {
-      return u.pathname.slice(1).split("/")[0];
-    }
-
-    // youtube.com/shorts/xxx
-    if (hostname === "youtube.com" && u.pathname.startsWith("/shorts/")) {
-      return u.pathname.split("/")[2] || null;
-    }
-
-    // youtube.com/embed/xxx
-    if (hostname === "youtube.com" && u.pathname.startsWith("/embed/")) {
-      return u.pathname.split("/")[2] || null;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/** Check if URL is a YouTube video page */
-export function isYouTubeVideoUrl(url: string): boolean {
-  return getYouTubeVideoId(url) !== null;
-}
+// Re-exported from neutral utils to avoid circular dependencies.
+// Reason: Both utils (urlTagUtils) and services need these functions.
+// The implementation lives in src/utils/youtubeUrl.ts.
+export { getYouTubeVideoId, isYouTubeVideoUrl } from "@/utils/youtubeUrl";
 
 /** YouTube transcript segment */
 export interface YouTubeTranscriptSegment {
