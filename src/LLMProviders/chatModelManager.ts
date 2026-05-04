@@ -344,6 +344,9 @@ export default class ChatModelManager {
         headers: {
           Authorization: `Bearer ${await getDecryptedKey(customModel.apiKey || "default-key")}`,
         },
+        // Route through Obsidian's requestUrl (safeFetch) to bypass CORS / mixed-content
+        // restrictions — required on mobile (WKWebView) when calling http:// Ollama hosts.
+        fetch: customModel.enableCors ? safeFetch : undefined,
         // Enable thinking for models with REASONING capability (e.g., qwen3, deepseek-r1)
         // Thinking content goes to additional_kwargs.reasoning_content
         think: customModel.capabilities?.includes(ModelCapability.REASONING) ?? false,
