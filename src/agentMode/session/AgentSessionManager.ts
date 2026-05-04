@@ -14,7 +14,6 @@ import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPo
 import { fileToHistoryItem } from "@/utils/chatHistoryUtils";
 import { App, FileSystemAdapter, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
-import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
 import { AgentSession } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
@@ -71,6 +70,13 @@ export class AgentSessionManager {
   private startingBackendId: BackendId | null = null;
   private lastError: string | null = null;
   private readonly preloader: AgentModelPreloader;
+  /**
+   * Resolves once the plugin-load preload phase has settled (regardless of
+   * per-backend success). Lets the chat UI gate its first render so the
+   * picker never flashes empty before the cache populates.
+   */
+  private preloadPromise: Promise<void> = Promise.resolve();
+  private preloadReady = true;
   // Per-session bookkeeping, all keyed by `internalId`:
   // - `path`: persisted file (set after first successful save)
   // - `timer`: pending debounce timer
@@ -343,6 +349,32 @@ export class AgentSessionManager {
   /** Kick off a (best-effort) model probe for `backendId`. */
   preloadModels(backendId: BackendId): Promise<void> {
     return this.preloader.preload(backendId);
+  }
+
+  /**
+   * Register the aggregate preload promise — typically the `Promise.allSettled`
+   * of every backend's `preloadModels` call from plugin bring-up. While it
+   * pends, `isPreloadReady()` returns `false`; the chat UI uses that flag to
+   * render a "Loading…" placeholder instead of an empty picker.
+   */
+  setPreloadPromise(promise: Promise<void>): void {
+    this.preloadReady = false;
+    this.preloadPromise = promise;
+    promise.then(() => {
+      this.preloadReady = true;
+      this.notify();
+    });
+    this.notify();
+  }
+
+  /** Resolves once `setPreloadPromise`'s promise settles. */
+  whenPreloadReady(): Promise<void> {
+    return this.preloadPromise;
+  }
+
+  /** Synchronous check, suitable for React render gates. */
+  isPreloadReady(): boolean {
+    return this.preloadReady;
   }
 
   /**
@@ -698,25 +730,11 @@ export class AgentSessionManager {
     const inflight = this.starting.get(backendId);
     if (inflight) return inflight;
 
-    const proc = (() => {
-      if (descriptor.createBackendProcess) {
-        return descriptor.createBackendProcess({
-          plugin: this.plugin,
-          app: this.app,
-          clientVersion: this.plugin.manifest.version,
-        });
-      }
-      if (descriptor.createBackend) {
-        return new AcpBackendProcess(
-          this.app,
-          descriptor.createBackend(this.plugin),
-          this.plugin.manifest.version
-        );
-      }
-      throw new Error(
-        `Backend descriptor "${backendId}" implements neither createBackendProcess nor createBackend`
-      );
-    })();
+    const proc = descriptor.createBackendProcess({
+      plugin: this.plugin,
+      app: this.app,
+      clientVersion: this.plugin.manifest.version,
+    });
     const startPromise = (async () => {
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.

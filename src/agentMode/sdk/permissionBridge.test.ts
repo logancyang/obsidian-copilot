@@ -19,6 +19,7 @@ describe("PermissionBridge.canUseTool", () => {
 
   const ctx = {
     signal: new AbortController().signal,
+    toolUseID: "toolu_test_id",
   } as unknown as Parameters<PermissionBridge["canUseTool"]>[2];
 
   it("denies when no prompter is registered", async () => {
@@ -44,6 +45,26 @@ describe("PermissionBridge.canUseTool", () => {
       "reject_once",
       "reject_always",
     ]);
+  });
+
+  it("propagates ctx.toolUseID as RequestPermissionRequest.toolCall.toolCallId", async () => {
+    // The session layer keys plan-card resolvers off the `tool_call`
+    // notification's `toolCallId` (the SDK's `tool_use_id`). If the bridge
+    // mints a fresh uuid here instead, rejecting a plan card cannot find the
+    // resolver — the SDK's `canUseTool` promise never settles and the chat
+    // hangs. Pin the propagation contract.
+    let captured: RequestPermissionRequest | null = null;
+    const bridge = makeBridge(async (req) => {
+      captured = req;
+      return { outcome: { outcome: "selected", optionId: "reject_once" } };
+    });
+    const ctxWithToolUse = {
+      signal: new AbortController().signal,
+      toolUseID: "toolu_abc123",
+    } as unknown as Parameters<PermissionBridge["canUseTool"]>[2];
+    await bridge.canUseTool("ExitPlanMode", { plan: "# x" }, ctxWithToolUse);
+    expect(captured).not.toBeNull();
+    expect(captured!.toolCall.toolCallId).toBe("toolu_abc123");
   });
 
   it("maps allow_once to allow with updatedInput echoing the original input", async () => {
@@ -131,5 +152,80 @@ describe("PermissionBridge.canUseTool", () => {
       ctx
     );
     expect(result.behavior).toBe("deny");
+  });
+
+  describe("Write tool gating", () => {
+    function makeBridgeWithPlanMatcher(
+      isPlanModePlanFilePath: (p: string) => boolean,
+      prompter:
+        | ((req: RequestPermissionRequest) => Promise<RequestPermissionResponse>)
+        | null = null
+    ) {
+      const bridge = new PermissionBridge({
+        getPrompter: () => prompter,
+        isPlanModePlanFilePath,
+      });
+      bridge.setSessionContext("session-1");
+      return bridge;
+    }
+
+    it("auto-allows Write when file_path matches the plan-mode predicate", async () => {
+      const prompter = jest.fn();
+      const bridge = makeBridgeWithPlanMatcher(
+        (p) => p.endsWith("/.claude/plans/foo.md"),
+        prompter as unknown as Parameters<typeof makeBridgeWithPlanMatcher>[1]
+      );
+      const result = await bridge.canUseTool(
+        "Write",
+        { file_path: "/Users/x/.claude/plans/foo.md", content: "# plan" },
+        ctx
+      );
+      expect(result.behavior).toBe("allow");
+      if (result.behavior === "allow") {
+        expect(result.updatedInput).toEqual({
+          file_path: "/Users/x/.claude/plans/foo.md",
+          content: "# plan",
+        });
+      }
+      expect(prompter).not.toHaveBeenCalled();
+    });
+
+    it("denies Write to non-plan paths without prompting", async () => {
+      const prompter = jest.fn();
+      const bridge = makeBridgeWithPlanMatcher(
+        () => false,
+        prompter as unknown as Parameters<typeof makeBridgeWithPlanMatcher>[1]
+      );
+      const result = await bridge.canUseTool(
+        "Write",
+        { file_path: "/tmp/foo.md", content: "x" },
+        ctx
+      );
+      expect(result.behavior).toBe("deny");
+      if (result.behavior === "deny") {
+        expect(result.message).toContain("plan-mode");
+      }
+      expect(prompter).not.toHaveBeenCalled();
+    });
+
+    it("denies Write with missing file_path", async () => {
+      const bridge = makeBridgeWithPlanMatcher(() => true);
+      const result = await bridge.canUseTool("Write", { content: "x" }, ctx);
+      expect(result.behavior).toBe("deny");
+      if (result.behavior === "deny") {
+        expect(result.message).toContain("file_path");
+      }
+    });
+
+    it("denies Write when no plan predicate is configured", async () => {
+      const bridge = new PermissionBridge({ getPrompter: () => null });
+      bridge.setSessionContext("session-1");
+      const result = await bridge.canUseTool(
+        "Write",
+        { file_path: "/Users/x/.claude/plans/foo.md", content: "x" },
+        ctx
+      );
+      expect(result.behavior).toBe("deny");
+    });
   });
 });

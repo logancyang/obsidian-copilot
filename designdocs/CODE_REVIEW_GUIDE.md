@@ -5,8 +5,8 @@
 One week of vibe-coded work that adds **Agent Mode** to the plugin: a chat
 surface that drives external coding agents (OpenCode, Codex, Claude). The
 branch is large (160 files, +31k / −9k LOC across 42 commits) but the
-architecture is clean — four layers with ESLint-enforced boundaries
-(`src/agentMode/AGENTS.md`).
+architecture is clean — **six element types** with ESLint-enforced boundaries
+(`src/agentMode/CLAUDE.md`, `.eslintrc` `boundaries/elements`).
 
 This is a **review tour by architectural concern**, not by commit
 chronology. Read in this order; each group is sized for one or two
@@ -17,42 +17,58 @@ sittings.
 ## Architecture in one diagram
 
 ```
-                     ┌────────────────────────────────────┐
-                     │            Host plugin              │
-                     │  (main.ts, CopilotView, ChatInput)  │
-                     └─────────────────┬──────────────────┘
-                                       │  only via @/agentMode barrel
-                     ┌─────────────────▼──────────────────┐
-                     │                ui/                  │   GROUP 5
-                     │  Backend-agnostic React; reads      │
-                     │  BackendDescriptor                  │
-                     └─────────────────┬──────────────────┘
-                                       │
-                     ┌─────────────────▼──────────────────┐
-                     │             session/                │   GROUP 4
-                     │  Turn state machine, message store, │
-                     │  multi-tab, persistence, adapters   │
-                     │  (mode/effort/MCP/model)            │
-                     └─────────────────┬──────────────────┘
-                                       │  AcpBackend interface
-                     ┌─────────────────▼──────────────────┐
-                     │           backends/<id>/            │   GROUP 3
-                     │  opencode, codex, claude            │
-                     │  Install + BYOK + settings + descriptor
-                     └────────┬───────────────────┬───────┘
-                              │                   │
-                ┌─────────────▼─────┐   ┌────────▼────────┐
-                │       acp/         │   │      sdk/        │   GROUP 2
-                │  JSON-RPC over     │   │  In-process      │
-                │  stdio subprocess  │   │  Claude Agent    │
-                │                    │   │  SDK iterator    │
-                └────────────────────┘   └─────────────────┘
-                  Transport: two implementations, one contract
+       ┌──────────────────────────────────────────┐
+       │              Host plugin                  │
+       │   (main.ts, CopilotView, ChatInput)       │
+       └────────────────────┬─────────────────────┘
+                            │  only via @/agentMode barrel
+                            ▼
+       ┌──────────────────────────────────────────┐
+       │                  ui/                      │   GROUP 5
+       │   Backend-agnostic React; reads           │
+       │   BackendDescriptor                       │
+       └─────────┬────────────────────────┬───────┘
+                 │ runtime + types        │ catalog
+                 │                        ▼
+                 │           ┌─────────────────────────┐
+                 │           │  backends/registry.ts   │   GROUP 3
+                 │           │  (its own element type) │
+                 │           └────────────┬────────────┘
+                 │                        │
+                 │                        ▼
+                 │           ┌─────────────────────────┐
+                 │           │     backends/<id>/      │   GROUP 3
+                 │           │  opencode, codex, claude│
+                 │           │  + backends/_shared/    │
+                 │           └────┬───────────────┬────┘
+                 │                │               │
+                 │     ┌──────────▼─────┐  ┌──────▼──────┐
+                 │     │      acp/       │  │    sdk/     │  GROUP 2
+                 │     │  JSON-RPC over  │  │ In-process  │
+                 │     │  stdio          │  │ Claude SDK  │
+                 │     └──────────┬─────┘  └──────┬──────┘
+                 │                │  siblings —    │
+                 │                │  neither imports the other
+                 ▼                ▼               ▼
+       ┌──────────────────────────────────────────┐
+       │                session/                   │   GROUP 1 + 4
+       │   The contract sink. Owns BackendProcess, │
+       │   BackendDescriptor, errors, debug sink.  │
+       │   Also: AgentSession, message store,      │
+       │   multi-tab manager, persistence,         │
+       │   mode/effort/MCP/model adapters.         │
+       │   Imports nothing from agentMode.         │
+       └──────────────────────────────────────────┘
 ```
 
+Dependency direction in one sentence: **all arrows point toward `session/`**.
+It's a sink — every other element imports types from it; it imports nothing
+back. `ui/` reaches the backend catalog via `registry` (carved out as its own
+element type) so it can stay oblivious to which specific backends exist.
+
 The **contract** that ties this all together (Group 1) lives in
-`session/types.ts` + `agentMode/AGENTS.md`. Read those first or nothing
-else will land cleanly.
+`session/types.ts`, `session/errors.ts`, and `src/agentMode/CLAUDE.md`. Read
+those first or nothing else will land cleanly.
 
 A **vertical slice** (Group 6 — plan mode & permissions) crosses every
 layer above; it's worth reading after you've seen the layers in
@@ -68,21 +84,29 @@ go.
 
 **Files (~700 lines total):**
 
-- `src/agentMode/AGENTS.md` — layer rules, descriptor surface, debug tips
-  (100 lines, the spec)
+- `src/agentMode/CLAUDE.md` — layer rules, descriptor surface, debug tips
+  (the spec; authoritative when this guide and it disagree)
 - `src/agentMode/session/types.ts` — **the central vocabulary**: the
-  `AcpBackend` interface, `BackendDescriptor`, `InstallState`, the event
-  union the session emits to the UI (528 lines)
+  `BackendProcess` interface, `BackendDescriptor`, `InstallState`, the event
+  union the session emits to the UI (532 lines)
+- `src/agentMode/session/errors.ts` — `MethodUnsupportedError` and
+  `JSONRPC_METHOD_NOT_FOUND` (extracted out of types.ts so backends can
+  throw them without a circular import)
+- `src/agentMode/session/debugSink.ts` — shared NDJSON frame sink fed by
+  both transport layers (`acp/debugTap.ts` and `sdk/sdkDebugTap.ts`)
 - `src/agentMode/index.ts` — public surface (one barrel; nothing outside
   agentMode is allowed to deep-import past this)
 - `src/agentMode/backends/registry.ts` — the only file you edit when
-  adding a new backend (32 lines)
-- `.eslintrc` — find the `boundaries/element-types` block; this is what
-  enforces the layering at lint time
+  adding a new backend (32 lines). Carved out as its own boundary element
+  so `ui/` can read the catalog without unlocking deep imports into
+  individual backends — this is why the element count is **six**, not five.
+- `.eslintrc` — find the `boundaries/elements` and
+  `boundaries/dependencies` blocks; this is what enforces the layering at
+  lint time
 
-**Validate understanding:** can you describe (a) what `AcpBackend` exposes
-to `session/`, (b) what `BackendDescriptor` exposes to `ui/`, and (c) why
-those two interfaces are different?
+**Validate understanding:** can you describe (a) what `BackendProcess`
+exposes to `session/`, (b) what `BackendDescriptor` exposes to `ui/` and
+`registry`, and (c) why those two interfaces are different?
 
 ---
 
@@ -91,13 +115,15 @@ those two interfaces are different?
 **Why grouped together:** ACP and the Claude Agent SDK are the same
 architectural layer — both translate "an external agent's event stream"
 into the session's internal event vocabulary, and both implement
-`AcpBackend`. They look like sibling implementations even though they
-were built weeks apart, and reading them side-by-side is the fastest way
-to see what the contract actually buys you.
+`BackendProcess`. They are **siblings: neither imports the other**, and
+`session/` doesn't import either — `session/` consumes the `BackendProcess`
+interface only. Reading them side-by-side is the fastest way to see what
+the contract actually buys you.
 
-**The shared shape both runtimes expose to `session/`:** `start(prompt)`,
-`interrupt()`, `setModel()`, `setPermissionMode()`, `close()`, plus a
-stream of `AcpEvent`-typed notifications.
+**The shared shape both runtimes expose to `session/`:** the
+`BackendProcess` interface — `start(prompt)`, `interrupt()`, `setModel()`,
+`setPermissionMode()`, `close()`, plus a stream of `SessionNotification`
+events.
 
 ### 2a. ACP runtime — JSON-RPC subprocess
 
@@ -105,21 +131,22 @@ stream of `AcpEvent`-typed notifications.
 
 - `types.ts` — ACP wire-format types
 - `AcpProcessManager.ts` — subprocess spawn / lifecycle
-- `AcpBackendProcess.ts` — JSON-RPC frame loop + ACP event translation
-  (445 lines, the central file)
+- `AcpBackendProcess.ts` — `BackendProcess` impl: JSON-RPC frame loop + ACP
+  event translation (446 lines, the central file)
 - `VaultClient.ts` — host-side handler for the agent's `fs/*` requests
   (this is how the agent reads/writes vault files via the host, not the
   OS filesystem)
-- `frameSink.ts` + `debugTap.ts` — opt-in NDJSON frame log
+- `debugTap.ts` — opt-in JSON-RPC frame tap; writes into
+  `session/debugSink.ts` (the standalone `frameSink.ts` from earlier
+  iterations is gone — the sink lives in `session/` now)
 - `nodeShebangPath.ts` — CLI shebang resolution
 
 ### 2b. Claude SDK runtime — in-process query iterator
 
 `src/agentMode/sdk/`
 
-- `ClaudeSdkBackendProcess.ts` — `AcpBackend` implementation that wraps
-  `query()` from `@anthropic-ai/claude-agent-sdk` (559 lines, the
-  central file)
+- `ClaudeSdkBackendProcess.ts` — `BackendProcess` impl that wraps `query()`
+  from `@anthropic-ai/claude-agent-sdk` (636 lines, the central file)
 - `sdkMessageTranslator.ts` — translates `SDKMessage` stream → the same
   internal event vocabulary the ACP path uses (this is what lets
   `session/` stay unchanged across both runtimes)
@@ -128,9 +155,14 @@ stream of `AcpEvent`-typed notifications.
   SDK's built-in Read/Write/Edit are explicitly disallowed.
 - `permissionBridge.ts` — translates the SDK's `canUseTool` callback into
   the existing permission flow, including new `AskUserQuestion` handling
-- `claudeBinaryResolver.ts` — locates the user-installed `claude` CLI
-  across Volta/asdf/NVM/Homebrew/npm-global on macOS/Linux/Windows
-- `sdkDebugTap.ts` — SDK-side equivalent of ACP's frame log
+- `effortOption.ts` — resolves reasoning-effort options for the SDK
+  (consumed by `backends/claude/descriptor.ts`)
+- `toolMeta.ts` — SDK-side tool metadata (icons / display strings)
+- `sdkDebugTap.ts` — SDK-side frame tap; feeds `session/debugSink.ts` so
+  ACP and SDK turns appear in the same NDJSON file
+
+(Note: `claudeBinaryResolver.ts` used to live here but moved to
+`backends/claude/` — see Group 3.)
 
 **Companion docs:**
 
@@ -151,13 +183,18 @@ turn on opencode and a turn on claude. The internal events emitted to
 descriptor picks a transport, owns its install/binary story, exposes a
 settings panel, and registers itself.
 
-**The pattern (every backend has these):**
+**The pattern (per backend):**
 
 ```
 backends/<id>/
   descriptor.ts        — the BackendDescriptor export (settings glue,
-                         install state, createBackend factory)
-  <Id>Backend.ts       — implements AcpBackend (often a thin wrapper)
+                         install state, createBackendProcess factory)
+  <Id>Backend.ts       — subprocess track only: implements the
+                         AcpBackend helper interface used by
+                         simpleBinaryBackendProcess (a thin wrapper).
+                         SDK-track backends skip this — the descriptor's
+                         createBackendProcess constructs the
+                         BackendProcess directly.
   <Id>InstallModal.tsx — onboarding UI (BYOK key, binary path)
   <Id>SettingsPanel.tsx — settings-page panel
   index.ts             — re-exports the descriptor
@@ -180,8 +217,13 @@ backends/<id>/
   - `platformResolver.ts` — picks the right tarball per OS/arch
 - `src/agentMode/backends/codex/` — minimal example (no managed binary)
 - `src/agentMode/backends/claude/` — uses Group 2b (`sdk/`) instead of
-  ACP. Includes `AskUserQuestionModal.tsx` (a capability ACP didn't
-  have).
+  ACP, so it has no `<Id>Backend.ts`. Includes:
+  - `AskUserQuestionModal.tsx` — Claude-only multi-choice question modal
+    (a capability ACP didn't have)
+  - `claudeBinaryResolver.ts(+test)` — locates the user-installed
+    `claude` CLI across Volta / asdf / NVM / Homebrew / npm-global on
+    macOS / Linux / Windows. Lives here (not in `sdk/`) because
+    cross-platform CLI resolution is Claude-specific.
 - `src/utils/detectBinary.ts` — generic binary-on-PATH detection used by
   the simple backend scaffold
 
@@ -207,7 +249,7 @@ incidental, and vice versa.
   switch. Skim once for public methods, then read each event handler in
   sequence.
 - `src/agentMode/session/AgentSessionManager.ts` — multi-tab orchestration
-  (761 lines): per-tab session creation, active-session selection,
+  (779 lines): per-tab session creation, active-session selection,
   cross-session lifecycle, persistence wiring
 - `src/agentMode/session/AgentMessageStore.ts` — append-only store
 - `src/agentMode/session/AgentChatUIState.ts` — React subscription bridge
@@ -215,6 +257,10 @@ incidental, and vice versa.
   session uses to talk to its current backend
 - `src/agentMode/session/AgentChatPersistenceManager.ts` — debounced
   markdown auto-save, project-scoped file naming
+- `src/agentMode/session/index.ts` — public surface for the layer
+
+(The contract files — `types.ts`, `errors.ts`, `debugSink.ts` — are
+already covered in Group 1.)
 
 ### 4b. Cross-cutting adapters (per-backend normalizers)
 
@@ -244,7 +290,9 @@ restore from disk.
 **Why grouped:** all of `ui/` (minus the plan/permission vertical in
 Group 6) is React rendering against the session layer. No file in here
 imports from `acp/`, `sdk/`, or specific backends — only from `session/`
-and `backends/registry.ts`.
+and `backends/registry.ts`. This is exactly what `.eslintrc`'s
+`from: { type: "ui" }` rule allows; if you want to verify a specific
+import, check that rule.
 
 ### 5a. Shell
 

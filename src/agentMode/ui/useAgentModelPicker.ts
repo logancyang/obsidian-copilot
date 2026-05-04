@@ -5,7 +5,7 @@ import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "@/agentMode/backends/registry";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { buildEffortAdapter, type EffortAdapter } from "@/agentMode/session/effortAdapter";
 import { getBackendModelOverrides } from "@/agentMode/session/backendSettingsAccess";
 import {

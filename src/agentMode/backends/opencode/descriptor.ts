@@ -21,10 +21,11 @@ import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import type { ChatModelProviders } from "@/constants";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
 import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
-import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 import * as path from "node:path";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
@@ -62,26 +63,30 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   displayName: "opencode",
   // OpenCode's `_meta` carries `modelId` / `variant` / `availableVariants`,
   // but none of those map to a `NormalizedToolCallMeta` field today —
-  // opencode's plan signal flows through `emitsPlanProposalOnEndOfTurn`
-  // and the plan-file matcher, not `_meta`.
+  // opencode's plan signals flow through the plan-file matcher and the
+  // bodyless `plan_exit` interception, not `_meta`.
   meta: noopBackendMetaParser,
 
   // OpenCode's plan agent has no permission-gated finalization tool —
   // `plan_exit` is CLI-only, never registered for ACP clients (see
   // opencode `tool/registry.ts`'s `OPENCODE_CLIENT === "cli"` gate). The
-  // canonical signal is a successful write to one of the plan-mode plan
-  // paths (`<cwd>/.opencode/plans/*.md` for VCS-tracked projects,
+  // canonical content signal is a successful write to one of the plan-mode
+  // plan paths (`<cwd>/.opencode/plans/*.md` for VCS-tracked projects,
   // `<xdgData>/opencode/plans/*.md` otherwise — see opencode
   // `session/session.ts:plan()`). The session bootstraps the plan card
   // off that write via `isPlanModePlanFilePath`.
   //
-  // `emitsPlanProposalOnEndOfTurn` stays on as a fallback for runs where
-  // the agent uses `todowrite` instead of (or in addition to) writing a
-  // plan file — opencode translates `todowrite` output into a structured
-  // `kind: "plan"` part (`acp/agent.ts:382`). The end-of-turn handler
-  // skips this promotion when a markdown-body plan was already published
-  // mid-turn, so the more authoritative file body wins.
-  emitsPlanProposalOnEndOfTurn: true,
+  // The model is still trained to call `plan_exit` to finalize, and
+  // OpenCode's tool dispatcher reports the call back as a hallucinated
+  // `tool_call` with `title: "plan_exit"` followed by an "Invalid Tool"
+  // update. We treat that initial tool_call as a bodyless exit signal:
+  // publish whatever plan body the session has (the file-write body, or
+  // a `kind: "plan"` part from `todowrite`'s structured-plan
+  // translation in `acp/agent.ts:382`) and suppress the noisy follow-up
+  // updates so the trail stays clean. Note: the model still receives the
+  // error from OpenCode and may keep retrying — only an upstream fix
+  // (registering `plan_exit` for ACP clients) would address that.
+  bodylessPlanExitToolNames: ["plan_exit"],
 
   isPlanModePlanFilePath(absolutePath, cwd) {
     if (!absolutePath.endsWith(".md")) return false;
@@ -118,8 +123,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     }).open();
   },
 
-  createBackend(): OpencodeBackend {
-    return new OpencodeBackend();
+  createBackendProcess(args): BackendProcess {
+    return simpleBinaryBackendProcess(args, new OpencodeBackend());
   },
 
   SettingsPanel: OpencodeSettingsPanel,

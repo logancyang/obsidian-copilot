@@ -1,5 +1,5 @@
 import type { CopilotSettings } from "@/settings/model";
-import type { BackendId } from "@/agentMode/acp/types";
+import type { BackendId } from "./types";
 
 interface BackendSliceWithOverrides {
   modelEnabledOverrides?: Record<string, boolean>;

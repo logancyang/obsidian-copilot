@@ -1,6 +1,6 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { AcpBackendProcess, SessionUpdateHandler } from "@/agentMode/acp/AcpBackendProcess";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import type { TFile } from "obsidian";
 import { AgentSession, buildPromptBlocks, tryReadExitPlanModeCall } from "./AgentSession";
 import type { BackendMetaParser } from "./backendMeta";
@@ -1184,6 +1184,279 @@ describe("AgentSession plan proposal lifecycle", () => {
         _meta: { claudeCode: { toolName: "ExitPlanMode" } },
       },
     });
+    expect(session.getCurrentPlan()).toBeNull();
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+  });
+});
+
+describe("AgentSession bodyless plan-exit interception", () => {
+  // Mirrors the OpenCode descriptor's plan surface: declares `plan_exit` as
+  // the bodyless exit signal, maps canonical `plan` to native `plan` via
+  // setMode, and uses an inert _meta parser (OpenCode's wire reality).
+  const opencodeLikeDescriptor = {
+    meta: { parseToolCallMeta: () => null } as BackendMetaParser,
+    bodylessPlanExitToolNames: ["plan_exit"] as const,
+    getModeMapping: () => ({
+      kind: "setMode" as const,
+      canonical: { plan: "plan", default: "build", auto: "build" },
+    }),
+    getStaticInitialState: () => ({
+      models: null,
+      modes: {
+        currentModeId: "plan",
+        availableModes: [
+          { id: "plan", name: "Plan" },
+          { id: "build", name: "Build" },
+        ],
+      },
+      configOptions: null,
+    }),
+  } as unknown as BackendDescriptor;
+
+  function setupSessionInPlanMode(): {
+    mock: ReturnType<typeof makeMockBackend>;
+    session: AgentSession;
+    turn: Promise<unknown>;
+    finishTurn: () => void;
+  } {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: string }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      getDescriptor: () => opencodeLikeDescriptor,
+    });
+    const { turn } = session.sendPrompt("plan something");
+    // Put the session into canonical plan mode.
+    mock.emit({
+      sessionId: "acp-1",
+      update: { sessionUpdate: "current_mode_update", currentModeId: "plan" },
+    });
+    return {
+      mock,
+      session,
+      turn,
+      finishTurn: () => resolvePrompt!({ stopReason: "end_turn" }),
+    };
+  }
+
+  it("publishes an entries-body card from a kind:'plan' part when plan_exit fires", async () => {
+    const { mock, session, turn, finishTurn } = setupSessionInPlanMode();
+
+    // Agent emits a structured plan (translated from todowrite).
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "plan",
+        entries: [
+          { content: "Read the docs", priority: "high", status: "completed" },
+          { content: "Draft the patch", priority: "high", status: "in_progress" },
+        ],
+      },
+    });
+    expect(session.getCurrentPlan()).toBeNull();
+
+    // Model attempts plan_exit — title-only signal, empty rawInput.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-exit-1",
+        title: "plan_exit",
+        kind: "other",
+        status: "pending",
+        rawInput: {},
+      },
+    });
+
+    const plan = session.getCurrentPlan();
+    expect(plan).not.toBeNull();
+    expect(plan?.body).toEqual({
+      type: "entries",
+      entries: [
+        { content: "Read the docs", priority: "high", status: "completed" },
+        { content: "Draft the patch", priority: "high", status: "in_progress" },
+      ],
+    });
+    expect(plan?.permissionGated).toBe(false);
+    expect(plan?.pendingToolCallId).toBeUndefined();
+
+    // The plan_exit tool_call itself is suppressed — no row in the trail.
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    const toolCallParts = placeholder?.parts?.filter((p) => p.kind === "tool_call");
+    expect(toolCallParts).toEqual([]);
+
+    finishTurn();
+    await turn;
+  });
+
+  it("suppresses subsequent tool_call_updates for the intercepted toolCallId", async () => {
+    const { mock, session, turn, finishTurn } = setupSessionInPlanMode();
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "plan",
+        entries: [{ content: "Step", priority: "high", status: "pending" }],
+      },
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-exit-2",
+        title: "plan_exit",
+        kind: "other",
+        status: "pending",
+        rawInput: {},
+      },
+    });
+    // OpenCode's "Invalid Tool" follow-ups carry the unavailable-tool error.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc-exit-2",
+        status: "in_progress",
+        title: "invalid",
+        rawInput: { tool: "plan_exit", error: "Model tried to call unavailable tool ..." },
+      },
+    });
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call_update",
+        toolCallId: "tc-exit-2",
+        status: "completed",
+        title: "Invalid Tool",
+        content: [
+          { type: "content", content: { type: "text", text: "The arguments provided ..." } },
+        ],
+      },
+    });
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.parts?.filter((p) => p.kind === "tool_call")).toEqual([]);
+    expect(session.getCurrentPlan()?.body.type).toBe("entries");
+
+    finishTurn();
+    await turn;
+  });
+
+  it("no-ops when a markdown plan body is already on the card (file-write took precedence)", async () => {
+    const { mock, session, turn, finishTurn } = setupSessionInPlanMode();
+
+    // Simulate the plan-file-write path having already populated the card.
+    // Use a `plan` entries part too, so the resolver would otherwise fall
+    // back to entries — we want to verify the markdown body wins.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "plan",
+        entries: [{ content: "todowrite item", priority: "high", status: "pending" }],
+      },
+    });
+    // Manually seed a markdown-body plan via the public ExitPlanMode path
+    // (Claude-style) by temporarily flipping the parser. Easier: emit a
+    // tool_call that publishGatedPlan recognizes through `kind: switch_mode`.
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-md-1",
+        title: "ExitPlanMode",
+        kind: "switch_mode",
+        status: "pending",
+        rawInput: { plan: "# the file body" },
+      },
+    });
+    const before = session.getCurrentPlan();
+    expect(before?.body).toEqual({ type: "markdown", text: "# the file body" });
+    const beforeRevision = before!.revision;
+
+    // Now plan_exit fires — should be a no-op (no body change).
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-exit-3",
+        title: "plan_exit",
+        kind: "other",
+        status: "pending",
+        rawInput: {},
+      },
+    });
+
+    const after = session.getCurrentPlan();
+    expect(after?.body).toEqual({ type: "markdown", text: "# the file body" });
+    expect(after?.revision).toBe(beforeRevision);
+
+    finishTurn();
+    await turn;
+  });
+
+  it("does nothing when there is no body to resolve (no plan part, no markdown card)", async () => {
+    const { mock, session, turn, finishTurn } = setupSessionInPlanMode();
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-exit-4",
+        title: "plan_exit",
+        kind: "other",
+        status: "pending",
+        rawInput: {},
+      },
+    });
+
+    expect(session.getCurrentPlan()).toBeNull();
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.parts?.filter((p) => p.kind === "tool_call")).toEqual([]);
+
+    finishTurn();
+    await turn;
+  });
+
+  it("does not intercept when the session is not in canonical plan mode", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: string }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      acpSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+      getDescriptor: () => opencodeLikeDescriptor,
+    });
+    const { turn } = session.sendPrompt("just chatting");
+    // Mode never flipped to plan.
+
+    mock.emit({
+      sessionId: "acp-1",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "tc-exit-5",
+        title: "plan_exit",
+        kind: "other",
+        status: "pending",
+        rawInput: {},
+      },
+    });
+
+    // Outside plan mode, the tool_call falls through to normal rendering.
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    const toolCallParts = placeholder?.parts?.filter((p) => p.kind === "tool_call");
+    expect(toolCallParts?.length).toBe(1);
     expect(session.getCurrentPlan()).toBeNull();
 
     resolvePrompt!({ stopReason: "end_turn" });

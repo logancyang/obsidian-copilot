@@ -16,9 +16,9 @@ function stubDescriptor(getModeMapping: BackendDescriptor["getModeMapping"]): Ba
     getInstallState: () => ({ kind: "absent" }),
     subscribeInstallState: () => () => {},
     openInstallUI: () => {},
-    createBackend: (() => {
+    createBackendProcess: (() => {
       throw new Error("not used in tests");
-    }) as unknown as BackendDescriptor["createBackend"],
+    }) as unknown as BackendDescriptor["createBackendProcess"],
     getModeMapping,
   };
 }
@@ -230,9 +230,9 @@ describe("buildModeAdapter — descriptor with no mapping", () => {
       getInstallState: () => ({ kind: "absent" }),
       subscribeInstallState: () => () => {},
       openInstallUI: () => {},
-      createBackend: (() => {
+      createBackendProcess: (() => {
         throw new Error("not used in tests");
-      }) as unknown as BackendDescriptor["createBackend"],
+      }) as unknown as BackendDescriptor["createBackendProcess"],
     };
     expect(
       buildModeAdapter(desc, {

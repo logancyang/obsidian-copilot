@@ -249,8 +249,6 @@ export interface CopilotSettings {
  * - No `binaryPath` — the user-installed `claude` CLI path lives at
  *   `agentMode.claudeCli.path` (top-level so the resolver can be reused
  *   independently of which Anthropic descriptor is active).
- * - No `selectedEffort` — the SDK's `thinking: { type: "adaptive" }` is the
- *   default; we don't expose an effort picker for v1.
  */
 export interface ClaudeBackendSettings {
   /**
@@ -271,6 +269,12 @@ export interface ClaudeBackendSettings {
    * surfaces reasoning chunks. Off by default (matches SDK default).
    */
   enableThinking?: boolean;
+  /**
+   * Persisted effort tier from the SDK's per-model vocabulary
+   * (`ModelInfo.supportedEffortLevels`). Unset = SDK default for the
+   * active model.
+   */
+  selectedEffort?: string;
 }
 
 /** Settings slice owned by the Codex backend. */
@@ -878,6 +882,8 @@ function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
     selectedModelKey: nonEmptyString(r.selectedModelKey),
     selectedMode: sanitizeCopilotMode(r.selectedMode),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+    enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
+    selectedEffort: nonEmptyString(r.selectedEffort),
   };
 }
 

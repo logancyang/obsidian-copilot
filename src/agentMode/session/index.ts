@@ -8,10 +8,9 @@ export { AgentChatUIState } from "./AgentChatUIState";
 export type { AgentChatBackend } from "./AgentChatBackend";
 export { AgentMessageStore } from "./AgentMessageStore";
 export type {
-  AcpBackend,
-  AcpSpawnDescriptor,
   BackendDescriptor,
   BackendId,
+  BackendProcess,
   InstallState,
   AgentChatMessage,
   AgentMessagePart,
@@ -21,3 +20,4 @@ export type {
   AgentPlanEntry,
   NewAgentChatMessage,
 } from "./types";
+export { MethodUnsupportedError, JSONRPC_METHOD_NOT_FOUND } from "./errors";

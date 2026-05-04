@@ -29,8 +29,9 @@ import {
 import { App, FileSystemAdapter } from "obsidian";
 import { AcpProcessManager, AcpProcessManagerOptions } from "./AcpProcessManager";
 import { VaultClient } from "./VaultClient";
+import { JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { wrapStreamsForDebug } from "./debugTap";
-import { AcpBackend, JSONRPC_METHOD_NOT_FOUND, MethodUnsupportedError } from "./types";
+import { AcpBackend } from "./types";
 
 /**
  * Capabilities the agent may or may not implement. Tracked in a single Set so

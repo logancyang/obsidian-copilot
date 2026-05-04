@@ -17,6 +17,7 @@ import type {
   ResumeSessionResponse,
   SessionConfigOption,
   SessionId,
+  SessionModelState,
   SessionModeState,
   SessionNotification,
   SetSessionConfigOptionRequest,
@@ -30,13 +31,12 @@ import type { CustomModel } from "@/aiParams";
 import type CopilotPlugin from "@/main";
 import type { CopilotSettings } from "@/settings/model";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
-import type { AcpBackend, BackendId } from "@/agentMode/acp/types";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type { BackendMetaParser } from "@/agentMode/session/backendMeta";
 import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
 
-// Re-export so consumers in session/ and ui/ can import a single types entry.
-export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/types";
+/** Stable identifier for a registered backend. New backends extend the registry; the type stays open. */
+export type BackendId = string;
 
 /**
  * Per-backend snapshot of the initial state ACP returns from `session/new`
@@ -45,7 +45,7 @@ export type { AcpBackend, AcpSpawnDescriptor, BackendId } from "@/agentMode/acp/
  * picker during session startup.
  */
 export interface BackendInitialState {
-  models: import("@agentclientprotocol/sdk").SessionModelState | null;
+  models: SessionModelState | null;
   modes: SessionModeState | null;
   configOptions: SessionConfigOption[] | null;
 }
@@ -105,8 +105,9 @@ export type InstallState =
 /**
  * Backend-agnostic descriptor consumed by `session/` and `ui/`. Each backend
  * exports one of these from its own folder; the registry maps `BackendId →
- * BackendDescriptor`. Adding a new backend is exactly: implement `AcpBackend`,
- * export a `BackendDescriptor`, register it. No edits to session or UI.
+ * BackendDescriptor`. Adding a new backend is exactly: implement
+ * `createBackendProcess`, export a `BackendDescriptor`, register it. No
+ * edits to session or UI.
  */
 export interface BackendDescriptor {
   readonly id: BackendId;
@@ -130,21 +131,13 @@ export interface BackendDescriptor {
   openInstallUI(plugin: CopilotPlugin): void;
 
   /**
-   * Construct the `AcpBackend` the session manager will spawn. ACP-style
-   * backends implement this; in-process adapters omit it and implement
-   * `createBackendProcess` instead. Exactly one of the two must be present
-   * — `AgentSessionManager.ensureBackend` throws if neither is.
+   * Construct the backend process the session manager will drive. ACP-style
+   * backends typically delegate to `simpleBinaryBackendProcess` from
+   * `backends/shared/`, which wraps `AcpBackendProcess` around an
+   * `AcpBackend` spawn descriptor. In-process adapters (e.g. the Claude
+   * Agent SDK) construct their own `BackendProcess` implementation directly.
    */
-  createBackend?(plugin: CopilotPlugin): AcpBackend;
-
-  /**
-   * Construct the entire backend process directly. When present, the session
-   * manager uses it instead of wrapping `createBackend()` in an
-   * `AcpBackendProcess`. Entry point for non-ACP backends (e.g. the Claude
-   * Agent SDK adapter, which talks to the SDK in-process via an async
-   * generator rather than a JSON-RPC subprocess).
-   */
-  createBackendProcess?(args: {
+  createBackendProcess(args: {
     plugin: CopilotPlugin;
     app: App;
     clientVersion: string;
@@ -158,6 +151,18 @@ export interface BackendDescriptor {
    * first session populates it.
    */
   getStaticInitialState?(): BackendInitialState | null;
+
+  /**
+   * Optional: SDK-backed backends (no ACP probe path) populate the preloader
+   * cache by running their own initialization handshake. Returns the same
+   * shape `AcpBackendProcess` would surface from a probe `newSession`.
+   * Errors should resolve to `null` so the preloader can move on.
+   *
+   * The preloader prefers this over `getStaticInitialState` when both are
+   * defined, so SDK backends can drop their hardcoded model list entirely
+   * once they implement this.
+   */
+  probeInitialState?(plugin: CopilotPlugin): Promise<BackendInitialState | null>;
 
   /** Optional: backend-specific settings panel. Rendered inside the Agent Mode tab. */
   SettingsPanel?: React.FC<{ plugin: CopilotPlugin; app: App }>;
@@ -262,15 +267,28 @@ export interface BackendDescriptor {
   applyInitialSessionConfig?(session: AgentSession, settings: CopilotSettings): Promise<void>;
 
   /**
-   * Optional: when `true`, the session will publish a `currentPlan` snapshot
-   * at the end of any plan-mode turn that produced a structured `plan` part,
-   * surfacing the floating proposal card for non-permission-gated backends
-   * (OpenCode-style). Backends that signal plan completion via a
-   * permission-gated tool (Claude Code's `ExitPlanMode`) must leave this
-   * unset — the gated path publishes the plan directly and double-emitting
-   * would clobber the gated state.
+   * Optional: tool names whose `tool_call` notifications signal "model is
+   * done planning" but carry no plan body in `rawInput`. When the session
+   * sees a `tool_call` whose `title` matches one of these (and the session
+   * is in canonical plan mode), it publishes the resolved plan body — from
+   * the existing `currentPlan` (markdown body bootstrapped by a plan-file
+   * write) or the most recent `kind: "plan"` part on the placeholder — as
+   * a non-gated proposal card, and suppresses the initial tool_call plus
+   * all subsequent updates for that toolCallId so the noisy "unavailable
+   * tool" follow-ups don't render in the trail.
+   *
+   * Use case: OpenCode's plan agent prompt instructs the model to call
+   * `plan_exit`, but OpenCode's tool registry only registers it when
+   * `OPENCODE_CLIENT === "cli"` — so for ACP clients the call hallucinates
+   * and OpenCode itself emits the "Model tried to call unavailable tool
+   * 'plan_exit'" error.
+   *
+   * Backends with a permission-gated finalization tool (Claude Code's
+   * `ExitPlanMode`) leave this unset — those flow through
+   * `tryReadExitPlanModeCall` + `publishGatedPlan` because the body lives
+   * in `rawInput.plan`.
    */
-  readonly emitsPlanProposalOnEndOfTurn?: boolean;
+  readonly bodylessPlanExitToolNames?: readonly string[];
 
   /**
    * Optional: identify backend-managed plan-mode plan files. Returning

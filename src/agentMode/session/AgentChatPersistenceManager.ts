@@ -18,8 +18,7 @@ import {
 } from "@/utils/vaultAdapterUtils";
 import type { App, TFile } from "obsidian";
 import { Notice } from "obsidian";
-import type { BackendId } from "@/agentMode/acp/types";
-import type { AgentChatMessage } from "./types";
+import type { AgentChatMessage, BackendId } from "./types";
 
 const SAFE_FILENAME_BYTE_LIMIT = 100;
 export const AGENT_FILENAME_PREFIX = "agent__";

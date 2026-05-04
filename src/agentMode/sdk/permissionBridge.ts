@@ -5,7 +5,6 @@
  * prompter, then translated back to a SDK `PermissionResult`. AskUserQuestion
  * gets a separate branch that opens a dedicated multi-choice modal.
  */
-import { v4 as uuidv4 } from "uuid";
 import type {
   PermissionOption,
   PermissionOptionId,
@@ -19,6 +18,7 @@ import type {
   PermissionResult,
   PermissionUpdate,
 } from "@anthropic-ai/claude-agent-sdk";
+import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
 import { deriveToolKind, deriveToolTitle } from "./toolMeta";
 
@@ -40,6 +40,15 @@ export interface AskUserQuestionInput {
 export interface PermissionBridgeOptions {
   getPrompter: () => Prompter | null;
   askUserQuestion?: AskUserQuestionHandler;
+  /**
+   * Predicate identifying plan-mode plan files. When provided, the bridge
+   * auto-allows `Write` calls whose `file_path` satisfies the predicate and
+   * silently denies every other `Write` — so the SDK can finalize plan mode
+   * (which writes to a path outside the vault) without re-opening arbitrary
+   * filesystem writes. Vault mutations are expected to flow through the
+   * vault MCP, never `Write`.
+   */
+  isPlanModePlanFilePath?: (absolutePath: string) => boolean;
 }
 
 export class PermissionBridge {
@@ -72,6 +81,10 @@ export class PermissionBridge {
       sessionId
     );
 
+    if (toolName === "Write") {
+      return this.handleWrite(input, sessionId);
+    }
+
     const prompter = this.opts.getPrompter();
     if (!prompter) {
       return this.deny("canUseTool:response", "No permission prompter available", sessionId);
@@ -86,6 +99,33 @@ export class PermissionBridge {
     logSdkOutbound("canUseTool:response", result, sessionId);
     return result;
   };
+
+  /**
+   * Vault writes flow through the vault MCP, so any built-in `Write` call is
+   * either (a) plan mode finalizing its proposal at `~/.claude/plans/*.md`,
+   * or (b) something we should not honor. Plan-file Writes are auto-allowed
+   * without prompting; everything else is denied without prompting so we
+   * never surface a "the agent wants to write `/etc/passwd`" modal.
+   */
+  private handleWrite(
+    input: Record<string, unknown>,
+    sessionId: SessionId | null
+  ): PermissionResult {
+    const filePath = typeof input.file_path === "string" ? input.file_path : null;
+    if (!filePath) {
+      return this.deny("canUseTool:response", "Write rejected: missing file_path", sessionId);
+    }
+    if (this.opts.isPlanModePlanFilePath?.(filePath)) {
+      const result: PermissionResult = { behavior: "allow", updatedInput: input };
+      logSdkOutbound("canUseTool:response:auto-allow-plan", result, sessionId);
+      return result;
+    }
+    return this.deny(
+      "canUseTool:response",
+      "Write is restricted to plan-mode plan files; use the vault MCP for vault writes.",
+      sessionId
+    );
+  }
 
   private async handleAskUserQuestion(input: AskUserQuestionInput): Promise<PermissionResult> {
     const sessionId = this.currentSessionId;
@@ -109,8 +149,11 @@ export class PermissionBridge {
       logSdkOutbound("askUserQuestion:response", result, sessionId);
       return result;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      return this.deny("askUserQuestion:response", `AskUserQuestion failed: ${msg}`, sessionId);
+      return this.deny(
+        "askUserQuestion:response",
+        `AskUserQuestion failed: ${err2String(e)}`,
+        sessionId
+      );
     }
   }
 
@@ -149,7 +192,12 @@ function synthesizePermissionRequest(
   return {
     sessionId,
     toolCall: {
-      toolCallId: uuidv4(),
+      // Reuse the SDK's own `tool_use_id` so this id matches the one carried
+      // on the corresponding `tool_call` session notification. The session
+      // layer keys plan-card resolvers off that id (see
+      // `AgentSession.publishGatedPlan`); a mismatch silently strands the
+      // resolver and the rejected plan card hangs the agent's RPC.
+      toolCallId: ctx.toolUseID,
       kind: deriveToolKind(toolName),
       status: "pending",
       title: deriveToolTitle(

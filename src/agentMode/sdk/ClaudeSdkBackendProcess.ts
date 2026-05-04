@@ -10,6 +10,7 @@
  * the first turn so the SDK loads prior conversation state).
  */
 import { logError, logInfo, logWarn } from "@/logger";
+import { err2String } from "@/utils";
 import {
   type CancelNotification,
   type ListSessionsRequest,
@@ -37,7 +38,9 @@ import {
 } from "@agentclientprotocol/sdk";
 import {
   query,
+  type EffortLevel,
   type McpServerConfig,
+  type ModelInfo,
   type Options,
   type PermissionMode,
   type Query,
@@ -46,10 +49,15 @@ import {
 import { App } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import type { BackendProcess, SessionUpdateHandler } from "@/agentMode/session/types";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
 import { createVaultMcpServer, VAULT_MCP_SERVER_NAME } from "./vaultMcpServer";
 import { PermissionBridge, type AskUserQuestionHandler } from "./permissionBridge";
+import {
+  probeClaudeSdkCatalog,
+  resolveSeedModelId,
+  synthesizeEffortConfigOption,
+} from "./effortOption";
 import {
   describeSdkMessage,
   logSdkError,
@@ -68,6 +76,13 @@ interface SessionState {
   firstPromptStarted: boolean;
   model?: string;
   permissionMode?: PermissionMode;
+  /**
+   * Effort tier passed to `query()`'s `options.effort` on the next prompt.
+   * The vocabulary is per-model — the runtime catalog
+   * (`ModelInfo.supportedEffortLevels`) is the source of truth and is
+   * pulled via `ensureModelCatalog()`.
+   */
+  effort?: EffortLevel;
   mcpServers: Record<string, McpServerConfig>;
   active?: Query;
 }
@@ -82,6 +97,27 @@ export interface ClaudeSdkBackendProcessOptions {
    * the next turn.
    */
   getEnableThinking?: () => boolean;
+  /**
+   * Predicate identifying plan-mode plan files (e.g. `~/.claude/plans/*.md`).
+   * When set, `Write` calls targeting these paths are auto-allowed via
+   * `canUseTool`; all other `Write` calls are denied without prompting.
+   * Vault writes always flow through the vault MCP, never `Write`.
+   */
+  isPlanModePlanFilePath?: (absolutePath: string) => boolean;
+  /**
+   * Returns the descriptor's preload-time catalog cache, if populated.
+   * The descriptor probes the SDK once at preload (via `probeInitialState`)
+   * and stashes the result; we read from there to avoid re-probing per
+   * session. `null` means the preload hasn't run or failed — the backend
+   * falls back to its own on-demand probe.
+   */
+  getCachedCatalog?: () => ModelInfo[] | null;
+  /**
+   * Returns the user's persisted model preference. Read at session start
+   * to seed `session.model` from the live catalog (so the SDK uses what
+   * the picker shows, instead of falling back to its own internal default).
+   */
+  getPreferredModelId?: () => string | undefined;
 }
 
 export class ClaudeSdkBackendProcess implements BackendProcess {
@@ -97,11 +133,20 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   private shuttingDown = false;
   private readonly vaultMcp: McpServerConfig;
   private readonly bridge: PermissionBridge;
+  /**
+   * Process-scoped cache of the SDK's model catalog. Populated lazily by
+   * `ensureModelCatalog()` so we only spawn one extra `claude` subprocess
+   * per backend lifetime. Each `ModelInfo` carries `supportsEffort` and
+   * `supportedEffortLevels`, which drive the dynamic effort dropdown.
+   */
+  private cachedModels: ModelInfo[] | null = null;
+  private cachedModelsProbe: Promise<ModelInfo[]> | null = null;
 
   constructor(private readonly opts: ClaudeSdkBackendProcessOptions) {
     this.bridge = new PermissionBridge({
       getPrompter: () => this.permissionPrompter,
       askUserQuestion: opts.askUserQuestion,
+      isPlanModePlanFilePath: opts.isPlanModePlanFilePath,
     });
     this.vaultMcp = createVaultMcpServer(opts.app.vault) as unknown as McpServerConfig;
     logInfo(
@@ -153,13 +198,41 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       const cfg = acpMcpServerToSdkConfig(server);
       if (cfg) mcp[server.name] = cfg;
     }
+    // Resolve the catalog before returning so the picker never sees an
+    // empty model list. The preloader populates `getCachedCatalog` at
+    // plugin load → first newSession is instant; on a probe miss this
+    // still spawns at most one subprocess (deduped via cachedModelsProbe).
+    const catalog = await this.ensureModelCatalog();
+    const preferred = this.opts.getPreferredModelId?.();
+    const seedModelId = resolveSeedModelId(catalog, preferred);
+
     this.sessions.set(sessionId, {
       cwd,
       firstPromptStarted: false,
       mcpServers: mcp,
+      model: seedModelId,
     });
-    logSdkOutboundResult("newSession", { sessionId }, sessionId);
-    return { sessionId };
+
+    const modelInfo = seedModelId ? catalog.find((m) => m.value === seedModelId) : undefined;
+    const effortOpt = synthesizeEffortConfigOption(modelInfo, undefined);
+    const models =
+      catalog.length > 0 && seedModelId
+        ? {
+            currentModelId: seedModelId,
+            availableModels: catalog.map((m) => ({ modelId: m.value, name: m.displayName })),
+          }
+        : null;
+
+    const resp: NewSessionResponse = { sessionId };
+    if (models) resp.models = models;
+    if (effortOpt) resp.configOptions = [effortOpt];
+
+    logSdkOutboundResult(
+      "newSession",
+      { sessionId, currentModelId: seedModelId ?? null, hasEffort: !!effortOpt },
+      sessionId
+    );
+    return resp;
   }
 
   async prompt(params: PromptRequest): Promise<PromptResponse> {
@@ -181,10 +254,18 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       cwd: session.cwd ?? undefined,
       includePartialMessages: true,
       mcpServers: { ...session.mcpServers, [VAULT_MCP_SERVER_NAME]: this.vaultMcp },
-      // Disallow built-in filesystem tools so the agent only mutates files
-      // through the vault MCP (which routes through Obsidian's modify/create
-      // events for sync, frontmatter, and listener parity).
-      disallowedTools: ["Read", "Write", "Edit"],
+      // Disallow built-in filesystem read/edit tools so the agent only mutates
+      // files through the vault MCP (which routes through Obsidian's
+      // modify/create events for sync, frontmatter, and listener parity).
+      // `Write` is intentionally NOT disallowed here: plan mode writes its
+      // proposal to a path outside the vault (`~/.claude/plans/<slug>.md`),
+      // and a hard SDK-level block would short-circuit the turn before our
+      // permission bridge ever sees the call. Instead the bridge's
+      // `canUseTool` auto-allows Writes whose `file_path` matches the
+      // descriptor's `isPlanModePlanFilePath` predicate and denies every
+      // other Write. Leaving `Write` out of `allowedTools` keeps that
+      // gating in effect.
+      disallowedTools: ["Read", "Edit"],
       allowedTools: [
         `mcp__${VAULT_MCP_SERVER_NAME}__vault_read`,
         `mcp__${VAULT_MCP_SERVER_NAME}__vault_list`,
@@ -204,6 +285,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     }
     if (session.model) options.model = session.model;
     if (session.permissionMode) options.permissionMode = session.permissionMode;
+    if (session.effort) options.effort = session.effort;
     if (this.opts.getEnableThinking?.()) {
       options.thinking = { type: "adaptive" };
     }
@@ -216,6 +298,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         sessionIdSeed: options.sessionId ?? null,
         model: options.model ?? null,
         permissionMode: options.permissionMode ?? null,
+        effort: options.effort ?? null,
         mcpServers: Object.keys(options.mcpServers ?? {}),
         allowedTools: options.allowedTools,
         disallowedTools: options.disallowedTools,
@@ -268,7 +351,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       await session.active.interrupt();
     } catch (e) {
       logWarn("[AgentMode] SDK query.interrupt() threw", e);
-      logSdkError("→", "interrupt", { error: String(e) }, params.sessionId);
+      logSdkError("→", "interrupt", { error: err2String(e) }, params.sessionId);
     }
   }
 
@@ -277,12 +360,24 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const session = this.sessions.get(params.sessionId);
     if (!session) throw new Error(`Unknown session ${params.sessionId}`);
     session.model = params.modelId;
+    // `newSession` awaits `ensureModelCatalog()` before returning, so by the
+    // time the UI can issue setSessionModel the catalog is cached. If a probe
+    // failure left it empty, we skip the clamp and the next model change
+    // after a successful probe will re-clamp.
+    if (this.cachedModels && session.effort) {
+      const info = this.cachedModels.find((m) => m.value === params.modelId);
+      const levels = info?.supportedEffortLevels ?? [];
+      if (!levels.includes(session.effort)) {
+        session.effort = levels[0];
+      }
+    }
+    this.emitEffortConfigOptionUpdate(params.sessionId);
     if (session.active) {
       try {
         await session.active.setModel(params.modelId);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setModel() threw (will apply on next turn)", e);
-        logSdkError("→", "setModel", { error: String(e) }, params.sessionId);
+        logSdkError("→", "setModel", { error: err2String(e) }, params.sessionId);
       }
     }
     return {};
@@ -306,7 +401,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
         await session.active.setPermissionMode(mode);
       } catch (e) {
         logWarn("[AgentMode] SDK query.setPermissionMode() threw (will apply on next turn)", e);
-        logSdkError("→", "setPermissionMode", { error: String(e) }, params.sessionId);
+        logSdkError("→", "setPermissionMode", { error: err2String(e) }, params.sessionId);
       }
     }
     return {};
@@ -316,17 +411,41 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     return true;
   }
 
+  /**
+   * Only `effort` is exposed as a session config option for this backend.
+   * We synthesize the option from the SDK's per-model
+   * `ModelInfo.supportedEffortLevels`, store the pick on the session, and
+   * apply it as `options.effort` on the next `query()` — the SDK has no
+   * runtime RPC for changing effort mid-turn.
+   */
   async setSessionConfigOption(
-    _params: SetSessionConfigOptionRequest
+    params: SetSessionConfigOptionRequest
   ): Promise<SetSessionConfigOptionResponse> {
-    // The SDK has no per-session config-option RPC; effort/thinking are
-    // controlled at query construction time. Surface as MethodUnsupported so
-    // the picker hides the effort dropdown.
-    throw new MethodUnsupportedError("session/set_config_option");
+    logSdkOutbound(
+      "setSessionConfigOption",
+      { configId: params.configId, value: params.value },
+      params.sessionId
+    );
+    if (params.configId !== "effort") {
+      throw new MethodUnsupportedError("session/set_config_option");
+    }
+    const session = this.sessions.get(params.sessionId);
+    if (!session) throw new Error(`Unknown session ${params.sessionId}`);
+    const models = await this.ensureModelCatalog();
+    const modelInfo = models.find((m) => m.value === session.model);
+    const levels = modelInfo?.supportedEffortLevels ?? [];
+    if (!levels.includes(params.value as EffortLevel)) {
+      throw new Error(
+        `Effort '${params.value}' not supported by ${session.model ?? "default model"}`
+      );
+    }
+    session.effort = params.value as EffortLevel;
+    const opt = synthesizeEffortConfigOption(modelInfo, session.effort);
+    return { configOptions: opt ? [opt] : [] };
   }
 
   isSetSessionConfigOptionSupported(): boolean | null {
-    return false;
+    return true;
   }
 
   async listSessions(_params: ListSessionsRequest): Promise<ListSessionsResponse> {
@@ -367,6 +486,53 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       }
     }
     this.exitListeners.clear();
+  }
+
+  /**
+   * Resolve the SDK's model catalog. Prefers the descriptor's preload
+   * cache (populated once per plugin lifetime by `probeInitialState`)
+   * over an on-demand probe — only the first session before preload
+   * completes (or after a probe failure) actually spawns a subprocess.
+   * Failures resolve to `[]` so callers degrade gracefully.
+   */
+  private ensureModelCatalog(): Promise<ModelInfo[]> {
+    if (this.cachedModels) return Promise.resolve(this.cachedModels);
+    const fromDescriptor = this.opts.getCachedCatalog?.();
+    if (fromDescriptor && fromDescriptor.length > 0) {
+      this.cachedModels = fromDescriptor;
+      return Promise.resolve(fromDescriptor);
+    }
+    if (this.cachedModelsProbe) return this.cachedModelsProbe;
+    const probePromise = probeClaudeSdkCatalog(this.opts.pathToClaudeCodeExecutable).then(
+      (models) => {
+        if (models.length > 0) this.cachedModels = models;
+        else this.cachedModelsProbe = null;
+        return models;
+      }
+    );
+    this.cachedModelsProbe = probePromise;
+    return probePromise;
+  }
+
+  /**
+   * Push a `config_option_update` for the given session reflecting the
+   * current model's effort vocabulary. No-op when the catalog hasn't
+   * arrived yet or the active model doesn't support effort.
+   */
+  private emitEffortConfigOptionUpdate(sessionId: SessionId): void {
+    const session = this.sessions.get(sessionId);
+    if (!session) return;
+    const models = this.cachedModels;
+    if (!models) return;
+    const modelInfo = models.find((m) => m.value === session.model);
+    const opt = synthesizeEffortConfigOption(modelInfo, session.effort);
+    this.dispatchNotification({
+      sessionId,
+      update: {
+        sessionUpdate: "config_option_update",
+        configOptions: opt ? [opt] : [],
+      },
+    });
   }
 
   private dispatchNotification(notification: SessionNotification): void {

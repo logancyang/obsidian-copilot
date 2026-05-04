@@ -37,12 +37,19 @@ export const AgentModeChat: React.FC<Props> = ({
     return manager.subscribe(() => setTick((v) => v + 1));
   }, [manager]);
 
+  // Manager fires `notify()` on preload settle, which bumps `tick` above and
+  // re-renders this component — so we can read the flag directly each render.
+  const preloadReady = manager?.isPreloadReady() ?? true;
+
   // Auto-spawn the first session on mount. The manager de-dupes concurrent
   // creators via creatingSession, so this is safe to fire whenever the
   // dependencies change. Skip if the backend isn't installed (the install
-  // pill takes over) or there's a prior boot error (Retry handles it).
+  // pill takes over), there's a prior boot error (Retry handles it), or
+  // preload hasn't settled (the SDK catalog isn't in cache yet — kicking
+  // off `newSession` would trigger a redundant on-demand probe).
   React.useEffect(() => {
     if (!manager) return;
+    if (!preloadReady) return;
     if (manager.getSessions().length > 0) return;
     if (manager.getIsStarting()) return;
     if (manager.getLastError()) return;
@@ -52,13 +59,24 @@ export const AgentModeChat: React.FC<Props> = ({
     });
     // tick forces re-evaluation when the manager's pool changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [manager, installState.kind, tick]);
+  }, [manager, installState.kind, preloadReady, tick]);
 
   const handleInstall = React.useCallback(() => {
     descriptor.openInstallUI(plugin);
   }, [descriptor, plugin]);
 
   if (!manager) return null;
+
+  // Render a loading placeholder until plugin-load preload settles. This
+  // guarantees the picker (and effort dropdown) read from a populated
+  // cache on first paint instead of flashing an empty list.
+  if (!preloadReady) {
+    return (
+      <div className="tw-flex tw-size-full tw-items-center tw-justify-center tw-text-muted">
+        Loading agent models…
+      </div>
+    );
+  }
 
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();

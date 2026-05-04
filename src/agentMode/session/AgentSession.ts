@@ -9,6 +9,7 @@ import {
   BackendDescriptor,
   CurrentPlan,
   NewAgentChatMessage,
+  PlanProposalBody,
   planBodyEquals,
   planEntriesToMarkdown,
 } from "@/agentMode/session/types";
@@ -31,8 +32,8 @@ import {
   ToolCall,
   ToolCallUpdate,
 } from "@agentclientprotocol/sdk";
-import type { BackendProcess } from "@/agentMode/session/types";
-import { MethodUnsupportedError, type BackendId } from "@/agentMode/acp/types";
+import type { BackendId, BackendProcess } from "@/agentMode/session/types";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import type { BackendMetaParser } from "@/agentMode/session/backendMeta";
 import { resolveMcpServers } from "@/agentMode/session/mcpResolver";
 import { getSettings } from "@/settings/model";
@@ -79,7 +80,7 @@ export interface AgentSessionStartOptions {
   preferredModelId?: string;
   /**
    * Optional descriptor accessor. The session uses it to read static behavior
-   * flags (e.g. `emitsPlanProposalOnEndOfTurn`) and to resolve mode mappings
+   * flags (e.g. `bodylessPlanExitToolNames`) and to resolve mode mappings
    * without coupling to specific backends. Manager-supplied; tests omit it.
    */
   getDescriptor?: () => BackendDescriptor | undefined;
@@ -160,6 +161,13 @@ export class AgentSession {
   // after `currentPlan` was cleared, resurrecting a "ghost" pending card the
   // user just dismissed.
   private decidedPlanToolCallIds = new Set<string>();
+  // Tool-call ids the session has identified as bodyless plan-exit signals
+  // (e.g. OpenCode's `plan_exit`). The initial `tool_call` is intercepted to
+  // publish the plan card, and all subsequent `tool_call_update`s for the
+  // same id are dropped so the noisy "unavailable tool" follow-ups don't
+  // render in the action-card trail. Per-session, like
+  // `decidedPlanToolCallIds` — toolCallIds are unique within a session.
+  private suppressedExitToolCallIds = new Set<string>();
 
   /**
    * Tests and `loadSessionFromHistory` use this constructor with a
@@ -494,13 +502,9 @@ export class AgentSession {
       };
       const resp = await this.backend.prompt(req);
       this.setStatus("idle");
-      // Publish any structured plan as the floating plan card when
-      // the descriptor opted in (OpenCode-style end-of-turn). Done before
-      // clearing the placeholder reference so the new part still routes to
-      // the same assistant message.
-      if (resp.stopReason === "end_turn" && placeholderId) {
-        this.maybePromotePlanToProposal(placeholderId);
-      }
+      // Plan-mode finalization is now an inline interception (descriptor's
+      // `bodylessPlanExitToolNames` matched in `handleSessionUpdate`) rather
+      // than an end-of-turn scan, so no extra work to do here.
       // Clear the placeholder reference now that the turn is done. We do this
       // here (and in the catch branch) instead of in `finally` so that
       // trailing `session/update` notifications that may arrive between
@@ -556,6 +560,7 @@ export class AgentSession {
     }
     this.pendingPlanResolvers.clear();
     this.decidedPlanToolCallIds.clear();
+    this.suppressedExitToolCallIds.clear();
     this.currentPlan = null;
     this.setStatus("closed");
     this.listeners.clear();
@@ -761,7 +766,29 @@ export class AgentSession {
         return;
       }
       case "tool_call": {
-        const parser = this.getDescriptor?.()?.meta;
+        const descriptor = this.getDescriptor?.();
+        const parser = descriptor?.meta;
+        // Bodyless plan-exit interception (OpenCode `plan_exit`): publish a
+        // proposal card from the body we already have in session state and
+        // suppress this tool_call + all its updates so the noisy "Invalid
+        // Tool" follow-ups never render. Skipped for backends without the
+        // declaration or when the session isn't in canonical plan mode.
+        if (
+          descriptor &&
+          this.isBodylessPlanExit(descriptor, update.title) &&
+          this.isCurrentlyInPlanMode(descriptor)
+        ) {
+          this.suppressedExitToolCallIds.add(update.toolCallId);
+          const resolved = this.resolveExitPlanBody(placeholderId);
+          if (resolved) {
+            this.setCurrentPlan({ ...resolved, permissionGated: false });
+          } else {
+            logInfo(
+              `[AgentMode] bodyless plan-exit ${update.title} fired without a resolvable body; ignoring`
+            );
+          }
+          return;
+        }
         const exitPlan = tryReadExitPlanModeCall({
           kind: update.kind,
           rawInput: update.rawInput,
@@ -783,6 +810,11 @@ export class AgentSession {
         return;
       }
       case "tool_call_update": {
+        // Drop follow-ups for a tool call we already intercepted as a
+        // bodyless plan-exit. Without this guard the "Invalid Tool" /
+        // "Model tried to call unavailable tool" updates would render in
+        // the trail right next to the plan card we just published.
+        if (this.suppressedExitToolCallIds.has(update.toolCallId)) return;
         const existing = this.findToolCallPart(placeholderId, update.toolCallId);
         const parser = this.getDescriptor?.()?.meta;
         const merged = mergeToolCallUpdate(existing, update, parser);
@@ -941,32 +973,32 @@ export class AgentSession {
   }
 
   /**
-   * If the descriptor advertises end-of-turn proposal emission AND the
-   * session is currently in canonical "plan" mode AND the placeholder
-   * message contains a structured `kind: "plan"` part, publish it as
-   * the floating plan card (entries body, not gated). No-op for backends
-   * that handle plan completion via a permission-gated tool — those
-   * routes already published a gated card via `publishGatedPlan`.
+   * Resolve the body for a bodyless plan-exit signal (e.g. OpenCode's
+   * `plan_exit`). Prefers the existing markdown body bootstrapped from a
+   * mid-turn plan-file write; falls back to the most recent `kind: "plan"`
+   * part on the placeholder (OpenCode translates `todowrite` into one).
    *
-   * Skips when a markdown-body plan was already published mid-turn (via
-   * `maybePromotePlanFileWrite`). The plan-file body is more
-   * authoritative than a `todowrite`-derived checklist; overwriting it
-   * with the entries body would lose detail.
+   * Returns `null` when there's nothing to publish (no file body, no plan
+   * part) — caller logs and skips.
    */
-  private maybePromotePlanToProposal(placeholderId: string): void {
-    const descriptor = this.getDescriptor?.();
-    if (!descriptor?.emitsPlanProposalOnEndOfTurn) return;
-    if (!this.isCurrentlyInPlanMode(descriptor)) return;
-    if (this.currentPlan?.body.type === "markdown") return;
+  private resolveExitPlanBody(
+    placeholderId: string
+  ): { body: PlanProposalBody; title: string } | null {
+    if (this.currentPlan?.body.type === "markdown") {
+      // A plan-file write already bootstrapped the card mid-turn; the exit
+      // signal is just a "ready" stamp. Re-publishing would be a no-op
+      // because `setCurrentPlan` early-returns on body equality, but bail
+      // here so the caller can skip side effects too.
+      return null;
+    }
     const msg = this.store.getMessage(placeholderId);
     const planPart = msg?.parts?.find((p) => p.kind === "plan");
-    if (!planPart || planPart.kind !== "plan") return;
+    if (!planPart || planPart.kind !== "plan") return null;
     const markdown = planEntriesToMarkdown(planPart.entries);
-    this.setCurrentPlan({
+    return {
       body: { type: "entries", entries: planPart.entries },
       title: derivePlanTitleFromMarkdown(markdown),
-      permissionGated: false,
-    });
+    };
   }
 
   /**
@@ -986,6 +1018,12 @@ export class AgentSession {
     if (this.modeState) return this.modeState;
     const seeded = this.getDescriptor?.()?.getStaticInitialState?.()?.modes;
     return seeded ?? { availableModes: [], currentModeId: "" };
+  }
+
+  private isBodylessPlanExit(descriptor: BackendDescriptor, title: string | undefined): boolean {
+    if (!title) return false;
+    const names = descriptor.bodylessPlanExitToolNames;
+    return Array.isArray(names) && names.includes(title);
   }
 
   private isCurrentlyInPlanMode(descriptor: BackendDescriptor): boolean {

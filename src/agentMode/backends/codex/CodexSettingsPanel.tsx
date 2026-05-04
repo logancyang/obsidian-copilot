@@ -2,7 +2,7 @@ import type CopilotPlugin from "@/main";
 import { getSettings } from "@/settings/model";
 import type { App } from "obsidian";
 import React from "react";
-import { SimpleBackendSettingsPanel } from "@/agentMode/backends/_shared/SimpleBackendSettingsPanel";
+import { SimpleBackendSettingsPanel } from "@/agentMode/backends/shared/SimpleBackendSettingsPanel";
 import { CodexInstallModal } from "./CodexInstallModal";
 import { CODEX_BINARY_NAME, CODEX_INSTALL_COMMAND, updateCodexFields } from "./descriptor";
 

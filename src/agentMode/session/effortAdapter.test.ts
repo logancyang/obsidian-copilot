@@ -14,9 +14,9 @@ const opencodeStub: BackendDescriptor = {
   getInstallState: () => ({ kind: "absent" }),
   subscribeInstallState: () => () => {},
   openInstallUI: () => {},
-  createBackend: (() => {
+  createBackendProcess: (() => {
     throw new Error("not used in tests");
-  }) as unknown as BackendDescriptor["createBackend"],
+  }) as unknown as BackendDescriptor["createBackendProcess"],
   parseEffortFromModelId(modelId) {
     if (!modelId) return null;
     const segs = modelId.split("/");
@@ -36,9 +36,9 @@ const claudeCodeStub: BackendDescriptor = {
   getInstallState: () => ({ kind: "absent" }),
   subscribeInstallState: () => () => {},
   openInstallUI: () => {},
-  createBackend: (() => {
+  createBackendProcess: (() => {
     throw new Error("not used in tests");
-  }) as unknown as BackendDescriptor["createBackend"],
+  }) as unknown as BackendDescriptor["createBackendProcess"],
   findEffortConfigOption(opts) {
     if (!opts) return null;
     return (

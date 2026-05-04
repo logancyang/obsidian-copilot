@@ -1,63 +1,71 @@
 # Agent Mode — layer rules
 
-Seven element types, strict imports. Enforced by `eslint-plugin-boundaries`
+Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
 (see root `.eslintrc`). The list below mirrors `boundaries/elements` and
 `boundaries/dependencies` exactly — when in doubt, the lint config wins.
 
-1. **`acp/`** — generic ACP runtime (subprocess, JSON-RPC connection,
-   vault MCP client, debug tap, frame sink). May import: `obsidian` +
-   `@agentclientprotocol/sdk` (host) only. Never imports from any
-   sibling layer.
-2. **`session/`** — backend-agnostic session, store, UI-state bridge.
+1. **`session/`** — **the contract layer.** Owns `BackendProcess`,
+   `BackendDescriptor`, `BackendId` (`session/types.ts`),
+   `MethodUnsupportedError`, `JSONRPC_METHOD_NOT_FOUND`
+   (`session/errors.ts`), and the shared debug NDJSON sink + payload
+   formatter (`session/debugSink.ts`). Also hosts the backend-agnostic
+   session, message store, UI-state bridge, and persistence manager.
    Receives a `BackendProcess` (not a concrete class) by DI from a
-   `BackendDescriptor`. May import: `acp/` + host.
+   `BackendDescriptor`. May import: `obsidian` + host only.
+2. **`acp/`** — generic ACP runtime (subprocess, JSON-RPC connection,
+   vault MCP client, JSON-RPC stream tap). Implements `BackendProcess`
+   via `AcpBackendProcess`. May import: `session/` + host.
 3. **`sdk/`** — in-process SDK adapters that implement
    `BackendProcess` directly, without a JSON-RPC subprocess. Today
-   this hosts the Claude Agent SDK driver. May import: `acp/` (types,
-   debug-tap helpers) + `session/types` + host.
-4. **`backends/_shared/` (`backend-shared`)** — helpers shared across
-   sibling backends (binary install UI, simple binary spawn descriptor).
-   May import: `acp/` + `session/` + host. Never imports from a sibling
-   backend.
-5. **`backends/<id>/`** — one backend per folder. Exports a
-   `BackendDescriptor`. May import: `acp/`, `session/`, `sdk/`,
-   `backends/_shared/`, host, **and only its own folder** (no
-   sibling-backend imports). May not import `ui/` or `registry`.
-6. **`backends/registry.ts`** — the only place that names every
+   this hosts the Claude Agent SDK driver. May import: `session/` +
+   host. **Does not import `acp/`** — `acp/` and `sdk/` are siblings.
+4. **`backends/<id>/`** — one backend per folder. Exports a
+   `BackendDescriptor` whose `createBackendProcess` returns a finished
+   `BackendProcess`. May import: `acp/`, `sdk/`, `session/`, host,
+   its own folder, and `backends/shared/` (a peer in this group, not
+   a separate element type — any backend may import from it). May not
+   import sibling backends, `ui/`, or `registry`.
+5. **`backends/registry.ts`** — the only place that names every
    backend. May import: `backend`, `session`, host. Carved out as its
    own element so `ui/` can deep-import the registry without unlocking
    deep imports into individual backends.
-7. **`ui/`** — backend-agnostic React UI. May import: `ui/`,
-   `session/`, `acp/`, `registry`, host. Strings like display names and
-   model lists come from `BackendDescriptor`, never hardcoded; the
-   registry is the only `backends/` path it touches.
+6. **`ui/`** — backend-agnostic React UI. May import: `ui/`,
+   `session/`, `registry`, host. **Does not import `acp/`** — strings
+   like display names and model lists come from `BackendDescriptor`,
+   never hardcoded; the registry is the only `backends/` path it
+   touches.
 
 Outside `agentMode/`: only `@/agentMode` (the `barrel`) is importable.
 Deep imports fail lint.
 
 ## Why two adapters under one session
 
-`session/` consumes the `BackendProcess` interface
-(`session/types.ts`). `acp/AcpBackendProcess` wraps a JSON-RPC
+The contract lives in `session/types.ts` (`BackendProcess`,
+`BackendDescriptor`) and `session/errors.ts`
+(`MethodUnsupportedError`). `acp/AcpBackendProcess` wraps a JSON-RPC
 subprocess; `sdk/ClaudeSdkBackendProcess` wraps an in-process async
-generator. Both produce the same `SessionNotification` stream, so
-`AgentSession` stays oblivious. Note that `session/` does **not** import
-`sdk/` — the abstraction lives in `session/types.ts`, and `sdk/`
-satisfies it from the other side.
+generator. Both produce the same `SessionNotification` stream and
+satisfy the same `BackendProcess` interface, so `AgentSession` stays
+oblivious. Crucially, **neither adapter imports the other**, and
+`session/` doesn't import either — it consumes the
+`BackendProcess` interface only and lets the descriptor's
+`createBackendProcess` factory hand it a finished process.
 
 ## Adding a new backend
 
 Pick a track based on what the agent gives you:
 
 - **Subprocess track** (codex, opencode) — the agent speaks ACP
-  over stdio. Implement `AcpBackend` in `Backend.ts`; the descriptor's
-  `createBackend(plugin)` returns it and the session manager wraps it
-  in `AcpBackendProcess`. Reuse `backends/_shared/simpleBinaryBackend`
-  if it's a binary you spawn with stock args.
+  over stdio. Implement `AcpBackend` in `Backend.ts` and have the
+  descriptor's `createBackendProcess(args)` call
+  `simpleBinaryBackendProcess(args, new <Id>Backend())` from
+  `backends/shared/simpleBinaryBackend.ts`. The helper wraps the
+  spawn descriptor in `AcpBackendProcess` for you.
 - **In-process / SDK track** (claude) — the agent ships an
-  in-process SDK. Put the `BackendProcess` implementation in `sdk/` if
-  any logic is reusable (translator, debug tap, MCP shim) and have the
-  descriptor's `createBackendProcess(args)` return it.
+  in-process SDK. Put the `BackendProcess` implementation in `sdk/`
+  if any logic is reusable (translator, debug tap, MCP shim) and
+  have the descriptor's `createBackendProcess(args)` construct it
+  directly.
 
 Then in either case:
 
@@ -85,10 +93,11 @@ Then in either case:
 
 ## What lives where (cheatsheet)
 
-- "ACP types or process spawning, JSON-RPC, frame sink" → `acp/`
-- "Manages the conversation, session lifecycle, message store" → `session/`
+- "Backend-agnostic contract — `BackendProcess`, `BackendDescriptor`,
+  `MethodUnsupportedError`, debug sink" → `session/`
+- "ACP types or process spawning, JSON-RPC, vault MCP client" → `acp/`
 - "In-process driver for an SDK that mimics ACP semantics" → `sdk/`
-- "Helper used by more than one backend" → `backends/_shared/`
+- "Helper used by more than one backend" → `backends/shared/`
 - "Knows about a specific binary, install path, BYOK keys, vendor models" → `backends/<id>/`
 - "React component or modal" → `ui/` (generic) or `backends/<id>/`
   (backend-specific)
@@ -103,18 +112,20 @@ Authoritative definition: **`src/agentMode/session/types.ts`**
 - **identity** — `id`, `displayName`, `meta` (vendor `_meta` parser)
 - **install** — `getInstallState`, `subscribeInstallState`,
   `openInstallUI`, `onPluginLoad`
-- **process construction** — exactly one of `createBackend`
-  (subprocess) or `createBackendProcess` (in-process); the session
-  manager throws if neither is present
-- **models** — `getStaticInitialState`, `filterCopilotModels`,
-  `getPreferredModelId`, `persistModelSelection`,
-  `copilotModelKeyToAgentModelId`, `agentModelIdToCopilotProvider`,
-  `isModelEnabledByDefault`
+- **process construction** — required `createBackendProcess(args)`
+  returning a `BackendProcess`. Both tracks use the same factory:
+  subprocess backends typically delegate to
+  `simpleBinaryBackendProcess` from `backends/shared/`; in-process
+  adapters construct their `BackendProcess` directly.
+- **models** — `getStaticInitialState`, `probeInitialState`,
+  `filterCopilotModels`, `getPreferredModelId`,
+  `persistModelSelection`, `copilotModelKeyToAgentModelId`,
+  `agentModelIdToCopilotProvider`, `isModelEnabledByDefault`
 - **modes** — `getModeMapping`, `persistModeSelection`,
   `applyInitialSessionConfig`
 - **effort** — `parseEffortFromModelId`, `composeModelId`,
   `findEffortConfigOption`, `persistEffortSelection`
-- **plan** — `emitsPlanProposalOnEndOfTurn`, `isPlanModePlanFilePath`
+- **plan** — `isPlanModePlanFilePath`, `bodylessPlanExitToolNames`
 - **probe sessions** — `getProbeSessionId`, `persistProbeSessionId`
 - **UI** — `SettingsPanel`
 
@@ -124,9 +135,9 @@ descriptor will keep growing; that's by design.
 
 ## Debugging tips
 
-### Inspect full ACP JSON-RPC frames
+### Inspect full Agent Mode frames
 
-The default ACP debug log truncates each frame's payload to 400 chars. For full
+The default debug log truncates each frame's payload to 400 chars. For full
 payloads — large tool results, MCP responses, attachments — turn on
 **Settings → Advanced → Log Full ACP Frames**.
 
@@ -136,7 +147,7 @@ When enabled, every parsed frame is appended as one NDJSON line to:
 <vault>/copilot/acp-frames.ndjson
 ```
 
-Each line is a `FrameRecord` (`src/agentMode/acp/frameSink.ts`):
+Each line is a `FrameRecord` (`src/agentMode/session/debugSink.ts`):
 
 ```ts
 { ts, dir: "→" | "←", tag, kind: "request" | "notif" | "result" | "error" | "raw",
@@ -144,10 +155,10 @@ Each line is a `FrameRecord` (`src/agentMode/acp/frameSink.ts`):
 ```
 
 `dir` is from the plugin's perspective: `→` = sent to the agent,
-`←` = received from the agent. `tag` is the backend id (e.g. `claude`,
-`opencode`, `codex`). The Claude SDK adapter routes through the same
-sink via `sdk/sdkDebugTap`, so SDK turns appear in the same file as
-ACP turns.
+`←` = received from the agent. `tag` is the backend id (e.g. `claude-sdk`,
+`opencode`, `codex`). The ACP runtime (`acp/debugTap`) and the Claude SDK
+adapter (`sdk/sdkDebugTap`) both feed the shared sink, so JSON-RPC and
+SDK turns appear in the same file.
 
 Useful queries:
 
@@ -159,7 +170,7 @@ jq -r .method copilot/acp-frames.ndjson | sort | uniq -c | sort -rn
 jq -c 'select(.method=="session/update") | .payload' copilot/acp-frames.ndjson
 
 # only frames for one backend
-jq -c 'select(.tag=="claude")' copilot/acp-frames.ndjson
+jq -c 'select(.tag=="claude-sdk")' copilot/acp-frames.ndjson
 ```
 
 The file is append-only and bounded — at 50 MB it rotates to

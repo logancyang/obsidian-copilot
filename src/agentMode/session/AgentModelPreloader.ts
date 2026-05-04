@@ -7,9 +7,8 @@ import type {
   SessionModelState,
 } from "@agentclientprotocol/sdk";
 import { App, FileSystemAdapter, Platform } from "obsidian";
-import { AcpBackendProcess } from "@/agentMode/acp/AcpBackendProcess";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
-import type { BackendDescriptor, BackendId, BackendInitialState } from "./types";
+import { MethodUnsupportedError } from "./errors";
+import type { BackendDescriptor, BackendId, BackendInitialState, BackendProcess } from "./types";
 
 export type { BackendInitialState } from "./types";
 
@@ -116,29 +115,39 @@ export class AgentModelPreloader {
     }
     if (descriptor.getInstallState(getSettings()).kind !== "ready") return;
 
-    // Non-ACP backends (Claude SDK adapter) don't expose a probe-friendly
-    // session model — their model list comes from the SDK directly when the
-    // first real session starts. Caching whatever the descriptor declares
-    // statically (if anything) is the descriptor's responsibility; we simply
-    // skip the ACP probe path here.
-    if (descriptor.createBackendProcess) {
+    // Descriptors that expose `probeInitialState` (today: the Claude SDK
+    // adapter) skip the session/new round-trip — their model list comes from
+    // the SDK at runtime. Prefer the live probe; fall back to the static
+    // slice if the probe fails or is unavailable.
+    if (descriptor.probeInitialState) {
+      try {
+        const snap = await descriptor.probeInitialState(this.plugin);
+        if (this.disposed) return;
+        if (snap) {
+          this.setCached(backendId, snap);
+          const ids = snap.models?.availableModels.map((m) => m.modelId).join(", ") ?? "";
+          const cfgIds = snap.configOptions?.map((o) => o.id).join(", ") ?? "";
+          logInfo(
+            `[AgentMode] preload ${backendId} (descriptor probe): models=[${ids}] (current=${snap.models?.currentModelId ?? "-"}), configOptions=[${cfgIds}]`
+          );
+          return;
+        }
+      } catch (e) {
+        logError(`[AgentMode] preload ${backendId} (descriptor probe) failed`, e);
+      }
       const staticState = descriptor.getStaticInitialState?.();
       if (staticState) this.setCached(backendId, staticState);
       return;
     }
 
-    if (!descriptor.createBackend) {
-      logWarn(`[AgentMode] preload skipped: ${backendId} declares no backend factory`);
-      return;
-    }
-    const proc = new AcpBackendProcess(
-      this.app,
-      descriptor.createBackend(this.plugin),
-      this.plugin.manifest.version
-    );
+    const proc = descriptor.createBackendProcess({
+      plugin: this.plugin,
+      app: this.app,
+      clientVersion: this.plugin.manifest.version,
+    });
 
     try {
-      await proc.start();
+      await proc.start?.();
       const storedId = descriptor.getProbeSessionId?.(getSettings());
       // The probe is read-only — we don't act on session/update frames.
       // A handler is still registered (no-op) for each touched sessionId so
@@ -171,7 +180,7 @@ export class AgentModelPreloader {
   }
 
   private async fetchInitialState(
-    proc: AcpBackendProcess,
+    proc: BackendProcess,
     descriptor: BackendDescriptor,
     backendId: BackendId,
     storedId: string | undefined,
@@ -185,15 +194,15 @@ export class AgentModelPreloader {
     };
     const strategies: Strategy[] = [];
     // Probe sessions are non-interactive — boot with no MCP servers to avoid
-    // spawning user-configured tool processes for a read-only ping.
-    if (storedId && proc.hasCapability("session/resume")) {
+    // spawning user-configured tool processes for a read-only ping. Backends
+    // that don't implement resume/load throw `MethodUnsupportedError` from
+    // the strategy's `run`, which the loop below catches and falls through.
+    if (storedId) {
       strategies.push({
         label: `resumed probe session ${storedId}`,
         sessionId: storedId,
         run: () => proc.resumeSession({ sessionId: storedId, cwd, mcpServers: [] }),
       });
-    }
-    if (storedId && proc.hasCapability("session/load")) {
       strategies.push({
         label: `loaded probe session ${storedId}`,
         sessionId: storedId,

@@ -1,6 +1,6 @@
 import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
-import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/_shared/simpleBinaryBackend";
+import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 
 /**
  * Spawns the user-provided `codex-acp` binary

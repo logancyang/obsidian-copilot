@@ -150,13 +150,7 @@ describe("translateSdkMessage", () => {
   it("ignores assistant messages whose tool_use blocks were already streamed", () => {
     const state = createTranslatorState();
     // Pretend the streaming path already saw this tool_use.
-    state.toolUseBlocks.set(0, {
-      id: "tool-1",
-      name: "vault_read",
-      inputJsonAcc: '{"path":"a.md"}',
-      lastParsedInput: { path: "a.md" },
-      emittedToolCall: true,
-    });
+    state.emittedToolUseIds.add("tool-1");
     expect(
       translateSdkMessage(
         {

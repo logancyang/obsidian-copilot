@@ -1,8 +1,6 @@
 import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { frameSink, type FrameRecord } from "./frameSink";
-
-const MAX_PAYLOAD_CHARS = 400;
+import { formatPayload, frameSink, type FrameRecord } from "@/agentMode/session/debugSink";
 
 interface JsonRpcFrame {
   jsonrpc?: string;
@@ -151,7 +149,7 @@ function logFrame(
   try {
     frame = JSON.parse(line);
   } catch {
-    logInfo(`[ACP ${arrow}][${tag}] (unparsed) ${truncate(line)}`);
+    logInfo(`[ACP ${arrow}][${tag}] (unparsed) ${formatPayload(line)}`);
     emit?.("raw", "(unparsed)", null, { raw: line });
     return;
   }
@@ -181,20 +179,4 @@ function logFrame(
     logInfo(`[ACP ${arrow}][${tag}] ${method}  ${idLabel}  ${formatPayload(frame.result)}`);
     emit?.("result", method, idStr, frame.result);
   }
-}
-
-export function formatPayload(value: unknown): string {
-  if (value === undefined) return "";
-  let s: string;
-  try {
-    s = JSON.stringify(value);
-  } catch {
-    s = String(value);
-  }
-  return truncate(s);
-}
-
-function truncate(s: string): string {
-  if (s.length <= MAX_PAYLOAD_CHARS) return s;
-  return s.slice(0, MAX_PAYLOAD_CHARS) + `…(+${s.length - MAX_PAYLOAD_CHARS})`;
 }

@@ -1,7 +1,7 @@
 import { getSettings } from "@/settings/model";
 import { App } from "obsidian";
 import React from "react";
-import { BinaryInstallModal } from "@/agentMode/backends/_shared/BinaryInstallContent";
+import { BinaryInstallModal } from "@/agentMode/backends/shared/BinaryInstallContent";
 import { CODEX_BINARY_NAME, CODEX_INSTALL_COMMAND, updateCodexFields } from "./descriptor";
 
 export class CodexInstallModal extends BinaryInstallModal {

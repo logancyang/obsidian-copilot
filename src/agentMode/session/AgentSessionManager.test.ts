@@ -27,8 +27,8 @@ const mockBackendStart = jest.fn(async () => undefined);
 const mockBackendExitListeners = new Set<() => void>();
 const mockSetPermissionPrompter = jest.fn();
 
-jest.mock("@/agentMode/acp/AcpBackendProcess", () => ({
-  AcpBackendProcess: jest.fn().mockImplementation(() => ({
+function makeMockBackendProcess() {
+  return {
     start: mockBackendStart,
     setPermissionPrompter: mockSetPermissionPrompter,
     onExit: (fn: () => void) => {
@@ -37,8 +37,8 @@ jest.mock("@/agentMode/acp/AcpBackendProcess", () => ({
     },
     isRunning: () => mockBackendIsRunning,
     shutdown: mockBackendShutdown,
-  })),
-}));
+  };
+}
 
 const mockSessionDispose = jest.fn(async () => undefined);
 const mockSessionCancel = jest.fn(async () => undefined);
@@ -92,11 +92,7 @@ function buildDescriptor(): BackendDescriptor {
     getInstallState: jest.fn(),
     subscribeInstallState: jest.fn(),
     openInstallUI: jest.fn(),
-    createBackend: jest.fn(() => ({
-      id: "opencode",
-      displayName: "opencode",
-      buildSpawnDescriptor: jest.fn(),
-    })),
+    createBackendProcess: jest.fn(() => makeMockBackendProcess()),
   } as unknown as BackendDescriptor;
 }
 

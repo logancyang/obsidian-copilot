@@ -3,10 +3,13 @@
 - P0: Chat history
   - [x] Load chat history from agents
   - [x] Save chat history to notes
-- P0: Thoroughly assess whether migrating to Anthropic agent SDK is worth it.
-- [ ] P1: Create sample vaults for test cases.
+- [x] P0: Thoroughly assess whether migrating to Anthropic agent SDK is worth it.
+- [ ] P0: Thoroughly test opencode, codex, and claude code with different test cases
+  - [ ] Create sample vaults for test cases.
 - [ ] P1: Provide copilot specific system prompt
 - [x] P1: Queue messages
+- [ ] P1: Only include the provided models
+  - avoid import all openrouter models
 - [ ] P1: MCP
   - Basic functionality is ready
   - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
@@ -40,7 +43,8 @@
 - [x] P1: Clean up opencode model list (maybe it's related to the "effort" feature)
 - [x] P1: Clicking new chat should reset the tab label
 - [ ] P2: Agent survey (asking for user input)
-  - Not possible with ACP, need more digging
+  - ~~Not possible with ACP, need more digging~~ now possible after migrating to agent SDK
+  - Need to convert the UI to inline card in chat
 - [ ] P1: Agent message is not rendered in the correct order with the tool calls
 - [x] P1: Plan mode preview display
 - [x] P1: Support note context input
@@ -53,6 +57,7 @@
   - what if the ACP package changes
   - how to update ACP packages?
   - how to update downloaded binary?
+- [ ] P2: Rebuild agent session tabs and right click context menu
 - [ ] P2: Claude vscode plugin add comment to plan capability
   - It makes iterating on plan a lot easier
 - [x] P2: Rebrand chat send button

@@ -34,7 +34,7 @@ export { McpServersPanel } from "./ui/McpServersPanel";
 export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
-export { frameSink as acpFrameSink } from "./acp/frameSink";
+export { frameSink as acpFrameSink } from "./session/debugSink";
 
 /**
  * Single seam between the plugin host (`main.ts`) and Agent Mode. Wires the
@@ -72,11 +72,18 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
 
   const settings = getSettings();
   if (!settings.agentMode?.enabled) return manager;
+  const preloads: Promise<void>[] = [];
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.getInstallState(settings).kind !== "ready") continue;
-    manager
-      .preloadModels(descriptor.id)
-      .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e));
+    preloads.push(
+      manager
+        .preloadModels(descriptor.id)
+        .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e))
+    );
   }
+  // Aggregate so the chat UI can gate its first render until every
+  // backend's catalog has settled — the model picker should never flash
+  // empty before the cache populates.
+  manager.setPreloadPromise(Promise.allSettled(preloads).then(() => undefined));
   return manager;
 }

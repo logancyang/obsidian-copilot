@@ -7,8 +7,7 @@
  */
 import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
-import { formatPayload } from "@/agentMode/acp/debugTap";
-import { frameSink, type FrameRecord } from "@/agentMode/acp/frameSink";
+import { formatPayload, frameSink, type FrameRecord } from "@/agentMode/session/debugSink";
 
 export const SDK_FRAME_TAG = "claude-sdk";
 

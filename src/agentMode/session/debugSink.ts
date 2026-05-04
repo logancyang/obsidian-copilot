@@ -2,6 +2,13 @@ import { COPILOT_FOLDER_ROOT } from "@/constants";
 import { ensureFolderExists } from "@/utils";
 import { TFile } from "obsidian";
 
+/**
+ * Sidecar logger and payload formatter shared by every backend's debug tap.
+ * The ACP runtime (`acp/debugTap.ts`) and the SDK adapter
+ * (`sdk/sdkDebugTap.ts`) both feed `frameSink` so JSON-RPC and SDK turns
+ * land in the same NDJSON file. `tag` distinguishes the source.
+ */
+
 export interface FrameRecord {
   ts: string;
   dir: "→" | "←";
@@ -16,10 +23,11 @@ const LOG_PATH = `${COPILOT_FOLDER_ROOT}/acp-frames.ndjson`;
 const ROTATED_PATH = `${COPILOT_FOLDER_ROOT}/acp-frames.old.ndjson`;
 const ROTATE_BYTES = 50 * 1024 * 1024;
 const ROTATE_CHECK_EVERY = 100;
+const MAX_PAYLOAD_CHARS = 400;
 
 /**
- * Sidecar logger for full ACP JSON-RPC frames. Writes are append-only NDJSON
- * to keep the file grep/jq-friendly. Writes are serialized through a single
+ * Sidecar logger for full backend frames. Writes are append-only NDJSON to
+ * keep the file grep/jq-friendly. Writes are serialized through a single
  * promise chain so concurrent calls don't interleave partial lines.
  *
  * Rotation: every ROTATE_CHECK_EVERY writes, stat the file; if it exceeds
@@ -132,3 +140,19 @@ async function removeIfExists(path: string): Promise<void> {
 }
 
 export const frameSink = new FrameSink();
+
+/**
+ * Stringify a payload for the truncated console log. Returns "" for
+ * undefined so the log line stays compact.
+ */
+export function formatPayload(value: unknown): string {
+  if (value === undefined) return "";
+  let s: string;
+  try {
+    s = JSON.stringify(value);
+  } catch {
+    s = String(value);
+  }
+  if (s.length <= MAX_PAYLOAD_CHARS) return s;
+  return s.slice(0, MAX_PAYLOAD_CHARS) + `…(+${s.length - MAX_PAYLOAD_CHARS})`;
+}

@@ -10,11 +10,14 @@ import { CodexBackend } from "./CodexBackend";
 import { CodexInstallModal } from "./CodexInstallModal";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { MethodUnsupportedError } from "@/agentMode/acp/types";
-import { binaryPathInstallState } from "@/agentMode/backends/_shared/simpleBinaryBackend";
+import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import {
+  binaryPathInstallState,
+  simpleBinaryBackendProcess,
+} from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { noopBackendMetaParser } from "@/agentMode/session/backendMeta";
 import type { CopilotMode, ModeMapping } from "@/agentMode/session/modeAdapter";
-import type { BackendDescriptor, InstallState } from "@/agentMode/session/types";
+import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 
 export const CODEX_BINARY_NAME = "codex-acp";
 export const CODEX_INSTALL_COMMAND = "npm install -g @zed-industries/codex-acp";
@@ -64,8 +67,8 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     new CodexInstallModal(plugin.app).open();
   },
 
-  createBackend(): CodexBackend {
-    return new CodexBackend();
+  createBackendProcess(args): BackendProcess {
+    return simpleBinaryBackendProcess(args, new CodexBackend());
   },
 
   SettingsPanel: CodexSettingsPanel,
