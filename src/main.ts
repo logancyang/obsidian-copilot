@@ -1,3 +1,8 @@
+// Must be the first import — patches Node's `events.setMaxListeners` so the
+// Claude Agent SDK's call with a web-realm AbortSignal stops throwing in
+// Electron's renderer. See file for details.
+import "@/utils/rendererEventsShim";
+
 import {
   AGENT_CHAT_MODE,
   CopilotAgentView,
