@@ -1,0 +1,1 @@
+export { OpencodeBackendDescriptor } from "./descriptor";

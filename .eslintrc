@@ -2,7 +2,7 @@
   "root": true,
   "parser": "@typescript-eslint/parser",
   "env": { "node": true },
-  "plugins": ["@typescript-eslint", "tailwindcss"],
+  "plugins": ["@typescript-eslint", "tailwindcss", "boundaries"],
   "extends": [
     "eslint:recommended",
     "plugin:@typescript-eslint/recommended",
@@ -29,6 +29,23 @@
     "tailwindcss/no-arbitrary-value": "off",
     "tailwindcss/no-custom-classname": ["error"],
     "tailwindcss/no-contradicting-classname": "error",
+    "boundaries/dependencies": ["error", {
+      "default": "disallow",
+      "rules": [
+        { "from": { "type": "session" },  "allow": { "to": { "type": ["session", "host"] } } },
+        { "from": { "type": "acp" },      "allow": { "to": { "type": ["acp", "session", "host"] } } },
+        { "from": { "type": "sdk" },      "allow": { "to": { "type": ["sdk", "session", "host"] } } },
+        { "from": { "type": "backend" },  "allow": [
+          { "to": { "type": ["acp", "sdk", "session", "host"] } },
+          { "to": { "type": "backend", "captured": { "name": "{{from.captured.name}}" } } },
+          { "to": { "type": "backend", "captured": { "name": "shared" } } }
+        ]},
+        { "from": { "type": "registry" }, "allow": { "to": { "type": ["backend", "session", "host"] } } },
+        { "from": { "type": "ui" },       "allow": { "to": { "type": ["ui", "session", "registry", "host"] } } },
+        { "from": { "type": "barrel" },   "allow": { "to": { "type": ["acp", "session", "backend", "sdk", "registry", "ui", "host"] } } },
+        { "from": { "type": "host" },     "allow": { "to": { "type": ["host", "barrel"] } } },
+      ],
+    }],
   },
   "overrides": [
     {
@@ -38,6 +55,10 @@
         "jsonc/auto": "error",
       },
     },
+    {
+      "files": ["**/*.test.ts", "**/*.test.tsx"],
+      "rules": { "boundaries/dependencies": "off" },
+    },
   ],
   "settings": {
     "react": {
@@ -45,8 +66,22 @@
     },
     "tailwindcss": {
       "callees": ["classnames", "clsx", "ctl", "cn", "cva"],
-      "config": "./tailwind.config.js",
       "cssFiles": ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
     },
+    "import/resolver": {
+      "typescript": { "project": "./tsconfig.json" },
+      "node": true,
+    },
+    "boundaries/include": ["src/**/*"],
+    "boundaries/elements": [
+      { "type": "session",  "pattern": "src/agentMode/session" },
+      { "type": "acp",      "pattern": "src/agentMode/acp" },
+      { "type": "sdk",      "pattern": "src/agentMode/sdk" },
+      { "type": "backend",  "pattern": "src/agentMode/backends/*", "capture": ["name"] },
+      { "type": "registry", "pattern": "src/agentMode/backends/registry.ts", "mode": "file" },
+      { "type": "ui",       "pattern": "src/agentMode/ui" },
+      { "type": "barrel",   "pattern": "src/agentMode/index.ts", "mode": "file" },
+      { "type": "host",     "pattern": "src/**" },
+    ],
   },
 }

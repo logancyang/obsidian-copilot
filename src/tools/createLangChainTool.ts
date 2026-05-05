@@ -76,7 +76,7 @@ function getZodDescription(schema: z.ZodType): string {
     schema instanceof z.ZodNullable ||
     schema instanceof z.ZodDefault
   ) {
-    return getZodDescription(schema._def.innerType);
+    return getZodDescription(schema._def.innerType as z.ZodType);
   }
 
   // @ts-ignore - accessing private _def property

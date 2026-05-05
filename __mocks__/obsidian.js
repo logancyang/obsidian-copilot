@@ -28,7 +28,22 @@ module.exports = {
   }),
   Platform: {
     isDesktop: true,
+    isDesktopApp: true,
+    isMobile: false,
   },
+  FileSystemAdapter: class FileSystemAdapter {
+    constructor(basePath = "/vault") {
+      this._basePath = basePath;
+      this.read = jest.fn();
+      this.write = jest.fn();
+      this.exists = jest.fn().mockResolvedValue(true);
+      this.mkdir = jest.fn().mockResolvedValue(undefined);
+    }
+    getBasePath() {
+      return this._basePath;
+    }
+  },
+  normalizePath: (p) => String(p).replace(/\\\\/g, "/").replace(/\/+/g, "/"),
   parseYaml: jest.fn().mockImplementation((content) => {
     return yaml.load(content);
   }),

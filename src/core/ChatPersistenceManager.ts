@@ -13,7 +13,9 @@ import {
   truncateToByteLimit,
 } from "@/utils";
 import {
+  isFileAlreadyExistsError,
   isInVaultCache,
+  isNameTooLongError,
   listMarkdownFiles,
   patchFrontmatter,
   readFrontmatterViaAdapter,
@@ -129,7 +131,7 @@ export class ChatPersistenceManager {
           new Notice(`Chat saved as note: ${preferredFileName}`);
           logInfo(`[ChatPersistenceManager] Created new chat file: ${preferredFileName}`);
         } catch (error) {
-          if (this.isFileAlreadyExistsError(error)) {
+          if (isFileAlreadyExistsError(error)) {
             const conflictFile = this.app.vault.getAbstractFileByPath(preferredFileName);
             if (conflictFile && conflictFile instanceof TFile) {
               // Read existing frontmatter to preserve lastAccessedAt and topic
@@ -160,7 +162,7 @@ export class ChatPersistenceManager {
                 `[ChatPersistenceManager] Resolved save conflict via adapter: ${preferredFileName}`
               );
             }
-          } else if (this.isNameTooLongError(error)) {
+          } else if (isNameTooLongError(error)) {
             // Single fallback: minimal guaranteed-to-work filename with project prefix
             const filePrefix = currentProject ? `${currentProject.id}__` : "";
             const fallbackName = `${settings.defaultSaveFolder}/${filePrefix}chat-${firstMessageEpoch}.md`;
@@ -172,7 +174,7 @@ export class ChatPersistenceManager {
                 `[ChatPersistenceManager] Used minimal filename due to length constraints: ${fallbackName}`
               );
             } catch (fallbackError) {
-              if (this.isFileAlreadyExistsError(fallbackError)) {
+              if (isFileAlreadyExistsError(fallbackError)) {
                 const conflictFile = this.app.vault.getAbstractFileByPath(fallbackName);
                 if (conflictFile && conflictFile instanceof TFile) {
                   // Read existing frontmatter to preserve lastAccessedAt
@@ -777,32 +779,6 @@ ${chatContent}`;
     } catch (error) {
       logError("[ChatPersistenceManager] Error applying AI topic to file:", error);
     }
-  }
-
-  /**
-   * Determine whether an error corresponds to an ENAMETOOLONG filesystem failure.
-   * @param error - The thrown error.
-   * @returns True when the error message indicates a name-length constraint violation.
-   */
-  private isNameTooLongError(error: unknown): boolean {
-    if (!error) {
-      return false;
-    }
-
-    const message = error instanceof Error ? error.message : String(error);
-    const normalized = message.toLowerCase();
-    return normalized.includes("enametoolong") || normalized.includes("name too long");
-  }
-
-  /**
-   * Determine if an error indicates an Obsidian file-exists conflict.
-   */
-  private isFileAlreadyExistsError(error: unknown): boolean {
-    if (!error) {
-      return false;
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    return message.toLowerCase().includes("already exists");
   }
 
   /**

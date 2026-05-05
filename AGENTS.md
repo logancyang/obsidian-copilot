@@ -12,6 +12,11 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 - **NEVER RUN `npm run dev`** - The user will handle all builds manually
 - `npm run build` - Production build (TypeScript check + minified output)
+- **After every code change, reload the plugin** so the user can see the change live:
+  ```bash
+  /Applications/Obsidian.app/Contents/MacOS/obsidian plugin:reload id=copilot
+  ```
+  If the reload fails with "Plugin not found", run `obsidian plugins` to confirm the id.
 
 ### Code Quality
 

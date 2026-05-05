@@ -1,6 +1,11 @@
 import { useRef, useEffect } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { COMMAND_PRIORITY_LOW, KEY_ENTER_COMMAND } from "lexical";
+import {
+  COMMAND_PRIORITY_LOW,
+  KEY_ENTER_COMMAND,
+  KEY_ESCAPE_COMMAND,
+  KEY_TAB_COMMAND,
+} from "lexical";
 import { SEND_SHORTCUT } from "@/constants";
 
 /**
@@ -11,13 +16,22 @@ interface KeyboardPluginProps {
   onSubmit: () => void;
   /** Send shortcut configuration */
   sendShortcut: SEND_SHORTCUT;
+  /** Optional callback fired when ESC is pressed; when set, swallows the event. */
+  onEscape?: () => void;
+  /** Optional callback fired when Shift+Tab is pressed; when set, swallows the event. */
+  onShiftTab?: () => void;
 }
 
 /**
  * Lexical plugin that handles keyboard shortcuts for the chat input.
  * Supports configurable send shortcuts: Enter, Shift+Enter
  */
-export function KeyboardPlugin({ onSubmit, sendShortcut }: KeyboardPluginProps) {
+export function KeyboardPlugin({
+  onSubmit,
+  sendShortcut,
+  onEscape,
+  onShiftTab,
+}: KeyboardPluginProps) {
   const [editor] = useLexicalComposerContext();
   // Track IME composition state with a ref to avoid stale closure issues
   const isComposingRef = useRef(false);
@@ -119,6 +133,41 @@ export function KeyboardPlugin({ onSubmit, sendShortcut }: KeyboardPluginProps) 
       COMMAND_PRIORITY_LOW
     );
   }, [editor, onSubmit, sendShortcut]);
+
+  useEffect(() => {
+    if (!onEscape) return;
+    return editor.registerCommand(
+      KEY_ESCAPE_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false;
+        // Some IMEs use ESC to dismiss the candidate window — don't cancel mid-composition.
+        if (isComposingRef.current || event.isComposing || event.keyCode === 229) {
+          return false;
+        }
+        event.preventDefault();
+        onEscape();
+        return true;
+      },
+      COMMAND_PRIORITY_LOW
+    );
+  }, [editor, onEscape]);
+
+  useEffect(() => {
+    if (!onShiftTab) return;
+    return editor.registerCommand(
+      KEY_TAB_COMMAND,
+      (event: KeyboardEvent | null) => {
+        if (!event) return false;
+        if (!event.shiftKey || event.metaKey || event.ctrlKey || event.altKey) {
+          return false;
+        }
+        event.preventDefault();
+        onShiftTab();
+        return true;
+      },
+      COMMAND_PRIORITY_LOW
+    );
+  }, [editor, onShiftTab]);
 
   return null;
 }

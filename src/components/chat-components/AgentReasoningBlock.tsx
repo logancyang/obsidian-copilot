@@ -1,4 +1,5 @@
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { CopilotSpinner } from "@/components/chat-components/CopilotSpinner";
 import { cn } from "@/lib/utils";
 import { ReasoningStatus } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { ChevronRight } from "lucide-react";
@@ -29,89 +30,18 @@ const formatTime = (seconds: number): string => {
   return `${mins}m ${secs}s`;
 };
 
-/**
- * Animated spinner using a 7-dot sigma (Σ) pattern.
- * Dots light up in sequence with gradient trail (snake effect).
- *
- * Grid positions (3x3 grid, sigma shape):
- * 0 1 2
- *   4
- * 6 7 8
- *
- * Animation sequence (traces sigma shape):
- * 2 → 1 → 0 → 4 → 6 → 7 → 8 → (all dim) → repeat
- */
-const CopilotSpinner: React.FC = () => {
-  // Sigma pattern dots: [row, col, animation index]
-  // Animation traces the sigma: top-right to top-left, down to center, then bottom-left to bottom-right
-  const sigmaDots: { row: number; col: number; animIndex: number }[] = [
-    { row: 0, col: 0, animIndex: 2 }, // top-left - 3rd
-    { row: 0, col: 1, animIndex: 1 }, // top-center - 2nd
-    { row: 0, col: 2, animIndex: 0 }, // top-right - 1st (leads)
-    { row: 1, col: 1, animIndex: 3 }, // center - 4th
-    { row: 2, col: 0, animIndex: 4 }, // bottom-left - 5th
-    { row: 2, col: 1, animIndex: 5 }, // bottom-center - 6th
-    { row: 2, col: 2, animIndex: 6 }, // bottom-right - 7th (last)
-  ];
-
-  const dotSize = 2.5;
-  const gap = 3;
-  const gridSize = dotSize * 3 + gap * 2;
-
-  return (
-    <svg
-      width={gridSize}
-      height={gridSize}
-      viewBox={`0 0 ${gridSize} ${gridSize}`}
-      className="copilot-spinner"
-    >
-      {sigmaDots.map((dot, index) => {
-        const cx = dot.col * (dotSize + gap) + dotSize / 2;
-        const cy = dot.row * (dotSize + gap) + dotSize / 2;
-
-        return (
-          <circle
-            key={index}
-            cx={cx}
-            cy={cy}
-            r={dotSize / 2}
-            // eslint-disable-next-line tailwindcss/no-custom-classname
-            className={`copilot-spinner-dot copilot-spinner-dot-${dot.animIndex}`}
-          />
-        );
-      })}
-    </svg>
-  );
-};
-
-/**
- * AgentReasoningBlock - Displays the agent's reasoning process
- *
- * This component replaces the old tool call banner with a more informative
- * reasoning display that shows:
- * - Active spinner during reasoning
- * - Elapsed time counter
- * - Current reasoning steps (last 2)
- * - Collapsible view after completion
- *
- * States:
- * - reasoning: Expanded, showing steps and active spinner
- * - collapsed: Collapsed after reasoning, before response
- * - complete: Response done, expandable to see steps
- */
 export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
   status,
   elapsedSeconds,
   steps,
   isStreaming,
 }) => {
-  const [isExpanded, setIsExpanded] = useState(status === "reasoning");
+  const [isExpanded, setIsExpanded] = useState(false);
 
-  // Auto-expand when reasoning, auto-collapse when done
+  // Auto-collapse when reasoning ends. (We default to collapsed and never
+  // auto-expand — the user must click to peek at live or finished steps.)
   useEffect(() => {
-    if (status === "reasoning") {
-      setIsExpanded(true);
-    } else if (status === "collapsed" || status === "complete") {
+    if (status === "collapsed" || status === "complete") {
       setIsExpanded(false);
     }
   }, [status]);
@@ -122,11 +52,11 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
   }
 
   const isActive = status === "reasoning";
-  const canExpand = !isActive && steps.length > 0;
+  const canExpand = steps.length > 0;
 
   return (
     <Collapsible
-      open={canExpand ? isExpanded : isActive}
+      open={isExpanded}
       onOpenChange={canExpand ? setIsExpanded : undefined}
       disabled={!canExpand}
       className="agent-reasoning-block"

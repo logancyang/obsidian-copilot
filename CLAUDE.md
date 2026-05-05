@@ -19,7 +19,7 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 - `npm run lint:fix` - Auto-fix ESLint issues
 - `npm run format` - Format code with Prettier
 - `npm run format:check` - Check formatting without changing files
-- **Before PR:** Always run `npm run format && npm run lint`
+- **Before PR:** Always run `npm run format && npm run lint && npm test`
 
 ### Testing
 
@@ -64,28 +64,24 @@ Run `obsidian help` for the full command list.
 ### Core Systems
 
 1. **LLM Provider System** (`src/LLMProviders/`)
-
    - Provider implementations for OpenAI, Anthropic, Google, Azure, local models
    - `LLMProviderManager` handles provider lifecycle and switching
    - Stream-based responses with error handling and rate limiting
    - Custom model configuration support
 
 2. **Chain Factory Pattern** (`src/chainFactory.ts`)
-
    - Different chain types for various AI operations (chat, copilot, adhoc prompts)
    - LangChain integration for complex workflows
    - Memory management for conversation context
    - Tool integration (search, file operations, time queries)
 
 3. **Vector Store & Search** (`src/search/`)
-
    - `VectorStoreManager` manages embeddings and semantic search
    - `ChunkedStorage` for efficient large document handling
    - Event-driven index updates via `IndexManager`
    - Multiple embedding providers support
 
 4. **UI Component System** (`src/components/`)
-
    - React functional components with Radix UI primitives
    - Tailwind CSS with class variance authority (CVA)
    - Modal system for user interactions
@@ -93,7 +89,6 @@ Run `obsidian help` for the full command list.
    - Settings UI with versioned components
 
 5. **Message Management Architecture** (`src/core/`, `src/state/`)
-
    - **MessageRepository** (`src/core/MessageRepository.ts`): Single source of truth for all messages
      - Stores each message once with both `displayText` and `processedText`
      - Provides computed views for UI display and LLM processing
@@ -115,7 +110,6 @@ Run `obsidian help` for the full command list.
      - Reprocesses context when messages are edited
 
 6. **Settings Management**
-
    - Jotai for atomic settings state management
    - React contexts for feature-specific state
 
@@ -146,14 +140,12 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 ### Core Classes and Flow
 
 1. **MessageRepository** (`src/core/MessageRepository.ts`)
-
    - Single source of truth for all messages
    - Stores `StoredMessage` objects with both `displayText` and `processedText`
    - Provides computed views via `getDisplayMessages()` and `getLLMMessages()`
    - No complex dual-array synchronization or ID matching
 
 2. **ChatManager** (`src/core/ChatManager.ts`)
-
    - Central business logic coordinator
    - Orchestrates MessageRepository, ContextManager, and LLM operations
    - Handles all message CRUD operations with proper error handling
@@ -165,14 +157,12 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
      - Creates new empty repository for each project (no message caching)
 
 3. **ChatUIState** (`src/state/ChatUIState.ts`)
-
    - Clean UI-only state manager
    - Delegates all business logic to ChatManager
    - Provides React integration with subscription mechanism
    - Replaces legacy SharedState with minimal, focused approach
 
 4. **ContextManager** (`src/core/ContextManager.ts`)
-
    - Handles context processing (notes, URLs, selected text)
    - Reprocesses context when messages are edited
    - Ensures fresh context for LLM processing

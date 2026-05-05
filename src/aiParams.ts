@@ -25,10 +25,7 @@ const userChainTypeAtom = atom<ChainType | null>(null);
 const chainTypeAtom = atom(
   (get) => {
     const userValue = get(userChainTypeAtom);
-    if (userValue !== null) {
-      return userValue;
-    }
-    return get(settingsAtom).defaultChainType;
+    return userValue !== null ? userValue : get(settingsAtom).defaultChainType;
   },
   (get, set, newValue) => {
     set(userChainTypeAtom, newValue);
@@ -285,6 +282,7 @@ export function removeSelectedTextContext(id: string) {
 }
 
 export function clearSelectedTextContexts() {
+  if (getSelectedTextContexts().length === 0) return;
   setSelectedTextContexts([]);
 }
 

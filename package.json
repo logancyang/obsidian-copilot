@@ -56,6 +56,8 @@
     "electron": "^27.3.2",
     "esbuild": "^0.25.0",
     "eslint": "^8.57.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-boundaries": "^6.0.2",
     "eslint-plugin-json": "^4.0.1",
     "eslint-plugin-react": "^7.37.3",
     "eslint-plugin-react-hooks": "^5.1.0",
@@ -75,6 +77,8 @@
     "web-streams-polyfill": "^3.3.2"
   },
   "dependencies": {
+    "@agentclientprotocol/sdk": "^0.20.0",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.126",
     "@dnd-kit/core": "^6.3.1",
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
@@ -123,6 +127,7 @@
     "cohere-ai": "^7.13.0",
     "crypto-js": "^4.1.1",
     "diff": "^7.0.0",
+    "dotenv": "^17.4.2",
     "esbuild-plugin-svg": "^0.1.0",
     "eventsource-parser": "^1.0.0",
     "fuzzysort": "^3.1.0",
@@ -136,6 +141,7 @@
     "luxon": "^3.5.0",
     "minisearch": "^7.2.0",
     "next-i18next": "^13.2.2",
+    "openai": "^6.34.0",
     "p-queue": "^8.1.0",
     "prop-types": "^15.8.1",
     "react": "^18.2.0",
@@ -148,6 +154,10 @@
     "tailwind-merge": "^2.5.5",
     "tailwindcss-animate": "^1.0.7",
     "trie-search": "^2.2.0",
-    "turndown": "^7.2.2"
+    "turndown": "^7.2.2",
+    "zod": "^4.4.2"
+  },
+  "overrides": {
+    "@browserbasehq/stagehand": "3.2.1"
   }
 }

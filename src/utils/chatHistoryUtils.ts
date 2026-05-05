@@ -1,3 +1,5 @@
+import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
+import type { RecentUsageManager } from "@/utils/recentUsageManager";
 import { formatDateTime } from "@/utils";
 import { TFile } from "obsidian";
 
@@ -78,6 +80,30 @@ export function extractChatLastAccessedAtMs(file: TFile): number | null {
 export function extractChatLastAccessedAt(file: TFile): Date | null {
   const lastAccessedAtMs = extractChatLastAccessedAtMs(file);
   return lastAccessedAtMs ? new Date(lastAccessedAtMs) : null;
+}
+
+/**
+ * Build a `ChatHistoryItem` from a chat file, blending the in-memory
+ * lastAccessedAt (for immediate UI feedback after a load/save) with the
+ * persisted frontmatter value. Used by both the legacy and Agent Mode
+ * chat-history flows so the two lists rank identically.
+ */
+export function fileToHistoryItem(
+  file: TFile,
+  lastAccessedAtManager: RecentUsageManager<string>
+): ChatHistoryItem {
+  const createdAt = extractChatDate(file);
+  const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
+  const effectiveLastAccessedAtMs = lastAccessedAtManager.getEffectiveLastUsedAt(
+    file.path,
+    persistedLastAccessedAtMs ?? createdAt.getTime()
+  );
+  return {
+    id: file.path,
+    title: extractChatTitle(file),
+    createdAt,
+    lastAccessedAt: new Date(effectiveLastAccessedAtMs),
+  };
 }
 
 /**

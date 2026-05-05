@@ -1,3 +1,16 @@
+// Must be the first import — patches Node's `events.setMaxListeners` so the
+// Claude Agent SDK's call with a web-realm AbortSignal stops throwing in
+// Electron's renderer. See file for details.
+import "@/utils/rendererEventsShim";
+
+import {
+  AGENT_CHAT_MODE,
+  CopilotAgentView,
+  createAgentSessionManager,
+  PlanPreviewView,
+  PLAN_PREVIEW_VIEW_TYPE,
+  type AgentSessionManager,
+} from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import ProjectManager from "@/LLMProviders/projectManager";
 import {
@@ -17,7 +30,13 @@ import { CustomCommandRegister } from "@/commands/customCommandRegister";
 import { migrateCommands, suggestDefaultCommands } from "@/commands/migrator";
 import { migrateSystemPromptsFromSettings } from "@/system-prompts/migration";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
-import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
+import {
+  ABORT_REASON,
+  CHAT_AGENT_VIEWTYPE,
+  CHAT_VIEWTYPE,
+  DEFAULT_OPEN_AREA,
+  EVENT_NAMES,
+} from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { encryptAllKeys } from "@/encryptionService";
@@ -40,7 +59,7 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
-import { ChatUIState } from "@/state/ChatUIState";
+import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { initializeBuiltinTools } from "@/tools/builtinTools";
@@ -57,15 +76,12 @@ import {
   Notice,
   Platform,
   Plugin,
+  setIcon,
   TFile,
   WorkspaceLeaf,
 } from "obsidian";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
-import {
-  extractChatDate,
-  extractChatLastAccessedAtMs,
-  extractChatTitle,
-} from "@/utils/chatHistoryUtils";
+import { extractChatLastAccessedAtMs, fileToHistoryItem } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
 import { listMarkdownFiles, patchFrontmatter, resolveFileByPath } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
@@ -82,7 +98,9 @@ export default class CopilotPlugin extends Plugin {
   customCommandRegister: CustomCommandRegister;
   systemPromptRegister: SystemPromptRegister;
   settingsUnsubscriber?: () => void;
-  chatUIState: ChatUIState;
+  chatUIState: ChatManagerChatUIState;
+  agentSessionManager?: AgentSessionManager;
+  private ribbonIconEl?: HTMLElement;
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
@@ -101,6 +119,9 @@ export default class CopilotPlugin extends Plugin {
         await this.saveData(next);
       }
       registerCommands(this, prev, next);
+      if (prev && prev.agentMode?.enabled !== next.agentMode?.enabled) {
+        this.refreshRibbonIcon();
+      }
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
@@ -118,6 +139,11 @@ export default class CopilotPlugin extends Plugin {
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
 
+    // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess support).
+    if (!Platform.isMobile) {
+      this.agentSessionManager = createAgentSessionManager(this.app, this);
+    }
+
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
     this.vectorStoreManager = VectorStoreManager.getInstance();
 
@@ -133,7 +159,7 @@ export default class CopilotPlugin extends Plugin {
     const messageRepo = new MessageRepository();
     const chainManager = this.projectManager.getCurrentChainManager();
     const chatManager = new ChatManager(messageRepo, chainManager, this.fileParserManager, this);
-    this.chatUIState = new ChatUIState(chatManager);
+    this.chatUIState = new ChatManagerChatUIState(chatManager);
 
     // Initialize UserMemoryManager
     this.userMemoryManager = new UserMemoryManager(this.app);
@@ -161,12 +187,22 @@ export default class CopilotPlugin extends Plugin {
 
     this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
     this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
+    if (!Platform.isMobile) {
+      this.registerView(
+        CHAT_AGENT_VIEWTYPE,
+        (leaf: WorkspaceLeaf) => new CopilotAgentView(leaf, this)
+      );
+      this.registerView(PLAN_PREVIEW_VIEW_TYPE, (leaf: WorkspaceLeaf) => new PlanPreviewView(leaf));
+    }
 
     this.initActiveLeafChangeHandler();
 
-    this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
-      this.activateView();
-    });
+    const agentReady = this.canUseAgentView();
+    this.ribbonIconEl = this.addRibbonIcon(
+      agentReady ? "bot" : "message-square",
+      agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat",
+      () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
+    );
 
     registerCommands(this, undefined, getSettings());
 
@@ -232,6 +268,8 @@ export default class CopilotPlugin extends Plugin {
     if (this.projectManager) {
       this.projectManager.onunload();
     }
+
+    await this.agentSessionManager?.shutdown();
 
     // Cleanup VaultDataManager event listeners
     const vaultDataManager = VaultDataManager.getInstance();
@@ -560,22 +598,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async activateView(): Promise<void> {
-    const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
-    if (leaves.length === 0) {
-      if (getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW) {
-        await this.app.workspace.getRightLeaf(false).setViewState({
-          type: CHAT_VIEWTYPE,
-          active: true,
-        });
-      } else {
-        await this.app.workspace.getLeaf(true).setViewState({
-          type: CHAT_VIEWTYPE,
-          active: true,
-        });
-      }
-    } else {
-      this.app.workspace.revealLeaf(leaves[0]);
-    }
+    await this.openOrRevealView(CHAT_VIEWTYPE);
     // Small delay to ensure React component is ready to receive the focus event
     setTimeout(() => {
       this.emitChatIsVisible();
@@ -584,6 +607,82 @@ export default class CopilotPlugin extends Plugin {
 
   async deactivateView() {
     this.app.workspace.detachLeavesOfType(CHAT_VIEWTYPE);
+  }
+
+  toggleAgentView() {
+    if (!this.requireAgentView()) return;
+    const leaves = this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE);
+    if (leaves.length > 0) {
+      this.deactivateAgentView();
+    } else {
+      this.activateAgentView();
+    }
+  }
+
+  async activateAgentView(): Promise<WorkspaceLeaf | null> {
+    if (!this.requireAgentView()) return null;
+    return this.openOrRevealView(CHAT_AGENT_VIEWTYPE);
+  }
+
+  async deactivateAgentView() {
+    this.app.workspace.detachLeavesOfType(CHAT_AGENT_VIEWTYPE);
+  }
+
+  async newAgentChat(): Promise<void> {
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    await this.activateAgentView();
+    try {
+      await manager.createSession();
+    } catch (error) {
+      logWarn("[CopilotPlugin] Failed to create agent session", error);
+      new Notice("Failed to create agent session. Check Copilot logs.");
+    }
+  }
+
+  private async openOrRevealView(viewType: string): Promise<WorkspaceLeaf | null> {
+    const leaves = this.app.workspace.getLeavesOfType(viewType);
+    if (leaves.length > 0) {
+      this.app.workspace.revealLeaf(leaves[0]);
+      return leaves[0];
+    }
+    const leaf =
+      getSettings().defaultOpenArea === DEFAULT_OPEN_AREA.VIEW
+        ? this.app.workspace.getRightLeaf(false)
+        : this.app.workspace.getLeaf(true);
+    if (!leaf) return null;
+    await leaf.setViewState({ type: viewType, active: true });
+    return leaf;
+  }
+
+  private requireAgentView(): AgentSessionManager | null {
+    if (Platform.isMobile) {
+      new Notice("Agent Chat is not available on mobile.");
+      return null;
+    }
+    if (!getSettings().agentMode?.enabled) {
+      new Notice("Enable Agent Mode in Copilot settings first.");
+      return null;
+    }
+    if (!this.agentSessionManager) {
+      new Notice("Agent Chat is not initialized.");
+      return null;
+    }
+    return this.agentSessionManager;
+  }
+
+  private canUseAgentView(): boolean {
+    return !Platform.isMobile && !!this.agentSessionManager && !!getSettings().agentMode?.enabled;
+  }
+
+  private refreshRibbonIcon() {
+    if (!this.ribbonIconEl) return;
+    const agentReady = this.canUseAgentView();
+    const icon = agentReady ? "bot" : "message-square";
+    const tooltip = agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat";
+    setIcon(this.ribbonIconEl, icon);
+    this.ribbonIconEl.setAttribute("aria-label", tooltip);
+    this.ribbonIconEl.setAttribute("title", tooltip);
   }
 
   async loadSettings() {
@@ -656,25 +755,7 @@ export default class CopilotPlugin extends Plugin {
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
     const files = await this.getChatHistoryFiles();
-    return files.map((file) => {
-      const createdAt = extractChatDate(file);
-      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
-
-      // Use effective last used time (prefers in-memory value for immediate UI updates)
-      const effectiveLastAccessedAtMs =
-        this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(
-          file.path,
-          persistedLastAccessedAtMs ?? createdAt.getTime()
-        );
-      const lastAccessedAt = new Date(effectiveLastAccessedAtMs);
-
-      return {
-        id: file.path,
-        title: extractChatTitle(file),
-        createdAt,
-        lastAccessedAt,
-      };
-    });
+    return files.map((file) => fileToHistoryItem(file, this.chatHistoryLastAccessedAtManager));
   }
 
   /**
@@ -765,11 +846,26 @@ export default class CopilotPlugin extends Plugin {
 
   async loadChatById(fileId: string): Promise<void> {
     const file = await resolveFileByPath(this.app, fileId);
-    if (file) {
-      await this.loadChatHistory(file);
-    } else {
-      throw new Error("Chat file not found.");
+    if (!file) throw new Error("Chat file not found.");
+
+    const frontmatter = this.app.metadataCache.getFileCache(file)?.frontmatter;
+    if (frontmatter?.mode === AGENT_CHAT_MODE) {
+      await this.loadAgentChatHistory(file);
+      return;
     }
+    await this.loadChatHistory(file);
+  }
+
+  private async loadAgentChatHistory(file: TFile): Promise<void> {
+    const manager = this.requireAgentView();
+    if (!manager) return;
+    const leaf = await this.activateAgentView();
+    if (!leaf) return;
+
+    await manager.loadSessionFromHistory(file);
+    void this.touchChatHistoryLastAccessedAt(file);
+
+    (leaf.view as CopilotAgentView | undefined)?.updateView();
   }
 
   async openChatSourceFile(fileId: string): Promise<void> {
