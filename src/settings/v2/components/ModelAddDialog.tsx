@@ -115,12 +115,12 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     if (!model.name) isValid = false;
 
     // Validate Azure OpenAI specific fields.
-    // Embedding models always require the legacy fields because EmbeddingManager
-    // does not consume baseUrl and still reads azureOpenAIApiInstanceName,
-    // azureOpenAIApiEmbeddingDeploymentName, and azureOpenAIApiVersion directly.
-    // Chat models may skip legacy fields when a full base URL is supplied instead.
+    // When a Base URL is provided, both chat and embedding models can
+    // skip the legacy Azure fields and rely on the normalized endpoint.
+    // When Base URL is empty, fall back to legacy instance/deployment/version
+    // fields for backward compatibility.
     const isAzure = model.provider === ChatModelProviders.AZURE_OPENAI;
-    const azureRequiresLegacyFields = isAzure && (isEmbeddingModel || !model.baseUrl?.trim());
+    const azureRequiresLegacyFields = isAzure && !model.baseUrl?.trim();
     if (azureRequiresLegacyFields) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
       newErrors.apiVersion = !model.azureOpenAIApiVersion;
@@ -340,10 +340,10 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             </FormField>
           );
         case ChatModelProviders.AZURE_OPENAI:
-          // Chat models with a base URL use the new flow and skip legacy fields.
-          // Embedding models always require legacy fields since EmbeddingManager
-          // reads them directly and does not consume baseUrl.
-          if (model.baseUrl?.trim() && !isEmbeddingModel) return null;
+          // Chat and embedding models with a Base URL use the new flow
+          // and skip legacy fields. When Base URL is empty, fall back to
+          // legacy instance/deployment/version inputs.
+          if (model.baseUrl?.trim()) return null;
           return (
             <>
               <FormField
@@ -500,14 +500,11 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       return providerInfo.host;
     }
 
-    const instanceName = model.azureOpenAIApiInstanceName || "[instance]";
-    const deploymentName = isEmbeddingModel
-      ? model.azureOpenAIApiEmbeddingDeploymentName || "[deployment]"
-      : model.azureOpenAIApiDeploymentName || "[deployment]";
-    const apiVersion = model.azureOpenAIApiVersion || "[api-version]";
-    const endpoint = isEmbeddingModel ? "embeddings" : "chat/completions";
-
-    return `https://${instanceName}.openai.azure.com/openai/deployments/${deploymentName}/${endpoint}?api-version=${apiVersion}`;
+    // For Azure, encourage users to paste either the full endpoint URL
+    // (including /embeddings or /chat/completions and api-version) or
+    // the deployment base URL. Legacy instance/deployment/version fields
+    // are still available below when Base URL is empty.
+    return "https://[proxy]/deployments/[model]/embeddings?api-version=[version]";
   };
 
   const capabilityOptions = Object.entries(MODEL_CAPABILITIES).map(([id, description]) => ({
