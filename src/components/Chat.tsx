@@ -51,6 +51,7 @@ import { arrayBufferToBase64 } from "@/utils/base64";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { t } from "@/lang";
 import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
@@ -369,7 +370,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       }
     } catch (error) {
       logError("Error sending message:", error);
-      new Notice("Failed to send message. Please try again.");
+      new Notice(t("messages.failedToSend"));
     } finally {
       safeSet.setLoading(false);
       safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
@@ -388,7 +389,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       await chatUIState.saveChat(currentModelKey);
     } catch (error) {
       logError("Error saving chat as note:", err2String(error));
-      new Notice("Failed to save chat as note. Check console for details.");
+      new Notice(t("messages.failedToSave"));
     }
   }, [app, chatUIState, currentModelKey]);
 
@@ -421,13 +422,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const handleRegenerate = useCallback(
     async (messageIndex: number) => {
       if (messageIndex <= 0) {
-        new Notice("Cannot regenerate the first message.");
+        new Notice(t("messages.cannotRegenerateFirst"));
         return;
       }
 
       const messageToRegenerate = chatHistory[messageIndex];
       if (!messageToRegenerate) {
-        new Notice("Message not found.");
+        new Notice(t("messages.messageNotFound"));
         return;
       }
 
@@ -443,7 +444,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         );
 
         if (!success) {
-          new Notice("Failed to regenerate message. Please try again.");
+          new Notice(t("messages.failedToRegenerate"));
         } else if (settings.debug) {
           console.log("Message regenerated successfully");
         }
@@ -562,7 +563,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       const existingIndex = currentProjects.findIndex((p) => p.name === project.name);
 
       if (existingIndex >= 0) {
-        throw new Error(`Project "${project.name}" already exists, please use a different name`);
+        throw new Error(t("project.projectAlreadyExists", { name: project.name }));
       }
 
       const newProjectList = [...currentProjects, project];
@@ -574,14 +575,14 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         // Reload the project context for the newly added project
         reloadCurrentProject()
           .then(() => {
-            new Notice(`${project.name} added and context loaded`);
+            new Notice(`${project.name} ${t("project.projectAddedContextLoaded")}`);
           })
           .catch((error: Error) => {
             logError("Error loading project context:", error);
-            new Notice(`${project.name} added but context loading failed`);
+            new Notice(`${project.name} ${t("project.projectAddedContextFailed")}`);
           });
       } else {
-        new Notice(`${project.name} added successfully`);
+        new Notice(`${project.name} ${t("project.projectAdded")}`);
       }
 
       return true;
