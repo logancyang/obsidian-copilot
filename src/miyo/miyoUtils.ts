@@ -3,6 +3,16 @@ import { CopilotSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 
 /**
+ * Convert backslashes to forward slashes and trim trailing slashes.
+ *
+ * @param path - Filesystem path.
+ * @returns Normalized path.
+ */
+function normalizeFilesystemPath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+}
+
+/**
  * Return the user-configured Miyo server URL, or "" to fall back to local service discovery.
  * Uses `|| ""` to guard against undefined when loaded from older saved settings.
  *
@@ -67,57 +77,28 @@ export function getMiyoAbsolutePath(app: App, vaultRelativePath: string): string
 }
 
 /**
- * Convert a Miyo file path back to a vault-relative path when it belongs to the current vault.
+ * Convert a Miyo file path to a vault-relative path when it belongs to the current vault.
+ *
+ * Miyo always returns paths prefixed with their owning folder name. When the
+ * prefix matches the current vault's folder name, strip it to get a
+ * vault-relative path. Files from other vaults pass through unchanged. The
+ * returned path is always normalized to forward slashes.
  *
  * @param app - Obsidian application instance.
- * @param miyoPath - Path returned by Miyo.
- * @returns Vault-relative path when the file is inside the current vault, otherwise the original path.
+ * @param miyoPath - Path returned by Miyo (e.g., "MyVault/notes/foo.md").
+ * @returns Normalized vault-relative path when inside the current vault, otherwise the normalized original path.
  */
 export function getVaultRelativeMiyoPath(app: App, miyoPath: string): string {
-  const vaultPath = getVaultBasePath(app);
-  if (!vaultPath) {
-    return miyoPath;
-  }
-
-  const normalizedVaultPath = normalizeFilesystemPath(vaultPath);
   const normalizedMiyoPath = normalizeFilesystemPath(miyoPath);
-  const prefix = `${normalizedVaultPath}/`;
-
-  if (normalizedMiyoPath.startsWith(prefix)) {
-    return normalizedMiyoPath.slice(prefix.length);
+  const folderName = getMiyoFolderName(app);
+  if (!folderName) {
+    return normalizedMiyoPath;
   }
 
-  return miyoPath;
-}
-
-/**
- * Resolve the base path for the current vault when available.
- *
- * @param app - Obsidian application instance.
- * @returns Vault base path or undefined when unavailable.
- */
-export function getVaultBasePath(app: App): string | undefined {
-  const adapter = app.vault.adapter;
-  if (adapter instanceof FileSystemAdapter) {
-    return adapter.getBasePath();
+  const folderPrefix = `${folderName}/`;
+  if (normalizedMiyoPath.startsWith(folderPrefix)) {
+    return normalizedMiyoPath.slice(folderPrefix.length);
   }
 
-  const adapterAny = adapter as unknown as { getBasePath?: () => string; basePath?: string };
-  if (typeof adapterAny.getBasePath === "function") {
-    return adapterAny.getBasePath();
-  }
-  if (typeof adapterAny.basePath === "string") {
-    return adapterAny.basePath;
-  }
-  return undefined;
-}
-
-/**
- * Normalize a filesystem path for prefix comparisons across platforms.
- *
- * @param path - Filesystem path.
- * @returns Normalized path with forward slashes and no trailing slash.
- */
-function normalizeFilesystemPath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "");
+  return normalizedMiyoPath;
 }
