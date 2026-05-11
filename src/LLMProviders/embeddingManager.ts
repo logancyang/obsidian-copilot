@@ -9,11 +9,12 @@ import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
-import { AzureOpenAIEmbeddings, OpenAIEmbeddings } from "@langchain/openai";
+import { OpenAIEmbeddings } from "@langchain/openai";
 import { Notice } from "obsidian";
 import { BrevilabsClient } from "./brevilabsClient";
 import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
 import { CustomOpenAIEmbeddings } from "./CustomOpenAIEmbeddings";
+import { normalizeAzureUrl } from "./chatModelManager";
 
 type EmbeddingConstructorType = new (config: any) => Embeddings;
 
@@ -23,7 +24,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
-  [EmbeddingModelProviders.AZURE_OPENAI]: AzureOpenAIEmbeddings,
+  [EmbeddingModelProviders.AZURE_OPENAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
   [EmbeddingModelProviders.LM_STUDIO]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.OPENAI_FORMAT]: OpenAIEmbeddings,
@@ -248,16 +249,60 @@ export default class EmbeddingManager {
         modelName: modelName,
         apiKey: await getDecryptedKey(settings.googleApiKey),
       },
-      [EmbeddingModelProviders.AZURE_OPENAI]: {
-        modelName,
-        azureOpenAIApiKey: await getDecryptedKey(customModel.apiKey || settings.azureOpenAIApiKey),
-        azureOpenAIApiInstanceName:
-          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName,
-        azureOpenAIApiDeploymentName:
+      [EmbeddingModelProviders.AZURE_OPENAI]: await (async () => {
+        const decryptedApiKey = await getDecryptedKey(
+          customModel.apiKey || settings.azureOpenAIApiKey
+        );
+
+        const hasCustomBaseUrl = Boolean(customModel.baseUrl?.trim());
+        const apiVersion = customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion;
+
+        if (hasCustomBaseUrl) {
+          const azureUrl = normalizeAzureUrl(customModel.baseUrl!.trim());
+
+          return {
+            modelName,
+            apiKey: decryptedApiKey,
+            timeout: 10000,
+            batchSize: getSettings().embeddingBatchSize,
+            configuration: {
+              baseURL: azureUrl.baseUrl || customModel.baseUrl!.trim(),
+              defaultQuery: {
+                "api-version": azureUrl.apiVersion || apiVersion,
+              },
+              fetch: customModel.enableCors ? safeFetch : undefined,
+            },
+          } as ExtendedConfig<
+            ConstructorParameters<
+              EmbeddingProviderConstructorMap[typeof EmbeddingModelProviders.AZURE_OPENAI]
+            >[0]
+          >;
+        }
+
+        const instanceName =
+          customModel.azureOpenAIApiInstanceName || settings.azureOpenAIApiInstanceName;
+        const deploymentName =
           customModel.azureOpenAIApiEmbeddingDeploymentName ||
-          settings.azureOpenAIApiEmbeddingDeploymentName,
-        azureOpenAIApiVersion: customModel.azureOpenAIApiVersion || settings.azureOpenAIApiVersion,
-      },
+          settings.azureOpenAIApiEmbeddingDeploymentName;
+
+        return {
+          modelName,
+          apiKey: decryptedApiKey,
+          timeout: 10000,
+          batchSize: getSettings().embeddingBatchSize,
+          configuration: {
+            baseURL: `https://${instanceName}.openai.azure.com/openai/deployments/${deploymentName}`,
+            defaultQuery: {
+              "api-version": apiVersion,
+            },
+            fetch: customModel.enableCors ? safeFetch : undefined,
+          },
+        } as ExtendedConfig<
+          ConstructorParameters<
+            EmbeddingProviderConstructorMap[typeof EmbeddingModelProviders.AZURE_OPENAI]
+          >[0]
+        >;
+      })(),
       [EmbeddingModelProviders.OLLAMA]: {
         baseUrl: customModel.baseUrl || "http://localhost:11434",
         model: modelName,
