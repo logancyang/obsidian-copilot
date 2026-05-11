@@ -407,6 +407,7 @@ export interface ProviderResponseMap {
   [ChatModelProviders.XAI]: XAIModelResponse;
   [ChatModelProviders.OPENROUTERAI]: OpenRouterAIModelResponse;
   [ChatModelProviders.SILICONFLOW]: SiliconFlowModelResponse;
+  [ChatModelProviders.MODELVERSE]: SiliconFlowModelResponse;
   [ChatModelProviders.COPILOT_PLUS]: null;
   [ChatModelProviders.AZURE_OPENAI]: null;
   [ChatModelProviders.AMAZON_BEDROCK]: unknown;
@@ -501,6 +502,13 @@ export const providerAdapters: ProviderModelAdapters = {
       id: model.id,
       name: model.id,
       provider: ChatModelProviders.SILICONFLOW,
+    })) || [],
+
+  [ChatModelProviders.MODELVERSE]: (data): StandardModel[] =>
+    data.data?.map((model) => ({
+      id: model.id,
+      name: model.id,
+      provider: ChatModelProviders.MODELVERSE,
     })) || [],
 
   [ChatModelProviders.GITHUB_COPILOT]: (data): StandardModel[] =>

@@ -203,6 +203,8 @@ export enum ChatModels {
   OPENROUTER_GROK_4_1_FAST = "x-ai/grok-4.1-fast",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
+  MODELVERSE_GPT_5_4 = "gpt-5.4",
+  MODELVERSE_CLAUDE_OPUS_4_6 = "claude-opus-4-6",
 }
 
 // Model Providers
@@ -223,6 +225,7 @@ export enum ChatModelProviders {
   DEEPSEEK = "deepseek",
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
+  MODELVERSE = "modelverse",
   GITHUB_COPILOT = "github-copilot",
 }
 
@@ -432,6 +435,20 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     isBuiltIn: false,
     baseUrl: "https://api.siliconflow.com/v1",
     capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.MODELVERSE_GPT_5_4,
+    provider: ChatModelProviders.MODELVERSE,
+    enabled: false,
+    isBuiltIn: false,
+    baseUrl: "https://api.modelverse.cn/v1",
+  },
+  {
+    name: ChatModels.MODELVERSE_CLAUDE_OPUS_4_6,
+    provider: ChatModelProviders.MODELVERSE,
+    enabled: false,
+    isBuiltIn: false,
+    baseUrl: "https://api.modelverse.cn/v1",
   },
 ];
 
@@ -668,6 +685,14 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://api.siliconflow.com/v1/models",
     testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
+  [ChatModelProviders.MODELVERSE]: {
+    label: "Modelverse",
+    host: "https://api.modelverse.cn/v1",
+    curlBaseURL: "https://api.modelverse.cn/v1",
+    keyManagementURL: "https://astraflow.ucloud.cn/modelverse/api-keys",
+    listModelURL: "https://api.modelverse.cn/v1/models",
+    testModel: ChatModels.MODELVERSE_GPT_5_4,
+  },
   [ChatModelProviders.OLLAMA]: {
     label: "Ollama",
     host: "http://localhost:11434/v1/",
@@ -750,6 +775,7 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   deepseek: "deepseekApiKey",
   "amazon-bedrock": "amazonBedrockApiKey",
   siliconflow: "siliconflowApiKey",
+  modelverse: "modelverseApiKey",
   "github-copilot": "githubCopilotToken",
 };
 
@@ -906,6 +932,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
   siliconflowApiKey: "",
+  modelverseApiKey: "",
   // GitHub Copilot OAuth tokens
   githubCopilotAccessToken: "",
   githubCopilotToken: "",
