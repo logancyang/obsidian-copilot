@@ -180,7 +180,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     // Extract tool calls from native response
     const nativeToolCalls = response.tool_calls || [];
     const responseText =
-      typeof response.content === "string" ? response.content : String(response.content);
+      typeof response.content === "string" ? response.content : JSON.stringify(response.content);
 
     logInfo("[CopilotPlus] Native tool calls:", nativeToolCalls.length);
 

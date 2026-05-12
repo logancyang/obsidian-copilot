@@ -338,7 +338,7 @@ describe("BedrockChatModel streaming decode", () => {
     it("includes thinking parameter when enableThinking is true", () => {
       const model = createModel(true);
       const requestBody = (model as any).buildRequestBody([
-        { role: "user", content: "test", _getType: () => "human" },
+        { role: "user", content: "test", getType: () => "human" },
       ]);
 
       expect(requestBody.thinking).toEqual({
@@ -352,7 +352,7 @@ describe("BedrockChatModel streaming decode", () => {
     it("does not include thinking parameter when enableThinking is false", () => {
       const model = createModel(false);
       const requestBody = (model as any).buildRequestBody(
-        [{ role: "user", content: "test", _getType: () => "human" }],
+        [{ role: "user", content: "test", getType: () => "human" }],
         { temperature: 0.7 }
       );
 
@@ -365,7 +365,7 @@ describe("BedrockChatModel streaming decode", () => {
     it("respects user temperature when thinking is disabled", () => {
       const model = createModel(false);
       const requestBody = (model as any).buildRequestBody(
-        [{ role: "user", content: "test", _getType: () => "human" }],
+        [{ role: "user", content: "test", getType: () => "human" }],
         { temperature: 0.5 }
       );
 
@@ -376,7 +376,7 @@ describe("BedrockChatModel streaming decode", () => {
     it("forces temperature to 1 when thinking is enabled", () => {
       const model = createModel(true);
       const requestBody = (model as any).buildRequestBody(
-        [{ role: "user", content: "test", _getType: () => "human" }],
+        [{ role: "user", content: "test", getType: () => "human" }],
         { temperature: 0.5 } // User tries to set 0.5, should be overridden to 1
       );
 
@@ -445,7 +445,7 @@ describe("BedrockChatModel streaming decode", () => {
               image_url: { url: "data:image/jpeg;base64,/9j/4AAQSkZJRg==" },
             },
           ],
-          _getType: () => "human",
+          getType: () => "human",
         };
 
         const result = (model as any).normaliseMessageContent(message);
@@ -466,7 +466,7 @@ describe("BedrockChatModel streaming decode", () => {
             { type: "text", text: "Hello " },
             { type: "text", text: "world!" },
           ],
-          _getType: () => "human",
+          getType: () => "human",
         };
 
         const result = (model as any).normaliseMessageContent(message);
@@ -479,7 +479,7 @@ describe("BedrockChatModel streaming decode", () => {
         const model = createModel();
         const message = {
           content: "Simple text message",
-          _getType: () => "human",
+          getType: () => "human",
         };
 
         const result = (model as any).normaliseMessageContent(message);
@@ -500,7 +500,7 @@ describe("BedrockChatModel streaming decode", () => {
                 image_url: { url: "data:image/jpeg;base64,/9j/4AAQSkZJRg==" },
               },
             ],
-            _getType: () => "human",
+            getType: () => "human",
           },
         ];
 
@@ -541,7 +541,7 @@ describe("BedrockChatModel streaming decode", () => {
                 image_url: { url: "data:image/png;base64,IMAGE2DATA" },
               },
             ],
-            _getType: () => "human",
+            getType: () => "human",
           },
         ];
 
@@ -560,7 +560,7 @@ describe("BedrockChatModel streaming decode", () => {
         const messages = [
           {
             content: "Just text, no images",
-            _getType: () => "human",
+            getType: () => "human",
           },
         ];
 
@@ -589,7 +589,7 @@ describe("BedrockChatModel streaming decode", () => {
                 image_url: { url: "data:image/jpeg;base64,VALIDDATA" }, // Valid
               },
             ],
-            _getType: () => "human",
+            getType: () => "human",
           },
         ];
 
