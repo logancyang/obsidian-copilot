@@ -21,6 +21,7 @@ import {
   updateCachedCommands,
 } from "./state";
 import { ensureFolderExists } from "@/utils";
+import { trashFile } from "@/utils/vaultAdapterUtils";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
@@ -165,7 +166,7 @@ export class CustomCommandManager {
       deleteCachedCommand(command.title);
       const file = app.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await app.vault.delete(file);
+        await trashFile(app, file);
       }
     } finally {
       removePendingFileWrite(filePath);

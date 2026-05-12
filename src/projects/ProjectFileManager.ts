@@ -43,8 +43,9 @@ import {
   patchFrontmatter,
   readFrontmatterViaAdapter,
   resolveFileByPath,
+  trashFile,
 } from "@/utils/vaultAdapterUtils";
-import { normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
+import { App, normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
 import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
 
 /**
@@ -57,22 +58,24 @@ import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
  */
 export class ProjectFileManager {
   private static instance: ProjectFileManager;
+  private app: App;
   private vault: Vault;
   private readonly projectLastUsedManager = new RecentUsageManager<string>();
 
-  private constructor(vault: Vault) {
-    this.vault = vault;
+  private constructor(app: App) {
+    this.app = app;
+    this.vault = app.vault;
   }
 
   /**
    * Get singleton instance.
-   * @param vault - Obsidian Vault (required on first call)
+   * @param app - Obsidian App (required on first call)
    * @returns ProjectFileManager singleton
    */
-  public static getInstance(vault?: Vault): ProjectFileManager {
+  public static getInstance(app?: App): ProjectFileManager {
     if (!ProjectFileManager.instance) {
-      if (!vault) throw new Error("Vault is required for first initialization");
-      ProjectFileManager.instance = new ProjectFileManager(vault);
+      if (!app) throw new Error("App is required for first initialization");
+      ProjectFileManager.instance = new ProjectFileManager(app);
     }
     return ProjectFileManager.instance;
   }
@@ -84,7 +87,7 @@ export class ProjectFileManager {
    */
   public async initialize(): Promise<void> {
     logInfo("[Projects] Initializing ProjectFileManager");
-    await ensureProjectsMigratedIfNeeded(this.vault);
+    await ensureProjectsMigratedIfNeeded(this.app);
     await loadAllProjects();
   }
 
@@ -148,7 +151,7 @@ export class ProjectFileManager {
     try {
       const file = this.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await this.vault.delete(file, true);
+        await trashFile(this.app, file);
       } else if (await this.vault.adapter.exists(filePath)) {
         // Reason: hidden-folder files are not indexed by vault cache.
         // Fall back to adapter-based deletion for consistent hidden-folder support.
@@ -156,7 +159,7 @@ export class ProjectFileManager {
       }
       const folder = this.vault.getAbstractFileByPath(folderPath);
       if (folder instanceof TFolder && folder.children.length === 0) {
-        await this.vault.delete(folder, true);
+        await trashFile(this.app, folder);
       } else if (await this.vault.adapter.exists(folderPath)) {
         const listing = await this.vault.adapter.list(folderPath);
         if (listing.files.length === 0 && listing.folders.length === 0) {
@@ -545,11 +548,11 @@ export class ProjectFileManager {
       addPendingFileWrite(existing.filePath);
 
       // Reason: delete only the managed config file to avoid destroying user files
-      // that may have been placed in the project folder. Use non-force delete so
-      // Obsidian respects the user's trash behavior (system trash / .trash folder).
+      // that may have been placed in the project folder. trashFile respects the
+      // user's trash behavior (system trash / .trash folder / permanent).
       const configFile = this.vault.getAbstractFileByPath(existing.filePath);
       if (configFile instanceof TFile) {
-        await this.vault.delete(configFile);
+        await trashFile(this.app, configFile);
       } else if (await this.vault.adapter.exists(existing.filePath)) {
         // Reason: hidden-folder files are not indexed by vault cache.
         // Fall back to adapter-based deletion for consistent hidden-folder support.
@@ -566,7 +569,7 @@ export class ProjectFileManager {
       try {
         const folder = this.vault.getAbstractFileByPath(folderPath);
         if (folder instanceof TFolder && folder.children.length === 0) {
-          await this.vault.delete(folder);
+          await trashFile(this.app, folder);
         } else if (await this.vault.adapter.exists(folderPath)) {
           const listing = await this.vault.adapter.list(folderPath);
           if (listing.files.length === 0 && listing.folders.length === 0) {

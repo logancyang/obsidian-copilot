@@ -69,7 +69,12 @@ import {
   filterChatHistoryFiles,
 } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import { listMarkdownFiles, patchFrontmatter, resolveFileByPath } from "@/utils/vaultAdapterUtils";
+import {
+  listMarkdownFiles,
+  patchFrontmatter,
+  resolveFileByPath,
+  trashFile,
+} from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface
@@ -207,7 +212,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.systemPromptRegister = new SystemPromptRegister(this, this.app.vault);
-    this.projectRegister = new ProjectRegister(this.app.vault);
+    this.projectRegister = new ProjectRegister(this.app);
 
     this.app.workspace.onLayoutReady(() => {
       // Reason: projects must initialize after vault file tree is indexed (onLayoutReady),
@@ -836,7 +841,7 @@ export default class CopilotPlugin extends Plugin {
   async deleteChatHistory(fileId: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
-      await this.app.vault.delete(file);
+      await trashFile(this.app, file);
       new Notice("Chat deleted.");
     } else if (await this.app.vault.adapter.exists(fileId)) {
       await this.app.vault.adapter.remove(fileId);

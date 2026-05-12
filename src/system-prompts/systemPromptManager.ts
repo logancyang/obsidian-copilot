@@ -25,6 +25,7 @@ import {
 } from "@/system-prompts/constants";
 import { logInfo } from "@/logger";
 import { ensureFolderExists } from "@/utils";
+import { trashFile } from "@/utils/vaultAdapterUtils";
 import { getSettings, updateSetting } from "@/settings/model";
 
 /**
@@ -192,7 +193,7 @@ export class SystemPromptManager {
       // Delete the file first
       const file = this.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await this.vault.delete(file);
+        await trashFile(app, file);
       }
 
       // Clear state only after successful deletion to maintain consistency

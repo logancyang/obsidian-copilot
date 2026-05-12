@@ -72,6 +72,7 @@ describe("SystemPromptManager", () => {
       fileManager: {
         processFrontMatter: jest.fn(),
         renameFile: jest.fn(),
+        trashFile: jest.fn().mockResolvedValue(undefined),
       },
     } as any;
 
@@ -317,7 +318,9 @@ describe("SystemPromptManager", () => {
 
       await manager.deletePrompt("Test Prompt");
 
-      expect(mockVault.delete).toHaveBeenCalledWith(mockFile);
+      expect(
+        (app.fileManager as unknown as { trashFile: jest.Mock }).trashFile
+      ).toHaveBeenCalledWith(mockFile);
     });
 
     it("removes prompt from cache", async () => {
@@ -335,7 +338,9 @@ describe("SystemPromptManager", () => {
 
       await manager.deletePrompt("Non-existent Prompt");
 
-      expect(mockVault.delete).not.toHaveBeenCalled();
+      expect(
+        (app.fileManager as unknown as { trashFile: jest.Mock }).trashFile
+      ).not.toHaveBeenCalled();
       expect(state.deleteCachedSystemPrompt).toHaveBeenCalledWith("Non-existent Prompt");
     });
 

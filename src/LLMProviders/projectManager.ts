@@ -187,7 +187,7 @@ export default class ProjectManager {
    * Delegates to ProjectFileManager for vault file writes.
    */
   private touchProjectUsageTimestamps(project: ProjectConfig): void {
-    const manager = ProjectFileManager.getInstance(this.app.vault);
+    const manager = ProjectFileManager.getInstance(this.app);
     void manager.touchProjectLastUsed(project.id);
   }
 
@@ -196,7 +196,7 @@ export default class ProjectManager {
    * This allows UI components to use in-memory values for immediate feedback.
    */
   public getProjectUsageTimestampsManager(): RecentUsageManager<string> {
-    return ProjectFileManager.getInstance(this.app.vault).getProjectUsageTimestampsManager();
+    return ProjectFileManager.getInstance(this.app).getProjectUsageTimestampsManager();
   }
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {
