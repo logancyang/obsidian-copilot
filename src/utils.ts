@@ -18,11 +18,15 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "@langchain/classic/chains";
-import moment from "moment";
-import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
+import { MarkdownView, Notice, TFile, Vault, moment, normalizePath, requestUrl } from "obsidian";
+import type { Moment, MomentInput } from "moment";
 import { CustomModel } from "./aiParams";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 export { err2String } from "@/errorFormat";
+
+// Obsidian re-exports `moment` typed as a namespace, but at runtime it's the callable factory.
+// Cast once here so call sites stay readable.
+const momentFn = moment as unknown as (input?: MomentInput, format?: string) => Moment;
 
 /**
  * Unified type for fetch implementation.
@@ -312,7 +316,7 @@ export const formatDateTime = (
   now: Date,
   timezone: "local" | "utc" = "local"
 ): FormattedDateTime => {
-  const formattedDateTime = moment(now);
+  const formattedDateTime = momentFn(now);
 
   if (timezone === "utc") {
     formattedDateTime.utc();
@@ -360,7 +364,7 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
 }
 
 export function stringToFormattedDateTime(timestamp: string): FormattedDateTime {
-  const date = moment(timestamp, "YYYY/MM/DD HH:mm:ss");
+  const date = momentFn(timestamp, "YYYY/MM/DD HH:mm:ss");
   if (!date.isValid()) {
     // If the string is not in the expected format, return current date/time
     return formatDateTime(new Date());
@@ -496,7 +500,9 @@ function getNoteTitleAndTags(noteWithTag: {
 function getChatContextStr(chatNoteContextPath: string, chatNoteContextTags: string[]): string {
   const pathStr = chatNoteContextPath ? `\nChat context by path: ${chatNoteContextPath}` : "";
   const tagsStr =
-    chatNoteContextTags?.length > 0 ? `\nChat context by tags: ${chatNoteContextTags}` : "";
+    chatNoteContextTags?.length > 0
+      ? `\nChat context by tags: ${chatNoteContextTags.join(",")}`
+      : "";
   return pathStr + tagsStr;
 }
 
@@ -826,7 +832,14 @@ export async function safeFetch(
     contentType: "application/json",
     headers: headers,
     method: method,
-    ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
+    ...(methodsWithBody.includes(method) && {
+      body:
+        typeof options.body === "string"
+          ? options.body
+          : options.body != null
+            ? JSON.stringify(options.body)
+            : undefined,
+    }),
     throw: false, // Don't throw so we can get the response body
   });
 
@@ -885,12 +898,8 @@ export async function safeFetch(
         return response.arrayBuffer;
       }
       const base64 = response.text.replace(/^data:.*;base64,/, "");
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes.buffer;
+      const buf = Buffer.from(base64, "base64");
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
     },
     blob: () => {
       throw new Error("not implemented");
@@ -1115,10 +1124,10 @@ export function debounce<T extends (...args: any[]) => void>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
+  let timeout: number;
   return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
+    window.clearTimeout(timeout);
+    timeout = window.setTimeout(() => func(...args), wait);
   };
 }
 
@@ -1418,7 +1427,7 @@ export async function withTimeout<T>(
   const { TimeoutError } = await import("@/error");
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
+  const timeoutId = window.setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
@@ -1432,7 +1441,7 @@ export async function withTimeout<T>(
       }),
     ]);
   } finally {
-    clearTimeout(timeoutId);
+    window.clearTimeout(timeoutId);
   }
 }
 

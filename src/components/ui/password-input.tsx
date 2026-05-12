@@ -41,7 +41,7 @@ export function PasswordInput({
       }
     };
 
-    processValue();
+    void processValue();
   }, [value]);
 
   return (

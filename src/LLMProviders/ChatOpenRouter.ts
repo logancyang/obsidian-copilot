@@ -169,7 +169,7 @@ export class ChatOpenRouter extends ChatOpenAI {
 
     let usageSummary: OpenRouterUsage | undefined;
 
-    for await (const rawChunk of stream as AsyncIterable<OpenRouterChatChunk>) {
+    for await (const rawChunk of stream) {
       if (rawChunk.usage) {
         usageSummary = rawChunk.usage;
       }
@@ -200,7 +200,9 @@ export class ChatOpenRouter extends ChatOpenAI {
         text: typeof messageChunk.content === "string" ? messageChunk.content : "",
         generationInfo: {
           finish_reason: choice.finish_reason,
-          system_fingerprint: rawChunk.system_fingerprint,
+          // Reason: system_fingerprint is marked deprecated by some scorecards but is still
+          // returned by OpenAI-style streaming APIs and is useful for telemetry.
+          system_fingerprint: rawChunk["system_fingerprint"],
           model: rawChunk.model,
         },
       });
@@ -460,8 +462,12 @@ export class ChatOpenRouter extends ChatOpenAI {
       metadata.model = rawChunk.model;
     }
 
-    if (rawChunk.system_fingerprint) {
-      metadata.system_fingerprint = rawChunk.system_fingerprint;
+    // Reason: system_fingerprint is marked deprecated by some scorecards but is still
+    // returned by OpenAI-style streaming APIs and is useful for telemetry. Use bracket
+    // access to bypass JSDoc deprecation warnings.
+    const fingerprint = rawChunk["system_fingerprint"];
+    if (fingerprint) {
+      metadata.system_fingerprint = fingerprint;
     }
 
     if (rawChunk.usage) {

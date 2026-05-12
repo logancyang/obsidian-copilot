@@ -213,7 +213,7 @@ export const CopilotPlusSettings: React.FC = () => {
                   </div>
                 }
                 checked={settings.enableSelfHostMode}
-                onCheckedChange={handleSelfHostModeToggle}
+                onCheckedChange={(checked) => void handleSelfHostModeToggle(checked)}
                 disabled={isValidatingSelfHost}
               />
 
@@ -232,7 +232,7 @@ export const CopilotPlusSettings: React.FC = () => {
                     title="Enable Miyo"
                     description="Use Miyo as your local search, PDF parsing, and context hub. Copilot will send the current vault folder name to Miyo and can request scans, but folder registration is managed in Miyo."
                     checked={settings.enableMiyo}
-                    onCheckedChange={handleMiyoSearchToggle}
+                    onCheckedChange={(checked) => void handleMiyoSearchToggle(checked)}
                     disabled={isValidatingSelfHost}
                   />
 

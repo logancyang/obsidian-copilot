@@ -1,4 +1,4 @@
-import { TFile, Vault } from "obsidian";
+import { App, TFile, Vault } from "obsidian";
 import { ProjectConfig } from "@/aiParams";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 
@@ -67,13 +67,12 @@ jest.mock("@/projects/projectMigration", () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-import {
-  getCachedProjectRecords,
-  getCachedProjectRecordById,
-} from "@/projects/state";
+import { getCachedProjectRecords, getCachedProjectRecordById } from "@/projects/state";
 
 /** Minimal valid ProjectConfig for test use. */
-function makeConfig(overrides: { id: string; name: string } & Partial<ProjectConfig>): ProjectConfig {
+function makeConfig(
+  overrides: { id: string; name: string } & Partial<ProjectConfig>
+): ProjectConfig {
   return {
     systemPrompt: "",
     projectModelKey: "",
@@ -88,11 +87,23 @@ function makeConfig(overrides: { id: string; name: string } & Partial<ProjectCon
 /** Build a minimal Vault mock. */
 function makeMockVault(): jest.Mocked<Vault> {
   return {
-    create: jest.fn(async (path: string) => ({ path } as TFile)),
+    create: jest.fn(async (path: string) => {
+      const file = Object.create(TFile.prototype);
+      Object.assign(file, { path });
+      return file;
+    }),
     // Reason: null = file does not exist yet, avoids collision error in createProject
     getAbstractFileByPath: jest.fn(() => null),
     adapter: { exists: jest.fn(async () => false) },
   } as unknown as jest.Mocked<Vault>;
+}
+
+/** Build a minimal App mock wrapping a vault. */
+function makeMockApp(vault: Vault): App {
+  return {
+    vault,
+    fileManager: { trashFile: jest.fn(async () => {}) },
+  } as unknown as App;
 }
 
 /** Reset the singleton so each test gets a fresh instance. */
@@ -124,7 +135,7 @@ describe("ProjectFileManager.createProject", () => {
       },
     ]);
 
-    const manager = ProjectFileManager.getInstance(vault);
+    const manager = ProjectFileManager.getInstance(makeMockApp(vault));
 
     // "my project" (lowercase) collides with "My Project"
     await expect(
@@ -133,15 +144,15 @@ describe("ProjectFileManager.createProject", () => {
   });
 
   it("rejects empty project id", async () => {
-    const manager = ProjectFileManager.getInstance(vault);
+    const manager = ProjectFileManager.getInstance(makeMockApp(vault));
 
-    await expect(
-      manager.createProject(makeConfig({ id: "", name: "Valid Name" }))
-    ).rejects.toThrow(/cannot be empty/i);
+    await expect(manager.createProject(makeConfig({ id: "", name: "Valid Name" }))).rejects.toThrow(
+      /cannot be empty/i
+    );
   });
 
   it("rejects whitespace-only project id", async () => {
-    const manager = ProjectFileManager.getInstance(vault);
+    const manager = ProjectFileManager.getInstance(makeMockApp(vault));
 
     await expect(
       manager.createProject(makeConfig({ id: "   ", name: "Valid Name" }))

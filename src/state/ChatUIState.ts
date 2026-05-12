@@ -214,8 +214,8 @@ export class ChatUIState {
   /**
    * Legacy compatibility - replace messages
    */
-  replaceMessages(messages: ChatMessage[]): void {
-    this.chatManager.loadMessages(messages);
+  async replaceMessages(messages: ChatMessage[]): Promise<void> {
+    await this.chatManager.loadMessages(messages);
     this.notifyListeners();
   }
 

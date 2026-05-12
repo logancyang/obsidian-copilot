@@ -3,11 +3,22 @@ import {
   DecoratorNode,
   DOMExportOutput,
   EditorConfig,
+  LexicalEditor,
   NodeKey,
   SerializedLexicalNode,
 } from "lexical";
 import { IPillNode } from "../plugins/PillDeletionPlugin";
 import { PillBadge } from "./PillBadge";
+
+/**
+ * Returns the Document that owns the given Lexical editor's root element.
+ * Pills must create DOM in the editor's window — using `activeDocument`
+ * (focused window) can produce nodes with the wrong ownerDocument when the
+ * chat is in an Obsidian popout but a different window is focused.
+ */
+export function getEditorDocument(editor: LexicalEditor): Document {
+  return editor.getRootElement()?.ownerDocument ?? activeDocument;
+}
 
 export interface SerializedBasePillNode extends SerializedLexicalNode {
   value: string;
@@ -106,8 +117,8 @@ export abstract class BasePillNode extends DecoratorNode<JSX.Element> implements
   /**
    * Default DOM creation - subclasses can override for custom elements.
    */
-  createDOM(_config: EditorConfig): HTMLElement {
-    const span = document.createElement("span");
+  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
+    const span = getEditorDocument(editor).createElement("span");
     span.className = this.getClassName();
     return span;
   }
@@ -115,8 +126,8 @@ export abstract class BasePillNode extends DecoratorNode<JSX.Element> implements
   /**
    * Default DOM export - subclasses can override for custom attributes.
    */
-  exportDOM(): DOMExportOutput {
-    const element = document.createElement("span");
+  exportDOM(editor: LexicalEditor): DOMExportOutput {
+    const element = getEditorDocument(editor).createElement("span");
     element.setAttribute(this.getDataAttribute(), "");
     element.setAttribute("data-pill-value", this.__value);
     element.textContent = this.__value;

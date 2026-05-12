@@ -30,7 +30,7 @@ export const AdvancedSettings: React.FC = () => {
     const filePath = getPromptFilePath(displayValue);
     // Close the settings modal before opening the file
     (app as any).setting.close();
-    app.workspace.openLinkText(filePath, "", true);
+    void app.workspace.openLinkText(filePath, "", true);
   };
 
   const handleAddPrompt = () => {
@@ -123,10 +123,12 @@ export const AdvancedSettings: React.FC = () => {
           <Button
             variant="secondary"
             size="sm"
-            onClick={async () => {
-              await flushRecordedPromptPayloadToLog();
-              await logFileManager.flush();
-              await logFileManager.openLogFile();
+            onClick={() => {
+              void (async () => {
+                await flushRecordedPromptPayloadToLog();
+                await logFileManager.flush();
+                await logFileManager.openLogFile();
+              })();
             }}
           >
             Create Log File

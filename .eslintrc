@@ -29,6 +29,54 @@
     "tailwindcss/no-arbitrary-value": "off",
     "tailwindcss/no-custom-classname": ["error"],
     "tailwindcss/no-contradicting-classname": "error",
+    "no-restricted-globals": [
+      "error",
+      { "name": "setTimeout", "message": "Use window.setTimeout() for popout window compatibility." },
+      { "name": "clearTimeout", "message": "Use window.clearTimeout() for popout window compatibility." },
+      { "name": "setInterval", "message": "Use window.setInterval() for popout window compatibility." },
+      { "name": "clearInterval", "message": "Use window.clearInterval() for popout window compatibility." },
+      { "name": "requestAnimationFrame", "message": "Use window.requestAnimationFrame() for popout window compatibility." },
+      { "name": "document", "message": "Use activeDocument (Obsidian global) — or window.document in tests — for popout window compatibility." },
+      { "name": "atob", "message": "Use Buffer.from(data, 'base64').toString() — atob is deprecated in Node." },
+      { "name": "btoa", "message": "Use Buffer.from(data).toString('base64') — btoa is deprecated in Node." },
+      { "name": "globalThis", "message": "Use 'window' or 'activeWindow' for popout window compatibility." },
+    ],
+    "no-restricted-imports": "off",
+    "@typescript-eslint/no-restricted-imports": [
+      "error",
+      {
+        "paths": [
+          {
+            "name": "moment",
+            "message": "Import moment from 'obsidian' — it's bundled with Obsidian.",
+            "allowTypeImports": true,
+          },
+          {
+            "name": "buffer",
+            "message": "Don't import the Node 'buffer' module — Buffer is available globally.",
+          },
+        ],
+      },
+    ],
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "TSAsExpression[typeAnnotation.typeName.name='TFile']",
+        "message": "Don't cast to TFile. Use 'instanceof TFile' to safely narrow the type. (In tests, use mockTFile from @/__tests__/mockObsidian.)",
+      },
+      {
+        "selector": "TSAsExpression[typeAnnotation.typeName.name='TFolder']",
+        "message": "Don't cast to TFolder. Use 'instanceof TFolder' to safely narrow the type. (In tests, use mockTFolder from @/__tests__/mockObsidian.)",
+      },
+      {
+        "selector": "CallExpression[callee.type='MemberExpression'][callee.property.name='delete'][callee.object.property.name='vault']",
+        "message": "Use FileManager.trashFile() instead of Vault.delete() to respect the user's file-deletion preference.",
+      },
+      {
+        "selector": "AssignmentExpression[left.type='MemberExpression'][left.object.type='MemberExpression'][left.object.property.name='style']",
+        "message": "Don't set element.style.<prop> directly. Use a Tailwind utility class, or element.style.setProperty() with a CSS variable for dynamic values.",
+      },
+    ],
   },
   "overrides": [
     {

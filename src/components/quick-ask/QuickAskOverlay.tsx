@@ -87,8 +87,6 @@ export class QuickAskOverlay {
   private resizeStartMouse: { x: number; y: number } | null = null;
   private resizeRafId: number | null = null;
   // Save original body styles to restore after resize
-  private savedBodyUserSelect: string = "";
-  private savedBodyCursor: string = "";
 
   constructor(private readonly options: QuickAskOverlayOptions) {}
 
@@ -97,7 +95,11 @@ export class QuickAskOverlay {
    * @param bottomAnchorPos - Bottom anchor (normalized selection.to) for "place below"
    * @param topAnchorPos - Top anchor (selection.from) for "place above" flip target
    */
-  mount(bottomAnchorPos: number, topAnchorPos?: number | null, focusAnchorPos?: number | null): void {
+  mount(
+    bottomAnchorPos: number,
+    topAnchorPos?: number | null,
+    focusAnchorPos?: number | null
+  ): void {
     this.bottomAnchorPos = bottomAnchorPos;
     this.topAnchorPos = typeof topAnchorPos === "number" ? topAnchorPos : null;
     this.focusAnchorPos = typeof focusAnchorPos === "number" ? focusAnchorPos : null;
@@ -310,7 +312,7 @@ export class QuickAskOverlay {
 
     if (QuickAskOverlay.overlayRoot) return QuickAskOverlay.overlayRoot;
 
-    const doc = host.ownerDocument ?? document;
+    const doc = host.ownerDocument ?? activeDocument;
     const root = doc.createElement("div");
     root.className = "copilot-quick-ask-overlay-root";
     host.appendChild(root);
@@ -321,11 +323,11 @@ export class QuickAskOverlay {
 
   private mountOverlay(): void {
     // Mount overlay inside editor DOM for proper layering
-    const overlayHost = this.options.view.dom ?? document.body;
+    const overlayHost = this.options.view.dom ?? activeDocument.body;
     this.overlayHost = overlayHost;
 
     // Capture owner document/window for popout window compatibility
-    const doc = overlayHost.ownerDocument ?? document;
+    const doc = overlayHost.ownerDocument ?? activeDocument;
     const win = doc.defaultView ?? window;
     this.ownerDocument = doc;
     this.ownerWindow = win;
@@ -380,7 +382,7 @@ export class QuickAskOverlay {
       if (event.key !== "Escape") return;
       if (event.defaultPrevented) return;
 
-      const doc = this.ownerDocument ?? document;
+      const doc = this.ownerDocument ?? activeDocument;
       const activeEl = doc.activeElement;
       const isFocusInsidePanel = !!(activeEl && this.overlayContainer?.contains(activeEl));
 
@@ -477,7 +479,7 @@ export class QuickAskOverlay {
         this.placementSide = "below";
       } else if (topRect) {
         const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
-        const spaceAbove = (topRect.top - hostRect.top) - PANEL_OFFSET_Y - visibleTop;
+        const spaceAbove = topRect.top - hostRect.top - PANEL_OFFSET_Y - visibleTop;
 
         if (spaceAbove >= heightForClamp + PANEL_MARGIN) {
           top = aboveY;
@@ -497,7 +499,7 @@ export class QuickAskOverlay {
     } else if (topRect) {
       // Bottom anchor not visible (selection extends below viewport): place above topRect
       const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
-      const spaceAbove = (topRect.top - hostRect.top) - PANEL_OFFSET_Y - visibleTop;
+      const spaceAbove = topRect.top - hostRect.top - PANEL_OFFSET_Y - visibleTop;
 
       if (spaceAbove >= heightForClamp + PANEL_MARGIN) {
         top = aboveY;
@@ -528,7 +530,7 @@ export class QuickAskOverlay {
       return;
     }
 
-    const doc = this.ownerDocument ?? document;
+    const doc = this.ownerDocument ?? activeDocument;
     const hostRect = this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
 
     const viewportWidth = hostRect.width;
@@ -661,23 +663,20 @@ export class QuickAskOverlay {
     this.resizeStartRect = rect;
     this.resizeStartMouse = start;
 
-    const doc = this.ownerDocument ?? document;
+    const doc = this.ownerDocument ?? activeDocument;
     const body = doc.body;
 
-    // Prevent text selection and set resize cursor on body during drag
-    // Save original values to restore later
-    this.savedBodyUserSelect = body.style.userSelect;
-    this.savedBodyCursor = body.style.cursor;
-    body.classList.add("copilot-quick-ask-resizing");
-    body.style.userSelect = "none";
-    // Set cursor based on direction to ensure consistent feedback
+    // Disable selection and set a direction-specific cursor on the body for
+    // the duration of the resize. Cursor is exposed via a CSS variable that the
+    // Tailwind arbitrary-value class consumes — no inline cursor styles needed.
     const cursorMap: Record<ResizeDirection, string> = {
       right: "ew-resize",
       bottom: "ns-resize",
       "bottom-left": "nesw-resize",
       "bottom-right": "nwse-resize",
     };
-    body.style.cursor = cursorMap[direction] ?? "default";
+    body.style.setProperty("--copilot-resize-cursor", cursorMap[direction] ?? "default");
+    body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 
     // Bind document-level listeners (use capture for consistency with useRafResizable/useDraggable)
     doc.addEventListener("mousemove", this.handleResizeMove, true);
@@ -717,14 +716,12 @@ export class QuickAskOverlay {
     // Only restore body styles if we actually started resizing
     // This prevents polluting body styles when destroy() is called without resize
     if (this.isResizing) {
-      const doc = this.ownerDocument ?? document;
+      const doc = this.ownerDocument ?? activeDocument;
       const body = doc.body;
       doc.removeEventListener("mousemove", this.handleResizeMove, true);
       doc.removeEventListener("mouseup", this.handleResizeEnd, true);
-      body.classList.remove("copilot-quick-ask-resizing");
-      // Restore original body styles
-      body.style.userSelect = this.savedBodyUserSelect;
-      body.style.cursor = this.savedBodyCursor;
+      body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
+      body.style.removeProperty("--copilot-resize-cursor");
     }
 
     this.isResizing = false;
@@ -736,7 +733,7 @@ export class QuickAskOverlay {
   private applyResize(clientX: number, clientY: number): void {
     if (!this.resizeStartRect || !this.resizeStartMouse || !this.resizeDirection) return;
 
-    const doc = this.ownerDocument ?? document;
+    const doc = this.ownerDocument ?? activeDocument;
     const hostRect = this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
 
     const deltaX = clientX - this.resizeStartMouse.x;
@@ -852,7 +849,7 @@ export class QuickAskOverlay {
   private updateDragPosition(): void {
     if (!this.overlayContainer || !this.dragPosition) return;
 
-    const doc = this.ownerDocument ?? document;
+    const doc = this.ownerDocument ?? activeDocument;
     const hostRect = this.overlayHost?.getBoundingClientRect() ?? doc.body.getBoundingClientRect();
 
     const viewportWidth = hostRect.width;

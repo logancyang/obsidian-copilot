@@ -25,7 +25,7 @@ export default function IndexingProgressCard({
   onStop,
 }: IndexingProgressCardProps) {
   const [indexingState] = useIndexingProgress();
-  const autoCloseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoCloseTimerRef = useRef<number | null>(null);
 
   const { isActive, isPaused, indexedCount, totalFiles, errors, completionStatus } = indexingState;
 
@@ -34,7 +34,7 @@ export default function IndexingProgressCard({
   // Auto-close 3s after completion
   useEffect(() => {
     if (autoCloseTimerRef.current) {
-      clearTimeout(autoCloseTimerRef.current);
+      window.clearTimeout(autoCloseTimerRef.current);
       autoCloseTimerRef.current = null;
     }
 
@@ -44,14 +44,14 @@ export default function IndexingProgressCard({
       completionStatus !== "none" &&
       !(completionStatus === "error" && totalFiles === 0);
     if (shouldAutoClose) {
-      autoCloseTimerRef.current = setTimeout(() => {
+      autoCloseTimerRef.current = window.setTimeout(() => {
         onClose();
       }, 3000);
     }
 
     return () => {
       if (autoCloseTimerRef.current) {
-        clearTimeout(autoCloseTimerRef.current);
+        window.clearTimeout(autoCloseTimerRef.current);
         autoCloseTimerRef.current = null;
       }
     };

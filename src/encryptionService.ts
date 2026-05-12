@@ -1,5 +1,4 @@
 import { type CopilotSettings } from "@/settings/model";
-import { Buffer } from "buffer";
 import { Platform } from "obsidian";
 
 // @ts-ignore

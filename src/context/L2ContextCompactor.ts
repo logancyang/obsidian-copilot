@@ -120,7 +120,13 @@ export function compactXmlBlock(
     return xmlBlock;
   }
 
-  const source = extractSourceFromBlock(xmlBlock, blockType) || extractSource(xmlBlock);
+  // Fallback to generic extractors when the block type has no registered sourceExtractor
+  const source =
+    extractSourceFromBlock(xmlBlock, blockType) ||
+    /<path>([^<]+)<\/path>/.exec(xmlBlock)?.[1] ||
+    /<url>([^<]+)<\/url>/.exec(xmlBlock)?.[1] ||
+    /<name>([^<]+)<\/name>/.exec(xmlBlock)?.[1] ||
+    "";
   const content = extractContentFromBlock(xmlBlock);
   const sourceType = getSourceType(blockType);
 

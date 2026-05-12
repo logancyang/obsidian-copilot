@@ -73,6 +73,7 @@ import {
   listMarkdownFiles,
   patchFrontmatter,
   resolveFileByPath,
+  trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 
@@ -95,6 +96,7 @@ export default class CopilotPlugin extends Plugin {
   chatSelectionHighlightController: ChatSelectionHighlightController;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
+  private selectionListenerDocument?: Document;
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
@@ -210,7 +212,7 @@ export default class CopilotPlugin extends Plugin {
 
     this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
     this.systemPromptRegister = new SystemPromptRegister(this, this.app.vault);
-    this.projectRegister = new ProjectRegister(this.app.vault);
+    this.projectRegister = new ProjectRegister(this.app);
 
     this.app.workspace.onLayoutReady(() => {
       // Reason: projects must initialize after vault file tree is indexed (onLayoutReady),
@@ -326,7 +328,7 @@ export default class CopilotPlugin extends Plugin {
     }
 
     // Without the timeout, the view is not yet active
-    setTimeout(() => {
+    window.setTimeout(() => {
       const activeCopilotView = this.app.workspace
         .getLeavesOfType(CHAT_VIEWTYPE)
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
@@ -382,8 +384,10 @@ export default class CopilotPlugin extends Plugin {
       }, 500);
     };
 
-    // Register the DOM selection change event
-    document.addEventListener("selectionchange", this.selectionChangeHandler);
+    // Capture the document at registration so removal targets the same one
+    // (activeDocument can change if the user focuses a popout window).
+    this.selectionListenerDocument = activeDocument;
+    this.selectionListenerDocument.addEventListener("selectionchange", this.selectionChangeHandler);
   }
 
   /**
@@ -393,9 +397,13 @@ export default class CopilotPlugin extends Plugin {
     if (this.selectionDebounceTimer) {
       window.clearTimeout(this.selectionDebounceTimer);
     }
-    if (this.selectionChangeHandler) {
-      document.removeEventListener("selectionchange", this.selectionChangeHandler);
+    if (this.selectionChangeHandler && this.selectionListenerDocument) {
+      this.selectionListenerDocument.removeEventListener(
+        "selectionchange",
+        this.selectionChangeHandler
+      );
     }
+    this.selectionListenerDocument = undefined;
   }
 
   /**
@@ -595,7 +603,7 @@ export default class CopilotPlugin extends Plugin {
       this.app.workspace.revealLeaf(leaves[0]);
     }
     // Small delay to ensure React component is ready to receive the focus event
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.emitChatIsVisible();
     }, 50);
   }
@@ -805,7 +813,7 @@ export default class CopilotPlugin extends Plugin {
         const handler = (updatedFile: TFile) => {
           if (updatedFile.path === fileId) {
             this.app.metadataCache.off("changed", handler);
-            clearTimeout(timeoutId);
+            window.clearTimeout(timeoutId);
             resolve();
           }
         };
@@ -813,7 +821,7 @@ export default class CopilotPlugin extends Plugin {
         this.app.metadataCache.on("changed", handler);
 
         // Fallback timeout with shorter duration and better error handling
-        const timeoutId = setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
           this.app.metadataCache.off("changed", handler);
           // Don't reject, just resolve - the frontmatter update might have worked
           // even if we didn't catch the event
@@ -833,7 +841,7 @@ export default class CopilotPlugin extends Plugin {
   async deleteChatHistory(fileId: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
-      await this.app.vault.delete(file);
+      await trashFile(this.app, file);
       new Notice("Chat deleted.");
     } else if (await this.app.vault.adapter.exists(fileId)) {
       await this.app.vault.adapter.remove(fileId);

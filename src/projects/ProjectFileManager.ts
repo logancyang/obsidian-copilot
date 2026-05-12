@@ -43,8 +43,9 @@ import {
   patchFrontmatter,
   readFrontmatterViaAdapter,
   resolveFileByPath,
+  trashFile,
 } from "@/utils/vaultAdapterUtils";
-import { normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
+import { App, normalizePath, stringifyYaml, TFile, TFolder, Vault } from "obsidian";
 import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
 
 /**
@@ -57,22 +58,24 @@ import { ensureProjectsMigratedIfNeeded } from "@/projects/projectMigration";
  */
 export class ProjectFileManager {
   private static instance: ProjectFileManager;
+  private app: App;
   private vault: Vault;
   private readonly projectLastUsedManager = new RecentUsageManager<string>();
 
-  private constructor(vault: Vault) {
-    this.vault = vault;
+  private constructor(app: App) {
+    this.app = app;
+    this.vault = app.vault;
   }
 
   /**
    * Get singleton instance.
-   * @param vault - Obsidian Vault (required on first call)
+   * @param app - Obsidian App (required on first call)
    * @returns ProjectFileManager singleton
    */
-  public static getInstance(vault?: Vault): ProjectFileManager {
+  public static getInstance(app?: App): ProjectFileManager {
     if (!ProjectFileManager.instance) {
-      if (!vault) throw new Error("Vault is required for first initialization");
-      ProjectFileManager.instance = new ProjectFileManager(vault);
+      if (!app) throw new Error("App is required for first initialization");
+      ProjectFileManager.instance = new ProjectFileManager(app);
     }
     return ProjectFileManager.instance;
   }
@@ -84,7 +87,7 @@ export class ProjectFileManager {
    */
   public async initialize(): Promise<void> {
     logInfo("[Projects] Initializing ProjectFileManager");
-    await ensureProjectsMigratedIfNeeded(this.vault);
+    await ensureProjectsMigratedIfNeeded(this.app);
     await loadAllProjects();
   }
 
@@ -148,7 +151,7 @@ export class ProjectFileManager {
     try {
       const file = this.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await this.vault.delete(file, true);
+        await trashFile(this.app, file);
       } else if (await this.vault.adapter.exists(filePath)) {
         // Reason: hidden-folder files are not indexed by vault cache.
         // Fall back to adapter-based deletion for consistent hidden-folder support.
@@ -156,7 +159,7 @@ export class ProjectFileManager {
       }
       const folder = this.vault.getAbstractFileByPath(folderPath);
       if (folder instanceof TFolder && folder.children.length === 0) {
-        await this.vault.delete(folder, true);
+        await trashFile(this.app, folder);
       } else if (await this.vault.adapter.exists(folderPath)) {
         const listing = await this.vault.adapter.list(folderPath);
         if (listing.files.length === 0 && listing.folders.length === 0) {
@@ -283,7 +286,8 @@ export class ProjectFileManager {
       }
 
       const now = Date.now();
-      const createdMs = Number.isFinite(project.created) && project.created > 0 ? project.created : now;
+      const createdMs =
+        Number.isFinite(project.created) && project.created > 0 ? project.created : now;
       const lastUsedMs =
         Number.isFinite(project.UsageTimestamps) && project.UsageTimestamps > 0
           ? project.UsageTimestamps
@@ -321,7 +325,10 @@ export class ProjectFileManager {
    * @param nextProject - New ProjectConfig (id must match)
    * @returns Updated ProjectFileRecord
    */
-  public async updateProject(projectId: string, nextProject: ProjectConfig): Promise<ProjectFileRecord> {
+  public async updateProject(
+    projectId: string,
+    nextProject: ProjectConfig
+  ): Promise<ProjectFileRecord> {
     const normalizedId = (projectId || "").trim();
     if (!normalizedId) throw new Error("Project id cannot be empty");
     if ((nextProject.id || "").trim() !== normalizedId) {
@@ -334,7 +341,9 @@ export class ProjectFileManager {
     const trimmedName = (nextProject.name || "").trim();
     if (trimmedName) {
       const nameConflict = getCachedProjectRecords().some(
-        (r) => r.project.id !== normalizedId && r.project.name.trim().toLowerCase() === trimmedName.toLowerCase()
+        (r) =>
+          r.project.id !== normalizedId &&
+          r.project.name.trim().toLowerCase() === trimmedName.toLowerCase()
       );
       if (nameConflict) {
         throw new Error(`A project with the name "${trimmedName}" already exists`);
@@ -369,9 +378,7 @@ export class ProjectFileManager {
       const isCaseOnlyRename =
         newFolderPath.toLowerCase() === getProjectFolderPath(existing.folderName).toLowerCase();
       if (!isCaseOnlyRename && (await this.vault.adapter.exists(newFolderPath))) {
-        throw new Error(
-          `Cannot rename project folder: "${newFolderPath}" already exists on disk`
-        );
+        throw new Error(`Cannot rename project folder: "${newFolderPath}" already exists on disk`);
       }
 
       // Suppress vault events for both old and new project.md paths
@@ -447,9 +454,13 @@ export class ProjectFileManager {
       if (isInVaultCache(app, filePath)) {
         // Vault-cached file: use processFrontMatter for safe field-level updates
         try {
-          await writeProjectFrontmatter(file, projectForWrite, folderName, { createdMs, lastUsedMs });
+          await writeProjectFrontmatter(file, projectForWrite, folderName, {
+            createdMs,
+            lastUsedMs,
+          });
         } catch (fmError) {
-          if (materialized) await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
+          if (materialized)
+            await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
           throw fmError;
         }
 
@@ -502,7 +513,10 @@ export class ProjectFileManager {
             `[Projects] Rolled back folder rename "${folderName}" → "${existing.folderName}" after write failure`
           );
         } catch (rollbackError) {
-          logError(`[Projects] Failed to rollback folder rename for ${normalizedId}`, rollbackError);
+          logError(
+            `[Projects] Failed to rollback folder rename for ${normalizedId}`,
+            rollbackError
+          );
         }
       }
       throw writeError;
@@ -534,11 +548,11 @@ export class ProjectFileManager {
       addPendingFileWrite(existing.filePath);
 
       // Reason: delete only the managed config file to avoid destroying user files
-      // that may have been placed in the project folder. Use non-force delete so
-      // Obsidian respects the user's trash behavior (system trash / .trash folder).
+      // that may have been placed in the project folder. trashFile respects the
+      // user's trash behavior (system trash / .trash folder / permanent).
       const configFile = this.vault.getAbstractFileByPath(existing.filePath);
       if (configFile instanceof TFile) {
-        await this.vault.delete(configFile);
+        await trashFile(this.app, configFile);
       } else if (await this.vault.adapter.exists(existing.filePath)) {
         // Reason: hidden-folder files are not indexed by vault cache.
         // Fall back to adapter-based deletion for consistent hidden-folder support.
@@ -555,7 +569,7 @@ export class ProjectFileManager {
       try {
         const folder = this.vault.getAbstractFileByPath(folderPath);
         if (folder instanceof TFolder && folder.children.length === 0) {
-          await this.vault.delete(folder);
+          await trashFile(this.app, folder);
         } else if (await this.vault.adapter.exists(folderPath)) {
           const listing = await this.vault.adapter.list(folderPath);
           if (listing.files.length === 0 && listing.folders.length === 0) {
@@ -576,9 +590,7 @@ export class ProjectFileManager {
 
       // Reason: rescan to re-admit any previously-ignored duplicate-id files.
       // The register won't fire (pending guard), so we trigger rescan here.
-      void loadAllProjects().catch((err) =>
-        logError("[Projects] Rescan after delete failed", err)
-      );
+      void loadAllProjects().catch((err) => logError("[Projects] Rescan after delete failed", err));
     } finally {
       removePendingFileWrite(existing.filePath);
     }

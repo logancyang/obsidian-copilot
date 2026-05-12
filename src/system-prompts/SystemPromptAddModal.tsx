@@ -236,7 +236,7 @@ export class SystemPromptAddModal extends Modal {
     const { contentEl, modalEl } = this;
 
     if (Platform.isMobile) {
-      modalEl.style.height = "80%";
+      modalEl.addClass("tw-h-4/5");
     }
 
     this.root = createRoot(contentEl);

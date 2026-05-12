@@ -125,7 +125,7 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !isLoading && isValidUrl) {
-      handleDownload();
+      void handleDownload();
     }
   };
 
@@ -156,10 +156,10 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
           <Button variant="ghost" onClick={handleDownloadAnother}>
             Download Another
           </Button>
-          <Button variant="default" onClick={handleCopyToClipboard}>
+          <Button variant="default" onClick={() => void handleCopyToClipboard()}>
             Copy to Clipboard
           </Button>
-          <Button variant="default" onClick={handleInsertToNote}>
+          <Button variant="default" onClick={() => void handleInsertToNote()}>
             Insert at Cursor
           </Button>
           <Button variant="secondary" onClick={onClose}>
@@ -190,7 +190,11 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
         <Button variant="secondary" onClick={onClose} disabled={isLoading}>
           Cancel
         </Button>
-        <Button variant="default" onClick={handleDownload} disabled={isLoading || !isValidUrl}>
+        <Button
+          variant="default"
+          onClick={() => void handleDownload()}
+          disabled={isLoading || !isValidUrl}
+        >
           {isLoading ? "Downloading..." : "Download Transcript"}
         </Button>
       </div>

@@ -2,6 +2,7 @@ import { AI_SENDER, USER_SENDER } from "@/constants";
 import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 import { MessageRepository } from "./MessageRepository";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock the settings module
 jest.mock("@/settings/model", () => ({
@@ -22,12 +23,12 @@ describe("Message Lifecycle with Context Notes - Complete Example", () => {
   it("should demonstrate complete message lifecycle with context note", () => {
     // Step 1: User types a message and attaches a note
     const userDisplayText = "Please summarize the key points";
-    const attachedNote: TFile = {
+    const attachedNote: TFile = mockTFile({
       path: "meeting-notes-2024-01-15.md",
       name: "meeting-notes-2024-01-15.md",
       basename: "meeting-notes-2024-01-15",
       extension: "md",
-    } as TFile;
+    });
 
     const context: MessageContext = {
       notes: [attachedNote],
@@ -166,12 +167,12 @@ The team appears to be taking a pragmatic approach with a focused MVP scope and 
   it("should handle message edit with context reprocessing", () => {
     // Initial message with context
     const initialText = "List the attendees";
-    const note: TFile = {
+    const note: TFile = mockTFile({
       path: "meeting.md",
       name: "meeting.md",
       basename: "meeting",
       extension: "md",
-    } as TFile;
+    });
 
     const context: MessageContext = {
       notes: [note],
@@ -234,12 +235,12 @@ Attendees: Alice (PM), Bob (Dev), Charlie (QA)
     // User asks initial question with context
     const context: MessageContext = {
       notes: [
-        {
+        mockTFile({
           path: "budget.md",
           name: "budget.md",
           basename: "budget",
           extension: "md",
-        } as TFile,
+        }),
       ],
       urls: [],
       selectedTextContexts: [],

@@ -58,7 +58,7 @@ export class CopilotSettingTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.style.userSelect = "text";
+    containerEl.addClass("tw-select-text");
     const div = containerEl.createDiv("div");
     const sections = createRoot(div);
 

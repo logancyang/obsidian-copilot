@@ -2,6 +2,7 @@ import React from "react";
 import { render } from "@testing-library/react";
 import { ChatMessage } from "@/types/message";
 import { TFile } from "obsidian";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock Tooltip components
 jest.mock("@radix-ui/react-tooltip", () => ({
@@ -45,11 +46,11 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
 
 describe("MessageContext", () => {
   const createMockFile = (path: string, basename: string): TFile =>
-    ({
+    mockTFile({
       path,
       basename,
       // Add other required TFile properties as needed
-    }) as TFile;
+    });
 
   describe("Duplicate Notes Bug Prevention", () => {
     it("should render duplicate notes without React key conflicts", () => {

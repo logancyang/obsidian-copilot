@@ -436,7 +436,7 @@ export class MiyoClient {
     if (getSettings().debug) {
       logInfo(`Miyo request ${options.method} ${url.toString()} succeeded`);
     }
-    return parsed as T;
+    return parsed;
   }
 
   /**

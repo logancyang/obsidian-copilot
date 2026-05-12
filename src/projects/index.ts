@@ -4,4 +4,7 @@ export * from "./projectUtils";
 export * from "./state";
 export { ProjectFileManager } from "./ProjectFileManager";
 export { ProjectRegister } from "./projectRegister";
-export { ensureProjectsMigratedIfNeeded, migrateProjectsFromSettingsToVault } from "./projectMigration";
+export {
+  ensureProjectsMigratedIfNeeded,
+  migrateProjectsFromSettingsToVault,
+} from "./projectMigration";

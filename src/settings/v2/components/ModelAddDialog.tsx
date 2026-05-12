@@ -73,7 +73,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
   // 判断 Provider 是否有必填的额外设置
   const hasRequiredExtraSettings = (provider: string) => {
-    return provider === ChatModelProviders.AZURE_OPENAI && !model.baseUrl;
+    return (provider as ChatModelProviders) === ChatModelProviders.AZURE_OPENAI && !model.baseUrl;
   };
 
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
@@ -119,7 +119,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     // does not consume baseUrl and still reads azureOpenAIApiInstanceName,
     // azureOpenAIApiEmbeddingDeploymentName, and azureOpenAIApiVersion directly.
     // Chat models may skip legacy fields when a full base URL is supplied instead.
-    const isAzure = model.provider === ChatModelProviders.AZURE_OPENAI;
+    const isAzure = (model.provider as ChatModelProviders) === ChatModelProviders.AZURE_OPENAI;
     const azureRequiresLegacyFields = isAzure && (isEmbeddingModel || !model.baseUrl?.trim());
     if (azureRequiresLegacyFields) {
       newErrors.instanceName = !model.azureOpenAIApiInstanceName;
@@ -138,7 +138,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
       }
     }
 
-    if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+    if ((model.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK) {
       newErrors.bedrockRegion = false;
     } else {
       newErrors.bedrockRegion = false;
@@ -324,7 +324,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
 
   const renderProviderSpecificFields = () => {
     const fields = () => {
-      switch (model.provider) {
+      switch (model.provider as ChatModelProviders) {
         case ChatModelProviders.OPENAI:
           return (
             <FormField
@@ -496,7 +496,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   };
 
   const getPlaceholderUrl = () => {
-    if (model.provider !== ChatModelProviders.AZURE_OPENAI) {
+    if ((model.provider as ChatModelProviders) !== ChatModelProviders.AZURE_OPENAI) {
       return providerInfo.host;
     }
 
@@ -535,7 +535,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             error={errors.name}
             errorMessage="Model name is required"
             description={
-              model.provider === ChatModelProviders.AMAZON_BEDROCK && !isEmbeddingModel
+              (model.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK &&
+              !isEmbeddingModel
                 ? "For Bedrock, use cross-region inference profile IDs (global., us., eu., or apac. prefix) for better reliability. Regional IDs without prefixes may fail."
                 : undefined
             }
@@ -543,7 +544,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
             <Input
               type="text"
               placeholder={`Enter model name (e.g. ${
-                model.provider === ChatModelProviders.AMAZON_BEDROCK && !isEmbeddingModel
+                (model.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK &&
+                !isEmbeddingModel
                   ? "global.anthropic.claude-sonnet-4-6-v1:0"
                   : isEmbeddingModel
                     ? "text-embedding-3-small"
@@ -701,8 +703,8 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
                 </div>
               </Label>
             </div>
-            {(model.provider === ChatModelProviders.OPENAI_FORMAT ||
-              model.provider === ChatModelProviders.LM_STUDIO) && (
+            {((model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT ||
+              (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO) && (
               <div className="tw-flex tw-items-center tw-gap-2">
                 <Checkbox
                   id="stream-usage"

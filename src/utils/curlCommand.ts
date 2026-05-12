@@ -217,7 +217,7 @@ async function buildOpenAICompatibleRequestSpec(
   | { ok: false; error: string; warnings: string[] }
 > {
   const warnings: string[] = [];
-  const provider = model.provider?.trim() ?? "";
+  const provider = (model.provider?.trim() ?? "") as ChatModelProviders | EmbeddingModelProviders;
 
   const providerBase = getProviderCurlBaseURL(provider);
   const baseUrlOverride = model.baseUrl?.trim() ?? "";
@@ -731,7 +731,7 @@ export async function buildCurlCommandForModel(
   model: CustomModel
 ): Promise<BuildCurlCommandResult> {
   const warnings: string[] = [];
-  const provider = model.provider?.trim();
+  const provider = model.provider?.trim() as ChatModelProviders | EmbeddingModelProviders;
 
   if (!provider) {
     return { ok: false, error: "Provider is required to build a curl command.", warnings };

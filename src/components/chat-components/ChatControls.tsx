@@ -255,14 +255,14 @@ export function ChatControls({
           <DropdownMenuContent align="start">
             <DropdownMenuItem
               onSelect={() => {
-                handleModeChange(ChainType.LLM_CHAIN);
+                void handleModeChange(ChainType.LLM_CHAIN);
               }}
             >
               chat (free)
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => {
-                handleModeChange(ChainType.VAULT_QA_CHAIN);
+                void handleModeChange(ChainType.VAULT_QA_CHAIN);
               }}
             >
               vault QA (free)
@@ -270,7 +270,7 @@ export function ChatControls({
             {isPlusUser ? (
               <DropdownMenuItem
                 onSelect={() => {
-                  handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
+                  void handleModeChange(ChainType.COPILOT_PLUS_CHAIN);
                 }}
               >
                 <div className="tw-flex tw-items-center tw-gap-1">
@@ -294,7 +294,7 @@ export function ChatControls({
               <DropdownMenuItem
                 className="tw-flex tw-items-center tw-gap-1"
                 onSelect={() => {
-                  handleModeChange(ChainType.PROJECT_CHAIN);
+                  void handleModeChange(ChainType.PROJECT_CHAIN);
                 }}
               >
                 <LibraryBig className="tw-size-4" />
@@ -330,7 +330,12 @@ export function ChatControls({
         {!settings.autosaveChat && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button variant="ghost2" size="icon" title="Save Chat as Note" onClick={onSaveAsNote}>
+              <Button
+                variant="ghost2"
+                size="icon"
+                title="Save Chat as Note"
+                onClick={() => void onSaveAsNote()}
+              >
                 <Download className="tw-size-4" />
               </Button>
             </TooltipTrigger>
@@ -404,14 +409,14 @@ export function ChatControls({
               <>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
-                  onSelect={() => reloadCurrentProject()}
+                  onSelect={() => void reloadCurrentProject()}
                 >
                   <RefreshCw className="tw-size-4" />
                   Reload Current Project
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
-                  onSelect={() => forceRebuildCurrentProjectContext()}
+                  onSelect={() => void forceRebuildCurrentProjectContext()}
                 >
                   <AlertTriangle className="tw-size-4" />
                   Force Rebuild Context
@@ -421,7 +426,7 @@ export function ChatControls({
               <>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
-                  onSelect={() => refreshVaultIndex()}
+                  onSelect={() => void refreshVaultIndex()}
                 >
                   <RefreshCw className="tw-size-4" />
                   Refresh Vault Index

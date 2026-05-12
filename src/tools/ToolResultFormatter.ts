@@ -254,8 +254,8 @@ export class ToolResultFormatter {
   private static parseSearchResults(result: any): any[] {
     // Only support the new structured format or pre-formatted XML flow
     if (typeof result === "object" && result !== null) {
-      if ((result as any).type === "local_search" && Array.isArray((result as any).documents)) {
-        return (result as any).documents;
+      if (result.type === "local_search" && Array.isArray(result.documents)) {
+        return result.documents;
       }
       return [];
     }

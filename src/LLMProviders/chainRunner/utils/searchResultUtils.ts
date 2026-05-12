@@ -95,11 +95,7 @@ export function formatSearchResultsForLLM(searchResults: any[]): string {
       const title = doc.title || "Untitled";
       const path = doc.path || "";
       // Optional stable source id if provided by caller; fallback to order
-      const sourceId =
-        (doc as any).__sourceId ||
-        (doc as any).collection_name ||
-        (doc as any).source_id ||
-        idx + 1;
+      const sourceId = doc.__sourceId || doc.collection_name || doc.source_id || idx + 1;
 
       // Safely handle mtime - check validity before converting
       let modified: string | null = null;
@@ -293,7 +289,7 @@ export function formatSplitSearchResultsForLLM(
   if (filterDocs.length > 0) {
     const filterXml = filterDocs
       .map((doc: any) => {
-        const id = (doc as any).__sourceId || currentId++;
+        const id = doc.__sourceId || currentId++;
         const title = doc.title || "Untitled";
         const path = doc.path || "";
         const matchType = doc.matchType || doc.source || "filter";
@@ -318,7 +314,7 @@ ${doc.content || ""}
   if (searchDocs.length > 0) {
     const searchXml = searchDocs
       .map((doc: any) => {
-        const id = (doc as any).__sourceId || currentId++;
+        const id = doc.__sourceId || currentId++;
         const title = doc.title || "Untitled";
         const path = doc.path || "";
         const modified = toIsoString(doc.mtime);

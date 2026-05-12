@@ -128,7 +128,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
     onTypeaheadSelect(category, data);
 
     // Return focus to the editor after selection
-    setTimeout(() => {
+    window.setTimeout(() => {
       if (lexicalEditorRef?.current) {
         lexicalEditorRef.current.focus();
       }
@@ -139,7 +139,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
    * Handles clicking on a badge to open the file in a new tab (or focus existing tab)
    */
   const handleBadgeClick = (file: TFile) => {
-    openFileInWorkspace(file);
+    void openFileInWorkspace(file);
   };
 
   const uniqueNotes = React.useMemo(() => {

@@ -20,11 +20,7 @@ import { ProjectContextBadgeList } from "@/components/project/ProjectContextBadg
 import { getModelKeyFromModel, useSettingsValue } from "@/settings/model";
 import { checkModelApiKey, err2String, randomUUID } from "@/utils";
 import { Settings } from "lucide-react";
-import {
-  type UrlItem,
-  parseProjectUrls,
-  serializeProjectUrls,
-} from "@/utils/urlTagUtils";
+import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
 import type CopilotPlugin from "@/main";
 import { App, Modal, Notice } from "obsidian";
 import React, { useMemo, useState } from "react";
@@ -90,8 +86,6 @@ function AddProjectModalContent({
     cacheProject: initialProject ?? null,
     contextSource: formData.contextSource,
   });
-
-
 
   const handleEditProjectContext = (projectDraft: ProjectConfig) => {
     const modal = new ContextManageModal(
@@ -211,9 +205,7 @@ function AddProjectModalContent({
     const saveData = { ...formData, name: trimmedName };
 
     const requiredFields = ["name", "projectModelKey"];
-    const missingFields = requiredFields.filter(
-      (field) => !saveData[field as keyof ProjectConfig]
-    );
+    const missingFields = requiredFields.filter((field) => !saveData[field as keyof ProjectConfig]);
 
     if (missingFields.length > 0) {
       setTouched((prev) => ({
@@ -474,8 +466,7 @@ export class AddProjectModal extends Modal {
     const { contentEl, modalEl } = this;
 
     // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea
-    // modalEl.style.minWidth = "min(640px, 90vw)";
-    modalEl.style.maxHeight = "85vh";
+    modalEl.addClass("!tw-max-h-[85vh]");
 
     this.root = createRoot(contentEl);
 

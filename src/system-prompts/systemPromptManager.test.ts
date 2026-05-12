@@ -4,6 +4,7 @@ import { TFile, Vault } from "obsidian";
 import * as systemPromptUtils from "@/system-prompts/systemPromptUtils";
 import * as state from "@/system-prompts/state";
 import * as utils from "@/utils";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({
@@ -71,6 +72,7 @@ describe("SystemPromptManager", () => {
       fileManager: {
         processFrontMatter: jest.fn(),
         renameFile: jest.fn(),
+        trashFile: jest.fn().mockResolvedValue(undefined),
       },
     } as any;
 
@@ -128,7 +130,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("creates a new prompt file", async () => {
-      const mockFile = { path: "SystemPrompts/New Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -140,7 +142,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("updates cache after creation", async () => {
-      const mockFile = { path: "SystemPrompts/New Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -150,7 +152,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("skips cache update when skipStoreUpdate is true", async () => {
-      const mockFile = { path: "SystemPrompts/New Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -180,7 +182,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("manages pending file writes", async () => {
-      const mockFile = { path: "SystemPrompts/New Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/New Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -207,7 +209,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("updates prompt content without renaming", async () => {
-      const mockFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -218,8 +220,8 @@ describe("SystemPromptManager", () => {
     });
 
     it("renames file when title changes", async () => {
-      const oldFile = { path: "SystemPrompts/Old Prompt.md" } as TFile;
-      const newFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const oldFile = mockTFile({ path: "SystemPrompts/Old Prompt.md" });
+      const newFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(oldFile, TFile.prototype);
       Object.setPrototypeOf(newFile, TFile.prototype);
 
@@ -237,7 +239,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("updates cache after modification", async () => {
-      const mockFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -247,8 +249,8 @@ describe("SystemPromptManager", () => {
     });
 
     it("deletes old cache entry when renaming", async () => {
-      const oldFile = { path: "SystemPrompts/Old Prompt.md" } as TFile;
-      const newFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const oldFile = mockTFile({ path: "SystemPrompts/Old Prompt.md" });
+      const newFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(oldFile, TFile.prototype);
       Object.setPrototypeOf(newFile, TFile.prototype);
 
@@ -263,7 +265,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("skips cache update when skipStoreUpdate is true", async () => {
-      const mockFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -273,7 +275,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("manages pending file writes for update", async () => {
-      const mockFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -284,8 +286,8 @@ describe("SystemPromptManager", () => {
     });
 
     it("manages pending file writes for rename", async () => {
-      const oldFile = { path: "SystemPrompts/Old Prompt.md" } as TFile;
-      const newFile = { path: "SystemPrompts/Updated Prompt.md" } as TFile;
+      const oldFile = mockTFile({ path: "SystemPrompts/Old Prompt.md" });
+      const newFile = mockTFile({ path: "SystemPrompts/Updated Prompt.md" });
       Object.setPrototypeOf(oldFile, TFile.prototype);
       Object.setPrototypeOf(newFile, TFile.prototype);
 
@@ -310,17 +312,19 @@ describe("SystemPromptManager", () => {
     });
 
     it("deletes the prompt file", async () => {
-      const mockFile = { path: "SystemPrompts/Test Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Test Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
       await manager.deletePrompt("Test Prompt");
 
-      expect(mockVault.delete).toHaveBeenCalledWith(mockFile);
+      expect(
+        (app.fileManager as unknown as { trashFile: jest.Mock }).trashFile
+      ).toHaveBeenCalledWith(mockFile);
     });
 
     it("removes prompt from cache", async () => {
-      const mockFile = { path: "SystemPrompts/Test Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Test Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -334,12 +338,14 @@ describe("SystemPromptManager", () => {
 
       await manager.deletePrompt("Non-existent Prompt");
 
-      expect(mockVault.delete).not.toHaveBeenCalled();
+      expect(
+        (app.fileManager as unknown as { trashFile: jest.Mock }).trashFile
+      ).not.toHaveBeenCalled();
       expect(state.deleteCachedSystemPrompt).toHaveBeenCalledWith("Non-existent Prompt");
     });
 
     it("manages pending file writes", async () => {
-      const mockFile = { path: "SystemPrompts/Test Prompt.md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Test Prompt.md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -371,7 +377,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("creates a duplicate with (copy) suffix", async () => {
-      const mockFile = { path: "SystemPrompts/Original Prompt (copy).md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Original Prompt (copy).md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -385,7 +391,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("sets new timestamps for duplicated prompt", async () => {
-      const mockFile = { path: "SystemPrompts/Original Prompt (copy).md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Original Prompt (copy).md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -401,7 +407,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("creates the duplicated file", async () => {
-      const mockFile = { path: "SystemPrompts/Original Prompt (copy).md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Original Prompt (copy).md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 
@@ -414,7 +420,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("returns the duplicated prompt object", async () => {
-      const mockFile = { path: "SystemPrompts/Original Prompt (copy).md" } as TFile;
+      const mockFile = mockTFile({ path: "SystemPrompts/Original Prompt (copy).md" });
       Object.setPrototypeOf(mockFile, TFile.prototype);
       (mockVault.getAbstractFileByPath as jest.Mock).mockReturnValue(mockFile);
 

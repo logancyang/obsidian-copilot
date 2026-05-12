@@ -212,7 +212,7 @@ export class MiyoServiceDiscovery {
    * @returns Node require function or null when unavailable.
    */
   private getNodeRequire(): NodeRequire | null {
-    const maybeRequire = (globalThis as { require?: NodeRequire } | undefined)?.require;
+    const maybeRequire = (window as unknown as { require?: NodeRequire } | undefined)?.require;
     if (typeof maybeRequire === "function") {
       return maybeRequire;
     }

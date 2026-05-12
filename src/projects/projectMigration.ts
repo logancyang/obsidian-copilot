@@ -1,14 +1,8 @@
 import { ProjectConfig } from "@/aiParams";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { logError, logInfo, logWarn } from "@/logger";
-import {
-  COPILOT_PROJECT_ID,
-  PROJECTS_UNSUPPORTED_FOLDER_NAME,
-} from "@/projects/constants";
-import {
-  deriveProjectFolderName,
-  sanitizeVaultPathSegment,
-} from "@/projects/projectPaths";
+import { COPILOT_PROJECT_ID, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
+import { deriveProjectFolderName, sanitizeVaultPathSegment } from "@/projects/projectPaths";
 import {
   ensureProjectFrontmatter,
   getProjectConfigFilePath,
@@ -22,7 +16,8 @@ import {
 import { addPendingFileWrite, removePendingFileWrite } from "@/projects/state";
 import { getSettings, updateSetting } from "@/settings/model";
 import { ensureFolderExists, stripFrontmatter } from "@/utils";
-import { Notice, parseYaml, TFile, TFolder, Vault } from "obsidian";
+import { App, Notice, parseYaml, TFile, TFolder, Vault } from "obsidian";
+import { trashFile } from "@/utils/vaultAdapterUtils";
 
 /**
  * Normalize line endings for content comparison (avoid CRLF/LF mismatches).
@@ -112,11 +107,12 @@ async function saveFailedProjectToUnsupported(
  * Best-effort rollback: delete a file and its parent folder if empty.
  * Logs errors but never throws.
  */
-async function rollbackCreatedFile(vault: Vault, filePath: string, folderPath: string): Promise<void> {
+async function rollbackCreatedFile(app: App, filePath: string, folderPath: string): Promise<void> {
+  const vault = app.vault;
   try {
     const file = vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
-      await vault.delete(file, true);
+      await trashFile(app, file);
     } else if (await vault.adapter.exists(filePath)) {
       // Reason: hidden-folder files are not indexed by vault cache.
       // Fall back to adapter-based deletion for consistent hidden-folder support.
@@ -124,7 +120,7 @@ async function rollbackCreatedFile(vault: Vault, filePath: string, folderPath: s
     }
     const folder = vault.getAbstractFileByPath(folderPath);
     if (folder instanceof TFolder && folder.children.length === 0) {
-      await vault.delete(folder, true);
+      await trashFile(app, folder);
     } else if (await vault.adapter.exists(folderPath)) {
       const listing = await vault.adapter.list(folderPath);
       if (listing.files.length === 0 && listing.folders.length === 0) {
@@ -145,10 +141,11 @@ async function rollbackCreatedFile(vault: Vault, filePath: string, folderPath: s
  * @returns The created TFile (for hidden-folder compatibility, avoids re-fetching via vault cache)
  */
 async function writeProjectToVaultFile(
-  vault: Vault,
+  app: App,
   project: ProjectConfig,
   folderName: string
 ): Promise<TFile> {
+  const vault = app.vault;
   const projectsFolder = getProjectsFolder();
   await ensureFolderExists(projectsFolder);
   await ensureFolderExists(`${projectsFolder}/${folderName}`);
@@ -174,7 +171,7 @@ async function writeProjectToVaultFile(
       await writeProjectFrontmatter(file, project, folderName, { createdMs, lastUsedMs });
     } catch (fmError) {
       // Reason: rollback the created file to avoid leaving a "poisoned" file without frontmatter
-      await rollbackCreatedFile(vault, filePath, folderPath);
+      await rollbackCreatedFile(app, filePath, folderPath);
       throw fmError;
     }
 
@@ -240,9 +237,10 @@ function getMigrationFolderName(projectId: string, projectName?: string): string
  * - retry-safe: already-migrated projects (target file exists with matching id) are skipped
  * - clear-on-success: projectList entries are removed only for successfully migrated projects
  *
- * @param vault - Vault instance
+ * @param app - Obsidian App instance
  */
-export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<void> {
+export async function migrateProjectsFromSettingsToVault(app: App): Promise<void> {
+  const vault = app.vault;
   const settings = getSettings();
   const legacyProjects = settings.projectList || [];
 
@@ -375,9 +373,7 @@ export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<
           continue;
         }
 
-        logWarn(
-          `[Projects] Migration verify failed on existing file for id=${id} at ${filePath}`
-        );
+        logWarn(`[Projects] Migration verify failed on existing file for id=${id} at ${filePath}`);
         await saveFailedProjectToUnsupported(
           vault,
           project,
@@ -399,7 +395,7 @@ export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<
     }
 
     try {
-      const file = await writeProjectToVaultFile(vault, project, folderName);
+      const file = await writeProjectToVaultFile(app, project, folderName);
 
       const verified = await verifyMigratedContent(vault, file, project.systemPrompt || "");
       if (!verified) {
@@ -407,7 +403,7 @@ export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<
         // Without this, the existing-file branch on next restart re-detects, re-verifies,
         // and fails again indefinitely.
         const folderPath = `${getProjectsFolder()}/${folderName}`;
-        await rollbackCreatedFile(vault, file.path, folderPath);
+        await rollbackCreatedFile(app, file.path, folderPath);
         await saveFailedProjectToUnsupported(vault, project, "content verification mismatch");
       } else {
         migratedEntries.push(project);
@@ -453,7 +449,9 @@ export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<
   };
 
   if (failedCount === 0) {
-    logInfo(`[Projects] Migration succeeded: all ${successCount} project(s) migrated to vault files`);
+    logInfo(
+      `[Projects] Migration succeeded: all ${successCount} project(s) migrated to vault files`
+    );
     new ConfirmModal(
       app,
       () => revealFolderInExplorer(projectsFolder),
@@ -584,10 +582,7 @@ async function migrateProjectFolderNames(vault: Vault): Promise<void> {
           `for project "${name}" (id=${record.project.id})`
       );
     } catch (error) {
-      logError(
-        `[Projects] Naming migration failed for project id="${record.project.id}"`,
-        error
-      );
+      logError(`[Projects] Naming migration failed for project id="${record.project.id}"`, error);
     } finally {
       removePendingFileWrite(oldFilePath);
       removePendingFileWrite(newFilePath);
@@ -599,14 +594,14 @@ async function migrateProjectFolderNames(vault: Vault): Promise<void> {
   }
 }
 
-export async function ensureProjectsMigratedIfNeeded(vault: Vault): Promise<void> {
+export async function ensureProjectsMigratedIfNeeded(app: App): Promise<void> {
   const legacyProjects = getSettings().projectList || [];
   if (legacyProjects.length > 0) {
-    await migrateProjectsFromSettingsToVault(vault);
+    await migrateProjectsFromSettingsToVault(app);
   }
 
   // Reason: run naming migration after data.json migration to rename id-based folders
   // to name-based folders. This also handles pre-existing projects from before the
   // naming convention change. Runs before loadAllProjects() in initialization flow.
-  await migrateProjectFolderNames(vault);
+  await migrateProjectFolderNames(app.vault);
 }

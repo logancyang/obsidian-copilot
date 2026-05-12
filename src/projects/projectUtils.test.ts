@@ -1,5 +1,6 @@
 import { TFile } from "obsidian";
 import { parseProjectConfigFile, sanitizeVaultPathSegment } from "@/projects/projectUtils";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock deep dependencies to avoid transitive import chains
 jest.mock("@/settings/model", () => ({
@@ -21,7 +22,7 @@ jest.mock("@/logger", () => ({
 
 // Helper: create a minimal TFile mock for a project config path
 function makeMockFile(path: string): TFile {
-  return {
+  return mockTFile({
     path,
     name: "project.md",
     basename: "project",
@@ -29,7 +30,7 @@ function makeMockFile(path: string): TFile {
     stat: { ctime: 1000, mtime: 1000, size: 0 },
     vault: {} as never,
     parent: null,
-  } as unknown as TFile;
+  });
 }
 
 // Helper: set up the global `app` mock used by parseProjectConfigFile
@@ -122,12 +123,7 @@ describe("parseProjectConfigFile", () => {
   });
 
   it("returns null when copilot-project-id is missing from frontmatter", async () => {
-    const rawContent = [
-      "---",
-      "copilot-project-name: My Project",
-      "---",
-      "Body text",
-    ].join("\n");
+    const rawContent = ["---", "copilot-project-name: My Project", "---", "Body text"].join("\n");
 
     setupAppMock(rawContent, {
       "copilot-project-name": "My Project",

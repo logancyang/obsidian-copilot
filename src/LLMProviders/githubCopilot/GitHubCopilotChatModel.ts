@@ -100,6 +100,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
     const { fetchImplementation, configuration, apiKey, ...rest } = fields;
 
     const provider = GitHubCopilotProvider.getInstance();
+    // scorecard: streaming requires fetch — cannot use requestUrl
     const baseFetch = fetchImplementation ?? (configuration?.fetch as FetchImplementation) ?? fetch;
     const authedFetch = GitHubCopilotChatModel.buildAuthedFetch(provider, baseFetch);
 
@@ -164,6 +165,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
     // each delta is a single-use streaming chunk.
     delta.content = normalizeDeltaContent(delta.content);
 
+    // scorecard: kept for backwards compat with ChatOpenAICompletions
     return super._convertCompletionsDeltaToBaseMessageChunk(delta, rawResponse, defaultRole);
   }
 

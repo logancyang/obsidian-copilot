@@ -4,11 +4,7 @@ import { FailedItem, getCurrentProject, useProjectContextLoad } from "@/aiParams
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
   AlertCircle,
   ChevronDown,
@@ -67,8 +63,7 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
 
   // Reason: determine whether the detail section has any content to show.
   // Without this, the "View Details" trigger would expand to empty space.
-  const hasDetailContent =
-    (processingData && processingData.items.length > 0) || hasMdItems;
+  const hasDetailContent = (processingData && processingData.items.length > 0) || hasMdItems;
 
   /** Retry a failed conversion item via processingData.failedItemMap. */
   const handleRetry = (itemId: string) => {
@@ -153,8 +148,7 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
               <span className="tw-text-xs tw-text-muted">
                 (Success:{" "}
                 <span className="tw-font-medium tw-text-success">{successFiles.length}</span>,
-                Failed:{" "}
-                <span className="tw-font-medium tw-text-error">{failedFiles.length}</span>)
+                Failed: <span className="tw-font-medium tw-text-error">{failedFiles.length}</span>)
               </span>
             </div>
             <span className="tw-font-medium">

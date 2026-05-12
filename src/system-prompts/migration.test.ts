@@ -4,6 +4,7 @@ import * as settingsModel from "@/settings/model";
 import * as systemPromptUtils from "@/system-prompts/systemPromptUtils";
 import * as logger from "@/logger";
 import * as utils from "@/utils";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({
@@ -112,9 +113,11 @@ describe("migrateSystemPromptsFromSettings", () => {
     });
     (mockVault.getAbstractFileByPath as jest.Mock)
       .mockReturnValueOnce(null) // File does not exist
-      .mockReturnValueOnce({
-        path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile); // File created
+      .mockReturnValueOnce(
+        mockTFile({
+          path: "SystemPrompts/Migrated Custom System Prompt.md",
+        })
+      ); // File created
 
     await migrateSystemPromptsFromSettings(mockVault);
 
@@ -127,9 +130,11 @@ describe("migrateSystemPromptsFromSettings", () => {
     });
     (mockVault.getAbstractFileByPath as jest.Mock)
       .mockReturnValueOnce(null) // File does not exist
-      .mockReturnValueOnce({
-        path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile); // File created
+      .mockReturnValueOnce(
+        mockTFile({
+          path: "SystemPrompts/Migrated Custom System Prompt.md",
+        })
+      ); // File created
 
     await migrateSystemPromptsFromSettings(mockVault);
 
@@ -144,9 +149,11 @@ describe("migrateSystemPromptsFromSettings", () => {
     });
     (mockVault.getAbstractFileByPath as jest.Mock)
       .mockReturnValueOnce(null) // File does not exist
-      .mockReturnValueOnce({
-        path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile); // File created
+      .mockReturnValueOnce(
+        mockTFile({
+          path: "SystemPrompts/Migrated Custom System Prompt.md",
+        })
+      ); // File created
 
     await migrateSystemPromptsFromSettings(mockVault);
 
@@ -164,9 +171,11 @@ describe("migrateSystemPromptsFromSettings", () => {
     (mockVault.getAbstractFileByPath as jest.Mock)
       .mockReturnValueOnce(null)
       .mockReturnValueOnce(null)
-      .mockReturnValueOnce({
-        path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile);
+      .mockReturnValueOnce(
+        mockTFile({
+          path: "SystemPrompts/Migrated Custom System Prompt.md",
+        })
+      );
 
     await migrateSystemPromptsFromSettings(mockVault);
 
@@ -179,9 +188,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("adds frontmatter to migrated file", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
+    });
 
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       userSystemPrompt: legacyPrompt,
@@ -205,9 +214,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("clears legacy userSystemPrompt from settings after migration", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
+    });
 
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       userSystemPrompt: legacyPrompt,
@@ -225,9 +234,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("sets migrated prompt as default", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
+    });
 
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       userSystemPrompt: legacyPrompt,
@@ -248,9 +257,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("reloads all prompts after migration", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
+    });
 
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       userSystemPrompt: legacyPrompt,
@@ -268,12 +277,12 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("generates unique name when default file already exists", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const existingFile = {
+    const existingFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
-    const newFile = {
+    });
+    const newFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt 2.md",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(newFile, TFile.prototype);
 
@@ -307,9 +316,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("generates incrementing unique names when multiple files exist", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const newFile = {
+    const newFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt 3.md",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(newFile, TFile.prototype);
 
@@ -334,9 +343,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("logs clearing message after migration", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
+    });
 
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       userSystemPrompt: legacyPrompt,
@@ -388,9 +397,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
   it("sets correct timestamps for migrated prompt", async () => {
     const legacyPrompt = "This is a legacy system prompt.";
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Migrated Custom System Prompt.md",
-    } as TFile;
+    });
 
     (settingsModel.getSettings as jest.Mock).mockReturnValue({
       userSystemPrompt: legacyPrompt,
@@ -425,9 +434,9 @@ describe("migrateSystemPromptsFromSettings", () => {
   describe("write-then-verify safety with unsupported folder", () => {
     it("clears userSystemPrompt and saves to unsupported when verification fails", async () => {
       const legacyPrompt = "This is a legacy system prompt.";
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile;
+      });
 
       Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -478,9 +487,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     it("saves to unsupported and clears userSystemPrompt when vault.read throws", async () => {
       const legacyPrompt = "This is a legacy system prompt.";
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile;
+      });
 
       Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -536,9 +545,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     it("clears userSystemPrompt and sets default on successful verification", async () => {
       const legacyPrompt = "This is a legacy system prompt.";
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile;
+      });
 
       Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -563,9 +572,9 @@ describe("migrateSystemPromptsFromSettings", () => {
 
     it("preserves whitespace and verifies exact content match", async () => {
       const legacyPrompt = "  This is a legacy system prompt.  \n\n";
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile;
+      });
 
       Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -587,9 +596,9 @@ describe("migrateSystemPromptsFromSettings", () => {
     it("normalizes CRLF/LF differences in verification", async () => {
       // Legacy prompt uses CRLF line endings (Windows style)
       const legacyPrompt = "Line 1\r\nLine 2\r\nLine 3";
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile;
+      });
 
       Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -614,9 +623,9 @@ describe("migrateSystemPromptsFromSettings", () => {
     it("handles double newline after frontmatter (Obsidian format)", async () => {
       // Obsidian's processFrontMatter may add an extra blank line after frontmatter
       const legacyPrompt = "This is a legacy system prompt.";
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/Migrated Custom System Prompt.md",
-      } as TFile;
+      });
 
       Object.setPrototypeOf(mockFile, TFile.prototype);
 

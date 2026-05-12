@@ -44,7 +44,8 @@ function clamp(value: number, min: number, max: number): number {
  * A draggable hook optimized for performance:
  * - Optionally writes `left/top` directly to the DOM (no React re-render on mousemove)
  * - Uses `requestAnimationFrame` to throttle updates
- * - Applies `preventDefault()` + `document.body.style.userSelect = "none"` during drag
+ * - Applies `preventDefault()` and disables body selection / sets grabbing cursor
+ *   during drag (the class disables text selection and sets a grabbing cursor)
  *
  * API is kept compatible:
  * `position, setPosition, isDragging, dragRef, handleMouseDown`
@@ -74,10 +75,11 @@ export function useDraggable(options: UseDraggableOptions = {}) {
   const cleanupDragRef = useRef<((commit: boolean) => void) | null>(null);
   const isMountedRef = useRef(true);
 
-  const previousBodyStyleRef = useRef<{ userSelect: string; cursor: string } | null>(null);
-
   /**
-   * Writes position to the drag element via inline styles.
+   * Writes position to the drag element via CSS custom properties.
+   * The consumer must include `!tw-left-[var(--copilot-drag-x,0px)]` and
+   * `!tw-top-[var(--copilot-drag-y,0px)]` (or equivalent) on the element so
+   * these variables map to actual `left`/`top` values.
    */
   const writePositionToDom = useCallback(
     (next: Position): void => {
@@ -86,11 +88,8 @@ export function useDraggable(options: UseDraggableOptions = {}) {
       const el = dragRef.current;
       if (!el) return;
 
-      const left = `${next.x}px`;
-      const top = `${next.y}px`;
-
-      if (el.style.left !== left) el.style.left = left;
-      if (el.style.top !== top) el.style.top = top;
+      el.style.setProperty("--copilot-drag-x", `${next.x}px`);
+      el.style.setProperty("--copilot-drag-y", `${next.y}px`);
     },
     [dragRef, writeToDom]
   );
@@ -154,6 +153,14 @@ export function useDraggable(options: UseDraggableOptions = {}) {
   }, [applyPosition, dragRef]);
 
   /**
+   * Initial mount: write the starting position to CSS variables so the element
+   * paints at the correct location on first render (before any drag occurs).
+   */
+  useLayoutEffect(() => {
+    writePositionToDom(positionRef.current);
+  }, [writePositionToDom]);
+
+  /**
    * Compatible setter: updates state + ref, and also writes to DOM immediately.
    * (No throttling here; `setPosition` is expected to be called infrequently.)
    */
@@ -192,16 +199,11 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         y: e.clientY - current.y,
       };
 
-      const ownerDocument = dragRef.current?.ownerDocument ?? document;
+      const ownerDocument = dragRef.current?.ownerDocument ?? activeDocument;
       const ownerWindow = ownerDocument.defaultView ?? window;
       const body = ownerDocument.body;
-      previousBodyStyleRef.current = {
-        userSelect: body.style.userSelect,
-        cursor: body.style.cursor,
-      };
 
-      body.style.userSelect = "none";
-      body.style.cursor = "grabbing";
+      body.classList.add("tw-select-none", "tw-cursor-grabbing");
 
       /**
        * Mouse move handler: updates pending position and schedules RAF apply.
@@ -233,15 +235,7 @@ export function useDraggable(options: UseDraggableOptions = {}) {
 
         const finalPosition = pending ? applyPosition(pending) : positionRef.current;
 
-        const previous = previousBodyStyleRef.current;
-        if (previous) {
-          body.style.userSelect = previous.userSelect;
-          body.style.cursor = previous.cursor;
-          previousBodyStyleRef.current = null;
-        } else {
-          body.style.userSelect = "";
-          body.style.cursor = "";
-        }
+        body.classList.remove("tw-select-none", "tw-cursor-grabbing");
 
         cleanupDragRef.current = null;
 

@@ -37,7 +37,7 @@ export function useRafThrottledCallback<T extends (...args: unknown[]) => void>(
 
       if (frameRef.current !== null) return;
 
-      frameRef.current = requestAnimationFrame(() => {
+      frameRef.current = window.requestAnimationFrame(() => {
         frameRef.current = null;
         const latestArgs = lastArgsRef.current;
         if (latestArgs) {

@@ -36,18 +36,12 @@ export function PastePlugin({ enableURLPills = false, onImagePaste }: PastePlugi
             if (imageItems.length > 0) {
               event.preventDefault();
 
-              // Handle image processing asynchronously
-              Promise.all(
-                imageItems.map((item) => {
-                  const file = item.getAsFile();
-                  return file;
-                })
-              ).then((files) => {
-                const validFiles = files.filter((file) => file !== null);
-                if (validFiles.length > 0) {
-                  onImagePaste(validFiles);
-                }
-              });
+              // getAsFile returns synchronously; no Promise needed.
+              const files = imageItems.map((item) => item.getAsFile());
+              const validFiles = files.filter((file): file is File => file !== null);
+              if (validFiles.length > 0) {
+                onImagePaste(validFiles);
+              }
 
               return true;
             }

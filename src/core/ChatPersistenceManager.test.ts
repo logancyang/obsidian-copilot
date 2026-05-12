@@ -1,6 +1,7 @@
 import { ChatMessage } from "@/types/message";
 import { Notice, TFile } from "obsidian";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 const USER_SENDER = "user";
 const AI_SENDER = "ai";
@@ -377,9 +378,9 @@ Nature's quiet song`);
       } as any;
 
       persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "test-folder/Summarize_weather_data@20240923_221800.md",
-      } as unknown as TFile;
+      });
       mockApp.vault.create.mockResolvedValue(mockFile);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(mockFile);
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
@@ -401,6 +402,12 @@ Nature's quiet song`);
       expect(savedContent).not.toContain("topic:");
       await Promise.resolve();
       await Promise.resolve();
+
+      // Topic generation is fire-and-forget via `void (async () => …)()`, so
+      // we need additional microtask ticks to flush the chain of awaits inside.
+      for (let i = 0; i < 10; i++) {
+        await Promise.resolve();
+      }
 
       expect(invoke).toHaveBeenCalled();
       expect(mockApp.fileManager.processFrontMatter).toHaveBeenCalledWith(
@@ -677,10 +684,12 @@ Nature's quiet song`);
           return Promise.reject(error);
         } else {
           // Second call: succeed with fallback filename
-          return Promise.resolve({
-            path,
-            basename: path.split("/").pop(),
-          } as TFile);
+          return Promise.resolve(
+            mockTFile({
+              path,
+              basename: path.split("/").pop(),
+            })
+          );
         }
       });
 
@@ -742,10 +751,12 @@ Nature's quiet song`);
           const error = new Error("ENAMETOOLONG: name too long");
           return Promise.reject(error);
         } else {
-          return Promise.resolve({
-            path,
-            basename: path.split("/").pop(),
-          } as TFile);
+          return Promise.resolve(
+            mockTFile({
+              path,
+              basename: path.split("/").pop(),
+            })
+          );
         }
       });
 
@@ -835,9 +846,9 @@ Nature's quiet song`);
         },
       ];
 
-      const existingFile = {
+      const existingFile = mockTFile({
         path: "test-folder/Hello@20240923_221800.md",
-      } as unknown as TFile;
+      });
 
       const getFilesSpy = jest
         .spyOn(persistenceManager, "getChatHistoryFiles")
@@ -1018,7 +1029,7 @@ tags:
 **ai**: Hi there!
 [Timestamp: 2024/09/23 22:18:01]`;
 
-      const mockFile = { path: "test.md" } as TFile;
+      const mockFile = mockTFile({ path: "test.md" });
       mockApp.vault.read.mockResolvedValue(fileContent);
 
       const result = await persistenceManager.loadChat(mockFile);
@@ -1191,16 +1202,16 @@ ${formattedContent}`;
 
     it("should resolve legacy basename-only context (backward compatibility)", async () => {
       // Create mock TFile for the note
-      const mockTFile = {
+      const file = mockTFile({
         basename: "typescript-guide.md",
         path: "docs/typescript-guide.md",
         extension: "md",
         name: "typescript-guide.md",
-      } as TFile;
+      });
 
       // Mock vault to return the file for basename resolution (legacy format)
       mockApp.vault.getAbstractFileByPath.mockReturnValue(null); // Path lookup fails
-      mockApp.vault.getMarkdownFiles.mockReturnValue([mockTFile]); // Basename lookup succeeds
+      mockApp.vault.getMarkdownFiles.mockReturnValue([file]); // Basename lookup succeeds
 
       // Old format: just basename, no path
       const content = `---
@@ -1228,19 +1239,19 @@ tags:
 
     it("should handle ambiguous basename resolution gracefully", async () => {
       // Create two mock TFiles with the same basename
-      const mockTFile1 = {
+      const mockTFile1 = mockTFile({
         basename: "typescript-guide.md",
         path: "docs/typescript-guide.md",
         extension: "md",
         name: "typescript-guide.md",
-      } as TFile;
+      });
 
-      const mockTFile2 = {
+      const mockTFile2 = mockTFile({
         basename: "typescript-guide.md",
         path: "archive/typescript-guide.md",
         extension: "md",
         name: "typescript-guide.md",
-      } as TFile;
+      });
 
       // Mock vault to return multiple files with same basename
       mockApp.vault.getAbstractFileByPath.mockReturnValue(null);
@@ -1553,9 +1564,9 @@ tags:
         },
       ];
 
-      const existingFile = {
+      const existingFile = mockTFile({
         path: "test-folder/Hello@20240923_221800.md",
-      } as unknown as TFile;
+      });
 
       const getFilesSpy = jest
         .spyOn(persistenceManager, "getChatHistoryFiles")
@@ -1599,9 +1610,11 @@ tags:
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
       mockApp.vault.getAbstractFileByPath.mockReturnValue(true);
-      mockApp.vault.create.mockResolvedValue({
-        path: "test-folder/New_chat@20240923_221800.md",
-      } as TFile);
+      mockApp.vault.create.mockResolvedValue(
+        mockTFile({
+          path: "test-folder/New_chat@20240923_221800.md",
+        })
+      );
 
       await persistenceManager.saveChat("gpt-4");
 

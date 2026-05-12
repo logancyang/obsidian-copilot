@@ -74,7 +74,7 @@ export default class CopilotView extends ItemView {
     // before we disconnect and rebind.
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
-        requestAnimationFrame(() => this.setupDrawerHideObserver());
+        window.requestAnimationFrame(() => this.setupDrawerHideObserver());
       })
     );
   }
@@ -94,7 +94,7 @@ export default class CopilotView extends ItemView {
     this.keyboardObserver?.disconnect();
 
     const syncKeyboardClass = () => {
-      const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+      const drawer = this.containerEl.closest<HTMLElement>(".workspace-drawer");
 
       // Reason: If the view moved out of its previous drawer, clear the class on the old one
       // so drawer chrome (header/tab options) is restored.
@@ -109,13 +109,13 @@ export default class CopilotView extends ItemView {
       // querying by data-type which is more brittle across Obsidian versions.
       const isCopilotActive = !!this.containerEl.closest(".workspace-drawer-active-tab-content");
       const kbHeight = parseFloat(
-        document.documentElement.style.getPropertyValue("--keyboard-height") || "0"
+        activeDocument.documentElement.style.getPropertyValue("--keyboard-height") || "0"
       );
       drawer.classList.toggle("copilot-keyboard-open", isCopilotActive && kbHeight > 0);
     };
 
     this.keyboardObserver = new MutationObserver(syncKeyboardClass);
-    this.keyboardObserver.observe(document.documentElement, {
+    this.keyboardObserver.observe(activeDocument.documentElement, {
       attributes: true,
       attributeFilter: ["style"],
     });
@@ -138,7 +138,7 @@ export default class CopilotView extends ItemView {
 
     this.drawerHideObserver?.disconnect();
 
-    const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+    const drawer = this.containerEl.closest<HTMLElement>(".workspace-drawer");
     if (!drawer) return;
 
     let wasHidden = drawer.classList.contains("is-hidden");

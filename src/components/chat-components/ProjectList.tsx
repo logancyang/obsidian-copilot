@@ -141,7 +141,9 @@ function ProjectItem({
                   if (fileInCache) {
                     app.workspace.openLinkText(record.filePath, "", true);
                   } else {
-                    new Notice("Project file is in a hidden folder and cannot be opened from the file explorer.");
+                    new Notice(
+                      "Project file is in a hidden folder and cannot be opened from the file explorer."
+                    );
                   }
                 }
               }}
@@ -300,7 +302,7 @@ export const ProjectList = memo(
     };
 
     const handleDeleteProject = async (project: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(app.vault);
+      const manager = ProjectFileManager.getInstance(app);
       try {
         await manager.deleteProject(project.id);
         // Reason: only clear UI selection — don't call setCurrentProject(null) here
@@ -345,7 +347,7 @@ export const ProjectList = memo(
       showChatUI(true);
       setCurrentProject(p);
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         chatInput.focusInput();
       }, 0);
     };

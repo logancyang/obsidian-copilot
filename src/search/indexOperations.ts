@@ -50,7 +50,7 @@ export class IndexOperations {
     this.chunkManager = getSharedChunkManager(app);
 
     // Subscribe to settings changes
-    subscribeToSettingsChange(async () => {
+    subscribeToSettingsChange(() => {
       this.refreshRuntimeIndexingConfig();
     });
   }
@@ -187,7 +187,9 @@ export class IndexOperations {
 
               // Skip documents with invalid embeddings
               if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
-                logError(`Invalid embedding for document ${chunk.fileInfo.path}: ${embedding}`);
+                logError(
+                  `Invalid embedding for document ${chunk.fileInfo.path}: ${JSON.stringify(embedding)}`
+                );
                 this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
                 continue;
               }
@@ -276,7 +278,7 @@ export class IndexOperations {
       this.finalizeIndexing(errors);
 
       // Run save and integrity check with setTimeout to ensure it's non-blocking
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.indexBackend
           .save()
           .then(() => {
@@ -459,7 +461,7 @@ export class IndexOperations {
 
     if (this.state.isIndexingPaused) {
       while (this.state.isIndexingPaused && !this.state.isIndexingCancelled) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
         // Re-read atom state each iteration
         const current = getIndexingProgressState();
         this.state.isIndexingPaused = current.isPaused;
@@ -472,7 +474,7 @@ export class IndexOperations {
         const files = await this.getFilesToIndex();
         if (files.length === 0) {
           logInfo("No files to index after filter change, stopping indexing");
-          this.cancelIndexing();
+          await this.cancelIndexing();
           return;
         }
         // Keep progress denominator consistent after resume:
@@ -653,6 +655,6 @@ export class IndexOperations {
     });
 
     // Add a small delay to ensure all state updates are processed
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
   }
 }

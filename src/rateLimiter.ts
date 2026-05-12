@@ -20,7 +20,7 @@ export class RateLimiter {
     const timeToWait = Math.max(0, 60000 / this.requestsPerMin - timeSinceLastRequest);
 
     if (timeToWait > 0) {
-      await new Promise((resolve) => setTimeout(resolve, timeToWait));
+      await new Promise((resolve) => window.setTimeout(resolve, timeToWait));
     }
 
     this.lastRequestTime = Date.now();

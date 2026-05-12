@@ -4,10 +4,11 @@ import {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
+  LexicalEditor,
   LexicalNode,
   NodeKey,
 } from "lexical";
-import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
+import { BasePillNode, getEditorDocument, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
 import { PillBadge } from "./PillBadge";
 
@@ -93,8 +94,8 @@ export class FolderPillNode extends BasePillNode {
   /**
    * Override to export DOM with curly braces
    */
-  exportDOM(): DOMExportOutput {
-    const element = document.createElement("span");
+  exportDOM(editor: LexicalEditor): DOMExportOutput {
+    const element = getEditorDocument(editor).createElement("span");
     element.setAttribute(this.getDataAttribute(), "");
     element.setAttribute("data-pill-value", this.__value);
     element.textContent = `{${this.getFolderPath()}}`;

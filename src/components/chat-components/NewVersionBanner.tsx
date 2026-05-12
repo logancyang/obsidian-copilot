@@ -25,7 +25,7 @@ export function NewVersionBanner({ currentVersion }: NewVersionBannerProps) {
     if (latestVersion) {
       setIsVisible(false);
       // Wait for animation to complete before updating setting
-      setTimeout(() => {
+      window.setTimeout(() => {
         updateSetting("lastDismissedVersion", latestVersion);
       }, 300);
     }

@@ -44,28 +44,34 @@ export class DBOperations {
 
   constructor(private app: App) {
     // Subscribe to settings changes
-    subscribeToSettingsChange(async () => {
-      const settings = getSettings();
+    subscribeToSettingsChange(() => {
+      void (async () => {
+        try {
+          const settings = getSettings();
 
-      // Handle mobile index loading setting change
-      if (Platform.isMobile && settings.disableIndexOnMobile) {
-        this.isIndexLoaded = false;
-        this.oramaDb = undefined;
-      } else if (Platform.isMobile && !settings.disableIndexOnMobile && !this.oramaDb) {
-        // Re-initialize DB if mobile setting is enabled
-        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
-      }
+          // Handle mobile index loading setting change
+          if (Platform.isMobile && settings.disableIndexOnMobile) {
+            this.isIndexLoaded = false;
+            this.oramaDb = undefined;
+          } else if (Platform.isMobile && !settings.disableIndexOnMobile && !this.oramaDb) {
+            // Re-initialize DB if mobile setting is enabled
+            await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
+          }
 
-      // Handle index sync setting change
-      const newPath = await this.getDbPath();
+          // Handle index sync setting change
+          const newPath = await this.getDbPath();
 
-      if (this.dbPath && newPath !== this.dbPath) {
-        logInfo("Path change detected, reinitializing database...");
-        this.dbPath = newPath;
-        await this.initializeChunkedStorage();
-        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
-        logInfo("Database reinitialized with new path:", newPath);
-      }
+          if (this.dbPath && newPath !== this.dbPath) {
+            logInfo("Path change detected, reinitializing database...");
+            this.dbPath = newPath;
+            await this.initializeChunkedStorage();
+            await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
+            logInfo("Database reinitialized with new path:", newPath);
+          }
+        } catch (error) {
+          logError("DBOperations settings change handler failed", error);
+        }
+      })();
     });
   }
 
@@ -161,7 +167,7 @@ export class DBOperations {
       await this.chunkedStorage?.clearStorage();
 
       // Wait a moment to ensure file system operations complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
 
       // Create new database instance
       this.oramaDb = await this.createNewDb(embeddingInstance);
@@ -220,7 +226,7 @@ export class DBOperations {
 
   public onunload() {
     if (this.hasUnsavedChanges) {
-      this.saveDB();
+      void this.saveDB().catch((err) => logError("saveDB on unload failed", err));
     }
   }
 
@@ -275,7 +281,7 @@ export class DBOperations {
 
     const schema = this.createDynamicSchema(vectorLength);
 
-    const db = await create({
+    const db = create({
       schema,
       components: {
         tokenizer: {
@@ -496,8 +502,8 @@ export class DBOperations {
         oramaDocSample !== null &&
         "document" in oramaDocSample
       ) {
-        const document = oramaDocSample.document as { embeddingModel?: string };
-        prevEmbeddingModel = document.embeddingModel;
+        const doc = oramaDocSample.document as { embeddingModel?: string };
+        prevEmbeddingModel = doc.embeddingModel;
       }
     }
 
@@ -786,7 +792,7 @@ export class DBOperations {
         }
       }
 
-      setTimeout(resolve, 0);
+      window.setTimeout(resolve, 0);
     });
   }
 }

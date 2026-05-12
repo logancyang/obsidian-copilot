@@ -2,6 +2,7 @@ import { MessageRepository } from "./MessageRepository";
 import { USER_SENDER, SELECTED_TEXT_TAG, WEB_SELECTED_TEXT_TAG } from "@/constants";
 import { MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 /**
  * Tests specifically for proper XML tag formatting in context processing
@@ -15,12 +16,12 @@ describe("Message Context XML Tag Formatting", () => {
 
   it("should format note context with proper XML tags including metadata", () => {
     const userMessage = "Analyze this document";
-    const note: TFile = {
+    const note: TFile = mockTFile({
       path: "reports/quarterly-review.md",
       name: "quarterly-review.md",
       basename: "quarterly-review",
       extension: "md",
-    } as TFile;
+    });
 
     const context: MessageContext = {
       notes: [note],
@@ -177,12 +178,12 @@ function fibonacci(n) {
 
   it("should handle multiple contexts with proper XML structure", () => {
     const userMessage = "Compare these resources";
-    const note: TFile = {
+    const note: TFile = mockTFile({
       path: "design-patterns.md",
       name: "design-patterns.md",
       basename: "design-patterns",
       extension: "md",
-    } as TFile;
+    });
 
     const context: MessageContext = {
       notes: [note],
@@ -261,12 +262,12 @@ The Single Responsibility Principle states that a class should have only one rea
 
   it("should handle error cases with proper XML tags", () => {
     const userMessage = "Process this file";
-    const corruptedNote: TFile = {
+    const corruptedNote: TFile = mockTFile({
       path: "corrupted-file.pdf",
       name: "corrupted-file.pdf",
       basename: "corrupted-file",
       extension: "pdf",
-    } as TFile;
+    });
 
     const context: MessageContext = {
       notes: [corruptedNote],

@@ -349,7 +349,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
       // Autosave if enabled
       if (settings.autosaveChat) {
-        handleSaveAsNote();
+        await handleSaveAsNote();
       }
 
       // Get the LLM message for AI processing
@@ -367,7 +367,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
       // Autosave again after AI response
       if (settings.autosaveChat) {
-        handleSaveAsNote();
+        await handleSaveAsNote();
       }
     } catch (error) {
       logError("Error sending message:", error);
@@ -452,7 +452,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
         // Autosave the chat if the setting is enabled
         if (settings.autosaveChat) {
-          handleSaveAsNote();
+          await handleSaveAsNote();
         }
       } catch (error) {
         logError("Error regenerating message:", error);
@@ -529,7 +529,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
         // Autosave the chat if the setting is enabled
         if (settings.autosaveChat) {
-          handleSaveAsNote();
+          await handleSaveAsNote();
         }
       } catch (error) {
         logError("Error editing message:", error);
@@ -560,7 +560,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleAddProject = useCallback(
     async (project: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(plugin.app.vault);
+      const manager = ProjectFileManager.getInstance(plugin.app);
       await manager.createProject(project);
       new Notice(`${project.name} added successfully`);
 
@@ -572,12 +572,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         void reloadCurrentProject();
       }
     },
-    [plugin.app.vault]
+    [plugin.app]
   );
 
   const handleEditProject = useCallback(
     async (originP: ProjectConfig, updateP: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(plugin.app.vault);
+      const manager = ProjectFileManager.getInstance(plugin.app);
       await manager.updateProject(originP.id, updateP);
       new Notice(`${originP.name} updated successfully`);
       // Reason: no explicit reload needed here — ProjectManager's project-record subscriber
@@ -585,7 +585,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       // setCurrentProject + loadProjectContext + createChainWithNewModel.
       // Doing it here too would duplicate expensive work (URL fetches, chain recreation).
     },
-    [plugin.app.vault]
+    [plugin.app]
   );
 
   const handleRemoveSelectedText = useCallback(
@@ -845,17 +845,17 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
             <IndexingProgressCard
               onClose={handleIndexingCardClose}
-              onPause={handleIndexingPause}
-              onResume={handleIndexingResume}
-              onStop={handleIndexingStop}
+              onPause={() => void handleIndexingPause()}
+              onResume={() => void handleIndexingResume()}
+              onStop={() => void handleIndexingStop()}
             />
           </div>
         ) : (
           <>
             <ChatControls
-              onNewChat={handleNewChat}
+              onNewChat={() => void handleNewChat()}
               onSaveAsNote={() => handleSaveAsNote()}
-              onLoadHistory={handleLoadChatHistory}
+              onLoadHistory={() => void handleLoadChatHistory()}
               onModeChange={(newMode) => {
                 setPreviousMode(selectedChain);
                 // Hide chat UI when switching to project mode

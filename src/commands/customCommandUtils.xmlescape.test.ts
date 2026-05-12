@@ -1,6 +1,7 @@
 import { processPrompt } from "@/commands/customCommandUtils";
 import { TFile, Vault } from "obsidian";
 import { getFileContent, getFileName, getNotesFromPath } from "@/utils";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock the dependencies
 jest.mock("@/utils", () => ({
@@ -35,10 +36,10 @@ describe("XML Escaping in processPrompt", () => {
       },
     } as unknown as Vault;
 
-    mockActiveNote = {
+    mockActiveNote = mockTFile({
       path: "path/to/active/note.md",
       basename: "Active Note",
-    } as TFile;
+    });
   });
 
   it("should NOT escape XML special characters in selected text", async () => {
@@ -59,12 +60,12 @@ describe("XML Escaping in processPrompt", () => {
   it("should NOT escape XML in variable names", async () => {
     const customPrompt = 'Use {my"variable<>}';
 
-    const mockNote = {
+    const mockNote = mockTFile({
       basename: 'Note with <special> & "chars"',
       path: "special.md",
-    } as TFile;
+    });
 
-    (getNotesFromPath as jest.Mock).mockResolvedValue([mockNote]);
+    (getNotesFromPath as jest.Mock).mockReturnValue([mockNote]);
     (getFileName as jest.Mock).mockReturnValue(mockNote.basename);
     (getFileContent as jest.Mock).mockResolvedValue('Content with <xml> & special "chars"');
 
@@ -102,12 +103,12 @@ describe("XML Escaping in processPrompt", () => {
   it("should NOT escape XML in note paths and metadata", async () => {
     const customPrompt = "[[Special Note]]";
 
-    const mockNote = {
+    const mockNote = mockTFile({
       basename: 'Special & "Note"',
       path: 'folder<with>/special&chars/"note".md',
-    } as TFile;
+    });
 
-    (getNotesFromPath as jest.Mock).mockResolvedValue([]);
+    (getNotesFromPath as jest.Mock).mockReturnValue([]);
     jest.requireMock("@/utils").extractTemplateNoteFiles.mockReturnValue([mockNote]);
     (getFileContent as jest.Mock).mockResolvedValue("Content with & and < and >");
 
@@ -126,13 +127,13 @@ describe("XML Escaping in processPrompt", () => {
   it("should NOT escape XML in tag variables", async () => {
     const customPrompt = "Notes for {#tag&special}";
 
-    const mockNote = {
+    const mockNote = mockTFile({
       basename: 'Tagged & "Note"',
       path: "tagged.md",
-    } as TFile;
+    });
 
-    (getNotesFromPath as jest.Mock).mockResolvedValue([]);
-    jest.requireMock("@/utils").getNotesFromTags.mockResolvedValue([mockNote]);
+    (getNotesFromPath as jest.Mock).mockReturnValue([]);
+    jest.requireMock("@/utils").getNotesFromTags.mockReturnValue([mockNote]);
     (getFileName as jest.Mock).mockReturnValue(mockNote.basename);
     (getFileContent as jest.Mock).mockResolvedValue("Content: <tag> & </tag>");
 

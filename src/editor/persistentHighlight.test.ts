@@ -43,7 +43,7 @@ describe("createPersistentHighlight", () => {
 
       view = new EditorView({
         state,
-        parent: document.createElement("div"),
+        parent: window.document.createElement("div"),
       });
     });
 
@@ -127,7 +127,7 @@ describe("createPersistentHighlight", () => {
         const bareState = EditorState.create({ doc: "Test" });
         const bareView = new EditorView({
           state: bareState,
-          parent: document.createElement("div"),
+          parent: window.document.createElement("div"),
         });
 
         const effects = highlight.buildEffects(bareView, null);
@@ -202,7 +202,7 @@ describe("createPersistentHighlight", () => {
 
       view = new EditorView({
         state,
-        parent: document.createElement("div"),
+        parent: window.document.createElement("div"),
       });
     });
 

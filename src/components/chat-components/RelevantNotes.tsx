@@ -8,7 +8,7 @@ import { useChatInput } from "@/context/ChatInputContext";
 import { useActiveFile } from "@/hooks/useActiveFile";
 import { useNoteDrag } from "@/hooks/useNoteDrag";
 import { cn } from "@/lib/utils";
-import { logWarn } from "@/logger";
+import { logError, logWarn } from "@/logger";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import {
@@ -49,7 +49,7 @@ function useRelevantNotes(refresher: number) {
       }
     }
 
-    fetchNotes();
+    void fetchNotes();
   }, [activeFile?.path, refresher, signalTick]);
 
   return relevantNotes;
@@ -84,7 +84,7 @@ function useHasIndex(notePath: string, refresher: number) {
       }
     }
 
-    fetchHasIndex();
+    void fetchHasIndex();
   }, [notePath, refresher, signalTick]);
   return hasIndex;
 }
@@ -132,7 +132,7 @@ function RelevantNote({
 
   useEffect(() => {
     if (isOpen) {
-      loadContent();
+      void loadContent();
     }
   }, [isOpen, loadContent]);
 
@@ -283,7 +283,7 @@ export const RelevantNotes = memo(
       const file = app.vault.getAbstractFileByPath(notePath);
       if (file instanceof TFile) {
         const leaf = app.workspace.getLeaf(openInNewLeaf);
-        leaf.openFile(file);
+        void leaf.openFile(file).catch((err) => logError("openFile failed", err));
       }
     };
     const addToChat = (prompt: string) => {
@@ -347,14 +347,14 @@ export const RelevantNotes = memo(
               {hasIndex ? (
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <Button variant="ghost2" size="icon" onClick={refreshIndex}>
+                    <Button variant="ghost2" size="icon" onClick={() => void refreshIndex()}>
                       <RefreshCcw className="tw-size-4" />
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent side="bottom">Reindex Current Note</TooltipContent>
                 </Tooltip>
               ) : (
-                <Button variant="secondary" size="sm" onClick={handleBuildIndex}>
+                <Button variant="secondary" size="sm" onClick={() => void handleBuildIndex()}>
                   Build Index
                 </Button>
               )}

@@ -8,11 +8,7 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { TruncatedText } from "@/components/TruncatedText";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
@@ -273,9 +269,7 @@ export function ProcessingStatus({
                           key={item.id}
                           item={item}
                           onRetry={onRetry}
-                          onOpenCached={
-                            onOpenCachedItem ? () => onOpenCachedItem(item) : undefined
-                          }
+                          onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
                         />
                       ))}
                     </ScrollableList>
@@ -297,12 +291,8 @@ export function ProcessingStatus({
                           key={item.id}
                           item={item}
                           onRetry={onRetry}
-                          onOpenCached={
-                            onOpenCachedItem ? () => onOpenCachedItem(item) : undefined
-                          }
-                          onRemove={
-                            onRemoveUrl ? () => onRemoveUrl(item) : undefined
-                          }
+                          onOpenCached={onOpenCachedItem ? () => onOpenCachedItem(item) : undefined}
+                          onRemove={onRemoveUrl ? () => onRemoveUrl(item) : undefined}
                         />
                       ))}
                     </ScrollableList>
@@ -321,13 +311,7 @@ export function ProcessingStatus({
  * Scroll container with a bottom fade mask when content overflows.
  * Reuses the existing `.copilot-fade-mask-bottom` CSS class from PatternListEditor.
  */
-function ScrollableList({
-  maxHeight,
-  children,
-}: {
-  maxHeight: string;
-  children: React.ReactNode;
-}) {
+function ScrollableList({ maxHeight, children }: { maxHeight: string; children: React.ReactNode }) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const [isOverflowing, setIsOverflowing] = useState(false);
 
@@ -379,10 +363,7 @@ function ProcessingItemRow({
   const isProcessing = item.status === "processing";
   const isFailed = item.status === "failed";
   // Reason: show open button for any item that is ready with actual content (file or URL)
-  const canOpenCached =
-    onOpenCached &&
-    item.status === "ready" &&
-    !item.contentEmpty;
+  const canOpenCached = onOpenCached && item.status === "ready" && !item.contentEmpty;
 
   return (
     <div className="tw-group tw-rounded-md tw-border tw-border-border tw-bg-primary tw-p-2.5">

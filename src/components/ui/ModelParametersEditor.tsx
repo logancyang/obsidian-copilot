@@ -78,7 +78,8 @@ export function ModelParametersEditor({
     model.provider === "lm_studio" ||
     model.provider === ChatModelProviders.LM_STUDIO ||
     hasReasoningCapability;
-  const showVerbosity = model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
+  const showVerbosity =
+    model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
 
   return (
     <div className="tw-space-y-4">
@@ -131,8 +132,8 @@ export function ModelParametersEditor({
                   model can use as context. Default is {DEFAULT_OLLAMA_NUM_CTX}.
                 </p>
                 <em>
-                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will
-                  cap this at the model&apos;s actual maximum.
+                  Lower this value to reduce VRAM usage on GPUs with limited memory. Ollama will cap
+                  this at the model&apos;s actual maximum.
                 </em>
               </>
             }

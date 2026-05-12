@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChainType } from "@/chainFactory";
+import { logError } from "@/logger";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { ChatUIState } from "@/state/ChatUIState";
 
@@ -110,7 +111,7 @@ export function useChatManager(chatUIState: ChatUIState) {
 
   const loadMessages = useCallback(
     (messages: ChatMessage[]): void => {
-      chatUIState.loadMessages(messages);
+      void chatUIState.loadMessages(messages).catch((err) => logError("loadMessages failed", err));
     },
     [chatUIState]
   );

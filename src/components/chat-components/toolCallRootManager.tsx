@@ -109,7 +109,7 @@ const handleContainerChange = (
   oldRecord.isUnmounting = true;
 
   // Defer unmount to avoid "synchronously unmount while React was already rendering" warning
-  setTimeout(() => {
+  window.setTimeout(() => {
     try {
       oldRecord.root.unmount();
     } catch (error) {
@@ -139,7 +139,7 @@ const scheduleToolCallRootDisposal = (
 
   record.isUnmounting = true;
 
-  setTimeout(() => {
+  window.setTimeout(() => {
     const currentRoots = registry.get(messageId);
     const currentRecord = currentRoots?.get(toolCallId);
 

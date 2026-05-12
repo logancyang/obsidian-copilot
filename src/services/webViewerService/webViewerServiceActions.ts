@@ -84,7 +84,7 @@ export async function getReaderModeMarkdown(
         })
         .catch((err) => {
           signal.removeEventListener("abort", abortHandler);
-          reject(err);
+          reject(err instanceof Error ? err : new Error(String(err)));
         });
     });
 

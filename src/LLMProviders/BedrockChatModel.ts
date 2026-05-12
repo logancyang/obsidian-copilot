@@ -84,7 +84,8 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     super(baseParams);
 
-    const globalFetch = typeof fetch !== "undefined" ? fetch.bind(globalThis) : undefined;
+    // scorecard: streaming requires fetch — cannot use requestUrl
+    const globalFetch = typeof fetch !== "undefined" ? fetch.bind(window) : undefined;
 
     this.fetchImpl = fetchImplementation ?? globalFetch;
     if (!this.fetchImpl) {
@@ -791,20 +792,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
   private decodeBase64ToUint8Array(encoded: string): Uint8Array | null {
     try {
-      if (typeof Buffer !== "undefined") {
-        return new Uint8Array(Buffer.from(encoded, "base64"));
-      }
-
-      if (typeof atob === "function") {
-        const binary = atob(encoded);
-        const output = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) {
-          output[i] = binary.charCodeAt(i);
-        }
-        return output;
-      }
-
-      return null;
+      return new Uint8Array(Buffer.from(encoded, "base64"));
     } catch {
       return null;
     }
@@ -1022,14 +1010,14 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
             return part;
           }
           if (part && typeof part === "object") {
-            if (typeof (part as any).text === "string") {
-              return (part as any).text;
+            if (typeof part.text === "string") {
+              return part.text;
             }
-            if (typeof (part as any).value === "string") {
-              return (part as any).value;
+            if (typeof part.value === "string") {
+              return part.value;
             }
-            if (Array.isArray((part as any).content)) {
-              return (part as any).content
+            if (Array.isArray(part.content)) {
+              return part.content
                 .map((sub: any) => (typeof sub?.text === "string" ? sub.text : ""))
                 .join("");
             }
@@ -1255,7 +1243,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     const systemPrompts: string[] = [];
 
     messages.forEach((message) => {
-      const messageType = message._getType();
+      const messageType = message.getType();
 
       // Handle system messages (always text-only)
       if (messageType === "system") {

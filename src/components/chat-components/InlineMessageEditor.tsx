@@ -32,7 +32,7 @@ export const InlineMessageEditor: React.FC<InlineMessageEditorProps> = ({
 
   // Convert initialContext to the format expected by ChatInput
   const [contextNotes, setContextNotes] = useState<TFile[]>(
-    initialContext?.notes?.map((note) => note as TFile) || []
+    initialContext?.notes?.filter((note): note is TFile => note instanceof TFile) || []
   );
   const [includeActiveNote, setIncludeActiveNote] = useState(false);
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);

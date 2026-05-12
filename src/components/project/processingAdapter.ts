@@ -86,7 +86,18 @@ export interface BuildProcessingItemsOptions {
 // ---------------------------------------------------------------------------
 
 const IMAGE_EXTENSIONS = new Set(["jpg", "jpeg", "png", "gif", "bmp", "webp", "svg", "tiff"]);
-const AUDIO_EXTENSIONS = new Set(["mp3", "wav", "m4a", "ogg", "flac", "aac", "mp4", "mpeg", "mpga", "webm"]);
+const AUDIO_EXTENSIONS = new Set([
+  "mp3",
+  "wav",
+  "m4a",
+  "ogg",
+  "flac",
+  "aac",
+  "mp4",
+  "mpeg",
+  "mpga",
+  "webm",
+]);
 
 /** Infer file type from a file path's extension. */
 function inferFileType(path: string): ProcessingItem["fileType"] {
@@ -112,7 +123,8 @@ function extractName(key: string): string {
       const pathAndQuery = urlObj.pathname + urlObj.search;
       if (pathAndQuery && pathAndQuery !== "/") {
         const maxLen = 30;
-        const shortPath = pathAndQuery.length > maxLen ? pathAndQuery.slice(0, maxLen) + "..." : pathAndQuery;
+        const shortPath =
+          pathAndQuery.length > maxLen ? pathAndQuery.slice(0, maxLen) + "..." : pathAndQuery;
         return hostname + shortPath;
       }
       return hostname;
@@ -131,12 +143,14 @@ function extractName(key: string): string {
 function parseUrlConfig(raw?: string): string[] {
   if (!raw) return [];
   // Reason: Deduplicate to prevent duplicate React keys and duplicate status rows
-  return [...new Set(
-    raw
-      .split("\n")
-      .map((line) => line.trim())
-      .filter(Boolean)
-  )];
+  return [
+    ...new Set(
+      raw
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean)
+    ),
+  ];
 }
 
 /**
@@ -237,15 +251,11 @@ function resolveNonCurrentProjectStatus(
  * This avoids depending on liveState.total which may be stale or empty for
  * non-current projects.
  */
-export function buildProcessingItems(options: BuildProcessingItemsOptions): ProcessingAdapterResult {
-  const {
-    project,
-    isCurrentProject,
-    liveState,
-    projectCache,
-    projectFiles,
-    supportedExtensions,
-  } = options;
+export function buildProcessingItems(
+  options: BuildProcessingItemsOptions
+): ProcessingAdapterResult {
+  const { project, isCurrentProject, liveState, projectCache, projectFiles, supportedExtensions } =
+    options;
 
   // Pre-process live state sets for O(1) lookups
   const successSet = new Set(liveState.success);

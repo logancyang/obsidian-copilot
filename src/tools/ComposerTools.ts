@@ -57,12 +57,12 @@ async function show_preview(
 
   if (file && (!activeFile || activeFile.path !== file_path)) {
     // If target file is not the active file, open the target file in the current leaf
-    await app.workspace.getLeaf().openFile(file as TFile);
+    await app.workspace.getLeaf().openFile(file);
   }
 
   let originalContent = "";
   if (file) {
-    originalContent = await app.vault.read(file as TFile);
+    originalContent = await app.vault.read(file);
   }
   const changes = diffTrimmedLines(originalContent, content, {
     newlineIsToken: true,
@@ -71,7 +71,7 @@ async function show_preview(
   return new Promise((resolve) => {
     // Open the Apply View in a new leaf with the processed content and the callback
     const leaf = app.workspace.getLeaf(true);
-    leaf.setViewState({
+    void leaf.setViewState({
       type: APPLY_VIEW_TYPE,
       active: true,
       state: {

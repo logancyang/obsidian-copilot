@@ -101,18 +101,21 @@ export class ContextProcessor {
       const match = matches[i];
       const queryType = match[1]; // 'dataview' or 'dataviewjs'
       const query = match[2].trim();
-      const matchStart = match.index!;
+      const matchStart = match.index;
       const matchEnd = matchStart + match[0].length;
 
       try {
         // Execute query with timeout
         const result = await Promise.race([
           this.executeDataviewQuery(dataviewApi, query, queryType, sourcePath),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 5000)),
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error("Query timeout")), 5000)
+          ),
         ]);
 
         // Replace block with structured output using slice (position-based, handles duplicates)
-        const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<executed_result>\n${result}\n</executed_result>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
+        const resultStr = typeof result === "string" ? result : JSON.stringify(result);
+        const replacement = `\n\n<${DATAVIEW_BLOCK_TAG}>\n<query_type>${queryType}</query_type>\n<original_query>\n${query}\n</original_query>\n<executed_result>\n${resultStr}\n</executed_result>\n</${DATAVIEW_BLOCK_TAG}>\n\n`;
         content = content.slice(0, matchStart) + replacement + content.slice(matchEnd);
       } catch (error) {
         logError(`Error executing Dataview query:`, error);
@@ -923,7 +926,7 @@ export class ContextProcessor {
 
         // Use AbortSignal for cancellable timeout
         const abortController = new AbortController();
-        const timeoutId = setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
           abortController.abort();
         }, READER_MODE_CONTENT_TIMEOUT_MS);
 
@@ -940,7 +943,7 @@ export class ContextProcessor {
             content,
           });
         } finally {
-          clearTimeout(timeoutId);
+          window.clearTimeout(timeoutId);
         }
       } catch (error) {
         logError(`Error processing web tab ${tab.url}:`, error);

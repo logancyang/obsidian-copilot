@@ -427,7 +427,7 @@ describe("ProjectContextCache", () => {
     // Define async update function
     const asyncUpdateFn = async (cache: any) => {
       // Simulate async operation
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
       cache.markdownContext = "Async updated content";
       cache.webContexts = { "https://example.com": "Async web content" };
       return cache;
@@ -600,7 +600,7 @@ describe("ProjectContextCache", () => {
     const updateMarkdownAsync = async (cache: any) => {
       const startMark = Date.now() - startTime;
       executionOrder.push(`markdown-start-${startMark}`);
-      await new Promise((resolve) => setTimeout(resolve, 30));
+      await new Promise((resolve) => window.setTimeout(resolve, 30));
       cache.markdownContext = "Async updated markdown";
       executionOrder.push(`markdown-end-${Date.now() - startTime}`);
       return cache;
@@ -609,7 +609,7 @@ describe("ProjectContextCache", () => {
     const updateWebAsync = async (cache: any) => {
       const startMark = Date.now() - startTime;
       executionOrder.push(`web-start-${startMark}`);
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      await new Promise((resolve) => window.setTimeout(resolve, 10));
       cache.webContexts = { "https://example.com": "Async web content" };
       executionOrder.push(`web-end-${Date.now() - startTime}`);
       return cache;
@@ -618,7 +618,7 @@ describe("ProjectContextCache", () => {
     const updateYoutubeAsync = async (cache: any) => {
       const startMark = Date.now() - startTime;
       executionOrder.push(`youtube-start-${startMark}`);
-      await new Promise((resolve) => setTimeout(resolve, 20));
+      await new Promise((resolve) => window.setTimeout(resolve, 20));
       cache.youtubeContexts = { "https://youtube.com/test": "Async YouTube content" };
       executionOrder.push(`youtube-end-${Date.now() - startTime}`);
       return cache;

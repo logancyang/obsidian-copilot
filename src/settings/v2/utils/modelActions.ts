@@ -3,7 +3,7 @@ import { ChatModelProviders, SettingKeyProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { GitHubCopilotProvider } from "@/LLMProviders/githubCopilot/GitHubCopilotProvider";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { logError, logWarn } from "@/logger";
+import { logError } from "@/logger";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
 import { err2String, getProviderInfo, safeFetch } from "@/utils";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
@@ -63,43 +63,25 @@ export async function fetchModelsForProvider(
       };
     }
 
-    const tryFetch = async (useSafeFetch: boolean) => {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
-
-      try {
-        const response = await (useSafeFetch ? safeFetch : fetch)(url, {
-          headers,
-          signal: controller.signal,
-          method: "GET",
-        });
-
-        if (!response.ok) {
-          const msg = err2String(await response.json());
-          logError(msg);
-          throw new Error(`Failed to fetch models: ${response.statusText} \n detail: ` + msg);
-        }
-        return response;
-      } finally {
-        clearTimeout(timeoutId);
-      }
-    };
+    // Use safeFetch (built on Obsidian's requestUrl) to bypass CORS.
+    const controller = new AbortController();
+    const timeoutId = window.setTimeout(() => controller.abort(), 3000);
 
     let response;
     try {
-      response = await tryFetch(false);
-    } catch (firstError) {
-      logWarn("First fetch attempt failed, trying with safeFetch...");
-      try {
-        response = await tryFetch(true);
-      } catch (error) {
-        const msg =
-          "\nwithout CORS Error: " +
-          err2String(firstError) +
-          "\nwith CORS Error: " +
-          err2String(error);
-        throw new Error(msg);
+      response = await safeFetch(url, {
+        headers,
+        signal: controller.signal,
+        method: "GET",
+      });
+
+      if (!response.ok) {
+        const msg = err2String(await response.json());
+        logError(msg);
+        throw new Error(`Failed to fetch models: ${response.statusText} \n detail: ` + msg);
       }
+    } finally {
+      window.clearTimeout(timeoutId);
     }
 
     const rawData = await response.json();
@@ -156,7 +138,7 @@ export async function verifyAndAddModel(
       // hasn't enabled this model on their GitHub settings page. Append the policy
       // terms (which include an activation link) to guide the user.
       if (
-        customModel.provider === ChatModelProviders.GITHUB_COPILOT &&
+        (customModel.provider as ChatModelProviders) === ChatModelProviders.GITHUB_COPILOT &&
         verificationError.toLowerCase().includes("not supported")
       ) {
         // Reason: policy cache is keyed by model.id, not customModel.name (display name)

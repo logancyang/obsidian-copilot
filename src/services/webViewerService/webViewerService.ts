@@ -142,7 +142,7 @@ export class WebViewerService {
 
   /** Get the currently active Web Viewer leaf (if any). */
   getActiveLeaf(): WebViewerLeaf | null {
-    const leaf = this.app.workspace.activeLeaf;
+    const leaf = this.app.workspace.getMostRecentLeaf();
     return isWebViewerLeaf(leaf) ? leaf : null;
   }
 

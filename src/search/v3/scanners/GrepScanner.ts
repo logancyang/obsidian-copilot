@@ -62,7 +62,7 @@ export class GrepScanner {
 
       // Yield periodically to prevent UI freezes in large vaults
       if (i > 0 && i % yieldInterval === 0) {
-        await new Promise((r) => setTimeout(r, 0));
+        await new Promise((r) => window.setTimeout(r, 0));
       }
     }
 
@@ -103,7 +103,7 @@ export class GrepScanner {
 
         // Yield periodically to prevent blocking
         if (i % GrepScanner.CONFIG.YIELD_INTERVAL === 0) {
-          await new Promise((r) => setTimeout(r, 0));
+          await new Promise((r) => window.setTimeout(r, 0));
         }
       }
     }

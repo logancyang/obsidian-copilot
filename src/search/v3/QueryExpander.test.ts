@@ -132,7 +132,7 @@ describe("QueryExpander", () => {
     it("should handle LLM timeout with fallback", async () => {
       // Mock slow LLM response
       mockChatModel.invoke.mockImplementation(
-        () => new Promise((resolve) => setTimeout(() => resolve({ content: "slow" }), 1000))
+        () => new Promise((resolve) => window.setTimeout(() => resolve({ content: "slow" }), 1000))
       );
 
       const expander = new QueryExpander({
@@ -190,7 +190,7 @@ describe("QueryExpander", () => {
           });
 
           // Simulate slow response that should be aborted
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+          await new Promise((resolve) => window.setTimeout(resolve, 1000));
 
           // This should not complete due to timeout
           return { content: "slow response" };
@@ -211,7 +211,7 @@ describe("QueryExpander", () => {
       expect(result.salientTerms).toContain("abort");
 
       // Give a moment for abort event to fire
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
       expect(isAborted).toBe(true);
     });
 

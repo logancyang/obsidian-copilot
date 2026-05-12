@@ -6,7 +6,7 @@ import {
 } from "@/system-prompts/systemPromptBuilder";
 import { ChainType } from "@/chainFactory";
 import { getChainType, getCurrentProject } from "@/aiParams";
-import { logInfo, logWarn } from "@/logger";
+import { logError, logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";
 import { processPrompt, type ProcessedPromptResult } from "@/commands/customCommandUtils";
 import { FileParserManager } from "@/tools/FileParserManager";
@@ -687,8 +687,10 @@ export class ChatManager {
   clearMessages(): void {
     const currentRepo = this.getCurrentMessageRepo();
     currentRepo.clear();
-    // Clear chain memory directly
-    this.chainManager.memoryManager.clearChatMemory();
+    // Clear chain memory directly (fire-and-forget; errors are logged but do not block UI)
+    void this.chainManager.memoryManager
+      .clearChatMemory()
+      .catch((err) => logError("clearChatMemory failed", err));
     logInfo(`[ChatManager] Cleared all messages`);
   }
 

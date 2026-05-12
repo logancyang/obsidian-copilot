@@ -241,7 +241,8 @@ class LogFileManager {
     }
 
     // Original buffer unchanged; open the file
-    const file = app.vault.getAbstractFileByPath(path) as TFile | null;
+    const abstract = app.vault.getAbstractFileByPath(path);
+    const file = abstract instanceof TFile ? abstract : null;
     try {
       if (file) {
         const leaf = app.workspace.getLeaf(true);

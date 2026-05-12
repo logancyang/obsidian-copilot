@@ -1,3 +1,4 @@
+import { logError } from "@/logger";
 import { checkLatestVersion, isNewerVersion } from "@/utils";
 import { useEffect, useState } from "react";
 
@@ -16,7 +17,7 @@ export function useLatestVersion(currentVersion: string): UseLatestVersionResult
         setLatestVersion(result.version);
       }
     };
-    checkVersion();
+    void checkVersion().catch((err) => logError("checkVersion failed", err));
   }, []);
 
   const hasUpdate = latestVersion !== null && isNewerVersion(latestVersion, currentVersion);

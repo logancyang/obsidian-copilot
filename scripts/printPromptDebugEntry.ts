@@ -94,7 +94,7 @@ export async function run(args: string[]): Promise<void> {
   }
 
   const app = createHeadlessApp();
-  (globalThis as any).app = app;
+  (global as unknown as { app: unknown }).app = app;
 
   initializeBuiltinTools();
 

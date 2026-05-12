@@ -56,7 +56,13 @@ export function DraggableModal({
   closeOnEscapeFromOutside = false,
   anchorBottom,
 }: DraggableModalProps) {
-  const { position, setPosition, dragRef, handleMouseDown: rawHandleMouseDown, isDragging } = useDraggable({
+  const {
+    position,
+    setPosition,
+    dragRef,
+    handleMouseDown: rawHandleMouseDown,
+    isDragging,
+  } = useDraggable({
     initialPosition: initialPosition || {
       x: typeof window !== "undefined" ? (window.innerWidth - 500) / 2 : 100,
       y: typeof window !== "undefined" ? (window.innerHeight - 400) / 2 : 100,
@@ -227,7 +233,7 @@ export function DraggableModal({
   useEffect(() => {
     if (!open) return;
 
-    const ownerDocument = dragRef.current?.ownerDocument ?? document;
+    const ownerDocument = dragRef.current?.ownerDocument ?? activeDocument;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Respect defaultPrevented to let internal components (e.g., Lexical typeahead, Radix menus) consume Escape first
@@ -280,6 +286,9 @@ export function DraggableModal({
       className={cn(
         // Positioning and z-index
         "tw-fixed tw-z-popover",
+        // Position driven by useDraggable's CSS variables (--copilot-drag-x/y).
+        // Fallback covers first paint before the hook's useLayoutEffect runs.
+        "tw-left-[var(--copilot-drag-x,0px)] tw-top-[var(--copilot-drag-y,0px)]",
         // Flexbox layout for stable structure
         "tw-flex tw-flex-col",
         // Visual styling
@@ -295,8 +304,6 @@ export function DraggableModal({
         className
       )}
       style={{
-        left: position.x,
-        top: position.y,
         width: resizable && widthPx !== null ? widthPx : width,
         ...(resizable && heightPx !== null ? { height: heightPx } : {}),
       }}

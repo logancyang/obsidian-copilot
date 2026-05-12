@@ -107,7 +107,9 @@ export default class ProjectManager {
         !nextProjects.some((p) => p.id === this.currentProjectId) &&
         getCurrentProject()?.id === this.currentProjectId
       ) {
-        logWarn(`[ProjectManager] Active project id="${this.currentProjectId}" no longer exists, clearing selection`);
+        logWarn(
+          `[ProjectManager] Active project id="${this.currentProjectId}" no longer exists, clearing selection`
+        );
         void this.switchProject(null).catch((err) =>
           logError("[ProjectManager] Failed to switch away from removed project", err)
         );
@@ -185,7 +187,7 @@ export default class ProjectManager {
    * Delegates to ProjectFileManager for vault file writes.
    */
   private touchProjectUsageTimestamps(project: ProjectConfig): void {
-    const manager = ProjectFileManager.getInstance(this.app.vault);
+    const manager = ProjectFileManager.getInstance(this.app);
     void manager.touchProjectLastUsed(project.id);
   }
 
@@ -194,7 +196,7 @@ export default class ProjectManager {
    * This allows UI components to use in-memory values for immediate feedback.
    */
   public getProjectUsageTimestampsManager(): RecentUsageManager<string> {
-    return ProjectFileManager.getInstance(this.app.vault).getProjectUsageTimestampsManager();
+    return ProjectFileManager.getInstance(this.app).getProjectUsageTimestampsManager();
   }
 
   public async switchProject(project: ProjectConfig | null): Promise<void> {

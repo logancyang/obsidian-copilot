@@ -17,9 +17,30 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-// Mock global fetch
+// Translate legacy { ok, json: async () => …, text?: async () => … } fetch-style
+// responses into the shape `requestUrl` returns: { status, json, text }.
+// Tests below still call `mockFetch.mockResolvedValueOnce({ ok, json })` etc.
 const mockFetch = jest.fn();
-global.fetch = mockFetch;
+const translate = async (fetchShape: Record<string, unknown>): Promise<Record<string, unknown>> => {
+  const ok = fetchShape.ok as boolean | undefined;
+  const status = (fetchShape.status as number | undefined) ?? (ok ? 200 : 500);
+  const jsonFn = fetchShape.json as (() => Promise<unknown>) | undefined;
+  const textFn = fetchShape.text as (() => Promise<string>) | undefined;
+  const json = jsonFn ? await jsonFn() : undefined;
+  const text = textFn ? await textFn() : json !== undefined ? JSON.stringify(json) : "";
+  return { status, json, text, headers: {}, arrayBuffer: new ArrayBuffer(0) };
+};
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const obsidianMock = require("obsidian");
+obsidianMock.__setRequestUrlImpl(async (req: { url: string; [k: string]: unknown }) => {
+  // Forward to the test-defined queue and adapt the shape for requestUrl callers.
+  // Strip `throw` from the init so existing `expect(mockFetch).toHaveBeenCalledWith(url, init)`
+  // assertions (which expect fetch-style init without `throw`) continue to work.
+  const { url, throw: _throw, ...init } = req;
+  void _throw;
+  const fetchShape = await mockFetch(url, init);
+  return translate(fetchShape);
+});
 
 beforeEach(() => {
   jest.clearAllMocks();

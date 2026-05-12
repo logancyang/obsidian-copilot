@@ -74,8 +74,7 @@ export function $createPillNode(pillData: PillData) {
     case "webTabs":
       // WebTabContext has url, title, faviconUrl
       if (data && typeof data === "object" && "url" in data) {
-        const webTab = data as WebTabContext;
-        return $createWebTabPillNode(webTab.url, webTab.title, webTab.faviconUrl);
+        return $createWebTabPillNode(data.url, data.title, data.faviconUrl);
       }
       break;
     case "activeWebTab":

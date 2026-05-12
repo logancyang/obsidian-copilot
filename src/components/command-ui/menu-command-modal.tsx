@@ -117,7 +117,7 @@ export function MenuCommandModal({
     if (!open) return;
 
     const modalEl = innerRef.current?.closest<HTMLElement>('[data-copilot-draggable-modal="true"]');
-    const ownerDocument = modalEl?.ownerDocument ?? document;
+    const ownerDocument = modalEl?.ownerDocument ?? activeDocument;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Only handle when result is ready and not busy
