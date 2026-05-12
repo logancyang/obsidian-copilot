@@ -77,6 +77,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
+  [ChatModelProviders.MODELVERSE]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatMistralAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
@@ -146,6 +147,7 @@ export default class ChatModelManager {
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.AMAZON_BEDROCK]: () => getSettings().amazonBedrockApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
+    [ChatModelProviders.MODELVERSE]: () => getSettings().modelverseApiKey,
     [ChatModelProviders.GITHUB_COPILOT]: () =>
       getSettings().githubCopilotToken || getSettings().githubCopilotAccessToken,
   } as const;
@@ -394,6 +396,20 @@ export default class ChatModelManager {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.siliconflowApiKey),
         configuration: {
           baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.SILICONFLOW].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+        ...this.getOpenAISpecialConfig(
+          modelName,
+          customModel.maxTokens ?? settings.maxTokens,
+          customModel.temperature ?? settings.temperature,
+          customModel
+        ),
+      },
+      [ChatModelProviders.MODELVERSE]: {
+        modelName: modelName,
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.modelverseApiKey),
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.MODELVERSE].host,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         ...this.getOpenAISpecialConfig(

@@ -40,6 +40,7 @@ const OPENAI_COMPATIBLE_PROVIDERS = new Set<string>([
   ChatModelProviders.XAI,
   ChatModelProviders.SILICONFLOW,
   EmbeddingModelProviders.SILICONFLOW,
+  ChatModelProviders.MODELVERSE,
   ChatModelProviders.OPENAI_FORMAT,
   EmbeddingModelProviders.OPENAI_FORMAT,
   ChatModelProviders.LM_STUDIO,
