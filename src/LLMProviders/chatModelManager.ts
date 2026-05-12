@@ -27,13 +27,11 @@ import {
 } from "@/utils";
 import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
-import { ChatCohere } from "@langchain/cohere";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
 import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 import { ChatGroq } from "@langchain/groq";
-import { ChatMistralAI } from "@langchain/mistralai";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
 import { ChatXAI } from "@langchain/xai";
@@ -68,7 +66,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI]: ChatOpenAI,
   [ChatModelProviders.AZURE_OPENAI]: ChatOpenAI,
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
-  [ChatModelProviders.COHEREAI]: ChatCohere,
+  [ChatModelProviders.COHEREAI]: ChatOpenAI,
   [ChatModelProviders.GOOGLE]: ChatGoogleGenerativeAI,
   [ChatModelProviders.XAI]: ChatXAI,
   [ChatModelProviders.OPENROUTERAI]: ChatOpenRouter,
@@ -78,7 +76,7 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
-  [ChatModelProviders.MISTRAL]: ChatMistralAI,
+  [ChatModelProviders.MISTRAL]: ChatOpenAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
   [ChatModelProviders.AMAZON_BEDROCK]: BedrockChatModel,
   [ChatModelProviders.GITHUB_COPILOT]: GitHubCopilotChatModel,
@@ -281,8 +279,12 @@ export default class ChatModelManager {
         };
       })(),
       [ChatModelProviders.COHEREAI]: {
+        modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
-        model: modelName,
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.COHEREAI].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [ChatModelProviders.GOOGLE]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.googleApiKey),
@@ -412,9 +414,12 @@ export default class ChatModelManager {
         },
       },
       [ChatModelProviders.MISTRAL]: {
-        model: modelName,
+        modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.mistralApiKey),
-        serverURL: customModel.baseUrl,
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.MISTRAL].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [ChatModelProviders.DEEPSEEK]: {
         modelName: modelName,

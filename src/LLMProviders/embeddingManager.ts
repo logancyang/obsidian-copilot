@@ -5,7 +5,6 @@ import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
-import { CohereEmbeddings } from "@langchain/cohere";
 import { Embeddings } from "@langchain/core/embeddings";
 import { GoogleGenerativeAIEmbeddings } from "@langchain/google-genai";
 import { OllamaEmbeddings } from "@langchain/ollama";
@@ -21,7 +20,7 @@ const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.COPILOT_PLUS]: CustomOpenAIEmbeddings,
   [EmbeddingModelProviders.COPILOT_PLUS_JINA]: CustomJinaEmbeddings,
   [EmbeddingModelProviders.OPENAI]: OpenAIEmbeddings,
-  [EmbeddingModelProviders.COHEREAI]: CohereEmbeddings,
+  [EmbeddingModelProviders.COHEREAI]: OpenAIEmbeddings,
   [EmbeddingModelProviders.GOOGLE]: GoogleGenerativeAIEmbeddings,
   [EmbeddingModelProviders.AZURE_OPENAI]: AzureOpenAIEmbeddings,
   [EmbeddingModelProviders.OLLAMA]: OllamaEmbeddings,
@@ -241,8 +240,14 @@ export default class EmbeddingManager {
         },
       },
       [EmbeddingModelProviders.COHEREAI]: {
-        model: modelName,
+        modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.cohereApiKey),
+        timeout: 10000,
+        batchSize: getSettings().embeddingBatchSize,
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[EmbeddingModelProviders.COHEREAI].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [EmbeddingModelProviders.GOOGLE]: {
         modelName: modelName,

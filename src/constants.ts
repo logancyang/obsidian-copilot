@@ -662,8 +662,8 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
   },
   [ChatModelProviders.COHEREAI]: {
     label: "Cohere",
-    host: "https://api.cohere.com",
-    curlBaseURL: "https://api.cohere.com/v1",
+    host: "https://api.cohere.ai/compatibility/v1",
+    curlBaseURL: "https://api.cohere.ai/compatibility/v1",
     keyManagementURL: "https://dashboard.cohere.ai/api-keys",
     listModelURL: "https://api.cohere.com/v1/models",
     testModel: ChatModels.COMMAND_R,
