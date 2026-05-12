@@ -1336,3 +1336,112 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
 .copilot-fade-mask-bottom {
   background: linear-gradient(to top, var(--background-primary), transparent);
 }
+
+/* =============================================================================
+   Diff renderer theming — Pierre view (@pierre/diffs)
+   =============================================================================
+   Pierre exposes ~96 CSS variables (--diffs-*). Override the ones that drive
+   visible chrome — backgrounds, gutters, line numbers, font — to map onto
+   Obsidian's tokens. The *-override variants take precedence over Pierre's
+   internal computed values, which is the documented escape hatch.
+*/
+
+.copilot-pierre-view {
+  /* Text color of changed lines — Pierre by default colors the ENTIRE line
+     of changed text red (deletion) or green (addition). Override to the
+     normal Obsidian text color so the diff reads like the editor: text in
+     the usual color, change indicated only by background wash + inline
+     emphasis spans. */
+  --diffs-addition-color-override: var(--text-normal);
+  --diffs-deletion-color-override: var(--text-normal);
+  --diffs-modified-color-override: var(--text-normal);
+
+  /* Surface + text */
+  --diffs-bg: var(--background-primary);
+  --diffs-fg: var(--text-normal);
+
+  /* Unchanged context lines */
+  --diffs-bg-context-override: var(--background-primary);
+  --diffs-bg-context-gutter-override: var(--background-secondary);
+
+  /* Buffer / separator strips between hunks */
+  --diffs-bg-buffer-override: var(--background-secondary);
+  --diffs-bg-separator-override: var(--background-secondary);
+
+  /* Whole-line backgrounds for added / removed lines.
+     Use --background-modifier-{success,error}-rgb so the wash matches
+     whatever the user's Obsidian theme tunes for diff-style affordances. */
+  --diffs-bg-addition-override: rgba(var(--background-modifier-success-rgb), 0.22);
+  --diffs-bg-deletion-override: rgba(var(--background-modifier-error-rgb), 0.22);
+
+  /* Token-level emphasis (intra-line word change highlight) — stronger
+     so it pops against the line wash on busy dark themes. */
+  --diffs-bg-addition-emphasis-override: rgba(var(--background-modifier-success-rgb), 0.55);
+  --diffs-bg-deletion-emphasis-override: rgba(var(--background-modifier-error-rgb), 0.55);
+
+  /* Line-number gutter colors */
+  --diffs-bg-addition-number-override: rgba(var(--color-green-rgb), 0.18);
+  --diffs-bg-deletion-number-override: rgba(var(--color-red-rgb), 0.18);
+  --diffs-fg-number-override: var(--text-muted);
+  --diffs-fg-number-addition-override: var(--color-green);
+  --diffs-fg-number-deletion-override: var(--color-red);
+
+  /* Hover / selection */
+  --diffs-bg-hover-override: var(--background-modifier-hover);
+  --diffs-bg-selection-override: var(--text-selection);
+
+  /* Typography: match Obsidian's monospace + size */
+  --diffs-font-family: var(--font-monospace);
+  --diffs-font-size: var(--font-text-size);
+  --diffs-line-height: var(--line-height-tight);
+
+  /* Decoration-bar color (Pierre's left edge accent on changed lines) */
+  --diffs-decoration-bar-color: var(--background-modifier-border);
+
+  /* Shiki token colors (--diffs-token-*) for code blocks rendered inside
+     a diff. Pierre uses Shiki for syntax highlighting; these defaults map
+     onto Obsidian's editor token tokens so code blocks read like the rest
+     of the vault instead of stock pierre-dark. */
+  --diffs-token-foreground: var(--text-normal);
+  --diffs-token-background: transparent;
+  --diffs-token-keyword: var(--color-purple);
+  --diffs-token-string: var(--color-green);
+  --diffs-token-number: var(--color-orange);
+  --diffs-token-comment: var(--text-muted);
+  --diffs-token-function: var(--color-blue);
+  --diffs-token-variable: var(--text-normal);
+  --diffs-token-type: var(--color-cyan);
+  --diffs-token-constant: var(--color-yellow);
+  --diffs-token-operator: var(--text-normal);
+  --diffs-token-punctuation: var(--text-muted);
+
+  /* Tabular figures for line numbers — keeps the gutter aligned across rows. */
+  --diffs-font-features: "tnum" 1, "calt" 0;
+}
+
+/* Pierre wraps its diff in a custom <diffs-container> element. Ensure it
+   fills the available space and inherits the themed background. */
+.copilot-pierre-view diffs-container {
+  background-color: var(--background-primary);
+  color: var(--text-normal);
+  border-radius: var(--radius-s);
+  border: var(--border-width) solid var(--background-modifier-border);
+}
+
+/* File header strip that Pierre renders above the diff */
+.copilot-pierre-view [data-diffs-header] {
+  background-color: var(--background-secondary);
+  color: var(--text-muted);
+  border-bottom: var(--border-width) solid var(--background-modifier-border);
+  padding: var(--size-4-1) var(--size-4-2);
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-interface);
+}
+
+/* Pierre's <pre> code element inherits font from --diffs-font-family already,
+   but ensure font-feature-settings come through and line-wrap honors prose. */
+.copilot-pierre-view pre {
+  font-feature-settings: "tnum" 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
