@@ -571,7 +571,7 @@ describe("shouldUseGitHubCopilotResponsesApi", () => {
 describe("withTimeout", () => {
   it("should return result when operation completes within timeout", async () => {
     const operation = async (signal: AbortSignal) => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
       return "success";
     };
 
@@ -581,7 +581,7 @@ describe("withTimeout", () => {
 
   it("should throw TimeoutError when operation exceeds timeout", async () => {
     const operation = async (signal: AbortSignal) => {
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
       return "should not complete";
     };
 
@@ -599,7 +599,7 @@ describe("withTimeout", () => {
         wasAborted = true;
       });
 
-      await new Promise((resolve) => setTimeout(resolve, 200));
+      await new Promise((resolve) => window.setTimeout(resolve, 200));
       return "should not complete";
     };
 
@@ -610,7 +610,7 @@ describe("withTimeout", () => {
     }
 
     // Give time for abort event to fire
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => window.setTimeout(resolve, 10));
     expect(wasAborted).toBe(true);
   });
 
@@ -624,7 +624,7 @@ describe("withTimeout", () => {
 
   it("should clean up timeout even when operation throws", async () => {
     const operation = async (signal: AbortSignal) => {
-      await new Promise((resolve) => setTimeout(resolve, 50));
+      await new Promise((resolve) => window.setTimeout(resolve, 50));
       throw new Error("Operation failed");
     };
 

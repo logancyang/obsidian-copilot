@@ -98,7 +98,7 @@ export default class VectorStoreManager {
           ) {
             retries--;
             if (retries > 0) {
-              await new Promise((resolve) => setTimeout(resolve, 100));
+              await new Promise((resolve) => window.setTimeout(resolve, 100));
               continue;
             }
           }

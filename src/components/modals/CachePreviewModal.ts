@@ -62,7 +62,7 @@ export class CachePreviewModal extends Modal {
           setIcon(copyIconEl, "check");
           copyBtn.addClass("tw-text-accent");
           new Notice("Copied to clipboard");
-          setTimeout(() => {
+          window.setTimeout(() => {
             setIcon(copyIconEl, "copy");
             copyBtn.removeClass("tw-text-accent");
           }, 2000);

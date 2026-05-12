@@ -65,7 +65,7 @@ export async function fetchModelsForProvider(
 
     const tryFetch = async (useSafeFetch: boolean) => {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 3000);
+      const timeoutId = window.setTimeout(() => controller.abort(), 3000);
 
       try {
         const response = await (useSafeFetch ? safeFetch : fetch)(url, {
@@ -81,7 +81,7 @@ export async function fetchModelsForProvider(
         }
         return response;
       } finally {
-        clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId);
       }
     };
 

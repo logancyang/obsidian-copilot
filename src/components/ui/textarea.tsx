@@ -51,7 +51,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
         onInput={adjustHeight}
         onCompositionEnd={adjustHeight}
         onPaste={() => {
-          setTimeout(adjustHeight, 0);
+          window.setTimeout(adjustHeight, 0);
         }}
         {...props}
       />

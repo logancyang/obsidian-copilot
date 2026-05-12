@@ -89,7 +89,7 @@ export class WebSelectionTracker {
   private readonly onSelectionChange: (context: WebSelectedTextContext) => void;
   private readonly onSelectionClear: (event: WebSelectionClearEvent) => void;
 
-  private timeoutId: ReturnType<typeof setTimeout> | null = null;
+  private timeoutId: number | null = null;
   private isRunning = false;
   private leafState = new WeakMap<WebViewerLeaf, LeafSelectionTrackingState>();
   /** URL-based suppression map: URL -> pinned selection text (null means "pin next observed") */
@@ -128,7 +128,7 @@ export class WebSelectionTracker {
   stop(): void {
     this.isRunning = false;
     if (this.timeoutId !== null) {
-      clearTimeout(this.timeoutId);
+      window.clearTimeout(this.timeoutId);
       this.timeoutId = null;
     }
     this.leafState = new WeakMap<WebViewerLeaf, LeafSelectionTrackingState>();
@@ -142,7 +142,7 @@ export class WebSelectionTracker {
   private scheduleNext(): void {
     if (!this.isRunning) return;
 
-    this.timeoutId = setTimeout(async () => {
+    this.timeoutId = window.setTimeout(async () => {
       await this.checkSelection();
       // Schedule next only after current check completes
       this.scheduleNext();

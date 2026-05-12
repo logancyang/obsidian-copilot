@@ -47,15 +47,15 @@ const ChatMessages = memo(
     });
 
     useEffect(() => {
-      let intervalId: NodeJS.Timeout;
+      let intervalId: number;
       if (loading) {
-        intervalId = setInterval(() => {
+        intervalId = window.setInterval(() => {
           setLoadingDots((dots) => (dots.length < 6 ? dots + "." : ""));
         }, 200);
       } else {
         setLoadingDots("");
       }
-      return () => clearInterval(intervalId);
+      return () => window.clearInterval(intervalId);
     }, [loading]);
 
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {

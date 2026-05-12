@@ -200,11 +200,11 @@ const ChatInput: React.FC<ChatInputProps> = ({
   useEffect(() => {
     if (!isProjectLoading) return;
 
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       setLoadingMessageIndex((prev) => (prev + 1) % loadingMessages.length);
     }, 3000);
 
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, [isProjectLoading, loadingMessages.length]);
 
   const getDisplayModelKey = (): string => {
@@ -616,14 +616,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
 
   // Update the current active note whenever it changes
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
+    let timeoutId: number;
 
     const handleActiveLeafChange = () => {
       // Clear any existing timeout
-      clearTimeout(timeoutId);
+      window.clearTimeout(timeoutId);
 
       // Set new timeout
-      timeoutId = setTimeout(() => {
+      timeoutId = window.setTimeout(() => {
         const activeNote = app.workspace.getActiveFile();
         setCurrentActiveNote(isAllowedFileForNoteContext(activeNote) ? activeNote : null);
       }, 100); // Wait 100ms after the last event because it fires multiple times
@@ -632,7 +632,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const eventRef = app.workspace.on("active-leaf-change", handleActiveLeafChange);
 
     return () => {
-      clearTimeout(timeoutId); // Clean up any pending timeout
+      window.clearTimeout(timeoutId); // Clean up any pending timeout
       // cspell:disable-next-line
       app.workspace.offref(eventRef); // Remove event listener
     };

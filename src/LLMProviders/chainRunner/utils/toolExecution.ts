@@ -96,7 +96,7 @@ export async function executeSequentialToolCall(
       result = await Promise.race([
         ToolManager.callTool(tool, toolArgs),
         new Promise((_, reject) =>
-          setTimeout(
+          window.setTimeout(
             () => reject(new Error(`Tool execution timed out after ${timeout}ms`)),
             timeout
           )

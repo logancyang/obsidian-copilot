@@ -278,7 +278,7 @@ export class IndexOperations {
       this.finalizeIndexing(errors);
 
       // Run save and integrity check with setTimeout to ensure it's non-blocking
-      setTimeout(() => {
+      window.setTimeout(() => {
         this.indexBackend
           .save()
           .then(() => {
@@ -461,7 +461,7 @@ export class IndexOperations {
 
     if (this.state.isIndexingPaused) {
       while (this.state.isIndexingPaused && !this.state.isIndexingCancelled) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await new Promise((resolve) => window.setTimeout(resolve, 100));
         // Re-read atom state each iteration
         const current = getIndexingProgressState();
         this.state.isIndexingPaused = current.isPaused;
@@ -655,6 +655,6 @@ export class IndexOperations {
     });
 
     // Add a small delay to ensure all state updates are processed
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    await new Promise((resolve) => window.setTimeout(resolve, 100));
   }
 }

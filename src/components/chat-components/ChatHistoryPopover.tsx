@@ -45,7 +45,7 @@ export function ChatHistoryPopover({
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [displayCount, setDisplayCount] = useState(PAGE_SIZE);
   const observerRef = useRef<IntersectionObserver | null>(null);
-  const deleteTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const deleteTimeoutRef = useRef<number | null>(null);
   const isMobile = Platform.isMobile;
   const settings = useSettingsValue();
 
@@ -222,7 +222,7 @@ export function ChatHistoryPopover({
   useEffect(() => {
     return () => {
       if (deleteTimeoutRef.current) {
-        clearTimeout(deleteTimeoutRef.current);
+        window.clearTimeout(deleteTimeoutRef.current);
       }
     };
   }, []);
@@ -241,11 +241,11 @@ export function ChatHistoryPopover({
     } else {
       // First click - show confirmation; clear any previous pending timeout first
       if (deleteTimeoutRef.current) {
-        clearTimeout(deleteTimeoutRef.current);
+        window.clearTimeout(deleteTimeoutRef.current);
       }
       setConfirmDeleteId(id);
       // Auto-cancel confirmation after 3 seconds
-      deleteTimeoutRef.current = setTimeout(() => {
+      deleteTimeoutRef.current = window.setTimeout(() => {
         setConfirmDeleteId(null);
         deleteTimeoutRef.current = null;
       }, 3000);

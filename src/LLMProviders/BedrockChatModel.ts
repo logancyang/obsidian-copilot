@@ -84,7 +84,8 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     super(baseParams);
 
-    const globalFetch = typeof fetch !== "undefined" ? fetch.bind(globalThis) : undefined;
+    // scorecard: streaming requires fetch — cannot use requestUrl
+    const globalFetch = typeof fetch !== "undefined" ? fetch.bind(window) : undefined;
 
     this.fetchImpl = fetchImplementation ?? globalFetch;
     if (!this.fetchImpl) {
@@ -791,20 +792,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
   private decodeBase64ToUint8Array(encoded: string): Uint8Array | null {
     try {
-      if (typeof Buffer !== "undefined") {
-        return new Uint8Array(Buffer.from(encoded, "base64"));
-      }
-
-      if (typeof atob === "function") {
-        const binary = atob(encoded);
-        const output = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i += 1) {
-          output[i] = binary.charCodeAt(i);
-        }
-        return output;
-      }
-
-      return null;
+      return new Uint8Array(Buffer.from(encoded, "base64"));
     } catch {
       return null;
     }

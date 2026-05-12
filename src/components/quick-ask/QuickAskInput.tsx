@@ -87,10 +87,10 @@ export const QuickAskInput = React.memo(function QuickAskInput({
   // Auto-focus on mount
   useEffect(() => {
     if (focusFn) {
-      const timer = setTimeout(() => {
+      const timer = window.setTimeout(() => {
         focusFn();
       }, 50);
-      return () => clearTimeout(timer);
+      return () => window.clearTimeout(timer);
     }
   }, [focusFn]);
 

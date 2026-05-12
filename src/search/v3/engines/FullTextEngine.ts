@@ -147,7 +147,7 @@ export class FullTextEngine {
     this.memoryManager.reset();
 
     // Create new index
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
     const startTime = Date.now();
     this.index = this.createIndex();
     const createTime = Date.now() - startTime;
@@ -242,7 +242,7 @@ export class FullTextEngine {
 
       // Yield to UI thread periodically
       if (i > 0 && i % BATCH_SIZE === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise((resolve) => window.setTimeout(resolve, 0));
       }
     }
 

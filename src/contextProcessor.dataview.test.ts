@@ -200,7 +200,7 @@ LIST
             () =>
               new Promise((resolve) => {
                 // Never resolve to simulate timeout
-                setTimeout(resolve, 10000);
+                window.setTimeout(resolve, 10000);
               })
           ),
         },

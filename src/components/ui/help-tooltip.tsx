@@ -43,7 +43,7 @@ export const HelpTooltip: React.FC<TooltipProps> = ({
     if (isMobile) {
       setShowTooltip(!showTooltip);
       // Reset the flag after a brief delay
-      setTimeout(() => {
+      window.setTimeout(() => {
         isClickingRef.current = false;
       }, 100);
     }

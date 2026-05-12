@@ -107,7 +107,7 @@ function createMockNodeRequire(
 }
 
 describe("MiyoServiceDiscovery", () => {
-  const originalRequire = (globalThis as { require?: NodeRequireShape }).require;
+  const originalRequire = (window as { require?: NodeRequireShape }).require;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -116,7 +116,7 @@ describe("MiyoServiceDiscovery", () => {
   });
 
   afterEach(() => {
-    (globalThis as { require?: NodeRequireShape }).require = originalRequire;
+    (window as { require?: NodeRequireShape }).require = originalRequire;
   });
 
   it("resolves macOS service.json path", async () => {
@@ -125,7 +125,7 @@ describe("MiyoServiceDiscovery", () => {
       port: 8742,
       pid: 999,
     });
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
 
@@ -142,7 +142,7 @@ describe("MiyoServiceDiscovery", () => {
       port: 8742,
       pid: 999,
     });
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
 
@@ -159,7 +159,7 @@ describe("MiyoServiceDiscovery", () => {
       port: 8742,
       pid: 999,
     });
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
 
@@ -173,7 +173,7 @@ describe("MiyoServiceDiscovery", () => {
       port: 8742,
       pid: 999,
     });
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
 
@@ -193,7 +193,7 @@ describe("MiyoServiceDiscovery", () => {
       },
       { readFileError: missingFileError }
     );
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
 
@@ -221,7 +221,7 @@ describe("MiyoServiceDiscovery", () => {
         },
       }
     );
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const discovery = MiyoServiceDiscovery.getInstance();
     const firstBaseUrl = await discovery.resolveBaseUrl();
@@ -253,7 +253,7 @@ describe("MiyoServiceDiscovery", () => {
         },
       }
     );
-    (globalThis as { require?: NodeRequireShape }).require = nodeRequire;
+    (window as { require?: NodeRequireShape }).require = nodeRequire;
 
     const baseUrl = await MiyoServiceDiscovery.getInstance().resolveBaseUrl({ forceRefresh: true });
 

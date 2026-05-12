@@ -108,7 +108,9 @@ export class ContextProcessor {
         // Execute query with timeout
         const result = await Promise.race([
           this.executeDataviewQuery(dataviewApi, query, queryType, sourcePath),
-          new Promise((_, reject) => setTimeout(() => reject(new Error("Query timeout")), 5000)),
+          new Promise((_, reject) =>
+            window.setTimeout(() => reject(new Error("Query timeout")), 5000)
+          ),
         ]);
 
         // Replace block with structured output using slice (position-based, handles duplicates)
@@ -924,7 +926,7 @@ export class ContextProcessor {
 
         // Use AbortSignal for cancellable timeout
         const abortController = new AbortController();
-        const timeoutId = setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
           abortController.abort();
         }, READER_MODE_CONTENT_TIMEOUT_MS);
 
@@ -941,7 +943,7 @@ export class ContextProcessor {
             content,
           });
         } finally {
-          clearTimeout(timeoutId);
+          window.clearTimeout(timeoutId);
         }
       } catch (error) {
         logError(`Error processing web tab ${tab.url}:`, error);

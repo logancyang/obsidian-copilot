@@ -10,7 +10,7 @@ const CSS_CHANGE_DEBOUNCE_MS = 600;
  * Instantiated once per CopilotView and tied to its lifecycle.
  */
 export class ChatViewLayout {
-  private debounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private debounceTimer: number | null = null;
   private cssChangeRef: ReturnType<Workspace["on"]> | null = null;
 
   constructor(
@@ -25,7 +25,7 @@ export class ChatViewLayout {
    */
   destroy(): void {
     if (this.debounceTimer) {
-      clearTimeout(this.debounceTimer);
+      window.clearTimeout(this.debounceTimer);
       this.debounceTimer = null;
     }
     if (this.cssChangeRef) {
@@ -76,8 +76,8 @@ export class ChatViewLayout {
     syncClearance();
 
     this.cssChangeRef = this.workspace.on("css-change", () => {
-      if (this.debounceTimer) clearTimeout(this.debounceTimer);
-      this.debounceTimer = setTimeout(syncClearance, CSS_CHANGE_DEBOUNCE_MS);
+      if (this.debounceTimer) window.clearTimeout(this.debounceTimer);
+      this.debounceTimer = window.setTimeout(syncClearance, CSS_CHANGE_DEBOUNCE_MS);
     });
   }
 }

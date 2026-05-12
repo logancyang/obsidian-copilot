@@ -167,7 +167,7 @@ export class DBOperations {
       await this.chunkedStorage?.clearStorage();
 
       // Wait a moment to ensure file system operations complete
-      await new Promise((resolve) => setTimeout(resolve, 100));
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
 
       // Create new database instance
       this.oramaDb = await this.createNewDb(embeddingInstance);
@@ -792,7 +792,7 @@ export class DBOperations {
         }
       }
 
-      setTimeout(resolve, 0);
+      window.setTimeout(resolve, 0);
     });
   }
 }

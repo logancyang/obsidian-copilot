@@ -370,7 +370,7 @@ export function updateIndexingProgressState(partial: Partial<IndexingProgressSta
 // cascading React re-renders from frequent Jotai atom updates.
 let _lastUpdateTime = 0;
 let _pendingCount = 0;
-let _throttleTimer: ReturnType<typeof setTimeout> | null = null;
+let _throttleTimer: number | null = null;
 const THROTTLE_INTERVAL_MS = 500;
 
 /**
@@ -381,7 +381,7 @@ export function resetIndexingProgressState() {
   // Cancel any pending throttled indexing count write so a stale timer from a
   // previous run cannot corrupt the freshly-reset state.
   if (_throttleTimer !== null) {
-    clearTimeout(_throttleTimer);
+    window.clearTimeout(_throttleTimer);
     _throttleTimer = null;
   }
   _lastUpdateTime = 0;
@@ -410,13 +410,13 @@ export function throttledUpdateIndexingCount(indexedCount: number): void {
     // Enough time has passed — write immediately
     _lastUpdateTime = now;
     if (_throttleTimer !== null) {
-      clearTimeout(_throttleTimer);
+      window.clearTimeout(_throttleTimer);
       _throttleTimer = null;
     }
     updateIndexingProgressState({ indexedCount: _pendingCount });
   } else if (_throttleTimer === null) {
     // Schedule a trailing write
-    _throttleTimer = setTimeout(
+    _throttleTimer = window.setTimeout(
       () => {
         _lastUpdateTime = Date.now();
         _throttleTimer = null;
@@ -433,7 +433,7 @@ export function throttledUpdateIndexingCount(indexedCount: number): void {
  */
 export function flushIndexingCount(): void {
   if (_throttleTimer !== null) {
-    clearTimeout(_throttleTimer);
+    window.clearTimeout(_throttleTimer);
     _throttleTimer = null;
   }
   updateIndexingProgressState({ indexedCount: _pendingCount });

@@ -522,7 +522,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     });
 
     // Focus on the next change block after state update
-    setTimeout(() => focusNextChangeBlock(blockIndex), 0);
+    window.setTimeout(() => focusNextChangeBlock(blockIndex), 0);
   };
 
   // Reject a block of changes
@@ -548,7 +548,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     });
 
     // Focus on the next change block after state update
-    setTimeout(() => focusNextChangeBlock(blockIndex), 0);
+    window.setTimeout(() => focusNextChangeBlock(blockIndex), 0);
   };
 
   return (

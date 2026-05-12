@@ -323,7 +323,7 @@ export default class CopilotPlugin extends Plugin {
     }
 
     // Without the timeout, the view is not yet active
-    setTimeout(() => {
+    window.setTimeout(() => {
       const activeCopilotView = this.app.workspace
         .getLeavesOfType(CHAT_VIEWTYPE)
         .find((leaf) => leaf.view instanceof CopilotView)?.view as CopilotView;
@@ -598,7 +598,7 @@ export default class CopilotPlugin extends Plugin {
       this.app.workspace.revealLeaf(leaves[0]);
     }
     // Small delay to ensure React component is ready to receive the focus event
-    setTimeout(() => {
+    window.setTimeout(() => {
       this.emitChatIsVisible();
     }, 50);
   }
@@ -808,7 +808,7 @@ export default class CopilotPlugin extends Plugin {
         const handler = (updatedFile: TFile) => {
           if (updatedFile.path === fileId) {
             this.app.metadataCache.off("changed", handler);
-            clearTimeout(timeoutId);
+            window.clearTimeout(timeoutId);
             resolve();
           }
         };
@@ -816,7 +816,7 @@ export default class CopilotPlugin extends Plugin {
         this.app.metadataCache.on("changed", handler);
 
         // Fallback timeout with shorter duration and better error handling
-        const timeoutId = setTimeout(() => {
+        const timeoutId = window.setTimeout(() => {
           this.app.metadataCache.off("changed", handler);
           // Don't reject, just resolve - the frontmatter update might have worked
           // even if we didn't catch the event

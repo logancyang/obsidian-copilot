@@ -76,11 +76,11 @@ import * as dotenv from "dotenv";
 
 // Add global fetch polyfill for Node.js environments
 import fetch, { Headers, Request, Response } from "node-fetch";
-if (!globalThis.fetch) {
-  globalThis.fetch = fetch as any;
-  globalThis.Headers = Headers as any;
-  globalThis.Request = Request as any;
-  globalThis.Response = Response as any;
+if (!window.fetch) {
+  window.fetch = fetch as any;
+  window.Headers = Headers as any;
+  window.Request = Request as any;
+  window.Response = Response as any;
 }
 
 // Add TextDecoderStream polyfill for Node.js environments

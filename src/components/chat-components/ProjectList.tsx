@@ -347,7 +347,7 @@ export const ProjectList = memo(
       showChatUI(true);
       setCurrentProject(p);
 
-      setTimeout(() => {
+      window.setTimeout(() => {
         chatInput.focusInput();
       }, 0);
     };

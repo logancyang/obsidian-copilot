@@ -187,7 +187,7 @@ async function pollSupadataJob(
   const pollUrl = `${SUPADATA_TRANSCRIPT_URL}/${jobId}`;
 
   while (Date.now() < deadline) {
-    await new Promise((resolve) => setTimeout(resolve, SUPADATA_POLL_INTERVAL));
+    await new Promise((resolve) => window.setTimeout(resolve, SUPADATA_POLL_INTERVAL));
 
     const pollResponse = await fetch(pollUrl, {
       method: "GET",

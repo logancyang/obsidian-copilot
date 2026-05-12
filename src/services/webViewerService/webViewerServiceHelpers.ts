@@ -55,7 +55,7 @@ export function toErrorMessage(err: unknown): string {
  * Delay for the provided number of milliseconds.
  */
 export async function delay(ms: number): Promise<void> {
-  await new Promise<void>((resolve) => setTimeout(resolve, ms));
+  await new Promise<void>((resolve) => window.setTimeout(resolve, ms));
 }
 
 /**

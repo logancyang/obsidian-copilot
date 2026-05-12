@@ -651,7 +651,7 @@ export class GitHubCopilotProvider {
    */
   private delay(ms: number, signal?: AbortSignal): Promise<void> {
     if (!signal) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
+      return new Promise((resolve) => window.setTimeout(resolve, ms));
     }
 
     if (signal.aborted) {
@@ -660,11 +660,11 @@ export class GitHubCopilotProvider {
 
     return new Promise((resolve, reject) => {
       const onAbort = () => {
-        clearTimeout(timeoutId);
+        window.clearTimeout(timeoutId);
         reject(new AuthCancelledError());
       };
 
-      const timeoutId = setTimeout(() => {
+      const timeoutId = window.setTimeout(() => {
         signal.removeEventListener("abort", onAbort);
         resolve();
       }, ms);

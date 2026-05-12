@@ -88,7 +88,7 @@ export default class CopilotView extends ItemView {
     // before we disconnect and rebind.
     this.registerEvent(
       this.app.workspace.on("layout-change", () => {
-        requestAnimationFrame(() => this.setupDrawerHideObserver());
+        window.requestAnimationFrame(() => this.setupDrawerHideObserver());
       })
     );
   }

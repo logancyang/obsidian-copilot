@@ -120,7 +120,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   // Agent Reasoning Block state
   private reasoningState: AgentReasoningState = createInitialReasoningState();
-  private reasoningTimerInterval: ReturnType<typeof setTimeout> | null = null;
+  private reasoningTimerInterval: number | null = null;
   private accumulatedContent = ""; // Track content to include in timer updates
   private allReasoningSteps: Array<{ timestamp: number; summary: string; toolName?: string }> = []; // Full history of all steps
   private abortHandledByTimer = false; // Flag to prevent duplicate interrupted messages
@@ -195,7 +195,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.addReasoningStep(randomStep);
 
     // Update every 100ms for smooth timer - always includes accumulated content
-    this.reasoningTimerInterval = setInterval(() => {
+    this.reasoningTimerInterval = window.setInterval(() => {
       // Check for abort and show interrupted message immediately
       if (abortController?.signal.aborted && this.reasoningState.status === "reasoning") {
         this.stopReasoningTimer();
@@ -259,7 +259,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    */
   private stopReasoningTimer(): void {
     if (this.reasoningTimerInterval) {
-      clearInterval(this.reasoningTimerInterval);
+      window.clearInterval(this.reasoningTimerInterval);
       this.reasoningTimerInterval = null;
     }
     this.reasoningState.status = "collapsed";
@@ -738,7 +738,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
             : displayedContent;
           updateCurrentAiMessage(currentResponse);
           if (i + STREAM_CHUNK_SIZE < finalContent.length) {
-            await new Promise((resolve) => setTimeout(resolve, STREAM_DELAY_MS));
+            await new Promise((resolve) => window.setTimeout(resolve, STREAM_DELAY_MS));
           }
         }
 

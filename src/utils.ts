@@ -887,12 +887,8 @@ export async function safeFetch(
         return response.arrayBuffer;
       }
       const base64 = response.text.replace(/^data:.*;base64,/, "");
-      const binaryString = atob(base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      return bytes.buffer;
+      const buf = Buffer.from(base64, "base64");
+      return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
     },
     blob: () => {
       throw new Error("not implemented");
@@ -1117,10 +1113,10 @@ export function debounce<T extends (...args: any[]) => void>(
   func: T,
   wait: number
 ): (...args: Parameters<T>) => void {
-  let timeout: NodeJS.Timeout;
+  let timeout: number;
   return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
+    window.clearTimeout(timeout);
+    timeout = window.setTimeout(() => func(...args), wait);
   };
 }
 
@@ -1420,7 +1416,7 @@ export async function withTimeout<T>(
   const { TimeoutError } = await import("@/error");
 
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => {
+  const timeoutId = window.setTimeout(() => {
     controller.abort();
   }, timeoutMs);
 
@@ -1434,7 +1430,7 @@ export async function withTimeout<T>(
       }),
     ]);
   } finally {
-    clearTimeout(timeoutId);
+    window.clearTimeout(timeoutId);
   }
 }
 
