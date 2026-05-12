@@ -283,7 +283,8 @@ export class ProjectFileManager {
       }
 
       const now = Date.now();
-      const createdMs = Number.isFinite(project.created) && project.created > 0 ? project.created : now;
+      const createdMs =
+        Number.isFinite(project.created) && project.created > 0 ? project.created : now;
       const lastUsedMs =
         Number.isFinite(project.UsageTimestamps) && project.UsageTimestamps > 0
           ? project.UsageTimestamps
@@ -321,7 +322,10 @@ export class ProjectFileManager {
    * @param nextProject - New ProjectConfig (id must match)
    * @returns Updated ProjectFileRecord
    */
-  public async updateProject(projectId: string, nextProject: ProjectConfig): Promise<ProjectFileRecord> {
+  public async updateProject(
+    projectId: string,
+    nextProject: ProjectConfig
+  ): Promise<ProjectFileRecord> {
     const normalizedId = (projectId || "").trim();
     if (!normalizedId) throw new Error("Project id cannot be empty");
     if ((nextProject.id || "").trim() !== normalizedId) {
@@ -334,7 +338,9 @@ export class ProjectFileManager {
     const trimmedName = (nextProject.name || "").trim();
     if (trimmedName) {
       const nameConflict = getCachedProjectRecords().some(
-        (r) => r.project.id !== normalizedId && r.project.name.trim().toLowerCase() === trimmedName.toLowerCase()
+        (r) =>
+          r.project.id !== normalizedId &&
+          r.project.name.trim().toLowerCase() === trimmedName.toLowerCase()
       );
       if (nameConflict) {
         throw new Error(`A project with the name "${trimmedName}" already exists`);
@@ -369,9 +375,7 @@ export class ProjectFileManager {
       const isCaseOnlyRename =
         newFolderPath.toLowerCase() === getProjectFolderPath(existing.folderName).toLowerCase();
       if (!isCaseOnlyRename && (await this.vault.adapter.exists(newFolderPath))) {
-        throw new Error(
-          `Cannot rename project folder: "${newFolderPath}" already exists on disk`
-        );
+        throw new Error(`Cannot rename project folder: "${newFolderPath}" already exists on disk`);
       }
 
       // Suppress vault events for both old and new project.md paths
@@ -447,9 +451,13 @@ export class ProjectFileManager {
       if (isInVaultCache(app, filePath)) {
         // Vault-cached file: use processFrontMatter for safe field-level updates
         try {
-          await writeProjectFrontmatter(file, projectForWrite, folderName, { createdMs, lastUsedMs });
+          await writeProjectFrontmatter(file, projectForWrite, folderName, {
+            createdMs,
+            lastUsedMs,
+          });
         } catch (fmError) {
-          if (materialized) await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
+          if (materialized)
+            await this.rollbackCreatedFile(filePath, getProjectFolderPath(folderName));
           throw fmError;
         }
 
@@ -502,7 +510,10 @@ export class ProjectFileManager {
             `[Projects] Rolled back folder rename "${folderName}" → "${existing.folderName}" after write failure`
           );
         } catch (rollbackError) {
-          logError(`[Projects] Failed to rollback folder rename for ${normalizedId}`, rollbackError);
+          logError(
+            `[Projects] Failed to rollback folder rename for ${normalizedId}`,
+            rollbackError
+          );
         }
       }
       throw writeError;
@@ -576,9 +587,7 @@ export class ProjectFileManager {
 
       // Reason: rescan to re-admit any previously-ignored duplicate-id files.
       // The register won't fire (pending guard), so we trigger rescan here.
-      void loadAllProjects().catch((err) =>
-        logError("[Projects] Rescan after delete failed", err)
-      );
+      void loadAllProjects().catch((err) => logError("[Projects] Rescan after delete failed", err));
     } finally {
       removePendingFileWrite(existing.filePath);
     }

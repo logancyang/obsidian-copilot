@@ -726,9 +726,7 @@ ${conversationSummary}`;
 
     // Prefix from an input project, global project, or empty if none
     const currentProject = project === undefined ? getCurrentProject() : project;
-    const filePrefix = currentProject
-      ? `${sanitizeVaultPathSegment(currentProject.id)}__`
-      : "";
+    const filePrefix = currentProject ? `${sanitizeVaultPathSegment(currentProject.id)}__` : "";
 
     // Calculate fixed components in bytes
     const extensionBytes = getUtf8ByteLength(".md");

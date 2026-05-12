@@ -1,5 +1,6 @@
 import { TFile, Vault } from "obsidian";
 import { saveConvertedDocOutput } from "./convertedDocOutput";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 jest.mock("@/utils", () => ({
   ensureFolderExists: jest.fn(),
@@ -21,7 +22,7 @@ function makeTFile(path: string): TFile {
   const filename = parts[parts.length - 1];
   const basename = filename.replace(/\.[^.]+$/, "");
   const extension = filename.split(".").pop() ?? "";
-  return { path, basename, extension } as unknown as TFile;
+  return mockTFile({ path, basename, extension });
 }
 
 function makeVaultAdapter() {

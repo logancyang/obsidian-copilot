@@ -137,7 +137,14 @@ export function useProjectProcessingData(
       projectFiles,
       supportedExtensions,
     });
-  }, [displayProject, isCurrentProject, contextLoadState, projectCache, projectFiles, supportedExtensions]);
+  }, [
+    displayProject,
+    isCurrentProject,
+    contextLoadState,
+    projectCache,
+    projectFiles,
+    supportedExtensions,
+  ]);
 
   return { processingData, projectCache, isCurrentProject };
 }

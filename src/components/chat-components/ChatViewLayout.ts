@@ -49,8 +49,8 @@ export class ChatViewLayout {
 
     const syncClearance = () => {
       // Re-query each time to avoid stale references after theme reloads.
-      const statusBar = document.querySelector(".status-bar") as HTMLElement | null;
-      const viewContent = this.containerEl.querySelector(".view-content") as HTMLElement | null;
+      const statusBar = document.querySelector<HTMLElement>(".status-bar");
+      const viewContent = this.containerEl.querySelector<HTMLElement>(".view-content");
       if (!statusBar || !viewContent) return;
 
       // Zero out clearance and force reflow to measure natural overlap.

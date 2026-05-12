@@ -10,14 +10,16 @@
  */
 
 import { Button } from "@/components/ui/button";
-import {
-  type UrlItem,
-  detectUrlType,
-  isValidUrl,
-} from "@/utils/urlTagUtils";
+import { type UrlItem, detectUrlType, isValidUrl } from "@/utils/urlTagUtils";
 import { TruncatedText } from "@/components/TruncatedText";
 import { ClipboardPaste, Globe, Link, X, Youtube } from "lucide-react";
-import React, { useCallback, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react";
+import React, {
+  useCallback,
+  useRef,
+  useState,
+  type ClipboardEvent,
+  type KeyboardEvent,
+} from "react";
 
 interface UrlTagInputProps {
   urls: UrlItem[];

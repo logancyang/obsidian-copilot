@@ -292,7 +292,7 @@ export class FullTextEngine {
     };
 
     for (const key of possibleKeys) {
-      const rawValue = (frontmatter as Record<string, unknown>)[key];
+      const rawValue = frontmatter[key];
       if (!rawValue) {
         continue;
       }

@@ -1328,8 +1328,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                               }
                               onOpenCached={
                                 // Reason: only offer open for non-markdown files that have been processed
-                                !item.isIgnored &&
-                                item.id.split(".").pop()?.toLowerCase() !== "md"
+                                !item.isIgnored && item.id.split(".").pop()?.toLowerCase() !== "md"
                                   ? () => {
                                       const name = item.name || item.id.split("/").pop() || item.id;
                                       openCachedProjectFile(app, projectCache, item.id, name);

@@ -1,14 +1,8 @@
 import { ProjectConfig } from "@/aiParams";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { logError, logInfo, logWarn } from "@/logger";
-import {
-  COPILOT_PROJECT_ID,
-  PROJECTS_UNSUPPORTED_FOLDER_NAME,
-} from "@/projects/constants";
-import {
-  deriveProjectFolderName,
-  sanitizeVaultPathSegment,
-} from "@/projects/projectPaths";
+import { COPILOT_PROJECT_ID, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
+import { deriveProjectFolderName, sanitizeVaultPathSegment } from "@/projects/projectPaths";
 import {
   ensureProjectFrontmatter,
   getProjectConfigFilePath,
@@ -112,7 +106,11 @@ async function saveFailedProjectToUnsupported(
  * Best-effort rollback: delete a file and its parent folder if empty.
  * Logs errors but never throws.
  */
-async function rollbackCreatedFile(vault: Vault, filePath: string, folderPath: string): Promise<void> {
+async function rollbackCreatedFile(
+  vault: Vault,
+  filePath: string,
+  folderPath: string
+): Promise<void> {
   try {
     const file = vault.getAbstractFileByPath(filePath);
     if (file instanceof TFile) {
@@ -375,9 +373,7 @@ export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<
           continue;
         }
 
-        logWarn(
-          `[Projects] Migration verify failed on existing file for id=${id} at ${filePath}`
-        );
+        logWarn(`[Projects] Migration verify failed on existing file for id=${id} at ${filePath}`);
         await saveFailedProjectToUnsupported(
           vault,
           project,
@@ -453,7 +449,9 @@ export async function migrateProjectsFromSettingsToVault(vault: Vault): Promise<
   };
 
   if (failedCount === 0) {
-    logInfo(`[Projects] Migration succeeded: all ${successCount} project(s) migrated to vault files`);
+    logInfo(
+      `[Projects] Migration succeeded: all ${successCount} project(s) migrated to vault files`
+    );
     new ConfirmModal(
       app,
       () => revealFolderInExplorer(projectsFolder),
@@ -584,10 +582,7 @@ async function migrateProjectFolderNames(vault: Vault): Promise<void> {
           `for project "${name}" (id=${record.project.id})`
       );
     } catch (error) {
-      logError(
-        `[Projects] Naming migration failed for project id="${record.project.id}"`,
-        error
-      );
+      logError(`[Projects] Naming migration failed for project id="${record.project.id}"`, error);
     } finally {
       removePendingFileWrite(oldFilePath);
       removePendingFileWrite(newFilePath);

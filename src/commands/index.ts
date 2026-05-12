@@ -34,7 +34,7 @@ import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "../constan
 import { setSelectedTextContexts } from "@/aiParams";
 
 /**
- * Add a command to the plugin.
+ * Add a command to the plugin. Supports async callbacks; errors are logged.
  */
 export function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void) {
   plugin.addCommand({
@@ -83,7 +83,7 @@ export function registerCommands(
   next: CopilotSettings
 ) {
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
-    const selectedText = await editor.getSelection();
+    const selectedText = editor.getSelection();
     const wordCount = selectedText.split(" ").length;
     const tokenCount = await plugin.projectManager
       .getCurrentChainManager()
@@ -108,13 +108,13 @@ export function registerCommands(
     plugin.toggleView();
   });
 
-  addCommand(plugin, COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW, () => {
-    plugin.activateView();
+  addCommand(plugin, COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW, async () => {
+    await plugin.activateView();
   });
 
-  addCommand(plugin, COMMAND_IDS.NEW_CHAT, () => {
+  addCommand(plugin, COMMAND_IDS.NEW_CHAT, async () => {
     clearRecordedPromptPayload();
-    plugin.newChat();
+    await plugin.newChat();
   });
 
   // Quick Command - opens a modal dialog for quick interactions
@@ -296,8 +296,8 @@ export function registerCommands(
     }
   });
 
-  addCommand(plugin, COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION, () => {
-    plugin.loadCopilotChatHistory();
+  addCommand(plugin, COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION, async () => {
+    await plugin.loadCopilotChatHistory();
   });
 
   addCommand(plugin, COMMAND_IDS.LIST_INDEXED_FILES, async () => {
@@ -377,16 +377,16 @@ export function registerCommands(
       await ensureFolderExists(folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (existingFile) {
-        await plugin.app.vault.modify(existingFile as TFile, content);
+      if (existingFile instanceof TFile) {
+        await plugin.app.vault.modify(existingFile, content);
       } else {
         await plugin.app.vault.create(filePath, content);
       }
 
       // Open the file
       const file = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (file) {
-        await plugin.app.workspace.getLeaf().openFile(file as TFile);
+      if (file instanceof TFile) {
+        await plugin.app.workspace.getLeaf().openFile(file);
         new Notice(`Listed ${indexedFiles.size} indexed files`);
       }
     } catch (error) {
@@ -449,15 +449,15 @@ export function registerCommands(
       await ensureFolderExists(folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (existingFile) {
-        await plugin.app.vault.modify(existingFile as TFile, content);
+      if (existingFile instanceof TFile) {
+        await plugin.app.vault.modify(existingFile, content);
       } else {
         await plugin.app.vault.create(filePath, content);
       }
 
       const file = plugin.app.vault.getAbstractFileByPath(filePath);
-      if (file) {
-        await plugin.app.workspace.getLeaf().openFile(file as TFile);
+      if (file instanceof TFile) {
+        await plugin.app.workspace.getLeaf().openFile(file);
         new Notice(`Embedding debug info for ${chunks.length} chunk(s)`);
       }
     } catch (error) {
@@ -546,7 +546,7 @@ export function registerCommands(
     setSelectedTextContexts([selectedTextContext]);
 
     // Open chat window to show the context was added
-    plugin.activateView();
+    await plugin.activateView();
   });
 
   // Add web selection to chat context command (manual)

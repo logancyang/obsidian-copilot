@@ -31,8 +31,8 @@ export function KeyboardPlugin({ onSubmit, sendShortcut }: KeyboardPluginProps) 
 
         // Ignore Enter key during IME composition (e.g., Chinese, Japanese, Korean input).
         // event.isComposing is set by the browser while a composition session is active.
-        // keyCode 229 is the legacy indicator used by some environments during IME input.
-        if (event.isComposing || event.keyCode === 229) {
+        // key "Process" is the standard indicator used during IME input.
+        if (event.isComposing || event.key === "Process") {
           event.preventDefault();
           return true;
         }

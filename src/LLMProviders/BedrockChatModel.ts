@@ -1022,14 +1022,14 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
             return part;
           }
           if (part && typeof part === "object") {
-            if (typeof (part as any).text === "string") {
-              return (part as any).text;
+            if (typeof part.text === "string") {
+              return part.text;
             }
-            if (typeof (part as any).value === "string") {
-              return (part as any).value;
+            if (typeof part.value === "string") {
+              return part.value;
             }
-            if (Array.isArray((part as any).content)) {
-              return (part as any).content
+            if (Array.isArray(part.content)) {
+              return part.content
                 .map((sub: any) => (typeof sub?.text === "string" ? sub.text : ""))
                 .join("");
             }

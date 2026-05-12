@@ -1,7 +1,8 @@
-import { Notice, Plugin, TFile, Vault } from "obsidian";
+import { Notice, Plugin, Vault } from "obsidian";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import * as state from "@/system-prompts/state";
 import * as systemPromptUtils from "@/system-prompts/systemPromptUtils";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock obsidian
 jest.mock("obsidian", () => ({
@@ -94,11 +95,11 @@ describe("SystemPromptRegister", () => {
 
   describe("handleFileDeletion - selectedPromptTitle sync", () => {
     it("clears selectedPromptTitle when deleted file matches current selection", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/MyPrompt.md",
         basename: "MyPrompt",
         extension: "md",
-      } as TFile;
+      });
 
       // Set up: current selection points to the file being deleted
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("MyPrompt");
@@ -112,11 +113,11 @@ describe("SystemPromptRegister", () => {
     });
 
     it("does not clear selectedPromptTitle when deleted file does not match", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/OtherPrompt.md",
         basename: "OtherPrompt",
         extension: "md",
-      } as TFile;
+      });
 
       // Set up: current selection points to a different prompt
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("MyPrompt");
@@ -130,11 +131,11 @@ describe("SystemPromptRegister", () => {
     });
 
     it("does not clear selectedPromptTitle when no prompt is selected", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/MyPrompt.md",
         basename: "MyPrompt",
         extension: "md",
-      } as TFile;
+      });
 
       // Set up: no prompt is currently selected
       (state.getSelectedPromptTitle as jest.Mock).mockReturnValue("");
@@ -150,11 +151,11 @@ describe("SystemPromptRegister", () => {
 
   describe("handleFileRename - selectedPromptTitle sync", () => {
     it("updates selectedPromptTitle when renamed file matches current selection", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/NewName.md",
         basename: "NewName",
         extension: "md",
-      } as TFile;
+      });
       const oldPath = "SystemPrompts/OldName.md";
 
       // Set up: current selection points to the old name
@@ -170,11 +171,11 @@ describe("SystemPromptRegister", () => {
     });
 
     it("clears selectedPromptTitle when file is moved out of prompts folder", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "OtherFolder/MyPrompt.md",
         basename: "MyPrompt",
         extension: "md",
-      } as TFile;
+      });
       const oldPath = "SystemPrompts/MyPrompt.md";
 
       // Set up: current selection points to the moved file
@@ -191,11 +192,11 @@ describe("SystemPromptRegister", () => {
     });
 
     it("does not update selectedPromptTitle when renamed file does not match", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/NewName.md",
         basename: "NewName",
         extension: "md",
-      } as TFile;
+      });
       const oldPath = "SystemPrompts/OldName.md";
 
       // Set up: current selection points to a different prompt
@@ -211,11 +212,11 @@ describe("SystemPromptRegister", () => {
     });
 
     it("does not update selectedPromptTitle when no prompt is selected", async () => {
-      const mockFile = {
+      const mockFile = mockTFile({
         path: "SystemPrompts/NewName.md",
         basename: "NewName",
         extension: "md",
-      } as TFile;
+      });
       const oldPath = "SystemPrompts/OldName.md";
 
       // Set up: no prompt is currently selected

@@ -50,7 +50,7 @@ export class IndexOperations {
     this.chunkManager = getSharedChunkManager(app);
 
     // Subscribe to settings changes
-    subscribeToSettingsChange(async () => {
+    subscribeToSettingsChange(() => {
       this.refreshRuntimeIndexingConfig();
     });
   }
@@ -187,7 +187,9 @@ export class IndexOperations {
 
               // Skip documents with invalid embeddings
               if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
-                logError(`Invalid embedding for document ${chunk.fileInfo.path}: ${embedding}`);
+                logError(
+                  `Invalid embedding for document ${chunk.fileInfo.path}: ${JSON.stringify(embedding)}`
+                );
                 this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
                 continue;
               }
@@ -472,7 +474,7 @@ export class IndexOperations {
         const files = await this.getFilesToIndex();
         if (files.length === 0) {
           logInfo("No files to index after filter change, stopping indexing");
-          this.cancelIndexing();
+          await this.cancelIndexing();
           return;
         }
         // Keep progress denominator consistent after resume:

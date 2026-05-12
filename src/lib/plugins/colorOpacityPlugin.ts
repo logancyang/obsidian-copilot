@@ -86,12 +86,12 @@ const processColorObject =
  * bg-modifier-error/50
  * text-background-modifier-success/30
  */
-export const colorOpacityPlugin = plugin(function ({ addUtilities, theme, e }) {
+export const colorOpacityPlugin = plugin(function (this: void, { addUtilities, theme, e }) {
   const opacityUtilities: Record<string, any> = {};
 
   // 处理所有颜色相关的主题配置
   const processThemeColors = (themeKey: string, prefix?: string) => {
-    const colors = theme(themeKey) as Record<string, string | ColorValue>;
+    const colors: Record<string, string | ColorValue> = theme(themeKey);
     Object.entries(colors).forEach(([colorName, colorValue]) => {
       const baseName = prefix ? `${prefix}-${colorName}` : colorName;
       processColorObject(e, opacityUtilities)(colorValue, baseName);

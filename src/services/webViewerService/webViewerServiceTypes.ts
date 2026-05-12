@@ -180,8 +180,7 @@ export function isWebViewerLeaf(leaf: WorkspaceLeaf | null): leaf is WebViewerLe
   if (!leaf) return false;
   const view = leaf.view as View | undefined;
   if (!view || typeof view !== "object") return false;
-  const getViewType = view.getViewType;
-  return typeof getViewType === "function" && leaf.view.getViewType() === WEB_VIEWER_VIEW_TYPE;
+  return typeof view.getViewType === "function" && view.getViewType() === WEB_VIEWER_VIEW_TYPE;
 }
 
 /**

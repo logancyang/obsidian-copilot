@@ -156,7 +156,7 @@ export async function verifyAndAddModel(
       // hasn't enabled this model on their GitHub settings page. Append the policy
       // terms (which include an activation link) to guide the user.
       if (
-        customModel.provider === ChatModelProviders.GITHUB_COPILOT &&
+        (customModel.provider as ChatModelProviders) === ChatModelProviders.GITHUB_COPILOT &&
         verificationError.toLowerCase().includes("not supported")
       ) {
         // Reason: policy cache is keyed by model.id, not customModel.name (display name)

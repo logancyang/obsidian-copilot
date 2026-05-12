@@ -48,7 +48,7 @@ export class PromptContextEngine {
 
     const debugLabel =
       typeof params.metadata?.["debugLabel"] === "string"
-        ? (params.metadata["debugLabel"] as string)
+        ? params.metadata["debugLabel"]
         : undefined;
 
     if (debugLabel) {

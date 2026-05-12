@@ -106,7 +106,7 @@ export class ChunkedStorage {
 
   async saveDatabase(db: Orama<any>): Promise<void> {
     try {
-      const rawData: RawData = await save(db);
+      const rawData: RawData = save(db);
       const numPartitions = getSettings().numPartitions;
 
       if (numPartitions === 1) {
@@ -234,7 +234,7 @@ export class ChunkedStorage {
         if (!legacyData?.schema) {
           throw new CustomError("Invalid legacy database format");
         }
-        const newDb = await create({
+        const newDb = create({
           schema: legacyData.schema,
           components: {
             tokenizer: {
@@ -243,13 +243,13 @@ export class ChunkedStorage {
             },
           },
         });
-        await load(newDb, legacyData);
+        load(newDb, legacyData);
         return newDb;
       }
 
       // Load metadata
       const metadata = await this.loadMetadata();
-      const newDb = await create({
+      const newDb = create({
         schema: metadata.schema,
         components: {
           tokenizer: {
@@ -289,7 +289,7 @@ export class ChunkedStorage {
         // Find document in any chunk
         const doc = allChunks
           .flatMap((chunk) => Object.values(chunk.docs.docs))
-          .find((doc: any) => (doc as any).id === internalId);
+          .find((doc: any) => doc.id === internalId);
 
         if (doc) {
           orderedDocs[nextDocId.toString()] = doc;
@@ -308,7 +308,7 @@ export class ChunkedStorage {
       // upsert cycles. These "ghost" IDs cause position mismatches after load,
       // where some user IDs point to wrong doc positions or undefined entries.
       mergedData.internalDocumentIDStore.internalIdToId = Object.values(orderedDocs).map(
-        (doc: any) => (doc as any).id
+        (doc: any) => doc.id
       );
 
       // Merge vectors from all chunks
@@ -318,7 +318,7 @@ export class ChunkedStorage {
       );
 
       // Load merged data into database
-      await load(newDb, mergedData);
+      load(newDb, mergedData);
       return newDb;
     } catch (error) {
       console.error(`Error loading database:`, error);

@@ -2,7 +2,7 @@ import { ToolManager } from "@/tools/toolManager";
 import { createGetTagListTool, enforceSizeLimit } from "./TagTools";
 
 describe("TagTools", () => {
-  const originalApp = (globalThis as any).app;
+  const originalApp = (window as any).app;
 
   const parsePayload = (result: string) => {
     const startIndex = result.indexOf('{"');
@@ -22,7 +22,7 @@ describe("TagTools", () => {
   };
 
   beforeEach(() => {
-    (globalThis as any).app = {
+    (window as any).app = {
       metadataCache: {
         getTags: jest.fn().mockReturnValue({
           "#project": 5,
@@ -38,7 +38,7 @@ describe("TagTools", () => {
   });
 
   afterEach(() => {
-    (globalThis as any).app = originalApp;
+    (window as any).app = originalApp;
     jest.clearAllMocks();
   });
 
@@ -48,8 +48,8 @@ describe("TagTools", () => {
 
     const payload = parsePayload(result);
 
-    expect((globalThis as any).app.metadataCache.getTags).toHaveBeenCalled();
-    expect((globalThis as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
+    expect((window as any).app.metadataCache.getTags).toHaveBeenCalled();
+    expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
     expect(payload.totalUniqueTags).toBe(3);
     expect(payload.returnedTagCount).toBe(3);
     expect(payload.totalOccurrences).toBe(10);
@@ -83,8 +83,8 @@ describe("TagTools", () => {
 
     const payload = parsePayload(result);
 
-    expect((globalThis as any).app.metadataCache.getTags).not.toHaveBeenCalled();
-    expect((globalThis as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
+    expect((window as any).app.metadataCache.getTags).not.toHaveBeenCalled();
+    expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
     expect(payload.totalUniqueTags).toBe(2);
     expect(payload.includedSources).toEqual(["frontmatter"]);
     expect(payload.tags).toEqual([
@@ -118,8 +118,8 @@ describe("TagTools", () => {
   });
 
   it("handles empty vault gracefully", async () => {
-    (globalThis as any).app.metadataCache.getTags.mockReturnValue({});
-    (globalThis as any).app.metadataCache.getFrontmatterTags.mockReturnValue({});
+    (window as any).app.metadataCache.getTags.mockReturnValue({});
+    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({});
 
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, {});
@@ -132,11 +132,11 @@ describe("TagTools", () => {
   });
 
   it("normalizes malformed tags correctly", async () => {
-    (globalThis as any).app.metadataCache.getTags.mockReturnValue({
+    (window as any).app.metadataCache.getTags.mockReturnValue({
       project: 5,
       "##Weird/Tag": 4,
     });
-    (globalThis as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
+    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
       "  #Project ": 3,
       "##Weird/Tag": 1,
     });
@@ -163,10 +163,10 @@ describe("TagTools", () => {
   });
 
   it("falls back when inline counts omit frontmatter occurrences", async () => {
-    (globalThis as any).app.metadataCache.getTags.mockReturnValue({
+    (window as any).app.metadataCache.getTags.mockReturnValue({
       "#project": 1,
     });
-    (globalThis as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
+    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
       "#project": 3,
     });
 

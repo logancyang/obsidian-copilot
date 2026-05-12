@@ -69,11 +69,7 @@ import {
   filterChatHistoryFiles,
 } from "@/utils/chatHistoryUtils";
 import { RecentUsageManager } from "@/utils/recentUsageManager";
-import {
-  listMarkdownFiles,
-  patchFrontmatter,
-  resolveFileByPath,
-} from "@/utils/vaultAdapterUtils";
+import { listMarkdownFiles, patchFrontmatter, resolveFileByPath } from "@/utils/vaultAdapterUtils";
 import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface

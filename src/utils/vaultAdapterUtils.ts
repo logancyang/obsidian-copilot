@@ -6,7 +6,7 @@ import { App, TFile, TFolder } from "obsidian";
  */
 export async function resolveFileByPath(app: App, filePath: string): Promise<TFile | null> {
   const file = app.vault.getAbstractFileByPath(filePath);
-  if (file) return file as TFile;
+  if (file instanceof TFile) return file;
 
   if (await app.vault.adapter.exists(filePath)) {
     return createSyntheticTFile(app, filePath);
@@ -55,8 +55,8 @@ export async function patchFrontmatter(
 ): Promise<void> {
   const file = app.vault.getAbstractFileByPath(filePath);
 
-  if (file && app.fileManager?.processFrontMatter) {
-    await app.fileManager.processFrontMatter(file as TFile, (frontmatter) => {
+  if (file instanceof TFile && app.fileManager?.processFrontMatter) {
+    await app.fileManager.processFrontMatter(file, (frontmatter) => {
       for (const [key, value] of Object.entries(updates)) {
         frontmatter[key] = value;
       }

@@ -67,13 +67,12 @@ jest.mock("@/projects/projectMigration", () => ({
 // Helpers
 // ---------------------------------------------------------------------------
 
-import {
-  getCachedProjectRecords,
-  getCachedProjectRecordById,
-} from "@/projects/state";
+import { getCachedProjectRecords, getCachedProjectRecordById } from "@/projects/state";
 
 /** Minimal valid ProjectConfig for test use. */
-function makeConfig(overrides: { id: string; name: string } & Partial<ProjectConfig>): ProjectConfig {
+function makeConfig(
+  overrides: { id: string; name: string } & Partial<ProjectConfig>
+): ProjectConfig {
   return {
     systemPrompt: "",
     projectModelKey: "",
@@ -88,7 +87,7 @@ function makeConfig(overrides: { id: string; name: string } & Partial<ProjectCon
 /** Build a minimal Vault mock. */
 function makeMockVault(): jest.Mocked<Vault> {
   return {
-    create: jest.fn(async (path: string) => ({ path } as TFile)),
+    create: jest.fn(async (path: string) => ({ path }) as TFile),
     // Reason: null = file does not exist yet, avoids collision error in createProject
     getAbstractFileByPath: jest.fn(() => null),
     adapter: { exists: jest.fn(async () => false) },
@@ -135,9 +134,9 @@ describe("ProjectFileManager.createProject", () => {
   it("rejects empty project id", async () => {
     const manager = ProjectFileManager.getInstance(vault);
 
-    await expect(
-      manager.createProject(makeConfig({ id: "", name: "Valid Name" }))
-    ).rejects.toThrow(/cannot be empty/i);
+    await expect(manager.createProject(makeConfig({ id: "", name: "Valid Name" }))).rejects.toThrow(
+      /cannot be empty/i
+    );
   });
 
   it("rejects whitespace-only project id", async () => {

@@ -673,7 +673,7 @@ export class ContextManager {
     vault: Vault,
     additionalNotes: TFile[] = []
   ): Promise<TFile[]> {
-    const extractedNotes = await extractNoteFiles(content, vault);
+    const extractedNotes = extractNoteFiles(content, vault);
 
     // Combine and deduplicate
     const allNotes = [...extractedNotes, ...additionalNotes];

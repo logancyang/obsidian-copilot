@@ -84,7 +84,9 @@ function buildEnvelopeWithL3Segments(segments: PromptLayerSegment[]): PromptCont
 /**
  * Create a mock MessageRepository that returns the given display messages.
  */
-function createMockMessageRepo(messages: Array<{ id: string; sender: string; contextEnvelope?: PromptContextEnvelope }>) {
+function createMockMessageRepo(
+  messages: Array<{ id: string; sender: string; contextEnvelope?: PromptContextEnvelope }>
+) {
   return {
     getDisplayMessages: () =>
       messages.map((msg) => ({

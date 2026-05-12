@@ -133,9 +133,11 @@ export class ProjectRegister {
       const cache = ProjectContextCache.getInstance();
       await Promise.all(
         oldRecords.map((old) =>
-          cache.clearForProject(old.project).catch((err) =>
-            logError("[Projects] Failed to clear context cache on folder switch", err)
-          )
+          cache
+            .clearForProject(old.project)
+            .catch((err) =>
+              logError("[Projects] Failed to clear context cache on folder switch", err)
+            )
         )
       );
 
@@ -170,16 +172,20 @@ export class ProjectRegister {
       const cache = ProjectContextCache.getInstance();
       await Promise.all(
         oldRecords.map((old) =>
-          cache.clearForProject(old.project).catch((err) =>
-            logError("[Projects] Failed to clear context cache on folder switch failure", err)
-          )
+          cache
+            .clearForProject(old.project)
+            .catch((err) =>
+              logError("[Projects] Failed to clear context cache on folder switch failure", err)
+            )
         )
       );
 
       updateCachedProjectRecords([]);
 
       logError(`[Projects] Failed to reload after folder change: ${nextFolder}`, error);
-      new Notice(`Failed to reload projects from "${nextFolder}". Projects cleared — reopen settings to retry.`);
+      new Notice(
+        `Failed to reload projects from "${nextFolder}". Projects cleared — reopen settings to retry.`
+      );
     }
   }
 
@@ -253,7 +259,9 @@ export class ProjectRegister {
         // fresh cache wiped by a stale async cleanup. Consistent with folder-switch path.
         await ProjectContextCache.getInstance()
           .clearForProject(record.project)
-          .catch((err) => logError("[Projects] Failed to clear context cache on external delete", err));
+          .catch((err) =>
+            logError("[Projects] Failed to clear context cache on external delete", err)
+          );
 
         // Reason: rescan to re-admit any previously-ignored duplicate-id files
         // that were hidden while the deleted file was the "kept" entry.
@@ -378,7 +386,9 @@ export class ProjectRegister {
         if (staleRecord) {
           void ProjectContextCache.getInstance()
             .clearForProject(staleRecord.project)
-            .catch((err) => logError("[Projects] Failed to clear context cache on invalid edit", err));
+            .catch((err) =>
+              logError("[Projects] Failed to clear context cache on invalid edit", err)
+            );
           // Reason: rescan to re-admit previously-ignored duplicate-id files
           void loadAllProjects().catch((err) =>
             logError("[Projects] Rescan after invalid edit failed", err)
@@ -395,7 +405,9 @@ export class ProjectRegister {
         if (staleRecord) {
           void ProjectContextCache.getInstance()
             .clearForProject(staleRecord.project)
-            .catch((err) => logError("[Projects] Failed to clear context cache on duplicate edit", err));
+            .catch((err) =>
+              logError("[Projects] Failed to clear context cache on duplicate edit", err)
+            );
           // Reason: rescan to re-admit previously-ignored duplicate-id files
           void loadAllProjects().catch((err) =>
             logError("[Projects] Rescan after duplicate edit failed", err)

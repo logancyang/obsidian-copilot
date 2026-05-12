@@ -650,7 +650,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const reasoningBlockData = parseReasoningBlock(originMessage);
       if (reasoningBlockData?.hasReasoning && reasoningBlockData.status !== "idle") {
         setReasoningData({
-          status: reasoningBlockData.status as "reasoning" | "collapsed" | "complete",
+          status: reasoningBlockData.status,
           elapsedSeconds: reasoningBlockData.elapsedSeconds,
           steps: reasoningBlockData.steps,
         });
@@ -726,7 +726,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               messageId.current,
               rootsRef.current,
               toolCallId,
-              container as HTMLElement,
+              container,
               "render refresh"
             );
 
@@ -760,7 +760,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               messageId.current,
               errorRootsRef.current,
               errorId,
-              container as HTMLElement,
+              container,
               "error render"
             );
 

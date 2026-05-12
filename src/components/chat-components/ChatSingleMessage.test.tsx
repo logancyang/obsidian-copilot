@@ -36,7 +36,7 @@ jest.mock("@/LLMProviders/chainRunner/utils/citationUtils", () => ({
 }));
 
 jest.mock("obsidian", () => {
-  const renderMarkdown = jest.fn();
+  const renderMarkdown = jest.fn().mockResolvedValue(undefined);
   return {
     MarkdownRenderer: {
       renderMarkdown,
@@ -93,6 +93,7 @@ describe("think block rendering — closing tags are not consumed by indented co
 
   beforeEach(() => {
     renderMarkdownMock.mockReset();
+    renderMarkdownMock.mockResolvedValue(undefined);
   });
 
   beforeAll(() => {
@@ -122,7 +123,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const messageText = `<think>${thinkContent}</think>Here is my answer.`;
 
     const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation((md: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
       el.innerHTML = "<p>rendered</p>";
     });
@@ -148,7 +149,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const messageText = `<think>${thinkContent}</think>Response text.`;
 
     const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation((md: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
       el.innerHTML = "<p>rendered</p>";
     });
@@ -174,7 +175,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const messageText = "<think>Thinking:\n    *   Still streaming.";
 
     const capturedMarkdown: string[] = [];
-    renderMarkdownMock.mockImplementation((md: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
       el.innerHTML = "<p>rendered</p>";
     });
@@ -199,6 +200,7 @@ describe("think block rendering — closing tags are not consumed by indented co
 describe("normalizeFootnoteRendering", () => {
   beforeEach(() => {
     renderMarkdownMock.mockReset();
+    renderMarkdownMock.mockResolvedValue(undefined);
   });
 
   it("removes separator and backref while preserving non-footnote elements", () => {
@@ -263,6 +265,7 @@ describe("ChatSingleMessage", () => {
 
   beforeEach(() => {
     renderMarkdownMock.mockReset();
+    renderMarkdownMock.mockResolvedValue(undefined);
   });
 
   beforeAll(() => {
@@ -270,7 +273,7 @@ describe("ChatSingleMessage", () => {
   });
 
   it("normalizes rendered footnotes for assistant messages", async () => {
-    renderMarkdownMock.mockImplementation((_markdown: string, el: HTMLElement) => {
+    renderMarkdownMock.mockImplementation(async (_markdown: string, el: HTMLElement) => {
       el.innerHTML = `
         <p>Example <sup><a href="#fn-2">2-1</a></sup></p>
         <hr class="content-hr" />

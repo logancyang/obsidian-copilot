@@ -120,7 +120,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
   // Agent Reasoning Block state
   private reasoningState: AgentReasoningState = createInitialReasoningState();
-  private reasoningTimerInterval: ReturnType<typeof setInterval> | null = null;
+  private reasoningTimerInterval: ReturnType<typeof setTimeout> | null = null;
   private accumulatedContent = ""; // Track content to include in timer updates
   private allReasoningSteps: Array<{ timestamp: number; summary: string; toolName?: string }> = []; // Full history of all steps
   private abortHandledByTimer = false; // Flag to prevent duplicate interrupted messages
@@ -543,7 +543,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     const availableTools = this.getAvailableTools();
 
     // Bind tools to the model for native function calling
-    const modelName = (chatModel as any).modelName || (chatModel as any).model || "unknown";
+    const modelName = chatModel.modelName || chatModel.model || "unknown";
     if (typeof chatModel.bindTools !== "function") {
       throw new Error(
         `Model ${modelName} does not support native tool calling (bindTools not available). ` +

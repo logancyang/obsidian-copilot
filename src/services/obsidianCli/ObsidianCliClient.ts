@@ -130,7 +130,7 @@ export function isDesktopRuntime(): boolean {
  * @throws If `require` is not available.
  */
 function getRuntimeRequire(): (id: string) => unknown {
-  const container = globalThis as unknown as RequireContainer;
+  const container = window as unknown as RequireContainer;
   if (typeof container.require !== "function") {
     throw new Error(
       "Node require is unavailable in this runtime. Obsidian CLI commands require the desktop app."
@@ -171,7 +171,7 @@ function normalizeCliParameterValue(value: string): string {
  * @returns Ordered non-empty binary candidates from environment.
  */
 function getCliBinaryCandidatesFromEnv(): string[] {
-  const container = globalThis as unknown as ProcessContainer;
+  const container = window as unknown as ProcessContainer;
   const env = container.process?.env;
   if (!env) {
     return [];

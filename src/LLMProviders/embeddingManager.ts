@@ -123,7 +123,7 @@ export default class EmbeddingManager {
       return emb.modelName as string;
     } else {
       throw new Error(
-        `Embeddings instance missing model or modelName properties: ${embeddingsInstance}`
+        `Embeddings instance missing model or modelName properties: ${JSON.stringify(embeddingsInstance)}`
       );
     }
   }
@@ -140,7 +140,7 @@ export default class EmbeddingManager {
     const settings = getSettings();
     const embeddingModelKey = settings.embeddingModelKey;
 
-    if (!EmbeddingManager.modelMap.hasOwnProperty(embeddingModelKey)) {
+    if (!Object.prototype.hasOwnProperty.call(EmbeddingManager.modelMap, embeddingModelKey)) {
       throw new CustomError(`No embedding model found for: ${embeddingModelKey}`);
     }
 

@@ -447,11 +447,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   // Ensure selfHostSearchProvider is a valid value
   const validSearchProviders = ["firecrawl", "perplexity"] as const;
-  if (
-    !validSearchProviders.includes(
-      sanitizedSettings.selfHostSearchProvider as (typeof validSearchProviders)[number]
-    )
-  ) {
+  if (!validSearchProviders.includes(sanitizedSettings.selfHostSearchProvider)) {
     sanitizedSettings.selfHostSearchProvider = DEFAULT_SETTINGS.selfHostSearchProvider;
   }
 

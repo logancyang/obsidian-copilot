@@ -70,7 +70,7 @@ import { ContextManager } from "./ContextManager";
 import { ChainType } from "@/chainFactory";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { ChatMessage, MessageContext } from "@/types/message";
-import { TFile } from "obsidian";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 const USER_SENDER = "user";
 const createContextResult = (content = "Hello with context") => ({
@@ -114,7 +114,7 @@ describe("ChatManager", () => {
 
     mockChainManager = {
       memoryManager: {
-        clearChatMemory: jest.fn(),
+        clearChatMemory: jest.fn().mockResolvedValue(undefined),
       },
       runChain: jest.fn(),
     };
@@ -156,7 +156,7 @@ describe("ChatManager", () => {
 
   describe("sendMessage", () => {
     it("should send a message with basic context", async () => {
-      const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+      const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
       const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const context: MessageContext = {
         notes: [],
@@ -203,7 +203,7 @@ describe("ChatManager", () => {
     });
 
     it("should include active note in context when includeActiveNote is true", async () => {
-      const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+      const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
       const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const context: MessageContext = {
         notes: [],
@@ -283,7 +283,7 @@ describe("ChatManager", () => {
 
   describe("editMessage", () => {
     it("should edit a message and reprocess context", async () => {
-      const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+      const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
 
       mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
       mockMessageRepo.editMessage.mockReturnValue(true);
@@ -590,7 +590,7 @@ describe("ChatManager", () => {
   describe("Bug Prevention Tests", () => {
     describe("Context Badge Bug Prevention", () => {
       it("should include active note in context when includeActiveNote is true", async () => {
-        const mockActiveFile = { path: "lesson4.md", basename: "Lesson 4" } as TFile;
+        const mockActiveFile = mockTFile({ path: "lesson4.md", basename: "Lesson 4" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = {
           notes: [],
@@ -641,7 +641,7 @@ describe("ChatManager", () => {
 
     describe("Edit Message Bug Prevention", () => {
       it("should reprocess context after editing", async () => {
-        const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+        const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
 
         mockPlugin.app.workspace.getActiveFile.mockReturnValue(mockActiveFile);
         mockMessageRepo.editMessage.mockReturnValue(true);
@@ -1240,7 +1240,7 @@ describe("ChatManager", () => {
 
     describe("Template Skip Logic", () => {
       it("should not call processPrompt when user custom prompt has no template variables", async () => {
-        const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+        const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1270,7 +1270,7 @@ describe("ChatManager", () => {
       });
 
       it("should call processPrompt for JSON but preserve content (handled internally)", async () => {
-        const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+        const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1308,7 +1308,7 @@ describe("ChatManager", () => {
       });
 
       it("should treat {} as literal in system prompts (not expand to activeNote)", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1350,7 +1350,7 @@ describe("ChatManager", () => {
       });
 
       it("should preserve trailing whitespace for JSON content", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1384,7 +1384,7 @@ describe("ChatManager", () => {
       });
 
       it("should not call processPrompt when enableCustomPromptTemplating is false", async () => {
-        const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+        const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1410,7 +1410,7 @@ describe("ChatManager", () => {
       });
 
       it("should not call processPrompt when no user custom prompt is set", async () => {
-        const mockActiveFile = { path: "active.md", basename: "active" } as TFile;
+        const mockActiveFile = mockTFile({ path: "active.md", basename: "active" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1431,7 +1431,7 @@ describe("ChatManager", () => {
 
     describe("Template Processing", () => {
       it("should call processPrompt with correct arguments for {activeNote} template", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1468,8 +1468,8 @@ describe("ChatManager", () => {
       });
 
       it("should pass includedFiles to contextManager for deduplication", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
-        const mockIncludedFile = { path: "included.md", basename: "Included Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
+        const mockIncludedFile = mockTFile({ path: "included.md", basename: "Included Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1512,7 +1512,7 @@ describe("ChatManager", () => {
 
     describe("Injection Logic", () => {
       it("should inject processed content into user_custom_instructions block", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1550,7 +1550,7 @@ describe("ChatManager", () => {
       it("should preserve $ characters in user prompt without interpreting as replacement patterns", async () => {
         // Regression test: String.prototype.replace treats $&, $1, $$ etc. as special sequences.
         // Using function replacement avoids this issue.
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1597,7 +1597,7 @@ describe("ChatManager", () => {
 
       it("should preserve $ characters when template processing is involved", async () => {
         // Regression test: Even when templates are processed, $ in output must not be interpreted
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1649,7 +1649,7 @@ describe("ChatManager", () => {
 
     describe("Memory Preservation", () => {
       it("should preserve memory prefix and not process it for templates", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1695,7 +1695,7 @@ describe("ChatManager", () => {
 
     describe("Error Handling", () => {
       it("should return original prompt when processPrompt throws error", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1729,7 +1729,7 @@ describe("ChatManager", () => {
 
     describe("Builtin Disabled Branch", () => {
       it("should handle builtin disabled scenario (no user_custom_instructions block)", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1762,7 +1762,7 @@ describe("ChatManager", () => {
       });
 
       it("should preserve memory prefix when builtin is disabled", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1797,7 +1797,7 @@ describe("ChatManager", () => {
 
     describe("EndsWith Mismatch Fallback", () => {
       it("should fallback to original base prompt when endsWith check fails", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1848,7 +1848,7 @@ describe("ChatManager", () => {
       });
 
       it("should process project system prompt templates", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1866,7 +1866,10 @@ describe("ChatManager", () => {
         getSystemPrompt.mockReturnValue("DEFAULT_SYSTEM_PROMPT");
         getSystemPromptWithMemory.mockResolvedValue("DEFAULT_SYSTEM_PROMPT");
 
-        const projectIncludedFile = { path: "project-note.md", basename: "Project Note" } as TFile;
+        const projectIncludedFile = mockTFile({
+          path: "project-note.md",
+          basename: "Project Note",
+        });
         processPrompt.mockResolvedValue({
           processedPrompt: "PROCESSED_PROJECT_PROMPT",
           includedFiles: [projectIncludedFile],
@@ -1904,7 +1907,7 @@ describe("ChatManager", () => {
       });
 
       it("should merge includedFiles from both user and project prompts", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 
@@ -1925,8 +1928,11 @@ describe("ChatManager", () => {
           `DEFAULT\n<user_custom_instructions>\n${userCustomPrompt}\n</user_custom_instructions>`
         );
 
-        const userIncludedFile = { path: "user-note.md", basename: "User Note" } as TFile;
-        const projectIncludedFile = { path: "project-note.md", basename: "Project Note" } as TFile;
+        const userIncludedFile = mockTFile({ path: "user-note.md", basename: "User Note" });
+        const projectIncludedFile = mockTFile({
+          path: "project-note.md",
+          basename: "Project Note",
+        });
 
         // First call for user prompt, second call for project prompt
         processPrompt
@@ -1957,7 +1963,7 @@ describe("ChatManager", () => {
       });
 
       it("should not add project_context block when context is null", async () => {
-        const mockActiveFile = { path: "test.md", basename: "Test Note" } as TFile;
+        const mockActiveFile = mockTFile({ path: "test.md", basename: "Test Note" });
         const mockMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const context: MessageContext = { notes: [], urls: [], selectedTextContexts: [] };
 

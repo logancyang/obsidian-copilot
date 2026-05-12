@@ -38,8 +38,9 @@ export class CustomCommandRegister {
 
   /**
    * Register all custom commands found in the custom commands folder.
+   * Synchronous: iterates cached commands and registers each.
    */
-  private async registerCommands() {
+  private registerCommands() {
     const commands = getCachedCustomCommands();
     commands.forEach((command) => {
       this.registerCommand(command);

@@ -160,9 +160,9 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     // token estimation entirely. Actual token usage comes from API response metadata.
     let response: AIMessage;
     {
-      const stream = (await withSuppressedTokenWarnings(() =>
+      const stream: AsyncIterable<AIMessageChunk> = await withSuppressedTokenWarnings(() =>
         boundModel.stream(planningMessages)
-      )) as AsyncIterable<AIMessageChunk>;
+      );
       let aggregated: AIMessageChunk | undefined;
       for await (const chunk of stream) {
         aggregated = aggregated ? aggregated.concat(chunk) : chunk;

@@ -93,7 +93,7 @@ export async function generateDefaultCommands(): Promise<void> {
     (command) => !existingCommands.some((c) => c.title === command.title)
   );
   const newCommands = [...existingCommands, ...defaultCommands];
-  CustomCommandManager.getInstance().updateCommands(newCommands);
+  await CustomCommandManager.getInstance().updateCommands(newCommands);
 }
 
 /** Suggests the default commands if the user has not created any commands yet. */

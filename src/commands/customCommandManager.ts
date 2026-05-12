@@ -56,11 +56,13 @@ export class CustomCommandManager {
       // Ensure nested folders are created cross-platform
       await ensureFolderExists(folderPath);
 
-      let commandFile = app.vault.getAbstractFileByPath(filePath) as TFile;
-      if (!commandFile || !(commandFile instanceof TFile)) {
-        commandFile = await app.vault.create(filePath, command.content);
+      const existingFile = app.vault.getAbstractFileByPath(filePath);
+      let commandFile: TFile;
+      if (existingFile instanceof TFile) {
+        await app.vault.modify(existingFile, command.content);
+        commandFile = existingFile;
       } else {
-        await app.vault.modify(commandFile, command.content);
+        commandFile = await app.vault.create(filePath, command.content);
       }
 
       await app.fileManager.processFrontMatter(commandFile, (frontmatter) => {

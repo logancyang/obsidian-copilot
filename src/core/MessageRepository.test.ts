@@ -1,7 +1,7 @@
 import { MessageRepository } from "./MessageRepository";
 import { ChatMessage, MessageContext, StoredMessage } from "@/types/message";
 import { formatDateTime } from "@/utils";
-import { TFile } from "obsidian";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock dependencies
 jest.mock("@/utils", () => ({
@@ -53,7 +53,7 @@ describe("MessageRepository", () => {
     });
 
     it("should add a message with context", () => {
-      const mockFile = { path: "test.md", basename: "test" } as TFile;
+      const mockFile = mockTFile({ path: "test.md", basename: "test" });
       const context: MessageContext = {
         notes: [mockFile],
         urls: ["https://example.com"],
@@ -281,7 +281,7 @@ describe("MessageRepository", () => {
   describe("Bug Prevention Tests", () => {
     describe("Context Badge Bug Prevention", () => {
       it("should preserve context when creating display messages", () => {
-        const mockFile = { path: "test.md", basename: "test" } as TFile;
+        const mockFile = mockTFile({ path: "test.md", basename: "test" });
         const context: MessageContext = {
           notes: [mockFile],
           urls: ["https://example.com"],

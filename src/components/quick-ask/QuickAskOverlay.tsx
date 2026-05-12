@@ -97,7 +97,11 @@ export class QuickAskOverlay {
    * @param bottomAnchorPos - Bottom anchor (normalized selection.to) for "place below"
    * @param topAnchorPos - Top anchor (selection.from) for "place above" flip target
    */
-  mount(bottomAnchorPos: number, topAnchorPos?: number | null, focusAnchorPos?: number | null): void {
+  mount(
+    bottomAnchorPos: number,
+    topAnchorPos?: number | null,
+    focusAnchorPos?: number | null
+  ): void {
     this.bottomAnchorPos = bottomAnchorPos;
     this.topAnchorPos = typeof topAnchorPos === "number" ? topAnchorPos : null;
     this.focusAnchorPos = typeof focusAnchorPos === "number" ? focusAnchorPos : null;
@@ -477,7 +481,7 @@ export class QuickAskOverlay {
         this.placementSide = "below";
       } else if (topRect) {
         const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
-        const spaceAbove = (topRect.top - hostRect.top) - PANEL_OFFSET_Y - visibleTop;
+        const spaceAbove = topRect.top - hostRect.top - PANEL_OFFSET_Y - visibleTop;
 
         if (spaceAbove >= heightForClamp + PANEL_MARGIN) {
           top = aboveY;
@@ -497,7 +501,7 @@ export class QuickAskOverlay {
     } else if (topRect) {
       // Bottom anchor not visible (selection extends below viewport): place above topRect
       const aboveY = topRect.top - hostRect.top - PANEL_OFFSET_Y - heightForClamp;
-      const spaceAbove = (topRect.top - hostRect.top) - PANEL_OFFSET_Y - visibleTop;
+      const spaceAbove = topRect.top - hostRect.top - PANEL_OFFSET_Y - visibleTop;
 
       if (spaceAbove >= heightForClamp + PANEL_MARGIN) {
         top = aboveY;

@@ -205,7 +205,7 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
-        }) as RunnableSequence;
+        });
 
         setChainType(ChainType.LLM_CHAIN);
         break;
@@ -259,7 +259,7 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
-        }) as RunnableSequence;
+        });
 
         setChainType(ChainType.COPILOT_PLUS_CHAIN);
         break;
@@ -273,7 +273,7 @@ export default class ChainManager {
           memory: memory,
           prompt: options.prompt || chatPrompt,
           abortController: options.abortController,
-        }) as RunnableSequence;
+        });
         setChainType(ChainType.PROJECT_CHAIN);
         break;
       }
@@ -302,7 +302,7 @@ export default class ChainManager {
       case ChainType.PROJECT_CHAIN:
         return new ProjectChainRunner(this);
       default:
-        throw new Error(`Unsupported chain type: ${chainType}`);
+        throw new Error(`Unsupported chain type: ${String(chainType)}`);
     }
   }
 

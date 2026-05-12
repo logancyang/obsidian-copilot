@@ -108,8 +108,9 @@ export class ChatSelectionHighlightController {
    * Call once during plugin onload.
    */
   initialize(): void {
-    const leaf = this.plugin.app.workspace.activeLeaf ?? null;
-    this.lastActiveLeafWasMarkdown = !!(leaf?.view instanceof MarkdownView);
+    const markdownView = this.plugin.app.workspace.getActiveViewOfType(MarkdownView);
+    const leaf = markdownView?.leaf ?? null;
+    this.lastActiveLeafWasMarkdown = !!markdownView;
     if (this.lastActiveLeafWasMarkdown && leaf) {
       this.lastActiveMarkdownLeaf = leaf;
     }
@@ -169,9 +170,8 @@ export class ChatSelectionHighlightController {
    * Does not use fallback - only works if MarkdownView is currently active.
    */
   persistFromPointerDown(): void {
-    // Early exit if already in Chat - no MarkdownView will be active
-    const activeLeafType = this.plugin.app.workspace.activeLeaf?.getViewState().type;
-    if (activeLeafType === CHAT_VIEWTYPE) {
+    // Early exit if no MarkdownView is active (e.g., user is already in Chat).
+    if (!this.plugin.app.workspace.getActiveViewOfType(MarkdownView)) {
       return;
     }
 

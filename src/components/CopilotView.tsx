@@ -94,7 +94,7 @@ export default class CopilotView extends ItemView {
     this.keyboardObserver?.disconnect();
 
     const syncKeyboardClass = () => {
-      const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+      const drawer = this.containerEl.closest<HTMLElement>(".workspace-drawer");
 
       // Reason: If the view moved out of its previous drawer, clear the class on the old one
       // so drawer chrome (header/tab options) is restored.
@@ -138,7 +138,7 @@ export default class CopilotView extends ItemView {
 
     this.drawerHideObserver?.disconnect();
 
-    const drawer = this.containerEl.closest(".workspace-drawer") as HTMLElement | null;
+    const drawer = this.containerEl.closest<HTMLElement>(".workspace-drawer");
     if (!drawer) return;
 
     let wasHidden = drawer.classList.contains("is-hidden");

@@ -275,7 +275,7 @@ export class DBOperations {
 
     const schema = this.createDynamicSchema(vectorLength);
 
-    const db = await create({
+    const db = create({
       schema,
       components: {
         tokenizer: {
@@ -496,8 +496,8 @@ export class DBOperations {
         oramaDocSample !== null &&
         "document" in oramaDocSample
       ) {
-        const document = oramaDocSample.document as { embeddingModel?: string };
-        prevEmbeddingModel = document.embeddingModel;
+        const doc = oramaDocSample.document as { embeddingModel?: string };
+        prevEmbeddingModel = doc.embeddingModel;
       }
     }
 

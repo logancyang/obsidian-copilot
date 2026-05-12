@@ -36,6 +36,7 @@ export function toStringSafe(value: unknown): string {
   if (typeof value === "string") return value;
   if (value === null || value === undefined) return "";
   try {
+    if (typeof value === "object") return JSON.stringify(value);
     return String(value);
   } catch {
     return "";
@@ -276,7 +277,7 @@ export function getInternalWebViewerPluginApi(
     plugins instanceof Map
       ? plugins.get(WEB_VIEWER_VIEW_TYPE)
       : isRecord(plugins)
-        ? (plugins as Record<string, unknown>)[WEB_VIEWER_VIEW_TYPE]
+        ? plugins[WEB_VIEWER_VIEW_TYPE]
         : null;
 
   if (directEntry) {

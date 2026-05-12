@@ -38,12 +38,12 @@ describe("ObsidianCliClient", () => {
     const platform = Platform as unknown as { isDesktopApp?: boolean; isDesktop?: boolean };
     platform.isDesktopApp = true;
 
-    const container = globalThis as unknown as TestRequireContainer;
+    const container = window as unknown as TestRequireContainer;
     originalRequire = container.require;
   });
 
   afterEach(() => {
-    const container = globalThis as unknown as TestRequireContainer;
+    const container = window as unknown as TestRequireContainer;
     if (originalRequire) {
       container.require = originalRequire;
     } else {
@@ -78,7 +78,7 @@ describe("ObsidianCliClient", () => {
       callback(null, "Daily note content", "")
     );
 
-    const container = globalThis as unknown as TestRequireContainer;
+    const container = window as unknown as TestRequireContainer;
     container.require = jest.fn((id: string) => {
       if (id === "child_process") {
         return { execFile: execFileMock };
@@ -111,7 +111,7 @@ describe("ObsidianCliClient", () => {
       callback(error, "", "command not found");
     });
 
-    const container = globalThis as unknown as TestRequireContainer;
+    const container = window as unknown as TestRequireContainer;
     container.require = jest.fn((id: string) => {
       if (id === "child_process") {
         return { execFile: execFileMock };
@@ -159,7 +159,7 @@ describe("ObsidianCliClient", () => {
       callback(error, "", "");
     });
 
-    const container = globalThis as unknown as TestRequireContainer;
+    const container = window as unknown as TestRequireContainer;
     container.require = jest.fn((id: string) => {
       if (id === "child_process") {
         return { execFile: execFileMock };
@@ -185,7 +185,7 @@ describe("ObsidianCliClient", () => {
       callback(null, "Random note content", "")
     );
 
-    const container = globalThis as unknown as TestRequireContainer;
+    const container = window as unknown as TestRequireContainer;
     container.require = jest.fn((id: string) => {
       if (id === "child_process") {
         return { execFile: execFileMock };

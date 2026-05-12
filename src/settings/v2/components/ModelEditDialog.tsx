@@ -44,7 +44,8 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   const [originalModel, setOriginalModel] = useState<CustomModel>(model);
   const [providerInfo, setProviderInfo] = useState<ProviderMetadata>({} as ProviderMetadata);
   const settings = getSettings();
-  const isBedrockProvider = localModel.provider === ChatModelProviders.AMAZON_BEDROCK;
+  const isBedrockProvider =
+    (localModel.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK;
 
   useEffect(() => {
     setLocalModel(model);
@@ -120,7 +121,8 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
     localModel
   );
   const showOtherParameters =
-    !isEmbeddingModel && localModel.provider !== EmbeddingModelProviders.COPILOT_PLUS_JINA;
+    !isEmbeddingModel &&
+    (localModel.provider as EmbeddingModelProviders) !== EmbeddingModelProviders.COPILOT_PLUS_JINA;
 
   return (
     <div className="tw-space-y-3 tw-p-4">
@@ -208,7 +210,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
         </FormField>
 
         {/* Prompt Caching Toggle for OpenRouter */}
-        {localModel.provider === ChatModelProviders.OPENROUTERAI && (
+        {(localModel.provider as ChatModelProviders) === ChatModelProviders.OPENROUTERAI && (
           <div className="tw-flex tw-items-center tw-gap-2">
             <Checkbox
               id="enable-prompt-caching"
@@ -271,8 +273,8 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
             </FormField>
 
             {/* Stream Usage Toggle for OpenAI-format providers */}
-            {(localModel.provider === ChatModelProviders.OPENAI_FORMAT ||
-              localModel.provider === ChatModelProviders.LM_STUDIO) && (
+            {((localModel.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT ||
+              (localModel.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO) && (
               <FormField label="Stream Options">
                 <div className="tw-flex tw-items-center tw-gap-2">
                   <Checkbox
@@ -297,7 +299,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
             )}
 
             {/* Responses API Toggle for LM Studio */}
-            {localModel.provider === ChatModelProviders.LM_STUDIO && (
+            {(localModel.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO && (
               <FormField label="Responses API">
                 <div className="tw-flex tw-items-center tw-gap-2">
                   <Checkbox

@@ -166,7 +166,7 @@ export function sortCommandsByAlphabetical(commands: CustomCommand[]): CustomCom
  * Sort prompts of the slash commands based on the sort strategy.
  */
 export function sortSlashCommands(commands: CustomCommand[]): CustomCommand[] {
-  const sortStrategy = getSettings().promptSortStrategy;
+  const sortStrategy: PromptSortStrategy = getSettings().promptSortStrategy as PromptSortStrategy;
   switch (sortStrategy) {
     case PromptSortStrategy.TIMESTAMP:
       return sortCommandsByRecency(commands);
@@ -295,7 +295,7 @@ async function extractVariablesFromPrompt(
         .slice(1)
         .split(",")
         .map((tag) => tag.trim());
-      const noteFiles = await getNotesFromTags(vault, tagNames);
+      const noteFiles = getNotesFromTags(vault, tagNames);
       const notesContent: string[] = [];
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);
@@ -309,7 +309,7 @@ async function extractVariablesFromPrompt(
       variableResult.content = notesContent.join("\n\n");
     } else {
       const processedVariableName = processVariableNameForNotePath(variableName);
-      const noteFiles = await getNotesFromPath(vault, processedVariableName);
+      const noteFiles = getNotesFromPath(vault, processedVariableName);
       const notesContent: string[] = [];
       for (const file of noteFiles) {
         const content = await getFileContent(file, vault);

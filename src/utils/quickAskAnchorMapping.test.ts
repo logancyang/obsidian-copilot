@@ -1,7 +1,4 @@
-import {
-  mapQuickAskAnchorPositions,
-  type QuickAskAnchorPositions,
-} from "./quickAskAnchorMapping";
+import { mapQuickAskAnchorPositions, type QuickAskAnchorPositions } from "./quickAskAnchorMapping";
 
 /** Creates a mock ChangeMapper that records calls and returns deterministic results. */
 function makeChanges() {

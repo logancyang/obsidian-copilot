@@ -37,12 +37,11 @@ export function FollowUpInput({
 }: FollowUpInputProps) {
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Avoid submitting when Enter is used to confirm IME composition (e.g., Chinese/Japanese/Korean).
-    // keyCode 229 is a legacy indicator for IME processing.
+    // key "Process" is the standard indicator for IME processing.
     const nativeEvent = e.nativeEvent as KeyboardEvent & {
       isComposing?: boolean;
-      keyCode?: number;
     };
-    if (nativeEvent.isComposing || nativeEvent.keyCode === 229) {
+    if (nativeEvent.isComposing || e.key === "Process") {
       return;
     }
 

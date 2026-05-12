@@ -496,7 +496,9 @@ function getNoteTitleAndTags(noteWithTag: {
 function getChatContextStr(chatNoteContextPath: string, chatNoteContextTags: string[]): string {
   const pathStr = chatNoteContextPath ? `\nChat context by path: ${chatNoteContextPath}` : "";
   const tagsStr =
-    chatNoteContextTags?.length > 0 ? `\nChat context by tags: ${chatNoteContextTags}` : "";
+    chatNoteContextTags?.length > 0
+      ? `\nChat context by tags: ${chatNoteContextTags.join(",")}`
+      : "";
   return pathStr + tagsStr;
 }
 

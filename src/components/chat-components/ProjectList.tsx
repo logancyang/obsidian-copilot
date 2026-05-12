@@ -141,7 +141,9 @@ function ProjectItem({
                   if (fileInCache) {
                     app.workspace.openLinkText(record.filePath, "", true);
                   } else {
-                    new Notice("Project file is in a hidden folder and cannot be opened from the file explorer.");
+                    new Notice(
+                      "Project file is in a hidden folder and cannot be opened from the file explorer."
+                    );
                   }
                 }
               }}

@@ -86,7 +86,9 @@ export function isSelfHostModeValid(): boolean {
 
 /** Check if the model key is a Copilot Plus model. */
 export function isPlusModel(modelKey: string): boolean {
-  return modelKey.split("|")[1] === EmbeddingModelProviders.COPILOT_PLUS;
+  return (
+    (modelKey.split("|")[1] as EmbeddingModelProviders) === EmbeddingModelProviders.COPILOT_PLUS
+  );
 }
 
 /**

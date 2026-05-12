@@ -39,10 +39,7 @@ function coerceProjectId(projectId: unknown): string | undefined {
  * Read the projectId from a chat file's frontmatter.
  * Tries metadataCache first, falls back to adapter read for hidden-directory files.
  */
-export async function readChatFileProjectId(
-  app: App,
-  file: TFile
-): Promise<string | undefined> {
+export async function readChatFileProjectId(app: App, file: TFile): Promise<string | undefined> {
   const fm = app.metadataCache.getFileCache(file)?.frontmatter;
   let projectId: unknown = fm?.projectId;
 

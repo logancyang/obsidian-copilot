@@ -445,7 +445,7 @@ export default class ChatModelManager {
     let selectedProviderConfig =
       providerConfig[customModel.provider as keyof typeof providerConfig] || {};
 
-    if (customModel.provider === ChatModelProviders.AMAZON_BEDROCK) {
+    if ((customModel.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK) {
       selectedProviderConfig = await this.buildBedrockConfig(
         customModel,
         modelName,
@@ -515,7 +515,7 @@ export default class ChatModelManager {
       if (
         modelInfo.isGPT5 &&
         customModel?.verbosity &&
-        customModel?.provider !== ChatModelProviders.AZURE_OPENAI
+        (customModel?.provider as ChatModelProviders) !== ChatModelProviders.AZURE_OPENAI
       ) {
         const verbosityValue = customModel.verbosity;
         // For Responses API, verbosity is nested under 'text' parameter
@@ -670,7 +670,7 @@ export default class ChatModelManager {
    * @returns True when the provider requirements are satisfied, otherwise false.
    */
   private hasProviderCredentials(model: CustomModel): boolean {
-    if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+    if ((model.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK) {
       const settings = getSettings();
       const apiKey = model.apiKey || settings.amazonBedrockApiKey;
       // Region defaults to us-east-1 if not specified, so API key is the only requirement
@@ -789,8 +789,8 @@ export default class ChatModelManager {
       const modelInfo = getModelInfo(model.name);
       if (
         modelInfo.isGPT5 &&
-        (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.OPENAI_FORMAT)
+        ((model.provider as ChatModelProviders) === ChatModelProviders.OPENAI ||
+          (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT)
       ) {
         logInfo(`Chat model set with Responses API for GPT-5: ${model.name}`);
       }
@@ -809,7 +809,7 @@ export default class ChatModelManager {
     }
     if (!selectedModel.hasApiKey) {
       const errorMessage = `API key is not provided for the model: ${modelKey}.`;
-      if (model.provider === ChatModelProviders.COPILOT_PLUS) {
+      if ((model.provider as ChatModelProviders) === ChatModelProviders.COPILOT_PLUS) {
         throw new MissingPlusLicenseError(
           "Copilot Plus license key is not configured. Please enter your license key in the Copilot Plus section at the top of Basic Settings."
         );
@@ -825,8 +825,8 @@ export default class ChatModelManager {
     const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
     if (
       modelInfo.isGPT5 &&
-      (selectedModel.vendor === ChatModelProviders.OPENAI ||
-        selectedModel.vendor === ChatModelProviders.OPENAI_FORMAT)
+      ((selectedModel.vendor as ChatModelProviders) === ChatModelProviders.OPENAI ||
+        (selectedModel.vendor as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT)
     ) {
       constructorConfig.useResponsesApi = true;
       logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
@@ -839,7 +839,10 @@ export default class ChatModelManager {
 
     // For LM Studio, use ChatLMStudio by default for Responses API compatibility.
     // Opt out by setting useResponsesApi to false.
-    if (model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false) {
+    if (
+      (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
+      model.useResponsesApi !== false
+    ) {
       const lmStudioInstance = new ChatLMStudio(constructorConfig);
       logInfo(`[ChatModelManager] Using Responses API for LM Studio model: ${model.name}`);
       return lmStudioInstance;
@@ -913,8 +916,8 @@ export default class ChatModelManager {
 
       if (
         modelInfo.isGPT5 &&
-        (model.provider === ChatModelProviders.OPENAI ||
-          model.provider === ChatModelProviders.OPENAI_FORMAT)
+        ((model.provider as ChatModelProviders) === ChatModelProviders.OPENAI ||
+          (model.provider as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT)
       ) {
         constructorConfig.useResponsesApi = true;
       }
@@ -926,7 +929,8 @@ export default class ChatModelManager {
       // For LM Studio with Responses API, ping via ChatLMStudio so the
       // connectivity check hits the same /v1/responses endpoint used in chats.
       const testModel =
-        model.provider === ChatModelProviders.LM_STUDIO && model.useResponsesApi !== false
+        (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
+        model.useResponsesApi !== false
           ? new ChatLMStudio(constructorConfig)
           : useCopilotResponses
             ? new GitHubCopilotResponsesModel(constructorConfig)

@@ -203,10 +203,7 @@ export abstract class BaseChainRunner implements ChainRunner {
     const responseError = (error as { response?: { status?: number; data?: any } })?.response;
     const errorData = responseError?.data?.error ?? (error as { error?: unknown })?.error;
     const rawStatus = responseError?.status ?? (errorData as { status?: number | string })?.status;
-    const statusCode =
-      typeof rawStatus === "string"
-        ? Number.parseInt(rawStatus, 10)
-        : (rawStatus as number | undefined);
+    const statusCode = typeof rawStatus === "string" ? Number.parseInt(rawStatus, 10) : rawStatus;
     const errorObject =
       typeof errorData === "object" && errorData !== null
         ? (errorData as Record<string, unknown>)

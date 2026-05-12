@@ -5,6 +5,7 @@ import yaml from "js-yaml";
 module.exports = {
   // Reason: normalizePath is used by projectPaths.ts; identity function is sufficient for tests
   normalizePath: jest.fn().mockImplementation((p) => p),
+  moment: jest.requireActual("moment"),
   Vault: jest.fn().mockImplementation(() => {
     return {
       getMarkdownFiles: jest.fn().mockImplementation(() => {

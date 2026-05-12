@@ -9,6 +9,7 @@ import {
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { TFile, TAbstractFile, normalizePath } from "obsidian";
 import * as settingsModel from "@/settings/model";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock Obsidian
 jest.mock("obsidian", () => ({
@@ -158,10 +159,10 @@ describe("isSystemPromptFile", () => {
   });
 
   it("returns true for valid system prompt file", () => {
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Test.md",
       extension: "md",
-    } as TFile;
+    });
 
     // Mock instanceof check
     Object.setPrototypeOf(mockFile, TFile.prototype);
@@ -178,10 +179,10 @@ describe("isSystemPromptFile", () => {
   });
 
   it("returns false for non-markdown files", () => {
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Test.txt",
       extension: "txt",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -189,10 +190,10 @@ describe("isSystemPromptFile", () => {
   });
 
   it("returns false for files outside system prompts folder", () => {
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "OtherFolder/Test.md",
       extension: "md",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -200,10 +201,10 @@ describe("isSystemPromptFile", () => {
   });
 
   it("returns false for files in subfolders", () => {
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/Subfolder/Test.md",
       extension: "md",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -211,10 +212,10 @@ describe("isSystemPromptFile", () => {
   });
 
   it("returns false for files in unsupported subfolder", () => {
-    const mockFile = {
+    const mockFile = mockTFile({
       path: "SystemPrompts/unsupported/Failed Migration.md",
       extension: "md",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(mockFile, TFile.prototype);
 
@@ -226,15 +227,15 @@ describe("isSystemPromptFile", () => {
       userSystemPromptsFolder: "CustomFolder/MyPrompts",
     } as any);
 
-    const validFile = {
+    const validFile = mockTFile({
       path: "CustomFolder/MyPrompts/Test.md",
       extension: "md",
-    } as TFile;
+    });
 
-    const unsupportedFile = {
+    const unsupportedFile = mockTFile({
       path: "CustomFolder/MyPrompts/unsupported/Failed.md",
       extension: "md",
-    } as TFile;
+    });
 
     Object.setPrototypeOf(validFile, TFile.prototype);
     Object.setPrototypeOf(unsupportedFile, TFile.prototype);
@@ -250,11 +251,11 @@ describe("parseSystemPromptFile", () => {
 
   beforeEach(() => {
     originalApp = global.app;
-    mockFile = {
+    mockFile = mockTFile({
       basename: "Test Prompt",
       path: "SystemPrompts/Test Prompt.md",
       extension: "md",
-    } as TFile;
+    });
 
     global.app = {
       vault: {

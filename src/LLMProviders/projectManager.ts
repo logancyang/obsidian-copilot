@@ -107,7 +107,9 @@ export default class ProjectManager {
         !nextProjects.some((p) => p.id === this.currentProjectId) &&
         getCurrentProject()?.id === this.currentProjectId
       ) {
-        logWarn(`[ProjectManager] Active project id="${this.currentProjectId}" no longer exists, clearing selection`);
+        logWarn(
+          `[ProjectManager] Active project id="${this.currentProjectId}" no longer exists, clearing selection`
+        );
         void this.switchProject(null).catch((err) =>
           logError("[ProjectManager] Failed to switch away from removed project", err)
         );

@@ -65,7 +65,11 @@ export function buildBadgeItems(value: string | undefined): BadgeItem[] {
  * Remove a pattern from a serialized pattern string.
  * Returns the new serialized string with the pattern removed.
  */
-export function removePattern(value: string | undefined, pattern: string, type: PatternType): string {
+export function removePattern(
+  value: string | undefined,
+  pattern: string,
+  type: PatternType
+): string {
   const patterns = [...new Set(getDecodedPatterns(value || ""))];
   const categorized = categorizePatterns(patterns);
   const categoryKey = CATEGORY_MAP[type];
@@ -171,9 +175,7 @@ export const ProjectContextBadgeList: React.FC<ProjectContextBadgeListProps> = (
         <div className="tw-rounded-md tw-border tw-border-dashed tw-border-border tw-py-4 tw-text-center">
           <span className="tw-text-sm tw-italic tw-text-muted">No file patterns configured</span>
         </div>
-        {actionSlot && (
-          <div className="tw-flex tw-justify-end">{actionSlot}</div>
-        )}
+        {actionSlot && <div className="tw-flex tw-justify-end">{actionSlot}</div>}
       </div>
     );
   }
