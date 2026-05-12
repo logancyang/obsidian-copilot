@@ -71,7 +71,7 @@ async function show_preview(
   return new Promise((resolve) => {
     // Open the Apply View in a new leaf with the processed content and the callback
     const leaf = app.workspace.getLeaf(true);
-    leaf.setViewState({
+    void leaf.setViewState({
       type: APPLY_VIEW_TYPE,
       active: true,
       state: {

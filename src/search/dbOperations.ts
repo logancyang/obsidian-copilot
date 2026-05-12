@@ -44,28 +44,34 @@ export class DBOperations {
 
   constructor(private app: App) {
     // Subscribe to settings changes
-    subscribeToSettingsChange(async () => {
-      const settings = getSettings();
+    subscribeToSettingsChange(() => {
+      void (async () => {
+        try {
+          const settings = getSettings();
 
-      // Handle mobile index loading setting change
-      if (Platform.isMobile && settings.disableIndexOnMobile) {
-        this.isIndexLoaded = false;
-        this.oramaDb = undefined;
-      } else if (Platform.isMobile && !settings.disableIndexOnMobile && !this.oramaDb) {
-        // Re-initialize DB if mobile setting is enabled
-        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
-      }
+          // Handle mobile index loading setting change
+          if (Platform.isMobile && settings.disableIndexOnMobile) {
+            this.isIndexLoaded = false;
+            this.oramaDb = undefined;
+          } else if (Platform.isMobile && !settings.disableIndexOnMobile && !this.oramaDb) {
+            // Re-initialize DB if mobile setting is enabled
+            await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
+          }
 
-      // Handle index sync setting change
-      const newPath = await this.getDbPath();
+          // Handle index sync setting change
+          const newPath = await this.getDbPath();
 
-      if (this.dbPath && newPath !== this.dbPath) {
-        logInfo("Path change detected, reinitializing database...");
-        this.dbPath = newPath;
-        await this.initializeChunkedStorage();
-        await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
-        logInfo("Database reinitialized with new path:", newPath);
-      }
+          if (this.dbPath && newPath !== this.dbPath) {
+            logInfo("Path change detected, reinitializing database...");
+            this.dbPath = newPath;
+            await this.initializeChunkedStorage();
+            await this.initializeDB(await EmbeddingsManager.getInstance().getEmbeddingsAPI());
+            logInfo("Database reinitialized with new path:", newPath);
+          }
+        } catch (error) {
+          logError("DBOperations settings change handler failed", error);
+        }
+      })();
     });
   }
 
@@ -220,7 +226,7 @@ export class DBOperations {
 
   public onunload() {
     if (this.hasUnsavedChanges) {
-      this.saveDB();
+      void this.saveDB().catch((err) => logError("saveDB on unload failed", err));
     }
   }
 

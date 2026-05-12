@@ -52,9 +52,9 @@ import { Notice } from "obsidian";
 const MobileCommandCard: React.FC<{
   command: CustomCommand;
   commands: CustomCommand[];
-  onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void;
-  onRemove: (command: CustomCommand) => void;
-  onCopy: (command: CustomCommand) => void;
+  onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void | Promise<void>;
+  onRemove: (command: CustomCommand) => void | Promise<void>;
+  onCopy: (command: CustomCommand) => void | Promise<void>;
   containerRef: React.RefObject<HTMLDivElement>;
 }> = ({ command, commands, onUpdate, onRemove, onCopy, containerRef }) => {
   const handleEdit = (cmd: CustomCommand) => {
@@ -168,9 +168,9 @@ const MobileCommandCard: React.FC<{
 const SortableTableRow: React.FC<{
   command: CustomCommand;
   commands: CustomCommand[];
-  onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void;
-  onRemove: (command: CustomCommand) => void;
-  onCopy: (command: CustomCommand) => void;
+  onUpdate: (newCommand: CustomCommand, prevCommandTitle: string) => void | Promise<void>;
+  onRemove: (command: CustomCommand) => void | Promise<void>;
+  onCopy: (command: CustomCommand) => void | Promise<void>;
 }> = ({ command, commands, onUpdate, onRemove, onCopy }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: command.title,
@@ -367,7 +367,11 @@ export const CommandSettings: React.FC = () => {
   // Mobile view rendering
   const renderMobileView = () => (
     <div className="tw-relative md:tw-hidden">
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={(event) => void handleDragEnd(event)}
+      >
         <SortableContext
           items={commands.map((command) => command.title)}
           strategy={verticalListSortingStrategy}
@@ -415,7 +419,9 @@ export const CommandSettings: React.FC = () => {
           value={settings.customPromptsFolder}
           onChange={(value) => {
             updateSetting("customPromptsFolder", value);
-            loadAllCustomCommands();
+            void loadAllCustomCommands().catch((err) =>
+              logError("loadAllCustomCommands failed", err)
+            );
           }}
           placeholder="copilot/copilot-custom-prompts"
         />
@@ -495,7 +501,7 @@ export const CommandSettings: React.FC = () => {
             <DndContext
               sensors={sensors}
               collisionDetection={closestCenter}
-              onDragEnd={handleDragEnd}
+              onDragEnd={(event) => void handleDragEnd(event)}
             >
               <Table>
                 <TableHeader>

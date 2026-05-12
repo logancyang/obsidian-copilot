@@ -60,10 +60,12 @@ export default class ChainManager {
     this.userMemoryManager = new UserMemoryManager(app);
 
     // Initialize async operations
-    this.initialize();
+    void this.initialize().catch((err) => logError("ChainManager initialize failed", err));
 
-    subscribeToSettingsChange(async () => {
-      await this.createChainWithNewModel();
+    subscribeToSettingsChange(() => {
+      void this.createChainWithNewModel().catch((err) =>
+        logError("createChainWithNewModel failed", err)
+      );
     });
   }
 
@@ -102,7 +104,9 @@ export default class ChainManager {
   private validateChainInitialization() {
     if (!this.chain || !isSupportedChain(this.chain)) {
       logInfo("Reinitializing chat chain after detecting missing or unsupported instance.");
-      this.createChainWithNewModel({}, false);
+      void this.createChainWithNewModel({}, false).catch((err) =>
+        logError("createChainWithNewModel failed", err)
+      );
     }
   }
 
@@ -173,7 +177,7 @@ export default class ChainManager {
       // Must update the chatModel for chain because ChainFactory always
       // retrieves the old chain without the chatModel change if it exists!
       // Create a new chain with the new chatModel
-      this.setChain(chainType, options);
+      await this.setChain(chainType, options);
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
       this.pendingModelError = error instanceof Error ? error : new Error(String(error));
@@ -359,7 +363,9 @@ export default class ChainManager {
         ]);
       }
 
-      this.createChainWithNewModel({ prompt: effectivePrompt }, false);
+      void this.createChainWithNewModel({ prompt: effectivePrompt }, false).catch((err) =>
+        logError("createChainWithNewModel failed", err)
+      );
       /*this.setChain(getChainType(), {
         prompt: effectivePrompt,
       });*/

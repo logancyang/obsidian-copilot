@@ -142,7 +142,9 @@ export class CustomCommandRegister {
           selectedText: editor.getSelection(),
           command: customCommand,
         }).open();
-        CustomCommandManager.getInstance().recordUsage(customCommand);
+        void CustomCommandManager.getInstance()
+          .recordUsage(customCommand)
+          .catch((err) => logError("recordUsage failed", err));
       },
     });
   }

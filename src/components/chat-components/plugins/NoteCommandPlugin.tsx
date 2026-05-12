@@ -102,7 +102,7 @@ export function NoteCommandPlugin({
     onHighlight: (_index: number, option: NoteSearchOption) => {
       // Load content for the highlighted note if not already loaded
       if (option && !previewContent.has(option.file.path)) {
-        loadNoteContent(option.file);
+        void loadNoteContent(option.file);
       }
     },
   });
@@ -110,7 +110,7 @@ export function NoteCommandPlugin({
   // Load content for the first note when filteredNotes change
   useEffect(() => {
     if (filteredNotes.length > 0 && !previewContent.has(filteredNotes[0].file.path)) {
-      loadNoteContent(filteredNotes[0].file);
+      void loadNoteContent(filteredNotes[0].file);
     }
   }, [filteredNotes, previewContent, loadNoteContent]);
 

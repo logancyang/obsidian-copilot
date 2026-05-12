@@ -1,4 +1,5 @@
 import { Button } from "@/components/ui/button";
+import { logError } from "@/logger";
 import { App, Modal } from "obsidian";
 import React from "react";
 import { createRoot, Root } from "react-dom/client";
@@ -41,12 +42,12 @@ export class ConfirmModal extends Modal {
 
   constructor(
     app: App,
-    private onConfirm: () => void,
+    private onConfirm: () => void | Promise<void>,
     private content: string,
     title: string,
     private confirmButtonText: string = "Continue",
     private cancelButtonText: string = "Cancel",
-    private onCancel?: () => void
+    private onCancel?: () => void | Promise<void>
   ) {
     super(app);
     // https://docs.obsidian.md/Reference/TypeScript+API/Modal/setTitle
@@ -60,7 +61,10 @@ export class ConfirmModal extends Modal {
 
     const handleConfirm = () => {
       this.confirmed = true;
-      this.onConfirm();
+      const result = this.onConfirm();
+      if (result instanceof Promise) {
+        result.catch((err) => logError("ConfirmModal onConfirm failed", err));
+      }
       this.close();
     };
 
@@ -81,7 +85,10 @@ export class ConfirmModal extends Modal {
 
   onClose() {
     if (!this.confirmed) {
-      this.onCancel?.();
+      const result = this.onCancel?.();
+      if (result instanceof Promise) {
+        result.catch((err) => logError("ConfirmModal onCancel failed", err));
+      }
     }
     this.root.unmount();
   }

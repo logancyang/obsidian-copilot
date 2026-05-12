@@ -36,28 +36,42 @@ import { setSelectedTextContexts } from "@/aiParams";
 /**
  * Add a command to the plugin. Supports async callbacks; errors are logged.
  */
-export function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void) {
-  plugin.addCommand({
-    id,
-    name: COMMAND_NAMES[id],
-    icon: COMMAND_ICONS[id],
-    callback,
-  });
-}
-
-/**
- * Add an editor command to the plugin.
- */
-function addEditorCommand(
+export function addCommand(
   plugin: CopilotPlugin,
   id: CommandId,
-  callback: (editor: Editor) => void
+  callback: () => void | Promise<void>
 ) {
   plugin.addCommand({
     id,
     name: COMMAND_NAMES[id],
     icon: COMMAND_ICONS[id],
-    editorCallback: callback,
+    callback: () => {
+      const result = callback();
+      if (result instanceof Promise) {
+        result.catch((err) => logError(`Command ${id} failed`, err));
+      }
+    },
+  });
+}
+
+/**
+ * Add an editor command to the plugin. Supports async callbacks; errors are logged.
+ */
+function addEditorCommand(
+  plugin: CopilotPlugin,
+  id: CommandId,
+  callback: (editor: Editor) => void | Promise<void>
+) {
+  plugin.addCommand({
+    id,
+    name: COMMAND_NAMES[id],
+    icon: COMMAND_ICONS[id],
+    editorCallback: (editor) => {
+      const result = callback(editor);
+      if (result instanceof Promise) {
+        result.catch((err) => logError(`Editor command ${id} failed`, err));
+      }
+    },
   });
 }
 

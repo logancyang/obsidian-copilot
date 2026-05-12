@@ -54,7 +54,7 @@ export class ApplyCustomCommandModal extends FuzzySuggestModal<CustomCommand> {
 
   private openCommandModal(command: CustomCommand, selectedText: string) {
     // Record usage of the command
-    CustomCommandManager.getInstance().recordUsage(command);
+    void CustomCommandManager.getInstance().recordUsage(command);
 
     // Open the CustomCommandChatModal with the selected command
     const modal = new CustomCommandChatModal(this.app, {

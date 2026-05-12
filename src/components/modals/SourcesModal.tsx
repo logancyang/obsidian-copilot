@@ -1,4 +1,5 @@
 // src/components/SourcesModal.tsx
+import { logError } from "@/logger";
 import { App, Modal, TFile } from "obsidian";
 
 export class SourcesModal extends Modal {
@@ -72,7 +73,7 @@ export class SourcesModal extends Modal {
         e.preventDefault();
         e.stopPropagation();
         // Use the path if available, otherwise fall back to title
-        this.app.workspace.openLinkText(source.path || source.title, "");
+        this.app.workspace.openLinkText(source.path || source.title, "").catch(logError);
       });
 
       // Display with 4 decimals to match SearchCore logs and avoid apparent ties

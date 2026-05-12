@@ -157,7 +157,7 @@ export function AtMentionCommandPlugin({
       selectedOption.category === "notes" &&
       selectedOption.data instanceof TFile
     ) {
-      loadNoteContentForPreview(selectedOption.data);
+      void loadNoteContentForPreview(selectedOption.data);
     } else {
       setCurrentPreviewContent("");
     }

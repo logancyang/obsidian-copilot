@@ -349,7 +349,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
       // Autosave if enabled
       if (settings.autosaveChat) {
-        handleSaveAsNote();
+        await handleSaveAsNote();
       }
 
       // Get the LLM message for AI processing
@@ -367,7 +367,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
       // Autosave again after AI response
       if (settings.autosaveChat) {
-        handleSaveAsNote();
+        await handleSaveAsNote();
       }
     } catch (error) {
       logError("Error sending message:", error);
@@ -452,7 +452,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
         // Autosave the chat if the setting is enabled
         if (settings.autosaveChat) {
-          handleSaveAsNote();
+          await handleSaveAsNote();
         }
       } catch (error) {
         logError("Error regenerating message:", error);
@@ -529,7 +529,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
         // Autosave the chat if the setting is enabled
         if (settings.autosaveChat) {
-          handleSaveAsNote();
+          await handleSaveAsNote();
         }
       } catch (error) {
         logError("Error editing message:", error);
@@ -845,17 +845,17 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
           <div className="tw-inset-0 tw-z-modal tw-flex tw-items-center tw-justify-center tw-rounded-xl">
             <IndexingProgressCard
               onClose={handleIndexingCardClose}
-              onPause={handleIndexingPause}
-              onResume={handleIndexingResume}
-              onStop={handleIndexingStop}
+              onPause={() => void handleIndexingPause()}
+              onResume={() => void handleIndexingResume()}
+              onStop={() => void handleIndexingStop()}
             />
           </div>
         ) : (
           <>
             <ChatControls
-              onNewChat={handleNewChat}
+              onNewChat={() => void handleNewChat()}
               onSaveAsNote={() => handleSaveAsNote()}
-              onLoadHistory={handleLoadChatHistory}
+              onLoadHistory={() => void handleLoadChatHistory()}
               onModeChange={(newMode) => {
                 setPreviousMode(selectedChain);
                 // Hide chat UI when switching to project mode

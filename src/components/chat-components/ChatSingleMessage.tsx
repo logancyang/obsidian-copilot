@@ -32,6 +32,7 @@ import { cn } from "@/lib/utils";
 import { parseToolCallMarkers } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
+import { logError } from "@/logger";
 import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
@@ -345,13 +346,16 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     }
 
     const cleanedContent = cleanMessageForCopy(message.message);
-    navigator.clipboard.writeText(cleanedContent).then(() => {
-      setIsCopied(true);
+    navigator.clipboard
+      .writeText(cleanedContent)
+      .then(() => {
+        setIsCopied(true);
 
-      setTimeout(() => {
-        setIsCopied(false);
-      }, 2000);
-    });
+        setTimeout(() => {
+          setIsCopied(false);
+        }, 2000);
+      })
+      .catch((err) => logError("Clipboard writeText failed", err));
   };
 
   const preprocess = useCallback(
@@ -700,8 +704,14 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               contentRef.current!.appendChild(textDiv);
             }
 
-            MarkdownRenderer.renderMarkdown(segment.content, textDiv, "", componentRef.current!);
-            normalizeFootnoteRendering(textDiv);
+            void MarkdownRenderer.renderMarkdown(
+              segment.content,
+              textDiv,
+              "",
+              componentRef.current!
+            )
+              .then(() => normalizeFootnoteRendering(textDiv))
+              .catch((err) => logError("renderMarkdown failed", err));
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;

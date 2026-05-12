@@ -67,7 +67,7 @@ export function SlashCommandPlugin(): JSX.Element {
   const handleSelect = useCallback(
     (option: SlashCommandOption) => {
       // Record usage to update lastUsedMs for recency sorting
-      CustomCommandManager.getInstance().recordUsage(option.command);
+      void CustomCommandManager.getInstance().recordUsage(option.command);
 
       editor.update(() => {
         const selection = $getSelection();

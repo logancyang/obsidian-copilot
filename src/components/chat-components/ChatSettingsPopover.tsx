@@ -199,7 +199,7 @@ export function ChatSettingsPopover() {
   const handleOpenSourceFile = () => {
     if (!displayValue) return;
     const filePath = getPromptFilePath(displayValue);
-    app.workspace.openLinkText(filePath, "", true);
+    void app.workspace.openLinkText(filePath, "", true);
   };
 
   if (!localModel) {
