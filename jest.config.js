@@ -12,6 +12,8 @@ module.exports = {
     // jsdom; Jest can't parse ESM without extra config, so point at the CJS
     // build it ships under dist/.
     "^yaml$": "<rootDir>/node_modules/yaml/dist/index.js",
+    "^@pierre/diffs/react$": "<rootDir>/__mocks__/pierre-diffs-react.js",
+    "^@pierre/diffs$": "<rootDir>/__mocks__/pierre-diffs-react.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
