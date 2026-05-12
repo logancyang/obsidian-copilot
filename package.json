@@ -97,6 +97,7 @@
     "@lexical/selection": "^0.34.0",
     "@lexical/utils": "^0.34.0",
     "@orama/orama": "^3.0.0-rc-2",
+    "@pierre/diffs": "^1.1.21",
     "@radix-ui/react-checkbox": "^1.3.3",
     "@radix-ui/react-collapsible": "^1.1.2",
     "@radix-ui/react-dialog": "^1.1.15",

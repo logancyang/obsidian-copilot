@@ -47,11 +47,7 @@ async function getFile(file_path: string): Promise<TFile> {
  * @param file_path - Vault-relative path to the file
  * @param content - Target content to compare against current file content
  */
-async function show_preview(
-  file_path: string,
-  content: string,
-  simple = false
-): Promise<ApplyViewResult> {
+async function show_preview(file_path: string, content: string): Promise<ApplyViewResult> {
   const file = await getFile(file_path);
   const activeFile = app.workspace.getActiveFile();
 
@@ -77,7 +73,6 @@ async function show_preview(
       state: {
         changes: changes,
         path: file_path,
-        simple: simple,
         resultCallback: (result: ApplyViewResult) => {
           resolve(result);
         },
@@ -571,7 +566,7 @@ const editFileTool = createLangChainTool({
         };
       }
 
-      const result = await show_preview(sanitizedPath, modifiedContent, true);
+      const result = await show_preview(sanitizedPath, modifiedContent);
       return {
         result: result,
         message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,

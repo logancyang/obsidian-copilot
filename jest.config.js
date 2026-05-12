@@ -9,6 +9,8 @@ module.exports = {
     "\\.(css|less|scss|sass)$": "identity-obj-proxy",
     "^@/(.*)$": "<rootDir>/src/$1",
     "^obsidian$": "<rootDir>/__mocks__/obsidian.js",
+    "^@pierre/diffs/react$": "<rootDir>/__mocks__/pierre-diffs-react.js",
+    "^@pierre/diffs$": "<rootDir>/__mocks__/pierre-diffs-react.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],
