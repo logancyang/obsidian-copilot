@@ -1,10 +1,25 @@
 // __mocks__/obsidian.js
 import { parse as parseYamlString } from "yaml";
 
+// Per-test overrides set via the exported `__setRequestUrlImpl` helper.
+// Default: empty success response. Tests that exercise network paths should
+// install their own implementation.
+let requestUrlImpl = jest.fn().mockResolvedValue({
+  status: 200,
+  text: "",
+  json: undefined,
+  arrayBuffer: new ArrayBuffer(0),
+  headers: {},
+});
+
 module.exports = {
   // Reason: normalizePath is used by projectPaths.ts; identity function is sufficient for tests
   normalizePath: jest.fn().mockImplementation((p) => p),
   moment: jest.requireActual("moment"),
+  requestUrl: (...args) => requestUrlImpl(...args),
+  __setRequestUrlImpl: (impl) => {
+    requestUrlImpl = impl;
+  },
   Vault: jest.fn().mockImplementation(() => {
     return {
       getMarkdownFiles: jest.fn().mockImplementation(() => {
