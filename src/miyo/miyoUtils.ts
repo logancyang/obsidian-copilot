@@ -1,6 +1,6 @@
 import { isSelfHostAccessValid } from "@/plusUtils";
 import { CopilotSettings } from "@/settings/model";
-import { App, FileSystemAdapter, Platform } from "obsidian";
+import { App, Platform } from "obsidian";
 
 /**
  * Convert backslashes to forward slashes and trim trailing slashes.
@@ -56,24 +56,26 @@ export function getMiyoFolderName(app: App): string {
 }
 
 /**
- * Resolve an absolute filesystem path for a vault file so it can be sent to Miyo.
+ * Build the portable file identifier sent to Miyo.
+ *
+ * Why: Miyo may be running on a different device than the vault on disk (e.g. a
+ * laptop reading a server-hosted Miyo). The server-side absolute path on Miyo's
+ * machine is unknown — and likely different — from the local Obsidian adapter's
+ * absolute path. The folder name (== vault name) is the only device-independent
+ * identifier, and Miyo's `resolveFileInput` remaps `<FolderName>/relative/path`
+ * to the matching registered folder's canonical absolute path on the server.
  *
  * @param app - Obsidian application instance.
- * @param vaultRelativePath - Vault-relative note path.
- * @returns Absolute file path when available, otherwise the original path.
+ * @param vaultRelativePath - Vault-relative note path (e.g. "Notes/foo.md").
+ * @returns `<FolderName>/<vaultRelativePath>` with forward slashes.
  */
-export function getMiyoAbsolutePath(app: App, vaultRelativePath: string): string {
-  const adapter = app.vault.adapter;
-  if (adapter instanceof FileSystemAdapter) {
-    return adapter.getFullPath(vaultRelativePath);
+export function getMiyoFilePath(app: App, vaultRelativePath: string): string {
+  const normalized = normalizeFilesystemPath(vaultRelativePath).replace(/^\/+/, "");
+  const folderName = getMiyoFolderName(app);
+  if (!folderName) {
+    return normalized;
   }
-
-  const adapterAny = adapter as unknown as { getFullPath?: (normalizedPath: string) => string };
-  if (typeof adapterAny.getFullPath === "function") {
-    return adapterAny.getFullPath(vaultRelativePath);
-  }
-
-  return vaultRelativePath;
+  return `${folderName}/${normalized}`;
 }
 
 /**

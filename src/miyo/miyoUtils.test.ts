@@ -2,7 +2,7 @@ jest.mock("@/plusUtils", () => ({
   isSelfHostAccessValid: jest.fn(),
 }));
 
-import { getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
+import { getMiyoFilePath, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 
 describe("getMiyoFolderName", () => {
   it("uses the vault folder name even when an adapter exposes an absolute path", () => {
@@ -57,5 +57,36 @@ describe("getVaultRelativeMiyoPath", () => {
 
   it("returns the normalized path when the vault folder name is empty", () => {
     expect(getVaultRelativeMiyoPath(buildApp(""), "notes\\foo.md")).toBe("notes/foo.md");
+  });
+});
+
+describe("getMiyoFilePath", () => {
+  const buildApp = (vaultName: string) =>
+    ({
+      vault: {
+        getName: () => vaultName,
+      },
+    }) as any;
+
+  it("prefixes the vault folder name to a vault-relative path", () => {
+    expect(getMiyoFilePath(buildApp("MyVault"), "notes/foo.md")).toBe("MyVault/notes/foo.md");
+  });
+
+  it("normalizes backslash separators before prefixing", () => {
+    expect(getMiyoFilePath(buildApp("MyVault"), "notes\\foo.md")).toBe("MyVault/notes/foo.md");
+  });
+
+  it("strips a leading slash from the input so the result has no duplicate separator", () => {
+    expect(getMiyoFilePath(buildApp("MyVault"), "/notes/foo.md")).toBe("MyVault/notes/foo.md");
+  });
+
+  it("round-trips with getVaultRelativeMiyoPath", () => {
+    const app = buildApp("MyVault");
+    const original = "notes/foo.md";
+    expect(getVaultRelativeMiyoPath(app, getMiyoFilePath(app, original))).toBe(original);
+  });
+
+  it("returns the normalized path when the vault folder name is empty", () => {
+    expect(getMiyoFilePath(buildApp(""), "notes/foo.md")).toBe("notes/foo.md");
   });
 });

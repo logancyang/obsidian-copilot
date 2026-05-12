@@ -3,8 +3,8 @@ import { App, Notice } from "obsidian";
 import { logInfo, logWarn } from "@/logger";
 import { MiyoClient, MiyoIndexedFileEntry } from "@/miyo/MiyoClient";
 import {
-  getMiyoAbsolutePath,
   getMiyoCustomUrl,
+  getMiyoFilePath,
   getMiyoFolderName,
   getVaultRelativeMiyoPath,
 } from "@/miyo/miyoUtils";
@@ -141,11 +141,11 @@ export class MiyoIndexBackend implements SemanticIndexBackend {
    */
   public async getDocumentsByPath(path: string): Promise<SemanticIndexDocument[]> {
     const baseUrl = await this.getBaseUrl();
-    const absolutePath = getMiyoAbsolutePath(this.app, path);
+    const miyoFilePath = getMiyoFilePath(this.app, path);
     const response = await this.client.getDocumentsByPath(
       baseUrl,
       this.getFolderName(),
-      absolutePath
+      miyoFilePath
     );
     const docs = response.documents ?? [];
     return docs.map((doc) => this.fromMiyoDocument(path, doc));
