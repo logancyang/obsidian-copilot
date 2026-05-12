@@ -9,9 +9,12 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
     const adjustHeight = React.useCallback(() => {
       const textarea = textareaRef.current;
       if (textarea) {
-        textarea.style.height = "auto";
+        // Reset to "auto" so scrollHeight reflects the natural content height,
+        // then set the computed pixel value. Consumed by the
+        // `tw-h-[var(--copilot-autosize-height,_auto)]` arbitrary-value class below.
+        textarea.style.setProperty("--copilot-autosize-height", "auto");
         const newHeight = Math.min(textarea.scrollHeight, 300);
-        textarea.style.height = `${newHeight}px`;
+        textarea.style.setProperty("--copilot-autosize-height", `${newHeight}px`);
       }
     }, []);
 
@@ -40,6 +43,7 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
         className={cn(
           "tw-min-w-fit tw-resize-y tw-overflow-auto tw-border-solid",
           "tw-flex tw-max-h-[300px] tw-min-h-[60px] tw-w-full tw-rounded-md tw-border tw-bg-transparent tw-px-3 tw-py-2 tw-text-base tw-shadow-sm placeholder:tw-text-muted focus-visible:tw-outline-none focus-visible:tw-ring-1 focus-visible:tw-ring-ring disabled:tw-cursor-not-allowed disabled:tw-opacity-50 md:tw-text-sm",
+          "tw-h-[var(--copilot-autosize-height,_auto)]",
           className
         )}
         value={value}

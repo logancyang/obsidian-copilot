@@ -466,8 +466,7 @@ export class AddProjectModal extends Modal {
     const { contentEl, modalEl } = this;
 
     // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea
-    // modalEl.style.minWidth = "min(640px, 90vw)";
-    modalEl.style.maxHeight = "85vh";
+    modalEl.addClass("!tw-max-h-[85vh]");
 
     this.root = createRoot(contentEl);
 

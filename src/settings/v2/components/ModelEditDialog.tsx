@@ -367,7 +367,7 @@ export class ModelEditModal extends Modal {
     const { contentEl, modalEl } = this;
     // It occupies only 80% of the height, leaving a clickable blank area to prevent the close icon from malfunctioning.
     if (Platform.isMobile) {
-      modalEl.style.height = "80%";
+      modalEl.addClass("tw-h-4/5");
     }
     this.root = createRoot(contentEl);
 

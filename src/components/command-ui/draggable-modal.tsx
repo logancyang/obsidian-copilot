@@ -286,6 +286,9 @@ export function DraggableModal({
       className={cn(
         // Positioning and z-index
         "tw-fixed tw-z-popover",
+        // Position driven by useDraggable's CSS variables (--copilot-drag-x/y).
+        // Fallback covers first paint before the hook's useLayoutEffect runs.
+        "tw-left-[var(--copilot-drag-x,0px)] tw-top-[var(--copilot-drag-y,0px)]",
         // Flexbox layout for stable structure
         "tw-flex tw-flex-col",
         // Visual styling
@@ -301,8 +304,6 @@ export function DraggableModal({
         className
       )}
       style={{
-        left: position.x,
-        top: position.y,
         width: resizable && widthPx !== null ? widthPx : width,
         ...(resizable && heightPx !== null ? { height: heightPx } : {}),
       }}

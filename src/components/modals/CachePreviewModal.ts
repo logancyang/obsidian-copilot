@@ -25,8 +25,7 @@ export class CachePreviewModal extends Modal {
     const { contentEl, modalEl } = this;
 
     // Reason: override default modal width for wider content preview
-    modalEl.style.width = "90vw";
-    modalEl.style.maxWidth = "800px";
+    modalEl.addClass("!tw-w-[90vw]", "!tw-max-w-[800px]");
 
     contentEl.empty();
     contentEl.addClass("tw-flex", "tw-flex-col", "tw-p-0");

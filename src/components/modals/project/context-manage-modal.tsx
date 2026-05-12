@@ -1382,7 +1382,7 @@ export class ContextManageModal extends Modal {
     const { contentEl, modalEl } = this;
     this.root = createRoot(contentEl);
 
-    modalEl.style.minWidth = "50vw";
+    modalEl.addClass("tw-min-w-[50vw]");
 
     const handleSave = (project: ProjectConfig) => {
       this.onSave(project);

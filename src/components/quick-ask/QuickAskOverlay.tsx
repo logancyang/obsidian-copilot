@@ -87,8 +87,6 @@ export class QuickAskOverlay {
   private resizeStartMouse: { x: number; y: number } | null = null;
   private resizeRafId: number | null = null;
   // Save original body styles to restore after resize
-  private savedBodyUserSelect: string = "";
-  private savedBodyCursor: string = "";
 
   constructor(private readonly options: QuickAskOverlayOptions) {}
 
@@ -668,20 +666,17 @@ export class QuickAskOverlay {
     const doc = this.ownerDocument ?? activeDocument;
     const body = doc.body;
 
-    // Prevent text selection and set resize cursor on body during drag
-    // Save original values to restore later
-    this.savedBodyUserSelect = body.style.userSelect;
-    this.savedBodyCursor = body.style.cursor;
-    body.classList.add("copilot-quick-ask-resizing");
-    body.style.userSelect = "none";
-    // Set cursor based on direction to ensure consistent feedback
+    // Disable selection and set a direction-specific cursor on the body for
+    // the duration of the resize. Cursor is exposed via a CSS variable that the
+    // Tailwind arbitrary-value class consumes — no inline cursor styles needed.
     const cursorMap: Record<ResizeDirection, string> = {
       right: "ew-resize",
       bottom: "ns-resize",
       "bottom-left": "nesw-resize",
       "bottom-right": "nwse-resize",
     };
-    body.style.cursor = cursorMap[direction] ?? "default";
+    body.style.setProperty("--copilot-resize-cursor", cursorMap[direction] ?? "default");
+    body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 
     // Bind document-level listeners (use capture for consistency with useRafResizable/useDraggable)
     doc.addEventListener("mousemove", this.handleResizeMove, true);
@@ -725,10 +720,8 @@ export class QuickAskOverlay {
       const body = doc.body;
       doc.removeEventListener("mousemove", this.handleResizeMove, true);
       doc.removeEventListener("mouseup", this.handleResizeEnd, true);
-      body.classList.remove("copilot-quick-ask-resizing");
-      // Restore original body styles
-      body.style.userSelect = this.savedBodyUserSelect;
-      body.style.cursor = this.savedBodyCursor;
+      body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
+      body.style.removeProperty("--copilot-resize-cursor");
     }
 
     this.isResizing = false;

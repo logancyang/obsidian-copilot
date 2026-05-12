@@ -27,23 +27,19 @@ export class SourcesModal extends Modal {
     sources: { title: string; path: string; score: number; explanation?: any }[]
   ) {
     const list = container.createEl("ul");
-    list.style.listStyleType = "none";
-    list.style.padding = "0";
+    list.addClass("tw-list-none", "tw-p-0");
 
     sources.forEach((source) => {
       const item = list.createEl("li");
-      item.style.marginBottom = "1em";
+      item.addClass("tw-mb-4");
 
       // Create collapsible container
       const itemContainer = item.createDiv();
-      itemContainer.style.cursor = "pointer";
+      itemContainer.addClass("tw-cursor-pointer");
 
       // Add expand/collapse indicator
       const expandIndicator = itemContainer.createSpan();
-      expandIndicator.style.marginRight = "0.5em";
-      expandIndicator.style.display = "inline-block";
-      expandIndicator.style.width = "1em";
-      expandIndicator.style.transition = "transform 0.2s";
+      expandIndicator.addClass("tw-mr-2", "tw-inline-block", "tw-w-4", "tw-transition-transform");
       expandIndicator.textContent = source.explanation ? "▶" : "";
 
       // Display title, but show path in parentheses if there are duplicates
@@ -87,16 +83,16 @@ export class SourcesModal extends Modal {
       let explanationDiv: HTMLElement | null = null;
       if (source.explanation) {
         explanationDiv = this.addExplanation(item, source.explanation);
-        explanationDiv.style.display = "none"; // Initially collapsed
+        explanationDiv.addClass("tw-hidden"); // Initially collapsed
 
         // Toggle expansion on click
         itemContainer.addEventListener("click", (e) => {
           if (e.target === link) return; // Don't toggle when clicking the link
 
           if (explanationDiv) {
-            const isExpanded = explanationDiv.style.display !== "none";
-            explanationDiv.style.display = isExpanded ? "none" : "block";
-            expandIndicator.style.transform = isExpanded ? "" : "rotate(90deg)";
+            const isExpanded = !explanationDiv.hasClass("tw-hidden");
+            explanationDiv.toggleClass("tw-hidden", isExpanded);
+            expandIndicator.toggleClass("tw-rotate-90", !isExpanded);
           }
         });
       }
@@ -105,12 +101,15 @@ export class SourcesModal extends Modal {
 
   private addExplanation(container: HTMLElement, explanation: any): HTMLElement {
     const explanationDiv = container.createDiv({ cls: "search-explanation" });
-    explanationDiv.style.marginTop = "0.5em";
-    explanationDiv.style.marginLeft = "2.5em";
-    explanationDiv.style.fontSize = "0.9em";
-    explanationDiv.style.color = "var(--text-muted)";
-    explanationDiv.style.borderLeft = "2px solid var(--background-modifier-border)";
-    explanationDiv.style.paddingLeft = "0.5em";
+    explanationDiv.addClass(
+      "tw-ml-[2.5em]",
+      "tw-mt-2",
+      "tw-pl-2",
+      "tw-text-[0.9em]",
+      "tw-text-muted",
+      "tw-border-l",
+      "tw-border-l-border"
+    );
 
     const details: string[] = [];
 
@@ -168,7 +167,7 @@ export class SourcesModal extends Modal {
     if (details.length > 0) {
       details.forEach((detail) => {
         const detailDiv = explanationDiv.createEl("div");
-        detailDiv.style.marginBottom = "0.25em";
+        detailDiv.addClass("tw-mb-1");
         detailDiv.textContent = `• ${detail}`;
       });
     }

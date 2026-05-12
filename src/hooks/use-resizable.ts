@@ -136,10 +136,10 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
     const ownerDocument = ownerDocumentRef.current ?? activeDocument;
     const ownerWindow = ownerWindowRef.current ?? window;
     const body = ownerDocument.body;
-    const previousCursor = body.style.cursor;
-    const previousUserSelect = body.style.userSelect;
-    body.style.cursor = cursor;
-    body.style.userSelect = "none";
+    // Direction-specific cursor is exposed via a CSS variable so the Tailwind
+    // arbitrary-value class can consume it without inline cursor styles.
+    body.style.setProperty("--copilot-resize-cursor", cursor);
+    body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 
     const cancelRaf = (): void => {
       if (rafIdRef.current === null) return;
@@ -213,8 +213,8 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       ownerDocument.removeEventListener("mousemove", handleMouseMove, true);
       ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
 
-      body.style.cursor = previousCursor;
-      body.style.userSelect = previousUserSelect;
+      body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
+      body.style.removeProperty("--copilot-resize-cursor");
 
       startRef.current = null;
       setIsResizing(false);
@@ -235,8 +235,8 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       ownerDocument.removeEventListener("mousemove", handleMouseMove, true);
       ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
 
-      body.style.cursor = previousCursor;
-      body.style.userSelect = previousUserSelect;
+      body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
+      body.style.removeProperty("--copilot-resize-cursor");
     };
   }, [isResizing]);
 
