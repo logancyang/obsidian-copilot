@@ -4,6 +4,7 @@ import {
   DOMConversionOutput,
   DOMExportOutput,
   EditorConfig,
+  LexicalEditor,
   LexicalNode,
   NodeKey,
   $getRoot,
@@ -11,7 +12,7 @@ import {
 import { Globe } from "lucide-react";
 import { Platform } from "obsidian";
 import { ACTIVE_WEB_TAB_MARKER } from "@/constants";
-import { BasePillNode, SerializedBasePillNode } from "./BasePillNode";
+import { BasePillNode, getEditorDocument, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
 import { PillBadge } from "./PillBadge";
 import { useActiveWebTabState } from "../hooks/useActiveWebTabState";
@@ -44,8 +45,8 @@ export class ActiveWebTabPillNode extends BasePillNode {
     return "data-lexical-active-web-tab-pill";
   }
 
-  createDOM(_config: EditorConfig): HTMLElement {
-    const span = document.createElement("span");
+  createDOM(_config: EditorConfig, editor: LexicalEditor): HTMLElement {
+    const span = getEditorDocument(editor).createElement("span");
     span.className = "active-web-tab-pill-wrapper";
     return span;
   }
@@ -76,8 +77,8 @@ export class ActiveWebTabPillNode extends BasePillNode {
     };
   }
 
-  exportDOM(): DOMExportOutput {
-    const element = document.createElement("span");
+  exportDOM(editor: LexicalEditor): DOMExportOutput {
+    const element = getEditorDocument(editor).createElement("span");
     element.setAttribute("data-lexical-active-web-tab-pill", "true");
     element.textContent = ACTIVE_WEB_TAB_MARKER;
     return { element };

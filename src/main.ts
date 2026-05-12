@@ -91,6 +91,7 @@ export default class CopilotPlugin extends Plugin {
   chatSelectionHighlightController: ChatSelectionHighlightController;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
+  private selectionListenerDocument?: Document;
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
@@ -378,8 +379,10 @@ export default class CopilotPlugin extends Plugin {
       }, 500);
     };
 
-    // Register the DOM selection change event
-    document.addEventListener("selectionchange", this.selectionChangeHandler);
+    // Capture the document at registration so removal targets the same one
+    // (activeDocument can change if the user focuses a popout window).
+    this.selectionListenerDocument = activeDocument;
+    this.selectionListenerDocument.addEventListener("selectionchange", this.selectionChangeHandler);
   }
 
   /**
@@ -389,9 +392,13 @@ export default class CopilotPlugin extends Plugin {
     if (this.selectionDebounceTimer) {
       window.clearTimeout(this.selectionDebounceTimer);
     }
-    if (this.selectionChangeHandler) {
-      document.removeEventListener("selectionchange", this.selectionChangeHandler);
+    if (this.selectionChangeHandler && this.selectionListenerDocument) {
+      this.selectionListenerDocument.removeEventListener(
+        "selectionchange",
+        this.selectionChangeHandler
+      );
     }
+    this.selectionListenerDocument = undefined;
   }
 
   /**

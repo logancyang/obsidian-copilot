@@ -52,7 +52,7 @@ module.exports = {
     },
   })),
   ItemView: jest.fn().mockImplementation(function () {
-    this.containerEl = document.createElement("div");
+    this.containerEl = window.document.createElement("div");
     this.onOpen = jest.fn();
     this.onClose = jest.fn();
     this.getDisplayText = jest.fn().mockReturnValue("Mock View");
@@ -61,7 +61,7 @@ module.exports = {
   }),
   Notice: jest.fn().mockImplementation(function (message) {
     this.message = message;
-    this.noticeEl = document.createElement("div");
+    this.noticeEl = window.document.createElement("div");
     this.hide = jest.fn();
   }),
   TFile: jest.fn().mockImplementation(function (path) {

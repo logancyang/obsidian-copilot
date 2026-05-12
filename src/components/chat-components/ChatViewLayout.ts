@@ -49,7 +49,7 @@ export class ChatViewLayout {
 
     const syncClearance = () => {
       // Re-query each time to avoid stale references after theme reloads.
-      const statusBar = document.querySelector<HTMLElement>(".status-bar");
+      const statusBar = activeDocument.querySelector<HTMLElement>(".status-bar");
       const viewContent = this.containerEl.querySelector<HTMLElement>(".view-content");
       if (!statusBar || !viewContent) return;
 

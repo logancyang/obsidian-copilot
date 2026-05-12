@@ -654,8 +654,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
       }
     };
 
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    const doc = activeDocument;
+    doc.addEventListener("keydown", handleKeyDown);
+    return () => doc.removeEventListener("keydown", handleKeyDown);
   }, [editMode, onEditCancel]);
 
   // Handle tool button toggle-off events - remove corresponding pills

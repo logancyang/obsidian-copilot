@@ -99,11 +99,12 @@ export function TypeaheadMenuPortal({
 
   useEffect(() => {
     const handler = () => recalcPosition();
+    const doc = activeDocument;
     window.addEventListener("resize", handler);
-    document.addEventListener("scroll", handler, { passive: true });
+    doc.addEventListener("scroll", handler, { passive: true });
     return () => {
       window.removeEventListener("resize", handler);
-      document.removeEventListener("scroll", handler);
+      doc.removeEventListener("scroll", handler);
     };
   }, [recalcPosition]);
 
@@ -135,7 +136,7 @@ export function TypeaheadMenuPortal({
     </div>
   );
 
-  return createPortal(container, document.body);
+  return createPortal(container, activeDocument.body);
 }
 
 export { tryToPositionRange };

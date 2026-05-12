@@ -10,7 +10,7 @@ export class AddImageModal {
   }
 
   open() {
-    const input = document.createElement("input");
+    const input = activeDocument.createElement("input");
     input.type = "file";
     input.accept = "image/*";
     input.multiple = true;
@@ -20,10 +20,10 @@ export class AddImageModal {
       const files = Array.from(input.files || []);
       this.onImagesSelected(files);
       // Clean up
-      document.body.removeChild(input);
+      activeDocument.body.removeChild(input);
     });
 
-    document.body.appendChild(input);
+    activeDocument.body.appendChild(input);
     input.click();
   }
 }

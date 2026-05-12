@@ -95,7 +95,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
 
         // Capture owner document/window from the event target
         const targetElement = e.currentTarget as HTMLElement | null;
-        const ownerDoc = targetElement?.ownerDocument ?? document;
+        const ownerDoc = targetElement?.ownerDocument ?? activeDocument;
         ownerDocumentRef.current = ownerDoc;
         ownerWindowRef.current = ownerDoc.defaultView ?? window;
 
@@ -133,7 +133,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
             ? "nesw-resize"
             : "nwse-resize";
 
-    const ownerDocument = ownerDocumentRef.current ?? document;
+    const ownerDocument = ownerDocumentRef.current ?? activeDocument;
     const ownerWindow = ownerWindowRef.current ?? window;
     const body = ownerDocument.body;
     const previousCursor = body.style.cursor;

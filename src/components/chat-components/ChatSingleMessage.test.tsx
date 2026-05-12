@@ -97,7 +97,7 @@ describe("think block rendering — closing tags are not consumed by indented co
   });
 
   beforeAll(() => {
-    (globalThis as any).activeDocument = document;
+    (window as any).activeDocument = window.document;
   });
 
   /**
@@ -204,7 +204,7 @@ describe("normalizeFootnoteRendering", () => {
   });
 
   it("removes separator and backref while preserving non-footnote elements", () => {
-    const container = document.createElement("div");
+    const container = window.document.createElement("div");
     container.innerHTML = `
       <div>
         <p>Body <sup><a href="#fn-1">1-1</a></sup></p>
@@ -229,7 +229,7 @@ describe("normalizeFootnoteRendering", () => {
   });
 
   it("leaves non-numeric footnote references untouched", () => {
-    const container = document.createElement("div");
+    const container = window.document.createElement("div");
     container.innerHTML = `
       <p>Body <sup><a href="#fn-note">Note-A</a></sup></p>
       <a class="footnote-backref" href="#ref">↩</a>
@@ -269,7 +269,7 @@ describe("ChatSingleMessage", () => {
   });
 
   beforeAll(() => {
-    (globalThis as any).activeDocument = document;
+    (window as any).activeDocument = window.document;
   });
 
   it("normalizes rendered footnotes for assistant messages", async () => {

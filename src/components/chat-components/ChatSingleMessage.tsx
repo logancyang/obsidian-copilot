@@ -115,10 +115,15 @@ export const linkInlineCitations = (root: HTMLElement): void => {
 
   if (citationAnchors.size === 0) return;
 
+  // Bind DOM ops to the document that owns `root` — the chat message may live
+  // in an Obsidian popout while a different window is focused, in which case
+  // `activeDocument` would create nodes with the wrong ownerDocument.
+  const doc = root.ownerDocument;
+
   // Collect text nodes that contain citation patterns (outside sources section)
   const sourcesEl = root.querySelector(".copilot-sources");
   const textNodes: Text[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
     acceptNode(node) {
       if (sourcesEl?.contains(node)) return NodeFilter.FILTER_REJECT;
       if (node.parentElement?.closest("code, pre")) return NodeFilter.FILTER_REJECT;
@@ -139,27 +144,27 @@ export const linkInlineCitations = (root: HTMLElement): void => {
     const text = node.textContent || "";
     INLINE_CITATION_RE.lastIndex = 0;
 
-    const fragment = document.createDocumentFragment();
+    const fragment = doc.createDocumentFragment();
     let lastIndex = 0;
     let match: RegExpExecArray | null;
 
     while ((match = INLINE_CITATION_RE.exec(text)) !== null) {
       // Text before the citation
       if (match.index > lastIndex) {
-        fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+        fragment.appendChild(doc.createTextNode(text.slice(lastIndex, match.index)));
       }
 
       const nums = match[1].split(/\s*,\s*/).map((s) => parseInt(s.trim(), 10));
       const allResolved = nums.every((num) => citationAnchors.has(num));
 
       if (allResolved) {
-        const span = document.createElement("span");
+        const span = doc.createElement("span");
         span.className = "copilot-citation-group";
-        span.appendChild(document.createTextNode("["));
+        span.appendChild(doc.createTextNode("["));
         nums.forEach((num, i) => {
-          if (i > 0) span.appendChild(document.createTextNode(", "));
+          if (i > 0) span.appendChild(doc.createTextNode(", "));
           const sourceAnchor = citationAnchors.get(num)!;
-          const link = document.createElement("a");
+          const link = doc.createElement("a");
           // Copy all attributes from the source anchor so Obsidian internal-link
           // metadata (e.g. data-href, class="internal-link") is preserved.
           for (const attr of Array.from(sourceAnchor.attributes)) {
@@ -171,17 +176,17 @@ export const linkInlineCitations = (root: HTMLElement): void => {
           link.setAttribute("aria-label", `Source ${num}`);
           span.appendChild(link);
         });
-        span.appendChild(document.createTextNode("]"));
+        span.appendChild(doc.createTextNode("]"));
         fragment.appendChild(span);
       } else {
-        fragment.appendChild(document.createTextNode(match[0]));
+        fragment.appendChild(doc.createTextNode(match[0]));
       }
 
       lastIndex = match.index + match[0].length;
     }
 
     if (lastIndex < text.length) {
-      fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+      fragment.appendChild(doc.createTextNode(text.slice(lastIndex)));
     }
 
     // If the text node is inside a placeholder span, replace the span itself
@@ -664,6 +669,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       const parsedMessage = parseToolCallMarkers(processedMessage, messageId.current);
 
       if (!isUnmountingRef.current) {
+        // Bind DOM ops to the document that owns the message container so
+        // popout-window chats don't pick up the wrong document if focus shifts.
+        const doc = contentRef.current.ownerDocument;
         // Track existing tool call and error block IDs
         const existingToolCallIds = new Set<string>();
         const existingErrorIds = new Set<string>();
@@ -691,7 +699,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             // Find where to insert this text segment
             const insertBefore = contentRef.current!.children[currentIndex];
 
-            const textDiv = document.createElement("div");
+            const textDiv = doc.createElement("div");
             textDiv.className = "message-segment";
 
             if (insertBefore) {
@@ -705,11 +713,11 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             currentIndex++;
           } else if (segment.type === "toolCall" && segment.toolCall) {
             const toolCallId = segment.toolCall.id;
-            let container = document.getElementById(`tool-call-${toolCallId}`);
+            let container = doc.getElementById(`tool-call-${toolCallId}`);
 
             if (!container) {
               const insertBefore = contentRef.current!.children[currentIndex];
-              const toolDiv = document.createElement("div");
+              const toolDiv = doc.createElement("div");
               toolDiv.className = "tool-call-container";
               toolDiv.id = `tool-call-${toolCallId}`;
 
@@ -737,12 +745,12 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             currentIndex++;
           } else if (segment.type === "error" && segment.error) {
             const errorId = segment.error.id;
-            let container = document.getElementById(`error-block-${errorId}`);
+            let container = doc.getElementById(`error-block-${errorId}`);
 
             if (!container) {
               // Insert error block at the current stream position
               const insertBefore = contentRef.current!.children[currentIndex];
-              const errorDiv = document.createElement("div");
+              const errorDiv = doc.createElement("div");
               errorDiv.className = "error-block-container";
               errorDiv.id = `error-block-${errorId}`;
 
@@ -781,7 +789,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         existingToolCallIds.forEach((id) => {
           if (!currentToolCallIds.has(id)) {
-            const element = document.getElementById(`tool-call-${id}`);
+            const element = doc.getElementById(`tool-call-${id}`);
             if (element) {
               removeToolCallRoot(messageId.current, rootsRef.current, id, "tool call removal");
               element.remove();
@@ -798,7 +806,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         existingErrorIds.forEach((id) => {
           if (!currentErrorIds.has(id)) {
-            const element = document.getElementById(`error-block-${id}`);
+            const element = doc.getElementById(`error-block-${id}`);
             if (element) {
               removeErrorBlockRoot(
                 messageId.current,

@@ -109,13 +109,13 @@ export default class CopilotView extends ItemView {
       // querying by data-type which is more brittle across Obsidian versions.
       const isCopilotActive = !!this.containerEl.closest(".workspace-drawer-active-tab-content");
       const kbHeight = parseFloat(
-        document.documentElement.style.getPropertyValue("--keyboard-height") || "0"
+        activeDocument.documentElement.style.getPropertyValue("--keyboard-height") || "0"
       );
       drawer.classList.toggle("copilot-keyboard-open", isCopilotActive && kbHeight > 0);
     };
 
     this.keyboardObserver = new MutationObserver(syncKeyboardClass);
-    this.keyboardObserver.observe(document.documentElement, {
+    this.keyboardObserver.observe(activeDocument.documentElement, {
       attributes: true,
       attributeFilter: ["style"],
     });

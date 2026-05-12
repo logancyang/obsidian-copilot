@@ -41,7 +41,7 @@ jest.mock("obsidian", () => ({
   })),
   Notice: jest.fn().mockImplementation(function (message) {
     this.message = message;
-    this.noticeEl = document.createElement("div");
+    this.noticeEl = window.document.createElement("div");
     this.hide = jest.fn();
   }),
   Platform: {

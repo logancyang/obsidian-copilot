@@ -15,7 +15,7 @@ export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   useEffect(() => {
     if (!hasInitialized.current) {
-      const modal = document.querySelector(".modal-container") as HTMLElement;
+      const modal = activeDocument.querySelector(".modal-container") as HTMLElement;
       setModalContainer(modal);
       hasInitialized.current = true;
     }

@@ -192,7 +192,7 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         y: e.clientY - current.y,
       };
 
-      const ownerDocument = dragRef.current?.ownerDocument ?? document;
+      const ownerDocument = dragRef.current?.ownerDocument ?? activeDocument;
       const ownerWindow = ownerDocument.defaultView ?? window;
       const body = ownerDocument.body;
       previousBodyStyleRef.current = {

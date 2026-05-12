@@ -233,7 +233,7 @@ export function DraggableModal({
   useEffect(() => {
     if (!open) return;
 
-    const ownerDocument = dragRef.current?.ownerDocument ?? document;
+    const ownerDocument = dragRef.current?.ownerDocument ?? activeDocument;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Respect defaultPrevented to let internal components (e.g., Lexical typeahead, Radix menus) consume Escape first

@@ -513,7 +513,7 @@ export class CustomCommandChatModal {
    * appended to the document that owns the triggering view.
    */
   private resolveDocument(view?: MarkdownView | null): Document {
-    return view?.containerEl?.ownerDocument ?? document;
+    return view?.containerEl?.ownerDocument ?? activeDocument;
   }
 
   /**
