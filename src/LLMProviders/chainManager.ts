@@ -249,8 +249,8 @@ export default class ChainManager {
 
         setChainType(ChainType.VAULT_QA_CHAIN);
         if (getSettings().debug) {
-          console.log("New Vault QA chain with hybrid retriever created for entire vault");
-          console.log("Set chain:", ChainType.VAULT_QA_CHAIN);
+          logInfo("New Vault QA chain with hybrid retriever created for entire vault");
+          logInfo("Set chain:", ChainType.VAULT_QA_CHAIN);
         }
         break;
       }

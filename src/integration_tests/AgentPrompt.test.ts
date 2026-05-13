@@ -196,11 +196,8 @@ describe("Agent Prompt Integration Test - Direct Model Testing", () => {
   beforeAll(async () => {
     // Skip tests if no API key is available
     if (!process.env.GEMINI_API_KEY) {
-      console.log("Skipping Agent Prompt tests - GEMINI_API_KEY not found");
       return;
     }
-
-    console.log("🚀 Starting Agent Prompt tests with real Gemini 2.5 Flash");
 
     try {
       // Import the necessary classes

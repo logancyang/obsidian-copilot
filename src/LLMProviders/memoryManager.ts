@@ -1,4 +1,5 @@
 import { compactAssistantOutput } from "@/context/ChatHistoryCompactor";
+import { logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { BaseChatMemory, BufferWindowMemory } from "@langchain/classic/memory";
 import { BaseChatMessageHistory } from "@langchain/core/chat_history";
@@ -34,7 +35,7 @@ export default class MemoryManager {
       chatHistory: chatHistory,
     });
     if (this.debug) {
-      console.log("Memory initialized with context turns:", chatContextTurns);
+      logInfo("Memory initialized with context turns:", chatContextTurns);
     }
   }
 
@@ -43,13 +44,13 @@ export default class MemoryManager {
   }
 
   async clearChatMemory(): Promise<void> {
-    if (this.debug) console.log("Clearing chat memory");
+    if (this.debug) logInfo("Clearing chat memory");
     await this.memory.clear();
   }
 
   async loadMemoryVariables(): Promise<any> {
     const variables = await this.memory.loadMemoryVariables({});
-    if (this.debug) console.log("Loaded memory variables:", variables);
+    if (this.debug) logInfo("Loaded memory variables:", variables);
     return variables;
   }
 
@@ -66,7 +67,7 @@ export default class MemoryManager {
         : { ...output, output: compactAssistantOutput(output.output) };
 
     if (this.debug) {
-      console.log("Saving to memory - Input:", input, "Output (compacted):", compactedOutput);
+      logInfo("Saving to memory - Input:", input, "Output (compacted):", compactedOutput);
     }
     await this.memory.saveContext(input, compactedOutput);
   }

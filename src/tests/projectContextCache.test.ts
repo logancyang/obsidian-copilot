@@ -643,9 +643,5 @@ describe("ProjectContextCache", () => {
     expect(
       currentCache.youtubeContexts && currentCache.youtubeContexts["https://youtube.com/test"]
     ).toBe("Async YouTube content");
-
-    // Log order details for debugging
-    // console.log("Execution order:", executionOrder);
-    // console.log("Write order:", writeOrder);
   });
 });

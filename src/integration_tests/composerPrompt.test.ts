@@ -39,9 +39,6 @@ describe.skip("Composer Instructions - Integration Tests", () => {
   let model: GenerativeModel;
 
   beforeAll(() => {
-    // Log for debugging
-    console.log("Starting tests, API key available:", !!process.env.GEMINI_API_KEY);
-
     // Fail tests if no API key is available
     if (!process.env.GEMINI_API_KEY) {
       throw new Error(
@@ -93,8 +90,6 @@ describe.skip("Composer Instructions - Integration Tests", () => {
           userPrompt + "\n\n<output_format>\n" + COMPOSER_OUTPUT_INSTRUCTIONS + "\n</output_format>"
         );
         const content = result.response.text();
-        // Log preview for inspection
-        console.log(`${testName} - Response preview:`, content);
 
         if (expectedBlocks == 0) {
           expect(content).not.toContain("<writeFile>");

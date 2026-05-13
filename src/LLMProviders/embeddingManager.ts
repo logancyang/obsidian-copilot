@@ -2,6 +2,7 @@ import { CustomModel } from "@/aiParams";
 import { BREVILABS_MODELS_BASE_URL, EmbeddingModelProviders, ProviderInfo } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { CustomError } from "@/error";
+import { logInfo } from "@/logger";
 import { getModelKeyFromModel, getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { err2String, safeFetch } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
@@ -327,7 +328,7 @@ export default class EmbeddingManager {
       await tryPing(false);
       return true;
     } catch (firstError) {
-      console.log("First ping attempt failed, trying with CORS...");
+      logInfo("First ping attempt failed, trying with CORS...");
       try {
         // Second try with CORS
         await tryPing(true);

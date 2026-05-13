@@ -132,7 +132,7 @@ export class IndexEventHandler {
 
     this.debounceTimer = window.setTimeout(() => {
       if (getSettings().debug) {
-        console.log("Copilot Plus: Triggering reindex for file ", file.path);
+        logInfo("Copilot Plus: Triggering reindex for file ", file.path);
       }
       void this.indexOps.reindexFile(file).catch((err) => logError("reindexFile failed", err));
       this.debounceTimer = null;

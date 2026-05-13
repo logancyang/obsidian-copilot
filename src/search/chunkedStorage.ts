@@ -1,5 +1,6 @@
 // DEPRECATED: Legacy partitioned Orama store. v3 uses JSONL snapshots + MemoryIndexManager.
 import { CustomError } from "@/error";
+import { logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { create, load, Orama, RawData, save } from "@orama/orama";
 import { App } from "obsidian";
@@ -64,7 +65,7 @@ export class ChunkedStorage {
     }
 
     if (getSettings().debug) {
-      console.log(`Total documents to distribute: ${documents.length}`);
+      logInfo(`Total documents to distribute: ${documents.length}`);
     }
 
     for (const doc of documents) {
@@ -81,12 +82,12 @@ export class ChunkedStorage {
     partitions.forEach((docs, i) => {
       totalDistributed += docs.length;
       if (getSettings().debug) {
-        console.log(`Partition ${i + 1}: ${docs.length} documents`);
+        logInfo(`Partition ${i + 1}: ${docs.length} documents`);
       }
     });
 
     if (getSettings().debug) {
-      console.log(`Total documents distributed: ${totalDistributed}`);
+      logInfo(`Total documents distributed: ${totalDistributed}`);
       if (totalDistributed !== documents.length) {
         console.error(
           `Document count mismatch! Original: ${documents.length}, Distributed: ${totalDistributed}`
@@ -127,7 +128,7 @@ export class ChunkedStorage {
       const rawDocs = Array.isArray(docsData) ? docsData : Object.values(docsData || {});
 
       if (getSettings().debug) {
-        console.log(`Starting save with ${rawDocs.length ?? 0} total documents`);
+        logInfo(`Starting save with ${rawDocs.length ?? 0} total documents`);
       }
 
       if (!rawDocs || rawDocs.length === 0) {
@@ -144,7 +145,7 @@ export class ChunkedStorage {
         await this.app.vault.adapter.write(metadataPath, JSON.stringify(metadata));
 
         if (getSettings().debug) {
-          console.log("Saved empty database state");
+          logInfo("Saved empty database state");
         }
         return;
       }
@@ -212,11 +213,11 @@ export class ChunkedStorage {
         await this.app.vault.adapter.write(chunkPath, JSON.stringify(finalPartitionData));
 
         if (getSettings().debug) {
-          console.log(`Saved partition ${partitionIndex + 1}/${numPartitions}`);
+          logInfo(`Saved partition ${partitionIndex + 1}/${numPartitions}`);
         }
       }
       if (getSettings().debug) {
-        console.log("Saved all partitions");
+        logInfo("Saved all partitions");
       }
     } catch (error) {
       console.error(`Error saving database:`, error);

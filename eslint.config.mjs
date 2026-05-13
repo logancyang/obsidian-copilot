@@ -106,9 +106,6 @@ export default [
       // obsidianmd/no-global-this fires on jest globalThis usage in tests and
       // a small number of legit cases — defer triage.
       "obsidianmd/no-global-this": "off",
-      // rule-custom-message wraps no-console; we don't enable no-console in this PR
-      // and the codebase enforces logInfo/logWarn/logError via CLAUDE.md.
-      "obsidianmd/rule-custom-message": "off",
 
       // SDL / import / no-unsanitized / depend: defer — review separately
       "@microsoft/sdl/no-inner-html": "off",
@@ -197,6 +194,18 @@ export default [
     files: ["**/package.json"],
     rules: {
       "depend/ban-dependencies": "off",
+    },
+  },
+
+  // logger.ts is the central logging utility and must call console.* directly.
+  // chainFactory.ts is deprecated and sits in a circular import with logger
+  // (constants → chainFactory → logger → settings → constants), so it can't
+  // pull in logger without breaking initialization.
+  // scripts/** are CLI tools that print to stdout.
+  {
+    files: ["src/logger.ts", "src/chainFactory.ts", "scripts/**"],
+    rules: {
+      "obsidianmd/rule-custom-message": "off",
     },
   },
 ];

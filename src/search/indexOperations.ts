@@ -258,7 +258,7 @@ export class IndexOperations {
 
           if (currentCheckpoint > previousCheckpoint) {
             await this.indexBackend.save();
-            console.log("Copilot index checkpoint save completed.");
+            logInfo("Copilot index checkpoint save completed.");
           }
         } catch (err) {
           this.handleError(err, {
@@ -638,7 +638,7 @@ export class IndexOperations {
       this.indexBackend.markUnsavedChanges();
 
       if (getSettings().debug) {
-        console.log(`Reindexed file: ${file.path}`);
+        logInfo(`Reindexed file: ${file.path}`);
       }
     } catch (error) {
       this.handleError(error, { filePath: file.path });
