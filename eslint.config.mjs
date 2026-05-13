@@ -103,9 +103,6 @@ export default [
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
 
-      // obsidianmd/no-global-this fires on jest globalThis usage in tests and
-      // a small number of legit cases — defer triage.
-      "obsidianmd/no-global-this": "off",
       // rule-custom-message wraps no-console; we don't enable no-console in this PR
       // and the codebase enforces logInfo/logWarn/logError via CLAUDE.md.
       "obsidianmd/rule-custom-message": "off",

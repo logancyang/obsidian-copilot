@@ -133,7 +133,7 @@ describe("findRelevantNotes", () => {
       ["linked-only.md", linkedOnly],
     ]);
 
-    (global.app.vault.getAbstractFileByPath as jest.Mock).mockImplementation((path: string) => {
+    (window.app.vault.getAbstractFileByPath as jest.Mock).mockImplementation((path: string) => {
       return filesByPath.get(path) ?? null;
     });
 

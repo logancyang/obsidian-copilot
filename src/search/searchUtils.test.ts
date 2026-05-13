@@ -68,12 +68,12 @@ jest.mock("@/settings/model", () => ({
 describe("searchUtils", () => {
   beforeAll(() => {
     // @ts-ignore
-    global.app = mockApp;
+    window.app = mockApp;
   });
 
   afterAll(() => {
     // @ts-ignore
-    delete global.app;
+    delete window.app;
   });
 
   beforeEach(() => {

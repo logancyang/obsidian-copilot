@@ -75,14 +75,14 @@ describe("migrateSystemPromptsFromSettings", () => {
     } as unknown as Vault;
 
     // Mock global app
-    originalApp = global.app;
-    global.app = {
+    originalApp = window.app;
+    window.app = {
       vault: mockVault,
     } as any;
   });
 
   afterEach(() => {
-    global.app = originalApp;
+    window.app = originalApp;
   });
 
   it("skips migration when userSystemPrompt is empty", async () => {

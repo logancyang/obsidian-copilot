@@ -94,6 +94,7 @@ export async function run(args: string[]): Promise<void> {
   }
 
   const app = createHeadlessApp();
+  // eslint-disable-next-line obsidianmd/no-global-this -- node-only debug script, no window available
   (global as unknown as { app: unknown }).app = app;
 
   initializeBuiltinTools();

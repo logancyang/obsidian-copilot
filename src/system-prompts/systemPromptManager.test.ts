@@ -66,8 +66,8 @@ describe("SystemPromptManager", () => {
     } as unknown as Vault;
 
     // Mock global app
-    originalApp = global.app;
-    global.app = {
+    originalApp = window.app;
+    window.app = {
       vault: mockVault,
       fileManager: {
         processFrontMatter: jest.fn(),
@@ -81,7 +81,7 @@ describe("SystemPromptManager", () => {
   });
 
   afterEach(() => {
-    global.app = originalApp;
+    window.app = originalApp;
   });
 
   describe("getInstance", () => {

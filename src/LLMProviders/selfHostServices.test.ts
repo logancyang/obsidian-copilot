@@ -19,7 +19,7 @@ jest.mock("@/logger", () => ({
 
 // Mock global fetch
 const mockFetch = jest.fn();
-global.fetch = mockFetch;
+window.fetch = mockFetch;
 
 beforeEach(() => {
   jest.clearAllMocks();

@@ -35,7 +35,7 @@ function makeMockFile(path: string): TFile {
 
 // Helper: set up the global `app` mock used by parseProjectConfigFile
 function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> | null) {
-  (global as Record<string, unknown>).app = {
+  (window as unknown as Record<string, unknown>).app = {
     vault: {
       read: jest.fn().mockResolvedValue(rawContent),
       // Reason: parseProjectConfigFile uses `cachedFile instanceof TFile` to detect synthetic TFiles.
