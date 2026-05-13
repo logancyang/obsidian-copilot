@@ -269,11 +269,7 @@ describe("ChatSingleMessage", () => {
   });
 
   beforeAll(() => {
-<<<<<<< HEAD
     (window as any).activeDocument = window.document;
-=======
-    (window as any).activeDocument = document;
->>>>>>> 267bf91 (chore(popout): window-global API swaps — timers, globalThis, base64 (W3/9))
   });
 
   it("normalizes rendered footnotes for assistant messages", async () => {
