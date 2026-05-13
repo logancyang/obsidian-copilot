@@ -3,6 +3,7 @@ import { TFile } from "obsidian";
 import {
   extractNoteFiles,
   extractTemplateNoteFiles,
+  formatDateTime,
   getNotesFromPath,
   getNotesFromTags,
   getUtf8ByteLength,
@@ -10,6 +11,7 @@ import {
   shouldUseGitHubCopilotResponsesApi,
   processVariableNameForNotePath,
   removeThinkTags,
+  stringToFormattedDateTime,
   stripFrontmatter,
   truncateToByteLimit,
   withTimeout,
@@ -840,5 +842,101 @@ title: Test
     const content = "---\r\ntitle: Test\r\n---\r\n  Content here.";
     const result = stripFrontmatter(content, { trimStart: false });
     expect(result).toBe("  Content here.");
+  });
+});
+
+describe("formatDateTime", () => {
+  const fixedDate = new Date("2024-03-15T14:30:45.123Z");
+
+  it("formats UTC deterministically when timezone='utc'", () => {
+    const result = formatDateTime(fixedDate, "utc");
+    expect(result.fileName).toBe("20240315_143045");
+    expect(result.display).toBe("2024/03/15 14:30:45");
+    expect(result.epoch).toBe(fixedDate.getTime());
+  });
+
+  it("local format is structurally valid and matches host timezone offset", () => {
+    const result = formatDateTime(fixedDate, "local");
+    // Display must always be "YYYY/MM/DD HH:mm:ss" regardless of host TZ.
+    expect(result.display).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(result.fileName).toMatch(/^\d{8}_\d{6}$/);
+    expect(result.epoch).toBe(fixedDate.getTime());
+
+    // The local display should equal what the host JS Date renders.
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const expectedDisplay =
+      `${fixedDate.getFullYear()}/${pad(fixedDate.getMonth() + 1)}/${pad(fixedDate.getDate())} ` +
+      `${pad(fixedDate.getHours())}:${pad(fixedDate.getMinutes())}:${pad(fixedDate.getSeconds())}`;
+    expect(result.display).toBe(expectedDisplay);
+  });
+
+  it("local and UTC differ when host is not on UTC, and agree otherwise", () => {
+    const local = formatDateTime(fixedDate, "local");
+    const utc = formatDateTime(fixedDate, "utc");
+    if (fixedDate.getTimezoneOffset() === 0) {
+      expect(local.display).toBe(utc.display);
+    } else {
+      expect(local.display).not.toBe(utc.display);
+    }
+  });
+
+  it("defaults to local timezone", () => {
+    const explicit = formatDateTime(fixedDate, "local");
+    const defaulted = formatDateTime(fixedDate);
+    expect(defaulted).toEqual(explicit);
+  });
+
+  it("epoch is independent of timezone choice", () => {
+    expect(formatDateTime(fixedDate, "local").epoch).toBe(formatDateTime(fixedDate, "utc").epoch);
+  });
+
+  it("zero-pads single-digit month/day/hour/minute/second", () => {
+    const earlyDate = new Date("2024-01-02T03:04:05.000Z");
+    const result = formatDateTime(earlyDate, "utc");
+    expect(result.fileName).toBe("20240102_030405");
+    expect(result.display).toBe("2024/01/02 03:04:05");
+  });
+});
+
+describe("stringToFormattedDateTime", () => {
+  it("parses a valid 'YYYY/MM/DD HH:mm:ss' string and round-trips display", () => {
+    const result = stringToFormattedDateTime("2024/03/15 10:30:45");
+    expect(result.display).toBe("2024/03/15 10:30:45");
+    expect(result.fileName).toBe("20240315_103045");
+    // The reconstructed Date must format back to the same components in local time.
+    const d = new Date(result.epoch);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    expect(
+      `${d.getFullYear()}/${pad(d.getMonth() + 1)}/${pad(d.getDate())} ` +
+        `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    ).toBe("2024/03/15 10:30:45");
+  });
+
+  it("round-trips formatDateTime(local) output", () => {
+    const original = new Date("2024-07-04T18:00:00.000Z");
+    const formatted = formatDateTime(original, "local");
+    const reparsed = stringToFormattedDateTime(formatted.display);
+    expect(reparsed.display).toBe(formatted.display);
+    expect(reparsed.fileName).toBe(formatted.fileName);
+    // Display is second-precision, so the round-tripped epoch loses millis.
+    expect(reparsed.epoch).toBe(Math.floor(original.getTime() / 1000) * 1000);
+  });
+
+  it("falls back to current date/time on invalid input", () => {
+    const before = Date.now();
+    const result = stringToFormattedDateTime("not-a-date");
+    const after = Date.now();
+    expect(result.epoch).toBeGreaterThanOrEqual(before);
+    expect(result.epoch).toBeLessThanOrEqual(after);
+    expect(result.display).toMatch(/^\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}$/);
+    expect(result.fileName).toMatch(/^\d{8}_\d{6}$/);
+  });
+
+  it("falls back on wrong-format input (e.g. dashes)", () => {
+    const before = Date.now();
+    const result = stringToFormattedDateTime("2024-03-15 10:30:45");
+    const after = Date.now();
+    expect(result.epoch).toBeGreaterThanOrEqual(before);
+    expect(result.epoch).toBeLessThanOrEqual(after);
   });
 });

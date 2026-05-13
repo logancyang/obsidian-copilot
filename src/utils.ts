@@ -19,7 +19,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
 import { BaseChain, RetrievalQAChain } from "@langchain/classic/chains";
-import moment from "moment";
+import { DateTime } from "luxon";
 import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
@@ -311,16 +311,12 @@ export const formatDateTime = (
   now: Date,
   timezone: "local" | "utc" = "local"
 ): FormattedDateTime => {
-  const formattedDateTime = moment(now);
-
-  if (timezone === "utc") {
-    formattedDateTime.utc();
-  }
+  const dt = timezone === "utc" ? DateTime.fromJSDate(now).toUTC() : DateTime.fromJSDate(now);
 
   return {
-    fileName: formattedDateTime.format("YYYYMMDD_HHmmss"),
-    display: formattedDateTime.format("YYYY/MM/DD HH:mm:ss"),
-    epoch: formattedDateTime.valueOf(),
+    fileName: dt.toFormat("yyyyMMdd_HHmmss"),
+    display: dt.toFormat("yyyy/MM/dd HH:mm:ss"),
+    epoch: dt.toMillis(),
   };
 };
 
@@ -359,15 +355,15 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
 }
 
 export function stringToFormattedDateTime(timestamp: string): FormattedDateTime {
-  const date = moment(timestamp, "YYYY/MM/DD HH:mm:ss");
-  if (!date.isValid()) {
+  const date = DateTime.fromFormat(timestamp, "yyyy/MM/dd HH:mm:ss");
+  if (!date.isValid) {
     // If the string is not in the expected format, return current date/time
     return formatDateTime(new Date());
   }
   return {
-    fileName: date.format("YYYYMMDD_HHmmss"),
-    display: date.format("YYYY/MM/DD HH:mm:ss"),
-    epoch: date.valueOf(),
+    fileName: date.toFormat("yyyyMMdd_HHmmss"),
+    display: date.toFormat("yyyy/MM/dd HH:mm:ss"),
+    epoch: date.toMillis(),
   };
 }
 

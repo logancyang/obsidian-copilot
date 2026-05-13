@@ -109,8 +109,6 @@ export default [
       "@typescript-eslint/no-deprecated": "off",
 
       // SDL / import / no-unsanitized / depend: defer — review separately
-      "import/no-nodejs-modules": "off",
-      "import/no-extraneous-dependencies": "off",
       "no-restricted-imports": "off",
       "no-restricted-globals": "off",
       // depend/ban-dependencies suggests native replacements for axios/lodash.debounce/etc.
@@ -127,6 +125,9 @@ export default [
         ...globals.jest,
         ...globals.node,
       },
+    },
+    rules: {
+      "import/no-nodejs-modules": "off",
     },
   },
 
@@ -146,6 +147,9 @@ export default [
       globals: {
         ...globals.node,
       },
+    },
+    rules: {
+      "import/no-nodejs-modules": "off",
     },
   },
 
