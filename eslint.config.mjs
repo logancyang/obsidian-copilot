@@ -73,7 +73,7 @@ export default [
       "tailwindcss/no-contradicting-classname": "error",
 
       // obsidianmd: defer to follow-up PRs
-      "obsidianmd/vault/iterate": "off",
+      "obsidianmd/vault/iterate": "error",
       "obsidianmd/prefer-active-doc": "off",
       "obsidianmd/object-assign": "off",
       "obsidianmd/ui/sentence-case": "off",
