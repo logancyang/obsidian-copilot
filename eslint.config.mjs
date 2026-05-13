@@ -109,7 +109,6 @@ export default [
       "@typescript-eslint/no-deprecated": "off",
 
       // SDL / import / no-unsanitized / depend: defer — review separately
-      "no-restricted-imports": "off",
       "no-restricted-globals": "off",
     },
   },
@@ -125,6 +124,15 @@ export default [
     },
     rules: {
       "import/no-nodejs-modules": "off",
+    },
+  },
+
+  // Integration tests bootstrap jsdom fetch via `node-fetch` polyfill —
+  // allow the otherwise-banned import here only.
+  {
+    files: ["src/integration_tests/**"],
+    rules: {
+      "no-restricted-imports": "off",
     },
   },
 
