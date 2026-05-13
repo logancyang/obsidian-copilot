@@ -1,5 +1,5 @@
 import { execSync } from "child_process";
-import { existsSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 
 const targetVersion = process.env.npm_package_version;
 const isPrerelease = targetVersion.includes("-");
@@ -35,9 +35,28 @@ execSync(`git add ${manifestPath} versions.json`);
 // When a stable release ships, an existing manifest-beta.json is now
 // historical. Remove it so BRAT and similar tools don't keep surfacing the
 // older prerelease entry alongside the new stable.
+//
+// `git rm` fails on untracked files or files with local modifications, so
+// check trackedness first and fall back to a plain unlink when the file is
+// only in the working tree. This keeps stable bumps robust against a partial
+// or in-progress prerelease state on the local machine.
 if (!isPrerelease && existsSync("manifest-beta.json")) {
-  execSync("git rm manifest-beta.json");
-  console.log("Removed manifest-beta.json (stable release supersedes prerelease).");
+  let isTracked = false;
+  try {
+    execSync("git ls-files --error-unmatch manifest-beta.json", { stdio: "ignore" });
+    isTracked = true;
+  } catch {
+    isTracked = false;
+  }
+
+  if (isTracked) {
+    execSync("git rm -f manifest-beta.json");
+  } else {
+    unlinkSync("manifest-beta.json");
+  }
+  console.log(
+    `Removed manifest-beta.json (${isTracked ? "tracked, staged deletion" : "untracked, removed from working tree"}).`
+  );
 }
 
 console.log(`version-bump: wrote ${targetVersion} to ${manifestPath} and versions.json.`);

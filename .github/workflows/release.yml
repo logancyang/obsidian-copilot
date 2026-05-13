@@ -69,14 +69,34 @@ jobs:
       # Obsidian plugin store reads). For prereleases the source of truth is
       # manifest-beta.json (manifest.json must stay pinned at the latest stable
       # so the plugin store keeps serving installs correctly).
+      #
+      # For prereleases we ALSO assert that manifest.json on the merge commit
+      # still matches the latest stable GitHub Release tag. This defends against
+      # an old-style version-bump or hand edit accidentally re-poisoning master.
       - name: Verify version matches manifest
         if: steps.semver.outputs.is_release == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.semver.outputs.version }}
           IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
         run: |
           if [ "$IS_PRERELEASE" = "true" ]; then
             MANIFEST_FILE="manifest-beta.json"
+
+            # Guard: master's manifest.json must still equal the latest stable Release tag.
+            LATEST_STABLE=$(gh release list --json tagName,isPrerelease \
+              -q '[.[] | select(.isPrerelease == false) | .tagName] | .[0]')
+            STABLE_MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+            if [ -z "$LATEST_STABLE" ]; then
+              echo "Could not determine latest stable GitHub Release tag; aborting to avoid poisoning manifest.json"
+              exit 1
+            fi
+            if [ "$STABLE_MANIFEST_VERSION" != "$LATEST_STABLE" ]; then
+              echo "manifest.json on merge commit ('$STABLE_MANIFEST_VERSION') drifted from latest stable Release ('$LATEST_STABLE')."
+              echo "A prerelease PR must not modify manifest.json. Refusing to publish."
+              exit 1
+            fi
+            echo "manifest.json drift check passed: $STABLE_MANIFEST_VERSION matches latest stable."
           else
             MANIFEST_FILE="manifest.json"
           fi
