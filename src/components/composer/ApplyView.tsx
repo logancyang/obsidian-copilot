@@ -63,10 +63,13 @@ export class ApplyView extends ItemView {
     if (!this.state) return;
 
     // The second child is the actual content of the view; the first is the title.
-    const contentEl = this.containerEl.children[1];
+    const contentEl = this.containerEl.children[1] as HTMLElement;
     contentEl.empty();
 
+    // Force the React root to fill the leaf — without this it collapses to
+    // content height and the floating Accept/Reject bar scrolls off.
     const rootEl = contentEl.createDiv();
+    rootEl.style.cssText = "height:100%;display:flex;flex-direction:column;min-height:0;";
     if (!this.root) {
       this.root = createRoot(rootEl);
     }
@@ -101,6 +104,14 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     setViewMode(mode);
     updateSetting("diffViewMode", mode);
   };
+
+  // +N / −M line counts for the header.
+  const { additions, removals } = useMemo(() => {
+    const changes = state.changes ?? [];
+    const sum = (pred: (c: Change) => boolean | undefined) =>
+      changes.filter(pred).reduce((n, c) => n + (c.count ?? 0), 0);
+    return { additions: sum((c) => c.added), removals: sum((c) => c.removed) };
+  }, [state.changes]);
 
   // Reconstruct original and proposed full text from the change list.
   const oldText = useMemo(
@@ -173,10 +184,16 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
   };
 
   return (
-    <div className="tw-relative tw-flex tw-h-full tw-flex-col">
-      <div className="tw-flex tw-items-center tw-justify-between tw-border-b tw-border-solid tw-border-border tw-p-2">
-        <div className="tw-text-sm tw-font-medium">{state.path}</div>
-        <div className="tw-flex tw-items-center tw-gap-2">
+    <div className="tw-relative tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
+      <div className="tw-flex tw-flex-none tw-items-center tw-justify-between tw-gap-3 tw-px-3 tw-py-2 tw-bg-secondary/50">
+        <div className="tw-flex tw-min-w-0 tw-items-center tw-gap-2">
+          <span className="tw-truncate tw-font-mono tw-text-xs tw-text-muted">{state.path}</span>
+          <span className="tw-flex tw-flex-none tw-items-center tw-gap-1 tw-font-mono tw-text-xs">
+            <span className="tw-text-success">+{additions}</span>
+            <span className="tw-text-error">−{removals}</span>
+          </span>
+        </div>
+        <div className="tw-flex tw-flex-none tw-items-center tw-gap-2">
           <span
             className={cn(
               "tw-text-xs",
