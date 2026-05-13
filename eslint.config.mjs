@@ -74,7 +74,7 @@ export default [
 
       // obsidianmd: defer to follow-up PRs
       "obsidianmd/vault/iterate": "off",
-      "obsidianmd/prefer-active-doc": "off",
+      "obsidianmd/prefer-active-doc": "error",
       "obsidianmd/object-assign": "off",
       "obsidianmd/ui/sentence-case": "off",
       "obsidianmd/no-unsupported-api": "off",
