@@ -109,8 +109,6 @@ export default [
       "@typescript-eslint/no-deprecated": "off",
 
       // SDL / import / no-unsanitized / depend: defer — review separately
-      "no-unsanitized/method": "off",
-      "no-unsanitized/property": "off",
       "import/no-nodejs-modules": "off",
       "import/no-extraneous-dependencies": "off",
       "no-restricted-imports": "off",

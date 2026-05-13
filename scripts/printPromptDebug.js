@@ -46,6 +46,7 @@ async function main() {
   });
 
   try {
+    // eslint-disable-next-line no-unsanitized/method -- outfile is a controlled path under os.tmpdir(), produced by the esbuild step above.
     const module = await import(url.pathToFileURL(outfile).href);
     await module.run(process.argv.slice(2));
   } finally {
