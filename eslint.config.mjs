@@ -98,7 +98,6 @@ export default [
       "@typescript-eslint/no-misused-promises": "off", // 46 violations
       "@typescript-eslint/no-unnecessary-type-assertion": "off", // 40 violations
       "@typescript-eslint/no-floating-promises": "off", // 39 violations
-      "@typescript-eslint/await-thenable": "off", // 20 violations
 
       // --- Quick wins: small enough to fix and enable in a single PR ---
       "@typescript-eslint/no-unsafe-enum-comparison": "off", // 11 violations

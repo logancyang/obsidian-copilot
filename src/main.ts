@@ -319,7 +319,7 @@ export default class CopilotPlugin extends Plugin {
     eventSubtype?: string,
     checkSelectedText = true
   ) {
-    const selectedText = await editor.getSelection();
+    const selectedText = editor.getSelection();
 
     const isChatWindowActive = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE).length > 0;
 
