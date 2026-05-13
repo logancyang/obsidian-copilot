@@ -77,7 +77,6 @@ export default [
       "obsidianmd/prefer-active-doc": "error",
       "obsidianmd/object-assign": "off",
       "obsidianmd/ui/sentence-case": "off",
-      "obsidianmd/no-unsupported-api": "off",
 
       // obsidianmd: disabled intentionally — Platform.isMacOS branching is on-purpose
       "obsidianmd/platform": "off",
