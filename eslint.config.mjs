@@ -73,9 +73,6 @@ export default [
       "tailwindcss/no-contradicting-classname": "error",
 
       // obsidianmd: defer to follow-up PRs
-      "obsidianmd/vault/iterate": "error",
-      "obsidianmd/prefer-active-doc": "error",
-      "obsidianmd/object-assign": "off",
       "obsidianmd/ui/sentence-case": "off",
 
       // obsidianmd: disabled intentionally — Platform.isMacOS branching is on-purpose
