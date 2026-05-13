@@ -398,7 +398,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
   }
 
-  private safeJsonParse(value: string): any | null {
+  private safeJsonParse(value: string): any {
     try {
       return JSON.parse(value);
     } catch {

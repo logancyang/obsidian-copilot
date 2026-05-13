@@ -849,6 +849,15 @@ ${chatContent}`;
   }
 
   /**
+   * Convert an unknown error to a safe lowercase string for substring matching.
+   */
+  private errorToMessage(error: unknown): string {
+    if (error instanceof Error) return error.message;
+    if (typeof error === "string") return error;
+    return JSON.stringify(error);
+  }
+
+  /**
    * Determine whether an error corresponds to an ENAMETOOLONG filesystem failure.
    * @param error - The thrown error.
    * @returns True when the error message indicates a name-length constraint violation.
@@ -858,8 +867,7 @@ ${chatContent}`;
       return false;
     }
 
-    const message = error instanceof Error ? error.message : String(error);
-    const normalized = message.toLowerCase();
+    const normalized = this.errorToMessage(error).toLowerCase();
     return normalized.includes("enametoolong") || normalized.includes("name too long");
   }
 
@@ -870,8 +878,7 @@ ${chatContent}`;
     if (!error) {
       return false;
     }
-    const message = error instanceof Error ? error.message : String(error);
-    return message.toLowerCase().includes("already exists");
+    return this.errorToMessage(error).toLowerCase().includes("already exists");
   }
 
   /**

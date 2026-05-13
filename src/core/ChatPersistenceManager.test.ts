@@ -38,7 +38,7 @@ jest.mock("@/utils", () => ({
         .join("");
     }
     if (content && typeof content === "object" && "text" in content) {
-      return String((content as { text?: unknown }).text ?? "");
+      return String((content as { text?: string }).text ?? "");
     }
     return String(content ?? "");
   }),

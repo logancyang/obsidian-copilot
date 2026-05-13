@@ -38,7 +38,9 @@ export function buildGitHubCopilotAuthedFetch(
         ? input
         : typeof Request !== "undefined" && input instanceof Request
           ? input.url
-          : input.toString();
+          : input instanceof URL
+            ? input.href
+            : input.url;
 
     const doRequest = async (token: string): Promise<Response> => {
       const copilotHeaders = provider.buildCopilotRequestHeaders(token);

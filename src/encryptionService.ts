@@ -1,8 +1,7 @@
 import { type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
 
-// @ts-ignore
-let safeStorageInternal: Electron.SafeStorage | null = null;
+let safeStorageInternal: any = null;
 
 function getSafeStorage() {
   if (Platform.isDesktop && safeStorageInternal) {

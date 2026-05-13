@@ -823,7 +823,8 @@ export async function safeFetch(
     contentType: "application/json",
     headers: headers,
     method: method,
-    ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
+    ...(methodsWithBody.includes(method) &&
+      typeof options.body === "string" && { body: options.body }),
     throw: false, // Don't throw so we can get the response body
   });
 
@@ -1194,7 +1195,7 @@ export function isCodexModel(model: BaseChatModel | string): boolean {
 export function shouldUseGitHubCopilotResponsesApi(
   model: Pick<CustomModel, "provider" | "name" | "useResponsesApi">
 ): boolean {
-  if (model.provider !== ChatModelProviders.GITHUB_COPILOT) {
+  if ((model.provider as ChatModelProviders) !== ChatModelProviders.GITHUB_COPILOT) {
     return false;
   }
 
@@ -1264,7 +1265,8 @@ export function checkModelApiKey(
   hasApiKey: boolean;
   errorNotice?: string;
 } {
-  if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+  const provider = model.provider as ChatModelProviders;
+  if (provider === ChatModelProviders.AMAZON_BEDROCK) {
     const apiKey = model.apiKey || settings.amazonBedrockApiKey;
     if (!apiKey) {
       return {
@@ -1279,7 +1281,7 @@ export function checkModelApiKey(
   }
 
   // GitHub Copilot uses OAuth, not API key
-  if (model.provider === ChatModelProviders.GITHUB_COPILOT) {
+  if (provider === ChatModelProviders.GITHUB_COPILOT) {
     const hasAuth = Boolean(
       model.apiKey || settings.githubCopilotToken || settings.githubCopilotAccessToken
     );
@@ -1293,7 +1295,7 @@ export function checkModelApiKey(
     return { hasApiKey: true };
   }
 
-  const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
+  const needSetKeyPath = !!getNeedSetKeyProvider().find((p) => p === provider);
   const hasNoApiKey = !getApiKeyForProvider(model.provider as SettingKeyProviders, model);
 
   // For Providers that require setting a key in the dialog, an inspection is necessary.

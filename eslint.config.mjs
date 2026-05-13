@@ -96,11 +96,6 @@ export default [
       "@typescript-eslint/unbound-method": "off", // 68 violations
       // Enabled in the TS-only block below.
 
-      // --- Quick wins: small enough to fix and enable in a single PR ---
-      "@typescript-eslint/no-unsafe-enum-comparison": "off", // 11 violations
-      "@typescript-eslint/no-base-to-string": "off", // 7 violations
-      "@typescript-eslint/no-redundant-type-constituents": "off", // 5 violations
-      "@typescript-eslint/restrict-template-expressions": "off", // 1 violation
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
 

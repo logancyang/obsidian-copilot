@@ -37,7 +37,11 @@ export function toStringSafe(value: unknown): string {
   if (value === null || value === undefined) return "";
   try {
     if (typeof value === "object") return JSON.stringify(value);
-    return String(value);
+    if (typeof value === "function") return value.toString();
+    if (typeof value === "symbol") return value.toString();
+    if (typeof value === "bigint") return value.toString();
+    if (typeof value === "number" || typeof value === "boolean") return String(value);
+    return "";
   } catch {
     return "";
   }

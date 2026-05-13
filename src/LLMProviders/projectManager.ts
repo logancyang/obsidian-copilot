@@ -69,7 +69,8 @@ export default class ProjectManager {
       const settings = getSettings();
       const shouldAutoIndex =
         settings.enableSemanticSearchV3 &&
-        settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
+        (settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY) ===
+          VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
         (getChainType() === ChainType.VAULT_QA_CHAIN ||
           getChainType() === ChainType.COPILOT_PLUS_CHAIN);
       void this.getCurrentChainManager().createChainWithNewModel({
@@ -936,7 +937,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
           await this.retryNonMarkdownFile(project, failedItem.path);
           break;
         default:
-          logWarn(`[retryFailedItem] Unknown item type: ${failedItem.type}`);
+          logWarn(`[retryFailedItem] Unknown item type: ${String(failedItem.type)}`);
           return;
       }
 
