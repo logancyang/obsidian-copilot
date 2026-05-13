@@ -62,7 +62,23 @@ Before doing any version bumping, validate the repo is releasable. Stop and surf
    - `isDesktopOnly` is declared (currently `false`; do not silently change this).
    - `minAppVersion` matches the Obsidian APIs the code actually uses. If a commit since the last release introduced a call that needs a newer minimum, the `minAppVersion` bump belongs in its own dedicated PR with its own review window, not bundled inside this release PR. Stop and tell the user.
 
-5. **Confirm there are merged PRs to release.**
+5. **Assert that `manifest.json.version` matches the latest stable GitHub Release.**
+
+   Obsidian's community plugin store reads `manifest.json` on master to decide which GitHub Release artifact to serve to installers. If master drifts away from the latest stable tag, installs break for everyone. Catch the drift loudly before doing anything else:
+
+   ```bash
+   LATEST_STABLE=$(gh release list --repo logancyang/obsidian-copilot --json tagName,isPrerelease \
+     -q '[.[] | select(.isPrerelease == false) | .tagName] | .[0]')
+   MASTER_VERSION=$(node -p "require('./manifest.json').version")
+   if [ "$LATEST_STABLE" != "$MASTER_VERSION" ]; then
+     echo "DRIFT: master manifest.json.version='$MASTER_VERSION' but latest stable Release='$LATEST_STABLE'. Stop." >&2
+     exit 1
+   fi
+   ```
+
+   Stop and tell the user if this fails. Do not "fix" the drift by bumping `manifest.json` inside a release PR — that needs its own dedicated PR.
+
+6. **Confirm there are merged PRs to release.**
 
    ```bash
    git describe --tags --abbrev=0
@@ -71,7 +87,7 @@ Before doing any version bumping, validate the repo is releasable. Stop and surf
 
    If the diff is empty, there is nothing to release. Stop and tell the user.
 
-Only proceed to Step 1 once all five checks pass.
+Only proceed to Step 1 once all six checks pass.
 
 ### Step 1: Determine Release Type
 
@@ -221,3 +237,4 @@ Share the PR URL with the user and summarize what was included in the release.
 - **Do not silently change `manifest.minAppVersion` or `manifest.isDesktopOnly`** in a release PR. Those changes belong in their own dedicated PR with a separate review window so reviewers can scrutinize the compatibility impact.
 - **Surface bundle-size growth in the release notes** if `main.js` grew significantly since the last release. Users notice, and reviewers do too.
 - **Stop on any pre-flight failure.** Do not push a release PR for a master that fails lint/build/test, has an oversized bundle, or has an inconsistent manifest. Report and ask, do not paper over.
+- **Stable releases delete `manifest-beta.json` automatically.** `version-bump.mjs` `git rm`s it when bumping to a stable version, on the rationale that the new stable supersedes any in-flight prerelease. This happens in the version-bump commit; nothing extra to do, but be aware that the diff will show the deletion.

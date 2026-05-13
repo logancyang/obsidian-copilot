@@ -64,18 +64,32 @@ jobs:
           # master don't cause this workflow to build the wrong code.
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      # ── Step 3: Verify PR title version matches manifest.json ───────────────
-      - name: Verify version matches manifest.json
+      # ── Step 3: Verify PR title version matches the source-of-truth manifest ──
+      # For stable releases the source of truth is manifest.json (which the
+      # Obsidian plugin store reads). For prereleases the source of truth is
+      # manifest-beta.json (manifest.json must stay pinned at the latest stable
+      # so the plugin store keeps serving installs correctly).
+      - name: Verify version matches manifest
         if: steps.semver.outputs.is_release == 'true'
         env:
           VERSION: ${{ steps.semver.outputs.version }}
+          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
         run: |
-          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
-          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "Version mismatch: PR title='$VERSION', manifest.json='$MANIFEST_VERSION'"
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            MANIFEST_FILE="manifest-beta.json"
+          else
+            MANIFEST_FILE="manifest.json"
+          fi
+          if [ ! -f "$MANIFEST_FILE" ]; then
+            echo "Expected $MANIFEST_FILE to exist for this release type but it does not."
             exit 1
           fi
-          echo "Version check passed: $VERSION"
+          MANIFEST_VERSION=$(node -p "require('./$MANIFEST_FILE').version")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "Version mismatch: PR title='$VERSION', $MANIFEST_FILE='$MANIFEST_VERSION'"
+            exit 1
+          fi
+          echo "Version check passed: $VERSION (verified against $MANIFEST_FILE)"
 
       # ── Step 4: Set up Node.js ───────────────────────────────────────────────
       - name: Setup Node.js 22.x
@@ -119,7 +133,21 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Step 9: Create GitHub Release ────────────────────────────────────────
+      # ── Step 9: Prepare release-asset manifest ──────────────────────────────
+      # For a prerelease, the manifest.json asset uploaded to the GitHub
+      # Release must carry the prerelease version (so testers who sideload
+      # the assets get a manifest matching what they downloaded). We swap
+      # manifest-beta.json into manifest.json's place IN THE RUNNER only —
+      # this never gets pushed back to master, so the committed manifest.json
+      # stays pinned to the latest stable.
+      - name: Prepare release-asset manifest
+        if: steps.semver.outputs.is_release == 'true' && steps.semver.outputs.is_prerelease == 'true'
+        run: |
+          cp manifest-beta.json manifest.json
+          echo "Release-asset manifest.json (prerelease):"
+          cat manifest.json
+
+      # ── Step 10: Create GitHub Release ───────────────────────────────────────
       # --target pins the tag to the exact merge commit SHA so concurrent
       # merges cannot cause the release tag to point at a different commit.
       # When the PR title is a prerelease semver (X.Y.Z-tag.N), pass --prerelease

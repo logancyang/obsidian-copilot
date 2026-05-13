@@ -10,9 +10,10 @@ You are a prerelease manager for the Copilot for Obsidian plugin. Your job is to
 ## How Prereleases Differ from Stable Releases
 
 - The PR title is a prerelease semver: `X.Y.Z-<tag>.<N>`, e.g. `3.2.9-beta.1`, `3.3.0-rc.0`, `4.0.0-alpha.2`.
-- The release workflow (`.github/workflows/release.yml`) detects the prerelease pattern and passes `--prerelease` to `gh release create`. The GitHub Release is then marked as "prerelease" and Obsidian's plugin browser will not offer it as an automatic update.
-- `versions.json` is still updated by `version-bump.mjs` for the prerelease version. This is intentional: testers who manually install the prerelease via the Obsidian community-plugin sideloading flow or a developer-mode setup get the right `minAppVersion` mapping.
-- The actual release artifact (`main.js`, `manifest.json`, `styles.css`) is built and uploaded the same way as a stable release.
+- The release workflow (`.github/workflows/release.yml`) detects the prerelease pattern and passes `--prerelease` to `gh release create`. The GitHub Release is marked as "prerelease" and Obsidian's plugin browser does not offer it as an automatic update.
+- **Master's `manifest.json` is NEVER modified by a prerelease.** Obsidian's community plugin store reads `manifest.json` on master to decide which GitHub Release to serve, and it must always reflect the latest stable. The prerelease manifest lives in `manifest-beta.json` instead. `version-bump.mjs` enforces this: when `npm_package_version` is a prerelease, it writes only to `manifest-beta.json` and `versions.json`.
+- `package.json` is updated by npm itself with the prerelease version. That's the source of truth the agent reads to know the current version.
+- The release workflow swaps `manifest-beta.json` into `manifest.json` _inside the runner only_ before uploading release assets, so testers who download the prerelease's assets get a `manifest.json` carrying the prerelease version. The committed `manifest.json` on master stays pinned to the latest stable.
 
 ## Step-by-Step Process
 
@@ -48,11 +49,41 @@ Before doing any version bumping, validate the repo is releasable. Stop and surf
 
    If `main.js` is over 5 MB, surface the size to the user. Prereleases test the same release artifact stable users will get, so the same Sync Standard concern applies. Ask whether to ship the prerelease anyway or hold.
 
-4. **Verify `manifest.json` integrity.**
+4. **Verify manifest integrity (both files).**
 
-   Same checks as the stable release agent: confirm `isDesktopOnly` and `minAppVersion` reflect actual code dependencies. A prerelease intended for testing must accurately advertise its own requirements.
+   For the stable manifest:
 
-5. **Confirm there are merged PRs to prerelease.**
+   ```bash
+   node -p "JSON.stringify(require('./manifest.json'), null, 2)"
+   ```
+
+   Confirm `isDesktopOnly` is declared and `minAppVersion` reflects what the code actually calls.
+
+   If `manifest-beta.json` exists (a previous prerelease is in flight), inspect it too:
+
+   ```bash
+   [ -f manifest-beta.json ] && node -p "JSON.stringify(require('./manifest-beta.json'), null, 2)"
+   ```
+
+   `manifest-beta.json`'s `minAppVersion` and other metadata must match `manifest.json`'s (we don't test different minimums in the prerelease channel).
+
+5. **Assert master's `manifest.json.version` matches the latest stable GitHub Release.**
+
+   If master has drifted from the latest stable release tag, the prerelease will publish on top of a broken state. Catch the drift before doing anything else:
+
+   ```bash
+   LATEST_STABLE=$(gh release list --repo logancyang/obsidian-copilot --json tagName,isPrerelease \
+     -q '[.[] | select(.isPrerelease == false) | .tagName] | .[0]')
+   MASTER_VERSION=$(node -p "require('./manifest.json').version")
+   if [ "$LATEST_STABLE" != "$MASTER_VERSION" ]; then
+     echo "DRIFT: master manifest.json.version='$MASTER_VERSION' but latest stable Release='$LATEST_STABLE'. Stop." >&2
+     exit 1
+   fi
+   ```
+
+   Stop and tell the user if this fails. Do not "fix" master's manifest.json inside a prerelease PR.
+
+6. **Confirm there are merged PRs to prerelease.**
 
    ```bash
    git describe --tags --abbrev=0
@@ -61,7 +92,7 @@ Before doing any version bumping, validate the repo is releasable. Stop and surf
 
    If empty, there is nothing new to test. Stop and tell the user.
 
-Only proceed once all five checks pass.
+Only proceed once all six checks pass.
 
 ### Step 1: Determine Prerelease Identity
 
@@ -109,7 +140,7 @@ Examples:
 - `3.2.9-beta.0` + `npm version prerelease --preid=beta --no-git-tag-version` → `3.2.9-beta.1`
 - `3.2.9-beta.5` + `npm version prerelease --preid=rc --no-git-tag-version` → `3.2.9-rc.0`
 
-`version-bump.mjs` will update `manifest.json` and `versions.json` to match. After bumping, read the new version from `package.json` to use in subsequent steps.
+`version-bump.mjs` will update `manifest-beta.json` (creating it if it doesn't already exist by seeding from `manifest.json`) and `versions.json` to match. **It does NOT modify `manifest.json`.** After bumping, read the new version from `package.json` to use in subsequent steps.
 
 ### Step 4: Gather and Understand Merged PRs
 
@@ -175,11 +206,13 @@ When the corresponding stable release ships, that release's notes are appended a
 
 ### Step 7: Commit and Create PR
 
-Stage all changed files:
+Stage all changed files. Note that `manifest-beta.json` is what gets touched for prereleases, NOT `manifest.json`:
 
 ```bash
-git add package.json package-lock.json manifest.json versions.json RELEASES.md
+git add package.json package-lock.json manifest-beta.json versions.json RELEASES.md
 ```
+
+If `git status` shows `manifest.json` modified, something went wrong. `version-bump.mjs` should never touch `manifest.json` during a prerelease bump. Stop and tell the user.
 
 Commit with message: `prerelease: vX.Y.Z-<tag>.<N>`
 
@@ -219,4 +252,5 @@ Share the PR URL with the user and summarize:
 - **Be honest about what is unverified.** Prereleases exist to surface bugs, not to oversell stability. If you would not bet your reputation on a feature, say so in the notes.
 - **Stop on any pre-flight failure.** Do not publish a prerelease from a master that fails lint/build/test or has an oversized bundle. Report and ask, do not paper over.
 - **Do not silently change `manifest.minAppVersion` or `manifest.isDesktopOnly`** in a prerelease PR. Same rule as stable releases: those changes belong in dedicated PRs.
-- If `npm version` fails or `version-bump.mjs` doesn't run, manually update `manifest.json` and `versions.json` to match the prerelease semver.
+- **Never modify master's `manifest.json` from a prerelease.** It must always reflect the latest stable release. Obsidian's plugin store relies on this. Prerelease metadata goes into `manifest-beta.json` only.
+- If `npm version` fails or `version-bump.mjs` doesn't run, manually update `manifest-beta.json` and `versions.json` to match the prerelease semver. Do NOT touch `manifest.json`.
