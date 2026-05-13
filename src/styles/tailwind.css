@@ -1347,13 +1347,11 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
 */
 
 .copilot-pierre-view {
-  /* Text color of changed lines — Pierre by default colors the ENTIRE line
-     of changed text red (deletion) or green (addition). Override to the
-     normal Obsidian text color so the diff reads like the editor: text in
-     the usual color, change indicated only by background wash + inline
-     emphasis spans. */
-  --diffs-addition-color-override: var(--text-normal);
-  --diffs-deletion-color-override: var(--text-normal);
+  /* Color pure-changed text green/red so the change pops at a glance.
+     Modified rows keep --text-normal so their inline-emphasis spans stay
+     the focal point on paired edits. */
+  --diffs-addition-color-override: var(--color-green);
+  --diffs-deletion-color-override: var(--color-red);
   --diffs-modified-color-override: var(--text-normal);
 
   /* Surface + text */
@@ -1368,16 +1366,16 @@ body.is-mobile div[data-radix-popper-content-wrapper] {
   --diffs-bg-buffer-override: var(--background-secondary);
   --diffs-bg-separator-override: var(--background-secondary);
 
-  /* Whole-line backgrounds for added / removed lines.
-     Use --background-modifier-{success,error}-rgb so the wash matches
-     whatever the user's Obsidian theme tunes for diff-style affordances. */
-  --diffs-bg-addition-override: rgba(var(--background-modifier-success-rgb), 0.22);
-  --diffs-bg-deletion-override: rgba(var(--background-modifier-error-rgb), 0.22);
+  /* Whole-line wash for pure adds / deletes. Use the vivid --color-{green,red}
+     palette at 0.40 — the previous --background-modifier-{success,error} at
+     0.22 was a tuned-subtle theme color and washed out on most dark themes. */
+  --diffs-bg-addition-override: rgba(var(--color-green-rgb), 0.4);
+  --diffs-bg-deletion-override: rgba(var(--color-red-rgb), 0.4);
 
-  /* Token-level emphasis (intra-line word change highlight) — stronger
-     so it pops against the line wash on busy dark themes. */
-  --diffs-bg-addition-emphasis-override: rgba(var(--background-modifier-success-rgb), 0.55);
-  --diffs-bg-deletion-emphasis-override: rgba(var(--background-modifier-error-rgb), 0.55);
+  /* Intra-line word-level emphasis. Higher alpha than the line wash so
+     changed tokens punch through on paired edits. */
+  --diffs-bg-addition-emphasis-override: rgba(var(--color-green-rgb), 0.55);
+  --diffs-bg-deletion-emphasis-override: rgba(var(--color-red-rgb), 0.55);
 
   /* Line-number gutter colors */
   --diffs-bg-addition-number-override: rgba(var(--color-green-rgb), 0.18);
