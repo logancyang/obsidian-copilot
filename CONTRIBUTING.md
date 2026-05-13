@@ -53,6 +53,35 @@ In the case of Copilot for Obsidian, you will need to:
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
 
+## Commit Signing
+
+Commits to `master` must be signed and verified by GitHub. The easiest path is SSH signing using your existing SSH key.
+
+1. Configure git to sign with your SSH key:
+
+   ```bash
+   git config --global gpg.format ssh
+   git config --global user.signingkey ~/.ssh/id_ed25519.pub
+   git config --global commit.gpgsign true
+   ```
+
+   Replace `id_ed25519.pub` with the path to your own public key if different.
+
+2. Register the same key as a **Signing Key** on GitHub at https://github.com/settings/ssh/new. Set "Key type" to `Signing Key` (this is separate from an Authentication Key, even if it's the same key).
+
+3. Confirm your commit email matches a verified email on your GitHub account at https://github.com/settings/emails. Otherwise commits show as Unverified even when signed.
+
+4. Verify locally and on GitHub:
+
+   ```bash
+   git commit --allow-empty -m "test signing"
+   git log --show-signature -1
+   ```
+
+   After pushing, the commit on github.com should display a green **Verified** badge.
+
+If you already use GPG, set `gpg.format openpgp` instead and register the GPG public key at https://github.com/settings/gpg/new. Commits merged via the GitHub web UI are auto-signed by GitHub and don't need this setup.
+
 ## Prompt Testing
 
 If you are making prompt changes, make sure to run the integration tests using the following steps:
