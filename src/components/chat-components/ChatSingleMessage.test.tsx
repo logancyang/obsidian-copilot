@@ -125,7 +125,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const capturedMarkdown: string[] = [];
     renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
-      el.innerHTML = "<p>rendered</p>";
+      el.textContent = "rendered";
     });
 
     render(
@@ -151,7 +151,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const capturedMarkdown: string[] = [];
     renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
-      el.innerHTML = "<p>rendered</p>";
+      el.textContent = "rendered";
     });
 
     render(
@@ -177,7 +177,7 @@ describe("think block rendering — closing tags are not consumed by indented co
     const capturedMarkdown: string[] = [];
     renderMarkdownMock.mockImplementation(async (md: string, el: HTMLElement) => {
       capturedMarkdown.push(md);
-      el.innerHTML = "<p>rendered</p>";
+      el.textContent = "rendered";
     });
 
     render(
@@ -205,7 +205,9 @@ describe("normalizeFootnoteRendering", () => {
 
   it("removes separator and backref while preserving non-footnote elements", () => {
     const container = window.document.createElement("div");
-    container.innerHTML = `
+    container.append(
+      ...new DOMParser().parseFromString(
+        `
       <div>
         <p>Body <sup><a href="#fn-1">1-1</a></sup></p>
         <hr class="content-separator" />
@@ -218,7 +220,10 @@ describe("normalizeFootnoteRendering", () => {
           </ol>
         </div>
       </div>
-    `;
+    `,
+        "text/html"
+      ).body.children
+    );
 
     normalizeFootnoteRendering(container);
 
@@ -230,10 +235,15 @@ describe("normalizeFootnoteRendering", () => {
 
   it("leaves non-numeric footnote references untouched", () => {
     const container = window.document.createElement("div");
-    container.innerHTML = `
+    container.append(
+      ...new DOMParser().parseFromString(
+        `
       <p>Body <sup><a href="#fn-note">Note-A</a></sup></p>
       <a class="footnote-backref" href="#ref">↩</a>
-    `;
+    `,
+        "text/html"
+      ).body.children
+    );
 
     normalizeFootnoteRendering(container);
 
@@ -274,7 +284,9 @@ describe("ChatSingleMessage", () => {
 
   it("normalizes rendered footnotes for assistant messages", async () => {
     renderMarkdownMock.mockImplementation(async (_markdown: string, el: HTMLElement) => {
-      el.innerHTML = `
+      el.append(
+        ...new DOMParser().parseFromString(
+          `
         <p>Example <sup><a href="#fn-2">2-1</a></sup></p>
         <hr class="content-hr" />
         <div class="footnotes">
@@ -285,7 +297,10 @@ describe("ChatSingleMessage", () => {
             </li>
           </ol>
         </div>
-      `;
+      `,
+          "text/html"
+        ).body.children
+      );
     });
 
     const { container } = render(

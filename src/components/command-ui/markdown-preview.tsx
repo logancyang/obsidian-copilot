@@ -27,7 +27,7 @@ export function MarkdownPreview({ content, renderMarkdown, className }: Markdown
     // Reason: Use the target's doc for popout-window safety in Obsidian
     const scratchEl = targetEl.doc.createElement("div");
 
-    targetEl.innerHTML = "";
+    targetEl.replaceChildren();
     renderMarkdown(content, scratchEl)
       .then(() => {
         if (currentGen !== renderGenRef.current) return;

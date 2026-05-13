@@ -100,7 +100,6 @@ export default [
       "@typescript-eslint/no-deprecated": "off",
 
       // SDL / import / no-unsanitized / depend: defer — review separately
-      "@microsoft/sdl/no-inner-html": "off",
       "no-unsanitized/method": "off",
       "no-unsanitized/property": "off",
       "import/no-nodejs-modules": "off",
