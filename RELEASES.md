@@ -1,5 +1,44 @@
 # Release Notes
 
+# Copilot for Obsidian - Prerelease v3.2.9-beta.0 🧪
+
+This is a beta release for testing the project storage migration, mobile support declaration, and a wave of reliability fixes before they ship in 3.2.9. Please report any issues in the Discord member channel with the version number in your report title.
+
+- 📁 **Projects now live in your vault, not data.json** — Project configurations are migrated from the plugin's `data.json` into your vault as regular markdown files. Your projects and their settings transfer automatically on first load. This is a significant storage change — testers please verify your projects come through intact and project chat history loads correctly. (@Emt-lin)
+- 📱 **Mobile support is now officially declared** — Copilot is no longer desktop-only. The plugin now works on Obsidian Mobile (minAppVersion 1.7.2). If you're a mobile user, now is the time to test! (@logancyang)
+- ⚡ **Bundle shrinks by 1.8 MB** — Cohere and Mistral models now route through the OpenAI-compatible endpoint instead of their own SDKs, cutting the plugin bundle from ~5 MB down to ~3.3 MB. Faster loads, especially on mobile. (@logancyang)
+- 🔧 **GitHub Copilot codex models use the Responses API** — Models like `gpt-4.1` and `o4-mini` accessed through GitHub Copilot now use the `/responses` endpoint as required. (@Keryer)
+- ⌨️ **Enter key delay fixed for Korean/CJK input** — A 100ms IME timeout was causing a noticeable delay when confirming input with Enter in Korean, Japanese, and Chinese. Removed. (@octo-patch)
+- 🛤️ **Miyo path portability fixes** — Two Miyo fixes land together: vault-folder-prefixed paths are now sent to the related-notes endpoint (fixing cross-vault disambiguation), and the vault folder-name prefix is stripped from indexed paths (fixing search result links). (@wenzhengjiang)
+- 🌐 **Ollama respects CORS setting for all requests** — Ollama requests now go through `safeFetch` when `enableCors` is set, matching the intended behavior for custom Ollama setups. (@zeroliu)
+- 🧠 **Think-section `</div>` parsing fix** — A bug where `</div>` tags were consumed by indented code blocks inside think sections has been fixed. (@trulyshelton)
+- 🛡️ **Codebase quality hardening** — A large wave of ESLint rule enablements (Obsidian API rules, security rules, type-aware rules) and corresponding fixes landed across the W0-W9 scorecard series. No behavior changes for users, but the codebase is now significantly more defensively typed and free of unsafe patterns. (@zeroliu)
+
+## What to Test
+
+- **Project migration**: Open the plugin after updating. Confirm all your projects appear in the Projects list and project chat history loads. Check that project files appear as notes in your vault.
+- **Mobile**: If you use Obsidian Mobile, install the prerelease and confirm basic chat, model switching, and search all work.
+- **Korean/CJK input**: Confirm Enter key no longer has a 100ms lag when confirming IME input in the chat box.
+- **Miyo**: If you use Miyo, test related-notes and search to confirm paths resolve correctly.
+- **Ollama with CORS**: If you run Ollama with `enableCors: true`, confirm requests still go through correctly.
+- **Bundle size**: Confirm Cohere and Mistral models still work correctly after the SDK routing change.
+
+## How to Install the Prerelease
+
+1. Download `main.js`, `manifest.json`, and `styles.css` from this prerelease's GitHub release page.
+2. Replace the same three files in your vault's `.obsidian/plugins/copilot/` folder.
+3. Reload the plugin (Settings → Community Plugins → toggle Copilot off and back on, or restart Obsidian).
+4. Report issues with the prerelease version number `3.2.9-beta.0` in the title so we can track them.
+
+To return to the stable release: reinstall the plugin from Obsidian's community-plugin browser.
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel with `3.2.9-beta.0` in the title!
+
+---
+
 # Copilot for Obsidian - Release v3.2.8 🔍
 
 A small but handy patch release adding a **global search toggle for Miyo** so you can search across everything you've indexed, not just your current vault!
