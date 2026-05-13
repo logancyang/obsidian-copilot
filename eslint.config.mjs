@@ -111,9 +111,6 @@ export default [
       // SDL / import / no-unsanitized / depend: defer — review separately
       "no-restricted-imports": "off",
       "no-restricted-globals": "off",
-      // depend/ban-dependencies suggests native replacements for axios/lodash.debounce/etc.
-      // — out of scope for this PR; revisit per-dep.
-      "depend/ban-dependencies": "off",
     },
   },
 
@@ -190,12 +187,26 @@ export default [
     },
   },
 
-  // package.json: obsidianmd recommended adds depend/ban-dependencies in a
-  // package.json-specific block that we need to override separately.
+  // package.json: keep depend/ban-dependencies enabled (from obsidianmd
+  // recommended) but allow the deps we deliberately keep.
   {
     files: ["**/package.json"],
     rules: {
-      "depend/ban-dependencies": "off",
+      "depend/ban-dependencies": [
+        "error",
+        {
+          presets: ["native", "microutilities", "preferred"],
+          allowed: [
+            "crypto-js",
+            "dotenv",
+            "js-yaml",
+            "lodash.debounce",
+            "eslint-plugin-react",
+            "lint-staged",
+            "npm-run-all",
+          ],
+        },
+      ],
     },
   },
 
