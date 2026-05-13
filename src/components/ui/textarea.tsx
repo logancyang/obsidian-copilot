@@ -12,9 +12,9 @@ const Textarea = React.forwardRef<HTMLTextAreaElement, React.ComponentProps<"tex
         // Reset to "auto" so scrollHeight reflects the natural content height,
         // then set the computed pixel value. Consumed by the
         // `tw-h-[var(--copilot-autosize-height,_auto)]` arbitrary-value class below.
-        textarea.style.setProperty("--copilot-autosize-height", "auto");
+        textarea.setCssProps({ "--copilot-autosize-height": "auto" });
         const newHeight = Math.min(textarea.scrollHeight, 300);
-        textarea.style.setProperty("--copilot-autosize-height", `${newHeight}px`);
+        textarea.setCssProps({ "--copilot-autosize-height": `${newHeight}px` });
       }
     }, []);
 

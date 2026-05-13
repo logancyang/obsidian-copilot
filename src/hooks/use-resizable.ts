@@ -138,7 +138,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
     const body = ownerDocument.body;
     // Direction-specific cursor is exposed via a CSS variable so the Tailwind
     // arbitrary-value class can consume it without inline cursor styles.
-    body.style.setProperty("--copilot-resize-cursor", cursor);
+    body.setCssProps({ "--copilot-resize-cursor": cursor });
     body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 
     const cancelRaf = (): void => {
@@ -214,7 +214,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
 
       body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
-      body.style.removeProperty("--copilot-resize-cursor");
+      body.setCssProps({ "--copilot-resize-cursor": "" });
 
       startRef.current = null;
       setIsResizing(false);
@@ -236,7 +236,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
       ownerDocument.removeEventListener("mouseup", handleMouseUp, true);
 
       body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
-      body.style.removeProperty("--copilot-resize-cursor");
+      body.setCssProps({ "--copilot-resize-cursor": "" });
     };
   }, [isResizing]);
 

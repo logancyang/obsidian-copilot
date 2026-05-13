@@ -112,19 +112,23 @@ export function updateDynamicStyleClass(
 
   const previousProperties = previousState?.properties ?? new Set<string>();
   const nextProperties = new Set<string>();
+  const propsToApply: Record<string, string> = {};
 
-  // Remove properties that are no longer present
+  // Clear properties that are no longer present (empty string ≡ removeProperty per CSSOM).
   previousProperties.forEach((property) => {
     if (!normalized.has(property)) {
-      element.style.removeProperty(property);
+      propsToApply[property] = "";
     }
   });
 
-  // Apply current styles
   normalized.forEach((value, property) => {
-    element.style.setProperty(property, value);
+    propsToApply[property] = value;
     nextProperties.add(property);
   });
+
+  if (Object.keys(propsToApply).length > 0) {
+    element.setCssProps(propsToApply);
+  }
 
   if (nextProperties.size === 0) {
     elementState.delete(element);
@@ -141,9 +145,13 @@ export function clearDynamicStyleClass(element: HTMLElement): void {
   const state = elementState.get(element);
   if (!state) return;
 
+  const cleared: Record<string, string> = {};
   state.properties.forEach((property) => {
-    element.style.removeProperty(property);
+    cleared[property] = "";
   });
+  if (Object.keys(cleared).length > 0) {
+    element.setCssProps(cleared);
+  }
   if (state.prefix) {
     removePrefixedClasses(element, state.prefix);
   }

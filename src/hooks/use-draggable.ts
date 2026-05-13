@@ -88,8 +88,10 @@ export function useDraggable(options: UseDraggableOptions = {}) {
       const el = dragRef.current;
       if (!el) return;
 
-      el.style.setProperty("--copilot-drag-x", `${next.x}px`);
-      el.style.setProperty("--copilot-drag-y", `${next.y}px`);
+      el.setCssProps({
+        "--copilot-drag-x": `${next.x}px`,
+        "--copilot-drag-y": `${next.y}px`,
+      });
     },
     [dragRef, writeToDom]
   );

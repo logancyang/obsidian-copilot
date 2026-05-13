@@ -675,7 +675,7 @@ export class QuickAskOverlay {
       "bottom-left": "nesw-resize",
       "bottom-right": "nwse-resize",
     };
-    body.style.setProperty("--copilot-resize-cursor", cursorMap[direction] ?? "default");
+    body.setCssProps({ "--copilot-resize-cursor": cursorMap[direction] ?? "default" });
     body.classList.add("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
 
     // Bind document-level listeners (use capture for consistency with useRafResizable/useDraggable)
@@ -721,7 +721,7 @@ export class QuickAskOverlay {
       doc.removeEventListener("mousemove", this.handleResizeMove, true);
       doc.removeEventListener("mouseup", this.handleResizeEnd, true);
       body.classList.remove("tw-select-none", "tw-cursor-[var(--copilot-resize-cursor)]");
-      body.style.removeProperty("--copilot-resize-cursor");
+      body.setCssProps({ "--copilot-resize-cursor": "" });
     }
 
     this.isResizing = false;
