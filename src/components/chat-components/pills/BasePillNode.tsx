@@ -13,11 +13,11 @@ import { PillBadge } from "./PillBadge";
 /**
  * Returns the Document that owns the given Lexical editor's root element.
  * Pills must create DOM in the editor's window — using `activeDocument`
- * (focused window) can produce nodes with the wrong ownerDocument when the
- * chat is in an Obsidian popout but a different window is focused.
+ * (focused window) can produce nodes with the wrong owner when the chat is
+ * in an Obsidian popout but a different window is focused.
  */
 export function getEditorDocument(editor: LexicalEditor): Document {
-  return editor.getRootElement()?.ownerDocument ?? activeDocument;
+  return editor.getRootElement()?.doc ?? activeDocument;
 }
 
 export interface SerializedBasePillNode extends SerializedLexicalNode {

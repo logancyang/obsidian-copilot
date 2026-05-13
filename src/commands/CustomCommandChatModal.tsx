@@ -504,7 +504,7 @@ export class CustomCommandChatModal {
    * the modal is positioned relative to the correct window.
    */
   private resolveWindow(view?: MarkdownView | null): Window {
-    return view?.containerEl?.ownerDocument?.defaultView ?? window;
+    return view?.containerEl?.win ?? window;
   }
 
   /**
@@ -513,7 +513,7 @@ export class CustomCommandChatModal {
    * appended to the document that owns the triggering view.
    */
   private resolveDocument(view?: MarkdownView | null): Document {
-    return view?.containerEl?.ownerDocument ?? activeDocument;
+    return view?.containerEl?.doc ?? activeDocument;
   }
 
   /**

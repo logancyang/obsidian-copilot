@@ -60,30 +60,36 @@ export function TypeaheadMenuPortal({
     null
   );
 
-  // Calculate dynamic width based on content
-  const calculateWidth = useCallback(() => {
-    const maxAllowedWidth = Math.floor(window.innerWidth * MAX_WIDTH_PERCENTAGE);
+  // Derive the popout-aware window/document from the range itself so positioning
+  // and the portal target follow the chat's window, not whichever happens to be focused.
+  const targetWin: Window = range?.startContainer.win ?? window;
 
-    if (options.length === 0) return Math.min(MENU_WIDTH, maxAllowedWidth);
+  const calculateWidth = useCallback(
+    (win: Window) => {
+      const maxAllowedWidth = Math.floor(win.innerWidth * MAX_WIDTH_PERCENTAGE);
 
-    const maxTitleLength = Math.max(...options.map((opt) => opt.title.length));
-    const maxSubtitleLength = Math.max(...options.map((opt) => opt.subtitle?.length || 0));
+      if (options.length === 0) return Math.min(MENU_WIDTH, maxAllowedWidth);
 
-    const estimatedWidth = Math.max(maxTitleLength * 8 + 32, maxSubtitleLength * 6 + 32);
-    const preferredWidth = Math.min(Math.max(estimatedWidth, 300), MENU_WIDTH);
+      const maxTitleLength = Math.max(...options.map((opt) => opt.title.length));
+      const maxSubtitleLength = Math.max(...options.map((opt) => opt.subtitle?.length || 0));
 
-    return Math.min(preferredWidth, maxAllowedWidth);
-  }, [options]);
+      const estimatedWidth = Math.max(maxTitleLength * 8 + 32, maxSubtitleLength * 6 + 32);
+      const preferredWidth = Math.min(Math.max(estimatedWidth, 300), MENU_WIDTH);
 
-  // Positioning for text-triggered menus
+      return Math.min(preferredWidth, maxAllowedWidth);
+    },
+    [options]
+  );
+
   const recalcPosition = useCallback(() => {
     if (!range) return;
+    const win = range.startContainer.win;
     const rect = range.getBoundingClientRect();
-    const containerWidth = calculateWidth();
+    const containerWidth = calculateWidth(win);
 
     const top = rect.top - 4;
     const minLeft = 8;
-    const maxLeft = window.innerWidth - containerWidth - 8;
+    const maxLeft = win.innerWidth - containerWidth - 8;
     const left = Math.min(Math.max(rect.left, minLeft), maxLeft);
 
     setPosition({
@@ -98,15 +104,16 @@ export function TypeaheadMenuPortal({
   }, [recalcPosition]);
 
   useEffect(() => {
+    if (!range) return;
+    const win = range.startContainer.win;
     const handler = () => recalcPosition();
-    const doc = activeDocument;
-    window.addEventListener("resize", handler);
-    doc.addEventListener("scroll", handler, { passive: true });
+    win.addEventListener("resize", handler);
+    win.document.addEventListener("scroll", handler, { passive: true });
     return () => {
-      window.removeEventListener("resize", handler);
-      doc.removeEventListener("scroll", handler);
+      win.removeEventListener("resize", handler);
+      win.document.removeEventListener("scroll", handler);
     };
-  }, [recalcPosition]);
+  }, [recalcPosition, range]);
 
   if (!position || options.length === 0) {
     return null;
@@ -136,7 +143,7 @@ export function TypeaheadMenuPortal({
     </div>
   );
 
-  return createPortal(container, activeDocument.body);
+  return createPortal(container, targetWin.document.body);
 }
 
 export { tryToPositionRange };

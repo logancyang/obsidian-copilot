@@ -24,8 +24,8 @@ export function MarkdownPreview({ content, renderMarkdown, className }: Markdown
     const currentGen = ++renderGenRef.current;
     // Reason: Render into a detached element so that if content changes
     // mid-render, the stale result never touches the live DOM.
-    // Reason: Use ownerDocument for popout-window safety in Obsidian
-    const scratchEl = targetEl.ownerDocument.createElement("div");
+    // Reason: Use the target's doc for popout-window safety in Obsidian
+    const scratchEl = targetEl.doc.createElement("div");
 
     targetEl.innerHTML = "";
     renderMarkdown(content, scratchEl)

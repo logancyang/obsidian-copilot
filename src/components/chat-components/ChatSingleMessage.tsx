@@ -117,8 +117,8 @@ export const linkInlineCitations = (root: HTMLElement): void => {
 
   // Bind DOM ops to the document that owns `root` — the chat message may live
   // in an Obsidian popout while a different window is focused, in which case
-  // `activeDocument` would create nodes with the wrong ownerDocument.
-  const doc = root.ownerDocument;
+  // `activeDocument` would create nodes with the wrong owner.
+  const doc = root.doc;
 
   // Collect text nodes that contain citation patterns (outside sources section)
   const sourcesEl = root.querySelector(".copilot-sources");
@@ -671,7 +671,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       if (!isUnmountingRef.current) {
         // Bind DOM ops to the document that owns the message container so
         // popout-window chats don't pick up the wrong document if focus shifts.
-        const doc = contentRef.current.ownerDocument;
+        const doc = contentRef.current.doc;
         // Track existing tool call and error block IDs
         const existingToolCallIds = new Set<string>();
         const existingErrorIds = new Set<string>();

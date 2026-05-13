@@ -80,7 +80,7 @@ export function DraggableModal({
   // so a click on the drag handle (without dragging) preserves anchorBottom behavior.
   const handleMouseDown = useCallback(
     (e: React.MouseEvent) => {
-      const ownerDoc = e.currentTarget.ownerDocument;
+      const ownerDoc = (e.currentTarget as HTMLElement).doc;
       const startX = e.clientX;
       const startY = e.clientY;
 
@@ -189,7 +189,7 @@ export function DraggableModal({
     if (anchorBottom !== undefined || isManualPositionRef.current) return;
     if (heightPx === null) return;
 
-    const ownerWindow = dragRef.current?.ownerDocument?.defaultView ?? window;
+    const ownerWindow = dragRef.current?.win ?? window;
     const maxY = ownerWindow.innerHeight - 12 - heightPx;
     const newY = Math.max(12, Math.min(position.y, maxY));
     if (Math.abs(position.y - newY) < 1) return;
@@ -233,7 +233,7 @@ export function DraggableModal({
   useEffect(() => {
     if (!open) return;
 
-    const ownerDocument = dragRef.current?.ownerDocument ?? activeDocument;
+    const ownerDocument = dragRef.current?.doc ?? activeDocument;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       // Respect defaultPrevented to let internal components (e.g., Lexical typeahead, Radix menus) consume Escape first

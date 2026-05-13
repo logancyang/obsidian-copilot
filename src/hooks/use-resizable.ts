@@ -95,7 +95,7 @@ export function useRafResizable(options: UseRafResizableOptions): UseRafResizabl
 
         // Capture owner document/window from the event target
         const targetElement = e.currentTarget as HTMLElement | null;
-        const ownerDoc = targetElement?.ownerDocument ?? activeDocument;
+        const ownerDoc = targetElement?.doc ?? activeDocument;
         ownerDocumentRef.current = ownerDoc;
         ownerWindowRef.current = ownerDoc.defaultView ?? window;
 

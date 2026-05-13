@@ -654,7 +654,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
       }
     };
 
-    const doc = activeDocument;
+    const doc = containerRef.current?.doc;
+    if (!doc) return;
     doc.addEventListener("keydown", handleKeyDown);
     return () => doc.removeEventListener("keydown", handleKeyDown);
   }, [editMode, onEditCancel]);

@@ -22,6 +22,7 @@ export default class CopilotView extends ItemView {
   private drawerHideObserver: MutationObserver | null = null;
   private layout: ChatViewLayout | null = null;
   private lastDrawerEl: HTMLElement | null = null;
+  private windowMigrationDestroy: (() => void) | null = null;
   eventTarget: EventTarget;
 
   constructor(
@@ -67,6 +68,19 @@ export default class CopilotView extends ItemView {
     this.setupMobileKeyboardObserver();
     this.setupDrawerHideObserver();
 
+    // Reason: When the leaf is dragged to (or back from) an Obsidian popout, the
+    // containerEl is reparented into a different window's document but onOpen
+    // does not re-fire. Lexical's editor._window stays bound to the original
+    // window, so input events fired in the popout never reach the editor.
+    // Tearing down and recreating the React root forces Lexical to re-register
+    // its root element under the new window — typing works again.
+    this.windowMigrationDestroy = this.containerEl.onWindowMigrated(() => {
+      if (!this.root) return;
+      this.root.unmount();
+      this.root = createRoot(this.containerEl.children[1]);
+      this.renderView(handleSaveAsNote, updateUserMessageHistory);
+    });
+
     // Reason: The view can move between containers (e.g. editor tab → drawer)
     // without onOpen firing again. Re-bind the drawer observer on layout changes
     // so it always watches the correct drawer element.
@@ -109,13 +123,13 @@ export default class CopilotView extends ItemView {
       // querying by data-type which is more brittle across Obsidian versions.
       const isCopilotActive = !!this.containerEl.closest(".workspace-drawer-active-tab-content");
       const kbHeight = parseFloat(
-        activeDocument.documentElement.style.getPropertyValue("--keyboard-height") || "0"
+        this.containerEl.doc.documentElement.style.getPropertyValue("--keyboard-height") || "0"
       );
       drawer.classList.toggle("copilot-keyboard-open", isCopilotActive && kbHeight > 0);
     };
 
     this.keyboardObserver = new MutationObserver(syncKeyboardClass);
-    this.keyboardObserver.observe(activeDocument.documentElement, {
+    this.keyboardObserver.observe(this.containerEl.doc.documentElement, {
       attributes: true,
       attributeFilter: ["style"],
     });
@@ -209,6 +223,8 @@ export default class CopilotView extends ItemView {
     this.keyboardObserver = null;
     this.drawerHideObserver?.disconnect();
     this.drawerHideObserver = null;
+    this.windowMigrationDestroy?.();
+    this.windowMigrationDestroy = null;
     this.layout?.destroy();
     this.layout = null;
     // Reason: Clean up the class on the tracked drawer element when the view is closed.

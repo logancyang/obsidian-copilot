@@ -78,7 +78,7 @@ export class SourcesModal extends Modal {
       // Display with 4 decimals to match SearchCore logs and avoid apparent ties
       if (typeof source.score === "number") {
         itemContainer.appendChild(
-          activeDocument.createTextNode(` - Relevance score: ${source.score.toFixed(4)}`)
+          this.contentEl.doc.createTextNode(` - Relevance score: ${source.score.toFixed(4)}`)
         );
       }
 

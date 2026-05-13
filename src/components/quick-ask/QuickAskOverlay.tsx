@@ -314,7 +314,7 @@ export class QuickAskOverlay {
 
     if (QuickAskOverlay.overlayRoot) return QuickAskOverlay.overlayRoot;
 
-    const doc = host.ownerDocument ?? activeDocument;
+    const doc = host.doc;
     const root = doc.createElement("div");
     root.className = "copilot-quick-ask-overlay-root";
     host.appendChild(root);
@@ -329,7 +329,7 @@ export class QuickAskOverlay {
     this.overlayHost = overlayHost;
 
     // Capture owner document/window for popout window compatibility
-    const doc = overlayHost.ownerDocument ?? activeDocument;
+    const doc = overlayHost.doc;
     const win = doc.defaultView ?? window;
     this.ownerDocument = doc;
     this.ownerWindow = win;

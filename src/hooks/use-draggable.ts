@@ -106,7 +106,7 @@ export function useDraggable(options: UseDraggableOptions = {}) {
       const el = dragRef.current;
 
       if (bounds === "window" && el) {
-        const ownerWindow = el.ownerDocument?.defaultView ?? window;
+        const ownerWindow = el.win;
         const rect = el.getBoundingClientRect();
         const maxX = ownerWindow.innerWidth - rect.width;
         const maxY = ownerWindow.innerHeight - rect.height;
@@ -141,7 +141,7 @@ export function useDraggable(options: UseDraggableOptions = {}) {
   const scheduleApply = useCallback((): void => {
     if (rafIdRef.current != null) return;
 
-    const ownerWindow = dragRef.current?.ownerDocument?.defaultView ?? window;
+    const ownerWindow = dragRef.current?.win ?? window;
     rafIdRef.current = ownerWindow.requestAnimationFrame(() => {
       rafIdRef.current = null;
 
@@ -192,7 +192,7 @@ export function useDraggable(options: UseDraggableOptions = {}) {
         y: e.clientY - current.y,
       };
 
-      const ownerDocument = dragRef.current?.ownerDocument ?? activeDocument;
+      const ownerDocument = dragRef.current?.doc ?? activeDocument;
       const ownerWindow = ownerDocument.defaultView ?? window;
       const body = ownerDocument.body;
       previousBodyStyleRef.current = {
