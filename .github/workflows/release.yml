@@ -84,8 +84,10 @@ jobs:
             MANIFEST_FILE="manifest-beta.json"
 
             # Guard: master's manifest.json must still equal the latest stable Release tag.
-            LATEST_STABLE=$(gh release list --json tagName,isPrerelease \
-              -q '[.[] | select(.isPrerelease == false) | .tagName] | .[0]')
+            # Use /releases/latest which (per GitHub API) returns only the most-recent
+            # non-prerelease, non-draft release in one call — no pagination concerns
+            # even if many prereleases have accumulated since the last stable.
+            LATEST_STABLE=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" -q .tag_name 2>/dev/null || true)
             STABLE_MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
             if [ -z "$LATEST_STABLE" ]; then
               echo "Could not determine latest stable GitHub Release tag; aborting to avoid poisoning manifest.json"
