@@ -1,5 +1,56 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.3.0 🚀
+
+The headline of this release is a big one: **your projects now live as notes in your vault**, not buried in `data.json`. Update and your existing projects migrate automatically. Everything else in this release is quality and polish: a 1.8 MB bundle reduction, mobile support declared official, fresh built-in models, and a wave of reliability fixes for Korean/CJK input, Miyo, Ollama, popout windows, and more!
+
+- 📁 **Projects are now vault notes** — Project configurations are migrated out of the plugin's `data.json` and into your vault as regular markdown files. On first launch after the update, Copilot reads your existing projects and writes them to vault files automatically. You can see, edit, and version-control your project configs like any other note! Any projects that can't be migrated are backed up to an `unsupported/` subfolder so nothing is lost. (@Emt-lin)
+- 📱 **Mobile support is now official** — Copilot is no longer desktop-only in the plugin manifest. Chat, Vault QA, and Plus modes all work on Obsidian Mobile, and the plugin now properly declares `minAppVersion: 1.7.2` so users on older Obsidian builds get a clear message rather than a cryptic runtime error. (@logancyang)
+- ⚡ **Bundle shrinks by 1.8 MB** — Cohere and Mistral models now route through OpenAI-compatible endpoints instead of their own SDKs, trimming the plugin from ~5 MB down to ~3.3 MB. Faster loads, especially on mobile! Note: if you had a custom `baseUrl` saved for a Cohere model, clear it in the model settings so Cohere falls back to the correct compatibility endpoint. (@logancyang)
+- 💡 **Latest built-in models (May 2026)** — Built-in model list updated: GPT-5.5, GPT-5.4-mini, Claude Opus 4.7, Gemini 3.1 Flash-Lite (now GA), and Grok 4.3 are all available out of the box. Click "Refresh Built-in Models" in settings if you don't see them yet. (@logancyang)
+- 🔧 **GitHub Copilot codex models use the Responses API** — Codex-family models accessed through GitHub Copilot now correctly route to the `/responses` endpoint. Previously they were hitting `/chat/completions` and failing with HTTP 400. (@Keryer)
+- ⌨️ **Enter key delay fixed for Korean/CJK input** — A 100ms timeout in the IME composition handler was making Enter feel sluggish when confirming Korean, Japanese, or Chinese input. Removed. (@octo-patch)
+- 🗑️ **Deleted files respect your trash preference** — When Copilot deletes a chat history file, project file, system prompt, or custom command, it now uses Obsidian's trash setting (system trash / vault `.trash` / permanent) instead of always deleting permanently. Recoverable! (@zeroliu)
+- 🛤️ **Miyo path fixes for cross-vault and remote setups** — Two Miyo fixes ship together: vault-folder-prefixed paths are now sent to the related-notes endpoint (fixing cross-device disambiguation), and the vault folder-name prefix is stripped from indexed paths (fixing broken links in "List Indexed Files"). (@wenzhengjiang)
+- 🌐 **Ollama respects the CORS setting** — Ollama requests now route through `safeFetch` when "Enable CORS" is toggled, matching what every other OpenAI-compatible provider does. Fixes mobile (WKWebView) requests to `http://` Ollama hosts. (@zeroliu)
+- 🪟 **Popout window reliability** — Chat in a popout window now creates DOM nodes in the correct window. Typing into the chat input after dragging the leaf between windows works without reopening the view. Pills, typeahead menus, the Quick Ask overlay, and inline citation links all render correctly in popouts. (@zeroliu)
+- 🧠 **Think-section rendering fix** — A bug where indented code blocks inside `<think>` sections consumed the closing `</div>` tag and displayed it as literal text has been fixed. Affects models like `google/gemma-4-31b-it` that use indented bullet-point reasoning. (@trulyshelton)
+
+More details in the changelog:
+
+### Improvements
+
+- #2324 feat: migrate project storage from data.json to vault files @Emt-lin
+- #2402 perf(deps): route Cohere & Mistral through OpenAI-compat (-1.8 MB bundle) @logancyang
+- #2396 chore(models): bump built-in models to latest (May 2026) @logancyang
+- #2425 chore(manifest): bump minAppVersion to 1.7.2 and declare mobile support @logancyang
+- #2406 fix(popout): document ownership and selection listener fixes (W4/9) @zeroliu
+- #2405 fix(vault): respect user trash preference via FileManager.trashFile (W7/9) @zeroliu
+- #2404 chore(providers): adopt non-deprecated LangChain APIs + type cleanup @zeroliu
+- #2403 chore(types): tighten types and replace TFile/TFolder casts @zeroliu
+- #2401 chore(popout): window-global API swaps for timers, globalThis, base64 @zeroliu
+- #2400 chore(styles): replace element.style with Tailwind + CSS vars @zeroliu
+- #2398 chore(deps): bump deps ahead of scorecard cleanup @zeroliu
+- #2358 docs(ai): unify AGENTS.md and CLAUDE.md @capyBearista
+
+### Bug Fixes
+
+- #2393 fix(miyo): send portable folder-prefixed path to related-notes endpoint @wenzhengjiang
+- #2390 fix(miyo): strip vault folder-name prefix from indexed paths @wenzhengjiang
+- #2382 fix(ollama): route through safeFetch when enableCors is set @zeroliu
+- #2367 fix: remove 100ms IME timeout that delayed Enter key for Korean/CJK input @octo-patch
+- #2343 fix: prevent </div> from being consumed by indented code blocks in think sections @trulyshelton
+- #2320 fix: use /responses for GitHub Copilot codex models @Keryer
+- #2408 fix: broken tests @zeroliu
+- #2407 chore(promises): explicit handling of floating promises @zeroliu
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Prerelease v3.2.9-beta.0 🧪
 
 This is a beta release for testing the project storage migration, mobile support declaration, and a wave of reliability fixes before they ship in 3.2.9. Please report any issues in the Discord member channel with the version number in your report title.
