@@ -609,8 +609,8 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
       const extensionPatterns = Object.keys(list.extensions);
       const notePatterns = list.notes
         .map((note) => {
-          const file = appFiles.find((file) => file.path === note.id);
-          if (file) {
+          const file = app.vault.getAbstractFileByPath(note.id);
+          if (file instanceof TFile) {
             return getFilePattern(file);
           }
         })
@@ -623,7 +623,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         notePatterns,
       });
     },
-    []
+    [app.vault]
   );
 
   // ignore file items convert to exclusions format
@@ -707,8 +707,8 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
       const parsedQuery = parseSearchQuery(searchTerm);
       return allItems
         .filter((item) => {
-          const fileObj = appAllFiles.find((f) => f.path === item.id);
-          if (!fileObj) return false;
+          const fileObj = app.vault.getAbstractFileByPath(item.id);
+          if (!(fileObj instanceof TFile)) return false;
 
           const isNote = fileObj.extension === "md";
 
@@ -844,7 +844,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     activeItem,
     parseSearchQuery,
     allItems,
-    appAllFiles,
+    app.vault,
     groupList.tags,
     groupList.folders,
     groupList.notes,
@@ -1102,8 +1102,8 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
   const handleDeleteItem = (e: React.MouseEvent, item: GroupItem) => {
     e.stopPropagation();
 
-    const file = appAllFiles.find((file) => file.path === item.id);
-    if (file) {
+    const file = app.vault.getAbstractFileByPath(item.id);
+    if (file instanceof TFile) {
       // add file to ignore
       setIgnoreItems((prev) => {
         const newFiles = new Set(prev.files);
@@ -1137,9 +1137,9 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
   const handleDeleteIgnoreItem = (e: React.MouseEvent, item: GroupItem) => {
     e.stopPropagation();
 
-    const file = appAllFiles.find((file) => file.path === item.id);
+    const file = app.vault.getAbstractFileByPath(item.id);
 
-    if (file) {
+    if (file instanceof TFile) {
       setIgnoreItems((prev) => {
         const newFiles = new Set(prev.files);
         newFiles.delete(file);

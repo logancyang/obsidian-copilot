@@ -265,7 +265,7 @@ describe("getNotesFromPath", () => {
 describe("getNotesFromTags", () => {
   beforeAll(() => {
     // @ts-ignore
-    global.app = mockApp;
+    window.app = mockApp;
 
     // Setup metadata cache mock
     mockMetadataCache.getFileCache.mockImplementation((file: TFile) => {
@@ -275,7 +275,7 @@ describe("getNotesFromTags", () => {
 
   afterAll(() => {
     // @ts-ignore
-    delete global.app;
+    delete window.app;
   });
 
   beforeEach(() => {

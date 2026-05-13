@@ -82,7 +82,7 @@ module.exports = {
 };
 
 // Mock the global app object
-global.app = {
+window.app = {
   vault: {
     getAbstractFileByPath: jest.fn().mockReturnValue({
       name: "test-file.md",

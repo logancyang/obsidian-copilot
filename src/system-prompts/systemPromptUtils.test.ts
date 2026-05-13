@@ -250,14 +250,14 @@ describe("parseSystemPromptFile", () => {
   let mockFile: TFile;
 
   beforeEach(() => {
-    originalApp = global.app;
+    originalApp = window.app;
     mockFile = mockTFile({
       basename: "Test Prompt",
       path: "SystemPrompts/Test Prompt.md",
       extension: "md",
     });
 
-    global.app = {
+    window.app = {
       vault: {
         read: jest.fn(),
       },
@@ -268,7 +268,7 @@ describe("parseSystemPromptFile", () => {
   });
 
   afterEach(() => {
-    global.app = originalApp;
+    window.app = originalApp;
   });
 
   it("parses a file with frontmatter and content", async () => {

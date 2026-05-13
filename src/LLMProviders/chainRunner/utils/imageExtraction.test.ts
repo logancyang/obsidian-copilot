@@ -9,7 +9,7 @@ describe("Image extraction from content", () => {
     },
   };
 
-  (global as any).app = mockApp;
+  (window as any).app = mockApp;
 
   beforeEach(() => {
     jest.clearAllMocks();

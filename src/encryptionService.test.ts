@@ -15,8 +15,8 @@ const mockElectron = {
 
 jest.mock("electron", () => mockElectron);
 
-global.TextEncoder = TextEncoder as any;
-global.TextDecoder = TextDecoder as any;
+window.TextEncoder = TextEncoder as any;
+window.TextDecoder = TextDecoder as any;
 
 // Now we can import our modules
 import { encryptAllKeys, getDecryptedKey, getEncryptedKey } from "@/encryptionService";
@@ -25,8 +25,8 @@ import { Platform } from "obsidian";
 import { Buffer } from "buffer";
 
 // Mock window.btoa and window.atob for base64 encoding/decoding
-global.btoa = jest.fn().mockImplementation((str) => Buffer.from(str).toString("base64"));
-global.atob = jest.fn().mockImplementation((str) => Buffer.from(str, "base64").toString());
+window.btoa = jest.fn().mockImplementation((str) => Buffer.from(str).toString("base64"));
+window.atob = jest.fn().mockImplementation((str) => Buffer.from(str, "base64").toString());
 
 const mockSubtle = {
   importKey: jest.fn().mockResolvedValue("mockCryptoKey"),
@@ -43,7 +43,7 @@ const mockSubtle = {
 };
 
 // Mock crypto.subtle instead of the entire crypto object
-Object.defineProperty(global.crypto, "subtle", {
+Object.defineProperty(window.crypto, "subtle", {
   value: mockSubtle,
   configurable: true,
 });

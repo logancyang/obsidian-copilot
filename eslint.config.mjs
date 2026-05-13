@@ -73,8 +73,8 @@ export default [
       "tailwindcss/no-contradicting-classname": "error",
 
       // obsidianmd: defer to follow-up PRs
-      "obsidianmd/vault/iterate": "off",
-      "obsidianmd/prefer-active-doc": "off",
+      "obsidianmd/vault/iterate": "error",
+      "obsidianmd/prefer-active-doc": "error",
       "obsidianmd/object-assign": "off",
       "obsidianmd/ui/sentence-case": "off",
       "obsidianmd/no-unsupported-api": "off",
@@ -102,10 +102,6 @@ export default [
       "@typescript-eslint/await-thenable": "off",
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
-
-      // obsidianmd/no-global-this fires on jest globalThis usage in tests and
-      // a small number of legit cases — defer triage.
-      "obsidianmd/no-global-this": "off",
 
       // SDL / import / no-unsanitized / depend: defer — review separately
       "@microsoft/sdl/no-inner-html": "off",

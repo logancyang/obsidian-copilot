@@ -27,7 +27,7 @@ const mockApp = {
 };
 
 // Mock global app
-Object.defineProperty(global, "app", {
+Object.defineProperty(window, "app", {
   value: mockApp,
   writable: true,
 });

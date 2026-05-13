@@ -39,7 +39,7 @@ describe("ContextProcessor - Embedded Notes", () => {
       getFileCache: jest.fn((file: TFile) => fileCaches[file.path] ?? {}),
     };
 
-    (global as any).app = {
+    (window as any).app = {
       metadataCache: metadataCacheMock,
     };
 

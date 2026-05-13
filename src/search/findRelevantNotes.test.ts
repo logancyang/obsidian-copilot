@@ -133,7 +133,7 @@ describe("findRelevantNotes", () => {
       ["linked-only.md", linkedOnly],
     ]);
 
-    (global.app.vault.getAbstractFileByPath as jest.Mock).mockImplementation((path: string) => {
+    (window.app.vault.getAbstractFileByPath as jest.Mock).mockImplementation((path: string) => {
       return filesByPath.get(path) ?? null;
     });
 
@@ -177,14 +177,14 @@ describe("findRelevantNotes", () => {
 
     const result = await findRelevantNotes({ filePath: "source.md" });
 
-    expect(result.map((entry) => entry.document.path)).toEqual([
+    expect(result.map((entry) => entry.note.path)).toEqual([
       "second.md",
       "first.md",
       "linked-only.md",
     ]);
-    expect(
-      result.find((entry) => entry.document.path === "second.md")?.metadata.similarityScore
-    ).toBe(0.82);
+    expect(result.find((entry) => entry.note.path === "second.md")?.metadata.similarityScore).toBe(
+      0.82
+    );
     expect(mockGetDb).toHaveBeenCalledTimes(1);
     expect(mockGetDocsByEmbedding).toHaveBeenCalledTimes(2);
     expect(mockSearchRelated).not.toHaveBeenCalled();
@@ -224,10 +224,10 @@ describe("findRelevantNotes", () => {
 
     const result = await findRelevantNotes({ filePath: "source.md" });
 
-    expect(result.map((entry) => entry.document.path)).toEqual(["beta.md", "alpha.md"]);
-    expect(
-      result.find((entry) => entry.document.path === "alpha.md")?.metadata.similarityScore
-    ).toBe(0.6);
+    expect(result.map((entry) => entry.note.path)).toEqual(["beta.md", "alpha.md"]);
+    expect(result.find((entry) => entry.note.path === "alpha.md")?.metadata.similarityScore).toBe(
+      0.6
+    );
     expect(mockGetDb).not.toHaveBeenCalled();
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();
     expect(mockSearchRelated).toHaveBeenCalledTimes(1);
@@ -259,7 +259,7 @@ describe("findRelevantNotes", () => {
 
     const result = await findRelevantNotes({ filePath: "source.md" });
 
-    expect(result.map((e) => e.document.path)).toEqual(["alpha.md"]);
+    expect(result.map((e) => e.note.path)).toEqual(["alpha.md"]);
     expect(result[0].metadata.similarityScore).toBe(0.75);
     // Orama path not taken (no embeddings); Miyo called as fallback
     expect(mockGetDocsByEmbedding).not.toHaveBeenCalled();
@@ -289,7 +289,7 @@ describe("findRelevantNotes", () => {
     const result = await findRelevantNotes({ filePath: "source.md" });
 
     expect(result).toHaveLength(1);
-    expect(result[0].document.path).toBe("linked-only.md");
+    expect(result[0].note.path).toBe("linked-only.md");
     expect(result[0].metadata.similarityScore).toBeUndefined();
     expect(result[0].metadata.hasOutgoingLinks).toBe(true);
     expect(mockGetDocumentsByPath).not.toHaveBeenCalled();

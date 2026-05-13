@@ -670,7 +670,7 @@ describe("parseCustomCommandFile", () => {
 
   beforeEach(() => {
     // Save and mock global app
-    originalApp = global.app;
+    originalApp = window.app;
     mockFrontmatter = {
       "copilot-command-context-menu-enabled": true,
       "copilot-command-slash-enabled": false,
@@ -679,7 +679,7 @@ describe("parseCustomCommandFile", () => {
       "copilot-command-last-used": 1234567890,
     };
     mockMetadata = { frontmatter: mockFrontmatter };
-    global.app = {
+    window.app = {
       vault: {
         read: jest
           .fn()
@@ -699,7 +699,7 @@ describe("parseCustomCommandFile", () => {
   });
 
   afterEach(() => {
-    global.app = originalApp;
+    window.app = originalApp;
   });
 
   it("parses a custom command file with frontmatter and content", async () => {
@@ -719,8 +719,8 @@ describe("parseCustomCommandFile", () => {
   });
 
   it("uses EMPTY_COMMAND defaults if frontmatter is missing", async () => {
-    (global.app.vault as any).read.mockResolvedValue("Prompt content only, no frontmatter.");
-    (global.app.metadataCache as any).getFileCache.mockReturnValue({});
+    (window.app.vault as any).read.mockResolvedValue("Prompt content only, no frontmatter.");
+    (window.app.metadataCache as any).getFileCache.mockReturnValue({});
     const { parseCustomCommandFile } = await import("@/commands/customCommandUtils");
     const result = await parseCustomCommandFile(mockFile);
     expect(result).toEqual({

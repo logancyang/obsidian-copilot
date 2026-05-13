@@ -276,7 +276,7 @@ function mergeScoreMaps(
 }
 
 export type RelevantNoteEntry = {
-  document: {
+  note: {
     path: string;
     title: string;
   };
@@ -327,7 +327,7 @@ export async function findRelevantNotes({
         return null;
       }
       return {
-        document: {
+        note: {
           path,
           title: file.basename,
         },

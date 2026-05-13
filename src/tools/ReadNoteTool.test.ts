@@ -35,14 +35,14 @@ describe("readNoteTool", () => {
   beforeEach(async () => {
     jest.resetModules();
 
-    originalApp = global.app;
+    originalApp = window.app;
     getAbstractFileByPathMock = jest.fn();
     getMarkdownFilesMock = jest.fn().mockReturnValue([]);
     getFirstLinkpathDestMock = jest.fn().mockReturnValue(null);
     mockRead.mockReset();
     mockRead.mockResolvedValue("");
 
-    global.app = {
+    window.app = {
       vault: {
         getAbstractFileByPath: getAbstractFileByPathMock,
         getMarkdownFiles: getMarkdownFilesMock,
@@ -62,7 +62,7 @@ describe("readNoteTool", () => {
   });
 
   afterEach(() => {
-    global.app = originalApp;
+    window.app = originalApp;
   });
 
   it("returns the first chunk with follow-up metadata", async () => {
