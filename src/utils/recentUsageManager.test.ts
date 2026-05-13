@@ -104,7 +104,7 @@ describe("recentUsageManager", () => {
         expect(ts1).toBe(1000);
         expect(manager.getLastTouchedAt("key1")).toBe(1000);
 
-        currentTime = 2000; // eslint-disable-line prefer-const
+        currentTime = 2000;
         const ts2 = manager.touch("key1");
         expect(ts2).toBe(2000);
         expect(manager.getLastTouchedAt("key1")).toBe(2000);

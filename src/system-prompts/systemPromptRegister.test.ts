@@ -68,7 +68,7 @@ describe("SystemPromptRegister", () => {
   let mockPlugin: Plugin;
   let mockVault: Vault;
   let register: SystemPromptRegister;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   let vaultEventHandlers: Record<string, (...args: any[]) => void>;
 
   beforeEach(() => {
@@ -79,7 +79,6 @@ describe("SystemPromptRegister", () => {
 
     mockPlugin = {} as Plugin;
     mockVault = {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       on: jest.fn((event: string, handler: (...args: any[]) => void) => {
         vaultEventHandlers[event] = handler;
       }),

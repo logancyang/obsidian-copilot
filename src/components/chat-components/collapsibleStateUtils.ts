@@ -99,7 +99,7 @@ export const getCopilotCollapsibleDetailsFromEvent = (
   }
 
   const details = target.closest(`details[id^="${COPILOT_COLLAPSIBLE_DOM_ID_PREFIX}-"]`);
-  if (details instanceof HTMLElement && details.tagName === "DETAILS" && root.contains(details)) {
+  if (details?.instanceOf(HTMLElement) && details.tagName === "DETAILS" && root.contains(details)) {
     return details as HTMLDetailsElement;
   }
 

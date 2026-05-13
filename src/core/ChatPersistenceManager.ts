@@ -757,7 +757,7 @@ ${conversationSummary}`;
 
     // Sanitize the final filename (replace any illegal chars with underscore)
     // Also remove leftover square brackets which are illegal on some platforms
-    // eslint-disable-next-line no-control-regex
+
     const sanitizedFileName = customFileName
       .replace(/\[\[([^\]]+)\]\]/g, "$1")
       .replace(/[{}[\]]/g, "_")

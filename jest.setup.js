@@ -1,4 +1,3 @@
-/* eslint-env browser */
 import "web-streams-polyfill/dist/polyfill.min.js";
 import { TextEncoder, TextDecoder } from "util";
 

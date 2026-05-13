@@ -451,7 +451,6 @@ function getTimeRangeMs(timeExpression: string) {
     };
   }
 
-  // eslint-disable-next-line no-console
   console.warn(`Unable to parse time expression: ${timeExpression}`);
   return undefined;
 }

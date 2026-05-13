@@ -15,7 +15,6 @@ describe("TagTools", () => {
     try {
       return JSON.parse(jsonSegment);
     } catch (error) {
-      // eslint-disable-next-line no-console -- helpful context when assertions fail
       console.error("Failed to parse tag tool payload:", jsonSegment);
       throw error;
     }

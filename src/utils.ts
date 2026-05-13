@@ -269,12 +269,10 @@ export const stringToChainType = (chain: string): ChainType => {
 // TODO: These chain validation functions are deprecated
 // Remove after confirming chainManager no longer uses them
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last?.modelName || (chain as any).last?.model;
 };
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (chain as any).last?.retriever !== undefined;
 };
 

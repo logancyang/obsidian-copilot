@@ -319,7 +319,10 @@ describe("getNotesFromTags", () => {
   it("should handle both path and tags, returning files under the specified path with the specified tags", async () => {
     const mockVault = new Obsidian.Vault();
     const tags = ["#tag1"];
-    const noteFiles = [{ path: "test/test2/note1.md" }, { path: "test/note2.md" }] as TFile[];
+    const noteFiles: TFile[] = [
+      new (TFile as any)("test/test2/note1.md"),
+      new (TFile as any)("test/note2.md"),
+    ];
     const expectedPaths = ["test/test2/note1.md"];
 
     const result = await getNotesFromTags(mockVault, tags, noteFiles);
