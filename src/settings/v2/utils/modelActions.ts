@@ -3,7 +3,7 @@ import { ChatModelProviders, SettingKeyProviders } from "@/constants";
 import { getDecryptedKey } from "@/encryptionService";
 import { GitHubCopilotProvider } from "@/LLMProviders/githubCopilot/GitHubCopilotProvider";
 import ProjectManager from "@/LLMProviders/projectManager";
-import { logError, logWarn } from "@/logger";
+import { logError } from "@/logger";
 import { parseModelsResponse, StandardModel } from "@/settings/providerModels";
 import { err2String, getProviderInfo, safeFetch } from "@/utils";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
@@ -66,43 +66,18 @@ export async function fetchModelsForProvider(
       };
     }
 
-    const tryFetch = async (useSafeFetch: boolean) => {
-      const controller = new AbortController();
-      const timeoutId = window.setTimeout(() => controller.abort(), 3000);
-
-      try {
-        const response = await (useSafeFetch ? safeFetch : fetch)(url, {
-          headers,
-          signal: controller.signal,
-          method: "GET",
-        });
-
-        if (!response.ok) {
-          const msg = err2String(await response.json());
-          logError(msg);
-          throw new Error(`Failed to fetch models: ${response.statusText} \n detail: ` + msg);
-        }
-        return response;
-      } finally {
-        window.clearTimeout(timeoutId);
-      }
-    };
-
-    let response;
-    try {
-      response = await tryFetch(false);
-    } catch (firstError) {
-      logWarn("First fetch attempt failed, trying with safeFetch...");
-      try {
-        response = await tryFetch(true);
-      } catch (error) {
-        const msg =
-          "\nwithout CORS Error: " +
-          err2String(firstError) +
-          "\nwith CORS Error: " +
-          err2String(error);
-        throw new Error(msg);
-      }
+    // Use safeFetch (requestUrl) to bypass CORS on desktop and mobile. safeFetch
+    // does not honor AbortSignal, so bound the call manually via Promise.race.
+    const response = await Promise.race([
+      safeFetch(url, { headers, method: "GET" }),
+      new Promise<never>((_, reject) =>
+        window.setTimeout(() => reject(new Error("Request timed out after 10s")), 10000)
+      ),
+    ]);
+    if (!response.ok) {
+      const msg = err2String(await response.json());
+      logError(msg);
+      throw new Error(`Failed to fetch models: ${response.statusText} \n detail: ` + msg);
     }
 
     const rawData = await response.json();

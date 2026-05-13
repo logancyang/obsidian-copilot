@@ -17,9 +17,12 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
 }));
 
-// Mock global fetch
+// Mock safeFetchNoThrow (the requestUrl-backed wrapper used in place of fetch)
 const mockFetch = jest.fn();
-window.fetch = mockFetch;
+jest.mock("@/utils", () => ({
+  ...jest.requireActual("@/utils"),
+  safeFetchNoThrow: (url: string, options?: RequestInit) => mockFetch(url, options),
+}));
 
 beforeEach(() => {
   jest.clearAllMocks();

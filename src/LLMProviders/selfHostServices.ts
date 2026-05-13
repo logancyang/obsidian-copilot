@@ -2,6 +2,7 @@ import { type Youtube4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { getDecryptedKey } from "@/encryptionService";
 import { logError, logInfo } from "@/logger";
 import { getSettings } from "@/settings/model";
+import { safeFetchNoThrow } from "@/utils";
 
 const FIRECRAWL_SEARCH_URL = "https://api.firecrawl.dev/v2/search";
 const PERPLEXITY_CHAT_URL = "https://api.perplexity.ai/chat/completions";
@@ -45,7 +46,7 @@ export function hasSelfHostSearchKey(): boolean {
 async function firecrawlSearch(query: string, apiKey: string): Promise<SelfHostWebSearchResult> {
   const startTime = Date.now();
 
-  const response = await fetch(FIRECRAWL_SEARCH_URL, {
+  const response = await safeFetchNoThrow(FIRECRAWL_SEARCH_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -95,7 +96,7 @@ async function perplexitySonarSearch(
   query: string,
   apiKey: string
 ): Promise<SelfHostWebSearchResult> {
-  const response = await fetch(PERPLEXITY_CHAT_URL, {
+  const response = await safeFetchNoThrow(PERPLEXITY_CHAT_URL, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -144,7 +145,7 @@ export async function selfHostYoutube4llm(url: string): Promise<Youtube4llmRespo
 
   const transcriptUrl = `${SUPADATA_TRANSCRIPT_URL}?url=${encodeURIComponent(url)}&mode=auto&text=true`;
 
-  const response = await fetch(transcriptUrl, {
+  const response = await safeFetchNoThrow(transcriptUrl, {
     method: "GET",
     headers: {
       "x-api-key": apiKey,
@@ -189,7 +190,7 @@ async function pollSupadataJob(
   while (Date.now() < deadline) {
     await new Promise((resolve) => window.setTimeout(resolve, SUPADATA_POLL_INTERVAL));
 
-    const pollResponse = await fetch(pollUrl, {
+    const pollResponse = await safeFetchNoThrow(pollUrl, {
       method: "GET",
       headers: {
         "x-api-key": apiKey,

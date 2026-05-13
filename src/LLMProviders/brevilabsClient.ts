@@ -4,7 +4,6 @@ import { MissingPlusLicenseError } from "@/error";
 import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
-import { safeFetchNoThrow } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import { requestUrl } from "obsidian";
 
@@ -55,6 +54,36 @@ async function buildMultipartFromFormData(
     body: out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer,
     contentType: `multipart/form-data; boundary=${boundary}`,
   };
+}
+
+/**
+ * Normalize a requestUrl response into the {data, error} shape used by Brevilabs API methods.
+ * Handles the case where `response.json` is a raw string (non-JSON body, e.g. HTML error page).
+ */
+function parseBrevilabsResponse<T>(
+  response: { status: number; json: unknown },
+  endpoint: string
+): { data: T | null; error?: Error } {
+  let data: any = response.json;
+  if (typeof data === "string") {
+    try {
+      data = JSON.parse(data);
+    } catch {
+      // Non-JSON body — fall through to status-based error.
+    }
+  }
+  if (response.status < 200 || response.status >= 300) {
+    try {
+      const errorDetail = data.detail;
+      const error = new Error(errorDetail.reason);
+      error.name = errorDetail.error;
+      return { data: null, error };
+    } catch {
+      return { data: null, error: new Error(`HTTP error: ${response.status}`) };
+    }
+  }
+  logInfo(`[API ${endpoint} request]:`, data);
+  return { data };
 }
 
 export interface RerankResponse {
@@ -173,25 +202,14 @@ export class BrevilabsClient {
     if (!excludeAuthHeader) {
       headers.Authorization = `Bearer ${await getDecryptedKey(getSettings().plusLicenseKey)}`;
     }
-    const response = await safeFetchNoThrow(url.toString(), {
+    const response = await requestUrl({
+      url: url.toString(),
       method,
       headers,
       ...(method === "POST" && { body: JSON.stringify(body) }),
+      throw: false,
     });
-    const data = await response.json();
-    if (!response.ok) {
-      try {
-        const errorDetail = data.detail;
-        const error = new Error(errorDetail.reason as string);
-        error.name = errorDetail.error as string;
-        return { data: null, error };
-      } catch {
-        return { data: null, error: new Error("Unknown error") };
-      }
-    }
-    logInfo(`[API ${endpoint} request]:`, data);
-
-    return { data };
+    return parseBrevilabsResponse<T>(response, endpoint);
   }
 
   private async makeFormDataRequest<T>(
@@ -223,20 +241,7 @@ export class BrevilabsClient {
         body,
         throw: false,
       });
-
-      const data = response.json;
-      if (response.status < 200 || response.status >= 300) {
-        try {
-          const errorDetail = data.detail;
-          const error = new Error(errorDetail.reason as string);
-          error.name = errorDetail.error as string;
-          return { data: null, error };
-        } catch {
-          return { data: null, error: new Error(`HTTP error: ${response.status}`) };
-        }
-      }
-      logInfo(`[API ${endpoint} form-data request]:`, data);
-      return { data };
+      return parseBrevilabsResponse<T>(response, `${endpoint} form-data`);
     } catch (error) {
       return { data: null, error: error instanceof Error ? error : new Error(String(error)) };
     }

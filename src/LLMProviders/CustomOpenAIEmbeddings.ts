@@ -1,3 +1,4 @@
+import { safeFetchNoThrow } from "@/utils";
 import { OpenAIEmbeddings } from "@langchain/openai";
 
 export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
@@ -35,7 +36,7 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
     const baseURL = configuration?.baseURL || "https://api.openai.com/v1";
     const url = `${baseURL}/embeddings`;
     const apiKey = this.customConfig.apiKey as string;
-    const fetchFn = configuration?.fetch || fetch;
+    const fetchFn = configuration?.fetch || safeFetchNoThrow;
 
     const response = await fetchFn(url, {
       method: "POST",
