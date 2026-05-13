@@ -11,7 +11,7 @@ import {
   useSelectedTextContexts,
 } from "@/aiParams";
 import { resetSessionSystemPromptSettings } from "@/system-prompts";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";

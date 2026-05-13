@@ -1,4 +1,4 @@
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatPromptTemplate } from "@langchain/core/prompts";
 

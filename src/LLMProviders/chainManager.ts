@@ -5,7 +5,8 @@ import {
   SetChainOptions,
   setChainType,
 } from "@/aiParams";
-import ChainFactory, { ChainType, Document } from "@/chainFactory";
+import ChainFactory, { Document } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
   AutonomousAgentChainRunner,

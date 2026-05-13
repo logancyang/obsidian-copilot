@@ -1,4 +1,4 @@
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { Button } from "@/components/ui/button";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Input } from "@/components/ui/input";

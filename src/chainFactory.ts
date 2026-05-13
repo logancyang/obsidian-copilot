@@ -8,6 +8,8 @@ import { BaseRetriever } from "@langchain/core/retrievers";
 import { RunnablePassthrough, RunnableSequence } from "@langchain/core/runnables";
 import { BaseChatMemory } from "@langchain/classic/memory";
 import { formatDocumentsAsString } from "@langchain/classic/util/document";
+import { ChainType } from "./chainType";
+import { logInfo } from "./logger";
 import { removeErrorTags, removeThinkTags } from "./utils";
 
 export interface LLMChainInput {
@@ -51,14 +53,6 @@ type ConversationalRetrievalQAChainInput = {
 // when streaming: https://github.com/hwchase17/langchainjs/issues/754#issuecomment-1540257078
 // Temp workaround triggers CORS issue 'refused to set header user-agent'
 
-// Add new chain types here
-export enum ChainType {
-  LLM_CHAIN = "llm_chain",
-  VAULT_QA_CHAIN = "vault_qa",
-  COPILOT_PLUS_CHAIN = "copilot_plus",
-  PROJECT_CHAIN = "project",
-}
-
 class ChainFactory {
   public static instances: Map<string, RunnableSequence> = new Map();
 
@@ -85,7 +79,7 @@ class ChainFactory {
       model,
     ]);
     ChainFactory.instances.set(ChainType.LLM_CHAIN, instance);
-    console.log("New LLM chain created.");
+    logInfo("New LLM chain created.");
     return instance;
   }
 
@@ -168,12 +162,12 @@ Question: {question}
     const standaloneQuestionChain = RunnableSequence.from([
       {
         question: (input: ConversationalRetrievalQAChainInput) => {
-          if (debug) console.log("Input Question: ", input.question);
+          if (debug) logInfo("Input Question: ", input.question);
           return input.question;
         },
         chat_history: (input: ConversationalRetrievalQAChainInput) => {
           const formattedChatHistory = formatChatHistory(input.chat_history);
-          if (debug) console.log("Formatted Chat History: ", formattedChatHistory);
+          if (debug) logInfo("Formatted Chat History: ", formattedChatHistory);
           return formattedChatHistory;
         },
       },
@@ -183,7 +177,7 @@ Question: {question}
       (output) => {
         const thinkTagsCleaned = removeThinkTags(output);
         const cleanedOutput = removeErrorTags(thinkTagsCleaned);
-        if (debug) console.log("Standalone Question: ", cleanedOutput);
+        if (debug) logInfo("Standalone Question: ", cleanedOutput);
         return cleanedOutput;
       },
     ]);

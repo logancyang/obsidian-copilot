@@ -1,4 +1,4 @@
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { logInfo } from "@/logger";
 import { ChatManager } from "@/core/ChatManager";
 import { ChatMessage, MessageContext } from "@/types/message";

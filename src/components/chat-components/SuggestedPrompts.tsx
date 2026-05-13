@@ -1,5 +1,5 @@
 import { useChainType } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { VAULT_VECTOR_STORE_STRATEGY } from "@/constants";

@@ -1,5 +1,5 @@
 import { getChainType } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { App, MarkdownView, Platform, TAbstractFile, TFile } from "obsidian";

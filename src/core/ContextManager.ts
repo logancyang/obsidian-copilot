@@ -1,5 +1,5 @@
 import { getSelectedTextContexts } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { processPrompt } from "@/commands/customCommandUtils";
 import { LOADING_MESSAGES } from "@/constants";
 import { PromptContextEngine } from "@/context/PromptContextEngine";

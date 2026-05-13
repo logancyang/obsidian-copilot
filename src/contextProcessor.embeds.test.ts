@@ -8,7 +8,7 @@ jest.mock("@/chainFactory", () => ({
 
 import { ContextProcessor } from "@/contextProcessor";
 import { EMBEDDED_NOTE_TAG } from "@/constants";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { TFile, Vault } from "obsidian";
 
 type FileCacheMap = Record<string, any>;

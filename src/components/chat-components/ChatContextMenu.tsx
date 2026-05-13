@@ -13,7 +13,7 @@ import {
   FaviconOrGlobe,
 } from "@/components/chat-components/ContextBadges";
 import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { Separator } from "@/components/ui/separator";
 import { useChainType, useIndexingProgress } from "@/aiParams";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";

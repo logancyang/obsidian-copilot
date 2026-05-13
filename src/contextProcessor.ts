@@ -1,5 +1,5 @@
 import { getSelectedTextContexts } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { RESTRICTION_MESSAGES } from "@/constants";
 import { logWarn, logInfo, logError } from "@/logger";
 import { escapeXml } from "@/LLMProviders/chainRunner/utils/xmlParsing";

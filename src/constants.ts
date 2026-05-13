@@ -1,7 +1,7 @@
 import { CustomModel } from "@/aiParams";
 import { type CopilotSettings } from "@/settings/model";
 import { v4 as uuidv4 } from "uuid";
-import { ChainType } from "./chainFactory";
+import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";

@@ -1,6 +1,6 @@
 import { App, FuzzySuggestModal, TFile } from "obsidian";
 import { isAllowedFileForChainContext } from "@/utils";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 
 export abstract class BaseNoteModal<T> extends FuzzySuggestModal<T> {
   protected activeNote: TFile | null;

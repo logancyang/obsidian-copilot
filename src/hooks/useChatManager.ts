@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { logError } from "@/logger";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { ChatUIState } from "@/state/ChatUIState";
 

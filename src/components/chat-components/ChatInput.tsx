@@ -6,7 +6,7 @@ import {
   useModelKey,
   useProjectLoading,
 } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";

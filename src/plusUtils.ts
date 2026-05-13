@@ -1,5 +1,5 @@
 import { setChainType, setModelKey } from "@/aiParams";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredModal";
 import {
   ChatModelProviders,

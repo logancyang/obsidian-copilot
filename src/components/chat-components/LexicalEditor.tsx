@@ -35,7 +35,7 @@ import { useChatInput } from "@/context/ChatInputContext";
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { ActiveFileProvider } from "./context/ActiveFileContext";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { useSettingsValue } from "@/settings/model";
 
 interface LexicalEditorProps {

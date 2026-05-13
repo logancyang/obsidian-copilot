@@ -67,7 +67,7 @@ jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { mockTFile } from "@/__tests__/mockObsidian";

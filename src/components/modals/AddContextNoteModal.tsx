@@ -1,6 +1,6 @@
 import { App, FuzzyMatch, TFile, Notice } from "obsidian";
 import { BaseNoteModal } from "./BaseNoteModal";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { isAllowedFileForChainContext } from "@/utils";
 import { RESTRICTION_MESSAGES } from "@/constants";
 

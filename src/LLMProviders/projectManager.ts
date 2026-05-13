@@ -11,7 +11,7 @@ import {
   subscribeToProjectChange,
 } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import CopilotView from "@/components/CopilotView";
 import { CHAT_VIEWTYPE, VAULT_VECTOR_STORE_STRATEGY } from "@/constants";
 import { logError, logInfo, logWarn } from "@/logger";

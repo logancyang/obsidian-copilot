@@ -1,4 +1,4 @@
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { useChainType, useProjectLoading, useProjectContextLoad } from "@/aiParams";
 
 /**

@@ -4,7 +4,7 @@ import {
   getSystemPrompt,
   getSystemPromptWithMemory,
 } from "@/system-prompts/systemPromptBuilder";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { getChainType, getCurrentProject } from "@/aiParams";
 import { logError, logInfo, logWarn } from "@/logger";
 import { ChatMessage, MessageContext, WebTabContext } from "@/types/message";

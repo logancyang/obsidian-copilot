@@ -190,12 +190,9 @@ export default [
   },
 
   // logger.ts is the central logging utility and must call console.* directly.
-  // chainFactory.ts is deprecated and sits in a circular import with logger
-  // (constants → chainFactory → logger → settings → constants), so it can't
-  // pull in logger without breaking initialization.
   // scripts/** are CLI tools that print to stdout.
   {
-    files: ["src/logger.ts", "src/chainFactory.ts", "scripts/**"],
+    files: ["src/logger.ts", "scripts/**"],
     rules: {
       "obsidianmd/rule-custom-message": "off",
     },

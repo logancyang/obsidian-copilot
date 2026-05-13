@@ -1,6 +1,6 @@
 import { getCurrentProject, setCurrentProject, setProjectLoading, useChainType } from "@/aiParams";
 import { ProjectContextCache } from "@/cache/projectContextCache";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";

@@ -8,7 +8,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChainType } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import { cn } from "@/lib/utils";
 import { updateSetting } from "@/settings/model";
 import { isPlusChain } from "@/utils";

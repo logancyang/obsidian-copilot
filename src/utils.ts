@@ -1,4 +1,5 @@
-import { ChainType, Document } from "@/chainFactory";
+import { Document } from "@/chainFactory";
+import { ChainType } from "@/chainType";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
   ChatModelProviders,
