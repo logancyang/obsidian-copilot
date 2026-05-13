@@ -1,4 +1,16 @@
-import { App, TFile, TFolder } from "obsidian";
+import { App, TAbstractFile, TFile, TFolder } from "obsidian";
+
+/**
+ * Move a file or folder to the user's configured trash via FileManager.trashFile (Obsidian 1.4+).
+ * Respects the user's deletion preference (system trash / vault .trash / permanent).
+ * Cast is needed because the bundled `obsidian.d.ts` doesn't yet expose this method.
+ */
+export async function trashFile(app: App, file: TAbstractFile): Promise<void> {
+  const fileManager = app.fileManager as unknown as {
+    trashFile(f: TAbstractFile): Promise<void>;
+  };
+  await fileManager.trashFile(file);
+}
 
 /**
  * Resolve a file path to a TFile, with adapter fallback for hidden directories.
@@ -127,7 +139,8 @@ export async function readFrontmatterViaAdapter(
 async function createSyntheticTFile(app: App, filePath: string): Promise<TFile> {
   const stat = await app.vault.adapter.stat(filePath);
   const name = filePath.split("/").pop() ?? "";
-  return {
+  const synthetic: TFile = Object.create(TFile.prototype);
+  Object.assign(synthetic, {
     path: filePath,
     name,
     basename: name.replace(/\.md$/, ""),
@@ -135,5 +148,6 @@ async function createSyntheticTFile(app: App, filePath: string): Promise<TFile> 
     stat: stat ?? { ctime: Date.now(), mtime: Date.now(), size: 0 },
     vault: app.vault,
     parent: null,
-  } as unknown as TFile;
+  });
+  return synthetic;
 }

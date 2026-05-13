@@ -1243,7 +1243,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     const systemPrompts: string[] = [];
 
     messages.forEach((message) => {
-      const messageType = message._getType();
+      const messageType = message.getType();
 
       // Handle system messages (always text-only)
       if (messageType === "system") {

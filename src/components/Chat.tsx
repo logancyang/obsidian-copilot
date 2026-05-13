@@ -560,7 +560,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
   const handleAddProject = useCallback(
     async (project: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(plugin.app.vault);
+      const manager = ProjectFileManager.getInstance(plugin.app);
       await manager.createProject(project);
       new Notice(`${project.name} added successfully`);
 
@@ -572,12 +572,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         void reloadCurrentProject();
       }
     },
-    [plugin.app.vault]
+    [plugin.app]
   );
 
   const handleEditProject = useCallback(
     async (originP: ProjectConfig, updateP: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(plugin.app.vault);
+      const manager = ProjectFileManager.getInstance(plugin.app);
       await manager.updateProject(originP.id, updateP);
       new Notice(`${originP.name} updated successfully`);
       // Reason: no explicit reload needed here — ProjectManager's project-record subscriber
@@ -585,7 +585,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       // setCurrentProject + loadProjectContext + createChainWithNewModel.
       // Doing it here too would duplicate expensive work (URL fetches, chain recreation).
     },
-    [plugin.app.vault]
+    [plugin.app]
   );
 
   const handleRemoveSelectedText = useCallback(

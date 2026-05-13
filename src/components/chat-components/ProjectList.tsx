@@ -302,7 +302,7 @@ export const ProjectList = memo(
     };
 
     const handleDeleteProject = async (project: ProjectConfig) => {
-      const manager = ProjectFileManager.getInstance(app.vault);
+      const manager = ProjectFileManager.getInstance(app);
       try {
         await manager.deleteProject(project.id);
         // Reason: only clear UI selection — don't call setCurrentProject(null) here

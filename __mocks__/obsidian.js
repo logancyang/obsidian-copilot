@@ -104,4 +104,7 @@ global.app = {
     getFirstLinkpathDest: jest.fn().mockReturnValue(null),
     getFileCache: jest.fn().mockReturnValue(null),
   },
+  fileManager: {
+    trashFile: jest.fn().mockResolvedValue(undefined),
+  },
 };

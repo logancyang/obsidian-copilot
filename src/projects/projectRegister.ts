@@ -22,7 +22,7 @@ import { loadAllProjects } from "@/projects/projectUtils";
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import debounce from "lodash.debounce";
-import { Notice, TAbstractFile, Vault } from "obsidian";
+import { App, Notice, TAbstractFile, Vault } from "obsidian";
 
 /**
  * Project Register: manages vault event listeners and cache synchronization.
@@ -42,9 +42,9 @@ export class ProjectRegister {
   /** Per-file debounced modify handlers to avoid cross-file debounce collisions. */
   private fileModifyDebouncers = new Map<string, ReturnType<typeof debounce>>();
 
-  constructor(vault: Vault) {
-    this.vault = vault;
-    this.manager = ProjectFileManager.getInstance(vault);
+  constructor(app: App) {
+    this.vault = app.vault;
+    this.manager = ProjectFileManager.getInstance(app);
   }
 
   /**
