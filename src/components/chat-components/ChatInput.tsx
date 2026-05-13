@@ -7,7 +7,6 @@ import {
   useProjectLoading,
 } from "@/aiParams";
 import { ChainType } from "@/chainFactory";
-import { AddImageModal } from "@/components/modals/AddImageModal";
 import { Button } from "@/components/ui/button";
 import { ModelSelector } from "@/components/ui/ModelSelector";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -855,8 +854,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
                       variant="ghost2"
                       size="fit"
                       className="tw-text-muted hover:tw-text-accent"
-                      onClick={() => {
-                        new AddImageModal(app, onAddImage).open();
+                      onClick={(e) => {
+                        const input = e.currentTarget.doc.createElement("input");
+                        input.type = "file";
+                        input.accept = "image/*";
+                        input.multiple = true;
+                        input.addEventListener(
+                          "change",
+                          () => onAddImage(Array.from(input.files || [])),
+                          { once: true }
+                        );
+                        input.click();
                       }}
                     >
                       <Image className="tw-size-4" />
