@@ -82,20 +82,29 @@ export default [
       // Disabled here because the codebase intentionally uses `any` / dynamic typing
       // around Obsidian's untyped APIs and LangChain message shapes — flipping these
       // on would require refactoring thousands of call sites with no functional gain.
-      "@typescript-eslint/no-unsafe-member-access": "off",
-      "@typescript-eslint/no-unsafe-assignment": "off",
-      "@typescript-eslint/no-unsafe-call": "off",
-      "@typescript-eslint/no-unsafe-argument": "off",
-      "@typescript-eslint/no-unsafe-return": "off",
-      "@typescript-eslint/no-unsafe-enum-comparison": "off",
-      "@typescript-eslint/no-base-to-string": "off",
-      "@typescript-eslint/no-redundant-type-constituents": "off",
-      "@typescript-eslint/restrict-template-expressions": "off",
-      "@typescript-eslint/unbound-method": "off",
-      "@typescript-eslint/no-misused-promises": "off",
-      "@typescript-eslint/no-floating-promises": "off",
-      "@typescript-eslint/no-unnecessary-type-assertion": "off",
-      "@typescript-eslint/await-thenable": "off",
+      //
+      // Violation counts (src/**/*.{ts,tsx}) are noted inline. Rules with low counts
+      // are candidates to enable in small follow-up PRs.
+
+      // --- Heavy: any-flow through Obsidian/LangChain APIs ---
+      "@typescript-eslint/no-unsafe-member-access": "off", // 2040 violations
+      "@typescript-eslint/no-unsafe-assignment": "off", // 879 violations
+      "@typescript-eslint/no-unsafe-call": "off", // 679 violations
+      "@typescript-eslint/no-unsafe-argument": "off", // 368 violations
+      "@typescript-eslint/no-unsafe-return": "off", // 187 violations
+
+      // --- Medium: promise / method ergonomics ---
+      "@typescript-eslint/unbound-method": "off", // 68 violations
+      "@typescript-eslint/no-misused-promises": "off", // 46 violations
+      "@typescript-eslint/no-unnecessary-type-assertion": "off", // 40 violations
+      "@typescript-eslint/no-floating-promises": "off", // 39 violations
+      "@typescript-eslint/await-thenable": "off", // 20 violations
+
+      // --- Quick wins: small enough to fix and enable in a single PR ---
+      "@typescript-eslint/no-unsafe-enum-comparison": "off", // 11 violations
+      "@typescript-eslint/no-base-to-string": "off", // 7 violations
+      "@typescript-eslint/no-redundant-type-constituents": "off", // 5 violations
+      "@typescript-eslint/restrict-template-expressions": "off", // 1 violation
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
 
