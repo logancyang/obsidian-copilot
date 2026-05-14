@@ -22,6 +22,7 @@ export function useAtMentionSearch(
   mode: "category" | "search",
   selectedCategory: AtMentionCategory | undefined,
   isCopilotPlus: boolean,
+  showTools: boolean,
   availableCategoryOptions: CategoryOption[],
   currentActiveFile: TFile | null = null
 ): (CategoryOption | AtMentionOption)[] {
@@ -59,7 +60,7 @@ export function useAtMentionSearch(
 
   const toolItems: AtMentionOption[] = useMemo(
     () =>
-      isCopilotPlus
+      showTools
         ? AVAILABLE_TOOLS.map((tool) => ({
             key: `tool-${tool}`,
             title: tool,
@@ -70,7 +71,7 @@ export function useAtMentionSearch(
             icon: React.createElement(Wrench, { className: "tw-size-4" }),
           }))
         : [],
-    [isCopilotPlus]
+    [showTools]
   );
 
   const folderItems: AtMentionOption[] = useMemo(

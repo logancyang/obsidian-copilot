@@ -196,6 +196,23 @@ export default [
     },
   },
 
+  // Agent Mode: backends spawn subprocesses (ACP) and the in-process Claude
+  // SDK uses node:async_hooks. The plugin runs in Electron renderer where
+  // these modules are available; the desktop-only Agent Mode is also gated by
+  // `Platform.isMobile` at runtime in main.ts.
+  // detectBinary / rendererEventsShim are sibling utilities pulled in by
+  // agent-mode wiring and share the same Electron-renderer assumptions.
+  {
+    files: [
+      "src/agentMode/**",
+      "src/utils/detectBinary.ts",
+      "src/utils/rendererEventsShim.ts",
+    ],
+    rules: {
+      "import/no-nodejs-modules": "off",
+    },
+  },
+
   // TypeScript-specific overrides (the @typescript-eslint plugin is registered
   // by obsidianmd's recommended config only for .ts/.tsx files).
   {
@@ -227,6 +244,20 @@ export default [
     },
   },
 
+  // Agent Mode tests use heavy `any` mocking for backend / SDK / ACP wire
+  // types whose real shapes are vendor-controlled and inconvenient to model
+  // in test scaffolding. Loosen the test-only unsafe rules for the
+  // agent-mode subtree only; production code stays enforced. Placed after the
+  // general TS block so it actually overrides.
+  {
+    files: ["src/agentMode/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+    },
+  },
+
   // Non-TS files aren't in tsconfig.json — disable type-aware rules that
   // obsidianmd's recommended config enables globally. Most typed obsidianmd
   // rules are already gated to **/*.ts(x); only no-plugin-as-component leaks
@@ -249,7 +280,9 @@ export default [
         "error",
         {
           presets: ["native", "microutilities", "preferred"],
-          allowed: [],
+          // dotenv is used only by integration tests to load .env.test;
+          // the native --env-file flag doesn't work in jest.
+          allowed: ["dotenv"],
         },
       ],
     },

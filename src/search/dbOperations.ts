@@ -372,7 +372,7 @@ export class DBOperations {
       tags: "string[]",
       extension: "string",
       nchars: "number",
-    };
+    } as const;
   }
 
   async upsert(docToSave: OramaDocument): Promise<unknown> {

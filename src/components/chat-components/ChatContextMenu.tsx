@@ -37,7 +37,10 @@ interface ChatContextMenuProps {
   onRemoveContext: (category: string, data: string) => void;
   showProgressCard: () => void;
   showIndexingCard?: () => void;
-  onTypeaheadSelect: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
+  onTypeaheadSelect: (
+    category: string,
+    data: TFile | string | TFolder | WebTabContext | null
+  ) => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 }
 

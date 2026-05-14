@@ -137,15 +137,35 @@ export const useChatScrolling = ({
     scrollToBottom("instant");
   }, [scrollToBottom]);
 
-  // Scroll to bottom only when user messages are added (not AI messages)
+  // Scroll only when a new user message is appended. Tracks the latest
+  // visible user-message id rather than the trailing element's sender so the
+  // scroll fires even when an AI placeholder is added in the same render
+  // (e.g. Agent Mode appends user + assistant placeholder in one notify).
+  const lastSeenUserMessageIdRef = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (chatHistory.length > 0) {
-      const lastMessage = chatHistory[chatHistory.length - 1];
-      if (lastMessage && lastMessage.sender === USER_SENDER) {
-        scrollToBottom();
+    let latestUserMessage: ChatMessage | undefined;
+    for (let i = chatHistory.length - 1; i >= 0; i--) {
+      const m = chatHistory[i];
+      if (m.isVisible && m.sender === USER_SENDER) {
+        latestUserMessage = m;
+        break;
       }
     }
-  }, [chatHistory.length, chatHistory, scrollToBottom]);
+    const latestId = latestUserMessage
+      ? `${latestUserMessage.id ?? latestUserMessage.timestamp?.epoch ?? ""}`
+      : undefined;
+
+    // First render: prime the ref so the on-mount instant scroll isn't
+    // immediately followed by a smooth scroll.
+    if (lastSeenUserMessageIdRef.current === undefined) {
+      lastSeenUserMessageIdRef.current = latestId;
+      return;
+    }
+    if (latestId && latestId !== lastSeenUserMessageIdRef.current) {
+      lastSeenUserMessageIdRef.current = latestId;
+      scrollToBottom();
+    }
+  }, [chatHistory, scrollToBottom]);
 
   return {
     containerMinHeight,

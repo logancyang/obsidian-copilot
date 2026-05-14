@@ -19,7 +19,7 @@ interface ChatControlsProps {
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 
   // Unified handlers
-  onAddToContext: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
+  onAddToContext: (category: string, data: TFile | string | TFolder | WebTabContext | null) => void;
   onRemoveFromContext: (category: string, data: string) => void;
 }
 
@@ -46,7 +46,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
 
   const handleTypeaheadSelect = (
     category: string,
-    data: TFile | string | TFolder | WebTabContext
+    data: TFile | string | TFolder | WebTabContext | null
   ) => {
     // Delegate to unified handler
     onAddToContext(category, data);

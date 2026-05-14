@@ -572,6 +572,10 @@ The following items are intentionally deferred from MVP and should be revisited 
 
 - Decide vault-relative only skills folders vs external/absolute path support.
 
+9. Advanced UI polish (end-of-project nits)
+
+- Improve the advanced-section UI in agent mode settings. The current button styling looks rough; revisit visual treatment, spacing, and affordance once functionality is locked in. Bundle with other end-of-project polish passes.
+
 ## 14. Acceptance Criteria
 
 - Agent mode can run Claude Code, Codex, OpenCode.

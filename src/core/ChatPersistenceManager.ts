@@ -15,7 +15,9 @@ import {
   truncateToByteLimit,
 } from "@/utils";
 import {
+  isFileAlreadyExistsError,
   isInVaultCache,
+  isNameTooLongError,
   listMarkdownFiles,
   patchFrontmatter,
   readFrontmatterViaAdapter,
@@ -138,7 +140,7 @@ export class ChatPersistenceManager {
           new Notice(`Chat saved as note: ${preferredFileName}`);
           logInfo(`[ChatPersistenceManager] Created new chat file: ${preferredFileName}`);
         } catch (error) {
-          if (this.isFileAlreadyExistsError(error)) {
+          if (isFileAlreadyExistsError(error)) {
             const conflictFile = this.app.vault.getAbstractFileByPath(preferredFileName);
             if (conflictFile && conflictFile instanceof TFile) {
               // Read existing frontmatter to preserve lastAccessedAt and topic
@@ -196,7 +198,7 @@ export class ChatPersistenceManager {
                 );
               }
             }
-          } else if (this.isNameTooLongError(error)) {
+          } else if (isNameTooLongError(error)) {
             // Single fallback: minimal guaranteed-to-work filename with project prefix
             const fallbackProject = getCurrentProject();
             const filePrefix = fallbackProject
@@ -213,7 +215,7 @@ export class ChatPersistenceManager {
                 `[ChatPersistenceManager] Used minimal filename due to length constraints: ${fallbackName}`
               );
             } catch (fallbackError) {
-              if (this.isFileAlreadyExistsError(fallbackError)) {
+              if (isFileAlreadyExistsError(fallbackError)) {
                 const conflictFile = this.app.vault.getAbstractFileByPath(fallbackName);
                 if (conflictFile && conflictFile instanceof TFile) {
                   // Read existing frontmatter to preserve lastAccessedAt

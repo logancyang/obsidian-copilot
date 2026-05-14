@@ -22,7 +22,7 @@ function hasWeakTyping(schema: z.ZodType): boolean {
   }
 
   if (schema instanceof z.ZodArray) {
-    return hasWeakTyping(schema._def.type as z.ZodType);
+    return hasWeakTyping(schema._def.element as z.ZodType);
   }
 
   if (
@@ -186,11 +186,10 @@ describe("All Tools Validation", () => {
 
       // Check that descriptions are accessible
       const shape = wellDocumentedSchema.shape;
-      type ZodWithDef = { _def: { description: string } };
-      expect((shape.query as unknown as ZodWithDef)._def.description).toBe(
+      expect((shape.query as unknown as { description: string }).description).toBe(
         "The search query to execute"
       );
-      expect((shape.limit as unknown as ZodWithDef)._def.description).toBe(
+      expect((shape.limit as unknown as { description: string }).description).toBe(
         "Maximum number of results to return"
       );
     });
