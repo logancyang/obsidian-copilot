@@ -131,11 +131,6 @@ export function MenuCommandModal({
   // Dynamic minHeight: compact when ContentArea is hidden, normal when shown
   const dynamicMinHeight = showContentArea ? MODAL_MIN_HEIGHT_EXPANDED : MODAL_MIN_HEIGHT_COMPACT;
 
-  // Quick Command mode renders an extra "Note" context checkbox in the footer,
-  // so the default 500px causes the action buttons to overflow with their
-  // shortcut-hint glyphs. Widen the dialog in that mode.
-  const modalWidth = hideContentAreaOnIdle ? "min(620px, 92vw)" : undefined;
-
   return (
     <DraggableModal
       open={open}
@@ -144,7 +139,7 @@ export function MenuCommandModal({
       anchorBottom={anchorBottom}
       resizable={resizable}
       minHeight={resizable ? dynamicMinHeight : undefined}
-      width={modalWidth}
+      width="min(620px, 92vw)"
       closeOnEscapeFromOutside
     >
       <div onKeyDown={handleKeyDown} className="tw-flex tw-min-h-0 tw-flex-1 tw-flex-col">
