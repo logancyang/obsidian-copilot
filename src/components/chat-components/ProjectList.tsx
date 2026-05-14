@@ -216,21 +216,22 @@ export const ProjectList = memo(
     // Safety net: if the selected project disappears from the list (delete/move/duplicate-id),
     // clear local UI selection. Don't call setCurrentProject(null) here — ProjectManager's
     // records subscriber handles the atom update with save-first ordering via switchProject(null).
-    // effectiveSelectedProject is what the UI trusts; the raw `selectedProject` state remains
-    // for the user's actual selection action.
-    const effectiveSelectedProject =
-      selectedProject && projects.some((p) => p.id === selectedProject.id) ? selectedProject : null;
-    const selectedProjectMissing = selectedProject !== null && effectiveSelectedProject === null;
-    if (selectedProjectMissing) {
-      setSelectedProject(null);
-      setShowChatInput(false);
-      setIsOpen(true);
-    }
+    // Consolidated into a single effect so the local resets and the parent showChatUI(false)
+    // land in the same committed transition. Splitting them caused render-phase setState to
+    // flip the "missing" flag back to false before any effect observed the transition,
+    // leaving the chat UI open with no project selected.
     useEffect(() => {
-      if (selectedProjectMissing) {
-        showChatUI(false);
-      }
-    }, [selectedProjectMissing, showChatUI]);
+      if (!selectedProject) return;
+      const stillExists = projects.some((p) => p.id === selectedProject.id);
+      if (stillExists) return;
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      setSelectedProject(null);
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      setShowChatInput(false);
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
+      setIsOpen(true);
+      showChatUI(false);
+    }, [projects, selectedProject, showChatUI]);
 
     // Get the project usage manager for subscription
     const projectUsageTimestampsManager =
