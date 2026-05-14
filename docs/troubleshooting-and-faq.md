@@ -189,7 +189,7 @@ If your settings get into a bad state, you can reset:
 1. Go to **Settings → Copilot** → find the reset option
 2. Or delete the `data.json` file from the plugin folder: `.obsidian/plugins/copilot/data.json`
 
-⚠️ Resetting will delete all your settings including API keys. Back them up first.
+⚠️ Resetting clears all your settings. API keys kept in `data.json` (standard storage) are removed, but keys stored in the Obsidian Keychain are **not** — to erase those, use **Settings → Copilot → Advanced → API Key Storage → Delete All Keys**. Back up your keys first.
 
 ### API Key Storage
 

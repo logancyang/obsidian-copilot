@@ -304,6 +304,15 @@ export function getSettings(): Readonly<CopilotSettings> {
 
 /**
  * Resets the settings to the default values.
+ *
+ * DESIGN NOTE — does NOT clear secrets from the Obsidian Keychain. Reset only
+ * rewrites `data.json` to defaults; a keychain-only vault keeps its OS keychain
+ * entries. "Delete All Keys" (Advanced Settings → API Key Storage, backed by
+ * `KeychainService.forgetAllSecrets`) is the dedicated path for erasing keychain
+ * secrets. Wiring that async transaction into this synchronous reset would pull
+ * the keychain service and its callbacks through `SettingsMainV2`, and is
+ * intentionally left out of the first-stage migration.
+ * If a future review flags this again, point them at this note.
  */
 export function resetSettings(): void {
   const defaultSettingsWithBuiltIns = {
