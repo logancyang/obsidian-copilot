@@ -64,6 +64,7 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
         <div className="tw-flex tw-flex-col tw-gap-1">
           <WorkedForBlock research={research} durationMs={turnDurationMs} app={app} />
           {final.map((p, i) => (
+            // eslint-disable-next-line @eslint-react/no-array-index-key -- text parts are append-only and may contain duplicate text
             <AgentMarkdownText key={`final-${i}`} text={p.text} app={app} />
           ))}
         </div>
@@ -197,7 +198,8 @@ const PlanPill: React.FC<PlanPillProps> = ({ entries }) => (
     <p className="tw-mb-1 tw-text-xs tw-text-muted">Plan</p>
     <ul className="tw-flex tw-flex-col tw-gap-0.5 tw-text-sm">
       {entries.map((e, i) => (
-        <li key={i} className="tw-flex tw-items-start tw-gap-2">
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- plan entries are positional and may share content
+        <li key={`plan-${i}`} className="tw-flex tw-items-start tw-gap-2">
           <span aria-hidden="true">{planEntryIcon(e.status)}</span>
           <span className={planEntryClass(e.status)}>{e.content}</span>
         </li>

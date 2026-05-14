@@ -44,7 +44,9 @@ export const PlanProposalCard: React.FC<PlanProposalCardProps> = ({ plan, app, c
   // Reset transient state when the user enters a fresh plan-mode review
   // (different `plan.id`). In-place revisions keep the typed feedback.
   useEffect(() => {
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset on plan-identity change; in-place revisions deliberately keep typed feedback so a key-prop remount would lose user input
     setFeedback("");
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- reset on plan-identity change
     setBusy(false);
   }, [plan.id]);
 

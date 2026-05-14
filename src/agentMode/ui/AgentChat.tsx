@@ -135,20 +135,28 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     };
   }, []);
 
-  // Subscribe to backend updates for re-renders.
+  // Subscribe to backend updates for re-renders. The initial sync on each
+  // `backend` change is needed because the lazy useState initializers only
+  // ran for the first backend; the next backend's values must be pulled
+  // imperatively. The backend exposes plain getters that return fresh
+  // arrays/objects (e.g. getMessages()), so `useSyncExternalStore` would
+  // see a new snapshot every render and tear — keep explicit subscribe +
+  // setState.
+  /* eslint-disable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- sync snapshot with the current backend; see comment above */
   useEffect(() => {
-    setMessages(backend.getMessages());
-    setIsStarting(backend.isStarting());
-    setHasPendingPlanPermission(backend.hasPendingPlanPermission());
-    setCurrentPlan(backend.getCurrentPlan());
-    return backend.subscribe(() => {
-      if (!isMountedRef.current) return;
+    const sync = () => {
       setMessages(backend.getMessages());
       setIsStarting(backend.isStarting());
       setHasPendingPlanPermission(backend.hasPendingPlanPermission());
       setCurrentPlan(backend.getCurrentPlan());
+    };
+    sync();
+    return backend.subscribe(() => {
+      if (!isMountedRef.current) return;
+      sync();
     });
   }, [backend]);
+  /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
 
   // Register a no-op save handler so CopilotView.saveChat() doesn't break.
   // Agent Mode persistence is not yet implemented.
@@ -264,6 +272,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   useEffect(() => {
     if (loading || isStarting || queuedMessages.length === 0) return;
     const combined = combineQueuedMessages(queuedMessages);
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- queue must be drained synchronously to avoid re-triggering this effect; see block comment above
     setQueuedMessages([]);
     void runSend(combined);
   }, [loading, isStarting, queuedMessages, runSend]);

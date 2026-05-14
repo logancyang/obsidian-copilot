@@ -88,29 +88,27 @@ export function partitionSessions<T extends { internalId: string }>({
 
 /**
  * Live `(status, label, descriptor, displayLabel)` view of a session.
- * Subscribes so per-session status / label changes don't require a global
- * manager notify.
+ * Subscribes once so per-session status / label changes don't require a
+ * global manager notify and don't multiply listeners on the session.
  */
 function useSessionDisplay(session: AgentSession) {
-  const [status, setStatus] = React.useState<AgentSessionStatus>(session.getStatus());
-  const [label, setLabel] = React.useState<string | null>(session.getLabel());
-  const [needsAttention, setNeedsAttention] = React.useState<boolean>(session.getNeedsAttention());
-  React.useEffect(() => {
-    setStatus(session.getStatus());
-    setLabel(session.getLabel());
-    setNeedsAttention(session.getNeedsAttention());
-    return session.subscribe({
-      onMessagesChanged: () => {},
-      onStatusChanged: setStatus,
-      onLabelChanged: () => setLabel(session.getLabel()),
-      onNeedsAttentionChanged: setNeedsAttention,
-    });
-  }, [session]);
+  const [, setTick] = React.useState(0);
+  React.useEffect(
+    () =>
+      session.subscribe({
+        onMessagesChanged: () => {},
+        onStatusChanged: () => setTick((v) => v + 1),
+        onLabelChanged: () => setTick((v) => v + 1),
+        onNeedsAttentionChanged: () => setTick((v) => v + 1),
+      }),
+    [session]
+  );
+  const label = session.getLabel();
   const descriptor = backendRegistry[session.backendId] as BackendDescriptor | undefined;
   return {
-    status,
+    status: session.getStatus(),
     label,
-    needsAttention,
+    needsAttention: session.getNeedsAttention(),
     descriptor,
     displayLabel: label ?? descriptor?.displayName ?? "Session",
   };
@@ -139,19 +137,12 @@ export const AgentTabStrip: React.FC<Props> = ({ manager }) => {
   React.useEffect(() => {
     const strip = stripRef.current;
     if (!strip) return;
-
-    const updateWidth = () => {
+    // ResizeObserver fires once on observe() with the initial size, so no
+    // synchronous primer is needed.
+    const ro = new ResizeObserver(() => {
       const nextWidth = strip.clientWidth;
       setStripWidth((currentWidth) => (currentWidth === nextWidth ? currentWidth : nextWidth));
-    };
-    updateWidth();
-
-    if (typeof ResizeObserver === "undefined") {
-      window.addEventListener("resize", updateWidth);
-      return () => window.removeEventListener("resize", updateWidth);
-    }
-
-    const ro = new ResizeObserver(updateWidth);
+    });
     ro.observe(strip);
     return () => ro.disconnect();
   }, []);
@@ -253,40 +244,17 @@ const SessionTab: React.FC<TabProps> = ({
 }) => {
   const { status, label, needsAttention, descriptor, displayLabel } = useSessionDisplay(session);
 
-  const [draft, setDraft] = React.useState(label ?? "");
-  React.useEffect(() => {
-    if (isRenaming) setDraft(label ?? "");
-  }, [isRenaming, label]);
-
   const [menuOpen, setMenuOpen] = React.useState(false);
-  // Set when Escape fires so the unmount-triggered onBlur doesn't commit the
-  // discarded draft. Reset on next rename open.
-  const cancelledRef = React.useRef(false);
-  React.useEffect(() => {
-    if (isRenaming) cancelledRef.current = false;
-  }, [isRenaming]);
 
   if (isRenaming) {
+    // Keyed on session id so a switch to renaming a different tab remounts
+    // the input with a fresh draft seeded from that session's label.
     return (
-      <Input
-        autoFocus
-        value={draft}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          if (cancelledRef.current) return;
-          onSubmitRename(draft);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            onSubmitRename(draft);
-          } else if (e.key === "Escape") {
-            e.preventDefault();
-            cancelledRef.current = true;
-            onCancelRename();
-          }
-        }}
-        className="tw-my-1 tw-h-6 tw-w-32 tw-text-xs"
+      <RenameInput
+        key={session.internalId}
+        initialValue={label ?? ""}
+        onSubmit={onSubmitRename}
+        onCancel={onCancelRename}
       />
     );
   }
@@ -343,6 +311,45 @@ const SessionTab: React.FC<TabProps> = ({
         <DropdownMenuItem onSelect={onClose}>Close</DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+};
+
+interface RenameInputProps {
+  initialValue: string;
+  onSubmit: (label: string) => void;
+  onCancel: () => void;
+}
+
+/**
+ * Rename text-field for `SessionTab`. Owns the draft locally and is keyed
+ * by session id so each rename session starts with a fresh draft seeded
+ * from `initialValue`. Escape sets a ref so the unmount-triggered onBlur
+ * doesn't commit the discarded draft.
+ */
+const RenameInput: React.FC<RenameInputProps> = ({ initialValue, onSubmit, onCancel }) => {
+  const [draft, setDraft] = React.useState(initialValue);
+  const cancelledRef = React.useRef(false);
+  return (
+    <Input
+      autoFocus
+      value={draft}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={() => {
+        if (cancelledRef.current) return;
+        onSubmit(draft);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          onSubmit(draft);
+        } else if (e.key === "Escape") {
+          e.preventDefault();
+          cancelledRef.current = true;
+          onCancel();
+        }
+      }}
+      className="tw-my-1 tw-h-6 tw-w-32 tw-text-xs"
+    />
   );
 };
 

@@ -57,7 +57,11 @@ const PermissionContent: React.FC<ContentProps> = ({ request, onChoose }) => {
       {diffContents.length > 0 ? (
         <div className="tw-flex tw-flex-col tw-gap-2">
           {diffContents.map((d, i) => (
-            <div key={i} className="tw-rounded tw-border tw-border-border tw-p-2">
+            <div
+              // eslint-disable-next-line @eslint-react/no-array-index-key -- diff list is derived once per render from a snapshot; same path can appear multiple times
+              key={`diff-${i}-${d.path}`}
+              className="tw-rounded tw-border tw-border-border tw-p-2"
+            >
               <p className="tw-mb-1 tw-font-mono tw-text-xs tw-text-muted">{d.path}</p>
               <pre className="tw-max-h-48 tw-overflow-auto tw-whitespace-pre-wrap tw-text-xs">
                 {renderDiff(d.oldText, d.newText)}

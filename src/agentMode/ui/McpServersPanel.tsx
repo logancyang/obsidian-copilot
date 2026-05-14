@@ -238,7 +238,8 @@ const KeyValueEditor: React.FC<{
   return (
     <div className="tw-space-y-2">
       {rows.map((row, index) => (
-        <div key={index} className="tw-flex tw-items-center tw-gap-2">
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- rows lack stable ids; name may be empty/duplicate while editing
+        <div key={`row-${index}`} className="tw-flex tw-items-center tw-gap-2">
           <Input
             className="!tw-flex-1"
             placeholder={keyPlaceholder}

@@ -46,7 +46,7 @@ const AskUserQuestionContent: React.FC<ContentProps> = ({ questions, onSubmit, o
   return (
     <div className="tw-flex tw-flex-col tw-gap-4">
       {questions.map((q, idx) => (
-        <div key={idx} className="tw-flex tw-flex-col tw-gap-2">
+        <div key={q.question} className="tw-flex tw-flex-col tw-gap-2">
           {q.header && (
             <div className="tw-text-xs tw-font-semibold tw-uppercase tw-text-muted">{q.header}</div>
           )}

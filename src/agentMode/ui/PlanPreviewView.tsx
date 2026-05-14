@@ -136,6 +136,7 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
   useEffect(() => {
     const backend = state.chatBackend;
     if (!backend) return;
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- sync local snapshot with the new backend; backend exposes a getter, not a cached snapshot, so useSyncExternalStore would tear
     setCurrentPlan(backend.getCurrentPlan());
     return backend.subscribe(() => {
       setCurrentPlan(backend.getCurrentPlan());
@@ -155,6 +156,7 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
   // in-place revision changes — the user gets fresh Approve/Reject
   // buttons for the new content.
   useEffect(() => {
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect -- intentional reset on plan-identity change; the alternative (key prop remount) would also unmount the markdown renderer
     setDecided(false);
   }, [liveProposalId, liveRevision]);
 

@@ -15,6 +15,7 @@ import {
   listMarkdownFiles,
   patchFrontmatter,
   readFrontmatterViaAdapter,
+  trashFile,
 } from "@/utils/vaultAdapterUtils";
 import { TFile, type App } from "obsidian";
 import { Notice } from "obsidian";
@@ -226,8 +227,8 @@ export class AgentChatPersistenceManager {
   async deleteFile(fileId: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file) {
-      await this.app.vault.delete(file);
-      new Notice("Chat deleted.");
+      await trashFile(this.app, file);
+      new Notice("Chat moved to trash.");
       return;
     }
     if (await this.app.vault.adapter.exists(fileId)) {

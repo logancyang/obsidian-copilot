@@ -18,10 +18,8 @@ interface ReasoningBlockProps {
  */
 export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreaming }) => {
   const startedAtRef = useRef<number | null>(null);
-  // State (not ref) so the freeze triggers a re-render — without it the
-  // component renders one frame with `isStreaming=false` and a still-null
-  // completion mark, collapsing the timer to "0s" and never recovering.
-  const [frozenAt, setFrozenAt] = useState<number | null>(null);
+  const frozenAtRef = useRef<number | null>(null);
+  const prevIsStreamingRef = useRef(isStreaming);
   const [now, setNow] = useState(() => Date.now());
 
   // Initialize start timestamp on first mount when the thought has content.
@@ -31,15 +29,18 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreamin
     }
   }, [part.text]);
 
-  // Freeze elapsed time when streaming flips off; reset when it resumes.
-  useEffect(() => {
-    if (!isStreaming && frozenAt === null && startedAtRef.current !== null) {
-      setFrozenAt(Date.now());
+  // Derive the freeze timestamp during render so we don't render one frame
+  // with `isStreaming=false` and a still-null completion mark. Mutating a
+  // ref during render is safe as long as the result is deterministic for
+  // this set of inputs.
+  if (prevIsStreamingRef.current !== isStreaming) {
+    if (!isStreaming && startedAtRef.current !== null) {
+      frozenAtRef.current = Date.now();
+    } else if (isStreaming) {
+      frozenAtRef.current = null;
     }
-    if (isStreaming && frozenAt !== null) {
-      setFrozenAt(null);
-    }
-  }, [isStreaming, frozenAt]);
+    prevIsStreamingRef.current = isStreaming;
+  }
 
   // Tick the clock while streaming.
   useEffect(() => {
@@ -47,6 +48,8 @@ export const ReasoningBlock: React.FC<ReasoningBlockProps> = ({ part, isStreamin
     const id = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, [isStreaming]);
+
+  const frozenAt = frozenAtRef.current;
 
   const startedAt = startedAtRef.current ?? Date.now();
   const endedAt = frozenAt ?? (isStreaming ? now : startedAt);
