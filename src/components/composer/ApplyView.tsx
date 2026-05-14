@@ -410,7 +410,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       close(result ? "accepted" : "failed"); // Pass result
     } catch (error) {
       logError("Error applying changes:", error);
-      new Notice(`Error applying changes: ${error.message}`);
+      new Notice(
+        `Error applying changes: ${error instanceof Error ? error.message : String(error)}`
+      );
       close("failed"); // fallback, but you may want to handle this differently
     }
   };
@@ -427,7 +429,9 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       close(result ? "rejected" : "failed"); // Pass result
     } catch (error) {
       logError("Error applying changes:", error);
-      new Notice(`Error applying changes: ${error.message}`);
+      new Notice(
+        `Error applying changes: ${error instanceof Error ? error.message : String(error)}`
+      );
       close("failed");
     }
   };

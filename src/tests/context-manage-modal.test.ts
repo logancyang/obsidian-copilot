@@ -162,7 +162,17 @@ describe("Context Manage Modal Functions", () => {
     (shouldIndexFile as jest.Mock).mockReturnValue(true);
     (getFilePattern as jest.Mock).mockImplementation((file: TFile) => `[[${file.basename}]]`);
     (createPatternSettingsValue as jest.Mock).mockImplementation(
-      ({ tagPatterns = [], folderPatterns = [], extensionPatterns = [], notePatterns = [] }) => {
+      ({
+        tagPatterns = [],
+        folderPatterns = [],
+        extensionPatterns = [],
+        notePatterns = [],
+      }: {
+        tagPatterns?: string[];
+        folderPatterns?: string[];
+        extensionPatterns?: string[];
+        notePatterns?: string[];
+      }) => {
         const patterns = [...tagPatterns, ...folderPatterns, ...extensionPatterns, ...notePatterns];
         return patterns.join(",");
       }
@@ -421,9 +431,9 @@ describe("Context Manage Modal Functions", () => {
         convertGroupListToInclusions(groupList, []);
 
         expect(createPatternSettingsValue).toHaveBeenCalledWith({
-          tagPatterns: expect.arrayContaining([`#tag0`, `#tag99`]),
-          folderPatterns: expect.arrayContaining([`folder0`, `folder99`]),
-          extensionPatterns: expect.arrayContaining([`*.ext0`, `*.ext99`]),
+          tagPatterns: expect.arrayContaining([`#tag0`, `#tag99`]) as string[],
+          folderPatterns: expect.arrayContaining([`folder0`, `folder99`]) as string[],
+          extensionPatterns: expect.arrayContaining([`*.ext0`, `*.ext99`]) as string[],
           notePatterns: [],
         });
       });
@@ -464,7 +474,7 @@ describe("Context Manage Modal Functions", () => {
 
         expect(getFilePattern).toHaveBeenCalledTimes(1000);
         expect(createPatternSettingsValue).toHaveBeenCalledWith({
-          notePatterns: expect.arrayContaining(["[[file0]]", "[[file999]]"]),
+          notePatterns: expect.arrayContaining(["[[file0]]", "[[file999]]"]) as string[],
         });
       });
 
@@ -526,7 +536,7 @@ describe("Context Manage Modal Functions", () => {
         tagPatterns: [],
         folderPatterns: ["docs", "src"],
         extensionPatterns: ["*.md", "*.ts"],
-        notePatterns: expect.any(Array),
+        notePatterns: expect.any(Array) as string[],
       });
 
       expect(createPatternSettingsValue).toHaveBeenCalledWith({

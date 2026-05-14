@@ -123,7 +123,7 @@ export async function verifyAndAddModel(
 
   // Check if model already exists
   const existingModel = activeModels.find(
-    (m) => m.name === model.name && m.provider === model.provider
+    (m) => m.name === model.name && (m.provider as SettingKeyProviders) === model.provider
   );
 
   const alreadyExists = Boolean(existingModel);

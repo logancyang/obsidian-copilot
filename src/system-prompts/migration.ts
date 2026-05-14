@@ -245,7 +245,8 @@ To recover:
         ""
       ).open();
     }
-  } catch (error) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
     // On any error, try to save to unsupported folder before clearing (best-effort data preservation)
     logError("Failed to migrate legacy userSystemPrompt:", error);
 
@@ -254,7 +255,7 @@ To recover:
       const unsupportedPath = await saveFailedMigrationToUnsupported(
         vault,
         legacyPrompt,
-        error.message || String(error)
+        errorMessage
       );
 
       // Clear legacy field - data is safely in unsupported folder
@@ -286,7 +287,7 @@ To recover:
       new ConfirmModal(
         app,
         () => {},
-        `Failed to migrate system prompt: ${error.message}
+        `Failed to migrate system prompt: ${errorMessage}
 
 Unable to save to file system. Your system prompt is still in settings and will continue to work.
 

@@ -16,8 +16,8 @@ jest.mock("obsidian", () => ({
     path: string;
   },
   Modal: class Modal {
-    app: any;
-    constructor(app: any) {
+    app: unknown;
+    constructor(app: unknown) {
       this.app = app;
     }
     open() {}
@@ -48,22 +48,28 @@ const mockApp = {
   vault: {
     getAbstractFileByPath: mockGetAbstractFileByPath,
   },
-} as any;
+} as unknown as typeof window.app;
 
 // Mock getTagsFromNote utility function
-jest.mock("@/utils", () => ({
-  ...jest.requireActual("@/utils"),
-  getTagsFromNote: jest.fn(),
-}));
+jest.mock(
+  "@/utils",
+  (): Record<string, unknown> => ({
+    ...jest.requireActual("@/utils"),
+    getTagsFromNote: jest.fn(),
+  })
+);
 
 // Add mock for settings
-jest.mock("@/settings/model", () => ({
-  ...jest.requireActual("@/settings/model"),
-  getSettings: jest.fn().mockReturnValue({
-    qaInclusions: "",
-    qaExclusions: "",
-  }),
-}));
+jest.mock(
+  "@/settings/model",
+  (): Record<string, unknown> => ({
+    ...jest.requireActual("@/settings/model"),
+    getSettings: jest.fn().mockReturnValue({
+      qaInclusions: "",
+      qaExclusions: "",
+    }),
+  })
+);
 
 describe("searchUtils", () => {
   beforeAll(() => {

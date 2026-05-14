@@ -29,7 +29,7 @@ export const AdvancedSettings: React.FC = () => {
     if (!displayValue) return;
     const filePath = getPromptFilePath(displayValue);
     // Close the settings modal before opening the file
-    (app as any).setting.close();
+    (app as unknown as { setting: { close: () => void } }).setting.close();
     void app.workspace.openLinkText(filePath, "", true);
   };
 

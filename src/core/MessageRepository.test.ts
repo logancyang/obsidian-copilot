@@ -1,6 +1,6 @@
 import { MessageRepository } from "./MessageRepository";
 import { ChatMessage, MessageContext, StoredMessage } from "@/types/message";
-import { formatDateTime } from "@/utils";
+import { formatDateTime, FormattedDateTime } from "@/utils";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock dependencies
@@ -14,11 +14,12 @@ jest.mock("@/logger", () => ({
 
 describe("MessageRepository", () => {
   let messageRepo: MessageRepository;
-  let mockFormattedDateTime: any;
+  let mockFormattedDateTime: FormattedDateTime;
 
   beforeEach(() => {
     messageRepo = new MessageRepository();
     mockFormattedDateTime = {
+      fileName: "20231201_103000",
       display: "2023-12-01 10:30:00",
       epoch: 1701423000000,
     };

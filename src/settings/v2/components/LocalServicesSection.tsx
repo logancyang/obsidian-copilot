@@ -41,14 +41,14 @@ async function fetchModelsFromService(url: string, kind: LocalServiceKind): Prom
 
   if (kind === ChatModelProviders.OLLAMA) {
     const res = await requestUrl({ url: `${normalizedUrl}/api/tags`, method: "GET" });
-    const models = res.json?.models || [];
-    return models.map((m: { name: string }) => ({ id: m.name, name: m.name }));
+    const models = (res.json as { models?: Array<{ name: string }> } | undefined)?.models || [];
+    return models.map((m) => ({ id: m.name, name: m.name }));
   }
 
   // LM Studio (OpenAI-compatible)
   const res = await requestUrl({ url: `${normalizedUrl}/v1/models`, method: "GET" });
-  const data = res.json?.data || [];
-  return data.map((m: { id: string }) => ({ id: m.id, name: m.id }));
+  const data = (res.json as { data?: Array<{ id: string }> } | undefined)?.data || [];
+  return data.map((m) => ({ id: m.id, name: m.id }));
 }
 
 interface LocalServiceItemProps {
@@ -85,7 +85,7 @@ function LocalServiceItem({ service, expanded, onToggleExpand }: LocalServiceIte
   const handleAddModelClick = () => {
     onToggleExpand();
     if (!expanded && !models && !loading) {
-      fetchModels();
+      void fetchModels();
     }
   };
 

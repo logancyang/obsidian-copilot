@@ -29,11 +29,7 @@ export class ScoreNormalizer {
   /**
    * Update explanation with normalized scores
    */
-  private updateExplanation(
-    explanation: any | undefined,
-    originalScore: number,
-    normalizedScore: number
-  ): any | undefined {
+  private updateExplanation(explanation: any, originalScore: number, normalizedScore: number): any {
     if (!explanation) return undefined;
 
     return {

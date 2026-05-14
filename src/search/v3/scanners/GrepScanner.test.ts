@@ -1,9 +1,15 @@
+import { App } from "obsidian";
 import { GrepScanner } from "./GrepScanner";
+
+interface MockFile {
+  path: string;
+  content: string;
+}
 
 describe("GrepScanner", () => {
   let scanner: GrepScanner;
-  let mockApp: any;
-  let mockFiles: any[];
+  let mockApp: App;
+  let mockFiles: MockFile[];
 
   beforeEach(() => {
     // Mock file data
@@ -19,12 +25,12 @@ describe("GrepScanner", () => {
     mockApp = {
       vault: {
         getMarkdownFiles: jest.fn(() => mockFiles.map((f) => ({ path: f.path }))),
-        cachedRead: jest.fn((file) => {
+        cachedRead: jest.fn((file: { path: string }) => {
           const mockFile = mockFiles.find((f) => f.path === file.path);
           return Promise.resolve(mockFile?.content || "");
         }),
       },
-    };
+    } as unknown as App;
 
     scanner = new GrepScanner(mockApp);
   });
@@ -81,7 +87,7 @@ describe("GrepScanner", () => {
     });
 
     it("should skip files that can't be read", async () => {
-      mockApp.vault.cachedRead = jest.fn((file) => {
+      mockApp.vault.cachedRead = jest.fn((file: { path: string }) => {
         if (file.path === "note2.md") {
           return Promise.reject(new Error("File read error"));
         }
@@ -122,14 +128,20 @@ describe("GrepScanner", () => {
   describe("fileContainsAny", () => {
     it("should return true if file contains any query", async () => {
       const file = { path: "note1.md" };
-      const result = await scanner.fileContainsAny(file as any, ["python", "typescript"]);
+      const result = await scanner.fileContainsAny(
+        file as unknown as Parameters<typeof scanner.fileContainsAny>[0],
+        ["python", "typescript"]
+      );
 
       expect(result).toBe(true); // Contains "typescript"
     });
 
     it("should return false if file contains no queries", async () => {
       const file = { path: "note1.md" };
-      const result = await scanner.fileContainsAny(file as any, ["python", "machine"]);
+      const result = await scanner.fileContainsAny(
+        file as unknown as Parameters<typeof scanner.fileContainsAny>[0],
+        ["python", "machine"]
+      );
 
       expect(result).toBe(false);
     });
@@ -138,7 +150,10 @@ describe("GrepScanner", () => {
       mockApp.vault.cachedRead = jest.fn(() => Promise.reject(new Error("Read error")));
 
       const file = { path: "note1.md" };
-      const result = await scanner.fileContainsAny(file as any, ["typescript"]);
+      const result = await scanner.fileContainsAny(
+        file as unknown as Parameters<typeof scanner.fileContainsAny>[0],
+        ["typescript"]
+      );
 
       expect(result).toBe(false);
     });

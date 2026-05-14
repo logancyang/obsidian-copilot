@@ -241,16 +241,20 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
       }
     };
 
+    const handleDropEvent = (e: DragEvent) => {
+      void handleDrop(e);
+    };
+
     // Attach event listeners
     container.addEventListener("dragover", handleDragOver);
     container.addEventListener("dragleave", handleDragLeave);
-    container.addEventListener("drop", handleDrop);
+    container.addEventListener("drop", handleDropEvent);
 
     // Cleanup
     return () => {
       container.removeEventListener("dragover", handleDragOver);
       container.removeEventListener("dragleave", handleDragLeave);
-      container.removeEventListener("drop", handleDrop);
+      container.removeEventListener("drop", handleDropEvent);
     };
   }, [app, contextNotes, selectedImages, onAddImage, setContextNotes, containerRef]);
 

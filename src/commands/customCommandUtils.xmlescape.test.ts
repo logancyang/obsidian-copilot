@@ -110,7 +110,7 @@ describe("XML Escaping in processPrompt", () => {
 
     (getNotesFromPath as jest.Mock).mockReturnValue([]);
     (
-      jest.requireMock("@/utils") as { extractTemplateNoteFiles: jest.Mock }
+      jest.requireMock("@/utils") as unknown as { extractTemplateNoteFiles: jest.Mock }
     ).extractTemplateNoteFiles.mockReturnValue([mockNote]);
     (getFileContent as jest.Mock).mockResolvedValue("Content with & and < and >");
 
@@ -136,7 +136,7 @@ describe("XML Escaping in processPrompt", () => {
 
     (getNotesFromPath as jest.Mock).mockReturnValue([]);
     (
-      jest.requireMock("@/utils") as { getNotesFromTags: jest.Mock }
+      jest.requireMock("@/utils") as unknown as { getNotesFromTags: jest.Mock }
     ).getNotesFromTags.mockReturnValue([mockNote]);
     (getFileName as jest.Mock).mockReturnValue(mockNote.basename);
     (getFileContent as jest.Mock).mockResolvedValue("Content: <tag> & </tag>");

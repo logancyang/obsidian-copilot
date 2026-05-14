@@ -1,13 +1,17 @@
 import { DateTime } from "luxon";
 import { getTimeRangeMsTool } from "./TimeTools";
 
+type InvokableTool = { invoke: (args: Record<string, unknown>) => Promise<string> };
+type TimeRangeResult = { startTime: number; endTime: number; error?: string };
+
 // Helper function to call the tool and parse result
-const getTimeRangeMs = async (timeExpression: string) => {
-  const result = await (getTimeRangeMsTool.invoke as (args: unknown) => Promise<string>)({
+const getTimeRangeMs = async (timeExpression: string): Promise<TimeRangeResult | undefined> => {
+  const result = await (getTimeRangeMsTool as unknown as InvokableTool).invoke({
     timeExpression,
   });
   // The tool returns JSON string, parse it
-  const parsed = typeof result === "string" ? JSON.parse(result) : result;
+  const parsed: TimeRangeResult =
+    typeof result === "string" ? (JSON.parse(result) as TimeRangeResult) : result;
   // Return undefined if it's an error response
   if (parsed.error) return undefined;
   return parsed;

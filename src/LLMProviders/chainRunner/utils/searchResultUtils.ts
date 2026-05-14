@@ -77,7 +77,7 @@ export function formatQualitySummary(summary: QualitySummary): string {
  * @param searchResults - The raw search results from localSearch tool
  * @returns Formatted text string for LLM
  */
-export function formatSearchResultsForLLM(searchResults: any[]): string {
+export function formatSearchResultsForLLM(searchResults: unknown): string {
   if (!Array.isArray(searchResults)) {
     return "";
   }
@@ -100,7 +100,7 @@ export function formatSearchResultsForLLM(searchResults: any[]): string {
       // Safely handle mtime - check validity before converting
       let modified: string | null = null;
       if (doc.mtime) {
-        const date = new Date(doc.mtime);
+        const date = new Date(doc.mtime as string | number | Date);
         if (!isNaN(date.getTime())) {
           modified = date.toISOString();
         }
@@ -155,7 +155,7 @@ export function formatSearchResultStringForLLM(resultString: string): string {
  * @returns Sources array with explanation preserved for UI
  */
 export function extractSourcesFromSearchResults(
-  searchResults: any[]
+  searchResults: unknown
 ): { title: string; path: string; score: number; explanation?: any }[] {
   if (!Array.isArray(searchResults)) {
     return [];
@@ -389,10 +389,7 @@ export function isTimeDominantResults(docs: Array<{ source?: string }>): boolean
  * @param snippetLength - Maximum characters for the content snippet (default 300)
  * @returns Formatted XML string with `<additionalMatches>` wrapper, or empty string if no docs
  */
-export function formatMetadataOnlyDocuments(
-  docs: Array<{ title?: string; path?: string; mtime?: number | null; content?: string }>,
-  snippetLength = 300
-): string {
+export function formatMetadataOnlyDocuments(docs: unknown, snippetLength = 300): string {
   if (!Array.isArray(docs) || docs.length === 0) {
     return "";
   }
@@ -402,7 +399,7 @@ export function formatMetadataOnlyDocuments(
       const title = doc.title || "Untitled";
       const path = doc.path || "";
       const modified = toIsoString(doc.mtime);
-      const content = sanitizeContentForCitations(doc.content || "");
+      const content = sanitizeContentForCitations((doc.content as string) || "");
       const snippet = content.slice(0, snippetLength);
 
       const pathEl = path ? `\n<path>${path}</path>` : "";

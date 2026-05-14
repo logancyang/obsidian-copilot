@@ -1,5 +1,6 @@
 import { generatePromptDebugReportForAgent, resolveBasePrompt } from "./promptDebugService";
-import { PromptSection } from "./modelAdapter";
+import type ChainManager from "@/LLMProviders/chainManager";
+import { ModelAdapter, PromptSection } from "./modelAdapter";
 import { PromptDebugReport } from "./toolPromptDebugger";
 
 const createAdapter = () => ({
@@ -24,7 +25,7 @@ const createAdapter = () => ({
   constructor: { name: "TestAdapter" },
 });
 
-const createChainContext = (history: any[] = []) => {
+const createChainContext = (history: unknown[] = []): ChainManager => {
   const memory = {
     loadMemoryVariables: jest.fn().mockResolvedValue({ history }),
   };
@@ -36,7 +37,7 @@ const createChainContext = (history: any[] = []) => {
     userMemoryManager: {
       getUserMemoryPrompt: jest.fn().mockResolvedValue(null),
     },
-  } as any;
+  } as unknown as ChainManager;
 };
 
 describe("promptDebugService", () => {
@@ -46,7 +47,7 @@ describe("promptDebugService", () => {
 
     const report: PromptDebugReport = await generatePromptDebugReportForAgent({
       chainManager,
-      adapter: adapter as any,
+      adapter: adapter as unknown as ModelAdapter,
       basePrompt: "BasePrompt",
       toolDescriptions: "<tool></tool>",
       toolNames: ["localSearch"],
@@ -90,7 +91,7 @@ describe("promptDebugService", () => {
       userMemoryManager: {
         getUserMemoryPrompt: jest.fn().mockResolvedValue(memoryPrompt),
       },
-    } as any;
+    } as unknown as ChainManager;
 
     const prompt = await resolveBasePrompt(chainManager);
     expect(prompt).toContain(memoryPrompt);

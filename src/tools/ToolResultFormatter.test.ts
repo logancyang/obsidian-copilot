@@ -178,7 +178,7 @@ Just content, no path or modified date
 
     it("should handle exceptions gracefully", () => {
       // Pass null which will cause an error in parsing
-      const formatted = ToolResultFormatter.format("localSearch", null as any);
+      const formatted = ToolResultFormatter.format("localSearch", null as unknown as string);
 
       // The formatLocalSearch method converts null to string "null"
       // which doesn't match the XML pattern, so it falls back to parseSearchResults

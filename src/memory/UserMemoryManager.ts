@@ -110,7 +110,9 @@ export class UserMemoryManager {
       );
       return result;
     } catch (error) {
-      return { error: "Error saving memory: " + error.message };
+      return {
+        error: "Error saving memory: " + (error instanceof Error ? error.message : String(error)),
+      };
     }
   }
 
@@ -295,7 +297,11 @@ ${query.trim()}
       const response = await chatModel.invoke(messages_llm);
       updatedContent = response.text ?? "";
     } catch (error) {
-      return { error: "LLM call failed while updating saved memories: " + error.message };
+      return {
+        error:
+          "LLM call failed while updating saved memories: " +
+          (error instanceof Error ? error.message : String(error)),
+      };
     }
     if (updatedContent == null || updatedContent.trim() === "") {
       return { error: "Empty content returned from LLM" };
@@ -443,7 +449,7 @@ Generate a title and summary for this conversation:`;
 
       // Try to parse JSON response
       try {
-        const parsed = JSON.parse(jsonContent);
+        const parsed = JSON.parse(jsonContent) as { title?: string; summary?: string };
         return {
           title: parsed.title || "Untitled Conversation",
           summary: parsed.summary || "No summary available",

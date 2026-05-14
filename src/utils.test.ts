@@ -99,7 +99,7 @@ const mockFileMetadata = {
 const mockApp = {
   vault: new Obsidian.Vault(),
   metadataCache: mockMetadataCache,
-} as any;
+} as unknown as typeof window.app;
 
 describe("isFolderMatch", () => {
   it("should return file from the folder name 1", async () => {
@@ -151,7 +151,7 @@ describe("Vault", () => {
 describe("getNotesFromPath", () => {
   it("should return all markdown files", async () => {
     const vault = new Obsidian.Vault();
-    const files = await getNotesFromPath(vault, "/");
+    const files = getNotesFromPath(vault, "/");
     expect(files.map((f) => f.path)).toEqual([
       "test/test2/note1.md",
       "test/note2.md",
@@ -169,31 +169,31 @@ describe("getNotesFromPath", () => {
 
   it("should return filtered markdown files 1", async () => {
     const vault = new Obsidian.Vault();
-    const files = await getNotesFromPath(vault, "test2");
+    const files = getNotesFromPath(vault, "test2");
     expect(files.map((f) => f.path)).toEqual(["test/test2/note1.md", "test2/note3.md"]);
   });
 
   it("should return filtered markdown files 2", async () => {
     const vault = new Obsidian.Vault();
-    const files = await getNotesFromPath(vault, "test");
+    const files = getNotesFromPath(vault, "test");
     expect(files.map((f) => f.path)).toEqual(["test/test2/note1.md", "test/note2.md"]);
   });
 
   it("should return filtered markdown files 3", async () => {
     const vault = new Obsidian.Vault();
-    const files = await getNotesFromPath(vault, "note4.md");
+    const files = getNotesFromPath(vault, "note4.md");
     expect(files.map((f) => f.path)).toEqual(["note4.md"]);
   });
 
   it("should return filtered markdown files 4", async () => {
     const vault = new Obsidian.Vault();
-    const files = await getNotesFromPath(vault, "/test");
+    const files = getNotesFromPath(vault, "/test");
     expect(files.map((f) => f.path)).toEqual(["test/test2/note1.md", "test/note2.md"]);
   });
 
   it("should not return markdown files", async () => {
     const vault = new Obsidian.Vault();
-    const files = await getNotesFromPath(vault, "");
+    const files = getNotesFromPath(vault, "");
     expect(files).toEqual([]);
   });
 
@@ -209,7 +209,7 @@ describe("getNotesFromPath", () => {
         { path: "folder/other/note.md" },
       ]);
 
-    const files = await getNotesFromPath(vault, "folder/subfolder 1/eng");
+    const files = getNotesFromPath(vault, "folder/subfolder 1/eng");
     expect(files).toEqual([
       { path: "folder/subfolder 1/eng/1.md" },
       { path: "folder/subfolder 1/eng/2.md" },
@@ -289,7 +289,7 @@ describe("getNotesFromTags", () => {
     const tags = ["#tag1"];
     const expectedPaths = ["test/test2/note1.md", "note4.md"];
 
-    const result = await getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockVault, tags);
     const resultPaths = result.map((fileWithTags) => fileWithTags.path);
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
@@ -301,7 +301,7 @@ describe("getNotesFromTags", () => {
     const tags = ["#nonexistentTag"];
     const expected: string[] = [];
 
-    const result = await getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockVault, tags);
 
     expect(result).toEqual(expected);
   });
@@ -311,7 +311,7 @@ describe("getNotesFromTags", () => {
     const tags = ["#tag2", "#tag4"];
     const expectedPaths = ["test/test2/note1.md", "test/note2.md", "note4.md"];
 
-    const result = await getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockVault, tags);
     const resultPaths = result.map((fileWithTags) => fileWithTags.path);
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
@@ -321,14 +321,14 @@ describe("getNotesFromTags", () => {
   it("should handle both path and tags, returning files under the specified path with the specified tags", async () => {
     const mockVault = new Obsidian.Vault();
     const tags = ["#tag1"];
-    const TFileCtor = TFile as unknown as new (path: string) => TFile;
+    type TFileCtor = new (path: string) => TFile;
     const noteFiles: TFile[] = [
-      new TFileCtor("test/test2/note1.md"),
-      new TFileCtor("test/note2.md"),
+      new (TFile as unknown as TFileCtor)("test/test2/note1.md"),
+      new (TFile as unknown as TFileCtor)("test/note2.md"),
     ];
     const expectedPaths = ["test/test2/note1.md"];
 
-    const result = await getNotesFromTags(mockVault, tags, noteFiles);
+    const result = getNotesFromTags(mockVault, tags, noteFiles);
     const resultPaths = result.map((fileWithTags) => fileWithTags.path);
 
     expect(resultPaths).toEqual(expect.arrayContaining(expectedPaths));
@@ -339,7 +339,7 @@ describe("getNotesFromTags", () => {
     const mockVault = new Obsidian.Vault();
 
     const tags = ["#inlineTag1"];
-    const result = await getNotesFromTags(mockVault, tags);
+    const result = getNotesFromTags(mockVault, tags);
 
     expect(result).toEqual([]); // Should return empty since inline tags are ignored
   });

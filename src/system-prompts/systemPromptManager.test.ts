@@ -48,7 +48,7 @@ jest.mock("@/system-prompts/state", () => ({
 describe("SystemPromptManager", () => {
   let manager: SystemPromptManager;
   let mockVault: Vault;
-  let originalApp: any;
+  let originalApp: typeof window.app;
 
   beforeEach(() => {
     // Reset the singleton instance before each test
@@ -74,7 +74,7 @@ describe("SystemPromptManager", () => {
         renameFile: jest.fn(),
         trashFile: jest.fn().mockResolvedValue(undefined),
       },
-    } as any;
+    } as unknown as typeof window.app;
 
     // Initialize manager
     manager = SystemPromptManager.getInstance(mockVault);

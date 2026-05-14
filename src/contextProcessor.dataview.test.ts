@@ -16,7 +16,7 @@ window.app = {
   plugins: {
     plugins: {},
   },
-} as any;
+} as unknown as typeof window.app;
 
 describe("ContextProcessor - Dataview Integration", () => {
   let contextProcessor: ContextProcessor;

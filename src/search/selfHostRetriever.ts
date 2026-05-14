@@ -246,7 +246,7 @@ export class SelfHostRetriever extends BaseRetriever {
 
     const boostedDocs = documents.map((doc) => {
       const content = doc.pageContent.toLowerCase();
-      const title = (doc.metadata?.title || "").toLowerCase();
+      const title = ((doc.metadata?.title as string | undefined) || "").toLowerCase();
 
       // Check if any salient term appears in content or title
       const hasMatch = salientTerms.some(

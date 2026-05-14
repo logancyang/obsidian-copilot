@@ -17,7 +17,14 @@ import { TFile } from "obsidian";
  */
 export function useNoteDrag() {
   const handleDragStart = useCallback((e: React.DragEvent, file: TFile): void => {
-    const dragManager = (app as any).dragManager;
+    const dragManager = (
+      app as unknown as {
+        dragManager?: {
+          dragLink: (event: DragEvent, linkText: string) => unknown;
+          onDragStart: (event: DragEvent, data: unknown) => void;
+        };
+      }
+    ).dragManager;
     if (!dragManager) return;
 
     // Mark this drag as internal so the chat drop zone overlay doesn't appear

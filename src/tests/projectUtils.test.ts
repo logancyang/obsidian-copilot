@@ -152,10 +152,10 @@ describe("projectUtils", () => {
     });
 
     test("should handle null or undefined project array", () => {
-      const result1 = filterProjects(null as any, "query");
+      const result1 = filterProjects(null, "query");
       expect(result1).toEqual([]);
 
-      const result2 = filterProjects(undefined as any, "query");
+      const result2 = filterProjects(undefined, "query");
       expect(result2).toEqual([]);
     });
 

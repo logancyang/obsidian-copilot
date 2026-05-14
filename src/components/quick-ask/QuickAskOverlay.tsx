@@ -435,7 +435,7 @@ export class QuickAskOverlay {
 
     const getVisibleRect = (pos: number | null): AnchorRect | null => {
       if (typeof pos !== "number") return null;
-      const coords = this.options.view.coordsAtPos(pos) as AnchorRect | null;
+      const coords = this.options.view.coordsAtPos(pos);
       if (!coords) return null;
       return this.isAnchorRectVisible(coords, visibleRect) ? coords : null;
     };

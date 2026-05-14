@@ -32,7 +32,7 @@ export class LLMChainRunner extends BaseChainRunner {
       debug: false,
     });
 
-    const messages: any[] = [];
+    const messages: { role: string; content: any }[] = [];
 
     // Add system message (L1)
     const systemMessage = baseMessages.find((m) => m.role === "system");
@@ -50,7 +50,7 @@ export class LLMChainRunner extends BaseChainRunner {
       // Handle multimodal content if present
       if (userMessage.content && Array.isArray(userMessage.content)) {
         // Merge envelope text with multimodal content (images)
-        const updatedContent = userMessage.content.map((item: any) => {
+        const updatedContent = userMessage.content.map((item: { type?: string }) => {
           if (item.type === "text") {
             return { ...item, text: userMessageContent.content };
           }
@@ -127,13 +127,17 @@ export class LLMChainRunner extends BaseChainRunner {
         }
         streamer.processChunk(chunk);
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Check if the error is due to abort signal
-      if (error.name === "AbortError" || abortController.signal.aborted) {
+      const errorName = error instanceof Error ? error.name : "";
+      if (errorName === "AbortError" || abortController.signal.aborted) {
         logInfo("Stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, streamer.processErrorChunk.bind(streamer));
+        await this.handleError(
+          error,
+          streamer.processErrorChunk.bind(streamer) as (message: string) => void
+        );
       }
     }
 

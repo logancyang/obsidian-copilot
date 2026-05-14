@@ -239,6 +239,7 @@ export class HybridRetriever extends BaseRetriever {
         mtime: { between: [startTime, endTime] },
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       const timeIntervalResults = await search(db, searchParams);
 
       // Convert timeIntervalResults to Document objects
@@ -267,15 +268,16 @@ export class HybridRetriever extends BaseRetriever {
 
       // Combine and deduplicate results
       const combinedResults = [...dailyNoteResultsWithContext, ...timeIntervalDocuments];
-      const uniqueResults = Array.from(new Set(combinedResults.map((doc) => doc.metadata.id))).map(
-        (id) => combinedResults.find((doc) => doc.metadata.id === id)
-      );
+      const uniqueResults = Array.from(
+        new Set(combinedResults.map((doc): string => doc.metadata.id as string))
+      ).map((id) => combinedResults.find((doc) => doc.metadata.id === id));
 
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
 
     logInfo("Orama search params:\n", searchParams);
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     const searchResults = await search(db, searchParams);
 
     // Add null check and validation for search results

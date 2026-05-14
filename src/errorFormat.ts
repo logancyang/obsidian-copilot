@@ -1,12 +1,8 @@
 export function err2String(err: unknown, stack = false): string {
   try {
     if (err instanceof Error) {
-      const causeMsg =
-        (err as any)?.cause instanceof Error
-          ? (err as any).cause.message
-          : (err as any)?.cause
-            ? String((err as any).cause)
-            : "";
+      const cause = (err as { cause?: unknown }).cause;
+      const causeMsg = cause instanceof Error ? cause.message : cause ? String(cause as any) : "";
       const stackStr = stack && err.stack ? err.stack : "";
       const parts = [err.message];
       if (causeMsg) parts.push(`more message: ${causeMsg}`);

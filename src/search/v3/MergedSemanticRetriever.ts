@@ -155,13 +155,11 @@ export class MergedSemanticRetriever extends BaseRetriever {
    */
   private getDocumentKey(doc: Document): string {
     const metadata = doc.metadata ?? {};
-    return (
-      metadata.chunkId ||
+    return (metadata.chunkId ||
       metadata.path ||
       metadata.id ||
       metadata.title ||
-      `${doc.pageContent.slice(0, 64)}::${doc.pageContent.length}`
-    );
+      `${doc.pageContent.slice(0, 64)}::${doc.pageContent.length}`) as string;
   }
 
   /**
@@ -230,7 +228,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * @returns True if tag matches were present in the explanation
    */
   private hasTagMatch(metadata: Record<string, any>): boolean {
-    const explanation = metadata?.explanation;
+    const explanation = metadata?.explanation as { lexicalMatches?: unknown } | undefined;
     if (!explanation) {
       return false;
     }
@@ -238,6 +236,6 @@ export class MergedSemanticRetriever extends BaseRetriever {
     if (!Array.isArray(matches)) {
       return false;
     }
-    return matches.some((match: any) => match?.field === "tags");
+    return matches.some((match: { field?: string } | null) => match?.field === "tags");
   }
 }

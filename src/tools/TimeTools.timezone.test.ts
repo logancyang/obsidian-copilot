@@ -1,17 +1,34 @@
 import { DateTime } from "luxon";
 import { getCurrentTimeTool, convertTimeBetweenTimezonesTool } from "./TimeTools";
 
+interface TimeResult {
+  epoch: number;
+  isoString: string;
+  userLocaleString: string;
+  localDateString: string;
+  timezoneOffset: number;
+  timezone: string;
+  originalTime?: string;
+  convertedTime?: string;
+}
+
+interface InvokableTool {
+  invoke: (args: unknown) => Promise<unknown>;
+}
+
 // Helper to invoke tool and parse result
-const invokeGetCurrentTime = async (args: { timezoneOffset?: string }) => {
-  const result = await (getCurrentTimeTool.invoke as (args: unknown) => Promise<string>)(args);
-  return typeof result === "string" ? JSON.parse(result) : result;
+const invokeGetCurrentTime = async (args: { timezoneOffset?: string }): Promise<TimeResult> => {
+  const result = await (getCurrentTimeTool as unknown as InvokableTool).invoke(args);
+  return (typeof result === "string" ? JSON.parse(result) : result) as TimeResult;
 };
 
-const invokeConvertTime = async (args: { time: string; fromOffset: string; toOffset: string }) => {
-  const result = await (
-    convertTimeBetweenTimezonesTool.invoke as (args: unknown) => Promise<string>
-  )(args);
-  return typeof result === "string" ? JSON.parse(result) : result;
+const invokeConvertTime = async (args: {
+  time: string;
+  fromOffset: string;
+  toOffset: string;
+}): Promise<TimeResult> => {
+  const result = await (convertTimeBetweenTimezonesTool as unknown as InvokableTool).invoke(args);
+  return (typeof result === "string" ? JSON.parse(result) : result) as TimeResult;
 };
 
 describe("TimeTools Timezone Tests", () => {

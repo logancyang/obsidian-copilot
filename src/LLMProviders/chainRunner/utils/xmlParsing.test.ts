@@ -42,9 +42,9 @@ describe("escapeXml", () => {
   });
 
   it("should handle non-string inputs", () => {
-    expect(escapeXml(null as any)).toBe("");
-    expect(escapeXml(undefined as any)).toBe("");
-    expect(escapeXml(123 as any)).toBe("");
+    expect(escapeXml(null)).toBe("");
+    expect(escapeXml(undefined)).toBe("");
+    expect(escapeXml(123)).toBe("");
   });
 
   it("should escape XML entity references", () => {
@@ -90,9 +90,9 @@ describe("unescapeXml", () => {
   });
 
   it("should handle non-string inputs", () => {
-    expect(unescapeXml(null as any)).toBe("");
-    expect(unescapeXml(undefined as any)).toBe("");
-    expect(unescapeXml(123 as any)).toBe("");
+    expect(unescapeXml(null)).toBe("");
+    expect(unescapeXml(undefined)).toBe("");
+    expect(unescapeXml(123)).toBe("");
   });
 
   it("should handle double-escaped ampersand correctly", () => {

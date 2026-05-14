@@ -38,7 +38,9 @@ export function buildGitHubCopilotAuthedFetch(
         ? input
         : typeof Request !== "undefined" && input instanceof Request
           ? input.url
-          : input.toString();
+          : input instanceof URL
+            ? input.href
+            : input.url;
 
     const doRequest = async (token: string): Promise<Response> => {
       const copilotHeaders = provider.buildCopilotRequestHeaders(token);
@@ -90,7 +92,7 @@ export class GitHubCopilotResponsesModel extends ChatOpenAI {
     const { fetchImplementation, configuration, apiKey, ...rest } = fields;
 
     const provider = GitHubCopilotProvider.getInstance();
-    const baseFetch = fetchImplementation ?? (configuration?.fetch as FetchImplementation) ?? fetch;
+    const baseFetch = fetchImplementation ?? configuration?.fetch ?? fetch;
     const authedFetch = buildGitHubCopilotAuthedFetch(provider, baseFetch);
 
     super({
@@ -100,7 +102,7 @@ export class GitHubCopilotResponsesModel extends ChatOpenAI {
       streamUsage: false,
       configuration: {
         ...(configuration ?? {}),
-        baseURL: (configuration?.baseURL as string) ?? COPILOT_API_BASE,
+        baseURL: configuration?.baseURL ?? COPILOT_API_BASE,
         fetch: authedFetch,
       },
     });

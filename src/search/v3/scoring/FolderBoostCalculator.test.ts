@@ -4,16 +4,17 @@ import { FolderBoostCalculator } from "./FolderBoostCalculator";
 
 // Mock Obsidian app with vault
 function createMockApp(files: string[]): App {
-  return {
+  const app: unknown = {
     vault: {
-      getMarkdownFiles: () =>
+      getMarkdownFiles: (): Array<{ path: string; basename: string; extension: string }> =>
         files.map((path) => ({
           path,
           basename: path.split("/").pop()?.replace(".md", "") || "",
           extension: "md",
         })),
     },
-  } as any;
+  };
+  return app as App;
 }
 
 describe("FolderBoostCalculator", () => {

@@ -628,7 +628,7 @@ export class ProjectFileManager {
 
         if (isInVaultCache(app, filePath)) {
           // Vault-cached file: use processFrontMatter for safe field-level update
-          await app.fileManager.processFrontMatter(file, (frontmatter) => {
+          await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
             const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
             const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
             actualPersistedValue = Math.max(existingMs, timestampToPersist);

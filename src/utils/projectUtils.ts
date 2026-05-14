@@ -61,7 +61,7 @@ function searchInProject(
  * @returns Filtered list of projects
  */
 export function filterProjects(
-  projects: ProjectConfig[],
+  projects: ProjectConfig[] | null | undefined,
   query: string,
   options: ProjectSearchOptions = {}
 ): ProjectConfig[] {

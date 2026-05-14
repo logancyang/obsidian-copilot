@@ -648,7 +648,7 @@ export function $replaceTextRangeWithPills(
 
   if (anchorNode.getType() !== "text") return;
 
-  const textNode = anchorNode as any; // TextNode
+  const textNode = anchorNode as TextNode;
   const textContent = textNode.getTextContent();
 
   // Parse the new text for pills
