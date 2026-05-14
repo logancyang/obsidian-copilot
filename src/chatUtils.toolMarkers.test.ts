@@ -1,6 +1,7 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import { ChatMessage } from "@/types/message";
 import { updateChatMemory } from "./chatUtils";
+import type MemoryManager from "@/LLMProviders/memoryManager";
 
 jest.mock("@/logger");
 
@@ -45,7 +46,7 @@ describe("updateChatMemory with tool call markers", () => {
     ];
 
     const memoryManager: any = new MockMemoryManager();
-    await updateChatMemory(messages, memoryManager);
+    await updateChatMemory(messages, memoryManager as MemoryManager);
 
     expect(memoryManager.getMemory().saved).toHaveLength(1);
     expect(memoryManager.getMemory().saved[0].input).toBe("find my piano notes");

@@ -63,7 +63,7 @@ function createLMStudioFetch(baseFetch?: typeof window.fetch): typeof window.fet
 
 export class ChatLMStudio extends ChatOpenAI {
   constructor(fields: ChatLMStudioInput) {
-    const originalFetch = fields.configuration?.fetch;
+    const originalFetch = fields.configuration?.fetch as typeof window.fetch | undefined;
 
     super({
       ...fields,

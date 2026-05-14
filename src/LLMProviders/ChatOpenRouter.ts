@@ -158,14 +158,16 @@ export class ChatOpenRouter extends ChatOpenAI {
     const openaiMessages = this.toOpenRouterMessages(messages);
 
     const stream = (await this.openaiClient.chat.completions.create({
-      ...params,
+      ...(params as Record<string, unknown>),
       messages: openaiMessages,
       stream: true,
       stream_options: {
         ...(params.stream_options ?? {}),
         include_usage: true,
       },
-    })) as unknown as AsyncIterable<OpenRouterChatChunk>;
+    } as Parameters<
+      typeof this.openaiClient.chat.completions.create
+    >[0])) as unknown as AsyncIterable<OpenRouterChatChunk>;
 
     let usageSummary: OpenRouterUsage | undefined;
 

@@ -69,13 +69,14 @@ export class ChunkedStorage {
     }
 
     for (const doc of documents) {
-      const partitionIndex = this.assignDocumentToPartition(doc.id, numPartitions);
+      const docId = String(doc.id);
+      const partitionIndex = this.assignDocumentToPartition(docId, numPartitions);
       const partition = partitions.get(partitionIndex);
       if (!partition) {
         throw new Error(`Invalid partition index: ${partitionIndex}`);
       }
       partition.push(doc);
-      documentPartitions[doc.id] = partitionIndex;
+      documentPartitions[docId] = partitionIndex;
     }
 
     let totalDistributed = 0;
@@ -125,7 +126,9 @@ export class ChunkedStorage {
 
       // NOTE: Orama RawData docs can be either an array or an object
       const docsData = (rawData as any).docs?.docs;
-      const rawDocs = Array.isArray(docsData) ? docsData : Object.values(docsData || {});
+      const rawDocs: any[] = Array.isArray(docsData)
+        ? docsData
+        : Object.values((docsData as Record<string, unknown>) || {});
 
       if (getSettings().debug) {
         logInfo(`Starting save with ${rawDocs.length ?? 0} total documents`);
@@ -158,7 +161,10 @@ export class ChunkedStorage {
         schema: db.schema,
         lastModified: Date.now(),
         documentPartitions: Object.fromEntries(
-          rawDocs.map((doc: any) => [doc.id, this.assignDocumentToPartition(doc.id, numPartitions)])
+          rawDocs.map((doc: any) => [
+            doc.id,
+            this.assignDocumentToPartition(String(doc.id), numPartitions),
+          ])
         ),
       };
 
@@ -182,9 +188,12 @@ export class ChunkedStorage {
               embedding: {
                 size: (rawData as any).index.vectorIndexes.embedding.size,
                 vectors: Object.fromEntries(
-                  Object.entries((rawData as any).index.vectorIndexes.embedding.vectors).filter(
-                    ([id]) => docs.some((doc) => doc.id === id)
-                  )
+                  Object.entries(
+                    (rawData as any).index.vectorIndexes.embedding.vectors as Record<
+                      string,
+                      unknown
+                    >
+                  ).filter(([id]) => docs.some((doc) => doc.id === id))
                 ),
               },
             },
@@ -231,7 +240,9 @@ export class ChunkedStorage {
 
       // Try loading legacy format first
       if (await this.app.vault.adapter.exists(legacyPath)) {
-        const legacyData = JSON.parse(await this.app.vault.adapter.read(legacyPath));
+        const legacyData = JSON.parse(await this.app.vault.adapter.read(legacyPath)) as RawData & {
+          schema?: any;
+        };
         if (!legacyData?.schema) {
           throw new CustomError("Invalid legacy database format");
         }
@@ -289,7 +300,7 @@ export class ChunkedStorage {
       for (const internalId of mergedData.internalDocumentIDStore.internalIdToId) {
         // Find document in any chunk
         const doc = allChunks
-          .flatMap((chunk) => Object.values(chunk.docs.docs))
+          .flatMap((chunk) => Object.values(chunk.docs.docs as Record<string, unknown>))
           .find((doc: any) => doc.id === internalId);
 
         if (doc) {
@@ -315,11 +326,14 @@ export class ChunkedStorage {
       // Merge vectors from all chunks
       mergedData.index.vectorIndexes.embedding.vectors = Object.assign(
         {},
-        ...allChunks.map((chunk) => chunk.index?.vectorIndexes?.embedding?.vectors || {})
+        ...allChunks.map(
+          (chunk) =>
+            (chunk.index?.vectorIndexes?.embedding?.vectors as Record<string, unknown>) || {}
+        )
       );
 
       // Load merged data into database
-      load(newDb, mergedData);
+      load(newDb, mergedData as RawData);
       return newDb;
     } catch (error) {
       console.error(`Error loading database:`, error);

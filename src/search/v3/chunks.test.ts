@@ -30,7 +30,7 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { ChunkManager, ChunkOptions } from "./chunks";
 
 describe("ChunkManager", () => {
@@ -43,7 +43,7 @@ describe("ChunkManager", () => {
     mockFileCache = new Map();
     mockApp = {
       vault: {
-        getAbstractFileByPath: jest.fn((path) => {
+        getAbstractFileByPath: jest.fn((path: string) => {
           if (!path || path.startsWith("missing")) return null;
           // Return cached file to ensure consistent mtime
           if (mockFileCache.has(path)) {
@@ -51,7 +51,7 @@ describe("ChunkManager", () => {
           }
           const file = new (TFile as any)(path);
           // Ensure the file passes instanceof TFile checks
-          Object.setPrototypeOf(file, (TFile as any).prototype);
+          Object.setPrototypeOf(file, TFile.prototype);
           mockFileCache.set(path, file);
           return file;
         }),
@@ -138,7 +138,7 @@ describe("ChunkManager", () => {
       },
     };
 
-    chunkManager = new ChunkManager(mockApp);
+    chunkManager = new ChunkManager(mockApp as App);
   });
 
   afterEach(() => {
@@ -486,7 +486,7 @@ describe("ChunkManager", () => {
   describe("cache behavior", () => {
     it("should evict cache when memory limit is exceeded", async () => {
       // Mock a manager with very small cache limit
-      const smallCacheManager = new ChunkManager(mockApp);
+      const smallCacheManager = new ChunkManager(mockApp as App);
       (smallCacheManager as any).maxCacheBytes = 1000; // 1KB limit
 
       // Add multiple large documents
@@ -712,7 +712,7 @@ describe("ChunkManager", () => {
       ];
 
       for (const testCase of testCases) {
-        const manager = new ChunkManager(mockApp);
+        const manager = new ChunkManager(mockApp as App);
         const generatedId = (manager as any).generateChunkId("test.md", testCase.index);
         expect(generatedId).toBe(`test.md#${testCase.expected}`);
       }

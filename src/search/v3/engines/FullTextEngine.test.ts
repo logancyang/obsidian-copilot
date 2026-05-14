@@ -219,7 +219,7 @@ jest.mock("../chunks", () => {
   };
 });
 
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { FullTextEngine } from "./FullTextEngine";
 
 describe("FullTextEngine", () => {
@@ -340,7 +340,7 @@ describe("FullTextEngine", () => {
       },
     };
 
-    engine = new FullTextEngine(mockApp);
+    engine = new FullTextEngine(mockApp as App);
   });
 
   describe("tokenizeMixed", () => {

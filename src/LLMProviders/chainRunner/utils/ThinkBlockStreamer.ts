@@ -160,7 +160,7 @@ export class ThinkBlockStreamer {
   private handleDeepseekChunk(chunk: any) {
     // Handle standard string content
     if (typeof chunk.content === "string") {
-      this.fullResponse += stripSpecialTokens(chunk.content);
+      this.fullResponse += stripSpecialTokens(chunk.content as string);
     }
 
     // Handle deepseek reasoning/thinking content
@@ -241,7 +241,7 @@ export class ThinkBlockStreamer {
     }
 
     for (const tc of toolCallChunks) {
-      const idx = tc.index ?? 0;
+      const idx: number = (tc.index as number) ?? 0;
       const existing = this.toolCallChunks.get(idx) || { name: "", args: "" };
 
       // Accumulate data from chunk
@@ -290,7 +290,7 @@ export class ThinkBlockStreamer {
     // Route based on the actual chunk format
     if (Array.isArray(chunk.content)) {
       // Claude format with content array
-      this.handleClaudeChunk(chunk.content);
+      this.handleClaudeChunk(chunk.content as any[]);
     } else if (chunk.additional_kwargs?.reasoning_content) {
       // Deepseek format with reasoning_content
       this.handleDeepseekChunk(chunk);

@@ -238,7 +238,7 @@ async function performLexicalSearch({
 
   const bestByKey = new Map<string, any>();
   for (const d of taggedSearchResults) {
-    const key = (d.path || d.title).toLowerCase();
+    const key = ((d.path as string) || (d.title as string)).toLowerCase();
     const existing = bestByKey.get(key);
     if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
       bestByKey.set(key, d);
@@ -331,7 +331,7 @@ const semanticSearchTool = createLangChainTool({
 
     const bestByKey = new Map<string, any>();
     for (const d of formattedResults) {
-      const key = (d.path || d.title).toLowerCase();
+      const key = ((d.path as string) || (d.title as string)).toLowerCase();
       const existing = bestByKey.get(key);
       if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
         bestByKey.set(key, d);

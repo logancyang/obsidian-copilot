@@ -109,7 +109,7 @@ Done.`;
 
     it("should return non-string/non-array content unchanged", () => {
       const output = { some: "object" };
-      expect(compactAssistantOutput(output as any)).toBe(output);
+      expect(compactAssistantOutput(output as unknown as string)).toBe(output);
     });
 
     it("should handle readNote JSON with nested braces in content", () => {

@@ -40,6 +40,7 @@ import {
   sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
+  type CopilotSettings,
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
@@ -615,7 +616,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadSettings() {
-    const savedSettings = await this.loadData();
+    const savedSettings = (await this.loadData()) as CopilotSettings;
     const sanitizedSettings = sanitizeSettings(savedSettings);
     setSettings(sanitizedSettings);
   }
@@ -656,7 +657,7 @@ export default class CopilotPlugin extends Plugin {
       this.app,
       chatFiles,
       this.chatHistoryLastAccessedAtManager,
-      this.loadChatHistory.bind(this)
+      this.loadChatHistory.bind(this) as (file: TFile) => void
     ).open();
   }
 

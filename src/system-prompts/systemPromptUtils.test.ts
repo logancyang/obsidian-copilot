@@ -9,6 +9,7 @@ import {
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { TFile, TAbstractFile, normalizePath } from "obsidian";
 import * as settingsModel from "@/settings/model";
+import type { CopilotSettings } from "@/settings/model";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
 // Mock Obsidian
@@ -118,7 +119,7 @@ describe("getSystemPromptsFolder", () => {
   it("returns the system prompts folder path from settings", () => {
     jest.spyOn(settingsModel, "getSettings").mockReturnValue({
       userSystemPromptsFolder: "CustomFolder/SystemPrompts",
-    } as any);
+    } as CopilotSettings);
 
     const result = getSystemPromptsFolder();
     expect(result).toBe("CustomFolder/SystemPrompts");
@@ -127,7 +128,7 @@ describe("getSystemPromptsFolder", () => {
   it("normalizes the path", () => {
     jest.spyOn(settingsModel, "getSettings").mockReturnValue({
       userSystemPromptsFolder: "SystemPrompts",
-    } as any);
+    } as CopilotSettings);
 
     const result = getSystemPromptsFolder();
     expect(normalizePath).toHaveBeenCalled();
@@ -139,7 +140,7 @@ describe("getPromptFilePath", () => {
   beforeEach(() => {
     jest.spyOn(settingsModel, "getSettings").mockReturnValue({
       userSystemPromptsFolder: "SystemPrompts",
-    } as any);
+    } as CopilotSettings);
   });
 
   it("returns correct file path with .md extension", () => {
@@ -155,7 +156,7 @@ describe("isSystemPromptFile", () => {
   beforeEach(() => {
     jest.spyOn(settingsModel, "getSettings").mockReturnValue({
       userSystemPromptsFolder: "SystemPrompts",
-    } as any);
+    } as CopilotSettings);
   });
 
   it("returns true for valid system prompt file", () => {
@@ -225,7 +226,7 @@ describe("isSystemPromptFile", () => {
   it("works with custom userSystemPromptsFolder setting", () => {
     jest.spyOn(settingsModel, "getSettings").mockReturnValue({
       userSystemPromptsFolder: "CustomFolder/MyPrompts",
-    } as any);
+    } as CopilotSettings);
 
     const validFile = mockTFile({
       path: "CustomFolder/MyPrompts/Test.md",

@@ -1,5 +1,6 @@
 import { ProjectConfig } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
+import type { TFile } from "obsidian";
 
 // Mock dependencies
 jest.mock("obsidian", () => ({
@@ -153,7 +154,7 @@ describe("ProjectContextCache", () => {
         inclusions: "**/*.md, **/*.pdf",
         exclusions: "",
       },
-    } as any;
+    } as ProjectConfig;
   });
 
   test("should store and retrieve file content", async () => {
@@ -202,7 +203,11 @@ describe("ProjectContextCache", () => {
     await projectContextCache.getOrInitializeCache(mockProject);
 
     // First add some context
-    await projectContextCache.setFileContext(mockProject, mockPdfFile.path, "PDF content");
+    await projectContextCache.setFileContext(
+      mockProject,
+      mockPdfFile.path as string,
+      "PDF content"
+    );
 
     // Then clean it up
     await projectContextCache.cleanupProjectFileReferences(mockProject);
@@ -250,7 +255,7 @@ describe("ProjectContextCache", () => {
     const updatedCache = projectContextCache.updateProjectMarkdownFilesFromPatterns(
       mockProject,
       contextCache,
-      testFiles as any
+      testFiles as unknown as TFile[]
     );
 
     // Verify that only Markdown files were added to the cache
@@ -404,7 +409,7 @@ describe("ProjectContextCache", () => {
 
     // Check that written content contains updated values
     const writeCall = mockApp.vault.adapter.write.mock.calls[0];
-    const writtenContent = JSON.parse(writeCall[1]);
+    const writtenContent = JSON.parse(writeCall[1] as string);
     expect(writtenContent.markdownContext).toBe("Updated markdown content");
     expect(writtenContent.markdownNeedsReload).toBe(true);
   });
@@ -441,7 +446,7 @@ describe("ProjectContextCache", () => {
 
     // Check that written content contains updated values
     const writeCall = mockApp.vault.adapter.write.mock.calls[0];
-    const writtenContent = JSON.parse(writeCall[1]);
+    const writtenContent = JSON.parse(writeCall[1] as string);
     expect(writtenContent.markdownContext).toBe("Async updated content");
     expect(writtenContent.webContexts["https://example.com"]).toBe("Async web content");
   });
@@ -455,7 +460,7 @@ describe("ProjectContextCache", () => {
         inclusions: "**/*.md, **/*.pdf",
         exclusions: "",
       },
-    } as any;
+    } as ProjectConfig;
 
     // Mock cache non-existence for this isolated project
     mockApp.vault.adapter.exists.mockImplementation((path) => {
@@ -501,7 +506,7 @@ describe("ProjectContextCache", () => {
       return Promise.resolve(JSON.stringify(currentCache));
     });
     mockApp.vault.adapter.write.mockImplementation((path, content) => {
-      currentCache = JSON.parse(content);
+      currentCache = JSON.parse(content as string);
       return Promise.resolve();
     });
 
@@ -575,7 +580,7 @@ describe("ProjectContextCache", () => {
     const startTime = Date.now();
 
     mockApp.vault.adapter.write.mockImplementation((path, content) => {
-      const parsed = JSON.parse(content);
+      const parsed = JSON.parse(content as string);
       currentCache = parsed;
 
       // Track what was written and when

@@ -28,12 +28,12 @@ export interface ToolCall {
 }
 
 export interface Url4llmResponse {
-  response: any;
+  response: string;
   elapsed_time_ms: number;
 }
 
 export interface Pdf4llmResponse {
-  response: any;
+  response: string;
   elapsed_time_ms: number;
 }
 
@@ -112,7 +112,7 @@ export class BrevilabsClient {
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
     if (method === "GET") {
       // Add query parameters for GET requests
-      Object.entries(body).forEach(([key, value]) => {
+      Object.entries(body as Record<string, unknown>).forEach(([key, value]) => {
         url.searchParams.append(key, value as string);
       });
     }
@@ -132,8 +132,8 @@ export class BrevilabsClient {
     if (!response.ok) {
       try {
         const errorDetail = data.detail;
-        const error = new Error(errorDetail.reason);
-        error.name = errorDetail.error;
+        const error = new Error(errorDetail.reason as string);
+        error.name = errorDetail.error as string;
         return { data: null, error };
       } catch {
         return { data: null, error: new Error("Unknown error") };
@@ -173,8 +173,8 @@ export class BrevilabsClient {
       if (!response.ok) {
         try {
           const errorDetail = data.detail;
-          const error = new Error(errorDetail.reason);
-          error.name = errorDetail.error;
+          const error = new Error(errorDetail.reason as string);
+          error.name = errorDetail.error as string;
           return { data: null, error };
         } catch {
           return { data: null, error: new Error(`HTTP error: ${response.status}`) };

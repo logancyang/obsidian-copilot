@@ -64,11 +64,14 @@ export default class MemoryManager {
     const compactedOutput =
       typeof output === "string"
         ? compactAssistantOutput(output)
-        : { ...output, output: compactAssistantOutput(output.output) };
+        : { ...output, output: compactAssistantOutput(output.output as string | any[]) };
 
     if (this.debug) {
       logInfo("Saving to memory - Input:", input, "Output (compacted):", compactedOutput);
     }
-    await this.memory.saveContext(input, compactedOutput);
+    await this.memory.saveContext(
+      input as Parameters<typeof this.memory.saveContext>[0],
+      compactedOutput as Parameters<typeof this.memory.saveContext>[1]
+    );
   }
 }

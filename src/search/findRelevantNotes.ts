@@ -38,13 +38,14 @@ function shouldUseMiyoForRelevantNotes(): boolean {
 function getHighestScoreHits(hits: Result<InternalTypedDocument<any>>[], currentFilePath: string) {
   const hitMap = new Map<string, number>();
   for (const hit of hits) {
-    const matchingScore = hitMap.get(hit.document.path);
+    const path = hit.document.path as string;
+    const matchingScore = hitMap.get(path);
     if (matchingScore) {
       if (hit.score > matchingScore) {
-        hitMap.set(hit.document.path, hit.score);
+        hitMap.set(path, hit.score);
       }
     } else {
-      hitMap.set(hit.document.path, hit.score);
+      hitMap.set(path, hit.score);
     }
   }
   hitMap.delete(currentFilePath);

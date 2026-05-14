@@ -1,10 +1,10 @@
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { OpenAIEmbeddings, type OpenAIEmbeddingsParams } from "@langchain/openai";
 
 export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
   private customConfig: any;
 
   constructor(config: any) {
-    super(config);
+    super(config as OpenAIEmbeddingsParams);
     // Store the config for our custom methods
     this.customConfig = config;
   }

@@ -662,7 +662,7 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
   const titlesSet = new Set<string>();
   docs.forEach((doc) => {
     if (doc.metadata?.title) {
-      titlesSet.add(doc.metadata?.title);
+      titlesSet.add(doc.metadata.title as string);
     }
   });
 
@@ -1216,8 +1216,10 @@ export interface ModelInfo {
 }
 
 export function getModelInfo(model: BaseChatModel | string): ModelInfo {
-  const modelName =
-    typeof model === "string" ? model : (model as any).modelName || (model as any).model || "";
+  const modelName: string =
+    typeof model === "string"
+      ? model
+      : ((model as any).modelName as string) || ((model as any).model as string) || "";
 
   const isOSeries = isOSeriesModel(modelName);
   const isGPT5 = isGPT5Model(modelName);

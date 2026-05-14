@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import { GrepScanner } from "./GrepScanner";
 
 describe("GrepScanner", () => {
@@ -26,7 +27,7 @@ describe("GrepScanner", () => {
       },
     };
 
-    scanner = new GrepScanner(mockApp);
+    scanner = new GrepScanner(mockApp as App);
   });
 
   describe("batchCachedReadGrep", () => {
@@ -122,14 +123,20 @@ describe("GrepScanner", () => {
   describe("fileContainsAny", () => {
     it("should return true if file contains any query", async () => {
       const file = { path: "note1.md" };
-      const result = await scanner.fileContainsAny(file as any, ["python", "typescript"]);
+      const result = await scanner.fileContainsAny(
+        file as unknown as Parameters<typeof scanner.fileContainsAny>[0],
+        ["python", "typescript"]
+      );
 
       expect(result).toBe(true); // Contains "typescript"
     });
 
     it("should return false if file contains no queries", async () => {
       const file = { path: "note1.md" };
-      const result = await scanner.fileContainsAny(file as any, ["python", "machine"]);
+      const result = await scanner.fileContainsAny(
+        file as unknown as Parameters<typeof scanner.fileContainsAny>[0],
+        ["python", "machine"]
+      );
 
       expect(result).toBe(false);
     });
@@ -138,7 +145,10 @@ describe("GrepScanner", () => {
       mockApp.vault.cachedRead = jest.fn(() => Promise.reject(new Error("Read error")));
 
       const file = { path: "note1.md" };
-      const result = await scanner.fileContainsAny(file as any, ["typescript"]);
+      const result = await scanner.fileContainsAny(
+        file as unknown as Parameters<typeof scanner.fileContainsAny>[0],
+        ["typescript"]
+      );
 
       expect(result).toBe(false);
     });

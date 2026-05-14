@@ -377,13 +377,13 @@ export class DBOperations {
       try {
         // Calculate partition first
         const partition = this.chunkedStorage?.assignDocumentToPartition(
-          docToSave.id,
+          String(docToSave.id),
           getSettings().numPartitions
         );
 
         // Check if document exists
         const existingDoc = await search(db, {
-          term: docToSave.id,
+          term: String(docToSave.id),
           properties: ["id"],
           limit: 1,
         });
@@ -394,7 +394,7 @@ export class DBOperations {
 
         // Insert into the assigned partition
         try {
-          await insert(db, docToSave);
+          await insert(db, docToSave as Parameters<typeof insert>[1]);
           logInfo(
             `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
           );
@@ -578,8 +578,8 @@ export class DBOperations {
       // 1) Files that no longer exist
       // 2) Files that exist but are excluded by current settings (or internal exclusions)
       const docsToRemove = docs.filter(
-        (doc) => !filePaths.has(doc.path) || !allowedPaths.has(doc.path)
-      );
+        (doc: { path: string }) => !filePaths.has(doc.path) || !allowedPaths.has(doc.path)
+      ) as { path: string; id: string }[];
 
       if (docsToRemove.length === 0) {
         return 0;
@@ -619,7 +619,7 @@ export class DBOperations {
 
       // Use a Set to get unique file paths since multiple chunks can belong to the same file
       const uniquePaths = new Set<string>();
-      docs.forEach((doc) => {
+      docs.forEach((doc: { path: string }) => {
         uniquePaths.add(doc.path);
       });
 

@@ -159,8 +159,10 @@ export class ChatPersistenceManager {
                   `[ChatPersistenceManager] Avoided cross-project overwrite. Created: ${uniqueName}`
                 );
               } else {
-                existingTopic = conflictFrontmatter?.topic ?? existingTopic;
-                const conflictLastAccessedAt = conflictFrontmatter?.lastAccessedAt;
+                existingTopic = (conflictFrontmatter?.topic as string | undefined) ?? existingTopic;
+                const conflictLastAccessedAt = conflictFrontmatter?.lastAccessedAt as
+                  | number
+                  | undefined;
 
                 // Regenerate content with preserved frontmatter values
                 const updatedContent = this.generateNoteContent(
@@ -217,8 +219,10 @@ export class ChatPersistenceManager {
                   // Read existing frontmatter to preserve lastAccessedAt
                   const conflictFrontmatter =
                     this.app.metadataCache.getFileCache(conflictFile)?.frontmatter;
-                  const conflictLastAccessedAt = conflictFrontmatter?.lastAccessedAt;
-                  const conflictTopic = conflictFrontmatter?.topic;
+                  const conflictLastAccessedAt = conflictFrontmatter?.lastAccessedAt as
+                    | number
+                    | undefined;
+                  const conflictTopic = conflictFrontmatter?.topic as string | undefined;
 
                   // Regenerate content with preserved frontmatter values
                   const updatedContent = this.generateNoteContent(

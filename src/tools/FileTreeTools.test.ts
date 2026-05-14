@@ -133,7 +133,8 @@ describe("FileTreeTools", () => {
     const result = await ToolManager.callTool(tool, {});
 
     // Extract JSON part after the prompt
-    const jsonPart = result.substring(result.indexOf("{"));
+    const resultStr = result as string;
+    const jsonPart = resultStr.substring(resultStr.indexOf("{"));
     const treeFromTool = JSON.parse(jsonPart);
 
     expect(treeFromTool).toEqual(expectedTree);

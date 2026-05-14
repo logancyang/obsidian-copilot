@@ -32,7 +32,7 @@ export class LLMChainRunner extends BaseChainRunner {
       debug: false,
     });
 
-    const messages: any[] = [];
+    const messages: { role: string; content: any }[] = [];
 
     // Add system message (L1)
     const systemMessage = baseMessages.find((m) => m.role === "system");
@@ -133,7 +133,10 @@ export class LLMChainRunner extends BaseChainRunner {
         logInfo("Stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, streamer.processErrorChunk.bind(streamer));
+        await this.handleError(
+          error,
+          streamer.processErrorChunk.bind(streamer) as (message: string) => void
+        );
       }
     }
 

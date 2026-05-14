@@ -398,7 +398,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-          content = content.replace(completeRegex, (_match, sectionContent) => {
+          content = content.replace(completeRegex, (_match, sectionContent: string) => {
             const sectionKey = `${tagName}-${sectionIndex}`;
             sectionIndex += 1;
             const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
@@ -411,7 +411,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (_match, partialContent) =>
+            (_match, partialContent: string) =>
               `<div style="${detailsStyle}">` +
               `<div style="${summaryStyle}">${streamingSummaryText}</div>` +
               `<div class="tw-text-muted" style="${contentStyle}">${ensureClosingTagOnNewLine(partialContent)}</div>` +
@@ -422,7 +422,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-        return content.replace(regex, (_match, sectionContent) => {
+        return content.replace(regex, (_match, sectionContent: string) => {
           const sectionKey = `${tagName}-${sectionIndex}`;
           sectionIndex += 1;
           const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
@@ -554,7 +554,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Match ![title](url) format and check if URL is YouTube
         const imageEmbedRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
-        return content.replace(imageEmbedRegex, (match, title, url) => {
+        return content.replace(imageEmbedRegex, (match, title: string, url: string) => {
           const videoId = extractYoutubeVideoId(url);
           if (!videoId) {
             // Not a YouTube URL, keep original

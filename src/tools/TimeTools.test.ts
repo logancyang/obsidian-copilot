@@ -21,8 +21,8 @@ const verifyDateRange = async (expression: string, expected: DateRange) => {
   const result = await getTimeRangeMs(expression);
   expect(result).toBeDefined();
   // getTimeRangeMs now returns epoch values directly: {startTime: number, endTime: number}
-  const startDate = DateTime.fromMillis(result!.startTime);
-  const endDate = DateTime.fromMillis(result!.endTime);
+  const startDate = DateTime.fromMillis(result!.startTime as number);
+  const endDate = DateTime.fromMillis(result!.endTime as number);
 
   expect(startDate.toISODate()).toBe(expected.startDate);
   expect(endDate.toISODate()).toBe(expected.endDate);

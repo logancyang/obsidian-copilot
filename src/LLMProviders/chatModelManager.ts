@@ -38,10 +38,13 @@ import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
-import { ChatLMStudio } from "./ChatLMStudio";
+import { ChatLMStudio, type ChatLMStudioInput } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
-import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
+import {
+  GitHubCopilotResponsesModel,
+  type GitHubCopilotResponsesModelParams,
+} from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
 
 // Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
 // tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
@@ -843,13 +846,15 @@ export default class ChatModelManager {
       (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
       model.useResponsesApi !== false
     ) {
-      const lmStudioInstance = new ChatLMStudio(constructorConfig);
+      const lmStudioInstance = new ChatLMStudio(constructorConfig as ChatLMStudioInput);
       logInfo(`[ChatModelManager] Using Responses API for LM Studio model: ${model.name}`);
       return lmStudioInstance;
     }
 
     if (useCopilotResponses) {
-      return new GitHubCopilotResponsesModel(constructorConfig);
+      return new GitHubCopilotResponsesModel(
+        constructorConfig as GitHubCopilotResponsesModelParams
+      );
     }
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
@@ -931,9 +936,11 @@ export default class ChatModelManager {
       const testModel =
         (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
         model.useResponsesApi !== false
-          ? new ChatLMStudio(constructorConfig)
+          ? new ChatLMStudio(constructorConfig as ChatLMStudioInput)
           : useCopilotResponses
-            ? new GitHubCopilotResponsesModel(constructorConfig)
+            ? new GitHubCopilotResponsesModel(
+                constructorConfig as GitHubCopilotResponsesModelParams
+              )
             : new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 8000,

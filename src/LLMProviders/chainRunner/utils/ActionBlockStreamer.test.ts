@@ -180,7 +180,7 @@ describe("ActionBlockStreamer", () => {
   });
 
   it("should handle chunks with different content types", async () => {
-    const chunks: any[] = [
+    const chunks: { content: string | null }[] = [
       { content: "Hello" },
       { content: null },
       { content: "" },

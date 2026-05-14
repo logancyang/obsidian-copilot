@@ -92,7 +92,7 @@ describe("ObsidianCliDailyTools", () => {
     );
 
     const response = await (obsidianDailyReadTool as any).invoke({ vault: "Work" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_daily_read");
     expect(parsed.command).toBe("daily:read");
@@ -107,7 +107,7 @@ describe("ObsidianCliDailyTools", () => {
     );
 
     const response = await (obsidianRandomReadTool as any).invoke({});
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_random_read");
     expect(parsed.command).toBe("random:read");

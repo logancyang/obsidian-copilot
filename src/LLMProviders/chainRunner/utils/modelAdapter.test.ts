@@ -1,5 +1,6 @@
 import { ModelAdapterFactory, joinPromptSections } from "./modelAdapter";
 import { ToolMetadata } from "@/tools/ToolRegistry";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 describe("ModelAdapter", () => {
   describe("enhanceSystemPrompt", () => {
@@ -15,7 +16,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should include tool instructions when tools are enabled", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const toolMetadata: ToolMetadata[] = [
@@ -38,7 +39,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should only include instructions for enabled tools", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const toolMetadata: ToolMetadata[] = [
@@ -64,7 +65,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should include base structure elements", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
@@ -76,7 +77,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should handle GPT-specific enhancements", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
@@ -87,7 +88,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should handle Claude-specific enhancements", () => {
-      const mockModel = { modelName: "claude-3-7-sonnet" } as any;
+      const mockModel = { modelName: "claude-3-7-sonnet" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
@@ -97,7 +98,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should handle Gemini-specific enhancements", () => {
-      const mockModel = { modelName: "gemini-pro" } as any;
+      const mockModel = { modelName: "gemini-pro" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(basePrompt, toolDescriptions, [], []);
@@ -107,7 +108,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should exclude instructions when no metadata provided", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(
@@ -123,7 +124,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should include composer-specific examples for GPT when file tools are enabled", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const enhancedPrompt = adapter.enhanceSystemPrompt(
@@ -141,7 +142,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should rebuild enhanceSystemPrompt output from section metadata", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const sections = adapter.buildSystemPromptSections(basePrompt, toolDescriptions, [], []);
@@ -157,7 +158,7 @@ describe("ModelAdapter", () => {
     });
 
     it("should enhance file editing messages for GPT", () => {
-      const mockModel = { modelName: "gpt-4" } as any;
+      const mockModel = { modelName: "gpt-4" } as unknown as BaseChatModel;
       const adapter = ModelAdapterFactory.createAdapter(mockModel);
 
       const editMessage = "fix the typo in my note";

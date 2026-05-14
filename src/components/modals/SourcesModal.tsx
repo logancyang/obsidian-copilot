@@ -115,8 +115,9 @@ export class SourcesModal extends Modal {
 
     // Add lexical matches
     if (explanation.lexicalMatches && explanation.lexicalMatches.length > 0) {
-      const fields = new Set(explanation.lexicalMatches.map((m: any) => m.field));
-      const queries = new Set(explanation.lexicalMatches.map((m: any) => m.query));
+      const lexicalMatches = explanation.lexicalMatches as { field: string; query: string }[];
+      const fields = new Set(lexicalMatches.map((m) => m.field));
+      const queries = new Set(lexicalMatches.map((m) => m.query));
       details.push(
         `Lexical: matched "${Array.from(queries).join('", "')}" in ${Array.from(fields).join(", ")}`
       );

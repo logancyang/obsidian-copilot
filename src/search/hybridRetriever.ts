@@ -239,6 +239,7 @@ export class HybridRetriever extends BaseRetriever {
         mtime: { between: [startTime, endTime] },
       };
 
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       const timeIntervalResults = await search(db, searchParams);
 
       // Convert timeIntervalResults to Document objects
@@ -276,6 +277,7 @@ export class HybridRetriever extends BaseRetriever {
 
     logInfo("Orama search params:\n", searchParams);
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     const searchResults = await search(db, searchParams);
 
     // Add null check and validation for search results

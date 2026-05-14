@@ -165,8 +165,15 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
     // each delta is a single-use streaming chunk.
     delta.content = normalizeDeltaContent(delta.content);
 
-    // scorecard: kept for backwards compat with ChatOpenAICompletions
-    return super._convertCompletionsDeltaToBaseMessageChunk(delta, rawResponse, defaultRole);
+    // Reason: rawResponse and defaultRole are intentionally `any` here — the parent's
+    // signature uses tight OpenAI SDK types we don't want to couple to.
+    type SuperFn =
+      (typeof ChatOpenAICompletions.prototype)["_convertCompletionsDeltaToBaseMessageChunk"];
+    return super._convertCompletionsDeltaToBaseMessageChunk(
+      delta,
+      rawResponse as Parameters<SuperFn>[1],
+      defaultRole as Parameters<SuperFn>[2]
+    );
   }
 
   /**

@@ -114,7 +114,7 @@ export function compactAssistantOutput(
     // Handle multimodal content - compact text parts
     return output.map((item) => {
       if (item.type === "text" && typeof item.text === "string") {
-        return { ...item, text: compactOutputString(item.text, config) };
+        return { ...item, text: compactOutputString(item.text as string, config) };
       }
       return item;
     });
@@ -186,7 +186,7 @@ function compactReadNoteResults(
     }
 
     try {
-      const parsed = JSON.parse(extracted.json);
+      const parsed = JSON.parse(extracted.json) as Parameters<typeof compactReadNoteResult>[0];
       if (parsed.content && parsed.content.length > threshold) {
         const compactedResult = compactReadNoteResult(parsed, config);
         result += `${READ_NOTE_PREFIX}${JSON.stringify(compactedResult)}`;

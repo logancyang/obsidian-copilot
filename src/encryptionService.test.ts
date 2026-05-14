@@ -25,12 +25,12 @@ import { Platform } from "obsidian";
 import { Buffer } from "buffer";
 
 // Mock window.btoa and window.atob for base64 encoding/decoding
-window.btoa = jest.fn().mockImplementation((str) => Buffer.from(str).toString("base64"));
-window.atob = jest.fn().mockImplementation((str) => Buffer.from(str, "base64").toString());
+window.btoa = jest.fn().mockImplementation((str: string) => Buffer.from(str).toString("base64"));
+window.atob = jest.fn().mockImplementation((str: string) => Buffer.from(str, "base64").toString());
 
 const mockSubtle = {
   importKey: jest.fn().mockResolvedValue("mockCryptoKey"),
-  encrypt: jest.fn().mockImplementation((algorithm, key, data) => {
+  encrypt: jest.fn().mockImplementation((algorithm, key, data: ArrayBuffer) => {
     const originalText = new TextDecoder().decode(data);
     const encryptedText = `${originalText}_encrypted`;
     return Promise.resolve(new TextEncoder().encode(encryptedText).buffer);

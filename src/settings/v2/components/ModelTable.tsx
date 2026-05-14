@@ -433,7 +433,7 @@ export const ModelTable: React.FC<ModelTableProps> = ({
     return {
       ...transform,
       x: 0,
-      y: Math.min(Math.max(minY, transform.y), maxY),
+      y: Math.min(Math.max(minY, transform.y as number), maxY),
     };
   };
 

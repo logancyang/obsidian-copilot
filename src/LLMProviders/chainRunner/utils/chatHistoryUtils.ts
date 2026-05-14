@@ -235,7 +235,7 @@ export async function loadAndAddChatHistory(
   const memoryVariables = await memory.loadMemoryVariables({});
   const rawHistory = memoryVariables.history || [];
 
-  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory) : [];
+  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory as any[]) : [];
 
   // Add history messages directly (already compacted at save time)
   for (const msg of processedHistory) {

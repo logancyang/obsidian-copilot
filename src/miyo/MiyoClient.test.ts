@@ -3,7 +3,8 @@ import { logInfo } from "@/logger";
 import { MiyoClient } from "@/miyo/MiyoClient";
 import { MiyoServiceDiscovery } from "@/miyo/MiyoServiceDiscovery";
 import { getSettings } from "@/settings/model";
-import { requestUrl } from "obsidian";
+import { requestUrl, type RequestUrlResponse } from "obsidian";
+import type { CopilotSettings } from "@/settings/model";
 
 jest.mock("obsidian", () => ({
   requestUrl: jest.fn(),
@@ -45,7 +46,7 @@ describe("MiyoClient", () => {
     mockedGetSettings.mockReturnValue({
       plusLicenseKey: "plus-test-license",
       debug: false,
-    } as any);
+    } as CopilotSettings);
     mockedGetDecryptedKey.mockResolvedValue("plus-test-license");
     mockResolveBaseUrl.mockResolvedValue("http://127.0.0.1:8742");
     mockedGetInstance.mockReturnValue({
@@ -64,7 +65,7 @@ describe("MiyoClient", () => {
         page_count: 3,
       },
       text: "",
-    } as any);
+    } as RequestUrlResponse);
 
     const client = new MiyoClient();
     const result = await client.parseDoc("http://127.0.0.1:8742", "TestVault", "docs/sample.pdf");
@@ -102,7 +103,7 @@ describe("MiyoClient", () => {
       status: 200,
       json: { results: [] },
       text: "",
-    } as any);
+    } as RequestUrlResponse);
 
     const client = new MiyoClient();
     await client.search("http://127.0.0.1:8742", "/vault", "project notes", 10, [
@@ -128,7 +129,7 @@ describe("MiyoClient", () => {
       status: 202,
       json: { status: "started", path: "/vault" },
       text: "",
-    } as any);
+    } as RequestUrlResponse);
 
     const client = new MiyoClient();
     const result = await client.scanFolder("http://127.0.0.1:8742", "/vault", true);
@@ -148,7 +149,7 @@ describe("MiyoClient", () => {
       status: 200,
       json: { files: [], total: 0 },
       text: "",
-    } as any);
+    } as RequestUrlResponse);
 
     const client = new MiyoClient();
     await client.listFolderFiles("http://127.0.0.1:8742", {
@@ -171,7 +172,7 @@ describe("MiyoClient", () => {
       status: 404,
       text: "not found",
       json: { detail: "folder not registered" },
-    } as any);
+    } as RequestUrlResponse);
 
     const client = new MiyoClient();
 

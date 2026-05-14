@@ -90,7 +90,6 @@ export default [
       "@typescript-eslint/no-unsafe-member-access": "off", // 2040 violations
       "@typescript-eslint/no-unsafe-assignment": "off", // 879 violations
       "@typescript-eslint/no-unsafe-call": "off", // 679 violations
-      "@typescript-eslint/no-unsafe-argument": "off", // 368 violations
       "@typescript-eslint/no-unsafe-return": "off", // 187 violations
 
       // --- Medium: promise / method ergonomics ---

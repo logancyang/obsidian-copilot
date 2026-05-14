@@ -9,7 +9,7 @@
  * @param str - The string to escape
  * @returns The escaped string safe for XML content
  */
-export function escapeXml(str: string): string {
+export function escapeXml(str: unknown): string {
   if (typeof str !== "string") {
     return "";
   }
@@ -28,7 +28,7 @@ export function escapeXml(str: string): string {
  * @param str - The XML-escaped string to unescape
  * @returns The unescaped string with original characters restored
  */
-export function unescapeXml(str: string): string {
+export function unescapeXml(str: unknown): string {
   if (typeof str !== "string") {
     return "";
   }
@@ -47,6 +47,6 @@ export function unescapeXml(str: string): string {
  * @param str - The string to escape for attribute use
  * @returns The escaped string safe for XML attributes
  */
-export function escapeXmlAttribute(str: string): string {
+export function escapeXmlAttribute(str: unknown): string {
   return escapeXml(str);
 }

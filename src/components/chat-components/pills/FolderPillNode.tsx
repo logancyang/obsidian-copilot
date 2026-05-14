@@ -135,7 +135,7 @@ export function $findFolderPills(): FolderPillNode[] {
     }
 
     if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren();
+      const children = node.getChildren() as LexicalNode[];
       for (const child of children) {
         traverse(child);
       }

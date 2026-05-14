@@ -33,7 +33,7 @@ describe("Image extraction from content", () => {
 
         if (resolvedFile) {
           // Use the resolved path
-          resolvedImages.push(resolvedFile.path);
+          resolvedImages.push(resolvedFile.path as string);
         } else {
           // If file not found, still include the raw filename
           resolvedImages.push(imageName);
@@ -69,7 +69,7 @@ describe("Image extraction from content", () => {
 
         if (resolvedFile) {
           // Use the resolved path
-          resolvedImages.push(resolvedFile.path);
+          resolvedImages.push(resolvedFile.path as string);
         } else {
           // If file not found, still include the raw path
           // Let ImageBatchProcessor handle validation

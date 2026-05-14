@@ -552,10 +552,13 @@ export const getModelAdapter = (provider: SettingKeyProviders) => {
 /**
  * Parse model data and convert to standard format
  */
-export const parseModelsResponse = (provider: SettingKeyProviders, data: any): StandardModel[] => {
+export const parseModelsResponse = (
+  provider: SettingKeyProviders,
+  data: unknown
+): StandardModel[] => {
   const adapter = getModelAdapter(provider);
   try {
-    return adapter(data);
+    return adapter(data as never);
   } catch (error) {
     logError(`Error parsing ${provider} model data:`, error);
     return [];

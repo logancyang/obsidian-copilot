@@ -9,6 +9,7 @@ import { initializeBuiltinTools } from "@/tools/builtinTools";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { StructuredTool } from "@langchain/core/tools";
 import { Runnable } from "@langchain/core/runnables";
+import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { ChatMessage, ResponseMetadata, StreamingResult } from "@/types/message";
 import { err2String, withSuppressedTokenWarnings } from "@/utils";
 import { AIMessage, BaseMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
@@ -28,6 +29,7 @@ import {
   buildToolCallsFromChunks,
   accumulateToolCallChunk,
   ToolCallChunk,
+  type RawToolCallChunk,
 } from "./utils/nativeToolCalling";
 
 import { ensureCiCOrderingWithQuestion } from "./utils/cicPromptUtils";
@@ -396,7 +398,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     if (!isPlusUser) {
       await this.handleError(
         new Error("Invalid license key"),
-        thinkStreamer.processErrorChunk.bind(thinkStreamer)
+        thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
       );
       const errorResponse = thinkStreamer.close().content;
       return this.handleResponse(
@@ -508,7 +510,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
         await this.handleError(
           new Error(autonomousAgentErrorMsg + fallbackErrorMsg),
-          thinkStreamer.processErrorChunk.bind(thinkStreamer)
+          thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
         );
 
         const fullAIResponse = thinkStreamer.close().content;
@@ -620,7 +622,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     // Extract user content (L3 smart references + L5) from base messages
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
-      const isMultimodal = this.isMultimodalModel(chatModel);
+      const isMultimodal = this.isMultimodalModel(chatModel as BaseChatModel);
       const content: string | MessageContent[] = isMultimodal
         ? await this.buildMessageContent(userMessageContent.content, userMessage)
         : userMessageContent.content;
@@ -1037,7 +1039,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         const tcChunks = chunk.tool_call_chunks;
         if (tcChunks && Array.isArray(tcChunks)) {
           for (const tc of tcChunks) {
-            accumulateToolCallChunk(toolCallChunks, tc);
+            accumulateToolCallChunk(toolCallChunks, tc as RawToolCallChunk);
           }
         }
 

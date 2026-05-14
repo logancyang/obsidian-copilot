@@ -90,7 +90,7 @@ export function AtMentionCommandPlugin({
 
   // Selection handler
   const handleSelect = useCallback(
-    (option: any) => {
+    (option: CategoryOption | AtMentionOption) => {
       if (extendedState.mode === "category" && isCategoryOption(option) && !currentQuery) {
         // Category was selected - switch to search mode for that category
         setExtendedState((prev) => ({
@@ -126,7 +126,7 @@ export function AtMentionCommandPlugin({
     [extendedState.mode, currentQuery, isCategoryOption, isAtMentionOption, editor]
   );
 
-  const onStateChangeCallback = useCallback((newState: any) => {
+  const onStateChangeCallback = useCallback((newState: { query: string; isOpen: boolean }) => {
     setCurrentQuery(newState.query);
     // Reset to category mode when menu closes
     if (!newState.isOpen) {

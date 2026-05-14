@@ -721,7 +721,7 @@ export class ContextManager {
     ].join("|");
     const blockRegex = new RegExp(`<(${allTags})(\\s[^>]*)?>[\\s\\S]*?</\\1>`, "g");
 
-    const result = content.replace(blockRegex, (block, tag) => {
+    const result = content.replace(blockRegex, (block, tag: string) => {
       // Non-recoverable blocks (selected_text, web_selected_text) are turn-scoped
       // and must not persist into L2.
       const blockType = CONTEXT_BLOCK_TYPES.find((bt) => bt.tag === tag);

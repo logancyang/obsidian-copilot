@@ -1,4 +1,5 @@
 import { generatePromptDebugReportForAgent, resolveBasePrompt } from "./promptDebugService";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { PromptSection } from "./modelAdapter";
 import { PromptDebugReport } from "./toolPromptDebugger";
 
@@ -92,7 +93,7 @@ describe("promptDebugService", () => {
       },
     } as any;
 
-    const prompt = await resolveBasePrompt(chainManager);
+    const prompt = await resolveBasePrompt(chainManager as ChainManager);
     expect(prompt).toContain(memoryPrompt);
   });
 });

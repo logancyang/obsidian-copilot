@@ -45,7 +45,7 @@ describe("TagTools", () => {
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, {});
 
-    const payload = parsePayload(result);
+    const payload = parsePayload(result as string);
 
     expect((window as any).app.metadataCache.getTags).toHaveBeenCalled();
     expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
@@ -80,7 +80,7 @@ describe("TagTools", () => {
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, { includeInline: false });
 
-    const payload = parsePayload(result);
+    const payload = parsePayload(result as string);
 
     expect((window as any).app.metadataCache.getTags).not.toHaveBeenCalled();
     expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
@@ -106,7 +106,7 @@ describe("TagTools", () => {
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, { maxEntries: 2 });
 
-    const payload = parsePayload(result);
+    const payload = parsePayload(result as string);
 
     expect(payload.totalUniqueTags).toBe(3);
     expect(payload.returnedTagCount).toBe(2);
@@ -123,7 +123,7 @@ describe("TagTools", () => {
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, {});
 
-    const payload = parsePayload(result);
+    const payload = parsePayload(result as string);
 
     expect(payload.totalUniqueTags).toBe(0);
     expect(payload.tags).toEqual([]);
@@ -143,7 +143,7 @@ describe("TagTools", () => {
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, {});
 
-    const payload = parsePayload(result);
+    const payload = parsePayload(result as string);
 
     expect(payload.tags).toEqual([
       {
@@ -172,7 +172,7 @@ describe("TagTools", () => {
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, {});
 
-    const payload = parsePayload(result);
+    const payload = parsePayload(result as string);
 
     expect(payload.tags).toEqual([
       {

@@ -517,7 +517,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     }
 
     // Process existing chat content images if present
-    const existingContent = userMessage.content;
+    const existingContent = userMessage.content as MessageContent[] | undefined;
     if (existingContent && existingContent.length > 0) {
       const result = await this.processChatInputImages(existingContent);
       successfulImages.push(...result.successfulImages);
@@ -546,7 +546,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
   }
 
   protected hasCapability(model: BaseChatModel, capability: ModelCapability): boolean {
-    const modelName = (model as any).modelName || (model as any).model || "";
+    const modelName: string =
+      ((model as any).modelName as string) || ((model as any).model as string) || "";
     const customModel = this.chainManager.chatModelManager.findModelByName(modelName);
     return customModel?.capabilities?.includes(capability) ?? false;
   }
@@ -584,7 +585,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const isMultimodalCurrent = this.isMultimodalModel(chatModel);
 
     // Create messages array
-    const messages: any[] = [];
+    const messages: { role: string; content: any }[] = [];
 
     // Envelope-based context construction (required)
     const envelope = userMessage.contextEnvelope;
@@ -747,7 +748,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     if (!isPlusUser) {
       await this.handleError(
         new Error("Invalid license key"),
-        thinkStreamer.processErrorChunk.bind(thinkStreamer)
+        thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
       );
       const errorResponse = thinkStreamer.close().content;
 
@@ -895,7 +896,10 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         logInfo("CopilotPlus stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, thinkStreamer.processErrorChunk.bind(thinkStreamer));
+        await this.handleError(
+          error,
+          thinkStreamer.processErrorChunk.bind(thinkStreamer) as (message: string) => void
+        );
       }
     }
 
@@ -1018,8 +1022,8 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     // timeDominant is checked independently of filterOnly: time-range queries often include
     // daily notes with source "title-match" (from getTitleMatches), which are not in
     // FILTER_SOURCES, so filterOnly would be false even for pure time-range result sets.
-    const filterOnly = isFilterOnlyResults(includedDocs);
-    const timeDominant = isTimeDominantResults(includedDocs);
+    const filterOnly = isFilterOnlyResults(includedDocs as Array<{ source?: string }>);
+    const timeDominant = isTimeDominantResults(includedDocs as Array<{ source?: string }>);
 
     // Determine tier split based on result type
     let tier1Docs: any[];
@@ -1066,7 +1070,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     const withIds = processedDocs.map((doc, idx) => ({
       ...doc,
       __sourceId: idx + 1,
-      content: sanitizeContentForCitations(doc.content || ""),
+      content: sanitizeContentForCitations((doc.content as string) || ""),
     }));
 
     // Split into filter and search docs by isFilterResult flag

@@ -190,7 +190,7 @@ export class IndexOperations {
                 logError(
                   `Invalid embedding for document ${chunk.fileInfo.path}: ${JSON.stringify(embedding)}`
                 );
-                this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
+                this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path as string);
                 continue;
               }
 
@@ -613,7 +613,7 @@ export class IndexOperations {
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           await this.indexBackend.upsert({
-            ...chunk.fileInfo,
+            ...(chunk.fileInfo as SemanticIndexDocument),
             id: this.getDocHash(chunk.content),
             content: chunk.content,
             embedding: embeddings[i],
@@ -624,7 +624,7 @@ export class IndexOperations {
       } else {
         for (const chunk of chunks) {
           await this.indexBackend.upsert({
-            ...chunk.fileInfo,
+            ...(chunk.fileInfo as SemanticIndexDocument),
             id: this.getDocHash(chunk.content),
             content: chunk.content,
             embedding: [],

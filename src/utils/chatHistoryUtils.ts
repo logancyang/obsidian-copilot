@@ -175,7 +175,7 @@ export function extractChatDate(file: TFile): Date {
 
   if (frontmatter && frontmatter.epoch) {
     // Use the epoch from front matter if available
-    return new Date(frontmatter.epoch);
+    return new Date(frontmatter.epoch as number);
   } else {
     // Fallback to file creation time if epoch is not in front matter
     return new Date(file.stat.ctime);

@@ -51,8 +51,8 @@ More content
 
     it("should handle edge cases", () => {
       expect(sanitizeContentForCitations("")).toBe("");
-      expect(sanitizeContentForCitations(null as any)).toBe("");
-      expect(sanitizeContentForCitations(undefined as any)).toBe("");
+      expect(sanitizeContentForCitations(null)).toBe("");
+      expect(sanitizeContentForCitations(undefined)).toBe("");
     });
   });
 
@@ -142,8 +142,8 @@ More content
 
     it("should handle edge cases", () => {
       expect(hasExistingCitations("")).toBe(false);
-      expect(hasExistingCitations(null as any)).toBe(false);
-      expect(hasExistingCitations(undefined as any)).toBe(false);
+      expect(hasExistingCitations(null)).toBe(false);
+      expect(hasExistingCitations(undefined)).toBe(false);
     });
 
     it("should handle the exact format from user's example", () => {
@@ -191,8 +191,8 @@ More content
 
     it("should handle edge cases", () => {
       expect(hasInlineCitations("")).toBe(false);
-      expect(hasInlineCitations(null as any)).toBe(false);
-      expect(hasInlineCitations(undefined as any)).toBe(false);
+      expect(hasInlineCitations(null)).toBe(false);
+      expect(hasInlineCitations(undefined)).toBe(false);
     });
 
     it("should NOT confuse markdown links with citations", () => {
@@ -424,7 +424,7 @@ More content
 
     it("should handle empty sources array", () => {
       const response = "Some content";
-      const sources: any[] = [];
+      const sources: { title?: string; path?: string }[] = [];
 
       const result = addFallbackSources(response, sources);
       expect(result).toBe(response);
@@ -432,8 +432,8 @@ More content
 
     it("should handle invalid inputs gracefully", () => {
       expect(addFallbackSources("", [{ title: "Doc" }])).toBe("");
-      expect(addFallbackSources(null as any, [{ title: "Doc" }])).toBe("");
-      expect(addFallbackSources(undefined as any, [{ title: "Doc" }])).toBe("");
+      expect(addFallbackSources(null, [{ title: "Doc" }])).toBe("");
+      expect(addFallbackSources(undefined, [{ title: "Doc" }])).toBe("");
     });
   });
 

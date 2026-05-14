@@ -23,7 +23,7 @@ function safeSerialize(value: unknown): string {
 
   return JSON.stringify(
     value,
-    (key, val) => {
+    (key, val: unknown) => {
       if (typeof val === "object" && val !== null) {
         if (seen.has(val)) {
           return "[Circular]";

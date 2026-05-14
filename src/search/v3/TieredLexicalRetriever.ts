@@ -236,8 +236,12 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
       // If scores are similar and both are chunks from the same note, sort by chunk index
       if (a.metadata.isChunk && b.metadata.isChunk && a.metadata.path === b.metadata.path) {
-        const aChunkIndex = parseInt(a.metadata.chunkId?.split("#")[1] || "0");
-        const bChunkIndex = parseInt(b.metadata.chunkId?.split("#")[1] || "0");
+        const aChunkIndex = parseInt(
+          ((a.metadata.chunkId as string | undefined)?.split("#")[1] as string) || "0"
+        );
+        const bChunkIndex = parseInt(
+          ((b.metadata.chunkId as string | undefined)?.split("#")[1] as string) || "0"
+        );
         return aChunkIndex - bChunkIndex;
       }
 

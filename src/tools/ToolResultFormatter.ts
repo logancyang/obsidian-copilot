@@ -45,15 +45,15 @@ function summarizeReadNotePayload(payload: any): string | null {
     return null;
   }
 
-  const status = typeof payload.status === "string" ? payload.status : null;
+  const status = typeof payload.status === "string" ? (payload.status as string) : null;
   const message =
-    typeof payload.message === "string" && payload.message.trim().length > 0
-      ? clampReadNoteMessage(payload.message)
+    typeof payload.message === "string" && (payload.message as string).trim().length > 0
+      ? clampReadNoteMessage(payload.message as string)
       : null;
-  const notePath = typeof payload.notePath === "string" ? payload.notePath : "";
+  const notePath = typeof payload.notePath === "string" ? (payload.notePath as string) : "";
   const noteTitle =
-    typeof payload.noteTitle === "string" && payload.noteTitle.trim().length > 0
-      ? payload.noteTitle.trim()
+    typeof payload.noteTitle === "string" && (payload.noteTitle as string).trim().length > 0
+      ? (payload.noteTitle as string).trim()
       : deriveReadNoteDisplayName(notePath);
   const displayName = noteTitle || deriveReadNoteDisplayName(notePath);
 
@@ -288,7 +288,7 @@ export class ToolResultFormatter {
     if (item.source === "time-filtered") {
       if (item.mtime) {
         try {
-          const d = new Date(item.mtime);
+          const d = new Date(item.mtime as string | number | Date);
           const iso = isNaN(d.getTime()) ? String(item.mtime) : d.toISOString();
           lines.push(`   🕒 Modified: ${iso}${item.includeInContext ? " ✓" : ""}`);
         } catch {
@@ -303,7 +303,7 @@ export class ToolResultFormatter {
       lines.push(`   📊 ${scoreLabel}: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`);
     }
 
-    const snippet = this.extractContentSnippet(item.content);
+    const snippet = this.extractContentSnippet(item.content as string);
     if (snippet) {
       lines.push(`   💬 "${snippet}${item.content?.length > 150 ? "..." : ""}"`);
     }
@@ -350,7 +350,7 @@ export class ToolResultFormatter {
       // Add the main content
       if (item.content) {
         output.push("");
-        output.push(item.content);
+        output.push(item.content as string);
       }
 
       // Add citations if present

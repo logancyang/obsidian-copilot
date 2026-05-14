@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import { NoteIdRank } from "./interfaces";
 
 jest.mock("@/settings/model", () => ({
@@ -114,7 +115,7 @@ describe("SearchCore retrieve", () => {
   });
 
   it("should pass queries and salient terms as recall queries", async () => {
-    const searchCore = new SearchCore(mockApp);
+    const searchCore = new SearchCore(mockApp as App);
 
     const retrieveResult = await searchCore.retrieve("#ProjectAlpha/Phase1 update");
 
@@ -128,7 +129,7 @@ describe("SearchCore retrieve", () => {
   });
 
   it("should bypass ceilings when returnAll is enabled", async () => {
-    const searchCore = new SearchCore(mockApp);
+    const searchCore = new SearchCore(mockApp as App);
 
     buildFromCandidatesMock.mockResolvedValueOnce(5);
     batchCachedReadGrepMock.mockResolvedValueOnce(["note1.md", "note2.md"]);

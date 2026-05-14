@@ -254,7 +254,7 @@ To recover:
       const unsupportedPath = await saveFailedMigrationToUnsupported(
         vault,
         legacyPrompt,
-        error.message || String(error)
+        (error.message as string) || String(error)
       );
 
       // Clear legacy field - data is safely in unsupported folder

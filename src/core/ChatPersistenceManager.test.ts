@@ -1,5 +1,7 @@
 import { ChatMessage } from "@/types/message";
-import { Notice, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
+import type { MessageRepository } from "./MessageRepository";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
@@ -120,7 +122,10 @@ describe("ChatPersistenceManager", () => {
     };
 
     // Create persistence manager
-    persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+    persistenceManager = new ChatPersistenceManager(
+      mockApp as App,
+      mockMessageRepo as MessageRepository
+    );
   });
 
   describe("formatChatContent", () => {
@@ -377,7 +382,11 @@ Nature's quiet song`);
         },
       } as any;
 
-      persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
+      persistenceManager = new ChatPersistenceManager(
+        mockApp as App,
+        mockMessageRepo as MessageRepository,
+        chainManager as ChainManager
+      );
       const mockFile = mockTFile({
         path: "test-folder/Summarize_weather_data@20240923_221800.md",
       });
@@ -1105,7 +1114,10 @@ ${formattedContent}`;
       });
 
       // Recreate persistence manager with the updated mock
-      const testPersistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+      const testPersistenceManager = new ChatPersistenceManager(
+        mockApp as App,
+        mockMessageRepo as MessageRepository
+      );
 
       const originalMessages: ChatMessage[] = [
         {

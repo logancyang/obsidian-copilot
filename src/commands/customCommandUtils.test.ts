@@ -704,7 +704,9 @@ describe("parseCustomCommandFile", () => {
 
   it("parses a custom command file with frontmatter and content", async () => {
     const { parseCustomCommandFile } = await import("@/commands/customCommandUtils");
-    const result = await parseCustomCommandFile(mockFile);
+    const result = await parseCustomCommandFile(
+      mockFile as Parameters<typeof parseCustomCommandFile>[0]
+    );
     expect(result).toEqual({
       title: "Test Command",
       modelKey: "gpt-4",
@@ -722,7 +724,9 @@ describe("parseCustomCommandFile", () => {
     (window.app.vault as any).read.mockResolvedValue("Prompt content only, no frontmatter.");
     (window.app.metadataCache as any).getFileCache.mockReturnValue({});
     const { parseCustomCommandFile } = await import("@/commands/customCommandUtils");
-    const result = await parseCustomCommandFile(mockFile);
+    const result = await parseCustomCommandFile(
+      mockFile as Parameters<typeof parseCustomCommandFile>[0]
+    );
     expect(result).toEqual({
       title: "Test Command",
       modelKey: "",

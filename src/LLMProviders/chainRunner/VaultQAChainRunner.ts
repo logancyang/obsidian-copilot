@@ -142,7 +142,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
         .map((doc: any) => {
           const title = doc.metadata?.title || "Untitled";
           const path = doc.metadata?.path || title;
-          return `<${RETRIEVED_DOCUMENT_TAG}>\n<title>${title}</title>\n<path>${path}</path>\n<content>\n${sanitizeContentForCitations(doc.pageContent)}\n</content>\n</${RETRIEVED_DOCUMENT_TAG}>`;
+          return `<${RETRIEVED_DOCUMENT_TAG}>\n<title>${title}</title>\n<path>${path}</path>\n<content>\n${sanitizeContentForCitations(doc.pageContent as string)}\n</content>\n</${RETRIEVED_DOCUMENT_TAG}>`;
         })
         .join("\n\n");
 
@@ -190,7 +190,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       }
 
       // Insert L4 (chat history) between system and user
-      await loadAndAddChatHistory(memory, messages);
+      await loadAndAddChatHistory(memory, messages as { role: string; content: any }[]);
 
       // Add user message with RAG prepended
       // User message now contains: RAG results + citations + L3 smart references + L5
@@ -252,7 +252,10 @@ export class VaultQAChainRunner extends BaseChainRunner {
         logInfo("VaultQA stream aborted by user", { reason: abortController.signal.reason });
         // Don't show error message for user-initiated aborts
       } else {
-        await this.handleError(error, streamer.processErrorChunk.bind(streamer));
+        await this.handleError(
+          error,
+          streamer.processErrorChunk.bind(streamer) as (message: string) => void
+        );
       }
     }
 

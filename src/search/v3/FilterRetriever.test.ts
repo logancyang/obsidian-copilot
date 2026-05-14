@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { FilterRetriever } from "./FilterRetriever";
 
 // Mock modules
@@ -36,7 +36,7 @@ describe("FilterRetriever", () => {
     it("should return title-matched notes with includeInContext true", async () => {
       const { extractNoteFiles } = jest.requireMock("@/utils");
       const mockFile = new (TFile as any)("mentioned.md");
-      Object.setPrototypeOf(mockFile, (TFile as any).prototype);
+      Object.setPrototypeOf(mockFile, TFile.prototype);
       mockFile.path = "mentioned.md";
       mockFile.basename = "mentioned";
       mockFile.stat = { mtime: 1000, ctime: 500 };
@@ -45,7 +45,7 @@ describe("FilterRetriever", () => {
       mockApp.vault.cachedRead.mockResolvedValue("Note content here");
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [{ tag: "#test" }] });
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: [],
         maxK: 30,
       });
@@ -64,7 +64,7 @@ describe("FilterRetriever", () => {
       const { extractNoteFiles } = jest.requireMock("@/utils");
       extractNoteFiles.mockReturnValueOnce([]);
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: [],
         maxK: 30,
       });
@@ -79,7 +79,7 @@ describe("FilterRetriever", () => {
       const obsidianMock = jest.requireMock("obsidian");
 
       const taggedFile = new (TFile as any)("projects/alpha.md");
-      Object.setPrototypeOf(taggedFile, (TFile as any).prototype);
+      Object.setPrototypeOf(taggedFile, TFile.prototype);
       taggedFile.path = "projects/alpha.md";
       taggedFile.basename = "alpha";
       taggedFile.stat = { mtime: 2000, ctime: 1000 };
@@ -95,7 +95,7 @@ describe("FilterRetriever", () => {
       });
       mockApp.vault.cachedRead.mockResolvedValue("Alpha content");
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: ["#project"],
         maxK: 30,
       });
@@ -113,7 +113,7 @@ describe("FilterRetriever", () => {
       const obsidianMock = jest.requireMock("obsidian");
 
       const betaFile = new (TFile as any)("projects/beta.md");
-      Object.setPrototypeOf(betaFile, (TFile as any).prototype);
+      Object.setPrototypeOf(betaFile, TFile.prototype);
       betaFile.path = "projects/beta.md";
       betaFile.basename = "beta";
       betaFile.stat = { mtime: 3000, ctime: 1000 };
@@ -129,7 +129,7 @@ describe("FilterRetriever", () => {
       });
       mockApp.vault.cachedRead.mockResolvedValue("Beta content");
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: ["#project"],
         maxK: 30,
       });
@@ -141,7 +141,7 @@ describe("FilterRetriever", () => {
     });
 
     it("should return empty when no tag terms present", async () => {
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: ["keyword1", "keyword2"],
         maxK: 30,
       });
@@ -156,7 +156,7 @@ describe("FilterRetriever", () => {
       // Create 10 files all matching the tag, but set maxK to 3
       const files = Array.from({ length: 10 }, (_, i) => {
         const f = new (TFile as any)(`note${i}.md`);
-        Object.setPrototypeOf(f, (TFile as any).prototype);
+        Object.setPrototypeOf(f, TFile.prototype);
         f.path = `note${i}.md`;
         f.basename = `note${i}`;
         f.stat = { mtime: 1000 + i, ctime: 500 };
@@ -171,7 +171,7 @@ describe("FilterRetriever", () => {
       });
       mockApp.vault.cachedRead.mockResolvedValue("Content");
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: ["#daily"],
         maxK: 3,
       });
@@ -186,7 +186,7 @@ describe("FilterRetriever", () => {
       // Create 40 files all matching the tag, set maxK to 3 but returnAll to true
       const files = Array.from({ length: 40 }, (_, i) => {
         const f = new (TFile as any)(`note${i}.md`);
-        Object.setPrototypeOf(f, (TFile as any).prototype);
+        Object.setPrototypeOf(f, TFile.prototype);
         f.path = `note${i}.md`;
         f.basename = `note${i}`;
         f.stat = { mtime: 1000 + i, ctime: 500 };
@@ -201,7 +201,7 @@ describe("FilterRetriever", () => {
       });
       mockApp.vault.cachedRead.mockResolvedValue("Content");
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: ["#daily"],
         maxK: 3,
         returnAll: true,
@@ -221,7 +221,7 @@ describe("FilterRetriever", () => {
       const { extractNoteFiles } = jest.requireMock("@/utils");
 
       const sharedFile = new (TFile as any)("shared.md");
-      Object.setPrototypeOf(sharedFile, (TFile as any).prototype);
+      Object.setPrototypeOf(sharedFile, TFile.prototype);
       sharedFile.path = "shared.md";
       sharedFile.basename = "shared";
       sharedFile.stat = { mtime: 1000, ctime: 500 };
@@ -236,7 +236,7 @@ describe("FilterRetriever", () => {
       });
       mockApp.vault.cachedRead.mockResolvedValue("Shared content");
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: ["#tag1"],
         maxK: 30,
       });
@@ -260,13 +260,13 @@ describe("FilterRetriever", () => {
         basename: "recent",
         stat: { mtime: now - 1000, ctime: now - 2000 },
       };
-      Object.setPrototypeOf(recentFile, (TFile as any).prototype);
+      Object.setPrototypeOf(recentFile, TFile.prototype);
 
       mockApp.vault.getMarkdownFiles.mockReturnValue([recentFile]);
       mockApp.vault.cachedRead.mockResolvedValue("Recent content");
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [] });
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: [],
         maxK: 30,
         timeRange: {
@@ -299,14 +299,14 @@ describe("FilterRetriever", () => {
         basename: "excluded",
         stat: { mtime: now - 1000, ctime: now - 2000 },
       };
-      [validFile, excludedFile].forEach((f) => Object.setPrototypeOf(f, (TFile as any).prototype));
+      [validFile, excludedFile].forEach((f) => Object.setPrototypeOf(f, TFile.prototype));
 
       shouldIndexFile.mockImplementation((file: any) => !file.path.startsWith("copilot/"));
       mockApp.vault.getMarkdownFiles.mockReturnValue([validFile, excludedFile]);
       mockApp.vault.cachedRead.mockResolvedValue("Content");
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [] });
 
-      const retriever = new FilterRetriever(mockApp, {
+      const retriever = new FilterRetriever(mockApp as App, {
         salientTerms: [],
         maxK: 30,
         timeRange: {
@@ -323,14 +323,14 @@ describe("FilterRetriever", () => {
     });
 
     it("should report hasTimeRange correctly", () => {
-      const withTime = new FilterRetriever(mockApp, {
+      const withTime = new FilterRetriever(mockApp as App, {
         salientTerms: [],
         maxK: 30,
         timeRange: { startTime: 100, endTime: 200 },
       });
       expect(withTime.hasTimeRange()).toBe(true);
 
-      const withoutTime = new FilterRetriever(mockApp, {
+      const withoutTime = new FilterRetriever(mockApp as App, {
         salientTerms: [],
         maxK: 30,
       });
