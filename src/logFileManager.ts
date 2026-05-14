@@ -2,6 +2,7 @@ import { err2String } from "@/errorFormat";
 import { TFile } from "obsidian";
 import { ensureFolderExists } from "@/utils";
 import { getSettings } from "@/settings/model";
+import { isSensitiveKey } from "@/encryptionService";
 
 type LogLevel = "INFO" | "WARN" | "ERROR";
 
@@ -180,12 +181,10 @@ class LogFileManager {
       const obj = value as Record<string, unknown>;
 
       for (const [key, val] of Object.entries(obj)) {
-        // Skip API keys, license keys, and infrastructure identifiers
+        // Skip sensitive fields (API keys, tokens, secrets, passwords, license keys)
+        // and infrastructure identifiers that may leak deployment details
         if (
-          /apiKey$/i.test(key) ||
-          /licenseKey$/i.test(key) ||
-          /_api_key$/i.test(key) ||
-          /_license_key$/i.test(key) ||
+          isSensitiveKey(key) ||
           /orgId$/i.test(key) ||
           /instanceName$/i.test(key) ||
           /deploymentName$/i.test(key) ||

@@ -28,6 +28,24 @@ declare module "obsidian" {
      */
     submenu?: Menu;
   }
+
+  // Reason: SecretStorage is declared as a class by obsidian@>=1.11.4, but the
+  // package pinned in package.json (^1.2.5) ships an older `.d.ts` that lacks
+  // it entirely. Declare the full shape here so the project compiles against
+  // older obsidian types without bumping the dev dependency (which would also
+  // shift @codemirror peers and widen this PR's blast radius). `deleteSecret`
+  // is intentionally optional — it exists at runtime since 1.11.4 but remains
+  // undocumented, so callers feature-detect it.
+  interface SecretStorage {
+    setSecret(id: string, secret: string): void;
+    getSecret(id: string): string | null;
+    listSecrets(): string[];
+    deleteSecret?(id: string): void;
+  }
+
+  interface App {
+    secretStorage?: SecretStorage;
+  }
 }
 
 export enum PromptSortStrategy {

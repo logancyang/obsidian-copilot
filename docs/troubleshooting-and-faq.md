@@ -191,13 +191,14 @@ If your settings get into a bad state, you can reset:
 
 ⚠️ Resetting will delete all your settings including API keys. Back them up first.
 
-### API Key Encryption
+### API Key Storage
 
-Copilot can encrypt your API keys at rest for added security.
+Copilot has two ways to store API keys:
 
-**Enable**: **Settings → Copilot → Advanced → Enable Encryption**
+- **Standard storage**: API keys are saved in `data.json` in plain text. Existing vaults stay in this mode until you choose to migrate.
+- **Obsidian Keychain**: New installs use this by default. You can also switch an existing vault by going to **Settings → Copilot → Advanced → API Key Storage** and clicking **Migrate to Obsidian Keychain**. After migration, `data.json` no longer contains your API keys.
 
-If you see strange authentication errors after enabling this, try disabling encryption and re-entering your keys.
+The Obsidian Keychain is per device. If you sync your vault to another device, you may need to re-enter API keys there.
 
 ### Debug Mode and Logs
 

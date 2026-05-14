@@ -95,7 +95,7 @@ async function resolveApiKeyForCurl(
 
   try {
     const decrypted = (await getDecryptedKey(trimmed))?.trim();
-    if (!decrypted || decrypted === "Copilot failed to decrypt API keys!") {
+    if (!decrypted) {
       warnings.push("API key could not be decrypted; using placeholder.");
       return { apiKey: "<YOUR_API_KEY>", warnings };
     }
@@ -245,9 +245,18 @@ async function buildOpenAICompatibleRequestSpec(
     Authorization: `Bearer ${apiKeyResolved.apiKey}`,
   };
 
-  // Add OpenAI org ID if present
+  // Add OpenAI org ID if present (may be encrypted at rest)
   if (model.openAIOrgId?.trim()) {
-    headers["OpenAI-Organization"] = model.openAIOrgId.trim();
+    try {
+      const orgId = (await getDecryptedKey(model.openAIOrgId))?.trim();
+      if (orgId) {
+        headers["OpenAI-Organization"] = orgId;
+      } else {
+        warnings.push("OpenAI organization ID could not be decrypted; omitting header.");
+      }
+    } catch {
+      warnings.push("OpenAI organization ID could not be decrypted; omitting header.");
+    }
   }
 
   // Add OpenRouter-specific headers (see chatModelManager.ts:259-262)

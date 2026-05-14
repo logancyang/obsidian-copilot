@@ -382,3 +382,22 @@ describe("getEffectiveUserPrompt - legacy fallback", () => {
     expect(result).toBe("");
   });
 });
+
+describe("normalizeModelProvider", () => {
+  it("maps azure_openai to the EmbeddingModelProviders.AZURE_OPENAI value", () => {
+    const { normalizeModelProvider } = jest.requireActual<{
+      normalizeModelProvider: (provider: string) => string;
+    }>("@/settings/model");
+    // Reason: EmbeddingModelProviders.AZURE_OPENAI = "azure openai" (with space)
+    expect(normalizeModelProvider("azure_openai")).toBe("azure openai");
+  });
+
+  it("passes through already-normalized and unrelated providers", () => {
+    const { normalizeModelProvider } = jest.requireActual<{
+      normalizeModelProvider: (provider: string) => string;
+    }>("@/settings/model");
+    expect(normalizeModelProvider("azure openai")).toBe("azure openai");
+    expect(normalizeModelProvider("openai")).toBe("openai");
+    expect(normalizeModelProvider("")).toBe("");
+  });
+});

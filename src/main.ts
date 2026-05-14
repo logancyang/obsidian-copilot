@@ -23,6 +23,12 @@ import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
+import { KeychainService } from "@/services/keychainService";
+import {
+  persistSettings,
+  loadSettingsWithKeychain,
+  flushPersistence,
+} from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { checkIsPlusUser, refreshSelfHostModeValidation } from "@/plusUtils";
@@ -36,10 +42,8 @@ import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
   getModelKeyFromModel,
   getSettings,
-  sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
-  type CopilotSettings,
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
@@ -100,15 +104,23 @@ export default class CopilotPlugin extends Plugin {
   private lastSelectionSignature?: string;
   private webSelectionTracker?: WebSelectionTracker;
   private readonly chatHistoryLastAccessedAtManager = new RecentUsageManager<string>();
-
   async onload(): Promise<void> {
+    KeychainService.getInstance(this.app);
     await this.loadSettings();
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
-        // Reason: encryption-at-rest is deprecated. encryptAllKeys is a no-op
-        // now; new keys are saved plaintext. Existing encrypted keys remain
-        // in data.json and are decrypted lazily by getDecryptedKey when read.
-        await this.saveData(next);
+        try {
+          await persistSettings(next, (data) => this.saveData(data), prev);
+        } catch (error) {
+          // Reason: Do NOT rollback memory state on persist failure.
+          // The writeQueue serializes I/O, so a later setSettings() may already
+          // be queued. Rolling back memory would create a split where memory is S0
+          // but disk ends up at S2 when the later write succeeds.
+          // Instead, just notify the user — the in-memory state remains current,
+          // and the next successful persist will reconcile disk with memory.
+          logError("Failed to persist settings.", error);
+          new Notice("Copilot failed to save settings. Check logs and try again.");
+        }
         registerCommands(this, prev, next);
       })();
     });
@@ -245,6 +257,11 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async onunload() {
+    // Best-effort flush of pending keychain/data.json writes.
+    // Reason: onunload() is void in Obsidian's type system, but awaiting here
+    // is no worse than fire-and-forget, and consistent with the log flush below.
+    await flushPersistence();
+
     // Clear all persistent selection highlights before unload
     // This prevents "stuck" highlights after hot reload (dev environment)
     this.clearAllPersistentSelectionHighlights();
@@ -617,9 +634,9 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadSettings() {
-    const savedSettings = (await this.loadData()) as CopilotSettings;
-    const sanitizedSettings = sanitizeSettings(savedSettings);
-    setSettings(sanitizedSettings);
+    const rawData = (await this.loadData()) as unknown;
+    const settings = await loadSettingsWithKeychain(rawData, (d) => this.saveData(d));
+    setSettings(settings);
   }
 
   mergeActiveModels(

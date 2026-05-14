@@ -942,7 +942,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   chatNoteContextTags: [],
   enableIndexSync: true,
   debug: false,
-  enableEncryption: false,
   maxSourceChunks: DEFAULT_MAX_SOURCE_CHUNKS,
   enableInlineCitations: true,
   groqApiKey: "",
