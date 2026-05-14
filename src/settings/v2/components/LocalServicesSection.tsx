@@ -85,7 +85,7 @@ function LocalServiceItem({ service, expanded, onToggleExpand }: LocalServiceIte
   const handleAddModelClick = () => {
     onToggleExpand();
     if (!expanded && !models && !loading) {
-      fetchModels();
+      void fetchModels();
     }
   };
 

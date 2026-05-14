@@ -537,13 +537,13 @@ describe("ChatManager", () => {
   });
 
   describe("loadMessages", () => {
-    it("should load messages from array", () => {
+    it("should load messages from array", async () => {
       const messages: ChatMessage[] = [
         createMockMessage("msg-1", "Hello", USER_SENDER),
         createMockMessage("msg-2", "Response", "AI"),
       ];
 
-      chatManager.loadMessages(messages);
+      await chatManager.loadMessages(messages);
 
       expect(mockMessageRepo.clear).toHaveBeenCalled();
       expect(mockMessageRepo.addMessage).toHaveBeenCalledTimes(2);

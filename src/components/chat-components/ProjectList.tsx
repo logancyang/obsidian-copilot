@@ -140,7 +140,7 @@ function ProjectItem({
                   // Reason: hidden-folder files are not in vault cache, so openLinkText silently fails.
                   const fileInCache = app.vault.getAbstractFileByPath(record.filePath);
                   if (fileInCache) {
-                    app.workspace.openLinkText(record.filePath, "", true);
+                    void app.workspace.openLinkText(record.filePath, "", true);
                   } else {
                     new Notice(
                       "Project file is in a hidden folder and cannot be opened from the file explorer."

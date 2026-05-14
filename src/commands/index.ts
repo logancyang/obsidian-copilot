@@ -606,7 +606,7 @@ export function registerCommands(
       setSelectedTextContexts([webSelectedTextContext]);
 
       // Open chat window to show the context was added
-      plugin.activateView();
+      await plugin.activateView();
     } catch (error) {
       logError("Error adding web selection to context:", error);
       new Notice("Failed to get web selection");

@@ -332,7 +332,7 @@ function CustomCommandChatModalContent({
       }
     }
 
-    generateInitialResponse();
+    void generateInitialResponse();
 
     return () => {
       cancelled = true;
@@ -690,7 +690,7 @@ export class CustomCommandChatModal {
     const { anchorBottom, ...initialPosition } = this.getInitialPosition(activeView);
 
     const handleInsert = (message: string) => {
-      insertIntoEditor(message);
+      void insertIntoEditor(message);
       this.close();
     };
 

@@ -178,7 +178,7 @@ export function MobileCard<T extends object>({
                       key={index}
                       onClick={(e) => {
                         e.stopPropagation();
-                        action.onClick(item);
+                        void action.onClick(item);
                       }}
                       className={cn(action.variant === "destructive" && "tw-text-error")}
                     >

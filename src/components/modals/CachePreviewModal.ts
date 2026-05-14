@@ -81,7 +81,7 @@ export class CachePreviewModal extends Modal {
     });
 
     // Reason: pass empty sourcePath to prevent vault link resolution
-    MarkdownRenderer.renderMarkdown(this.content, mdContainer, "", this.component);
+    void MarkdownRenderer.renderMarkdown(this.content, mdContainer, "", this.component);
   }
 
   onClose(): void {

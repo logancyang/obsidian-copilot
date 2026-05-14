@@ -194,7 +194,7 @@ export class CustomCommandSettingsModal extends Modal {
     this.root = createRoot(contentEl);
 
     const handleConfirm = (command: CustomCommand) => {
-      this.onUpdate(command);
+      void this.onUpdate(command);
       this.close();
     };
 

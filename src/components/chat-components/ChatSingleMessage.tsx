@@ -913,7 +913,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     const editor = leaf.view.editor;
     const hasSelection = editor.getSelection().length > 0;
-    insertIntoEditor(message.message, hasSelection);
+    void insertIntoEditor(message.message, hasSelection);
   };
 
   const renderMessageContent = () => {

@@ -94,7 +94,7 @@ export default [
 
       // --- Medium: promise / method ergonomics ---
       "@typescript-eslint/unbound-method": "off", // 68 violations
-      "@typescript-eslint/no-floating-promises": "off", // 39 violations
+      // Enabled in the TS-only block below.
 
       // --- Quick wins: small enough to fix and enable in a single PR ---
       "@typescript-eslint/no-unsafe-enum-comparison": "off", // 11 violations
@@ -177,6 +177,7 @@ export default [
         "error",
         { checksVoidReturn: { attributes: false, inheritedMethods: false } },
       ],
+      "@typescript-eslint/no-floating-promises": "error",
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
