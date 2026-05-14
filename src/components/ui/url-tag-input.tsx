@@ -12,7 +12,7 @@
 import { Button } from "@/components/ui/button";
 import { type UrlItem, detectUrlType, isValidUrl } from "@/utils/urlTagUtils";
 import { TruncatedText } from "@/components/TruncatedText";
-import { ClipboardPaste, Globe, Link, X, Youtube } from "lucide-react";
+import { ClipboardPaste, Globe, Link, X } from "lucide-react";
 import React, {
   useCallback,
   useRef,
@@ -155,7 +155,7 @@ export function UrlTagInput({ urls, onAdd, onRemove }: UrlTagInputProps) {
           {youtubeUrls.length > 0 && (
             <div className="tw-p-2">
               <div className="tw-mb-2 tw-flex tw-items-center tw-gap-1.5 tw-px-1">
-                <Youtube className="tw-size-3.5 tw-text-error" />
+                <Globe className="tw-size-3.5 tw-text-accent" />
                 <span className="tw-text-ui-smaller tw-font-medium tw-text-muted">
                   YouTube ({youtubeUrls.length})
                 </span>
@@ -225,11 +225,7 @@ function UrlItemRow({ url, onRemove }: { url: UrlItem; onRemove: (id: string) =>
   return (
     <div className="tw-group tw-flex tw-items-center tw-justify-between tw-rounded tw-px-2 tw-py-1.5 hover:tw-bg-modifier-hover">
       <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-2">
-        {url.type === "youtube" ? (
-          <Youtube className="tw-size-3.5 tw-shrink-0 tw-text-error" />
-        ) : (
-          <Globe className="tw-size-3.5 tw-shrink-0 tw-text-accent" />
-        )}
+        <Globe className="tw-size-3.5 tw-shrink-0 tw-text-accent" />
         <TruncatedText className="tw-text-sm tw-text-normal" tooltipContent={url.url}>
           {url.url.replace(/^https?:\/\//, "")}
         </TruncatedText>

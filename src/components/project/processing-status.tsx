@@ -28,7 +28,6 @@ import {
   Loader2,
   RefreshCw,
   X,
-  Youtube,
 } from "lucide-react";
 import React, { useCallback, useRef, useState } from "react";
 
@@ -83,9 +82,8 @@ function FileTypeIcon({ fileType }: { fileType: ProcessingItem["fileType"] }) {
     case "image":
       return <FileImage className="tw-size-3.5 tw-text-accent" />;
     case "web":
-      return <Globe className="tw-size-3.5 tw-text-accent" />;
     case "youtube":
-      return <Youtube className="tw-size-3.5 tw-text-error" />;
+      return <Globe className="tw-size-3.5 tw-text-accent" />;
     case "audio":
       return <FileVideo className="tw-size-3.5 tw-text-warning" />;
     default:
