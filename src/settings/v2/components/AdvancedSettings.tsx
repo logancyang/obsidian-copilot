@@ -65,8 +65,7 @@ export const AdvancedSettings: React.FC = () => {
   // current in-memory `settings` presence so the Migrate / Delete CTAs
   // appear immediately. Matches the gate used in `canClearDiskSecrets()`.
   const diskHasSecrets =
-    hasDiskSecretsToMigrate() ||
-    (!keychainOnly && hasPersistedSecrets(settings));
+    hasDiskSecretsToMigrate() || (!keychainOnly && hasPersistedSecrets(settings));
   const canMigrate = canClearDiskSecrets(settings);
 
   // Reason: a single status string is easier to reason about and debug than
@@ -88,6 +87,14 @@ export const AdvancedSettings: React.FC = () => {
         : diskHasSecrets && !canMigrate
           ? "blocked"
           : "standard";
+
+  // Reason: keychain-only mode + keychain available but this device has no
+  // secrets persisted yet. Hits three real scenarios: (1) desktop migrated
+  // then Sync shipped a stripped data.json to mobile; (2) backup restore of a
+  // _keychainOnly vault to a new device; (3) synced vault opened on a third
+  // device for the first time. Without surfacing this, the green "active"
+  // pill misleads the user into thinking everything is fine.
+  const keychainAppearsEmpty = storageStatus === "active" && !hasPersistedSecrets(settings);
 
   // Check if the default system prompt exists in the current prompts list
   const defaultPromptExists = prompts.some(
@@ -319,10 +326,19 @@ export const AdvancedSettings: React.FC = () => {
                 Obsidian to <code>1.11.4+</code>, or re-enter keys on a supported device.
               </>
             ) : storageStatus === "active" ? (
-              <>
-                API keys are stored in this device&apos;s{" "}
-                <strong className="tw-font-semibold tw-text-normal">Obsidian Keychain</strong>.
-              </>
+              keychainAppearsEmpty ? (
+                <span className="tw-text-warning">
+                  No API keys found in this device&apos;s{" "}
+                  <strong className="tw-font-semibold tw-text-normal">Obsidian Keychain</strong>.
+                  Re-enter your API keys in the relevant settings sections — this device&apos;s
+                  keychain is separate from other devices.
+                </span>
+              ) : (
+                <>
+                  API keys are stored in this device&apos;s{" "}
+                  <strong className="tw-font-semibold tw-text-normal">Obsidian Keychain</strong>.
+                </>
+              )
             ) : (
               <>
                 Your API keys are stored in <code>data.json</code>. Move them to the{" "}

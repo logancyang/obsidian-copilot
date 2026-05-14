@@ -28,6 +28,7 @@ import {
   persistSettings,
   loadSettingsWithKeychain,
   flushPersistence,
+  resetPersistenceState,
 } from "@/services/settingsPersistence";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 import { clearRecordedPromptPayload } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
@@ -261,6 +262,13 @@ export default class CopilotPlugin extends Plugin {
     // Reason: onunload() is void in Obsidian's type system, but awaiting here
     // is no worse than fire-and-forget, and consistent with the log flush below.
     await flushPersistence();
+
+    // Reason: clear module-level persistence state and the KeychainService
+    // singleton so plugin disable→enable (or "Open another vault") starts
+    // from a clean slate instead of inheriting stale epoch / tombstone /
+    // diff-baseline state from the previous session.
+    resetPersistenceState();
+    KeychainService.resetInstance();
 
     // Clear all persistent selection highlights before unload
     // This prevents "stuck" highlights after hot reload (dev environment)

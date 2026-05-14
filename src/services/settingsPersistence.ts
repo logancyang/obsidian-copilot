@@ -115,6 +115,27 @@ export function refreshDiskHasSecrets(data: CopilotSettings): void {
 }
 
 /**
+ * Reset all module-level persistence state.
+ *
+ * Reason: module-level state (lastPersistedSettings, transactionEpoch,
+ * pendingTombstones, persistHadUndecryptableSecrets, diskHasSecrets,
+ * suppressNextPersist, writeQueue) survives `onunload` because Node /
+ * Electron's require cache keeps the module instance alive across plugin
+ * disable→enable. After a mid-migration disable, stale state would poison
+ * the next session. Similarly, switching vaults via "Open another vault"
+ * carries stale state across vaults. Call this from `onunload`.
+ */
+export function resetPersistenceState(): void {
+  writeQueue = Promise.resolve();
+  diskHasSecrets = false;
+  lastPersistedSettings = undefined;
+  suppressNextPersist = false;
+  transactionEpoch = 0;
+  pendingTombstones.clear();
+  persistHadUndecryptableSecrets = false;
+}
+
+/**
  * Refresh the last known-good settings baseline used by keychain rollback.
  * Called by dedicated transactions that bypass `doPersist()`.
  */
