@@ -21,7 +21,7 @@ import { ProjectRegister } from "@/projects/projectRegister";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
-import { encryptAllKeys } from "@/encryptionService";
+import { encryptAllKeys, findDesktopEncryptedKeyFields } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -104,6 +104,24 @@ export default class CopilotPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
+
+    // Reason: surface desktop-encrypted API keys on mobile up front. These
+    // were encrypted with Electron's safeStorage (Keychain / DPAPI /
+    // libsecret) on desktop and synced to mobile via Obsidian Sync. Mobile
+    // can't decrypt them — the user must re-enter each one. Without this
+    // notice, the user only finds out which key is broken when they hit a
+    // chat error, one at a time.
+    if (Platform.isMobile) {
+      const desktopKeys = findDesktopEncryptedKeyFields(getSettings());
+      if (desktopKeys.length > 0) {
+        new Notice(
+          `Copilot: ${desktopKeys.length} API key(s) encrypted on desktop and unusable on mobile. ` +
+            `Re-enter in Copilot settings: ${desktopKeys.join(", ")}`,
+          0
+        );
+      }
+    }
+
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
         if (next.enableEncryption) {

@@ -95,13 +95,17 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
   }
 
   try {
-    // Try desktop encryption first
-    if (getSafeStorage()?.isEncryptionAvailable()) {
+    // Reason: only attempt safeStorage encryption on desktop. Mobile has no
+    // Electron, so a safeStorage-encrypted blob saved on mobile would be
+    // unusable here (and could even sync back to desktop if Obsidian Sync
+    // pushes it). Belt-and-suspenders: even if getSafeStorage() somehow
+    // returned a truthy value on mobile, we want the WebCrypto path.
+    if (Platform.isDesktop && getSafeStorage()?.isEncryptionAvailable()) {
       const encryptedBuffer = getSafeStorage()!.encryptString(apiKey);
       return DESKTOP_PREFIX + encryptedBuffer.toString("base64");
     }
 
-    // Fallback to Web Crypto API
+    // Fallback to Web Crypto API (always used on mobile)
     const key = await getEncryptionKey();
     const encodedData = new TextEncoder().encode(apiKey);
     const encryptedData = await crypto.subtle.encrypt(ALGORITHM, key, encodedData);
@@ -110,6 +114,43 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
     console.error("Encryption failed:", error);
     return apiKey;
   }
+}
+
+/**
+ * Scan settings for API keys still encrypted with the desktop-only prefix.
+ * Used on mobile to surface which fields the user must re-enter — they were
+ * encrypted with Electron's safeStorage and cannot be decrypted on mobile.
+ *
+ * Returns the human-readable field names (e.g. "plusLicenseKey",
+ * "activeModels[gpt-5.5]") in the order they appear in settings.
+ */
+export function findDesktopEncryptedKeyFields(settings: Readonly<CopilotSettings>): string[] {
+  const found: string[] = [];
+
+  for (const key of Object.keys(settings)) {
+    const value = settings[key as keyof CopilotSettings];
+    if (typeof value === "string" && value.startsWith(DESKTOP_PREFIX)) {
+      found.push(key);
+    }
+  }
+
+  if (Array.isArray(settings.activeModels)) {
+    for (const model of settings.activeModels) {
+      if (typeof model.apiKey === "string" && model.apiKey.startsWith(DESKTOP_PREFIX)) {
+        found.push(`activeModels[${model.name}]`);
+      }
+    }
+  }
+
+  if (Array.isArray(settings.activeEmbeddingModels)) {
+    for (const model of settings.activeEmbeddingModels) {
+      if (typeof model.apiKey === "string" && model.apiKey.startsWith(DESKTOP_PREFIX)) {
+        found.push(`activeEmbeddingModels[${model.name}]`);
+      }
+    }
+  }
+
+  return found;
 }
 
 export async function getDecryptedKey(apiKey: string): Promise<string> {
