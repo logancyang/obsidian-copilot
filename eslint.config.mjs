@@ -180,18 +180,15 @@ export default [
   },
 
   // Non-TS files aren't in tsconfig.json — disable type-aware rules that
-  // obsidianmd's recommended config enables globally. (The plugin lists some
-  // typed rules in its general rule bundle, not just the TS-only bundle, so
-  // they cascade to .js / package.json without parser services.)
+  // obsidianmd's recommended config enables globally. Most typed obsidianmd
+  // rules are already gated to **/*.ts(x); only no-plugin-as-component leaks
+  // out via recommendedPluginRulesConfig, and @typescript-eslint/no-deprecated
+  // is enabled globally.
   {
     files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/package.json"],
     rules: {
       "@typescript-eslint/no-deprecated": "off",
       "obsidianmd/no-plugin-as-component": "off",
-      "obsidianmd/no-view-references-in-plugin": "off",
-      "obsidianmd/no-unsupported-api": "off",
-      "obsidianmd/prefer-file-manager-trash-file": "off",
-      "obsidianmd/prefer-instanceof": "off",
     },
   },
 
