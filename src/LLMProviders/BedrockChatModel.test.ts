@@ -1,5 +1,22 @@
 import { BedrockChatModel } from "./BedrockChatModel";
 
+type BedrockInternals = {
+  decodeChunkBytes: (encoded: string) => string[];
+  processStreamEvent: (
+    event: unknown,
+    a: unknown,
+    b: unknown,
+    c: unknown
+  ) => Promise<{ hasText: boolean; deltaChunks: any[]; [k: string]: any }>;
+  buildContentItemsFromDelta: (event: unknown) => Array<Record<string, unknown>>;
+  extractStreamText: (event: unknown) => string | null;
+  buildRequestBody: (...args: unknown[]) => Record<string, any>;
+  convertImageContent: (url: string) => { type: string; source?: Record<string, unknown> } | null;
+  normaliseMessageContent: (message: unknown) => any;
+};
+
+const internals = (model: BedrockChatModel) => model as unknown as BedrockInternals;
+
 /**
  * Builds a minimal Amazon EventStream message containing the provided UTF-8 payload.
  * This helper keeps CRC fields at zero because the decoder ignores them.
@@ -48,7 +65,7 @@ describe("BedrockChatModel streaming decode", () => {
     const base64 = Buffer.from(payload, "utf-8").toString("base64");
 
     const model = createModel();
-    const decoded = (model as any).decodeChunkBytes(base64);
+    const decoded = internals(model).decodeChunkBytes(base64);
 
     expect(decoded).toEqual([payload]);
   });
@@ -64,7 +81,7 @@ describe("BedrockChatModel streaming decode", () => {
 
     const base64 = buildEventStreamChunk(payload);
     const model = createModel();
-    const decoded = (model as any).decodeChunkBytes(base64);
+    const decoded = internals(model).decodeChunkBytes(base64);
 
     expect(decoded).toEqual([payload]);
   });
@@ -85,7 +102,7 @@ describe("BedrockChatModel streaming decode", () => {
     };
 
     const model = createModel();
-    const processed = await (model as any).processStreamEvent(
+    const processed = await internals(model).processStreamEvent(
       event,
       undefined,
       undefined,
@@ -111,7 +128,7 @@ describe("BedrockChatModel streaming decode", () => {
       };
 
       const model = createModel();
-      const contentItems = (model as any).buildContentItemsFromDelta(event);
+      const contentItems = internals(model).buildContentItemsFromDelta(event);
 
       expect(contentItems).toHaveLength(1);
       expect(contentItems[0]).toEqual({
@@ -133,7 +150,7 @@ describe("BedrockChatModel streaming decode", () => {
       };
 
       const model = createModel();
-      const contentItems = (model as any).buildContentItemsFromDelta(event);
+      const contentItems = internals(model).buildContentItemsFromDelta(event);
 
       expect(contentItems).toHaveLength(1);
       expect(contentItems[0]).toEqual({
@@ -161,7 +178,7 @@ describe("BedrockChatModel streaming decode", () => {
       };
 
       const model = createModel();
-      const processed = await (model as any).processStreamEvent(
+      const processed = await internals(model).processStreamEvent(
         event,
         undefined,
         undefined,
@@ -208,7 +225,7 @@ describe("BedrockChatModel streaming decode", () => {
       };
 
       const model = createModel();
-      const processed = await (model as any).processStreamEvent(
+      const processed = await internals(model).processStreamEvent(
         event,
         undefined,
         undefined,
@@ -254,7 +271,7 @@ describe("BedrockChatModel streaming decode", () => {
         chunk: { bytes: thinkingBase64 },
       };
 
-      const thinkingResult = await (model as any).processStreamEvent(
+      const thinkingResult = await internals(model).processStreamEvent(
         thinkingEvent,
         undefined,
         undefined,
@@ -283,7 +300,7 @@ describe("BedrockChatModel streaming decode", () => {
         chunk: { bytes: textBase64 },
       };
 
-      const textResult = await (model as any).processStreamEvent(
+      const textResult = await internals(model).processStreamEvent(
         textEvent,
         undefined,
         undefined,
@@ -307,7 +324,7 @@ describe("BedrockChatModel streaming decode", () => {
       };
 
       const model = createModel();
-      const extracted = (model as any).extractStreamText(event);
+      const extracted = internals(model).extractStreamText(event);
 
       expect(extracted).toBe("Fallback thinking extraction");
     });
@@ -324,7 +341,7 @@ describe("BedrockChatModel streaming decode", () => {
       };
 
       const model = createModel();
-      const contentItems = (model as any).buildContentItemsFromDelta(event);
+      const contentItems = internals(model).buildContentItemsFromDelta(event);
 
       expect(contentItems).toHaveLength(1);
       expect(contentItems[0]).toEqual({
@@ -337,7 +354,7 @@ describe("BedrockChatModel streaming decode", () => {
   describe("thinking mode enablement", () => {
     it("includes thinking parameter when enableThinking is true", () => {
       const model = createModel(true);
-      const requestBody = (model as any).buildRequestBody([
+      const requestBody = internals(model).buildRequestBody([
         { role: "user", content: "test", getType: () => "human" },
       ]);
 
@@ -351,7 +368,7 @@ describe("BedrockChatModel streaming decode", () => {
 
     it("does not include thinking parameter when enableThinking is false", () => {
       const model = createModel(false);
-      const requestBody = (model as any).buildRequestBody(
+      const requestBody = internals(model).buildRequestBody(
         [{ role: "user", content: "test", getType: () => "human" }],
         { temperature: 0.7 }
       );
@@ -364,7 +381,7 @@ describe("BedrockChatModel streaming decode", () => {
 
     it("respects user temperature when thinking is disabled", () => {
       const model = createModel(false);
-      const requestBody = (model as any).buildRequestBody(
+      const requestBody = internals(model).buildRequestBody(
         [{ role: "user", content: "test", getType: () => "human" }],
         { temperature: 0.5 }
       );
@@ -375,7 +392,7 @@ describe("BedrockChatModel streaming decode", () => {
 
     it("forces temperature to 1 when thinking is enabled", () => {
       const model = createModel(true);
-      const requestBody = (model as any).buildRequestBody(
+      const requestBody = internals(model).buildRequestBody(
         [{ role: "user", content: "test", getType: () => "human" }],
         { temperature: 0.5 } // User tries to set 0.5, should be overridden to 1
       );
@@ -390,7 +407,7 @@ describe("BedrockChatModel streaming decode", () => {
       it("converts valid data URL to Claude image format", () => {
         const model = createModel();
         const dataUrl = "data:image/jpeg;base64,/9j/4AAQSkZJRg==";
-        const result = (model as any).convertImageContent(dataUrl);
+        const result = internals(model).convertImageContent(dataUrl);
 
         expect(result).toEqual({
           type: "image",
@@ -405,7 +422,7 @@ describe("BedrockChatModel streaming decode", () => {
       it("handles PNG images", () => {
         const model = createModel();
         const dataUrl = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg==";
-        const result = (model as any).convertImageContent(dataUrl);
+        const result = internals(model).convertImageContent(dataUrl);
 
         expect(result).toEqual({
           type: "image",
@@ -420,7 +437,7 @@ describe("BedrockChatModel streaming decode", () => {
       it("returns null for invalid data URL format", () => {
         const model = createModel();
         const invalidUrl = "not-a-data-url";
-        const result = (model as any).convertImageContent(invalidUrl);
+        const result = internals(model).convertImageContent(invalidUrl);
 
         expect(result).toBeNull();
       });
@@ -428,7 +445,7 @@ describe("BedrockChatModel streaming decode", () => {
       it("returns null for non-image media type", () => {
         const model = createModel();
         const dataUrl = "data:text/plain;base64,SGVsbG8gV29ybGQ=";
-        const result = (model as any).convertImageContent(dataUrl);
+        const result = internals(model).convertImageContent(dataUrl);
 
         expect(result).toBeNull();
       });
@@ -448,7 +465,7 @@ describe("BedrockChatModel streaming decode", () => {
           getType: () => "human",
         };
 
-        const result = (model as any).normaliseMessageContent(message);
+        const result = internals(model).normaliseMessageContent(message);
 
         expect(Array.isArray(result)).toBe(true);
         expect(result).toHaveLength(2);
@@ -469,7 +486,7 @@ describe("BedrockChatModel streaming decode", () => {
           getType: () => "human",
         };
 
-        const result = (model as any).normaliseMessageContent(message);
+        const result = internals(model).normaliseMessageContent(message);
 
         expect(typeof result).toBe("string");
         expect(result).toBe("Hello world!");
@@ -482,7 +499,7 @@ describe("BedrockChatModel streaming decode", () => {
           getType: () => "human",
         };
 
-        const result = (model as any).normaliseMessageContent(message);
+        const result = internals(model).normaliseMessageContent(message);
 
         expect(result).toBe("Simple text message");
       });
@@ -504,7 +521,7 @@ describe("BedrockChatModel streaming decode", () => {
           },
         ];
 
-        const requestBody = (model as any).buildRequestBody(messages);
+        const requestBody = internals(model).buildRequestBody(messages);
 
         expect(requestBody.messages).toHaveLength(1);
         expect(requestBody.messages[0].content).toHaveLength(2);
@@ -545,7 +562,7 @@ describe("BedrockChatModel streaming decode", () => {
           },
         ];
 
-        const requestBody = (model as any).buildRequestBody(messages);
+        const requestBody = internals(model).buildRequestBody(messages);
 
         expect(requestBody.messages[0].content).toHaveLength(3);
         expect(requestBody.messages[0].content[0].type).toBe("text");
@@ -564,7 +581,7 @@ describe("BedrockChatModel streaming decode", () => {
           },
         ];
 
-        const requestBody = (model as any).buildRequestBody(messages);
+        const requestBody = internals(model).buildRequestBody(messages);
 
         expect(requestBody.messages).toHaveLength(1);
         expect(requestBody.messages[0].content).toHaveLength(1);
@@ -593,7 +610,7 @@ describe("BedrockChatModel streaming decode", () => {
           },
         ];
 
-        const requestBody = (model as any).buildRequestBody(messages);
+        const requestBody = internals(model).buildRequestBody(messages);
 
         // Should have text + 1 valid image (invalid one skipped)
         expect(requestBody.messages[0].content).toHaveLength(2);

@@ -47,8 +47,12 @@ describe("TagTools", () => {
 
     const payload = parsePayload(result);
 
-    expect((window as any).app.metadataCache.getTags).toHaveBeenCalled();
-    expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
+    expect(
+      (window.app.metadataCache as unknown as { getTags: jest.Mock }).getTags
+    ).toHaveBeenCalled();
+    expect(
+      (window.app.metadataCache as unknown as { getFrontmatterTags: jest.Mock }).getFrontmatterTags
+    ).toHaveBeenCalled();
     expect(payload.totalUniqueTags).toBe(3);
     expect(payload.returnedTagCount).toBe(3);
     expect(payload.totalOccurrences).toBe(10);
@@ -82,8 +86,12 @@ describe("TagTools", () => {
 
     const payload = parsePayload(result);
 
-    expect((window as any).app.metadataCache.getTags).not.toHaveBeenCalled();
-    expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
+    expect(
+      (window.app.metadataCache as unknown as { getTags: jest.Mock }).getTags
+    ).not.toHaveBeenCalled();
+    expect(
+      (window.app.metadataCache as unknown as { getFrontmatterTags: jest.Mock }).getFrontmatterTags
+    ).toHaveBeenCalled();
     expect(payload.totalUniqueTags).toBe(2);
     expect(payload.includedSources).toEqual(["frontmatter"]);
     expect(payload.tags).toEqual([
@@ -117,8 +125,10 @@ describe("TagTools", () => {
   });
 
   it("handles empty vault gracefully", async () => {
-    (window as any).app.metadataCache.getTags.mockReturnValue({});
-    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({});
+    (window.app.metadataCache as unknown as { getTags: jest.Mock }).getTags.mockReturnValue({});
+    (
+      window.app.metadataCache as unknown as { getFrontmatterTags: jest.Mock }
+    ).getFrontmatterTags.mockReturnValue({});
 
     const tool = createGetTagListTool();
     const result = await ToolManager.callTool(tool, {});
@@ -131,11 +141,13 @@ describe("TagTools", () => {
   });
 
   it("normalizes malformed tags correctly", async () => {
-    (window as any).app.metadataCache.getTags.mockReturnValue({
+    (window.app.metadataCache as unknown as { getTags: jest.Mock }).getTags.mockReturnValue({
       project: 5,
       "##Weird/Tag": 4,
     });
-    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
+    (
+      window.app.metadataCache as unknown as { getFrontmatterTags: jest.Mock }
+    ).getFrontmatterTags.mockReturnValue({
       "  #Project ": 3,
       "##Weird/Tag": 1,
     });
@@ -162,10 +174,12 @@ describe("TagTools", () => {
   });
 
   it("falls back when inline counts omit frontmatter occurrences", async () => {
-    (window as any).app.metadataCache.getTags.mockReturnValue({
+    (window.app.metadataCache as unknown as { getTags: jest.Mock }).getTags.mockReturnValue({
       "#project": 1,
     });
-    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
+    (
+      window.app.metadataCache as unknown as { getFrontmatterTags: jest.Mock }
+    ).getFrontmatterTags.mockReturnValue({
       "#project": 3,
     });
 

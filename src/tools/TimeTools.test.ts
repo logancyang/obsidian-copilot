@@ -3,7 +3,9 @@ import { getTimeRangeMsTool } from "./TimeTools";
 
 // Helper function to call the tool and parse result
 const getTimeRangeMs = async (timeExpression: string) => {
-  const result = await (getTimeRangeMsTool as any).invoke({ timeExpression });
+  const result = await (getTimeRangeMsTool.invoke as (args: unknown) => Promise<string>)({
+    timeExpression,
+  });
   // The tool returns JSON string, parse it
   const parsed = typeof result === "string" ? JSON.parse(result) : result;
   // Return undefined if it's an error response

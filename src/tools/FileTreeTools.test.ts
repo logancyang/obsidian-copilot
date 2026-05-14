@@ -133,7 +133,8 @@ describe("FileTreeTools", () => {
     const result = await ToolManager.callTool(tool, {});
 
     // Extract JSON part after the prompt
-    const jsonPart = result.substring(result.indexOf("{"));
+    const resultText = result as string;
+    const jsonPart = resultText.substring(resultText.indexOf("{"));
     const treeFromTool = JSON.parse(jsonPart);
 
     expect(treeFromTool).toEqual(expectedTree);
@@ -168,7 +169,7 @@ describe("FileTreeTools", () => {
 
   it("should exclude files based on patterns", async () => {
     // Mock shouldIndexFile to exclude all files in projects folder
-    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation((file) => {
+    (searchUtils.shouldIndexFile as jest.Mock).mockImplementation((file: { path: string }) => {
       return !file.path.includes("projects");
     });
 

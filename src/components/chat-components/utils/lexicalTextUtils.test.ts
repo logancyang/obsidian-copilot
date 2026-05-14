@@ -1,6 +1,9 @@
 import { parseTextForPills } from "./lexicalTextUtils";
 import { TFile, TFolder } from "obsidian";
 
+const TFolderCtor = TFolder as unknown as new (path: string) => TFolder;
+const MockTFile = TFile as unknown as jest.Mock;
+
 // Mock dependencies
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -67,7 +70,7 @@ describe("parseTextForPills", () => {
       });
 
       // Mock TFile constructor to set properties
-      (TFile as any).mockImplementation(function (this: any) {
+      MockTFile.mockImplementation(function (this: any) {
         this.basename = "Valid Note";
         this.path = "Valid Note.md";
       });
@@ -220,7 +223,7 @@ describe("parseTextForPills", () => {
   describe("with folders only", () => {
     beforeEach(() => {
       // Create a mock folder using the TFolder constructor from the mock
-      const mockFolder = new (TFolder as any)("Projects");
+      const mockFolder = new TFolderCtor("Projects");
 
       // Mock folder resolution
       mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
@@ -276,7 +279,7 @@ describe("parseTextForPills", () => {
         return null;
       });
 
-      (TFile as any).mockImplementation(function (this: any) {
+      MockTFile.mockImplementation(function (this: any) {
         this.basename = "Test Note";
         this.path = "Test Note.md";
       });
@@ -287,7 +290,7 @@ describe("parseTextForPills", () => {
         frontmatter: { tags: ["test"] },
       });
 
-      const mockFolder = new (TFolder as any)("TestFolder");
+      const mockFolder = new TFolderCtor("TestFolder");
       mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
 
       mockApp.workspace.getActiveFile.mockReturnValue(null);
@@ -418,7 +421,7 @@ describe("parseTextForPills", () => {
       const text = "@tool-name #tag_with_underscores {folder with spaces}";
 
       // Mock folder resolution for folder with spaces
-      const mockFolder = new (TFolder as any)("folder with spaces");
+      const mockFolder = new TFolderCtor("folder with spaces");
       mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
 
       const result = parseTextForPills(text, {

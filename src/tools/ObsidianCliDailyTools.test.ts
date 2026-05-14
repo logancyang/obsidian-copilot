@@ -91,7 +91,9 @@ describe("ObsidianCliDailyTools", () => {
       buildSuccessResult("daily:read", "Today I worked on CLI integration.")
     );
 
-    const response = await (obsidianDailyReadTool as any).invoke({ vault: "Work" });
+    const response = await (obsidianDailyReadTool.invoke as (args: unknown) => Promise<string>)({
+      vault: "Work",
+    });
     const parsed = JSON.parse(response);
 
     expect(parsed.type).toBe("obsidian_cli_daily_read");
@@ -106,7 +108,9 @@ describe("ObsidianCliDailyTools", () => {
       buildSuccessResult("random:read", "Random note body")
     );
 
-    const response = await (obsidianRandomReadTool as any).invoke({});
+    const response = await (obsidianRandomReadTool.invoke as (args: unknown) => Promise<string>)(
+      {}
+    );
     const parsed = JSON.parse(response);
 
     expect(parsed.type).toBe("obsidian_cli_random_read");
@@ -121,16 +125,16 @@ describe("ObsidianCliDailyTools", () => {
       buildFailedResult("daily:read", "EFAIL", "daily note unavailable")
     );
 
-    await expect((obsidianDailyReadTool as any).invoke({})).rejects.toThrow(
-      "daily note unavailable"
-    );
+    await expect(
+      (obsidianDailyReadTool.invoke as (args: unknown) => Promise<string>)({})
+    ).rejects.toThrow("daily note unavailable");
   });
 
   test("obsidianRandomReadTool surfaces actionable ENOENT failure details", async () => {
     mockedRunRandomReadCommand.mockResolvedValue(buildFailedResult("random:read", "ENOENT", ""));
 
-    await expect((obsidianRandomReadTool as any).invoke({})).rejects.toThrow(
-      "CLI binary not found"
-    );
+    await expect(
+      (obsidianRandomReadTool.invoke as (args: unknown) => Promise<string>)({})
+    ).rejects.toThrow("CLI binary not found");
   });
 });

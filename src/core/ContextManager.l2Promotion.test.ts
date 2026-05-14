@@ -99,11 +99,18 @@ function createMockMessageRepo(
   } as any;
 }
 
+type ContextManagerInternals = {
+  buildL2ContextFromPreviousTurns: (
+    currentMessageId: string,
+    messageRepo: unknown
+  ) => { l2Context: string; l2Paths: Set<string> };
+};
+
 describe("ContextManager L2 promotion filtering", () => {
-  let contextManager: any;
+  let contextManager: ContextManagerInternals;
 
   beforeEach(() => {
-    contextManager = ContextManager.getInstance();
+    contextManager = ContextManager.getInstance() as unknown as ContextManagerInternals;
   });
 
   it("should exclude selected_text segments from L2", () => {

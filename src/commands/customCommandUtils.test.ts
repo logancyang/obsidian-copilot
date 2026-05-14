@@ -111,7 +111,7 @@ describe("processedPrompt()", () => {
       .mockResolvedValueOnce("here is the note content for note0")
       .mockResolvedValueOnce("note content for note1");
 
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockReturnValueOnce("Variable1 Note").mockReturnValueOnce("Variable2 Note");
 
     const mockNote1 = mockTFile({ path: "path/to/note1.md", basename: "Variable1 Note" });
@@ -175,7 +175,7 @@ describe("processedPrompt()", () => {
     const selectedText = "";
 
     (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockReturnValue("Active Note");
 
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
@@ -238,7 +238,7 @@ describe("processedPrompt()", () => {
     (getNotesFromTags as jest.Mock).mockReturnValue([mockNoteForTag]);
 
     // Mock getFileName to return the basename
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockReturnValue("Tagged Note");
 
     // Mock getFileContent to return content for the note
@@ -270,7 +270,7 @@ describe("processedPrompt()", () => {
     (getNotesFromTags as jest.Mock).mockReturnValue([mockNoteForTag1, mockNoteForTag2]);
 
     // Mock getFileName to return the basename
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockImplementation((file: TFile) => file.basename);
 
     // Mock getFileContent to return content for each note
@@ -324,7 +324,7 @@ describe("processedPrompt()", () => {
 
     (extractTemplateNoteFiles as jest.Mock).mockReturnValue([mockNoteFile]);
 
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockReturnValue("Test Note");
 
     (getFileContent as jest.Mock).mockResolvedValue("Test note content");
@@ -362,7 +362,7 @@ describe("processedPrompt()", () => {
     // Only Note1 should be extracted since it's wrapped in {[[]]}
     (extractTemplateNoteFiles as jest.Mock).mockReturnValue([mockNote1]);
 
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockImplementation((file: TFile) => file.basename);
 
     (getFileContent as jest.Mock).mockImplementation((file: TFile) => {
@@ -459,7 +459,7 @@ describe("processedPrompt()", () => {
     const selectedText = "";
 
     // Mock getFileName and getFileContent
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockReturnValue("Active Note");
 
     (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
@@ -511,7 +511,7 @@ describe("processedPrompt()", () => {
 
     // Mock getFileContent for the active note when processed via {}
     (getFileContent as jest.Mock).mockResolvedValue("Content of the active note");
-    const { getFileName } = jest.requireMock("@/utils") as any;
+    const { getFileName } = jest.requireMock("@/utils") as { getFileName: jest.Mock };
     getFileName.mockReturnValue("Active Note");
 
     const result = await processPrompt(doc.content, selectedText, mockVault, mockActiveNote);
@@ -719,8 +719,12 @@ describe("parseCustomCommandFile", () => {
   });
 
   it("uses EMPTY_COMMAND defaults if frontmatter is missing", async () => {
-    (window.app.vault as any).read.mockResolvedValue("Prompt content only, no frontmatter.");
-    (window.app.metadataCache as any).getFileCache.mockReturnValue({});
+    (window.app.vault as unknown as { read: jest.Mock }).read.mockResolvedValue(
+      "Prompt content only, no frontmatter."
+    );
+    (
+      window.app.metadataCache as unknown as { getFileCache: jest.Mock }
+    ).getFileCache.mockReturnValue({});
     const { parseCustomCommandFile } = await import("@/commands/customCommandUtils");
     const result = await parseCustomCommandFile(mockFile);
     expect(result).toEqual({

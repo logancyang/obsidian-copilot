@@ -59,7 +59,7 @@ jest.mock("@/cache/fileCache", () => {
           .mockImplementation(
             (file, additionalContext) => `key-${file.path}-${additionalContext || ""}`
           ),
-        get: jest.fn().mockImplementation(async (key) => {
+        get: jest.fn().mockImplementation(async (key: string) => {
           // Return mock content based on key
           if (key.includes("pdf")) return "Mock PDF content";
           if (key.includes("doc")) return "Mock document content";
@@ -111,7 +111,19 @@ describe("ProjectContextCache", () => {
   let mockProject: ProjectConfig;
 
   // Mock files
-  const { TFile: MockedTFile } = jest.requireMock("obsidian");
+  const { TFile: MockedTFile } = jest.requireMock("obsidian") as {
+    TFile: new (
+      path: string,
+      ext: string,
+      name: string,
+      stat: { mtime: number; size: number }
+    ) => {
+      path: string;
+      extension: string;
+      name: string;
+      stat: { mtime: number; size: number };
+    };
+  };
   const mockMarkdownFile = new MockedTFile("test/file.md", "md", "file", {
     mtime: Date.now(),
     size: 100,
@@ -458,7 +470,7 @@ describe("ProjectContextCache", () => {
     } as any;
 
     // Mock cache non-existence for this isolated project
-    mockApp.vault.adapter.exists.mockImplementation((path) => {
+    mockApp.vault.adapter.exists.mockImplementation((path: string) => {
       if (path.includes("isolated-test-project-id")) {
         return Promise.resolve(false);
       }

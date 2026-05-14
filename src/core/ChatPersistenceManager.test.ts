@@ -3,6 +3,24 @@ import { Notice, TFile } from "obsidian";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
+type ParsedMessage = Omit<ChatMessage, "context"> & {
+  context: Required<NonNullable<ChatMessage["context"]>>;
+};
+
+type ChatPersistenceManagerInternals = {
+  formatChatContent: (messages: ChatMessage[]) => string;
+  parseChatContent: (content: string) => ParsedMessage[];
+  generateNoteContent: (
+    chatContent: string,
+    firstMessageEpoch: number,
+    modelKey: string,
+    topic?: string,
+    lastAccessedAt?: number
+  ) => string;
+};
+
+const internals = (pm: ChatPersistenceManager) => pm as unknown as ChatPersistenceManagerInternals;
+
 const USER_SENDER = "user";
 const AI_SENDER = "ai";
 
@@ -80,9 +98,31 @@ jest.mock("@/utils", () => ({
   }),
 }));
 
+type MockApp = {
+  vault: {
+    getAbstractFileByPath: jest.Mock;
+    createFolder: jest.Mock;
+    create: jest.Mock;
+    modify: jest.Mock;
+    read: jest.Mock;
+    getMarkdownFiles: jest.Mock;
+    adapter: {
+      exists: jest.Mock;
+      read: jest.Mock;
+      write: jest.Mock;
+      list: jest.Mock;
+      stat: jest.Mock;
+    };
+  };
+  metadataCache: { getFileCache: jest.Mock };
+  fileManager: { processFrontMatter: jest.Mock };
+};
+
+type MockMessageRepo = { getDisplayMessages: jest.Mock };
+
 describe("ChatPersistenceManager", () => {
-  let mockApp: any;
-  let mockMessageRepo: any;
+  let mockApp: MockApp;
+  let mockMessageRepo: MockMessageRepo;
   let persistenceManager: ChatPersistenceManager;
 
   beforeEach(() => {
@@ -120,7 +160,7 @@ describe("ChatPersistenceManager", () => {
     };
 
     // Create persistence manager
-    persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+    persistenceManager = new ChatPersistenceManager(mockApp as never, mockMessageRepo as never);
   });
 
   describe("formatChatContent", () => {
@@ -173,7 +213,7 @@ describe("ChatPersistenceManager", () => {
         },
       ];
 
-      const result = (persistenceManager as any).formatChatContent(messages);
+      const result = internals(persistenceManager).formatChatContent(messages);
 
       const expected = `**user**: my name is logan, what's your name
 [Timestamp: 2024/09/23 22:18:00]
@@ -201,7 +241,7 @@ describe("ChatPersistenceManager", () => {
         },
       ];
 
-      const result = (persistenceManager as any).formatChatContent(messages);
+      const result = internals(persistenceManager).formatChatContent(messages);
 
       expect(result).toBe(`**user**: Hello
 [Timestamp: Unknown time]`);
@@ -232,7 +272,7 @@ tags:
 **ai**: Your name is Logan.
 [Timestamp: 2024/09/23 22:56:20]`;
 
-      const result = (persistenceManager as any).parseChatContent(content);
+      const result = internals(persistenceManager).parseChatContent(content);
 
       expect(result).toHaveLength(5);
       expect(result[0]).toMatchObject({
@@ -284,7 +324,7 @@ Gentle breeze whispers secrets
 Nature's quiet song
 [Timestamp: 2024/09/23 22:18:01]`;
 
-      const result = (persistenceManager as any).parseChatContent(content);
+      const result = internals(persistenceManager).parseChatContent(content);
 
       expect(result).toHaveLength(2);
       expect(result[1].message).toBe(`Here's a haiku for you:
@@ -301,7 +341,7 @@ Nature's quiet song`);
 **ai**: Hi there!
 [Timestamp: Unknown time]`;
 
-      const result = (persistenceManager as any).parseChatContent(content);
+      const result = internals(persistenceManager).parseChatContent(content);
 
       expect(result).toHaveLength(2);
       expect(result[0].timestamp).toBeNull();
@@ -377,7 +417,11 @@ Nature's quiet song`);
         },
       } as any;
 
-      persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
+      persistenceManager = new ChatPersistenceManager(
+        mockApp as never,
+        mockMessageRepo as never,
+        chainManager
+      );
       const mockFile = mockTFile({
         path: "test-folder/Summarize_weather_data@20240923_221800.md",
       });
@@ -628,7 +672,8 @@ Nature's quiet song`);
       ];
 
       // Mock getCurrentProject to return a project
-      const getCurrentProject = jest.requireMock("@/aiParams").getCurrentProject;
+      const getCurrentProject = (jest.requireMock("@/aiParams") as { getCurrentProject: jest.Mock })
+        .getCurrentProject;
       getCurrentProject.mockReturnValue({ id: "project-123", name: "Test Project" });
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
@@ -737,7 +782,8 @@ Nature's quiet song`);
       ];
 
       // Mock getCurrentProject to return a project
-      const getCurrentProject = jest.requireMock("@/aiParams").getCurrentProject;
+      const getCurrentProject = (jest.requireMock("@/aiParams") as { getCurrentProject: jest.Mock })
+        .getCurrentProject;
       getCurrentProject.mockReturnValue({ id: "songs-of-syx", name: "Songs of Syx Translation" });
 
       mockMessageRepo.getDisplayMessages.mockReturnValue(messages);
@@ -1068,7 +1114,7 @@ tags:
       ];
 
       // Format the content
-      const formattedContent = (persistenceManager as any).formatChatContent(originalMessages);
+      const formattedContent = internals(persistenceManager).formatChatContent(originalMessages);
 
       // Add frontmatter
       const fullContent = `---
@@ -1081,7 +1127,7 @@ tags:
 ${formattedContent}`;
 
       // Parse it back
-      const parsedMessages = (persistenceManager as any).parseChatContent(fullContent);
+      const parsedMessages = internals(persistenceManager).parseChatContent(fullContent);
 
       // Verify the messages match
       expect(parsedMessages).toHaveLength(2);
@@ -1105,7 +1151,10 @@ ${formattedContent}`;
       });
 
       // Recreate persistence manager with the updated mock
-      const testPersistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+      const testPersistenceManager = new ChatPersistenceManager(
+        mockApp as never,
+        mockMessageRepo as never
+      );
 
       const originalMessages: ChatMessage[] = [
         {
@@ -1159,7 +1208,8 @@ ${formattedContent}`;
       ];
 
       // Format the content
-      const formattedContent = (testPersistenceManager as any).formatChatContent(originalMessages);
+      const formattedContent =
+        internals(testPersistenceManager).formatChatContent(originalMessages);
 
       // Verify the formatted content contains the full path (not just basename)
       expect(formattedContent).toContain("docs/typescript-guide.md");
@@ -1175,7 +1225,7 @@ tags:
 ${formattedContent}`;
 
       // Parse it back
-      const parsedMessages = (testPersistenceManager as any).parseChatContent(fullContent);
+      const parsedMessages = internals(testPersistenceManager).parseChatContent(fullContent);
 
       // Verify the messages match
       expect(parsedMessages).toHaveLength(2);
@@ -1228,7 +1278,7 @@ tags:
 **ai**: Here's what I found about TypeScript in your files...
 [Timestamp: 2024/09/23 22:18:01]`;
 
-      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+      const parsedMessages = internals(persistenceManager).parseChatContent(content);
 
       expect(parsedMessages).toHaveLength(2);
       expect(parsedMessages[0].context).toBeDefined();
@@ -1269,7 +1319,7 @@ tags:
 [Context: Notes: typescript-guide.md | URLs: https://typescriptlang.org]
 [Timestamp: 2024/09/23 22:18:00]`;
 
-      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+      const parsedMessages = internals(persistenceManager).parseChatContent(content);
 
       // Should skip ambiguous note (logs warning) but preserve other context
       expect(parsedMessages).toHaveLength(1);
@@ -1295,7 +1345,7 @@ tags:
 [Context: Notes: docs/deleted-file.md | Tags: typescript, programming]
 [Timestamp: 2024/09/23 22:18:00]`;
 
-      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+      const parsedMessages = internals(persistenceManager).parseChatContent(content);
 
       // Should skip missing note (logs warning) but preserve other context
       expect(parsedMessages).toHaveLength(1);
@@ -1318,7 +1368,7 @@ tags:
 **ai**: Hi there!
 [Timestamp: 2024/09/23 22:18:01]`;
 
-      const parsedMessages = (persistenceManager as any).parseChatContent(content);
+      const parsedMessages = internals(persistenceManager).parseChatContent(content);
 
       expect(parsedMessages).toHaveLength(2);
       expect(parsedMessages[0].context).toBeUndefined();
@@ -1465,8 +1515,8 @@ tags:
       ];
 
       // Generate the note content
-      const chatContent = (persistenceManager as any).formatChatContent(messages);
-      const noteContent = (persistenceManager as any).generateNoteContent(
+      const chatContent = internals(persistenceManager).formatChatContent(messages);
+      const noteContent = internals(persistenceManager).generateNoteContent(
         chatContent,
         messages[0].timestamp!.epoch,
         testModelKey
@@ -1498,8 +1548,8 @@ tags:
       ];
 
       // Generate the note content
-      const chatContent = (persistenceManager as any).formatChatContent(messages);
-      const noteContent = (persistenceManager as any).generateNoteContent(
+      const chatContent = internals(persistenceManager).formatChatContent(messages);
+      const noteContent = internals(persistenceManager).generateNoteContent(
         chatContent,
         messages[0].timestamp!.epoch,
         testModelKey
@@ -1531,8 +1581,8 @@ tags:
       ];
 
       // Generate the note content
-      const chatContent = (persistenceManager as any).formatChatContent(messages);
-      const noteContent = (persistenceManager as any).generateNoteContent(
+      const chatContent = internals(persistenceManager).formatChatContent(messages);
+      const noteContent = internals(persistenceManager).generateNoteContent(
         chatContent,
         messages[0].timestamp!.epoch,
         testModelKey

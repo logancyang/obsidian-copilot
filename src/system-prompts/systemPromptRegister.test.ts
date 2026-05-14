@@ -243,7 +243,9 @@ describe("SystemPromptRegister", () => {
       settingsChangeHandler = subscribeToSettingsChange.mock.calls[0]?.[0];
 
       // Get reference to mock manager
-      const { SystemPromptManager } = jest.requireMock("@/system-prompts/systemPromptManager");
+      const { SystemPromptManager } = jest.requireMock("@/system-prompts/systemPromptManager") as {
+        SystemPromptManager: { getInstance: () => { fetchPrompts: jest.Mock } };
+      };
       mockManager = SystemPromptManager.getInstance();
     });
 

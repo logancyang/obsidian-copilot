@@ -3,12 +3,14 @@ import { getCurrentTimeTool, convertTimeBetweenTimezonesTool } from "./TimeTools
 
 // Helper to invoke tool and parse result
 const invokeGetCurrentTime = async (args: { timezoneOffset?: string }) => {
-  const result = await (getCurrentTimeTool as any).invoke(args);
+  const result = await (getCurrentTimeTool.invoke as (args: unknown) => Promise<string>)(args);
   return typeof result === "string" ? JSON.parse(result) : result;
 };
 
 const invokeConvertTime = async (args: { time: string; fromOffset: string; toOffset: string }) => {
-  const result = await (convertTimeBetweenTimezonesTool as any).invoke(args);
+  const result = await (
+    convertTimeBetweenTimezonesTool.invoke as (args: unknown) => Promise<string>
+  )(args);
   return typeof result === "string" ? JSON.parse(result) : result;
 };
 

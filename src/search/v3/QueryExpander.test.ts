@@ -7,7 +7,7 @@ jest.mock("@/settings/model", () => ({
 
 describe("QueryExpander", () => {
   let expander: QueryExpander;
-  let mockChatModel: any;
+  let mockChatModel: { invoke: jest.Mock };
 
   beforeEach(() => {
     // Reset mocks
@@ -20,7 +20,7 @@ describe("QueryExpander", () => {
 
     // Create expander with mock chat model getter
     expander = new QueryExpander({
-      getChatModel: async () => mockChatModel,
+      getChatModel: async () => mockChatModel as never,
     });
   });
 
@@ -122,7 +122,7 @@ describe("QueryExpander", () => {
 
       const expander = new QueryExpander({
         maxVariants: 2,
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
       const result = await expander.expand("test");
 
@@ -137,7 +137,7 @@ describe("QueryExpander", () => {
 
       const expander = new QueryExpander({
         timeout: 100,
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
       const result = await expander.expand("search typescript interfaces");
 
@@ -170,7 +170,7 @@ describe("QueryExpander", () => {
 
       const expander = new QueryExpander({
         timeout: 10000, // Long timeout to ensure it doesn't trigger during tests
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
 
       await expander.expand("test query");
@@ -199,7 +199,7 @@ describe("QueryExpander", () => {
 
       const expander = new QueryExpander({
         timeout: 100, // Short timeout to trigger abort
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
 
       const result = await expander.expand("test timeout abort");
@@ -394,7 +394,7 @@ describe("QueryExpander", () => {
     it("should evict old cache entries when full", async () => {
       const expander = new QueryExpander({
         cacheSize: 2,
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
 
       mockChatModel.invoke.mockImplementation((prompt: string) => {
@@ -429,7 +429,7 @@ describe("QueryExpander", () => {
         maxVariants: 3,
         timeout: 200,
         cacheSize: 50,
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
 
       mockChatModel.invoke.mockResolvedValue({
@@ -449,7 +449,7 @@ describe("QueryExpander", () => {
 
     it("should use default options when not provided", () => {
       const expander = new QueryExpander({
-        getChatModel: async () => mockChatModel,
+        getChatModel: async () => mockChatModel as never,
       });
       expect(expander.getCacheSize()).toBe(0);
     });

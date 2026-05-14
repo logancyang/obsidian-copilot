@@ -43,15 +43,15 @@ describe("ChunkManager", () => {
     mockFileCache = new Map();
     mockApp = {
       vault: {
-        getAbstractFileByPath: jest.fn((path) => {
+        getAbstractFileByPath: jest.fn((path: string) => {
           if (!path || path.startsWith("missing")) return null;
           // Return cached file to ensure consistent mtime
           if (mockFileCache.has(path)) {
             return mockFileCache.get(path);
           }
-          const file = new (TFile as any)(path);
+          const file = new (TFile as unknown as new (path: string) => TFile)(path);
           // Ensure the file passes instanceof TFile checks
-          Object.setPrototypeOf(file, (TFile as any).prototype);
+          Object.setPrototypeOf(file, (TFile as unknown as { prototype: object }).prototype);
           mockFileCache.set(path, file);
           return file;
         }),
@@ -713,7 +713,9 @@ describe("ChunkManager", () => {
 
       for (const testCase of testCases) {
         const manager = new ChunkManager(mockApp);
-        const generatedId = (manager as any).generateChunkId("test.md", testCase.index);
+        const generatedId = (
+          manager as unknown as { generateChunkId: (path: string, index: number) => string }
+        ).generateChunkId("test.md", testCase.index);
         expect(generatedId).toBe(`test.md#${testCase.expected}`);
       }
     });

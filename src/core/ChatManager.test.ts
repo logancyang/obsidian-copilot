@@ -78,12 +78,28 @@ const createContextResult = (content = "Hello with context") => ({
   contextEnvelope: undefined,
 });
 
+type MockChainManager = {
+  memoryManager: { clearChatMemory: jest.Mock };
+  runChain: jest.Mock;
+};
+type MockPlugin = {
+  app: {
+    workspace: { getActiveFile: jest.Mock };
+    vault?: { adapter?: { stat: jest.Mock } };
+  };
+  projectManager: {
+    getCurrentChainManager: jest.Mock;
+    getCurrentProjectId: jest.Mock;
+    getCachedMessages: jest.Mock;
+  };
+};
+
 describe("ChatManager", () => {
   let chatManager: ChatManager;
   let mockMessageRepo: jest.Mocked<MessageRepository>;
-  let mockChainManager: any;
-  let mockFileParserManager: any;
-  let mockPlugin: any;
+  let mockChainManager: MockChainManager;
+  let mockFileParserManager: object;
+  let mockPlugin: MockPlugin;
   let mockContextManager: jest.Mocked<ContextManager>;
 
   // Helper function to create mock messages
@@ -144,9 +160,9 @@ describe("ChatManager", () => {
 
     chatManager = new ChatManager(
       mockMessageRepo,
-      mockChainManager,
-      mockFileParserManager,
-      mockPlugin
+      mockChainManager as never,
+      mockFileParserManager as never,
+      mockPlugin as never
     );
   });
 
@@ -1221,12 +1237,20 @@ describe("ChatManager", () => {
 
   describe("System Prompt Template Processing", () => {
     // Import mocked modules for manipulation
-    const { processPrompt } = jest.requireMock("@/commands/customCommandUtils");
+    const { processPrompt } = jest.requireMock("@/commands/customCommandUtils") as {
+      processPrompt: jest.Mock;
+    };
     const { getSystemPrompt, getSystemPromptWithMemory, getEffectiveUserPrompt } = jest.requireMock(
       "@/system-prompts/systemPromptBuilder"
-    );
-    const { getSettings } = jest.requireMock("@/settings/model");
-    const { getCurrentProject } = jest.requireMock("@/aiParams");
+    ) as {
+      getSystemPrompt: jest.Mock;
+      getSystemPromptWithMemory: jest.Mock;
+      getEffectiveUserPrompt: jest.Mock;
+    };
+    const { getSettings } = jest.requireMock("@/settings/model") as { getSettings: jest.Mock };
+    const { getCurrentProject } = jest.requireMock("@/aiParams") as {
+      getCurrentProject: jest.Mock;
+    };
 
     beforeEach(() => {
       // Reset to defaults

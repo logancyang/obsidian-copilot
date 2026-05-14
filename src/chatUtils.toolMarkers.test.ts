@@ -44,8 +44,8 @@ describe("updateChatMemory with tool call markers", () => {
       },
     ];
 
-    const memoryManager: any = new MockMemoryManager();
-    await updateChatMemory(messages, memoryManager);
+    const memoryManager = new MockMemoryManager();
+    await updateChatMemory(messages, memoryManager as never);
 
     expect(memoryManager.getMemory().saved).toHaveLength(1);
     expect(memoryManager.getMemory().saved[0].input).toBe("find my piano notes");
