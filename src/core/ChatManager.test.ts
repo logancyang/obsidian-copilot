@@ -70,6 +70,7 @@ import { ContextManager } from "./ContextManager";
 import { ChainType } from "@/chainType";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { ChatMessage, MessageContext } from "@/types/message";
+import { PromptContextEnvelope } from "@/context/PromptContextTypes";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
 const USER_SENDER = "user";
@@ -110,7 +111,7 @@ describe("ChatManager", () => {
       editMessage: jest.fn(),
       getDebugInfo: jest.fn(),
       truncateAfter: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<MessageRepository>;
 
     mockChainManager = {
       memoryManager: {
@@ -137,7 +138,7 @@ describe("ChatManager", () => {
     mockContextManager = {
       processMessageContext: jest.fn(),
       reprocessMessageContext: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<ContextManager>;
 
     // Mock ContextManager.getInstance
     (ContextManager.getInstance as jest.Mock).mockReturnValue(mockContextManager);
@@ -332,7 +333,7 @@ describe("ChatManager", () => {
       const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
       const mockLLMMessage = {
         ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
-        contextEnvelope: { layers: [] } as any, // Has envelope, no lazy reprocessing needed
+        contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope, // Has envelope, no lazy reprocessing needed
       };
 
       mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
@@ -373,7 +374,7 @@ describe("ChatManager", () => {
       // Second call: after reprocessing, has envelope
       const mockLLMMessageWithEnvelope = {
         ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
-        contextEnvelope: { layers: [] } as any,
+        contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope,
       };
 
       mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
@@ -674,7 +675,7 @@ describe("ChatManager", () => {
         const mockUserMessage = createMockMessage("msg-1", "Hello", USER_SENDER);
         const mockLLMMessage = {
           ...createMockMessage("msg-1", "Hello with context", USER_SENDER),
-          contextEnvelope: { layers: [] } as any,
+          contextEnvelope: { layers: [] } as unknown as PromptContextEnvelope,
         };
 
         mockMessageRepo.getMessage.mockReturnValue(mockAiMessage);
@@ -750,7 +751,7 @@ describe("ChatManager", () => {
               url: "https://active.example.com",
               isActive: true,
             }),
-          ]),
+          ]) as unknown,
         }),
         undefined
       );
@@ -794,7 +795,7 @@ describe("ChatManager", () => {
               url: "https://marker.example.com",
               isActive: true,
             }),
-          ]),
+          ]) as unknown,
         }),
         undefined
       );
@@ -1221,12 +1222,20 @@ describe("ChatManager", () => {
 
   describe("System Prompt Template Processing", () => {
     // Import mocked modules for manipulation
-    const { processPrompt } = jest.requireMock("@/commands/customCommandUtils");
+    const { processPrompt } = jest.requireMock("@/commands/customCommandUtils") as {
+      processPrompt: jest.Mock;
+    };
     const { getSystemPrompt, getSystemPromptWithMemory, getEffectiveUserPrompt } = jest.requireMock(
       "@/system-prompts/systemPromptBuilder"
-    );
-    const { getSettings } = jest.requireMock("@/settings/model");
-    const { getCurrentProject } = jest.requireMock("@/aiParams");
+    ) as {
+      getSystemPrompt: jest.Mock;
+      getSystemPromptWithMemory: jest.Mock;
+      getEffectiveUserPrompt: jest.Mock;
+    };
+    const { getSettings } = jest.requireMock("@/settings/model") as { getSettings: jest.Mock };
+    const { getCurrentProject } = jest.requireMock("@/aiParams") as {
+      getCurrentProject: jest.Mock;
+    };
 
     beforeEach(() => {
       // Reset to defaults

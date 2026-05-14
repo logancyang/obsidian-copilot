@@ -130,11 +130,11 @@ describe("FileTreeTools", () => {
 
     // Also test the tool to ensure it uses buildFileTree correctly
     const tool = createGetFileTreeTool(root);
-    const result = await ToolManager.callTool(tool, {});
+    const result = (await ToolManager.callTool(tool, {})) as string;
 
     // Extract JSON part after the prompt
     const jsonPart = result.substring(result.indexOf("{"));
-    const treeFromTool = JSON.parse(jsonPart);
+    const treeFromTool = JSON.parse(jsonPart) as typeof expectedTree;
 
     expect(treeFromTool).toEqual(expectedTree);
   });

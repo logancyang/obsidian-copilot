@@ -58,7 +58,7 @@ describe("promptPayloadRecorder", () => {
   });
 
   it("serializes circular message graphs without throwing", async () => {
-    const circular: any = { role: "system" };
+    const circular: { role: string; self?: unknown } = { role: "system" };
     circular.self = circular;
 
     expect(() => recordPromptPayload({ messages: [circular] })).not.toThrow();

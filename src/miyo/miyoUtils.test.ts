@@ -2,6 +2,7 @@ jest.mock("@/plusUtils", () => ({
   isSelfHostAccessValid: jest.fn(),
 }));
 
+import { App } from "obsidian";
 import { getMiyoFilePath, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 
 describe("getMiyoFolderName", () => {
@@ -13,19 +14,19 @@ describe("getMiyoFolderName", () => {
           getBasePath: () => "\\\\Mac\\Home\\Downloads\\graham-essays-main",
         },
       },
-    } as any);
+    } as unknown as App);
 
     expect(folderName).toBe("graham-essays-main");
   });
 });
 
 describe("getVaultRelativeMiyoPath", () => {
-  const buildApp = (vaultName: string) =>
+  const buildApp = (vaultName: string): App =>
     ({
       vault: {
         getName: () => vaultName,
       },
-    }) as any;
+    }) as unknown as App;
 
   it("strips the current vault folder-name prefix", () => {
     expect(getVaultRelativeMiyoPath(buildApp("MyVault"), "MyVault/notes/foo.md")).toBe(
@@ -61,12 +62,12 @@ describe("getVaultRelativeMiyoPath", () => {
 });
 
 describe("getMiyoFilePath", () => {
-  const buildApp = (vaultName: string) =>
+  const buildApp = (vaultName: string): App =>
     ({
       vault: {
         getName: () => vaultName,
       },
-    }) as any;
+    }) as unknown as App;
 
   it("prefixes the vault folder name to a vault-relative path", () => {
     expect(getMiyoFilePath(buildApp("MyVault"), "notes/foo.md")).toBe("MyVault/notes/foo.md");

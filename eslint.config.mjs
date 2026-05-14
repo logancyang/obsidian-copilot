@@ -88,7 +88,7 @@ export default [
 
       // --- Heavy: any-flow through Obsidian/LangChain APIs ---
       "@typescript-eslint/no-unsafe-member-access": "off", // 2040 violations
-      "@typescript-eslint/no-unsafe-assignment": "off", // 879 violations
+      "@typescript-eslint/no-unsafe-assignment": "off", // 499 violations — enabled for tests below; follow-up PR for production
       "@typescript-eslint/no-unsafe-call": "off", // 679 violations
       "@typescript-eslint/no-unsafe-argument": "off", // 368 violations
       "@typescript-eslint/no-unsafe-return": "off", // 187 violations
@@ -124,6 +124,15 @@ export default [
     },
     rules: {
       "import/no-nodejs-modules": "off",
+    },
+  },
+
+  // Tests have been cleaned of unsafe `any` assignments. Production code
+  // (~499 violations) is a follow-up; keep tests enforced.
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "error",
     },
   },
 

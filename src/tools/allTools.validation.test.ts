@@ -13,9 +13,9 @@ function hasWeakTyping(schema: z.ZodType): boolean {
   }
 
   if (schema instanceof z.ZodObject) {
-    const shape = schema.shape;
+    const shape = schema.shape as Record<string, z.ZodType>;
     for (const value of Object.values(shape)) {
-      if (hasWeakTyping(value as z.ZodType)) {
+      if (hasWeakTyping(value)) {
         return true;
       }
     }

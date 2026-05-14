@@ -5,11 +5,11 @@ describe("Image extraction from content", () => {
   // Mock the global app object
   const mockApp = {
     metadataCache: {
-      getFirstLinkpathDest: jest.fn(),
+      getFirstLinkpathDest: jest.fn() as jest.Mock<{ path: string } | null, [string, string]>,
     },
   };
 
-  (window as any).app = mockApp;
+  (window as unknown as { app: typeof mockApp }).app = mockApp;
 
   beforeEach(() => {
     jest.clearAllMocks();

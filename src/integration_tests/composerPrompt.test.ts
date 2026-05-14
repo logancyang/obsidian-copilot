@@ -104,7 +104,10 @@ describe.skip("Composer Instructions - Integration Tests", () => {
             // For canvas files, validate JSON structure
             if (path.endsWith(".canvas")) {
               try {
-                const canvasJson = JSON.parse(contentStr);
+                const canvasJson = JSON.parse(contentStr) as {
+                  nodes: unknown[];
+                  edges?: unknown[];
+                };
                 expect(canvasJson).toHaveProperty("nodes");
                 expect(Array.isArray(canvasJson.nodes)).toBe(true);
                 if (canvasJson.edges) {
