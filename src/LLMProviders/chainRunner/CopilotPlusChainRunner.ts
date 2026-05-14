@@ -109,7 +109,8 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
    */
   private async planToolCalls(
     userMessage: string,
-    chatModel: BaseChatModel
+    chatModel: BaseChatModel,
+    hasActiveContextNote: boolean = false
   ): Promise<{ toolCalls: ToolCallWithExecutor[]; salientTerms: string[] }> {
     const availableTools = this.getAvailableToolsForPlanning();
 
@@ -129,12 +130,19 @@ export class CopilotPlusChainRunner extends BaseChainRunner {
     const boundModel = modelWithTools.bindTools(availableTools);
 
     // Build a lightweight planning prompt (no XML format instructions needed)
+    // Reason: when an active note is attached in this turn, tell the planner not
+    // to call getFileTree just because the user says "this note" / "this file" —
+    // the note's content is already available via context, so getFileTree is
+    // wasteful unless the user explicitly wants to discover OTHER notes.
+    const activeContextHint = hasActiveContextNote
+      ? "\n- The user has an active note attached in this turn. Its content is already available; do NOT call getFileTree merely because the user says 'this note' or 'this file'. Only call getFileTree when the user explicitly wants to discover OTHER notes, list folders, or verify paths."
+      : "";
     const planningPrompt = `You are a helpful AI assistant. Analyze the user's message and determine if any tools should be called.
 
 Guidelines:
 - Use tools when the user's request requires external information or computation
 - For time-related queries, use getTimeRangeMs to convert time expressions to timestamps
-- For file structure queries, use getFileTree to explore the vault
+- Use getFileTree ONLY when the user wants to discover or list notes/folders in the vault — not to read content already in context${activeContextHint}
 - If no tools are needed, respond with your analysis
 
 After analyzing, extract key search terms from the user's message that would be useful for searching notes:
@@ -787,7 +795,17 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
       try {
         // Use model-based planning instead of Broca
         const chatModel = this.chainManager.chatModelManager.getChatModel();
-        const planningResult = await this.planToolCalls(messageForAnalysis, chatModel);
+        // Reason: detect active-note attachment from the envelope so the planner
+        // can avoid calling getFileTree just to read a note that's already in
+        // context. See issue #2456.
+        const l3TurnForPlanning = envelope.layers.find((l) => l.id === "L3_TURN");
+        const hasActiveContextNote =
+          !!l3TurnForPlanning && /<active_note/.test(l3TurnForPlanning.text);
+        const planningResult = await this.planToolCalls(
+          messageForAnalysis,
+          chatModel,
+          hasActiveContextNote
+        );
 
         // Execute getTimeRangeMs immediately if present (needed for localSearch timeRange)
         // We execute it once here and remove it from toolCalls to avoid double execution
