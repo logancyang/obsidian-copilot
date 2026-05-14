@@ -49,6 +49,7 @@ import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
 import { arrayBufferToBase64 } from "@/utils/base64";
+import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
@@ -241,13 +242,20 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
 
+  /**
+   * Add selected image files while preserving the original selection order.
+   */
+  const handleAddImage = useCallback((files: File[]) => {
+    setSelectedImages((prev) => appendUniqueFiles(prev, files));
+  }, []);
+
   // Drag-and-drop hook for file handling
   const { isDragActive } = useChatFileDrop({
     app,
     contextNotes,
     setContextNotes,
     selectedImages,
-    onAddImage: (files) => setSelectedImages((prev) => [...prev, ...files]),
+    onAddImage: handleAddImage,
     containerRef: chatContainerRef,
   });
 
@@ -885,7 +893,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               setIncludeActiveWebTab={setIncludeActiveWebTab}
               activeWebTab={currentActiveWebTab}
               selectedImages={selectedImages}
-              onAddImage={(files: File[]) => setSelectedImages((prev) => [...prev, ...files])}
+              onAddImage={handleAddImage}
               setSelectedImages={setSelectedImages}
               disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
               selectedTextContexts={selectedTextContexts}

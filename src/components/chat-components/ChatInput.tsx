@@ -21,6 +21,7 @@ import {
 import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { isAllowedFileForNoteContext } from "@/utils";
+import { getFileIdentityKey } from "@/utils/fileListUtils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -740,10 +741,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       {selectedImages.length > 0 && (
         <div className="selected-images">
           {selectedImages.map((file, index) => (
-            <div
-              key={`${file.name}-${file.size}-${file.lastModified}`}
-              className="image-preview-container"
-            >
+            <div key={getFileIdentityKey(file)} className="image-preview-container">
               <img
                 src={URL.createObjectURL(file)}
                 alt={file.name}
