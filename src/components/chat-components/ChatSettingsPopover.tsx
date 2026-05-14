@@ -45,6 +45,11 @@ export function ChatSettingsPopover() {
 
   // Local editing state
   const [localModel, setLocalModel] = useState<CustomModel | undefined>(originalModel);
+  const [prevModelKey, setPrevModelKey] = useState(modelKey);
+  if (prevModelKey !== modelKey) {
+    setPrevModelKey(modelKey);
+    setLocalModel(originalModel);
+  }
 
   // System prompt state (session-level, in-memory)
   const prompts = useSystemPrompts();
@@ -70,11 +75,6 @@ export function ChatSettingsPopover() {
   const [disableBuiltin, setDisableBuiltin] = useState(() => getDisableBuiltinSystemPrompt());
   const [showConfirmation, setShowConfirmation] = useState(false);
   const confirmationRef = useRef<HTMLDivElement>(null);
-
-  // Update local state when original model changes (e.g., switching models)
-  useEffect(() => {
-    setLocalModel(originalModel);
-  }, [originalModel]);
 
   // Auto-scroll to confirmation box when it appears
   useEffect(() => {

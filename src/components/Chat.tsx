@@ -88,7 +88,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [currentChain] = useChainType();
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
-  const [latestTokenCount, setLatestTokenCount] = useState<number | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   // Stable ID for streaming message, shared with final persisted message
   // This allows collapsible UI state (think blocks) to persist across streaming -> history
@@ -104,12 +103,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       const messageToAdd = shouldAttachId ? { ...message, id: streamingId } : message;
 
       rawAddMessage(messageToAdd);
-      if (
-        messageToAdd.sender === AI_SENDER &&
-        messageToAdd.responseMetadata?.tokenUsage?.totalTokens
-      ) {
-        setLatestTokenCount(messageToAdd.responseMetadata.tokenUsage.totalTokens);
-      }
     },
     [rawAddMessage]
   );
@@ -122,8 +115,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const [loading, setLoading] = useState(false);
   const [loadingMessage, setLoadingMessage] = useState(LOADING_MESSAGES.DEFAULT);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
-  const [includeActiveNote, setIncludeActiveNote] = useState(false);
-  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
+  const [includeActiveNote, setIncludeActiveNote] = useState(
+    settings.autoAddActiveContentToContext === true && currentChain !== ChainType.PROJECT_CHAIN
+  );
+  const [includeActiveWebTab, setIncludeActiveWebTab] = useState(
+    settings.autoAddActiveContentToContext === true && currentChain !== ChainType.PROJECT_CHAIN
+  );
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [showChatUI, setShowChatUI] = useState(false);
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
@@ -182,10 +179,11 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     return projectContextStatus === "loading" || projectContextStatus === "error";
   };
 
-  // Reset user preference when status changes to allow default behavior
-  useEffect(() => {
+  const [prevProjectContextStatus, setPrevProjectContextStatus] = useState(projectContextStatus);
+  if (prevProjectContextStatus !== projectContextStatus) {
+    setPrevProjectContextStatus(projectContextStatus);
     setProgressCardVisible(null);
-  }, [projectContextStatus]);
+  }
 
   /**
    * Whether to show the indexing progress card.
@@ -198,12 +196,22 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     return indexingState.isActive || indexingState.completionStatus !== "none";
   };
 
-  // Allow the card to show whenever new indexing activity or completion is detected
-  useEffect(() => {
+  const [prevIndexingActivity, setPrevIndexingActivity] = useState({
+    isActive: indexingState.isActive,
+    completionStatus: indexingState.completionStatus,
+  });
+  if (
+    prevIndexingActivity.isActive !== indexingState.isActive ||
+    prevIndexingActivity.completionStatus !== indexingState.completionStatus
+  ) {
+    setPrevIndexingActivity({
+      isActive: indexingState.isActive,
+      completionStatus: indexingState.completionStatus,
+    });
     if (indexingState.isActive || indexingState.completionStatus !== "none") {
       setIndexingCardVisible(null);
     }
-  }, [indexingState.isActive, indexingState.completionStatus]);
+  }
 
   const handleIndexingCardClose = useCallback(() => {
     setIndexingCardVisible(false);
@@ -228,11 +236,12 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     await VectorStoreManager.getInstance().cancelIndexing();
   }, []);
 
-  // Clear token count when chat is cleared or replaced (e.g., loading chat history)
-  useEffect(() => {
-    if (chatHistory.length === 0) {
-      setLatestTokenCount(null);
+  const latestTokenCount = useMemo(() => {
+    for (let i = chatHistory.length - 1; i >= 0; i--) {
+      const m = chatHistory[i];
+      if (m.sender === AI_SENDER) return m.responseMetadata?.tokenUsage?.totalTokens ?? null;
     }
+    return null;
   }, [chatHistory]);
 
   const [previousMode, setPreviousMode] = useState<ChainType | null>(null);
@@ -687,7 +696,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     // Additional UI state reset specific to this component
     safeSet.setCurrentAiMessage("");
     setContextNotes([]);
-    setLatestTokenCount(null); // Clear token count on new chat
     // Capture web selection URL before clearing for suppression
     const webSelectionUrl = selectedTextContexts.find((ctx) => ctx.sourceType === "web")?.url;
     clearSelectedTextContexts();
@@ -796,10 +804,19 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
     };
   }, [eventTarget, handleStopGenerating]);
 
-  // Use the autoAddActiveContentToContext setting
-  useEffect(() => {
+  const [prevAutoAddTuple, setPrevAutoAddTuple] = useState({
+    autoAdd: settings.autoAddActiveContentToContext,
+    chain: selectedChain,
+  });
+  if (
+    prevAutoAddTuple.autoAdd !== settings.autoAddActiveContentToContext ||
+    prevAutoAddTuple.chain !== selectedChain
+  ) {
+    setPrevAutoAddTuple({
+      autoAdd: settings.autoAddActiveContentToContext,
+      chain: selectedChain,
+    });
     if (settings.autoAddActiveContentToContext !== undefined) {
-      // Only apply the setting if not in Project mode
       if (selectedChain === ChainType.PROJECT_CHAIN) {
         setIncludeActiveNote(false);
         setIncludeActiveWebTab(false);
@@ -808,7 +825,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         setIncludeActiveWebTab(settings.autoAddActiveContentToContext);
       }
     }
-  }, [settings.autoAddActiveContentToContext, selectedChain]);
+  }
 
   // Note: pendingMessages loading has been removed as ChatManager now handles
   // message persistence and loading automatically based on project context

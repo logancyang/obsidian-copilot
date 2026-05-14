@@ -34,7 +34,14 @@ import {
 } from "lucide-react";
 import { getCachedProjectRecordById } from "@/projects/state";
 import { App, Notice } from "obsidian";
-import React, { memo, useEffect, useMemo, useState } from "react";
+import React, {
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { filterProjects } from "@/utils/projectUtils";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -46,22 +53,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 function useRecentUsageManagerRevision<Key extends string>(
   manager: RecentUsageManager<Key> | null | undefined
 ): number {
-  const [revision, setRevision] = useState(() => manager?.getRevision() ?? 0);
-
-  useEffect(() => {
-    if (!manager) {
-      setRevision(0);
-      return;
-    }
-
-    setRevision(manager.getRevision());
-
-    return manager.subscribe(() => {
-      setRevision(manager.getRevision());
-    });
-  }, [manager]);
-
-  return revision;
+  const subscribe = useCallback(
+    (cb: () => void) => manager?.subscribe(cb) ?? (() => {}),
+    [manager]
+  );
+  const getSnapshot = useCallback(() => manager?.getRevision() ?? 0, [manager]);
+  return useSyncExternalStore(subscribe, getSnapshot);
 }
 
 function ProjectItem({
@@ -219,28 +216,35 @@ export const ProjectList = memo(
     // Safety net: if the selected project disappears from the list (delete/move/duplicate-id),
     // clear local UI selection. Don't call setCurrentProject(null) here — ProjectManager's
     // records subscriber handles the atom update with save-first ordering via switchProject(null).
+    // effectiveSelectedProject is what the UI trusts; the raw `selectedProject` state remains
+    // for the user's actual selection action.
+    const effectiveSelectedProject =
+      selectedProject && projects.some((p) => p.id === selectedProject.id) ? selectedProject : null;
+    const selectedProjectMissing = selectedProject !== null && effectiveSelectedProject === null;
+    if (selectedProjectMissing) {
+      setSelectedProject(null);
+      setShowChatInput(false);
+      setIsOpen(true);
+    }
     useEffect(() => {
-      if (!selectedProject) return;
-      const stillExists = projects.some((p) => p.id === selectedProject.id);
-      if (!stillExists) {
-        setSelectedProject(null);
-        setShowChatInput(false);
-        setIsOpen(true);
+      if (selectedProjectMissing) {
         showChatUI(false);
       }
-    }, [projects, selectedProject, showChatUI]);
+    }, [selectedProjectMissing, showChatUI]);
 
     // Get the project usage manager for subscription
     const projectUsageTimestampsManager =
       plugin?.projectManager?.getProjectUsageTimestampsManager?.();
     const projectUsageRevision = useRecentUsageManagerRevision(projectUsageTimestampsManager);
 
-    // Auto collapse when messages appear
-    useEffect(() => {
-      if (hasMessages) {
-        setIsOpen(false);
-      }
-    }, [hasMessages]);
+    // Auto collapse when messages first appear; user can re-open manually.
+    const [prevHasMessages, setPrevHasMessages] = useState(hasMessages);
+    if (!prevHasMessages && hasMessages) {
+      setPrevHasMessages(true);
+      setIsOpen(false);
+    } else if (prevHasMessages && !hasMessages) {
+      setPrevHasMessages(false);
+    }
 
     // Sort projects based on sort strategy
     // Note: projectUsageRevision triggers re-sort when in-memory timestamps change,

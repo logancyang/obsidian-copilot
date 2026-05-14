@@ -22,13 +22,42 @@ type AuthStep = "idle" | "pending" | "polling" | "done" | "error";
 export function GitHubCopilotAuth() {
   const settings = useSettingsValue();
   const [copilotProvider] = useState(() => GitHubCopilotProvider.getInstance());
-  const [authStep, setAuthStep] = useState<AuthStep>("idle");
+  const [authStep, setAuthStep] = useState<AuthStep>(() =>
+    copilotProvider.getAuthState().status === "authenticated" ? "done" : "idle"
+  );
   const [deviceCode, setDeviceCode] = useState<DeviceCodeResponse | null>(null);
   const [pollCount, setPollCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
   const authRequestIdRef = useRef(0);
   const isMountedRef = useRef(true);
+
+  // Render-phase reset: re-derive authStep when the underlying auth tokens change.
+  // GitHubCopilotProvider has no subscribe API, so we track the token tuple instead.
+  const [prevTokens, setPrevTokens] = useState({
+    token: settings.githubCopilotToken,
+    accessToken: settings.githubCopilotAccessToken,
+    expiresAt: settings.githubCopilotTokenExpiresAt,
+  });
+  if (
+    prevTokens.token !== settings.githubCopilotToken ||
+    prevTokens.accessToken !== settings.githubCopilotAccessToken ||
+    prevTokens.expiresAt !== settings.githubCopilotTokenExpiresAt
+  ) {
+    setPrevTokens({
+      token: settings.githubCopilotToken,
+      accessToken: settings.githubCopilotAccessToken,
+      expiresAt: settings.githubCopilotTokenExpiresAt,
+    });
+    const state = copilotProvider.getAuthState();
+    if (state.status === "authenticated") {
+      if (authStep !== "pending" && authStep !== "polling") {
+        setAuthStep("done");
+      }
+    } else if (authStep === "done") {
+      setAuthStep("idle");
+    }
+  }
 
   // Cleanup on unmount: abort polling and prevent setState
   useEffect(() => {
@@ -40,34 +69,6 @@ export function GitHubCopilotAuth() {
       copilotProvider.abortPolling();
     };
   }, [copilotProvider]);
-
-  // Check initial auth state
-  useEffect(() => {
-    const state = copilotProvider.getAuthState();
-    if (state.status === "authenticated") {
-      setAuthStep("done");
-    }
-  }, [copilotProvider]);
-
-  // Update auth step when settings change - reuse getAuthState() for consistency
-  useEffect(() => {
-    const state = copilotProvider.getAuthState();
-    if (state.status === "authenticated") {
-      // Don't override in-flight auth UI during polling
-      if (authStep !== "pending" && authStep !== "polling") {
-        setAuthStep("done");
-      }
-    } else if (authStep === "done") {
-      // Token expired or cleared, reset to idle
-      setAuthStep("idle");
-    }
-  }, [
-    settings.githubCopilotToken,
-    settings.githubCopilotAccessToken,
-    settings.githubCopilotTokenExpiresAt,
-    copilotProvider,
-    authStep,
-  ]);
 
   /**
    * Runs the polling flow to complete OAuth authorization.

@@ -10,7 +10,7 @@ import { getNeedSetKeyProvider, getProviderInfo, getProviderLabel } from "@/util
 import { ChevronDown, ChevronRight, ChevronUp, Info } from "lucide-react";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { App, Modal } from "obsidian";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 
 interface ApiKeyModalContentProps {
@@ -27,10 +27,6 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
   // Subscribe to settings changes so the component re-renders when API keys are updated
   useSettingsValue();
   const [expandedProvider, setExpandedProvider] = useState<SettingKeyProviders | null>(null);
-
-  useEffect(() => {
-    setExpandedProvider(null);
-  }, []);
 
   const providers: ProviderKeyItem[] = getNeedSetKeyProvider().map((provider) => {
     const providerKey = provider as SettingKeyProviders;
@@ -115,6 +111,7 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
                   <Collapsible open={isExpanded} className="tw-mt-2">
                     <CollapsibleContent className="tw-rounded-md tw-p-3">
                       <ModelImporter
+                        key={`${item.provider}:${item.apiKey}`}
                         provider={item.provider}
                         isReady={Boolean(item.apiKey)}
                         expanded={isExpanded}

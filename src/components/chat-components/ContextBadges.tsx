@@ -51,33 +51,35 @@ interface FaviconOrGlobeProps {
   className?: string;
 }
 
+function FaviconImage({ faviconUrl, className }: { faviconUrl: string; className: string }) {
+  const [failed, setFailed] = React.useState(false);
+  if (failed) {
+    return <Globe className={className} />;
+  }
+  return (
+    <img
+      src={faviconUrl}
+      alt=""
+      referrerPolicy="no-referrer"
+      loading="lazy"
+      decoding="async"
+      className={cn(className, "tw-rounded-sm")}
+      onError={() => setFailed(true)}
+    />
+  );
+}
+
 export function FaviconOrGlobe({
   faviconUrl,
   isLoaded = true,
   className = "tw-size-3",
 }: FaviconOrGlobeProps) {
-  const [showFavicon, setShowFavicon] = React.useState<boolean>(Boolean(faviconUrl));
-
-  React.useEffect(() => {
-    setShowFavicon(Boolean(faviconUrl));
-  }, [faviconUrl]);
-
   if (!isLoaded) {
     return <CircleDashed className={cn(className, "tw-text-muted")} />;
   }
 
-  if (showFavicon && faviconUrl) {
-    return (
-      <img
-        src={faviconUrl}
-        alt=""
-        referrerPolicy="no-referrer"
-        loading="lazy"
-        decoding="async"
-        className={cn(className, "tw-rounded-sm")}
-        onError={() => setShowFavicon(false)}
-      />
-    );
+  if (faviconUrl) {
+    return <FaviconImage key={faviconUrl} faviconUrl={faviconUrl} className={className} />;
   }
 
   return <Globe className={className} />;

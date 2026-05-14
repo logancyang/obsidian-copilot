@@ -111,15 +111,28 @@ export function DraggableModal({
     [rawHandleMouseDown]
   );
 
+  // Resize state (height and width)
+  const [heightPx, setHeightPx] = useState<number | null>(null);
+  const [widthPx, setWidthPx] = useState<number | null>(null);
+
   // Reason: Reset transient state when the modal reopens so that stale
   // drag/resize/anchor state from a previous session does not leak.
+  // Render-phase prev-open tracker resets the size state on false→true transition;
+  // ref resets and the initialPosition setter live in an effect since refs aren't
+  // subject to the no-direct-set-state rule and setPosition belongs to a child hook.
+  const [prevOpen, setPrevOpen] = useState(open);
+  if (open && !prevOpen) {
+    setPrevOpen(true);
+    setHeightPx(null);
+    setWidthPx(null);
+  } else if (!open && prevOpen) {
+    setPrevOpen(false);
+  }
   useEffect(() => {
     if (!open) return;
     pendingDragCleanupRef.current?.();
     pendingDragCleanupRef.current = null;
     isManualPositionRef.current = false;
-    setHeightPx(null);
-    setWidthPx(null);
     if (initialPosition) {
       setPosition(initialPosition);
     }
@@ -132,10 +145,6 @@ export function DraggableModal({
       pendingDragCleanupRef.current = null;
     };
   }, []);
-
-  // Resize state (height and width)
-  const [heightPx, setHeightPx] = useState<number | null>(null);
-  const [widthPx, setWidthPx] = useState<number | null>(null);
 
   // When resizable, lock an initial height so streaming/content won't "push" the modal taller.
   useLayoutEffect(() => {
@@ -156,13 +165,10 @@ export function DraggableModal({
     }
   }, [open, resizable, heightPx, widthPx, minHeight, dragRef]);
 
-  // Auto-expand height when minHeight increases (e.g., ContentArea becomes visible)
-  useEffect(() => {
-    if (!resizable || heightPx === null) return;
-    if (heightPx < minHeight) {
-      setHeightPx(minHeight);
-    }
-  }, [resizable, minHeight, heightPx]);
+  // Auto-expand height when minHeight increases (e.g., ContentArea becomes visible).
+  // Derived: effectiveHeight clamps the user's explicit resize to the current minHeight
+  // without writing back into heightPx state.
+  const effectiveHeight = heightPx === null ? null : Math.max(heightPx, minHeight);
 
   // Reason: For "above" placement, keep the panel's bottom edge anchored.
   // When height increases (e.g., ContentArea appears), shift position.y up so the
@@ -170,14 +176,14 @@ export function DraggableModal({
   // Uses useLayoutEffect to apply before paint, preventing visual flash.
   useLayoutEffect(() => {
     if (anchorBottom === undefined || isManualPositionRef.current) return;
-    if (heightPx === null) return;
+    if (effectiveHeight === null) return;
 
-    const newY = Math.max(12, anchorBottom - heightPx);
+    const newY = Math.max(12, anchorBottom - effectiveHeight);
     // Guard: only update if position actually changed (avoid infinite re-render)
     if (Math.abs(position.y - newY) < 1) return;
 
     setPosition({ x: position.x, y: newY });
-  }, [anchorBottom, heightPx, position.x, position.y, setPosition]);
+  }, [anchorBottom, effectiveHeight, position.x, position.y, setPosition]);
 
   // Reason: Generic overflow correction for non-anchored panels.
   // If content/minHeight growth pushes the modal below the viewport edge,
@@ -187,15 +193,15 @@ export function DraggableModal({
   // height changes.
   useLayoutEffect(() => {
     if (anchorBottom !== undefined || isManualPositionRef.current) return;
-    if (heightPx === null) return;
+    if (effectiveHeight === null) return;
 
     const ownerWindow = dragRef.current?.win ?? window;
-    const maxY = ownerWindow.innerHeight - 12 - heightPx;
+    const maxY = ownerWindow.innerHeight - 12 - effectiveHeight;
     const newY = Math.max(12, Math.min(position.y, maxY));
     if (Math.abs(position.y - newY) < 1) return;
 
     setPosition({ x: position.x, y: newY });
-  }, [anchorBottom, heightPx, position.x, position.y, setPosition, dragRef]);
+  }, [anchorBottom, effectiveHeight, position.x, position.y, setPosition, dragRef]);
 
   const getResizeRect = useCallback(() => {
     return dragRef.current?.getBoundingClientRect() ?? null;
@@ -305,7 +311,7 @@ export function DraggableModal({
       )}
       style={{
         width: resizable && widthPx !== null ? widthPx : width,
-        ...(resizable && heightPx !== null ? { height: heightPx } : {}),
+        ...(resizable && effectiveHeight !== null ? { height: effectiveHeight } : {}),
       }}
     >
       {/* Header: drag handle + close button (flex-none) */}

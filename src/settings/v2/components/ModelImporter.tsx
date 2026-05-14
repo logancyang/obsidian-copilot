@@ -118,15 +118,6 @@ export function ModelImporter({
     }
   }, [provider, isReady]);
 
-  // Reset cached models when provider or credentials change
-  // This ensures the model list is refreshed after re-authentication or API key rotation
-  useEffect(() => {
-    setModels(null);
-    setSelectedModel(null);
-    setError(null);
-    setVerificationMessage(null);
-  }, [provider, credentialVersion]);
-
   // Auto-load models when expanded and ready
   useEffect(() => {
     if (expanded && isReady && models === null && !loading && !error) {

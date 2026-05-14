@@ -52,11 +52,12 @@ export function TypeaheadMenuContent({
   const selectedItemRef = useRef<HTMLDivElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const [hoveredIndex, setHoveredIndex] = React.useState<number | null>(null);
+  const [prevSelectedIndex, setPrevSelectedIndex] = React.useState(selectedIndex);
 
-  // Clear hover state when keyboard navigation changes selection
-  useEffect(() => {
+  if (selectedIndex !== prevSelectedIndex) {
+    setPrevSelectedIndex(selectedIndex);
     setHoveredIndex(null);
-  }, [selectedIndex]);
+  }
 
   // Scroll the selected item into view when selection changes
   useEffect(() => {

@@ -7,7 +7,7 @@ import {
 } from "@/components/command-ui/constants";
 import { SelectionHighlight } from "@/editor/selectionHighlight";
 import { createHighlightReplaceGuard, type ReplaceGuard } from "@/editor/replaceGuard";
-import { logError, logWarn } from "@/logger";
+import { logError } from "@/logger";
 import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
 import { computeVerticalPlacement } from "@/utils/panelPlacement";
 import { computeSelectionAnchors } from "@/utils/selectionAnchors";
@@ -183,12 +183,12 @@ function CustomCommandChatModalContent({
     return command.modelKey || globalModelKey;
   }, [modelSelectionScope, settings.quickCommandModelKey, command.modelKey, globalModelKey]);
 
-  const [selectedModelKey, setSelectedModelKey] = useState(initialModelKey);
+  const [userSelectedModelKey, setUserSelectedModelKey] = useState(initialModelKey);
 
   // Handle model change with scope-aware persistence
   const handleModelChange = useCallback(
     (newModelKey: string) => {
-      setSelectedModelKey(newModelKey);
+      setUserSelectedModelKey(newModelKey);
       // Only persist for quick-command scope (shared with Quick Ask)
       if (modelSelectionScope === "quick-command") {
         updateSetting("quickCommandModelKey", newModelKey);
@@ -209,16 +209,13 @@ function CustomCommandChatModalContent({
     updateSetting("quickCommandIncludeNoteContext", checked);
   }, []);
 
-  // Track if we've already shown the fallback notice to avoid repeated notices
-  const didShowFallbackNoticeRef = useRef(false);
-
   // Safely resolve the selected model with fallback to first enabled model
   const resolvedModel = useMemo((): CustomModel | null => {
     try {
-      const model = findCustomModel(selectedModelKey, settings.activeModels);
+      const model = findCustomModel(userSelectedModelKey, settings.activeModels);
       // Treat disabled models as invalid selections (ModelSelector won't present them)
       if (!model.enabled) {
-        throw new Error(`Selected model is disabled: ${selectedModelKey}`);
+        throw new Error(`Selected model is disabled: ${userSelectedModelKey}`);
       }
       return model;
     } catch {
@@ -226,7 +223,7 @@ function CustomCommandChatModalContent({
       // Avoid side effects during render; notify/log in the effect below.
       return settings.activeModels.find((m) => m.enabled) ?? null;
     }
-  }, [selectedModelKey, settings.activeModels]);
+  }, [userSelectedModelKey, settings.activeModels]);
 
   // Compute the key for the resolved model
   const resolvedModelKey = useMemo(() => {
@@ -234,23 +231,8 @@ function CustomCommandChatModalContent({
     return `${resolvedModel.name}|${resolvedModel.provider}`;
   }, [resolvedModel]);
 
-  // Update selectedModelKey if we had to fall back to a different model
-  useEffect(() => {
-    if (!resolvedModelKey) return;
-    if (resolvedModelKey === selectedModelKey) return;
-
-    // Always keep UI selection consistent with the resolved model
-    setSelectedModelKey(resolvedModelKey);
-
-    // Notify only once per modal lifecycle
-    if (didShowFallbackNoticeRef.current) return;
-    didShowFallbackNoticeRef.current = true;
-    logWarn("Selected model is no longer available. Falling back to a default model.", {
-      selectedModelKey,
-      resolvedModelKey,
-    });
-    new Notice("Selected model is no longer available. Falling back to a default model.");
-  }, [resolvedModelKey, selectedModelKey]);
+  // Effective model key for the UI — falls back to user selection when resolution fails.
+  const effectiveModelKey = resolvedModelKey ?? userSelectedModelKey;
 
   // Use shared streaming hook
   const {
@@ -277,12 +259,15 @@ function CustomCommandChatModalContent({
   // Track the last input prompt for saving context on stop
   const lastInputPromptRef = useRef<string>("");
 
-  // Sync editedText with finalText when finalText changes
-  useEffect(() => {
+  // Sync editedText with finalText when finalText changes. Render-phase tracker
+  // preserves user edits made after the last finalText change until the next change.
+  const [prevFinalText, setPrevFinalText] = useState(finalText);
+  if (prevFinalText !== finalText) {
+    setPrevFinalText(finalText);
     if (finalText) {
       setEditedText(finalText);
     }
-  }, [finalText]);
+  }
 
   // Compute content state for MenuCommandModal
   const contentState: ContentState = useMemo(() => {
@@ -453,7 +438,7 @@ function CustomCommandChatModalContent({
       followUpValue={followUpValue}
       onFollowUpChange={setFollowUpValue}
       onFollowUpSubmit={handleFollowUpSubmit}
-      selectedModel={selectedModelKey}
+      selectedModel={effectiveModelKey}
       onSelectModel={handleModelChange}
       onStop={handleStop}
       onCopy={handleCopy}

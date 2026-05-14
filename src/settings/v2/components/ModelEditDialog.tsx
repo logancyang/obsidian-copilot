@@ -19,7 +19,7 @@ import { getSettings } from "@/settings/model";
 import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { App, Modal, Platform } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import { ModelParametersEditor } from "@/components/ui/ModelParametersEditor";
 
@@ -40,20 +40,19 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   isEmbeddingModel,
   onCancel,
 }) => {
+  // Reason: `model` is passed in once when ModelEditModal renders its React root
+  // (see class below) and never changes for the lifetime of this component — the
+  // modal unmounts on close and a new instance is constructed for each edit.
+  // No prop→state sync is needed; `useState(model)` at mount is sufficient.
   const [localModel, setLocalModel] = useState<CustomModel>(model);
-  const [originalModel, setOriginalModel] = useState<CustomModel>(model);
-  const [providerInfo, setProviderInfo] = useState<ProviderMetadata>({} as ProviderMetadata);
+  const originalModel = model;
+  const providerInfo = useMemo<ProviderMetadata>(
+    () => (model.provider ? getProviderInfo(model.provider) : ({} as ProviderMetadata)),
+    [model.provider]
+  );
   const settings = getSettings();
   const isBedrockProvider =
     (localModel.provider as ChatModelProviders) === ChatModelProviders.AMAZON_BEDROCK;
-
-  useEffect(() => {
-    setLocalModel(model);
-    setOriginalModel(model);
-    if (model.provider) {
-      setProviderInfo(getProviderInfo(model.provider));
-    }
-  }, [model]);
 
   // Debounce the onUpdate callback
   const debouncedOnUpdate = useMemo(

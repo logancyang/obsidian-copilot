@@ -39,7 +39,11 @@ export function AtMentionCommandPlugin({
   const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
 
   // Load note content for preview using shared utilities
-  const loadNoteContentForPreview = useCallback(async (file: TFile) => {
+  const loadNoteContentForPreview = useCallback(async (file: TFile | null) => {
+    if (!file) {
+      setCurrentPreviewContent("");
+      return;
+    }
     try {
       // Handle PDF and canvas files - treat as empty content (no preview)
       if (file.extension === "pdf" || file.extension === "canvas") {
@@ -148,8 +152,8 @@ export function AtMentionCommandPlugin({
     onStateChange: onStateChangeCallback,
   });
 
-  // Load preview content when selection changes
-  useEffect(() => {
+  // Compute the currently selected file for preview, or null if not a note
+  const selectedFile = useMemo<TFile | null>(() => {
     const selectedOption = searchResults[state.selectedIndex];
     if (
       selectedOption &&
@@ -157,11 +161,15 @@ export function AtMentionCommandPlugin({
       selectedOption.category === "notes" &&
       selectedOption.data instanceof TFile
     ) {
-      void loadNoteContentForPreview(selectedOption.data);
-    } else {
-      setCurrentPreviewContent("");
+      return selectedOption.data;
     }
-  }, [state.selectedIndex, searchResults, isAtMentionOption, loadNoteContentForPreview]);
+    return null;
+  }, [state.selectedIndex, searchResults, isAtMentionOption]);
+
+  // Load preview content when selected file changes
+  useEffect(() => {
+    void loadNoteContentForPreview(selectedFile);
+  }, [selectedFile, loadNoteContentForPreview]);
 
   // Create display options with preview content for the highlighted note
   const displayOptions = useMemo(() => {

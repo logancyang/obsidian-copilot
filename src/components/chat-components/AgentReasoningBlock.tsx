@@ -2,7 +2,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { cn } from "@/lib/utils";
 import { ReasoningStatus } from "@/LLMProviders/chainRunner/utils/AgentReasoningState";
 import { ChevronRight } from "lucide-react";
-import React, { useEffect, useState } from "react";
+import React, { useState } from "react";
 
 /**
  * Props for the AgentReasoningBlock component
@@ -106,15 +106,16 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
   isStreaming,
 }) => {
   const [isExpanded, setIsExpanded] = useState(status === "reasoning");
+  const [prevStatus, setPrevStatus] = useState(status);
 
-  // Auto-expand when reasoning, auto-collapse when done
-  useEffect(() => {
+  if (status !== prevStatus) {
+    setPrevStatus(status);
     if (status === "reasoning") {
       setIsExpanded(true);
     } else if (status === "collapsed" || status === "complete") {
       setIsExpanded(false);
     }
-  }, [status]);
+  }
 
   // Don't render anything if idle
   if (status === "idle") {

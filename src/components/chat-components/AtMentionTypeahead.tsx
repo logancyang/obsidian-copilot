@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useState } from "react";
 import { TFile, TFolder } from "obsidian";
 import { TypeaheadMenuPopover } from "./TypeaheadMenuPopover";
 import {
@@ -42,6 +42,8 @@ export function AtMentionTypeahead({
   }>({
     mode: "category",
   });
+  const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
+  const [prevResultsLength, setPrevResultsLength] = useState(0);
 
   const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
 
@@ -161,8 +163,8 @@ export function AtMentionTypeahead({
     [selectedIndex, searchResults, handleSelect, onClose, extendedState.mode, searchQuery]
   );
 
-  // Reset state when menu closes
-  useEffect(() => {
+  if (isOpen !== prevIsOpen) {
+    setPrevIsOpen(isOpen);
     if (!isOpen) {
       setSearchQuery("");
       setSelectedIndex(0);
@@ -171,12 +173,12 @@ export function AtMentionTypeahead({
         selectedCategory: undefined,
       });
     }
-  }, [isOpen]);
+  }
 
-  // Reset selected index when options change
-  useEffect(() => {
+  if (searchResults.length !== prevResultsLength) {
+    setPrevResultsLength(searchResults.length);
     setSelectedIndex(0);
-  }, [searchResults.length]);
+  }
 
   if (!isOpen) {
     return null;

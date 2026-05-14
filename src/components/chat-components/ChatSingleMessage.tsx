@@ -37,7 +37,7 @@ import { ChatMessage } from "@/types/message";
 import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { App, Component, MarkdownRenderer, MarkdownView, TFile } from "obsidian";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 import {
   buildCopilotCollapsibleDomId,
@@ -314,12 +314,24 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 }) => {
   const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
-  // Agent Reasoning Block state
-  const [reasoningData, setReasoningData] = useState<{
+  const parsedReasoningBlock = useMemo(
+    () => parseReasoningBlock(message.message),
+    [message.message]
+  );
+  const reasoningData = useMemo<{
     status: "reasoning" | "collapsed" | "complete";
     elapsedSeconds: number;
     steps: string[];
-  } | null>(null);
+  } | null>(() => {
+    if (!parsedReasoningBlock?.hasReasoning || parsedReasoningBlock.status === "idle") {
+      return null;
+    }
+    return {
+      status: parsedReasoningBlock.status,
+      elapsedSeconds: parsedReasoningBlock.elapsedSeconds,
+      steps: parsedReasoningBlock.steps,
+    };
+  }, [parsedReasoningBlock]);
   const contentRef = useRef<HTMLDivElement>(null);
   const componentRef = useRef<Component | null>(null);
   const isUnmountingRef = useRef<boolean>(false);
@@ -661,20 +673,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
       const originMessage = message.message;
 
-      // Parse and extract agent reasoning block if present
-      const reasoningBlockData = parseReasoningBlock(originMessage);
-      if (reasoningBlockData?.hasReasoning && reasoningBlockData.status !== "idle") {
-        setReasoningData({
-          status: reasoningBlockData.status,
-          elapsedSeconds: reasoningBlockData.elapsedSeconds,
-          steps: reasoningBlockData.steps,
-        });
-      } else {
-        setReasoningData(null);
-      }
-
       // Use content after reasoning block (or full message if no reasoning block)
-      const messageContent = reasoningBlockData?.contentAfter ?? originMessage;
+      const messageContent = parsedReasoningBlock?.contentAfter ?? originMessage;
       const processedMessage = preprocess(messageContent);
       const parsedMessage = parseToolCallMarkers(processedMessage, messageId.current);
 
@@ -848,7 +848,15 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
     return () => {
       isUnmountingRef.current = true;
     };
-  }, [message, app, componentRef, isStreaming, preprocess, collapsibleOpenStateMap]);
+  }, [
+    message,
+    app,
+    componentRef,
+    isStreaming,
+    preprocess,
+    collapsibleOpenStateMap,
+    parsedReasoningBlock,
+  ]);
 
   // Cleanup effect that only runs on component unmount
   useEffect(() => {

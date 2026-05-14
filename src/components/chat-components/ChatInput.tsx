@@ -1,6 +1,5 @@
 import {
   getCurrentProject,
-  ProjectConfig,
   subscribeToProjectChange,
   useChainType,
   useModelKey,
@@ -24,7 +23,14 @@ import { isAllowedFileForNoteContext } from "@/utils";
 import { getFileIdentityKey } from "@/utils/fileListUtils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
 import { App, Notice, TFile, TFolder } from "obsidian";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { $getSelection, $isRangeSelection, LexicalEditor as LexicalEditorType } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
@@ -123,7 +129,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     const activeFile = app.workspace.getActiveFile();
     return isAllowedFileForNoteContext(activeFile) ? activeFile : null;
   });
-  const [selectedProject, setSelectedProject] = useState<ProjectConfig | null>(null);
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
@@ -171,32 +176,26 @@ const ChatInput: React.FC<ChatInputProps> = ({
     "If you have many files in context, this can take a while...",
   ];
 
-  // Sync autonomous agent toggle with settings and chain type
-  useEffect(() => {
-    if (currentChain === ChainType.PROJECT_CHAIN) {
-      // Force off in Projects mode
-      setAutonomousAgentToggle(false);
-    } else {
-      // In other modes, use the actual settings value
-      setAutonomousAgentToggle(settings.enableAutonomousAgent);
-    }
-  }, [settings.enableAutonomousAgent, currentChain]);
+  // Render-phase reset: re-derive autonomous agent toggle whenever chain or setting changes
+  const autonomousAgentSourceRef = useRef<{
+    chain: ChainType;
+    enabled: boolean;
+  }>({ chain: currentChain, enabled: settings.enableAutonomousAgent });
+  if (
+    autonomousAgentSourceRef.current.chain !== currentChain ||
+    autonomousAgentSourceRef.current.enabled !== settings.enableAutonomousAgent
+  ) {
+    autonomousAgentSourceRef.current = {
+      chain: currentChain,
+      enabled: settings.enableAutonomousAgent,
+    };
+    setAutonomousAgentToggle(
+      currentChain === ChainType.PROJECT_CHAIN ? false : settings.enableAutonomousAgent
+    );
+  }
 
-  useEffect(() => {
-    if (currentChain === ChainType.PROJECT_CHAIN) {
-      setSelectedProject(getCurrentProject());
-
-      const unsubscribe = subscribeToProjectChange((project) => {
-        setSelectedProject(project);
-      });
-
-      return () => {
-        unsubscribe();
-      };
-    } else {
-      setSelectedProject(null);
-    }
-  }, [currentChain]);
+  const subscribedProject = useSyncExternalStore(subscribeToProjectChange, getCurrentProject);
+  const selectedProject = currentChain === ChainType.PROJECT_CHAIN ? subscribedProject : null;
 
   useEffect(() => {
     if (!isProjectLoading) return;
@@ -322,19 +321,25 @@ const ChatInput: React.FC<ChatInputProps> = ({
     });
   };
 
-  // Sync tool button states with tool pills
-  useEffect(() => {
-    if (!isCopilotPlus || autonomousAgentToggle) return;
-
-    // Update button states based on current tool pills
-    const hasVault = toolsFromPills.includes("@vault");
-    const hasWeb = toolsFromPills.includes("@websearch") || toolsFromPills.includes("@web");
-    const hasComposer = toolsFromPills.includes("@composer");
-
-    setVaultToggle(hasVault);
-    setWebToggle(hasWeb);
-    setComposerToggle(hasComposer);
-  }, [toolsFromPills, isCopilotPlus, autonomousAgentToggle]);
+  // Render-phase reset: mirror tool pill presence into toggle state when inputs change.
+  // Users can still flip toggles independently via ChatToolControls.
+  const toolPillSourceRef = useRef<{
+    tools: string[];
+    isCopilotPlus: boolean;
+    autonomousAgentToggle: boolean;
+  }>({ tools: toolsFromPills, isCopilotPlus, autonomousAgentToggle });
+  if (
+    toolPillSourceRef.current.tools !== toolsFromPills ||
+    toolPillSourceRef.current.isCopilotPlus !== isCopilotPlus ||
+    toolPillSourceRef.current.autonomousAgentToggle !== autonomousAgentToggle
+  ) {
+    toolPillSourceRef.current = { tools: toolsFromPills, isCopilotPlus, autonomousAgentToggle };
+    if (isCopilotPlus && !autonomousAgentToggle) {
+      setVaultToggle(toolsFromPills.includes("@vault"));
+      setWebToggle(toolsFromPills.includes("@websearch") || toolsFromPills.includes("@web"));
+      setComposerToggle(toolsFromPills.includes("@composer"));
+    }
+  }
 
   // Handle when context notes are removed from the context menu
   // This should remove all corresponding pills from the editor
@@ -579,43 +584,34 @@ const ChatInput: React.FC<ChatInputProps> = ({
     });
   }, [notesFromPills, app.vault, setContextNotes]);
 
-  // URL pill-to-context synchronization (when URL pills are added) - only for Plus chains
+  // Pill state is owned by the Lexical editor; absorb new entries into our context arrays
+  // without removing user-added ones (removal is handled in the dedicated handlers above).
   useEffect(() => {
     if (isPlusChain(currentChain)) {
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
       setContextUrls((prev) => {
         const contextUrlSet = new Set(prev);
-
-        // Find URLs that need to be added
-        const newUrlsFromPills = urlsFromPills.filter((pillUrl) => {
-          // Only add if not already in context
-          return !contextUrlSet.has(pillUrl);
-        });
-
-        // Add completely new URLs from pills
+        const newUrlsFromPills = urlsFromPills.filter((pillUrl) => !contextUrlSet.has(pillUrl));
         if (newUrlsFromPills.length > 0) {
           return Array.from(new Set([...prev, ...newUrlsFromPills]));
         }
-
         return prev;
       });
     } else {
-      // Clear URLs for non-Plus chains
+      // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
       setContextUrls([]);
     }
   }, [urlsFromPills, currentChain]);
 
-  // Folder-to-context synchronization (when folders are added via pills)
+  // Pill state is owned by the Lexical editor; absorb new entries into context folders
+  // without removing user-added ones (removal is handled in handleFolderPillsRemoved).
   useEffect(() => {
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
     setContextFolders((prev) => {
       const contextFolderPaths = new Set(prev);
-
-      // Find folders that need to be added
-      const newFoldersFromPills = foldersFromPills.filter((pillFolder) => {
-        // Only add if not already in context
-        return !contextFolderPaths.has(pillFolder);
-      });
-
-      // Add completely new folders from pills
+      const newFoldersFromPills = foldersFromPills.filter(
+        (pillFolder) => !contextFolderPaths.has(pillFolder)
+      );
       return [...prev, ...newFoldersFromPills];
     });
   }, [foldersFromPills]);

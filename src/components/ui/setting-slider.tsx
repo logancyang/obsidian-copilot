@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Slider } from "@/components/ui/slider";
 
@@ -23,20 +23,18 @@ export function SettingSlider({
   className,
   suffix,
 }: SettingSliderProps) {
-  // Internal state for smooth updates
-  const [localValue, setLocalValue] = useState(initialValue);
-
-  // Update local value when prop value changes
-  useEffect(() => {
-    setLocalValue(initialValue);
-  }, [initialValue]);
+  const [dragValue, setDragValue] = useState<number | null>(null);
+  const displayedValue = dragValue ?? initialValue;
 
   return (
     <div className={cn("tw-flex tw-items-center tw-gap-4", className)}>
       <Slider
-        value={[localValue]}
-        onValueChange={([value]) => setLocalValue(value)}
-        onValueCommit={([value]) => onChange?.(value)}
+        value={[displayedValue]}
+        onValueChange={([value]) => setDragValue(value)}
+        onValueCommit={([value]) => {
+          setDragValue(null);
+          onChange?.(value);
+        }}
         min={min}
         max={max}
         step={step}
@@ -44,9 +42,9 @@ export function SettingSlider({
         className="tw-flex-1"
       />
       <div className="tw-min-w-[60px] tw-text-right tw-text-sm tw-tabular-nums">
-        {localValue >= 1000
-          ? `${localValue % 1000 === 0 ? localValue / 1000 : (localValue / 1000).toFixed(1)}k`
-          : localValue}
+        {displayedValue >= 1000
+          ? `${displayedValue % 1000 === 0 ? displayedValue / 1000 : (displayedValue / 1000).toFixed(1)}k`
+          : displayedValue}
         {suffix}
       </div>
     </div>

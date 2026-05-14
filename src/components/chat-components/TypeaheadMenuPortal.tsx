@@ -92,6 +92,7 @@ export function TypeaheadMenuPortal({
     const maxLeft = win.innerWidth - containerWidth - 8;
     const left = Math.min(Math.max(rect.left, minLeft), maxLeft);
 
+    // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
     setPosition({
       top,
       left,
