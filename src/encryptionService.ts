@@ -1,3 +1,10 @@
+// Reason: `buffer` is the npm polyfill (browser-compatible), bundled by
+// esbuild so the same Buffer code path works on desktop (Electron) and
+// mobile (WebView). Without this import, bare `Buffer` is undefined on
+// mobile and throws "Can't find variable: Buffer" — see PR #2443.
+// eslint-disable-next-line import/no-nodejs-modules
+import { Buffer } from "buffer";
+
 import { type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
 
@@ -115,6 +122,19 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
 
   // Handle different encryption methods
   if (apiKey.startsWith(DESKTOP_PREFIX)) {
+    // Reason: DESKTOP_PREFIX keys are encrypted with Electron's safeStorage,
+    // which uses OS-level encryption (Keychain / DPAPI / libsecret). Mobile
+    // has no Electron and no safeStorage, so a desktop-encrypted key synced
+    // to mobile via Obsidian Sync cannot be decrypted there. Throw a clear,
+    // actionable error instead of letting Buffer.from / safeStorage crash
+    // with a cryptic "Can't find variable: Buffer".
+    if (Platform.isMobile) {
+      throw new Error(
+        "This API key was encrypted on desktop with OS-level encryption that's " +
+          "unavailable on mobile. Please re-enter your API key in Copilot settings " +
+          "on this device to use it here."
+      );
+    }
     const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
     const buffer = Buffer.from(base64Data, "base64");
     return getSafeStorage()!.decryptString(buffer);
