@@ -1,5 +1,45 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.3.1 🔐
+
+This release is all about keeping your API keys safe and your plugin running smoothly everywhere. **API keys can now be stored in Obsidian's built-in Keychain** so they never touch `data.json`, the encryption toggle is removed (it was more trouble than it was worth), and a wave of reliability fixes ensures chat works correctly on mobile, in popout windows, and with Plus mode.
+
+- 🔐 **API keys now live in the Obsidian Keychain** — Fresh installs automatically store all API keys in Obsidian's vault-scoped Keychain instead of `data.json`. Existing users can opt in at any time via the new "API Key Storage" section in Advanced Settings. A guided migration wizard walks you through the move, and keys are stripped from `data.json` the moment migration completes. Each device has its own Keychain, so re-entering keys on a new device is expected. (@Emt-lin)
+  - The Advanced Settings panel shows your current storage mode and surfaces a clear warning if a synced vault arrives on a device whose Keychain is empty (so you know exactly why chat isn't working yet).
+  - A "Delete All Keys" option in Advanced Settings purges secrets from both the Keychain and `data.json` in one go.
+  - The Reset Settings button no longer touches API keys. Use "Delete All Keys" if you want them gone.
+- 🚫 **Encryption toggle removed** — The "Enable Encryption" toggle has been retired. The previous encryption was security theater on mobile (hardcoded WebCrypto key) and caused recurring chat failures when desktop-encrypted keys synced to mobile. Keys are now stored as plaintext; if your vault lives on shared storage, treat `data.json` accordingly. Existing encrypted blobs are still decrypted transparently on read. (@logancyang)
+  - Mobile users whose vault contained desktop-encrypted keys now see a startup notice listing exactly which fields need to be re-entered, rather than a confusing 401 error mid-chat.
+- 📱 **Image send on mobile is fixed** — Sending images was broken for all mobile users since 3.3.0 due to a missing Buffer polyfill. Fixed. (@logancyang)
+- ⌨️ **Quick Command shortcuts and icons restored** — The Cmd+Enter (Replace) and Cmd+Shift+Enter (Insert) shortcuts in the Quick Command result modal were broken if any global Obsidian hotkey was bound to Cmd+Enter. Fixed, and the inline shortcut glyphs next to the Insert/Replace buttons are back too. (@zeroliu)
+- 🧠 **Plus mode: no more surprise getFileTree calls** — When you have a note attached in context and ask "what's this note about?", the planner no longer fires a `getFileTree` tool call first. It now knows the content is already in context and answers directly. Explicit "list folders" or "find other notes" requests still trigger the tool as expected. (@logancyang)
+- 🏷️ **Settings version chip and Reset button are visible again** — Obsidian's own CSS was hiding the version chip and Reset Settings button at the top of the settings panel. Fixed by swapping the `<h1>` for a semantically equivalent `<div>` that Obsidian's styles don't suppress. (@logancyang)
+- 🛡️ **Supply-chain attestations for release assets** — Release artifacts (`main.js`, `manifest.json`, `styles.css`) are now cryptographically signed and published to Sigstore's transparency log. You can verify any release asset with `gh attestation verify`. (@logancyang)
+- 🔧 **Codebase hardening** — Extensive ESLint rule tightening (no-explicit-any, no-unsafe-member-access, no-floating-promises, and more), dead CSS cleanup, deprecated dependency swaps, and React best-practice fixes. No behavior changes for users, but the codebase is significantly more defensively typed. (@zeroliu)
+
+More details in the changelog:
+
+### Improvements
+
+- #2364 feat(keychain): migrate API key storage to Obsidian Keychain @Emt-lin
+- #2431 ci(release): publish artifact attestations for release assets @logancyang
+
+### Bug Fixes
+
+- #2457 fix(plus): planner skips getFileTree when active note is attached @logancyang
+- #2455 fix(keychain): empty-keychain banner, reset modal copy, lifecycle reset @logancyang
+- #2446 fix(encryption): deprecate encryption toggle; fix mobile chat failure on desktop-encrypted keys @logancyang
+- #2445 fix(settings): restore version chip + reset button hidden by Obsidian h1 CSS @logancyang
+- #2443 fix(mobile): import Buffer from the polyfill so image send works on mobile @logancyang
+- #2442 fix(quick-command): restore Cmd+Enter shortcut and shortcut hint icons @zeroliu
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.3.0 🚀
 
 The headline of this release is a big one: **your projects now live as notes in your vault**, not buried in `data.json`. Update and your existing projects migrate automatically. Everything else in this release is quality and polish: a 1.8 MB bundle reduction, mobile support declared official, fresh built-in models, and a wave of reliability fixes for Korean/CJK input, Miyo, Ollama, popout windows, and more!
