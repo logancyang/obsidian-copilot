@@ -1,6 +1,6 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useEffect } from "react";
-import { $getRoot } from "lexical";
+import { $getRoot, LexicalNode } from "lexical";
 import { $isActiveNotePillNode } from "../pills/ActiveNotePillNode";
 
 /**
@@ -35,15 +35,16 @@ export function ActiveNotePillSyncPlugin({
 
         // Recursively traverse the editor tree to find active note pill
         let foundActiveNotePill = false;
-        function traverse(node: any): void {
+        function traverse(node: LexicalNode): void {
           if ($isActiveNotePillNode(node)) {
             foundActiveNotePill = true;
             return;
           }
 
           // Only traverse children if the node has the getChildren method
-          if (typeof node.getChildren === "function") {
-            const children = node.getChildren();
+          const maybeContainer = node as LexicalNode & { getChildren?: () => LexicalNode[] };
+          if (typeof maybeContainer.getChildren === "function") {
+            const children = maybeContainer.getChildren();
             for (const child of children) {
               if (foundActiveNotePill) return; // Early exit if found
               traverse(child);

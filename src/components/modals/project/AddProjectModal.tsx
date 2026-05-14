@@ -124,7 +124,7 @@ function AddProjectModalContent({
         }
       }
       if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-        value = value.map((item) => item.trim()).filter(Boolean);
+        value = (value as string[]).map((item) => item.trim()).filter(Boolean);
       }
 
       if (field.includes(".")) {

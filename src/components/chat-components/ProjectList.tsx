@@ -228,10 +228,15 @@ export const ProjectList = memo(
     }, [projects, selectedProject, showChatUI]);
 
     // Get the project usage manager for subscription
-    const projectUsageTimestampsManager =
-      plugin?.projectManager?.getProjectUsageTimestampsManager?.() as
-        | RecentUsageManager<string>
-        | undefined;
+    const projectUsageTimestampsManager = (
+      plugin as
+        | {
+            projectManager?: {
+              getProjectUsageTimestampsManager?: () => RecentUsageManager<string>;
+            };
+          }
+        | undefined
+    )?.projectManager?.getProjectUsageTimestampsManager?.();
     const projectUsageRevision = useRecentUsageManagerRevision(projectUsageTimestampsManager);
 
     // Auto collapse when messages appear

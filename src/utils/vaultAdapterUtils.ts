@@ -68,7 +68,7 @@ export async function patchFrontmatter(
   const file = app.vault.getAbstractFileByPath(filePath);
 
   if (file instanceof TFile && app.fileManager?.processFrontMatter) {
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       for (const [key, value] of Object.entries(updates)) {
         frontmatter[key] = value;
       }

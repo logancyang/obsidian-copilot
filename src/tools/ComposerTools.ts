@@ -38,7 +38,8 @@ async function getFile(file_path: string): Promise<TFile> {
 
     return file;
   } catch (error) {
-    throw new Error(`Failed to get or create file "${file_path}": ${error.message}`);
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to get or create file "${file_path}": ${message}`);
   }
 }
 
@@ -178,10 +179,11 @@ const writeFileTool = createLangChainTool({
           message:
             "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
         return {
           result: "failed" as ApplyViewResult,
-          message: `Error writing to file without preview: ${error?.message || error}`,
+          message: `Error writing to file without preview: ${message}`,
         };
       }
     }

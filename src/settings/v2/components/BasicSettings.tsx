@@ -73,7 +73,10 @@ export const BasicSettings: React.FC = () => {
       setConversationNoteName(format);
       new Notice(`Format applied successfully! Example: ${customFileName}`, 4000);
     } catch (error) {
-      new Notice(`Error applying format: ${error.message}`, 4000);
+      new Notice(
+        `Error applying format: ${error instanceof Error ? error.message : String(error)}`,
+        4000
+      );
     } finally {
       setIsChecking(false);
     }

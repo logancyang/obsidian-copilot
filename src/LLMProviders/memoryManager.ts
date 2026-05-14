@@ -64,7 +64,7 @@ export default class MemoryManager {
     const compactedOutput =
       typeof output === "string"
         ? compactAssistantOutput(output)
-        : { ...output, output: compactAssistantOutput(output.output) };
+        : { ...output, output: compactAssistantOutput((output as { output: string }).output) };
 
     if (this.debug) {
       logInfo("Saving to memory - Input:", input, "Output (compacted):", compactedOutput);

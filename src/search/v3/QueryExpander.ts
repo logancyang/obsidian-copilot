@@ -191,9 +191,10 @@ Format:
    */
   private extractContent(response: any): string | null {
     // Elegant extraction with nullish coalescing
+    const typed = response as { content?: unknown; text?: unknown } | null | undefined;
     return typeof response === "string"
       ? response
-      : String(response?.content ?? response?.text ?? "").trim() || null;
+      : String(typed?.content ?? typed?.text ?? "").trim() || null;
   }
 
   /**

@@ -68,12 +68,13 @@ class ChainFactory {
     const model = llm.withConfig({ signal: abortController?.signal });
     const instance = RunnableSequence.from([
       {
-        input: (initialInput) => initialInput.input,
+        input: (initialInput: { input: string }) => initialInput.input,
         memory: () => memory.loadMemoryVariables({}),
       },
       {
-        input: (previousOutput) => previousOutput.input,
-        history: (previousOutput) => previousOutput.memory.history,
+        input: (previousOutput: { input: string }) => previousOutput.input,
+        history: (previousOutput: { memory: { history: unknown } }) =>
+          previousOutput.memory.history,
       },
       prompt,
       model,

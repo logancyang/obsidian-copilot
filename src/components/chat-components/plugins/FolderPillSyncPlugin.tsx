@@ -17,7 +17,7 @@ interface FolderPillSyncPluginProps {
  */
 const folderPillConfig: PillSyncConfig<string> = {
   isPillNode: $isFolderPillNode,
-  extractData: (node: any) => node.getFolderPath(),
+  extractData: (node: { getFolderPath: () => string }) => node.getFolderPath(),
 };
 
 /**

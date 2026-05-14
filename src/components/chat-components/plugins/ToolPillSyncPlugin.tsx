@@ -17,7 +17,7 @@ interface ToolPillSyncPluginProps {
  */
 const toolPillConfig: PillSyncConfig<string> = {
   isPillNode: $isToolPillNode,
-  extractData: (node: any) => node.getToolName(),
+  extractData: (node: { getToolName: () => string }) => node.getToolName(),
 };
 
 /**

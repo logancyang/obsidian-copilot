@@ -164,14 +164,17 @@ export function $removeActiveNotePills(): number {
   const root = $getRoot();
   let removedCount = 0;
 
-  function traverse(node: any): void {
+  function traverse(node: LexicalNode): void {
     if ($isActiveNotePillNode(node)) {
       node.remove();
       removedCount++;
-    } else if (typeof node.getChildren === "function") {
-      const children = node.getChildren();
-      for (const child of children) {
-        traverse(child);
+    } else {
+      const maybeContainer = node as LexicalNode & { getChildren?: () => LexicalNode[] };
+      if (typeof maybeContainer.getChildren === "function") {
+        const children = maybeContainer.getChildren();
+        for (const child of children) {
+          traverse(child);
+        }
       }
     }
   }

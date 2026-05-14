@@ -72,7 +72,7 @@ export class IndexEventHandler {
     this.listenersActive = false;
   }
 
-  private handleActiveLeafChange = async (leaf: any) => {
+  private handleActiveLeafChange = async (leaf: { view?: unknown } | null) => {
     if (!this.shouldHandleEvents()) {
       return;
     }

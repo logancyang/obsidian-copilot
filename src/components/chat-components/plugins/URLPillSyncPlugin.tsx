@@ -17,7 +17,7 @@ interface URLPillSyncPluginProps {
  */
 const urlPillConfig: PillSyncConfig<string> = {
   isPillNode: $isURLPillNode,
-  extractData: (node: any) => node.getURL(),
+  extractData: (node: { getURL: () => string }) => node.getURL(),
 };
 
 /**

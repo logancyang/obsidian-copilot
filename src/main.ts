@@ -720,20 +720,23 @@ export default class CopilotPlugin extends Plugin {
         this.app.fileManager?.processFrontMatter &&
         this.app.vault.getAbstractFileByPath(file.path) != null
       ) {
-        await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-          // Monotonic protection: ensure we never write an older timestamp
-          const existingValue = Number(frontmatter.lastAccessedAt);
-          const existingAtMs =
-            Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
+        await this.app.fileManager.processFrontMatter(
+          file,
+          (frontmatter: Record<string, unknown>) => {
+            // Monotonic protection: ensure we never write an older timestamp
+            const existingValue = Number(frontmatter.lastAccessedAt);
+            const existingAtMs =
+              Number.isFinite(existingValue) && existingValue > 0 ? existingValue : 0;
 
-          persistedAtMs = Math.max(existingAtMs, timestampToPersist);
+            persistedAtMs = Math.max(existingAtMs, timestampToPersist);
 
-          if (existingAtMs === persistedAtMs) {
-            return;
+            if (existingAtMs === persistedAtMs) {
+              return;
+            }
+
+            frontmatter.lastAccessedAt = persistedAtMs;
           }
-
-          frontmatter.lastAccessedAt = persistedAtMs;
-        });
+        );
       } else {
         await patchFrontmatter(this.app, file.path, { lastAccessedAt: persistedAtMs });
       }
@@ -803,9 +806,12 @@ export default class CopilotPlugin extends Plugin {
   async updateChatTitle(fileId: string, newTitle: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(fileId);
     if (file instanceof TFile) {
-      await this.app.fileManager.processFrontMatter(file, (frontmatter) => {
-        frontmatter.topic = newTitle;
-      });
+      await this.app.fileManager.processFrontMatter(
+        file,
+        (frontmatter: Record<string, unknown>) => {
+          frontmatter.topic = newTitle;
+        }
+      );
 
       // Wait for metadata cache to update with improved error handling
       // This ensures that subsequent calls to extractChatTitle will get the updated data

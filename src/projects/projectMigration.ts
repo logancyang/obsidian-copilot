@@ -438,7 +438,18 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
     const folder = vault.getAbstractFileByPath(folderPath);
     if (folder instanceof TFolder) {
       // Reason: use the internal file-explorer plugin API to reveal and highlight the folder.
-      const fileExplorer = (app as any).internalPlugins?.getPluginById?.("file-explorer");
+      const fileExplorer = (
+        app as unknown as {
+          internalPlugins?: {
+            getPluginById?: (id: string) =>
+              | {
+                  enabled?: boolean;
+                  instance?: { revealInFolder?: (folder: TFolder) => void };
+                }
+              | undefined;
+          };
+        }
+      ).internalPlugins?.getPluginById?.("file-explorer");
       if (fileExplorer?.enabled && fileExplorer.instance?.revealInFolder) {
         fileExplorer.instance.revealInFolder(folder);
       }

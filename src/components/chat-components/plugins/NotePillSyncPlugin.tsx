@@ -22,7 +22,7 @@ type NoteData = { path: string; basename: string };
  */
 const notePillConfig: PillSyncConfig<NoteData> = {
   isPillNode: $isNotePillNode,
-  extractData: (node: any) => ({
+  extractData: (node: { getNotePath: () => string; getNoteTitle: () => string }) => ({
     path: node.getNotePath(),
     basename: node.getNoteTitle(),
   }),

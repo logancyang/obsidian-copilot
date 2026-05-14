@@ -33,7 +33,7 @@ function createLMStudioFetch(baseFetch?: typeof window.fetch): typeof window.fet
   return async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     if (init?.body && typeof init.body === "string") {
       try {
-        const body = JSON.parse(init.body);
+        const body = JSON.parse(init.body) as { tools?: unknown };
         let modified = false;
 
         // Strip null/undefined values from tool definitions
@@ -63,7 +63,8 @@ function createLMStudioFetch(baseFetch?: typeof window.fetch): typeof window.fet
 
 export class ChatLMStudio extends ChatOpenAI {
   constructor(fields: ChatLMStudioInput) {
-    const originalFetch = fields.configuration?.fetch;
+    const configuration = fields.configuration as { fetch?: typeof window.fetch } | undefined;
+    const originalFetch = configuration?.fetch;
 
     super({
       ...fields,
