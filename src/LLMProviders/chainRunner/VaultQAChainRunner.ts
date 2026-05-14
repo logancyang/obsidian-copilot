@@ -204,7 +204,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
         // Handle multimodal content if present
         if (userMessage.content && Array.isArray(userMessage.content)) {
-          const updatedContent = userMessage.content.map((item: any) => {
+          const updatedContent = userMessage.content.map((item: any): any => {
             if (item.type === "text") {
               return { ...item, text: enhancedUserContent };
             }

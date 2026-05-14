@@ -320,7 +320,7 @@ export class ChunkedStorage {
       // upsert cycles. These "ghost" IDs cause position mismatches after load,
       // where some user IDs point to wrong doc positions or undefined entries.
       mergedData.internalDocumentIDStore.internalIdToId = Object.values(orderedDocs).map(
-        (doc: any) => doc.id
+        (doc: { id: string }): string => doc.id
       );
 
       // Merge vectors from all chunks

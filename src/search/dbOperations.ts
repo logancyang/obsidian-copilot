@@ -340,7 +340,7 @@ export class DBOperations {
       });
 
       if (result.hits.length > 0) {
-        const latestDoc = result.hits[0].document as any;
+        const latestDoc = result.hits[0].document as unknown as { mtime: number };
         return latestDoc.mtime;
       }
 
@@ -368,7 +368,7 @@ export class DBOperations {
     };
   }
 
-  async upsert(docToSave: any): Promise<any> {
+  async upsert(docToSave: any): Promise<unknown> {
     if (!this.oramaDb) throw new Error("DB not initialized");
     const db = this.oramaDb;
 
@@ -400,7 +400,7 @@ export class DBOperations {
           );
 
           this.markUnsavedChanges();
-          return docToSave;
+          return docToSave as unknown;
         } catch (insertErr) {
           logError(
             `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
@@ -438,7 +438,7 @@ export class DBOperations {
       });
 
       if (result.hits.length > 0) {
-        const latestDoc = result.hits[0].document as any;
+        const latestDoc = result.hits[0].document as unknown as { mtime: number };
         return latestDoc.mtime;
       }
 
@@ -587,7 +587,7 @@ export class DBOperations {
 
       logInfo(
         "Copilot index: Docs to remove during garbage collection:",
-        Array.from(new Set(docsToRemove.map((doc) => doc.path))).join(", ")
+        Array.from(new Set(docsToRemove.map((doc): string => doc.path))).join(", ")
       );
 
       if (docsToRemove.length === 1) {
@@ -595,7 +595,7 @@ export class DBOperations {
       } else {
         await removeMultiple(
           this.oramaDb,
-          docsToRemove.map((hit) => hit.id),
+          docsToRemove.map((hit): string => hit.id),
           500
         );
       }

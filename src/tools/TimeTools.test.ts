@@ -2,7 +2,7 @@ import { DateTime } from "luxon";
 import { getTimeRangeMsTool } from "./TimeTools";
 
 // Helper function to call the tool and parse result
-const getTimeRangeMs = async (timeExpression: string) => {
+const getTimeRangeMs = async (timeExpression: string): Promise<any> => {
   const result = await (getTimeRangeMsTool as any).invoke({ timeExpression });
   // The tool returns JSON string, parse it
   const parsed = typeof result === "string" ? JSON.parse(result) : result;

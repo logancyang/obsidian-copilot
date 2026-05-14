@@ -51,19 +51,25 @@ const mockApp = {
 } as any;
 
 // Mock getTagsFromNote utility function
-jest.mock("@/utils", () => ({
-  ...jest.requireActual("@/utils"),
-  getTagsFromNote: jest.fn(),
-}));
+jest.mock(
+  "@/utils",
+  (): Record<string, unknown> => ({
+    ...jest.requireActual("@/utils"),
+    getTagsFromNote: jest.fn(),
+  })
+);
 
 // Add mock for settings
-jest.mock("@/settings/model", () => ({
-  ...jest.requireActual("@/settings/model"),
-  getSettings: jest.fn().mockReturnValue({
-    qaInclusions: "",
-    qaExclusions: "",
-  }),
-}));
+jest.mock(
+  "@/settings/model",
+  (): Record<string, unknown> => ({
+    ...jest.requireActual("@/settings/model"),
+    getSettings: jest.fn().mockReturnValue({
+      qaInclusions: "",
+      qaExclusions: "",
+    }),
+  })
+);
 
 describe("searchUtils", () => {
   beforeAll(() => {

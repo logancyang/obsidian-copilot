@@ -255,7 +255,7 @@ export class ToolResultFormatter {
     // Only support the new structured format or pre-formatted XML flow
     if (typeof result === "object" && result !== null) {
       if (result.type === "local_search" && Array.isArray(result.documents)) {
-        return result.documents;
+        return result.documents as any[];
       }
       return [];
     }
@@ -264,7 +264,7 @@ export class ToolResultFormatter {
       try {
         const parsed = JSON.parse(result);
         if (parsed && parsed.type === "local_search" && Array.isArray(parsed.documents)) {
-          return parsed.documents;
+          return parsed.documents as any[];
         }
       } catch {
         // ignore JSON parse errors; fall through to empty array
@@ -415,7 +415,7 @@ export class ToolResultFormatter {
       return output.join("\n");
     }
 
-    return result;
+    return result as string;
   }
 
   private static formatYoutubeTranscription(result: any): string {
@@ -548,7 +548,9 @@ export class ToolResultFormatter {
     }
 
     // Return message if available, otherwise the raw result
-    return typeof result === "object" && result.message ? result.message : String(status);
+    return typeof result === "object" && result.message
+      ? (result.message as string)
+      : String(status);
   }
 
   private static formatReplaceInFile(result: any): string {
@@ -564,7 +566,7 @@ export class ToolResultFormatter {
     }
 
     // Error / not-found strings pass through unchanged
-    return typeof result === "object" && result.message ? result.message : status;
+    return typeof result === "object" && result.message ? (result.message as string) : status;
   }
 
   private static formatReadNote(result: any): string {

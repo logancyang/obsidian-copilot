@@ -154,7 +154,7 @@ export class IndexOperations {
 
       // Update totalFiles to reflect only files that produced chunks
       // (some files may be empty or produce no valid content after chunking)
-      const filesWithChunks = new Set(allChunks.map((c) => c.fileInfo.path)).size;
+      const filesWithChunks = new Set(allChunks.map((c): string => c.fileInfo.path as string)).size;
       this.state.totalFilesToIndex = filesWithChunks;
       updateIndexingProgressState({ totalFiles: filesWithChunks });
 
@@ -495,7 +495,7 @@ export class IndexOperations {
     }
 
     // Check the error message at any depth
-    const message = error.message || error.toString();
+    const message: string = (error.message || error.toString()) as string;
     const lowerMessage = message.toLowerCase();
     return lowerMessage.includes("string length") || lowerMessage.includes("rangeerror");
   }
@@ -549,7 +549,7 @@ export class IndexOperations {
   }
 
   private isRateLimitError(err: any): boolean {
-    return err?.message?.includes?.("rate limit") || false;
+    return (err?.message?.includes?.("rate limit") as boolean) || false;
   }
 
   private finalizeIndexing(errors: string[]): void {

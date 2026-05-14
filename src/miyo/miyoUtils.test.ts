@@ -21,7 +21,7 @@ describe("getMiyoFolderName", () => {
 });
 
 describe("getVaultRelativeMiyoPath", () => {
-  const buildApp = (vaultName: string) =>
+  const buildApp = (vaultName: string): App =>
     ({
       vault: {
         getName: () => vaultName,
@@ -62,7 +62,7 @@ describe("getVaultRelativeMiyoPath", () => {
 });
 
 describe("getMiyoFilePath", () => {
-  const buildApp = (vaultName: string) =>
+  const buildApp = (vaultName: string): App =>
     ({
       vault: {
         getName: () => vaultName,

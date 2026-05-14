@@ -1,5 +1,5 @@
 import React from "react";
-import { $isURLPillNode } from "../pills/URLPillNode";
+import { $isURLPillNode, URLPillNode } from "../pills/URLPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
 /**
@@ -17,7 +17,7 @@ interface URLPillSyncPluginProps {
  */
 const urlPillConfig: PillSyncConfig<string> = {
   isPillNode: $isURLPillNode,
-  extractData: (node: any) => node.getURL(),
+  extractData: (node: any) => (node as URLPillNode).getURL(),
 };
 
 /**

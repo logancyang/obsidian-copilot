@@ -155,13 +155,11 @@ export class MergedSemanticRetriever extends BaseRetriever {
    */
   private getDocumentKey(doc: Document): string {
     const metadata = doc.metadata ?? {};
-    return (
-      metadata.chunkId ||
+    return (metadata.chunkId ||
       metadata.path ||
       metadata.id ||
       metadata.title ||
-      `${doc.pageContent.slice(0, 64)}::${doc.pageContent.length}`
-    );
+      `${doc.pageContent.slice(0, 64)}::${doc.pageContent.length}`) as string;
   }
 
   /**

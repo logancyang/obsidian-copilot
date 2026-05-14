@@ -24,7 +24,7 @@ describe("ActionBlockStreamer", () => {
   });
 
   // Helper function to process chunks and collect results
-  async function processChunks(chunks: { content: string | null }[]) {
+  async function processChunks(chunks: { content: string | null }[]): Promise<any[]> {
     const outputContents: any[] = [];
     for (const chunk of chunks) {
       for await (const result of streamer.processChunk(chunk)) {

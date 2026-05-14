@@ -49,7 +49,7 @@ export async function executeSequentialToolCall(
     const tool = availableTools.find((t) => t.name === toolCall.name);
 
     if (!tool) {
-      const availableToolNames = availableTools.map((t) => t.name).join(", ");
+      const availableToolNames = availableTools.map((t): string => t.name as string).join(", ");
       return {
         toolName: toolCall.name,
         result: `Error: Tool '${toolCall.name}' not found. Available tools: ${availableToolNames}. Make sure you have the tool enabled in the Agent settings.`,

@@ -57,11 +57,11 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
       throw new Error("Invalid API response format: missing or invalid data array");
     }
 
-    return responseData.data.map((item: any) => {
+    return (responseData.data as Array<{ embedding?: unknown }>).map((item) => {
       if (!item.embedding || !Array.isArray(item.embedding)) {
         throw new Error("Invalid API response format: missing or invalid embedding array");
       }
-      return item.embedding;
+      return item.embedding as number[];
     });
   }
 }

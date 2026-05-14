@@ -88,7 +88,7 @@ function makeConfig(
 function makeMockVault(): jest.Mocked<Vault> {
   return {
     create: jest.fn(async (path: string) => {
-      const file = Object.create(TFile.prototype);
+      const file: TFile = Object.create(TFile.prototype);
       Object.assign(file, { path });
       return file;
     }),

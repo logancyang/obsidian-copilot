@@ -630,7 +630,7 @@ describe("sortSlashCommands", () => {
     });
 
     const sorted = sortSlashCommands(sampleCommands);
-    expect(sorted.map((c: any) => c.title)).toEqual(["Gamma", "Alpha", "Beta"]);
+    expect(sorted.map((c: { title: string }) => c.title)).toEqual(["Gamma", "Alpha", "Beta"]);
   });
 
   it("sorts alphabetically (ALPHABETICAL)", () => {
@@ -640,7 +640,7 @@ describe("sortSlashCommands", () => {
     });
 
     const sorted = sortSlashCommands(sampleCommands);
-    expect(sorted.map((c: any) => c.title)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(sorted.map((c: { title: string }) => c.title)).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 
   it("sorts by manual order (MANUAL)", () => {
@@ -649,7 +649,7 @@ describe("sortSlashCommands", () => {
       promptSortStrategy: PromptSortStrategy.MANUAL,
     });
     const sorted = sortSlashCommands(sampleCommands);
-    expect(sorted.map((c: any) => c.title)).toEqual(["Alpha", "Beta", "Gamma"]);
+    expect(sorted.map((c: { title: string }) => c.title)).toEqual(["Alpha", "Beta", "Gamma"]);
   });
 
   it("returns original order for unknown strategy", () => {

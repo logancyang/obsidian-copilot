@@ -43,7 +43,7 @@ const generateAllUtilities = (e: any) => (color: string, name: string, opacity: 
     generateUtility(e)(property, name, color, opacity)
   );
 
-  return Object.assign({}, ...utilities);
+  return Object.assign({}, ...utilities) as Record<string, unknown>;
 };
 
 const generateOpacityClasses =

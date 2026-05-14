@@ -12,10 +12,11 @@ import { EMBEDDED_NOTE_TAG } from "@/constants";
 import { ChainType } from "@/chainType";
 import { TFile, Vault } from "obsidian";
 
-type FileCacheMap = Record<string, any>;
+type FileCacheMap = Record<string, Record<string, unknown>>;
 type FileContentMap = Record<string, string>;
 
-const createMockFile = (path: string): TFile => new (TFile as any)(path);
+const createMockFile = (path: string): TFile =>
+  new (TFile as unknown as new (path: string) => TFile)(path);
 
 describe("ContextProcessor - Embedded Notes", () => {
   let contextProcessor: ContextProcessor;

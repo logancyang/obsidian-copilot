@@ -16,7 +16,7 @@ import { mockTFile } from "@/__tests__/mockObsidian";
 jest.mock("obsidian", () => ({
   TFile: jest.fn(),
   TAbstractFile: jest.fn(),
-  normalizePath: jest.fn((path) => path),
+  normalizePath: jest.fn((path: string) => path),
 }));
 
 // Mock settings

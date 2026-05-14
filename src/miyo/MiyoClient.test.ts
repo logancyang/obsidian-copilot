@@ -23,7 +23,7 @@ const mockResolveBaseUrl = jest.fn();
 jest.mock("@/miyo/MiyoServiceDiscovery", () => ({
   MiyoServiceDiscovery: {
     getInstance: jest.fn(() => ({
-      resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args),
+      resolveBaseUrl: (...args: unknown[]): unknown => mockResolveBaseUrl(...args),
     })),
   },
 }));

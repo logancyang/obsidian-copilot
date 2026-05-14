@@ -1,5 +1,5 @@
 import React from "react";
-import { $isFolderPillNode } from "../pills/FolderPillNode";
+import { $isFolderPillNode, FolderPillNode } from "../pills/FolderPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
 /**
@@ -17,7 +17,7 @@ interface FolderPillSyncPluginProps {
  */
 const folderPillConfig: PillSyncConfig<string> = {
   isPillNode: $isFolderPillNode,
-  extractData: (node: any) => node.getFolderPath(),
+  extractData: (node: any) => (node as FolderPillNode).getFolderPath(),
 };
 
 /**

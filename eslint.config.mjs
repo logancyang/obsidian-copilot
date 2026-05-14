@@ -90,7 +90,6 @@ export default [
       "@typescript-eslint/no-unsafe-member-access": "off", // 2040 violations
       "@typescript-eslint/no-unsafe-assignment": "off", // 879 violations
       "@typescript-eslint/no-unsafe-call": "off", // 679 violations
-      "@typescript-eslint/no-unsafe-return": "off", // 187 violations
 
       // --- Medium: promise / method ergonomics ---
       "@typescript-eslint/unbound-method": "off", // 68 violations
@@ -173,6 +172,7 @@ export default [
         { checksVoidReturn: { attributes: false, inheritedMethods: false } },
       ],
       "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",

@@ -57,7 +57,11 @@ import {
   const text =
     typeof content === "string"
       ? content
-      : content.map((item: any) => (typeof item === "string" ? item : (item.text ?? ""))).join("");
+      : content
+          .map((item: any): string =>
+            typeof item === "string" ? item : ((item.text as string) ?? "")
+          )
+          .join("");
   return Math.ceil(text.length / 4);
 };
 
@@ -249,7 +253,7 @@ export default class ChatModelManager {
           },
         }),
       },
-      [ChatModelProviders.AZURE_OPENAI]: await (async () => {
+      [ChatModelProviders.AZURE_OPENAI]: await (async (): Promise<any> => {
         const azureUrl = normalizeAzureUrl(customModel.baseUrl);
         return {
           modelName: customModel.baseUrl
@@ -491,7 +495,7 @@ export default class ChatModelManager {
     maxTokens: number,
     _temperature: number | undefined,
     customModel?: CustomModel
-  ) {
+  ): any {
     const settings = getSettings();
     const modelInfo = getModelInfo(modelName);
     const resolvedTemperature = this.getTemperatureForModel(
@@ -859,7 +863,7 @@ export default class ChatModelManager {
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
 
-    return newModelInstance;
+    return newModelInstance as BaseChatModel;
   }
 
   validateChatModel(chatModel: BaseChatModel): boolean {

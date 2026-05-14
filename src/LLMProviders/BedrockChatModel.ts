@@ -149,16 +149,16 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   private extractToolCalls(data: any): any[] | undefined {
     if (!Array.isArray(data?.content)) return undefined;
 
-    const toolUseBlocks = data.content.filter((block: any) => block.type === "tool_use");
+    const toolUseBlocks: any[] = data.content.filter((block: any) => block.type === "tool_use");
 
     if (toolUseBlocks.length === 0) return undefined;
 
     return toolUseBlocks.map((block: any) => ({
-      id: block.id,
-      name: block.name,
-      args: block.input || {},
+      id: block.id as string,
+      name: block.name as string,
+      args: (block.input || {}) as Record<string, unknown>,
       type: "tool_call" as const,
-    }));
+    })) as Array<{ id: string; name: string; args: Record<string, unknown>; type: "tool_call" }>;
   }
 
   async _generate(
@@ -1006,20 +1006,20 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     if (Array.isArray(candidate)) {
       const combined = candidate
-        .map((part) => {
+        .map((part: any): string => {
           if (typeof part === "string") {
             return part;
           }
           if (part && typeof part === "object") {
             if (typeof part.text === "string") {
-              return part.text;
+              return part.text as string;
             }
             if (typeof part.value === "string") {
-              return part.value;
+              return part.value as string;
             }
             if (Array.isArray(part.content)) {
-              return part.content
-                .map((sub: any) => (typeof sub?.text === "string" ? sub.text : ""))
+              return (part.content as any[])
+                .map((sub: any) => (typeof sub?.text === "string" ? (sub.text as string) : ""))
                 .join("");
             }
           }
@@ -1488,18 +1488,18 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
   private extractText(data: any): string {
     if (typeof data?.outputText === "string") {
-      return data.outputText;
+      return data.outputText as string;
     }
 
     if (Array.isArray(data?.content)) {
-      return data.content
-        .map((item: any) => {
+      return (data.content as any[])
+        .map((item: any): string => {
           if (!item) return "";
           if (typeof item === "string") return item;
           if (typeof item === "object") {
-            if (typeof item.text === "string") return item.text;
+            if (typeof item.text === "string") return item.text as string;
             if (item.text && typeof item.text === "object" && "text" in item.text) {
-              return item.text.text ?? "";
+              return (item.text.text as string | undefined) ?? "";
             }
           }
           return "";
@@ -1508,11 +1508,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
 
     if (typeof data?.completion === "string") {
-      return data.completion;
+      return data.completion as string;
     }
 
     if (typeof data?.resultText === "string") {
-      return data.resultText;
+      return data.resultText as string;
     }
 
     return "";

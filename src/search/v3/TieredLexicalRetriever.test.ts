@@ -88,9 +88,9 @@ describe("TieredLexicalRetriever", () => {
       // Mock file system
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "note1.md" || path === "note2.md") {
-          const file = new (TFile as any)(path);
+          const file: TFile = new (TFile as any)(path);
           Object.setPrototypeOf(file, TFile.prototype);
-          file.stat = { mtime: 1000, ctime: 1000 };
+          file.stat = { mtime: 1000, ctime: 1000 } as TFile["stat"];
           return file;
         }
         return null;
@@ -207,9 +207,9 @@ describe("TieredLexicalRetriever", () => {
 
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test.md") {
-          const file = new (TFile as any)(path);
+          const file: TFile = new (TFile as any)(path);
           Object.setPrototypeOf(file, TFile.prototype);
-          file.stat = { mtime: 1000, ctime: 1000 };
+          file.stat = { mtime: 1000, ctime: 1000 } as TFile["stat"];
           return file;
         }
         return null;
@@ -258,9 +258,9 @@ describe("TieredLexicalRetriever", () => {
     it("should handle multiple chunks from same note correctly", async () => {
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "large.md" || path === "other.md") {
-          const file = new (TFile as any)(path);
+          const file: TFile = new (TFile as any)(path);
           Object.setPrototypeOf(file, TFile.prototype);
-          file.stat = { mtime: 1000, ctime: 1000 };
+          file.stat = { mtime: 1000, ctime: 1000 } as TFile["stat"];
           return file;
         }
         return null;

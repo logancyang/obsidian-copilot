@@ -268,9 +268,9 @@ export class HybridRetriever extends BaseRetriever {
 
       // Combine and deduplicate results
       const combinedResults = [...dailyNoteResultsWithContext, ...timeIntervalDocuments];
-      const uniqueResults = Array.from(new Set(combinedResults.map((doc) => doc.metadata.id))).map(
-        (id) => combinedResults.find((doc) => doc.metadata.id === id)
-      );
+      const uniqueResults = Array.from(
+        new Set(combinedResults.map((doc): string => doc.metadata.id as string))
+      ).map((id) => combinedResults.find((doc) => doc.metadata.id === id));
 
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }

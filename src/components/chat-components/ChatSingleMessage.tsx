@@ -448,7 +448,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?)\s*```/g;
 
-          return text.replace(xmlCodeblockRegex, (_match, xmlContent) => {
+          return text.replace(xmlCodeblockRegex, (_match: string, xmlContent: string) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -461,7 +461,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           // Pattern to match XML codeblocks that contain unclosed writeFile tags
           const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeFile>[\s\S]*?)$/g;
 
-          return text.replace(streamingXmlCodeblockRegex, (_match, xmlContent) => {
+          return text.replace(streamingXmlCodeblockRegex, (_match: string, xmlContent: string) => {
             // Extract the content and return it without the codeblock wrapper
             return xmlContent.trim();
           });

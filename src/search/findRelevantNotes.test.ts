@@ -37,7 +37,7 @@ const mockGetDocsByEmbedding = jest.fn();
 
 jest.mock("@/search/dbOperations", () => ({
   DBOperations: {
-    getDocsByEmbedding: (...args: unknown[]) => mockGetDocsByEmbedding(...args),
+    getDocsByEmbedding: (...args: unknown[]) => mockGetDocsByEmbedding(...args) as unknown,
   },
 }));
 
@@ -46,8 +46,8 @@ const mockSearchRelated = jest.fn();
 
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: jest.fn().mockImplementation(() => ({
-    resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args),
-    searchRelated: (...args: unknown[]) => mockSearchRelated(...args),
+    resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args) as unknown,
+    searchRelated: (...args: unknown[]) => mockSearchRelated(...args) as unknown,
   })),
 }));
 

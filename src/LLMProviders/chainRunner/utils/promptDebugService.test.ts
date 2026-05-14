@@ -25,7 +25,7 @@ const createAdapter = () => ({
   constructor: { name: "TestAdapter" },
 });
 
-const createChainContext = (history: any[] = []) => {
+const createChainContext = (history: any[] = []): any => {
   const memory = {
     loadMemoryVariables: jest.fn().mockResolvedValue({ history }),
   };

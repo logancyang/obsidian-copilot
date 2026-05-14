@@ -12,8 +12,8 @@ jest.mock("obsidian", () => {
     }
 
     // Add instanceof compatibility
-    static [Symbol.hasInstance](instance: any) {
-      return (
+    static [Symbol.hasInstance](instance: any): boolean {
+      return Boolean(
         instance && typeof instance === "object" && "path" in instance && "basename" in instance
       );
     }
@@ -37,7 +37,7 @@ describe("ChunkManager", () => {
   let chunkManager: ChunkManager;
   let mockApp: any;
   // Cache mock files to ensure consistent mtime across calls
-  let mockFileCache: Map<string, any>;
+  let mockFileCache: Map<string, TFile>;
 
   beforeEach(() => {
     mockFileCache = new Map();
@@ -49,13 +49,13 @@ describe("ChunkManager", () => {
           if (mockFileCache.has(path)) {
             return mockFileCache.get(path);
           }
-          const file = new (TFile as any)(path);
+          const file: TFile = new (TFile as any)(path);
           // Ensure the file passes instanceof TFile checks
           Object.setPrototypeOf(file, TFile.prototype);
           mockFileCache.set(path, file);
           return file;
         }),
-        cachedRead: jest.fn((file) => {
+        cachedRead: jest.fn((file: TFile) => {
           const contents: Record<string, string> = {
             "short.md": "This is a short note with minimal content.",
             "medium.md":
@@ -73,8 +73,8 @@ describe("ChunkManager", () => {
         }),
       },
       metadataCache: {
-        getFileCache: jest.fn((file) => {
-          const headingsByFile: Record<string, any> = {
+        getFileCache: jest.fn((file: TFile) => {
+          const headingsByFile: Record<string, unknown> = {
             "medium.md": {
               headings: [
                 { heading: "Introduction", level: 1, position: { start: { offset: 0 } } },

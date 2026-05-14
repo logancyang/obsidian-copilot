@@ -236,7 +236,7 @@ async function performLexicalSearch({
   }));
   const dedupedSearchSources = deduplicateSources(searchSourcesLike);
 
-  const bestByKey = new Map<string, any>();
+  const bestByKey = new Map<string, { rerank_score?: number }>();
   for (const d of taggedSearchResults) {
     const key = ((d.path as string) || (d.title as string)).toLowerCase();
     const existing = bestByKey.get(key);
@@ -329,7 +329,7 @@ const semanticSearchTool = createLangChainTool({
     }));
     const dedupedSources = deduplicateSources(sourcesLike);
 
-    const bestByKey = new Map<string, any>();
+    const bestByKey = new Map<string, { rerank_score?: number }>();
     for (const d of formattedResults) {
       const key = ((d.path as string) || (d.title as string)).toLowerCase();
       const existing = bestByKey.get(key);

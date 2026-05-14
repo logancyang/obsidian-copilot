@@ -428,7 +428,7 @@ export function registerCommands(
       }
 
       // Map hits to chunks (getDocsByPath returns {document, score} format)
-      const chunks = hits.map((hit: any) => hit.document);
+      const chunks: any[] = hits.map((hit: { document: any }): any => hit.document);
       const content = [
         `# Embedding Debug: ${activeFile.basename}`,
         "",

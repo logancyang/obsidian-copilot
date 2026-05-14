@@ -1,5 +1,5 @@
 import React from "react";
-import { $isToolPillNode } from "../pills/ToolPillNode";
+import { $isToolPillNode, ToolPillNode } from "../pills/ToolPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 
 /**
@@ -17,7 +17,7 @@ interface ToolPillSyncPluginProps {
  */
 const toolPillConfig: PillSyncConfig<string> = {
   isPillNode: $isToolPillNode,
-  extractData: (node: any) => node.getToolName(),
+  extractData: (node: any) => (node as ToolPillNode).getToolName(),
 };
 
 /**

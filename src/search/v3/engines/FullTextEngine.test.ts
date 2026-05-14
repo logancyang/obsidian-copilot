@@ -18,7 +18,7 @@ jest.mock("obsidian", () => {
     Platform: {
       isMobile: false,
     },
-    getAllTags: jest.fn((cache) => {
+    getAllTags: jest.fn((cache: { frontmatter?: { tags?: string[] } }) => {
       if (cache?.frontmatter?.tags) {
         return cache.frontmatter.tags;
       }
@@ -228,7 +228,7 @@ describe("FullTextEngine", () => {
 
   beforeEach(() => {
     // Mock metadata cache
-    const mockCache: Record<string, any> = {
+    const mockCache: Record<string, unknown> = {
       "note1.md": {
         headings: [{ heading: "Introduction" }, { heading: "Setup Guide" }],
         frontmatter: { title: "TypeScript Guide", tags: ["programming", "typescript"] },
@@ -302,9 +302,9 @@ describe("FullTextEngine", () => {
     // Mock app
     mockApp = {
       vault: {
-        getAbstractFileByPath: jest.fn((path) => {
+        getAbstractFileByPath: jest.fn((path: string) => {
           if (!path || path === "missing.md") return null;
-          const file = new (TFile as any)(path);
+          const file: TFile = new (TFile as any)(path);
           // Make it pass instanceof TFile check
           Object.setPrototypeOf(file, TFile.prototype);
           return file;
@@ -328,7 +328,7 @@ describe("FullTextEngine", () => {
         }),
       },
       metadataCache: {
-        getFileCache: jest.fn((file: any) => mockCache[file.path]),
+        getFileCache: jest.fn((file: { path: string }) => mockCache[file.path]),
         resolvedLinks: {
           "note1.md": { "note2.md": 1, "note3.md": 2 },
           "note2.md": { "note1.md": 1 },
@@ -446,9 +446,9 @@ describe("FullTextEngine", () => {
     });
 
     it("should handle missing files gracefully", async () => {
-      mockApp.vault.getAbstractFileByPath = jest.fn((path) => {
+      mockApp.vault.getAbstractFileByPath = jest.fn((path: string) => {
         if (path === "missing.md") return null;
-        const file = new (TFile as any)(path);
+        const file: TFile = new (TFile as any)(path);
         Object.setPrototypeOf(file, TFile.prototype);
         return file;
       });
@@ -497,9 +497,9 @@ describe("FullTextEngine", () => {
 
     it("should skip unsafe vault paths", async () => {
       // Mock vault to return files for any safe path
-      mockApp.vault.getAbstractFileByPath = jest.fn((path) => {
+      mockApp.vault.getAbstractFileByPath = jest.fn((path: string) => {
         if (path === "note1.md") {
-          const file = new (TFile as any)(path);
+          const file: TFile = new (TFile as any)(path);
           Object.setPrototypeOf(file, TFile.prototype);
           return file;
         }
@@ -565,7 +565,7 @@ describe("FullTextEngine", () => {
   describe("search scoring", () => {
     beforeEach(async () => {
       // Create more specific test data for scoring tests
-      const scoringMockCache: Record<string, any> = {
+      const scoringMockCache: Record<string, unknown> = {
         "Piano Lessons/Lesson 1.md": {
           headings: [{ heading: "Piano Basics" }],
           frontmatter: { title: "Piano Lesson 1" },
@@ -584,7 +584,9 @@ describe("FullTextEngine", () => {
         },
       };
 
-      mockApp.metadataCache.getFileCache = jest.fn((file: any) => scoringMockCache[file.path]);
+      mockApp.metadataCache.getFileCache = jest.fn(
+        (file: { path: string }) => scoringMockCache[file.path]
+      );
       mockApp.vault.cachedRead = jest.fn((file) => {
         const contents: Record<string, string> = {
           "Piano Lessons/Lesson 1.md": "Learning piano fundamentals and basic notes",
@@ -930,7 +932,7 @@ describe("FullTextEngine", () => {
       a.ref = b;
       b.ref = a; // circular
 
-      const propsCache: Record<string, any> = {
+      const propsCache: Record<string, unknown> = {
         "circular.md": {
           headings: [],
           frontmatter: a,

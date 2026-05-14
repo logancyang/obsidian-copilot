@@ -1,15 +1,21 @@
 import { type CopilotSettings } from "@/settings/model";
 import { Platform } from "obsidian";
 
-let safeStorageInternal: any = null;
+interface SafeStorage {
+  isEncryptionAvailable(): boolean;
+  encryptString(plainText: string): Buffer;
+  decryptString(encrypted: Buffer): string;
+}
 
-function getSafeStorage() {
+let safeStorageInternal: SafeStorage | null = null;
+
+function getSafeStorage(): SafeStorage | null {
   if (Platform.isDesktop && safeStorageInternal) {
     return safeStorageInternal;
   }
   // Dynamically import electron to access safeStorage
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  safeStorageInternal = require("electron")?.remote?.safeStorage;
+  safeStorageInternal = require("electron")?.remote?.safeStorage as SafeStorage | null;
   return safeStorageInternal;
 }
 
@@ -84,7 +90,7 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
   try {
     // Try desktop encryption first
     if (getSafeStorage()?.isEncryptionAvailable()) {
-      const encryptedBuffer = getSafeStorage().encryptString(apiKey) as Buffer;
+      const encryptedBuffer = getSafeStorage()!.encryptString(apiKey);
       return DESKTOP_PREFIX + encryptedBuffer.toString("base64");
     }
 
@@ -111,7 +117,7 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
   if (apiKey.startsWith(DESKTOP_PREFIX)) {
     const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
     const buffer = Buffer.from(base64Data, "base64");
-    return getSafeStorage().decryptString(buffer) as string;
+    return getSafeStorage()!.decryptString(buffer);
   }
 
   if (apiKey.startsWith(WEBCRYPTO_PREFIX)) {
@@ -129,7 +135,7 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
     if (getSafeStorage()?.isEncryptionAvailable()) {
       try {
         const buffer = Buffer.from(base64Data, "base64");
-        return getSafeStorage().decryptString(buffer) as string;
+        return getSafeStorage()!.decryptString(buffer);
       } catch {
         // Silent catch is intentional - if desktop decryption fails,
         // it means this key was likely encrypted with Web Crypto.

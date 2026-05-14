@@ -7,7 +7,7 @@ const mockElectron = {
       encryptString: jest.fn().mockImplementation((text) => Buffer.from(`${text}_encrypted`)),
       decryptString: jest
         .fn()
-        .mockImplementation((buffer) => buffer.toString().replace("_encrypted", "")),
+        .mockImplementation((buffer: Buffer) => buffer.toString().replace("_encrypted", "")),
       isEncryptionAvailable: jest.fn().mockReturnValue(true),
     },
   },

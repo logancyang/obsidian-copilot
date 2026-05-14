@@ -25,17 +25,21 @@ function normalizeDeltaContent(content: unknown): string {
   if (content == null) return "";
   if (Array.isArray(content)) {
     return content
-      .map((part) => {
+      .map((part): string => {
         if (typeof part === "string") return part;
-        if (part && typeof part === "object" && typeof part.text === "string") {
-          return part.text;
+        if (
+          part &&
+          typeof part === "object" &&
+          typeof (part as { text?: unknown }).text === "string"
+        ) {
+          return (part as { text: string }).text;
         }
         return "";
       })
       .join("");
   }
   if (typeof content === "object" && typeof (content as any).text === "string") {
-    return (content as any).text;
+    return (content as { text: string }).text;
   }
   return "";
 }

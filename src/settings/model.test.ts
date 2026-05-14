@@ -20,7 +20,7 @@ jest.mock("@/system-prompts/state", () => ({
 jest.mock("@/settings/model", () => {
   const actual = jest.requireActual("@/settings/model");
   return {
-    ...actual,
+    ...(actual as object),
     getSettings: jest.fn(() => ({ userSystemPrompt: "" })),
   };
 });

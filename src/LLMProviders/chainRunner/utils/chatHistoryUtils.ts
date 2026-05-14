@@ -92,9 +92,9 @@ function extractTextContent(content: any): string {
     return content;
   } else if (Array.isArray(content)) {
     // Extract text from multimodal content, skip image_url payloads
-    const textParts = content
+    const textParts: string = content
       .filter((item: any) => item.type === "text")
-      .map((item: any) => item.text || "")
+      .map((item: any): string => (item.text as string) || "")
       .join(" ");
     return textParts || "[Image content]";
   }

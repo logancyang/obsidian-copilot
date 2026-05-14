@@ -50,12 +50,14 @@ export async function createChatChain(
 
   return RunnableSequence.from([
     {
-      input: (initialInput) => initialInput.input,
+      input: (initialInput: { input: string }) => initialInput.input,
       memory: () => memory.loadMemoryVariables({}),
     },
     {
-      input: (previousOutput) => previousOutput.input,
-      history: (previousOutput) => previousOutput.memory.history,
+      input: (previousOutput: { input: string; memory: { history: unknown } }) =>
+        previousOutput.input,
+      history: (previousOutput: { input: string; memory: { history: unknown } }) =>
+        previousOutput.memory.history,
     },
     chatPrompt,
     chatModel,

@@ -107,14 +107,14 @@ function extractBalancedJson(
  * @returns Compacted output
  */
 export function compactAssistantOutput(
-  output: string | any[],
+  output: string | unknown[],
   config: Partial<CompactionConfig> = {}
-): string | any[] {
+): string | unknown[] {
   if (Array.isArray(output)) {
     // Handle multimodal content - compact text parts
-    return output.map((item) => {
+    return output.map((item: { type?: string; text?: unknown }) => {
       if (item.type === "text" && typeof item.text === "string") {
-        return { ...item, text: compactOutputString(item.text as string, config) };
+        return { ...item, text: compactOutputString(item.text, config) };
       }
       return item;
     });

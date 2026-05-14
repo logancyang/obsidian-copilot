@@ -21,6 +21,7 @@ import {
   DndContext,
   DragEndEvent,
   KeyboardSensor,
+  type Modifier,
   PointerSensor,
   useSensor,
   useSensors,
@@ -397,45 +398,47 @@ export const ModelTable: React.FC<ModelTableProps> = ({
   const firstDraggableIndex = models.findIndex((model) => !model.core);
 
   // Create unified modifier logic
-  const createDragModifier = (isMobile: boolean) => (args: any) => {
-    const { transform, active, activeNodeRect, over } = args;
-    if (!active || !activeNodeRect) return transform;
+  const createDragModifier =
+    (isMobile: boolean): Modifier =>
+    (args) => {
+      const { transform, active, activeNodeRect, over } = args;
+      if (!active || !activeNodeRect) return transform;
 
-    // Get the index of current dragging item
-    const currentIndex = models.findIndex((model) => getModelKeyFromModel(model) === active.id);
+      // Get the index of current dragging item
+      const currentIndex = models.findIndex((model) => getModelKeyFromModel(model) === active.id);
 
-    // Calculate the number of non-core items
-    const draggableItemsCount = models.filter((model) => !model.core).length;
+      // Calculate the number of non-core items
+      const draggableItemsCount = models.filter((model) => !model.core).length;
 
-    // Calculate row height
-    const rowHeight = activeNodeRect.height;
+      // Calculate row height
+      const rowHeight = activeNodeRect.height;
 
-    // Calculate draggable range
-    const minY = (firstDraggableIndex - currentIndex) * rowHeight;
-    const maxY = (firstDraggableIndex + draggableItemsCount - 1 - currentIndex) * rowHeight;
+      // Calculate draggable range
+      const minY = (firstDraggableIndex - currentIndex) * rowHeight;
+      const maxY = (firstDraggableIndex + draggableItemsCount - 1 - currentIndex) * rowHeight;
 
-    // For mobile view, check if hovering over a core model
-    if (isMobile && over) {
-      const overIndex = models.findIndex((model) => getModelKeyFromModel(model) === over.id);
-      const overModel = models[overIndex];
+      // For mobile view, check if hovering over a core model
+      if (isMobile && over) {
+        const overIndex = models.findIndex((model) => getModelKeyFromModel(model) === over.id);
+        const overModel = models[overIndex];
 
-      // If hovering over a core model, return to original position
-      if (overModel.core || overIndex < firstDraggableIndex) {
-        return {
-          ...transform,
-          x: 0,
-          y: 0,
-        };
+        // If hovering over a core model, return to original position
+        if (overModel.core || overIndex < firstDraggableIndex) {
+          return {
+            ...transform,
+            x: 0,
+            y: 0,
+          };
+        }
       }
-    }
 
-    // Restrict within draggable range
-    return {
-      ...transform,
-      x: 0,
-      y: Math.min(Math.max(minY, transform.y as number), maxY),
+      // Restrict within draggable range
+      return {
+        ...transform,
+        x: 0,
+        y: Math.min(Math.max(minY, transform.y), maxY),
+      };
     };
-  };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;

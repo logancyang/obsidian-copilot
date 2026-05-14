@@ -23,7 +23,7 @@ function safeSerialize(value: unknown): string {
 
   return JSON.stringify(
     value,
-    (key, val: unknown) => {
+    (key, val: unknown): unknown => {
       if (typeof val === "object" && val !== null) {
         if (seen.has(val)) {
           return "[Circular]";
@@ -87,12 +87,12 @@ function buildLayeredViewFromMessages(
   // Helper to extract text content from message
   const getTextContent = (msg: any): string => {
     if (typeof msg.content === "string") {
-      return msg.content;
+      return msg.content as string;
     }
     if (Array.isArray(msg.content)) {
-      const textParts = msg.content
+      const textParts: string[] = msg.content
         .filter((item: any) => item.type === "text")
-        .map((item: any) => item.text);
+        .map((item: any): string => item.text as string);
       return textParts.join("\n");
     }
     return "";

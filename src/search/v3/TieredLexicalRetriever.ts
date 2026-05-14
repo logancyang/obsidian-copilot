@@ -3,14 +3,15 @@ import { getSettings } from "@/settings/model";
 import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { SearchCore } from "./SearchCore";
 import { ExpandedQuery } from "./QueryExpander";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
-let getChatModelManagerSingleton: (() => any) | null = null;
-async function safeGetChatModel() {
+let getChatModelManagerSingleton: (() => { getChatModel: () => BaseChatModel }) | null = null;
+async function safeGetChatModel(): Promise<BaseChatModel | null> {
   try {
     if (!getChatModelManagerSingleton) {
       // dynamic import to prevent module load side effects during tests

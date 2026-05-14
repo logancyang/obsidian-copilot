@@ -2,12 +2,16 @@ import { DateTime } from "luxon";
 import { getCurrentTimeTool, convertTimeBetweenTimezonesTool } from "./TimeTools";
 
 // Helper to invoke tool and parse result
-const invokeGetCurrentTime = async (args: { timezoneOffset?: string }) => {
+const invokeGetCurrentTime = async (args: { timezoneOffset?: string }): Promise<any> => {
   const result = await (getCurrentTimeTool as any).invoke(args);
   return typeof result === "string" ? JSON.parse(result) : result;
 };
 
-const invokeConvertTime = async (args: { time: string; fromOffset: string; toOffset: string }) => {
+const invokeConvertTime = async (args: {
+  time: string;
+  fromOffset: string;
+  toOffset: string;
+}): Promise<any> => {
   const result = await (convertTimeBetweenTimezonesTool as any).invoke(args);
   return typeof result === "string" ? JSON.parse(result) : result;
 };

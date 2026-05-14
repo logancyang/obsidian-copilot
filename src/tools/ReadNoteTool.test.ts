@@ -3,7 +3,7 @@ import { StructuredTool } from "@langchain/core/tools";
 const mockRead = jest.fn();
 
 // Helper to invoke tool and parse JSON result
-const invokeReadNoteTool = async (tool: StructuredTool, args: any) => {
+const invokeReadNoteTool = async (tool: StructuredTool, args: any): Promise<any> => {
   const result = await tool.invoke(args);
   return typeof result === "string" ? JSON.parse(result) : result;
 };

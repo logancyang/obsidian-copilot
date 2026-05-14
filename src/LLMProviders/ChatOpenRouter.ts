@@ -386,7 +386,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       return undefined;
     }
 
-    return candidate.filter((detail) => detail !== undefined && detail !== null);
+    return (candidate as unknown[]).filter((detail) => detail !== undefined && detail !== null);
   }
 
   /**
@@ -406,8 +406,12 @@ export class ChatOpenRouter extends ChatOpenAI {
           if (typeof part === "string") {
             return part;
           }
-          if (part && typeof part === "object" && typeof part.text === "string") {
-            return part.text;
+          if (
+            part &&
+            typeof part === "object" &&
+            typeof (part as { text?: unknown }).text === "string"
+          ) {
+            return (part as { text: string }).text;
           }
           return "";
         })

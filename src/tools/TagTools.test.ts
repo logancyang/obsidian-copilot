@@ -4,7 +4,7 @@ import { createGetTagListTool, enforceSizeLimit } from "./TagTools";
 describe("TagTools", () => {
   const originalApp = (window as any).app;
 
-  const parsePayload = (result: string) => {
+  const parsePayload = (result: string): any => {
     const startIndex = result.indexOf('{"');
     const endIndex = result.lastIndexOf("}");
 
