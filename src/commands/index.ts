@@ -428,7 +428,7 @@ export function registerCommands(
       }
 
       // Map hits to chunks (getDocsByPath returns {document, score} format)
-      const chunks = hits.map((hit: any) => hit.document);
+      const chunks: any[] = hits.map((hit: { document: any }): any => hit.document);
       const content = [
         `# Embedding Debug: ${activeFile.basename}`,
         "",
@@ -606,7 +606,7 @@ export function registerCommands(
       setSelectedTextContexts([webSelectedTextContext]);
 
       // Open chat window to show the context was added
-      plugin.activateView();
+      await plugin.activateView();
     } catch (error) {
       logError("Error adding web selection to context:", error);
       new Notice("Failed to get web selection");

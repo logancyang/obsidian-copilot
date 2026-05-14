@@ -142,10 +142,12 @@ export class WebSelectionTracker {
   private scheduleNext(): void {
     if (!this.isRunning) return;
 
-    this.timeoutId = window.setTimeout(async () => {
-      await this.checkSelection();
-      // Schedule next only after current check completes
-      this.scheduleNext();
+    this.timeoutId = window.setTimeout(() => {
+      void (async () => {
+        await this.checkSelection();
+        // Schedule next only after current check completes
+        this.scheduleNext();
+      })();
     }, this.intervalMs);
   }
 

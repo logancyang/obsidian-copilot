@@ -3,14 +3,15 @@ import { getSettings } from "@/settings/model";
 import { extractNoteFiles } from "@/utils";
 import { BaseCallbackConfig } from "@langchain/core/callbacks/manager";
 import { Document } from "@langchain/core/documents";
+import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseRetriever } from "@langchain/core/retrievers";
 import { App, TFile } from "obsidian";
 import { ChunkManager, getSharedChunkManager } from "./chunks";
 import { SearchCore } from "./SearchCore";
 import { ExpandedQuery } from "./QueryExpander";
 // Defer requiring ChatModelManager until runtime to avoid test-time import issues
-let getChatModelManagerSingleton: (() => any) | null = null;
-async function safeGetChatModel() {
+let getChatModelManagerSingleton: (() => { getChatModel: () => BaseChatModel }) | null = null;
+async function safeGetChatModel(): Promise<BaseChatModel | null> {
   try {
     if (!getChatModelManagerSingleton) {
       // dynamic import to prevent module load side effects during tests
@@ -236,8 +237,12 @@ export class TieredLexicalRetriever extends BaseRetriever {
 
       // If scores are similar and both are chunks from the same note, sort by chunk index
       if (a.metadata.isChunk && b.metadata.isChunk && a.metadata.path === b.metadata.path) {
-        const aChunkIndex = parseInt(a.metadata.chunkId?.split("#")[1] || "0");
-        const bChunkIndex = parseInt(b.metadata.chunkId?.split("#")[1] || "0");
+        const aChunkIndex = parseInt(
+          ((a.metadata.chunkId as string | undefined)?.split("#")[1] as string) || "0"
+        );
+        const bChunkIndex = parseInt(
+          ((b.metadata.chunkId as string | undefined)?.split("#")[1] as string) || "0"
+        );
         return aChunkIndex - bChunkIndex;
       }
 

@@ -1,5 +1,6 @@
 import { ProjectConfig } from "@/aiParams";
 import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
+import type { TFile } from "obsidian";
 
 // Mock dependencies
 interface MockFileStat {
@@ -122,14 +123,14 @@ describe("ProjectContextCache", () => {
     basename: string;
     stat: MockFileStat;
   }
-  const { TFile: MockedTFile } = jest.requireMock("obsidian") as {
+  const { TFile: MockedTFile } = jest.requireMock<{
     TFile: new (
       path: string,
       extension: string,
       basename: string,
       stat: MockFileStat
     ) => MockedTFileType;
-  };
+  }>("obsidian");
   const mockMarkdownFile: MockedTFileType = new MockedTFile("test/file.md", "md", "file", {
     mtime: Date.now(),
     size: 100,
@@ -149,9 +150,9 @@ describe("ProjectContextCache", () => {
 
     // Set up mock vault file retrieval
     mockApp.vault.getFiles.mockReturnValue([mockMarkdownFile, mockPdfFile]);
-    mockApp.vault.getAbstractFileByPath.mockImplementation((path) => {
-      if (path === mockMarkdownFile.path) return mockMarkdownFile;
-      if (path === mockPdfFile.path) return mockPdfFile;
+    mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
+      if (path === mockMarkdownFile.path) return mockMarkdownFile as unknown;
+      if (path === mockPdfFile.path) return mockPdfFile as unknown;
       return null;
     });
 
@@ -268,7 +269,7 @@ describe("ProjectContextCache", () => {
     const updatedCache = projectContextCache.updateProjectMarkdownFilesFromPatterns(
       mockProject,
       contextCache,
-      testFiles as any
+      testFiles as unknown as TFile[]
     );
 
     // Verify that only Markdown files were added to the cache
@@ -408,7 +409,7 @@ describe("ProjectContextCache", () => {
     mockApp.vault.adapter.read.mockResolvedValue(JSON.stringify(initialCache));
 
     // Define update function
-    const updateFn = (cache: any) => {
+    const updateFn = (cache: ContextCache) => {
       cache.markdownContext = "Updated markdown content";
       cache.markdownNeedsReload = true;
       return cache;
@@ -443,7 +444,7 @@ describe("ProjectContextCache", () => {
     mockApp.vault.adapter.read.mockResolvedValue(JSON.stringify(initialCache));
 
     // Define async update function
-    const asyncUpdateFn = async (cache: any) => {
+    const asyncUpdateFn = async (cache: ContextCache) => {
       // Simulate async operation
       await new Promise((resolve) => window.setTimeout(resolve, 10));
       cache.markdownContext = "Async updated content";
@@ -484,7 +485,7 @@ describe("ProjectContextCache", () => {
     });
 
     // Define update function
-    const updateFn = jest.fn((cache: any) => {
+    const updateFn = jest.fn((cache: ContextCache) => {
       cache.markdownContext = "Should not be called";
       return cache;
     });
@@ -528,19 +529,19 @@ describe("ProjectContextCache", () => {
     const startTime = Date.now();
 
     // Create update functions to modify different parts of the cache
-    const updateMarkdown = (cache: any) => {
+    const updateMarkdown = (cache: ContextCache) => {
       executionOrder.push(`markdown-${Date.now() - startTime}`);
       cache.markdownContext = "Updated markdown content";
       return cache;
     };
 
-    const updateWeb = (cache: any) => {
+    const updateWeb = (cache: ContextCache) => {
       executionOrder.push(`web-${Date.now() - startTime}`);
       cache.webContexts = { "https://example.com": "Web content" };
       return cache;
     };
 
-    const updateYoutube = (cache: any) => {
+    const updateYoutube = (cache: ContextCache) => {
       executionOrder.push(`youtube-${Date.now() - startTime}`);
       cache.youtubeContexts = { "https://youtube.com/test": "YouTube content" };
       return cache;
@@ -615,7 +616,7 @@ describe("ProjectContextCache", () => {
     });
 
     // Create async update functions with different delays
-    const updateMarkdownAsync = async (cache: any) => {
+    const updateMarkdownAsync = async (cache: ContextCache) => {
       const startMark = Date.now() - startTime;
       executionOrder.push(`markdown-start-${startMark}`);
       await new Promise((resolve) => window.setTimeout(resolve, 30));
@@ -624,7 +625,7 @@ describe("ProjectContextCache", () => {
       return cache;
     };
 
-    const updateWebAsync = async (cache: any) => {
+    const updateWebAsync = async (cache: ContextCache) => {
       const startMark = Date.now() - startTime;
       executionOrder.push(`web-start-${startMark}`);
       await new Promise((resolve) => window.setTimeout(resolve, 10));
@@ -633,7 +634,7 @@ describe("ProjectContextCache", () => {
       return cache;
     };
 
-    const updateYoutubeAsync = async (cache: any) => {
+    const updateYoutubeAsync = async (cache: ContextCache) => {
       const startMark = Date.now() - startTime;
       executionOrder.push(`youtube-start-${startMark}`);
       await new Promise((resolve) => window.setTimeout(resolve, 20));

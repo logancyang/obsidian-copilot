@@ -128,7 +128,7 @@ export function ModelImporter({
   // Auto-load models when expanded and ready
   useEffect(() => {
     if (expanded && isReady && models === null && !loading && !error) {
-      loadModels();
+      void loadModels();
     }
   }, [expanded, isReady, models, loading, error, loadModels]);
 
@@ -216,7 +216,7 @@ export function ModelImporter({
               }}
               onClick={() => {
                 if (models === null && !loading) {
-                  loadModels();
+                  void loadModels();
                 }
               }}
               value={selectedModel?.id || ""}

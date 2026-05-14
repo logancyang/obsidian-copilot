@@ -107,7 +107,7 @@ export class CustomCommandRegister {
       return;
     }
     const commandId = getCommandId(file.basename);
-    (this.plugin as any).removeCommand(commandId);
+    (this.plugin as unknown as { removeCommand: (id: string) => void }).removeCommand(commandId);
     deleteCachedCommand(file.basename);
   };
 
@@ -119,7 +119,9 @@ export class CustomCommandRegister {
     const oldFilename = oldPath.split("/").pop()?.replace(/\.md$/, "");
     if (oldFilename) {
       const oldCommandId = getCommandId(oldFilename);
-      (this.plugin as any).removeCommand(oldCommandId);
+      (this.plugin as unknown as { removeCommand: (id: string) => void }).removeCommand(
+        oldCommandId
+      );
       deleteCachedCommand(oldFilename);
     }
     // Register the new command if it's still a custom command file
@@ -133,7 +135,7 @@ export class CustomCommandRegister {
 
   private registerCommand(customCommand: CustomCommand) {
     const commandId = getCommandId(customCommand.title);
-    (this.plugin as any).removeCommand(commandId);
+    (this.plugin as unknown as { removeCommand: (id: string) => void }).removeCommand(commandId);
     this.plugin.addCommand({
       id: commandId,
       name: customCommand.title,

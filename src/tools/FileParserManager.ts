@@ -375,9 +375,9 @@ export class Docs4LLMParser implements FileParser {
           if (doc.content) {
             // Prioritize markdown content, then fallback to text content
             if (doc.content.md) {
-              markdownParts.push(doc.content.md);
+              markdownParts.push(doc.content.md as string);
             } else if (doc.content.text) {
-              markdownParts.push(doc.content.text);
+              markdownParts.push(doc.content.text as string);
             }
           }
         }

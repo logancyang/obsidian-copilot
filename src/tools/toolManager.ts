@@ -25,10 +25,11 @@ export class ToolManager {
       throw new Error("Tool is undefined");
     }
 
-    const result = await tool.call(args);
+    const typedTool = tool as { call: (args: unknown) => Promise<unknown>; name: string };
+    const result = await typedTool.call(args);
 
     if (result === undefined || result === null) {
-      logWarn(`[ToolCall] Tool "${tool.name}" returned null/undefined`);
+      logWarn(`[ToolCall] Tool "${typedTool.name}" returned null/undefined`);
       return null;
     }
 

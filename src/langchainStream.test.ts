@@ -5,7 +5,7 @@ jest.mock("@/settings/model", () => ({
 import { AI_SENDER } from "@/constants";
 import { MissingApiKeyError } from "@/error";
 import { getAIResponse } from "@/langchainStream";
-import ChainManager from "@/LLMProviders/chainManager";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/message";
 
 describe("getAIResponse onboarding errors", () => {

@@ -318,7 +318,7 @@ describe("createMapPosReplaceGuard", () => {
         mapPos: (pos: number, assoc: number) => pos + 3,
       };
 
-      guard.onDocChanged?.(mockChanges as any);
+      guard.onDocChanged?.(mockChanges as unknown as import("@codemirror/state").ChangeDesc);
 
       expect(guard.getRange()).toEqual({ from: 3, to: 8 });
     });
@@ -376,9 +376,9 @@ describe("createMapPosReplaceGuard", () => {
 });
 
 describe("createHighlightReplaceGuard", () => {
-  const { SelectionHighlight } = jest.requireMock("./selectionHighlight") as {
+  const { SelectionHighlight } = jest.requireMock<{
     SelectionHighlight: { getRange: jest.Mock };
-  };
+  }>("./selectionHighlight");
 
   const createMockEditorView = (docContent: string): EditorView => {
     return {

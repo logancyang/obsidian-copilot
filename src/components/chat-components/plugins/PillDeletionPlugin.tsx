@@ -26,7 +26,8 @@ function $isPillNode(node: any): node is DecoratorNode<any> & IPillNode {
   }
 
   // Check if it implements the IPillNode interface
-  return typeof (node as any).isPill === "function" && (node as any).isPill() === true;
+  const maybePill = node as { isPill?: () => boolean };
+  return typeof maybePill.isPill === "function" && maybePill.isPill() === true;
 }
 
 /**

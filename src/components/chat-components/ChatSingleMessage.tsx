@@ -398,7 +398,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         if (isStreaming && content.includes(openTag)) {
           // Replace any complete sections first
           const completeRegex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-          content = content.replace(completeRegex, (_match, sectionContent) => {
+          content = content.replace(completeRegex, (_match, sectionContent: string) => {
             const sectionKey = `${tagName}-${sectionIndex}`;
             sectionIndex += 1;
             const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
@@ -411,7 +411,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const unClosedRegex = new RegExp(`<${tagName}>([\\s\\S]*)$`);
           content = content.replace(
             unClosedRegex,
-            (_match, partialContent) =>
+            (_match, partialContent: string) =>
               `<div style="${detailsStyle}">` +
               `<div style="${summaryStyle}">${streamingSummaryText}</div>` +
               `<div class="tw-text-muted" style="${contentStyle}">${ensureClosingTagOnNewLine(partialContent)}</div>` +
@@ -422,7 +422,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
         // Not streaming, process all sections normally
         const regex = new RegExp(`<${tagName}>([\\s\\S]*?)<\\/${tagName}>`, "g");
-        return content.replace(regex, (_match, sectionContent) => {
+        return content.replace(regex, (_match, sectionContent: string) => {
           const sectionKey = `${tagName}-${sectionIndex}`;
           sectionIndex += 1;
           const domId = buildCopilotCollapsibleDomId(messageId.current, sectionKey);
@@ -448,7 +448,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           const xmlCodeblockRegex =
             /```(?:xml)?\s*([\s\S]*?<writeFile>[\s\S]*?<\/writeFile>[\s\S]*?)\s*```/g;
 
-          return text.replace(xmlCodeblockRegex, (_match, xmlContent) => {
+          return text.replace(xmlCodeblockRegex, (_match: string, xmlContent: string) => {
             // Extract just the content inside the codeblock and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -461,7 +461,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
           // Pattern to match XML codeblocks that contain unclosed writeFile tags
           const streamingXmlCodeblockRegex = /```xml\s*([\s\S]*?<writeFile>[\s\S]*?)$/g;
 
-          return text.replace(streamingXmlCodeblockRegex, (_match, xmlContent) => {
+          return text.replace(streamingXmlCodeblockRegex, (_match: string, xmlContent: string) => {
             // Extract the content and return it without the codeblock wrapper
             return xmlContent.trim();
           });
@@ -554,7 +554,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Match ![title](url) format and check if URL is YouTube
         const imageEmbedRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
-        return content.replace(imageEmbedRegex, (match, title, url) => {
+        return content.replace(imageEmbedRegex, (match, title: string, url: string) => {
           const videoId = extractYoutubeVideoId(url);
           if (!videoId) {
             // Not a YouTube URL, keep original
@@ -913,42 +913,44 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     const editor = leaf.view.editor;
     const hasSelection = editor.getSelection().length > 0;
-    insertIntoEditor(message.message, hasSelection);
+    void insertIntoEditor(message.message, hasSelection);
   };
 
   const renderMessageContent = () => {
     if (message.content) {
       return (
         <div className="tw-flex tw-flex-col tw-gap-3">
-          {message.content.map((item, index) => {
-            if (item.type === "text") {
-              return (
-                <div key={index}>
-                  {message.sender === USER_SENDER ? (
-                    <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
-                      {message.message}
-                    </div>
-                  ) : (
-                    <div
-                      ref={contentRef}
-                      className={message.isErrorMessage ? "tw-text-error" : ""}
-                    ></div>
-                  )}
-                </div>
-              );
-            } else if (item.type === "image_url") {
-              return (
-                <div key={index} className="message-image-content">
-                  <img
-                    src={item.image_url.url}
-                    alt="User uploaded image"
-                    className="chat-message-image"
-                  />
-                </div>
-              );
+          {(message.content as Array<{ type: string; image_url?: { url: string } }>).map(
+            (item, index) => {
+              if (item.type === "text") {
+                return (
+                  <div key={index}>
+                    {message.sender === USER_SENDER ? (
+                      <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
+                        {message.message}
+                      </div>
+                    ) : (
+                      <div
+                        ref={contentRef}
+                        className={message.isErrorMessage ? "tw-text-error" : ""}
+                      ></div>
+                    )}
+                  </div>
+                );
+              } else if (item.type === "image_url") {
+                return (
+                  <div key={index} className="message-image-content">
+                    <img
+                      src={item.image_url!.url}
+                      alt="User uploaded image"
+                      className="chat-message-image"
+                    />
+                  </div>
+                );
+              }
+              return null;
             }
-            return null;
-          })}
+          )}
         </div>
       );
     }

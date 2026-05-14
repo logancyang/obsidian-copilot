@@ -18,7 +18,7 @@ jest.mock("@/system-prompts/state", () => ({
 
 // Mock settings/model getSettings for legacy fallback tests
 jest.mock("@/settings/model", () => {
-  const actual = jest.requireActual("@/settings/model") as Record<string, unknown>;
+  const actual = jest.requireActual<object>("@/settings/model");
   return {
     ...actual,
     getSettings: jest.fn(() => ({ userSystemPrompt: "" })),
@@ -209,7 +209,7 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
       miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
     };
 
-    const sanitized = sanitizeSettings(legacySettings as unknown as CopilotSettings);
+    const sanitized = sanitizeSettings(legacySettings);
     const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
 
     expect(sanitized.userId).toBeTruthy();

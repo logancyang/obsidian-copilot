@@ -92,9 +92,9 @@ function extractTextContent(content: any): string {
     return content;
   } else if (Array.isArray(content)) {
     // Extract text from multimodal content, skip image_url payloads
-    const textParts = content
+    const textParts: string = content
       .filter((item: any) => item.type === "text")
-      .map((item: any) => item.text || "")
+      .map((item: any): string => (item.text as string) || "")
       .join(" ");
     return textParts || "[Image content]";
   }
@@ -235,7 +235,7 @@ export async function loadAndAddChatHistory(
   const memoryVariables = await memory.loadMemoryVariables({});
   const rawHistory = memoryVariables.history || [];
 
-  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory) : [];
+  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory as any[]) : [];
 
   // Add history messages directly (already compacted at save time)
   for (const msg of processedHistory) {

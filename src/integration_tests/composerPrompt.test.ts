@@ -68,7 +68,7 @@ describe.skip("Composer Instructions - Integration Tests", () => {
   });
 
   // Helper function to run a test with a given prompt and check for writeFile blocks
-  const testComposerResponse = async (
+  const testComposerResponse = (
     testName: string,
     userPrompt: string,
     expectedBlocks: number = 1

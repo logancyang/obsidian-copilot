@@ -121,7 +121,7 @@ export abstract class BaseChainRunner implements ChainRunner {
       const { parseToolCallMarkers } = await import("./utils/toolCallParser");
       const parsed = parseToolCallMarkers(fullAIResponse);
       let textOnly = parsed.segments
-        .map((seg: any) => (seg.type === "text" ? seg.content : ""))
+        .map((seg: { type: string; content: string }) => (seg.type === "text" ? seg.content : ""))
         .join("")
         .trim();
       if (!textOnly) textOnly = fullAIResponse || "";

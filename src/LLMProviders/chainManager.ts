@@ -244,7 +244,9 @@ export default class ChainManager {
             retriever: retriever,
             systemMessage: getSystemPrompt(),
           },
-          this.storeRetrieverDocuments.bind(this),
+          this.storeRetrieverDocuments.bind(this) as (
+            documents: import("@langchain/core/documents").Document[]
+          ) => void,
           getSettings().debug
         );
 

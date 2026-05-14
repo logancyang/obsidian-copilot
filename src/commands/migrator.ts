@@ -24,7 +24,7 @@ async function saveUnsupportedCommands(commands: CustomCommand[]) {
     commands.map(async (command) => {
       const filePath = `${unsupportedFolderPath}/${command.title}.md`;
       const file = await app.vault.create(filePath, command.content);
-      await app.fileManager.processFrontMatter(file, (frontmatter) => {
+      await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
         frontmatter[COPILOT_COMMAND_SLASH_ENABLED] = command.showInSlashMenu;
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ORDER] = command.order;

@@ -1,6 +1,9 @@
 # Release workflow: triggered when a PR targeting master is merged and its title
-# is a strict semver string (e.g. "3.2.3"). The PR title becomes the release tag
-# and title; the PR body becomes the release notes.
+# is a semver string. Two formats are accepted:
+#   - Stable release:    "X.Y.Z"               (e.g. "3.2.3")
+#   - Prerelease:        "X.Y.Z-<tag>.<N>"     (e.g. "3.2.9-beta.1", "3.3.0-rc.0")
+# Prerelease titles publish a GitHub Release marked as a prerelease.
+# The PR title becomes the release tag and title; the PR body becomes the release notes.
 #
 # Non-semver PR titles (feature PRs, bug fixes, etc.) are silently ignored —
 # the workflow runs but exits early without creating a release.
@@ -21,28 +24,37 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write  # required to create GitHub releases and tags
+      contents: write       # required to create GitHub releases and tags
+      attestations: write   # required to publish artifact attestations
+      id-token: write       # required for the workflow's OIDC token (used to sign attestations)
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
     steps:
-      # ── Step 1: Validate that the PR title is a strict semver ──────────────
+      # ── Step 1: Validate that the PR title is a semver (stable or prerelease) ──
       # Exits without error when the title is not semver so non-release PRs
-      # pass silently. Sets outputs.version and outputs.is_release for
-      # downstream steps.
+      # pass silently. Sets outputs.version, outputs.is_release, and
+      # outputs.is_prerelease for downstream steps.
       - name: Validate semver PR title
         id: semver
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: |
           if echo "$PR_TITLE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "PR title '$PR_TITLE' is a valid semver — proceeding with release."
+            echo "PR title '$PR_TITLE' is a stable semver — proceeding with release."
             echo "version=$PR_TITLE" >> "$GITHUB_OUTPUT"
             echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
+          elif echo "$PR_TITLE" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+-[0-9A-Za-z-]+\.[0-9]+$'; then
+            echo "PR title '$PR_TITLE' is a prerelease semver — proceeding with prerelease."
+            echo "version=$PR_TITLE" >> "$GITHUB_OUTPUT"
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=true" >> "$GITHUB_OUTPUT"
           else
-            echo "PR title '$PR_TITLE' is not strict semver (X.Y.Z) — skipping release."
+            echo "PR title '$PR_TITLE' is not semver (X.Y.Z or X.Y.Z-tag.N) — skipping release."
             echo "is_release=false" >> "$GITHUB_OUTPUT"
+            echo "is_prerelease=false" >> "$GITHUB_OUTPUT"
           fi
 
       # ── Step 2: Checkout the merge commit on master ─────────────────────────
@@ -54,18 +66,54 @@ jobs:
           # master don't cause this workflow to build the wrong code.
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      # ── Step 3: Verify PR title version matches manifest.json ───────────────
-      - name: Verify version matches manifest.json
+      # ── Step 3: Verify PR title version matches the source-of-truth manifest ──
+      # For stable releases the source of truth is manifest.json (which the
+      # Obsidian plugin store reads). For prereleases the source of truth is
+      # manifest-beta.json (manifest.json must stay pinned at the latest stable
+      # so the plugin store keeps serving installs correctly).
+      #
+      # For prereleases we ALSO assert that manifest.json on the merge commit
+      # still matches the latest stable GitHub Release tag. This defends against
+      # an old-style version-bump or hand edit accidentally re-poisoning master.
+      - name: Verify version matches manifest
         if: steps.semver.outputs.is_release == 'true'
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.semver.outputs.version }}
+          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
         run: |
-          MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
-          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
-            echo "Version mismatch: PR title='$VERSION', manifest.json='$MANIFEST_VERSION'"
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            MANIFEST_FILE="manifest-beta.json"
+
+            # Guard: master's manifest.json must still equal the latest stable Release tag.
+            # Use /releases/latest which (per GitHub API) returns only the most-recent
+            # non-prerelease, non-draft release in one call — no pagination concerns
+            # even if many prereleases have accumulated since the last stable.
+            LATEST_STABLE=$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" -q .tag_name 2>/dev/null || true)
+            STABLE_MANIFEST_VERSION=$(node -p "require('./manifest.json').version")
+            if [ -z "$LATEST_STABLE" ]; then
+              echo "Could not determine latest stable GitHub Release tag; aborting to avoid poisoning manifest.json"
+              exit 1
+            fi
+            if [ "$STABLE_MANIFEST_VERSION" != "$LATEST_STABLE" ]; then
+              echo "manifest.json on merge commit ('$STABLE_MANIFEST_VERSION') drifted from latest stable Release ('$LATEST_STABLE')."
+              echo "A prerelease PR must not modify manifest.json. Refusing to publish."
+              exit 1
+            fi
+            echo "manifest.json drift check passed: $STABLE_MANIFEST_VERSION matches latest stable."
+          else
+            MANIFEST_FILE="manifest.json"
+          fi
+          if [ ! -f "$MANIFEST_FILE" ]; then
+            echo "Expected $MANIFEST_FILE to exist for this release type but it does not."
             exit 1
           fi
-          echo "Version check passed: $VERSION"
+          MANIFEST_VERSION=$(node -p "require('./$MANIFEST_FILE').version")
+          if [ "$VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "Version mismatch: PR title='$VERSION', $MANIFEST_FILE='$MANIFEST_VERSION'"
+            exit 1
+          fi
+          echo "Version check passed: $VERSION (verified against $MANIFEST_FILE)"
 
       # ── Step 4: Set up Node.js ───────────────────────────────────────────────
       - name: Setup Node.js 22.x
@@ -109,20 +157,60 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # ── Step 9: Create GitHub Release ────────────────────────────────────────
+      # ── Step 9: Prepare release-asset manifest ──────────────────────────────
+      # For a prerelease, the manifest.json asset uploaded to the GitHub
+      # Release must carry the prerelease version (so testers who sideload
+      # the assets get a manifest matching what they downloaded). We swap
+      # manifest-beta.json into manifest.json's place IN THE RUNNER only —
+      # this never gets pushed back to master, so the committed manifest.json
+      # stays pinned to the latest stable.
+      - name: Prepare release-asset manifest
+        if: steps.semver.outputs.is_release == 'true' && steps.semver.outputs.is_prerelease == 'true'
+        run: |
+          cp manifest-beta.json manifest.json
+          echo "Release-asset manifest.json (prerelease):"
+          cat manifest.json
+
+      # ── Step 10: Generate build provenance attestation ──────────────────────
+      # Cryptographically signs main.js / manifest.json / styles.css with the
+      # workflow's OIDC identity and publishes the attestation to Sigstore's
+      # public transparency log. Anyone can later verify a downloaded asset
+      # was actually built by this workflow on this commit with:
+      #   gh attestation verify main.js --owner logancyang --repo logancyang/obsidian-copilot
+      #
+      # Runs AFTER the prerelease manifest swap so the attested manifest.json
+      # exactly matches the file uploaded to the GitHub Release.
+      - name: Generate artifact attestation
+        if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      # ── Step 11: Create GitHub Release ───────────────────────────────────────
       # --target pins the tag to the exact merge commit SHA so concurrent
       # merges cannot cause the release tag to point at a different commit.
+      # When the PR title is a prerelease semver (X.Y.Z-tag.N), pass --prerelease
+      # so Obsidian's plugin browser does not offer it as a stable update.
       # Artifacts: main.js, manifest.json, styles.css
       - name: Create GitHub Release
         if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
         env:
           VERSION: ${{ steps.semver.outputs.version }}
           MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          IS_PRERELEASE: ${{ steps.semver.outputs.is_prerelease }}
         run: |
+          PRERELEASE_FLAG=""
+          if [ "$IS_PRERELEASE" = "true" ]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
           gh release create "$VERSION" \
             --target "$MERGE_SHA" \
             --title "$VERSION" \
             --notes-file /tmp/release-notes.md \
+            $PRERELEASE_FLAG \
             main.js \
             manifest.json \
             styles.css

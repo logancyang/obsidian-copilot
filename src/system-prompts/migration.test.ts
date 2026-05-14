@@ -36,7 +36,7 @@ jest.mock("@/system-prompts/systemPromptUtils", () => ({
 
 // Mock utils
 jest.mock("@/utils", () => {
-  const actual = jest.requireActual("@/utils") as { stripFrontmatter: unknown };
+  const actual = jest.requireActual<{ stripFrontmatter: unknown }>("@/utils");
   return {
     ensureFolderExists: jest.fn(),
     stripFrontmatter: actual.stripFrontmatter,

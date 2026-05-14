@@ -43,7 +43,13 @@ export class CopilotSettingTab extends PluginSettingTab {
 
       // Reload the plugin
 
-      const app = this.plugin.app as any;
+      const app = this.plugin.app as unknown as {
+        plugins: {
+          disablePlugin: (id: string) => Promise<void>;
+          enablePlugin: (id: string) => Promise<void>;
+        };
+        setting: { openTabById: (id: string) => { display: () => void } };
+      };
       await app.plugins.disablePlugin("copilot");
       await app.plugins.enablePlugin("copilot");
 

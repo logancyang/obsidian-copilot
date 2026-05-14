@@ -36,7 +36,7 @@ interface ChatContextMenuProps {
   showProgressCard: () => void;
   showIndexingCard?: () => void;
   onTypeaheadSelect: (category: string, data: any) => void;
-  lexicalEditorRef?: React.RefObject<any>;
+  lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 }
 
 function ContextSelection({

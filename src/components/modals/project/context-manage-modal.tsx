@@ -436,7 +436,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         setProjectCache(cache);
       }
     };
-    loadCache();
+    void loadCache();
     return () => {
       isMounted = false;
     };
@@ -1331,7 +1331,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
                                 !item.isIgnored && item.id.split(".").pop()?.toLowerCase() !== "md"
                                   ? () => {
                                       const name = item.name || item.id.split("/").pop() || item.id;
-                                      openCachedProjectFile(app, projectCache, item.id, name);
+                                      void openCachedProjectFile(app, projectCache, item.id, name);
                                     }
                                   : undefined
                               }

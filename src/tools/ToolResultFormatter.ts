@@ -45,15 +45,15 @@ function summarizeReadNotePayload(payload: any): string | null {
     return null;
   }
 
-  const status = typeof payload.status === "string" ? payload.status : null;
+  const status = typeof payload.status === "string" ? (payload.status as string) : null;
   const message =
-    typeof payload.message === "string" && payload.message.trim().length > 0
-      ? clampReadNoteMessage(payload.message)
+    typeof payload.message === "string" && (payload.message as string).trim().length > 0
+      ? clampReadNoteMessage(payload.message as string)
       : null;
-  const notePath = typeof payload.notePath === "string" ? payload.notePath : "";
+  const notePath = typeof payload.notePath === "string" ? (payload.notePath as string) : "";
   const noteTitle =
-    typeof payload.noteTitle === "string" && payload.noteTitle.trim().length > 0
-      ? payload.noteTitle.trim()
+    typeof payload.noteTitle === "string" && (payload.noteTitle as string).trim().length > 0
+      ? (payload.noteTitle as string).trim()
       : deriveReadNoteDisplayName(notePath);
   const displayName = noteTitle || deriveReadNoteDisplayName(notePath);
 
@@ -255,7 +255,7 @@ export class ToolResultFormatter {
     // Only support the new structured format or pre-formatted XML flow
     if (typeof result === "object" && result !== null) {
       if (result.type === "local_search" && Array.isArray(result.documents)) {
-        return result.documents;
+        return result.documents as any[];
       }
       return [];
     }
@@ -264,7 +264,7 @@ export class ToolResultFormatter {
       try {
         const parsed = JSON.parse(result);
         if (parsed && parsed.type === "local_search" && Array.isArray(parsed.documents)) {
-          return parsed.documents;
+          return parsed.documents as any[];
         }
       } catch {
         // ignore JSON parse errors; fall through to empty array
@@ -288,7 +288,7 @@ export class ToolResultFormatter {
     if (item.source === "time-filtered") {
       if (item.mtime) {
         try {
-          const d = new Date(item.mtime);
+          const d = new Date(item.mtime as string | number | Date);
           const iso = isNaN(d.getTime()) ? String(item.mtime) : d.toISOString();
           lines.push(`   🕒 Modified: ${iso}${item.includeInContext ? " ✓" : ""}`);
         } catch {
@@ -303,7 +303,7 @@ export class ToolResultFormatter {
       lines.push(`   📊 ${scoreLabel}: ${scoreDisplay}${item.includeInContext ? " ✓" : ""}`);
     }
 
-    const snippet = this.extractContentSnippet(item.content);
+    const snippet = this.extractContentSnippet(item.content as string);
     if (snippet) {
       lines.push(`   💬 "${snippet}${item.content?.length > 150 ? "..." : ""}"`);
     }
@@ -350,7 +350,7 @@ export class ToolResultFormatter {
       // Add the main content
       if (item.content) {
         output.push("");
-        output.push(item.content);
+        output.push(item.content as string);
       }
 
       // Add citations if present
@@ -415,7 +415,7 @@ export class ToolResultFormatter {
       return output.join("\n");
     }
 
-    return result;
+    return result as string;
   }
 
   private static formatYoutubeTranscription(result: any): string {
@@ -548,7 +548,9 @@ export class ToolResultFormatter {
     }
 
     // Return message if available, otherwise the raw result
-    return typeof result === "object" && result.message ? result.message : String(status);
+    return typeof result === "object" && result.message
+      ? (result.message as string)
+      : String(status);
   }
 
   private static formatReplaceInFile(result: any): string {
@@ -564,7 +566,7 @@ export class ToolResultFormatter {
     }
 
     // Error / not-found strings pass through unchanged
-    return typeof result === "object" && result.message ? result.message : status;
+    return typeof result === "object" && result.message ? (result.message as string) : status;
   }
 
   private static formatReadNote(result: any): string {

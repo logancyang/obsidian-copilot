@@ -12,8 +12,8 @@ jest.mock("obsidian", () => {
     }
 
     // Add instanceof compatibility
-    static [Symbol.hasInstance](instance: any) {
-      return (
+    static [Symbol.hasInstance](instance: any): boolean {
+      return Boolean(
         instance && typeof instance === "object" && "path" in instance && "basename" in instance
       );
     }
@@ -30,10 +30,9 @@ jest.mock("@/logger", () => ({
   logError: jest.fn(),
 }));
 
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { ChunkManager, ChunkOptions } from "./chunks";
-
-type TFileCtor = new (path: string) => TFile;
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 type ChunkManagerInternal = {
   cache: Map<string, unknown>;
@@ -48,25 +47,27 @@ describe("ChunkManager", () => {
   let chunkManager: ChunkManager;
   let mockApp: any;
   // Cache mock files to ensure consistent mtime across calls
-  let mockFileCache: Map<string, any>;
+  let mockFileCache: Map<string, TFile>;
 
   beforeEach(() => {
     mockFileCache = new Map();
     mockApp = {
       vault: {
-        getAbstractFileByPath: jest.fn((path) => {
+        getAbstractFileByPath: jest.fn((path: string) => {
           if (!path || path.startsWith("missing")) return null;
           // Return cached file to ensure consistent mtime
           if (mockFileCache.has(path)) {
             return mockFileCache.get(path);
           }
-          const file = new (TFile as unknown as TFileCtor)(path);
-          // Ensure the file passes instanceof TFile checks
-          Object.setPrototypeOf(file, (TFile as unknown as TFileCtor).prototype);
+          const file = mockTFile({
+            path,
+            basename: path.replace(".md", ""),
+            stat: { mtime: Date.now(), ctime: 0, size: 0 },
+          });
           mockFileCache.set(path, file);
           return file;
         }),
-        cachedRead: jest.fn((file) => {
+        cachedRead: jest.fn((file: TFile) => {
           const contents: Record<string, string> = {
             "short.md": "This is a short note with minimal content.",
             "medium.md":
@@ -84,8 +85,8 @@ describe("ChunkManager", () => {
         }),
       },
       metadataCache: {
-        getFileCache: jest.fn((file) => {
-          const headingsByFile: Record<string, any> = {
+        getFileCache: jest.fn((file: TFile) => {
+          const headingsByFile: Record<string, unknown> = {
             "medium.md": {
               headings: [
                 { heading: "Introduction", level: 1, position: { start: { offset: 0 } } },
@@ -149,7 +150,7 @@ describe("ChunkManager", () => {
       },
     };
 
-    chunkManager = new ChunkManager(mockApp);
+    chunkManager = new ChunkManager(mockApp as App);
   });
 
   afterEach(() => {
@@ -497,7 +498,7 @@ describe("ChunkManager", () => {
   describe("cache behavior", () => {
     it("should evict cache when memory limit is exceeded", async () => {
       // Mock a manager with very small cache limit
-      const smallCacheManager = new ChunkManager(mockApp);
+      const smallCacheManager = new ChunkManager(mockApp as App);
       asChunkInternal(smallCacheManager).maxCacheBytes = 1000; // 1KB limit
 
       // Add multiple large documents
@@ -723,7 +724,7 @@ describe("ChunkManager", () => {
       ];
 
       for (const testCase of testCases) {
-        const manager = new ChunkManager(mockApp);
+        const manager = new ChunkManager(mockApp as App);
         const generatedId = asChunkInternal(manager).generateChunkId("test.md", testCase.index);
         expect(generatedId).toBe(`test.md#${testCase.expected}`);
       }

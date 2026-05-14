@@ -154,7 +154,7 @@ export class IndexOperations {
 
       // Update totalFiles to reflect only files that produced chunks
       // (some files may be empty or produce no valid content after chunking)
-      const filesWithChunks = new Set(allChunks.map((c) => c.fileInfo.path)).size;
+      const filesWithChunks = new Set(allChunks.map((c): string => c.fileInfo.path as string)).size;
       this.state.totalFilesToIndex = filesWithChunks;
       updateIndexingProgressState({ totalFiles: filesWithChunks });
 
@@ -190,7 +190,7 @@ export class IndexOperations {
                 logError(
                   `Invalid embedding for document ${chunk.fileInfo.path}: ${JSON.stringify(embedding)}`
                 );
-                this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path);
+                this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path as string);
                 continue;
               }
 
@@ -495,7 +495,7 @@ export class IndexOperations {
     }
 
     // Check the error message at any depth
-    const message = error.message || error.toString();
+    const message: string = (error.message || error.toString()) as string;
     const lowerMessage = message.toLowerCase();
     return lowerMessage.includes("string length") || lowerMessage.includes("rangeerror");
   }
@@ -549,7 +549,7 @@ export class IndexOperations {
   }
 
   private isRateLimitError(err: any): boolean {
-    return err?.message?.includes?.("rate limit") || false;
+    return (err?.message?.includes?.("rate limit") as boolean) || false;
   }
 
   private finalizeIndexing(errors: string[]): void {
@@ -613,7 +613,7 @@ export class IndexOperations {
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           await this.indexBackend.upsert({
-            ...chunk.fileInfo,
+            ...(chunk.fileInfo as SemanticIndexDocument),
             id: this.getDocHash(chunk.content),
             content: chunk.content,
             embedding: embeddings[i],
@@ -624,7 +624,7 @@ export class IndexOperations {
       } else {
         for (const chunk of chunks) {
           await this.indexBackend.upsert({
-            ...chunk.fileInfo,
+            ...(chunk.fileInfo as SemanticIndexDocument),
             id: this.getDocHash(chunk.content),
             content: chunk.content,
             embedding: [],

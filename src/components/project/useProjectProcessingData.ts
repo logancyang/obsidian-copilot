@@ -71,7 +71,7 @@ export function useProjectProcessingData(
       return;
     }
     let mounted = true;
-    ProjectContextCache.getInstance()
+    void ProjectContextCache.getInstance()
       .get(cacheProject)
       .then((cache) => {
         if (mounted) setProjectCache(cache);

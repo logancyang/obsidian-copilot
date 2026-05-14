@@ -1,6 +1,7 @@
-import ChainManager from "@/LLMProviders/chainManager";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/message";
-import { Notice, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
+import type { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
@@ -33,20 +34,23 @@ jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
 }));
 jest.mock("@/utils", () => ({
-  extractTextFromChunk: jest.fn((content) => {
+  extractTextFromChunk: jest.fn((content: unknown): string => {
     if (typeof content === "string") {
       return content;
     }
     if (Array.isArray(content)) {
-      return content
+      return (content as Array<{ type?: string; text?: string }>)
         .filter((item) => item?.type === "text")
         .map((item) => item?.text || "")
         .join("");
     }
     if (content && typeof content === "object" && "text" in content) {
-      return String((content as { text?: unknown }).text ?? "");
+      return String((content as { text?: string }).text ?? "");
     }
-    return String(content ?? "");
+    if (typeof content === "number" || typeof content === "boolean") {
+      return String(content);
+    }
+    return "";
   }),
   formatDateTime: jest.fn((date) => ({
     fileName: "20240923_221800",
@@ -128,7 +132,10 @@ describe("ChatPersistenceManager", () => {
     };
 
     // Create persistence manager
-    persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+    persistenceManager = new ChatPersistenceManager(
+      mockApp as App,
+      mockMessageRepo as MessageRepository
+    );
   });
 
   describe("formatChatContent", () => {
@@ -385,7 +392,11 @@ Nature's quiet song`);
         },
       } as unknown as ChainManager;
 
-      persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
+      persistenceManager = new ChatPersistenceManager(
+        mockApp as App,
+        mockMessageRepo as MessageRepository,
+        chainManager
+      );
       const mockFile = mockTFile({
         path: "test-folder/Summarize_weather_data@20240923_221800.md",
       });
@@ -1110,7 +1121,10 @@ ${formattedContent}`;
       });
 
       // Recreate persistence manager with the updated mock
-      const testPersistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+      const testPersistenceManager = new ChatPersistenceManager(
+        mockApp as App,
+        mockMessageRepo as MessageRepository
+      );
 
       const originalMessages: ChatMessage[] = [
         {
@@ -1626,7 +1640,7 @@ tags:
 
       // Verify that create was called with content NOT containing lastAccessedAt
       const createCall = mockApp.vault.create.mock.calls[0] as [string, string];
-      const content = createCall[1] as string;
+      const content = createCall[1];
       expect(content).not.toContain("lastAccessedAt:");
     });
 

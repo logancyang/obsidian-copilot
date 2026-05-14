@@ -67,21 +67,21 @@ export interface ErrorDetail {
 }
 
 export function extractErrorDetail(error: any): ErrorDetail {
-  const errorDetail = error?.detail || {};
+  const errorDetail: ErrorDetail = error?.detail || {};
   return {
     status: errorDetail.status,
-    message: errorDetail.message || error?.message,
+    message: errorDetail.message || (error?.message as string | undefined),
     reason: errorDetail.reason,
   };
 }
 
 export function isLicenseKeyError(error: any): boolean {
   const errorDetail = extractErrorDetail(error);
-  return (
+  return Boolean(
     errorDetail.reason === "Invalid license key" ||
-    error?.message === "Invalid license key" ||
-    error?.message?.includes("status 403") ||
-    errorDetail.status === 403
+      error?.message === "Invalid license key" ||
+      error?.message?.includes("status 403") ||
+      errorDetail.status === 403
   );
 }
 
@@ -270,7 +270,7 @@ export const stringToChainType = (chain: string): ChainType => {
 // TODO: These chain validation functions are deprecated
 // Remove after confirming chainManager no longer uses them
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
-  return (chain as any).last?.modelName || (chain as any).last?.model;
+  return Boolean((chain as any).last?.modelName || (chain as any).last?.model);
 };
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
@@ -662,7 +662,7 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
   const titlesSet = new Set<string>();
   docs.forEach((doc) => {
     if (doc.metadata?.title) {
-      titlesSet.add(doc.metadata?.title);
+      titlesSet.add(doc.metadata.title as string);
     }
   });
 
@@ -823,7 +823,8 @@ export async function safeFetch(
     contentType: "application/json",
     headers: headers,
     method: method,
-    ...(methodsWithBody.includes(method) && { body: options.body?.toString() }),
+    ...(methodsWithBody.includes(method) &&
+      typeof options.body === "string" && { body: options.body }),
     throw: false, // Don't throw so we can get the response body
   });
 
@@ -875,7 +876,7 @@ export async function safeFetch(
     bytes: () => Promise.resolve(new Uint8Array(0)),
     body: createReadableStreamFromString(response.text),
     bodyUsed: true,
-    json: () => response.json,
+    json: (): Promise<unknown> => Promise.resolve(response.json as unknown),
     text: async () => response.text,
     arrayBuffer: async () => {
       if (response.arrayBuffer) {
@@ -1159,7 +1160,7 @@ export function isOSeriesModel(model: BaseChatModel | string): boolean {
   }
 
   // For BaseChatModel instances
-  const modelName = (model as any).modelName || (model as any).model || "";
+  const modelName: string = (model as any).modelName || (model as any).model || "";
   return modelName.startsWith("o1") || modelName.startsWith("o3") || modelName.startsWith("o4");
 }
 
@@ -1169,7 +1170,7 @@ export function isGPT5Model(model: BaseChatModel | string): boolean {
   }
 
   // For BaseChatModel instances
-  const modelName = (model as any).modelName || (model as any).model || "";
+  const modelName: string = (model as any).modelName || (model as any).model || "";
   return modelName.startsWith("gpt-5");
 }
 
@@ -1180,7 +1181,7 @@ export function isGPT5Model(model: BaseChatModel | string): boolean {
  * @returns True when the model name indicates a Codex model.
  */
 export function isCodexModel(model: BaseChatModel | string): boolean {
-  const modelName =
+  const modelName: string =
     typeof model === "string" ? model : (model as any).modelName || (model as any).model || "";
   return modelName.toLowerCase().includes("codex");
 }
@@ -1194,7 +1195,7 @@ export function isCodexModel(model: BaseChatModel | string): boolean {
 export function shouldUseGitHubCopilotResponsesApi(
   model: Pick<CustomModel, "provider" | "name" | "useResponsesApi">
 ): boolean {
-  if (model.provider !== ChatModelProviders.GITHUB_COPILOT) {
+  if ((model.provider as ChatModelProviders) !== ChatModelProviders.GITHUB_COPILOT) {
     return false;
   }
 
@@ -1216,8 +1217,10 @@ export interface ModelInfo {
 }
 
 export function getModelInfo(model: BaseChatModel | string): ModelInfo {
-  const modelName =
-    typeof model === "string" ? model : (model as any).modelName || (model as any).model || "";
+  const modelName: string =
+    typeof model === "string"
+      ? model
+      : ((model as any).modelName as string) || ((model as any).model as string) || "";
 
   const isOSeries = isOSeriesModel(modelName);
   const isGPT5 = isGPT5Model(modelName);
@@ -1262,7 +1265,8 @@ export function checkModelApiKey(
   hasApiKey: boolean;
   errorNotice?: string;
 } {
-  if (model.provider === ChatModelProviders.AMAZON_BEDROCK) {
+  const provider = model.provider as ChatModelProviders;
+  if (provider === ChatModelProviders.AMAZON_BEDROCK) {
     const apiKey = model.apiKey || settings.amazonBedrockApiKey;
     if (!apiKey) {
       return {
@@ -1277,7 +1281,7 @@ export function checkModelApiKey(
   }
 
   // GitHub Copilot uses OAuth, not API key
-  if (model.provider === ChatModelProviders.GITHUB_COPILOT) {
+  if (provider === ChatModelProviders.GITHUB_COPILOT) {
     const hasAuth = Boolean(
       model.apiKey || settings.githubCopilotToken || settings.githubCopilotAccessToken
     );
@@ -1291,7 +1295,7 @@ export function checkModelApiKey(
     return { hasApiKey: true };
   }
 
-  const needSetKeyPath = !!getNeedSetKeyProvider().find((provider) => provider === model.provider);
+  const needSetKeyPath = !!getNeedSetKeyProvider().find((p) => p === provider);
   const hasNoApiKey = !getApiKeyForProvider(model.provider as SettingKeyProviders, model);
 
   // For Providers that require setting a key in the dialog, an inspection is necessary.
@@ -1321,7 +1325,7 @@ export function extractTextFromChunk(content: any): string {
   if (Array.isArray(content)) {
     return content
       .filter((item) => item.type === "text")
-      .map((item) => item.text)
+      .map((item) => item.text as string)
       .join("");
   }
   // For any other type, try to convert to string or return empty
@@ -1385,7 +1389,7 @@ export async function withSuppressedTokenWarnings<T>(fn: () => Promise<T>): Prom
         return;
       }
       // Pass through other warnings
-      return originalWarn.apply(console, args);
+      originalWarn.apply(console, args);
     };
 
     // Execute the provided function

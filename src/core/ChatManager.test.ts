@@ -67,6 +67,9 @@ jest.mock("@/services/webViewerService/webViewerServiceSingleton", () => ({
 import { ChatManager } from "./ChatManager";
 import { MessageRepository } from "./MessageRepository";
 import { ContextManager } from "./ContextManager";
+import type ChainManager from "@/LLMProviders/chainManager";
+import type { FileParserManager } from "@/tools/FileParserManager";
+import type CopilotPlugin from "@/main";
 import { ChainType } from "@/chainType";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import { ChatMessage, MessageContext } from "@/types/message";
@@ -145,9 +148,9 @@ describe("ChatManager", () => {
 
     chatManager = new ChatManager(
       mockMessageRepo,
-      mockChainManager,
-      mockFileParserManager,
-      mockPlugin
+      mockChainManager as ChainManager,
+      mockFileParserManager as FileParserManager,
+      mockPlugin as CopilotPlugin
     );
   });
 
@@ -535,13 +538,13 @@ describe("ChatManager", () => {
   });
 
   describe("loadMessages", () => {
-    it("should load messages from array", () => {
+    it("should load messages from array", async () => {
       const messages: ChatMessage[] = [
         createMockMessage("msg-1", "Hello", USER_SENDER),
         createMockMessage("msg-2", "Response", "AI"),
       ];
 
-      chatManager.loadMessages(messages);
+      await chatManager.loadMessages(messages);
 
       expect(mockMessageRepo.clear).toHaveBeenCalled();
       expect(mockMessageRepo.addMessage).toHaveBeenCalledTimes(2);
@@ -1222,20 +1225,17 @@ describe("ChatManager", () => {
 
   describe("System Prompt Template Processing", () => {
     // Import mocked modules for manipulation
-    const { processPrompt } = jest.requireMock("@/commands/customCommandUtils") as {
-      processPrompt: jest.Mock;
-    };
-    const { getSystemPrompt, getSystemPromptWithMemory, getEffectiveUserPrompt } = jest.requireMock(
-      "@/system-prompts/systemPromptBuilder"
-    ) as {
-      getSystemPrompt: jest.Mock;
-      getSystemPromptWithMemory: jest.Mock;
-      getEffectiveUserPrompt: jest.Mock;
-    };
-    const { getSettings } = jest.requireMock("@/settings/model") as { getSettings: jest.Mock };
-    const { getCurrentProject } = jest.requireMock("@/aiParams") as {
-      getCurrentProject: jest.Mock;
-    };
+    const { processPrompt } = jest.requireMock<{ processPrompt: jest.Mock }>(
+      "@/commands/customCommandUtils"
+    );
+    const { getSystemPrompt, getSystemPromptWithMemory, getEffectiveUserPrompt } =
+      jest.requireMock<{
+        getSystemPrompt: jest.Mock;
+        getSystemPromptWithMemory: jest.Mock;
+        getEffectiveUserPrompt: jest.Mock;
+      }>("@/system-prompts/systemPromptBuilder");
+    const { getSettings } = jest.requireMock<{ getSettings: jest.Mock }>("@/settings/model");
+    const { getCurrentProject } = jest.requireMock<{ getCurrentProject: jest.Mock }>("@/aiParams");
 
     beforeEach(() => {
       // Reset to defaults

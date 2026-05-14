@@ -2,7 +2,7 @@ import { App } from "obsidian";
 import { ConfirmModal } from "./ConfirmModal";
 
 export class RebuildIndexConfirmModal extends ConfirmModal {
-  constructor(app: App, onConfirm: () => void) {
+  constructor(app: App, onConfirm: () => void | Promise<void>) {
     super(
       app,
       onConfirm,

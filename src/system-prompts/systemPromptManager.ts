@@ -148,7 +148,7 @@ export class SystemPromptManager {
 
         // Update frontmatter - write back ALL fields since vault.modify clears frontmatter
         // Reference: Command module writes all fields in processFrontMatter
-        await app.fileManager.processFrontMatter(file, (frontmatter) => {
+        await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
           frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = newPrompt.createdMs;
           frontmatter[COPILOT_SYSTEM_PROMPT_MODIFIED] = newPrompt.modifiedMs;
           frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] = newPrompt.lastUsedMs;

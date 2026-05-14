@@ -343,8 +343,9 @@ export function extractAppIgnoreSettings(app: App): string[] {
   const appIgnoreFolders: string[] = [];
   try {
     // Check if getConfig method exists (it won't in tests)
-    if (typeof (app.vault as any).getConfig === "function") {
-      const userIgnoreFilters: unknown = (app.vault as any).getConfig("userIgnoreFilters");
+    const vaultWithConfig = app.vault as unknown as { getConfig?: (key: string) => unknown };
+    if (typeof vaultWithConfig.getConfig === "function") {
+      const userIgnoreFilters: unknown = vaultWithConfig.getConfig("userIgnoreFilters");
 
       if (!!userIgnoreFilters && Array.isArray(userIgnoreFilters)) {
         userIgnoreFilters.forEach((it) => {

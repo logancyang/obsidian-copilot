@@ -14,7 +14,7 @@
 export function isRateLimitError(error: any): boolean {
   if (!error || typeof error !== "object") return false;
 
-  const errorMessage = error.message || error.toString();
+  const errorMessage: string = error.message || error.toString();
   return (
     errorMessage.includes("Request rate limit exceeded") ||
     errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
@@ -29,7 +29,7 @@ export function isRateLimitError(error: any): boolean {
  * @returns The retry time string if found, or 'some time' as fallback
  */
 export function extractRetryTime(error: any): string {
-  const errorMessage = error?.message || error?.toString() || "";
+  const errorMessage: string = error?.message || error?.toString() || "";
   const retryMatch = errorMessage.match(/Try again in ([\d\w\s]+)/);
   return retryMatch ? retryMatch[1] : "some time";
 }

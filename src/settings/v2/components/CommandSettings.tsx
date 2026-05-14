@@ -109,7 +109,7 @@ const MobileCommandCard: React.FC<{
         <Checkbox
           checked={command.showInContextMenu}
           onCheckedChange={(checked) => {
-            onUpdate(
+            void onUpdate(
               {
                 ...command,
                 showInContextMenu: checked === true,
@@ -182,7 +182,7 @@ const SortableTableRow: React.FC<{
   };
 
   const handleDelete = () => {
-    onRemove(command);
+    void onRemove(command);
   };
 
   return (
@@ -209,7 +209,7 @@ const SortableTableRow: React.FC<{
         <Checkbox
           checked={command.showInContextMenu}
           onCheckedChange={(checked) => {
-            onUpdate(
+            void onUpdate(
               {
                 ...command,
                 showInContextMenu: checked === true,

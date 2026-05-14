@@ -54,9 +54,9 @@ describe("TieredLexicalRetriever", () => {
 
   beforeEach(() => {
     // Get reference to the mocked chunk manager
-    const chunksModule = jest.requireMock("./chunks") as {
-      getSharedChunkManager: () => MockChunkManager;
-    };
+    const chunksModule = jest.requireMock<{ getSharedChunkManager: () => MockChunkManager }>(
+      "./chunks"
+    );
     mockChunkManager = chunksModule.getSharedChunkManager();
 
     retrieveMock.mockReset();
@@ -193,7 +193,7 @@ describe("TieredLexicalRetriever", () => {
 
       expect(results.length).toBe(2);
       // Higher score should come first
-      expect(results[0].metadata.score).toBeGreaterThanOrEqual(results[1].metadata.score);
+      expect(results[0].metadata.score).toBeGreaterThanOrEqual(results[1].metadata.score as number);
     });
   });
 

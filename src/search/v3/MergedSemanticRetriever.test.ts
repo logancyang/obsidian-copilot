@@ -1,5 +1,5 @@
+import type { App } from "obsidian";
 import { Document } from "@langchain/core/documents";
-import { App } from "obsidian";
 import { MergedSemanticRetriever } from "./MergedSemanticRetriever";
 import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
 import { HybridRetriever } from "@/search/hybridRetriever";

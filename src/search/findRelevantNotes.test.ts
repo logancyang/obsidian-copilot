@@ -8,7 +8,7 @@ import {
   getVaultRelativeMiyoPath,
   shouldUseMiyo,
 } from "@/miyo/miyoUtils";
-import { getSettings } from "@/settings/model";
+import { getSettings, type CopilotSettings } from "@/settings/model";
 import VectorStoreManager from "@/search/vectorStoreManager";
 
 jest.mock("@/noteUtils", () => ({
@@ -37,7 +37,7 @@ const mockGetDocsByEmbedding = jest.fn();
 
 jest.mock("@/search/dbOperations", () => ({
   DBOperations: {
-    getDocsByEmbedding: (...args: unknown[]) => mockGetDocsByEmbedding(...args),
+    getDocsByEmbedding: (...args: unknown[]) => mockGetDocsByEmbedding(...args) as unknown,
   },
 }));
 
@@ -46,8 +46,8 @@ const mockSearchRelated = jest.fn();
 
 jest.mock("@/miyo/MiyoClient", () => ({
   MiyoClient: jest.fn().mockImplementation(() => ({
-    resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args),
-    searchRelated: (...args: unknown[]) => mockSearchRelated(...args),
+    resolveBaseUrl: (...args: unknown[]) => mockResolveBaseUrl(...args) as unknown,
+    searchRelated: (...args: unknown[]) => mockSearchRelated(...args) as unknown,
   })),
 }));
 
@@ -108,7 +108,7 @@ describe("findRelevantNotes", () => {
       enableSemanticSearchV3: false,
       selfHostModeValidatedAt: null,
       selfHostValidationCount: 0,
-    } as any);
+    } as CopilotSettings);
     mockedGetLinkedNotes.mockReturnValue([]);
     mockedGetBacklinkedNotes.mockReturnValue([]);
     mockedGetMiyoFolderName.mockReturnValue("vault");
@@ -197,7 +197,7 @@ describe("findRelevantNotes", () => {
       miyoServerUrl: "http://127.0.0.1:8742",
       enableMiyo: true,
       enableSemanticSearchV3: true,
-    } as any);
+    } as CopilotSettings);
     mockGetDocumentsByPath.mockResolvedValue([
       {
         id: "chunk-a",
@@ -245,7 +245,7 @@ describe("findRelevantNotes", () => {
       miyoServerUrl: "http://127.0.0.1:8742",
       enableMiyo: false,
       enableSemanticSearchV3: true,
-    } as any);
+    } as CopilotSettings);
     mockGetDocumentsByPath.mockResolvedValue([
       { id: "chunk-a", path: "source.md", content: "source chunk content", embedding: [] },
     ]);
@@ -273,7 +273,7 @@ describe("findRelevantNotes", () => {
       miyoServerUrl: "http://127.0.0.1:8742",
       enableMiyo: true,
       enableSemanticSearchV3: true,
-    } as any);
+    } as CopilotSettings);
     mockGetDocumentsByPath.mockResolvedValue([
       {
         id: "chunk-a",

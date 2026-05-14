@@ -116,11 +116,11 @@ export default class EmbeddingManager {
   }
 
   static getModelName(embeddingsInstance: Embeddings): string {
-    const emb = embeddingsInstance as any;
-    if ("model" in emb && emb.model) {
-      return emb.model as string;
-    } else if ("modelName" in emb && emb.modelName) {
-      return emb.modelName as string;
+    const emb = embeddingsInstance as { model?: string; modelName?: string };
+    if (emb.model) {
+      return emb.model;
+    } else if (emb.modelName) {
+      return emb.modelName;
     } else {
       throw new Error(
         `Embeddings instance missing model or modelName properties: ${JSON.stringify(embeddingsInstance)}`
@@ -175,9 +175,8 @@ export default class EmbeddingManager {
       EmbeddingManager.embeddingModel = new selectedModel.EmbeddingConstructor(config);
       return EmbeddingManager.embeddingModel;
     } catch (error) {
-      throw new CustomError(
-        `Error creating embedding model: ${embeddingModelKey}. ${error.message}`
-      );
+      const message = error instanceof Error ? error.message : String(error);
+      throw new CustomError(`Error creating embedding model: ${embeddingModelKey}. ${message}`);
     }
   }
 

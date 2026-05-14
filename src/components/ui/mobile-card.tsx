@@ -15,7 +15,7 @@ import { ChevronDown, ChevronRight, GripVertical, MoreVertical } from "lucide-re
 export interface MobileCardDropdownAction<T = any> {
   icon: React.ReactNode;
   label: string;
-  onClick: (item: T) => void;
+  onClick: (item: T) => void | Promise<void>;
   variant?: "default" | "destructive";
 }
 
@@ -178,7 +178,7 @@ export function MobileCard<T extends object>({
                       key={index}
                       onClick={(e) => {
                         e.stopPropagation();
-                        action.onClick(item);
+                        void action.onClick(item);
                       }}
                       className={cn(action.variant === "destructive" && "tw-text-error")}
                     >

@@ -10,10 +10,10 @@ import {
 describe("searchResultUtils", () => {
   describe("formatSearchResultsForLLM", () => {
     it("should return empty string for non-array input", () => {
-      expect(formatSearchResultsForLLM(null as any)).toBe("");
-      expect(formatSearchResultsForLLM(undefined as any)).toBe("");
-      expect(formatSearchResultsForLLM("string" as any)).toBe("");
-      expect(formatSearchResultsForLLM({} as any)).toBe("");
+      expect(formatSearchResultsForLLM(null)).toBe("");
+      expect(formatSearchResultsForLLM(undefined)).toBe("");
+      expect(formatSearchResultsForLLM("string")).toBe("");
+      expect(formatSearchResultsForLLM({})).toBe("");
     });
 
     it("should return 'No relevant documents found.' for empty array", () => {
@@ -153,9 +153,9 @@ describe("searchResultUtils", () => {
 
   describe("extractSourcesFromSearchResults", () => {
     it("should return empty array for non-array input", () => {
-      expect(extractSourcesFromSearchResults(null as any)).toEqual([]);
-      expect(extractSourcesFromSearchResults(undefined as any)).toEqual([]);
-      expect(extractSourcesFromSearchResults("string" as any)).toEqual([]);
+      expect(extractSourcesFromSearchResults(null)).toEqual([]);
+      expect(extractSourcesFromSearchResults(undefined)).toEqual([]);
+      expect(extractSourcesFromSearchResults("string")).toEqual([]);
     });
 
     it("should extract sources with all fields", () => {
@@ -283,8 +283,8 @@ describe("searchResultUtils", () => {
     });
 
     it("should return empty string for non-array input", () => {
-      expect(formatMetadataOnlyDocuments(null as any)).toBe("");
-      expect(formatMetadataOnlyDocuments(undefined as any)).toBe("");
+      expect(formatMetadataOnlyDocuments(null)).toBe("");
+      expect(formatMetadataOnlyDocuments(undefined)).toBe("");
     });
 
     it("should include correct count attribute", () => {
@@ -385,8 +385,8 @@ describe("searchResultUtils", () => {
     });
 
     it("should return false for non-array input", () => {
-      expect(isFilterOnlyResults(null as any)).toBe(false);
-      expect(isFilterOnlyResults(undefined as any)).toBe(false);
+      expect(isFilterOnlyResults(null as unknown as Array<{ source?: string }>)).toBe(false);
+      expect(isFilterOnlyResults(undefined as unknown as Array<{ source?: string }>)).toBe(false);
     });
 
     it("should return true when all docs have filter sources", () => {
@@ -425,8 +425,8 @@ describe("searchResultUtils", () => {
     });
 
     it("should return false for non-array input", () => {
-      expect(isTimeDominantResults(null as any)).toBe(false);
-      expect(isTimeDominantResults(undefined as any)).toBe(false);
+      expect(isTimeDominantResults(null as unknown as Array<{ source?: string }>)).toBe(false);
+      expect(isTimeDominantResults(undefined as unknown as Array<{ source?: string }>)).toBe(false);
     });
 
     it("should return true when at least one doc has source time-filtered", () => {

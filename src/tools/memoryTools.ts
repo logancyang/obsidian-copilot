@@ -37,12 +37,12 @@ export const updateMemoryTool = createLangChainTool({
         success: true,
         message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
       };
-    } catch (error: any) {
+    } catch (error: unknown) {
       logError("[updateMemoryTool] Error updating memory:", error);
 
       return {
         success: false,
-        message: `Failed to save memory: ${error.message}`,
+        message: `Failed to save memory: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
   },

@@ -1,7 +1,7 @@
 import { generatePromptDebugReportForAgent, resolveBasePrompt } from "./promptDebugService";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { ModelAdapter, PromptSection } from "./modelAdapter";
 import { PromptDebugReport } from "./toolPromptDebugger";
-import ChainManager from "@/LLMProviders/chainManager";
 
 const createAdapter = () => ({
   buildSystemPromptSections: jest.fn(

@@ -124,7 +124,7 @@ function AddProjectModalContent({
         }
       }
       if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-        value = value.map((item) => item.trim()).filter(Boolean);
+        value = (value as string[]).map((item) => item.trim()).filter(Boolean);
       }
 
       if (field.includes(".")) {
@@ -177,7 +177,7 @@ function AddProjectModalContent({
 
   /** Handle opening cached parsed content for any item (file or URL) */
   const handleOpenCachedItem = (item: ProcessingItem) => {
-    openCachedItemPreview(app, projectCache, item);
+    void openCachedItemPreview(app, projectCache, item);
   };
 
   /** Handle removing a failed URL from the project config via ProcessingStatus × button */
@@ -196,7 +196,7 @@ function AddProjectModalContent({
     if (!plugin?.projectManager || !processingData) return;
     const failedItem = processingData.failedItemMap.get(itemId);
     if (failedItem) {
-      plugin.projectManager.retryFailedItem(failedItem);
+      void plugin.projectManager.retryFailedItem(failedItem);
     }
   };
 
@@ -218,7 +218,7 @@ function AddProjectModalContent({
 
     try {
       setIsSubmitting(true);
-      await onSave(saveData as ProjectConfig);
+      await onSave(saveData);
     } catch (e) {
       new Notice(err2String(e));
       setTouched((prev) => ({
