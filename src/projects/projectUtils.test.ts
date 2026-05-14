@@ -40,11 +40,7 @@ function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> |
       read: jest.fn().mockResolvedValue(rawContent),
       // Reason: parseProjectConfigFile uses `cachedFile instanceof TFile` to detect synthetic TFiles.
       // Return an object with TFile prototype so tests exercise the vault.read() path by default.
-      getAbstractFileByPath: jest.fn((path: string): TFile => {
-        const file: TFile = Object.create(TFile.prototype);
-        Object.assign(file, { path });
-        return file;
-      }),
+      getAbstractFileByPath: jest.fn((path: string): TFile => mockTFile({ path })),
       adapter: { read: jest.fn().mockResolvedValue(rawContent) },
     },
     metadataCache: {

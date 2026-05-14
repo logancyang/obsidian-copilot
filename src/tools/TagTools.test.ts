@@ -1,10 +1,38 @@
 import { ToolManager } from "@/tools/toolManager";
 import { createGetTagListTool, enforceSizeLimit } from "./TagTools";
 
-describe("TagTools", () => {
-  const originalApp = (window as any).app;
+interface TagEntry {
+  tag: string;
+  occurrences: number;
+  frontmatterOccurrences: number;
+  inlineOccurrences: number;
+}
 
-  const parsePayload = (result: string): any => {
+interface TagPayload {
+  totalUniqueTags: number;
+  returnedTagCount: number;
+  totalOccurrences: number;
+  truncated: boolean;
+  includedSources: Array<"frontmatter" | "inline">;
+  tags: TagEntry[];
+}
+
+interface MockApp {
+  metadataCache: {
+    getTags: jest.Mock;
+    getFrontmatterTags: jest.Mock;
+  };
+}
+
+const getMockApp = (): MockApp => (window as unknown as { app: MockApp }).app;
+const setMockApp = (value: MockApp | undefined): void => {
+  (window as unknown as { app: MockApp | undefined }).app = value;
+};
+
+describe("TagTools", () => {
+  const originalApp = getMockApp();
+
+  const parsePayload = (result: string): TagPayload => {
     const startIndex = result.indexOf('{"');
     const endIndex = result.lastIndexOf("}");
 
@@ -13,7 +41,7 @@ describe("TagTools", () => {
 
     const jsonSegment = result.slice(startIndex, endIndex + 1);
     try {
-      return JSON.parse(jsonSegment);
+      return JSON.parse(jsonSegment) as TagPayload;
     } catch (error) {
       console.error("Failed to parse tag tool payload:", jsonSegment);
       throw error;
@@ -21,7 +49,7 @@ describe("TagTools", () => {
   };
 
   beforeEach(() => {
-    (window as any).app = {
+    setMockApp({
       metadataCache: {
         getTags: jest.fn().mockReturnValue({
           "#project": 5,
@@ -33,22 +61,22 @@ describe("TagTools", () => {
           "#daily": 2,
         }),
       },
-    };
+    });
   });
 
   afterEach(() => {
-    (window as any).app = originalApp;
+    setMockApp(originalApp);
     jest.clearAllMocks();
   });
 
   it("returns combined tag statistics by default", async () => {
     const tool = createGetTagListTool();
-    const result = await ToolManager.callTool(tool, {});
+    const result = (await ToolManager.callTool(tool, {})) as string;
 
-    const payload = parsePayload(result as string);
+    const payload = parsePayload(result);
 
-    expect((window as any).app.metadataCache.getTags).toHaveBeenCalled();
-    expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
+    expect(getMockApp().metadataCache.getTags).toHaveBeenCalled();
+    expect(getMockApp().metadataCache.getFrontmatterTags).toHaveBeenCalled();
     expect(payload.totalUniqueTags).toBe(3);
     expect(payload.returnedTagCount).toBe(3);
     expect(payload.totalOccurrences).toBe(10);
@@ -78,12 +106,12 @@ describe("TagTools", () => {
 
   it("supports frontmatter-only mode", async () => {
     const tool = createGetTagListTool();
-    const result = await ToolManager.callTool(tool, { includeInline: false });
+    const result = (await ToolManager.callTool(tool, { includeInline: false })) as string;
 
-    const payload = parsePayload(result as string);
+    const payload = parsePayload(result);
 
-    expect((window as any).app.metadataCache.getTags).not.toHaveBeenCalled();
-    expect((window as any).app.metadataCache.getFrontmatterTags).toHaveBeenCalled();
+    expect(getMockApp().metadataCache.getTags).not.toHaveBeenCalled();
+    expect(getMockApp().metadataCache.getFrontmatterTags).toHaveBeenCalled();
     expect(payload.totalUniqueTags).toBe(2);
     expect(payload.includedSources).toEqual(["frontmatter"]);
     expect(payload.tags).toEqual([
@@ -104,9 +132,9 @@ describe("TagTools", () => {
 
   it("limits entries when maxEntries is provided", async () => {
     const tool = createGetTagListTool();
-    const result = await ToolManager.callTool(tool, { maxEntries: 2 });
+    const result = (await ToolManager.callTool(tool, { maxEntries: 2 })) as string;
 
-    const payload = parsePayload(result as string);
+    const payload = parsePayload(result);
 
     expect(payload.totalUniqueTags).toBe(3);
     expect(payload.returnedTagCount).toBe(2);
@@ -117,13 +145,13 @@ describe("TagTools", () => {
   });
 
   it("handles empty vault gracefully", async () => {
-    (window as any).app.metadataCache.getTags.mockReturnValue({});
-    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({});
+    getMockApp().metadataCache.getTags.mockReturnValue({});
+    getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({});
 
     const tool = createGetTagListTool();
-    const result = await ToolManager.callTool(tool, {});
+    const result = (await ToolManager.callTool(tool, {})) as string;
 
-    const payload = parsePayload(result as string);
+    const payload = parsePayload(result);
 
     expect(payload.totalUniqueTags).toBe(0);
     expect(payload.tags).toEqual([]);
@@ -131,19 +159,19 @@ describe("TagTools", () => {
   });
 
   it("normalizes malformed tags correctly", async () => {
-    (window as any).app.metadataCache.getTags.mockReturnValue({
+    getMockApp().metadataCache.getTags.mockReturnValue({
       project: 5,
       "##Weird/Tag": 4,
     });
-    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
+    getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({
       "  #Project ": 3,
       "##Weird/Tag": 1,
     });
 
     const tool = createGetTagListTool();
-    const result = await ToolManager.callTool(tool, {});
+    const result = (await ToolManager.callTool(tool, {})) as string;
 
-    const payload = parsePayload(result as string);
+    const payload = parsePayload(result);
 
     expect(payload.tags).toEqual([
       {
@@ -162,17 +190,17 @@ describe("TagTools", () => {
   });
 
   it("falls back when inline counts omit frontmatter occurrences", async () => {
-    (window as any).app.metadataCache.getTags.mockReturnValue({
+    getMockApp().metadataCache.getTags.mockReturnValue({
       "#project": 1,
     });
-    (window as any).app.metadataCache.getFrontmatterTags.mockReturnValue({
+    getMockApp().metadataCache.getFrontmatterTags.mockReturnValue({
       "#project": 3,
     });
 
     const tool = createGetTagListTool();
-    const result = await ToolManager.callTool(tool, {});
+    const result = (await ToolManager.callTool(tool, {})) as string;
 
-    const payload = parsePayload(result as string);
+    const payload = parsePayload(result);
 
     expect(payload.tags).toEqual([
       {

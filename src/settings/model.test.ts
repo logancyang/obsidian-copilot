@@ -5,7 +5,7 @@ import {
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
 } from "@/constants";
-import { sanitizeQaExclusions, sanitizeSettings } from "@/settings/model";
+import { sanitizeQaExclusions, sanitizeSettings, CopilotSettings } from "@/settings/model";
 import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import * as systemPromptsState from "@/system-prompts/state";
 import * as settingsModel from "@/settings/model";
@@ -18,9 +18,9 @@ jest.mock("@/system-prompts/state", () => ({
 
 // Mock settings/model getSettings for legacy fallback tests
 jest.mock("@/settings/model", () => {
-  const actual = jest.requireActual("@/settings/model");
+  const actual = jest.requireActual<object>("@/settings/model");
   return {
-    ...(actual as object),
+    ...actual,
     getSettings: jest.fn(() => ({ userSystemPrompt: "" })),
   };
 });
@@ -57,8 +57,8 @@ describe("sanitizeSettings - defaultSendShortcut migration", () => {
   it("should use default when defaultSendShortcut is missing", () => {
     const settingsWithoutShortcut = {
       ...DEFAULT_SETTINGS,
-      defaultSendShortcut: undefined as any,
-    };
+      defaultSendShortcut: undefined,
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(settingsWithoutShortcut);
 
@@ -68,8 +68,8 @@ describe("sanitizeSettings - defaultSendShortcut migration", () => {
   it("should use default when defaultSendShortcut is invalid", () => {
     const settingsWithInvalidShortcut = {
       ...DEFAULT_SETTINGS,
-      defaultSendShortcut: "invalid-shortcut" as any,
-    };
+      defaultSendShortcut: "invalid-shortcut",
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(settingsWithInvalidShortcut);
 
@@ -103,9 +103,9 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
   it("should migrate from old includeActiveNoteAsContext=true", () => {
     const oldSettings = {
       ...DEFAULT_SETTINGS,
-      autoAddActiveContentToContext: undefined as any,
+      autoAddActiveContentToContext: undefined,
       includeActiveNoteAsContext: true,
-    };
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(oldSettings);
 
@@ -115,9 +115,9 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
   it("should migrate from old includeActiveNoteAsContext=false", () => {
     const oldSettings = {
       ...DEFAULT_SETTINGS,
-      autoAddActiveContentToContext: undefined as any,
+      autoAddActiveContentToContext: undefined,
       includeActiveNoteAsContext: false,
-    };
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(oldSettings);
 
@@ -127,8 +127,8 @@ describe("sanitizeSettings - autoAddActiveContentToContext migration", () => {
   it("should use default when no old setting exists", () => {
     const newSettings = {
       ...DEFAULT_SETTINGS,
-      autoAddActiveContentToContext: undefined as any,
-    };
+      autoAddActiveContentToContext: undefined,
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(newSettings);
 
@@ -142,9 +142,9 @@ describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
   it("should migrate from old autoIncludeTextSelection=true", () => {
     const oldSettings = {
       ...DEFAULT_SETTINGS,
-      autoAddSelectionToContext: undefined as any,
+      autoAddSelectionToContext: undefined,
       autoIncludeTextSelection: true,
-    };
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(oldSettings);
 
@@ -154,9 +154,9 @@ describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
   it("should migrate from old autoIncludeTextSelection=false", () => {
     const oldSettings = {
       ...DEFAULT_SETTINGS,
-      autoAddSelectionToContext: undefined as any,
+      autoAddSelectionToContext: undefined,
       autoIncludeTextSelection: false,
-    };
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(oldSettings);
 
@@ -166,8 +166,8 @@ describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
   it("should use default when no old setting exists", () => {
     const newSettings = {
       ...DEFAULT_SETTINGS,
-      autoAddSelectionToContext: undefined as any,
-    };
+      autoAddSelectionToContext: undefined,
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(newSettings);
 
@@ -179,11 +179,11 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
   it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
     const legacySettings = {
       ...DEFAULT_SETTINGS,
-      enableMiyo: undefined as any,
+      enableMiyo: undefined,
       enableMiyoSearch: true,
       miyoServerUrl: "http://127.0.0.1:8742",
       miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
-    };
+    } as unknown as CopilotSettings;
 
     const sanitized = sanitizeSettings(legacySettings);
 

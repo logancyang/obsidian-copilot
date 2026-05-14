@@ -16,8 +16,8 @@ jest.mock("obsidian", () => ({
     path: string;
   },
   Modal: class Modal {
-    app: any;
-    constructor(app: any) {
+    app: unknown;
+    constructor(app: unknown) {
       this.app = app;
     }
     open() {}
@@ -48,7 +48,7 @@ const mockApp = {
   vault: {
     getAbstractFileByPath: mockGetAbstractFileByPath,
   },
-} as any;
+} as unknown as typeof window.app;
 
 // Mock getTagsFromNote utility function
 jest.mock(

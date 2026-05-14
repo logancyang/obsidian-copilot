@@ -1,11 +1,17 @@
 import { DateTime } from "luxon";
 import { getTimeRangeMsTool } from "./TimeTools";
 
+type InvokableTool = { invoke: (args: Record<string, unknown>) => Promise<string> };
+type TimeRangeResult = { startTime: number; endTime: number; error?: string };
+
 // Helper function to call the tool and parse result
-const getTimeRangeMs = async (timeExpression: string): Promise<any> => {
-  const result = await (getTimeRangeMsTool as any).invoke({ timeExpression });
+const getTimeRangeMs = async (timeExpression: string): Promise<TimeRangeResult | undefined> => {
+  const result = await (getTimeRangeMsTool as unknown as InvokableTool).invoke({
+    timeExpression,
+  });
   // The tool returns JSON string, parse it
-  const parsed = typeof result === "string" ? JSON.parse(result) : result;
+  const parsed: TimeRangeResult =
+    typeof result === "string" ? (JSON.parse(result) as TimeRangeResult) : result;
   // Return undefined if it's an error response
   if (parsed.error) return undefined;
   return parsed;
@@ -21,8 +27,8 @@ const verifyDateRange = async (expression: string, expected: DateRange) => {
   const result = await getTimeRangeMs(expression);
   expect(result).toBeDefined();
   // getTimeRangeMs now returns epoch values directly: {startTime: number, endTime: number}
-  const startDate = DateTime.fromMillis(result!.startTime as number);
-  const endDate = DateTime.fromMillis(result!.endTime as number);
+  const startDate = DateTime.fromMillis(result!.startTime);
+  const endDate = DateTime.fromMillis(result!.endTime);
 
   expect(startDate.toISODate()).toBe(expected.startDate);
   expect(endDate.toISODate()).toBe(expected.endDate);

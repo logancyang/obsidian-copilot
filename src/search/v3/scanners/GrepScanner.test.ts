@@ -1,10 +1,15 @@
-import type { App } from "obsidian";
+import { App } from "obsidian";
 import { GrepScanner } from "./GrepScanner";
+
+interface MockFile {
+  path: string;
+  content: string;
+}
 
 describe("GrepScanner", () => {
   let scanner: GrepScanner;
-  let mockApp: any;
-  let mockFiles: any[];
+  let mockApp: App;
+  let mockFiles: MockFile[];
 
   beforeEach(() => {
     // Mock file data
@@ -20,14 +25,14 @@ describe("GrepScanner", () => {
     mockApp = {
       vault: {
         getMarkdownFiles: jest.fn(() => mockFiles.map((f) => ({ path: f.path }))),
-        cachedRead: jest.fn((file) => {
+        cachedRead: jest.fn((file: { path: string }) => {
           const mockFile = mockFiles.find((f) => f.path === file.path);
           return Promise.resolve(mockFile?.content || "");
         }),
       },
-    };
+    } as unknown as App;
 
-    scanner = new GrepScanner(mockApp as App);
+    scanner = new GrepScanner(mockApp);
   });
 
   describe("batchCachedReadGrep", () => {
@@ -82,7 +87,7 @@ describe("GrepScanner", () => {
     });
 
     it("should skip files that can't be read", async () => {
-      mockApp.vault.cachedRead = jest.fn((file) => {
+      mockApp.vault.cachedRead = jest.fn((file: { path: string }) => {
         if (file.path === "note2.md") {
           return Promise.reject(new Error("File read error"));
         }

@@ -16,7 +16,7 @@ const mockElectron = {
 jest.mock("electron", () => mockElectron);
 
 window.TextEncoder = TextEncoder;
-window.TextDecoder = TextDecoder as any;
+window.TextDecoder = TextDecoder as unknown as typeof window.TextDecoder;
 
 // Now we can import our modules
 import { encryptAllKeys, getDecryptedKey, getEncryptedKey } from "@/encryptionService";

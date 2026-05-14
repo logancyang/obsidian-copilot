@@ -247,7 +247,7 @@ describe("isSystemPromptFile", () => {
 });
 
 describe("parseSystemPromptFile", () => {
-  let originalApp: any;
+  let originalApp: typeof window.app;
   let mockFile: TFile;
 
   beforeEach(() => {
@@ -265,7 +265,7 @@ describe("parseSystemPromptFile", () => {
       metadataCache: {
         getFileCache: jest.fn(),
       },
-    } as any;
+    } as unknown as typeof window.app;
   });
 
   afterEach(() => {

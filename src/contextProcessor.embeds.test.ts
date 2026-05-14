@@ -12,7 +12,7 @@ import { EMBEDDED_NOTE_TAG } from "@/constants";
 import { ChainType } from "@/chainType";
 import { TFile, Vault } from "obsidian";
 
-type FileCacheMap = Record<string, Record<string, unknown>>;
+type FileCacheMap = Record<string, unknown>;
 type FileContentMap = Record<string, string>;
 
 const createMockFile = (path: string): TFile =>
@@ -67,7 +67,7 @@ describe("ContextProcessor - Embedded Notes", () => {
     };
   });
 
-  const registerFile = (file: TFile, content: string, cache: any = {}): void => {
+  const registerFile = (file: TFile, content: string, cache: unknown = {}): void => {
     fileIndex.set(file.path, file);
     fileContents[file.path] = content;
     fileCaches[file.path] = cache;

@@ -91,7 +91,7 @@ export default [
       // are exempted via per-file overrides below (see "no-unsafe-member-access
       // exemptions"). Remaining source files (≤5 violations each) were fixed in
       // this PR.
-      "@typescript-eslint/no-unsafe-assignment": "off", // 879 violations
+      "@typescript-eslint/no-unsafe-assignment": "off", // enabled for tests below; follow-up PR for production
       "@typescript-eslint/no-unsafe-call": "off", // 679 violations
 
       // --- Medium: promise / method ergonomics ---
@@ -171,6 +171,15 @@ export default [
     ],
     rules: {
       "@typescript-eslint/no-unsafe-member-access": "off",
+    },
+  },
+
+  // Tests have been cleaned of unsafe `any` assignments. Production code
+  // (~499 violations) is a follow-up; keep tests enforced.
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "error",
     },
   },
 

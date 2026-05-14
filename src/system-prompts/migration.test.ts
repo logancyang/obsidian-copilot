@@ -36,7 +36,7 @@ jest.mock("@/system-prompts/systemPromptUtils", () => ({
 
 // Mock utils
 jest.mock("@/utils", () => {
-  const actual = jest.requireActual("@/utils");
+  const actual = jest.requireActual<{ stripFrontmatter: unknown }>("@/utils");
   return {
     ensureFolderExists: jest.fn(),
     stripFrontmatter: actual.stripFrontmatter,
@@ -52,7 +52,7 @@ jest.mock("@/components/modals/ConfirmModal", () => ({
 
 describe("migrateSystemPromptsFromSettings", () => {
   let mockVault: Vault;
-  let originalApp: any;
+  let originalApp: typeof window.app;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -78,7 +78,7 @@ describe("migrateSystemPromptsFromSettings", () => {
     originalApp = window.app;
     window.app = {
       vault: mockVault,
-    } as any;
+    } as unknown as typeof window.app;
   });
 
   afterEach(() => {
@@ -423,7 +423,10 @@ describe("migrateSystemPromptsFromSettings", () => {
       })
     );
 
-    const callArgs = (systemPromptUtils.ensurePromptFrontmatter as jest.Mock).mock.calls[0][1];
+    const callArgs = (systemPromptUtils.ensurePromptFrontmatter as jest.Mock).mock.calls[0][1] as {
+      createdMs: number;
+      modifiedMs: number;
+    };
     expect(callArgs.createdMs).toBeGreaterThanOrEqual(beforeTime);
     expect(callArgs.createdMs).toBeLessThanOrEqual(afterTime);
     expect(callArgs.modifiedMs).toBeGreaterThanOrEqual(beforeTime);

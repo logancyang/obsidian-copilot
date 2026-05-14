@@ -1,5 +1,19 @@
 import { App, TFile } from "obsidian";
 import { FilterRetriever } from "./FilterRetriever";
+import { mockTFile } from "@/__tests__/mockObsidian";
+
+// Helper: create a TFile-typed mock from a path. Uses mockTFile so `instanceof TFile`
+// works for downstream code paths.
+const createTFile = (path: string, stat: { mtime: number; ctime: number }): TFile => {
+  const basename = path.split("/").pop()?.replace(/\.md$/, "") ?? "";
+  return mockTFile({ path, basename, stat: { ...stat, size: 0 } });
+};
+
+// Typed accessors for mocked module exports used in tests.
+const getObsidianMock = (): { getAllTags: jest.Mock } => jest.requireMock("obsidian");
+const getUtilsMock = (): { extractNoteFiles: jest.Mock } => jest.requireMock("@/utils");
+const getSearchUtilsMock = (): { shouldIndexFile: jest.Mock } =>
+  jest.requireMock("@/search/searchUtils");
 
 // Mock modules
 jest.mock("obsidian");
@@ -17,7 +31,7 @@ describe("FilterRetriever", () => {
   let mockApp: any;
 
   beforeEach(() => {
-    const obsidianMock = jest.requireMock("obsidian");
+    const obsidianMock = getObsidianMock();
     obsidianMock.getAllTags = jest.fn().mockReturnValue([]);
 
     mockApp = {
@@ -34,12 +48,8 @@ describe("FilterRetriever", () => {
 
   describe("title matches", () => {
     it("should return title-matched notes with includeInContext true", async () => {
-      const { extractNoteFiles } = jest.requireMock("@/utils");
-      const mockFile = new (TFile as any)("mentioned.md");
-      Object.setPrototypeOf(mockFile, TFile.prototype);
-      mockFile.path = "mentioned.md";
-      mockFile.basename = "mentioned";
-      mockFile.stat = { mtime: 1000, ctime: 500 };
+      const extractNoteFiles = jest.requireMock("@/utils").extractNoteFiles as jest.Mock;
+      const mockFile = createTFile("mentioned.md", { mtime: 1000, ctime: 500 });
 
       extractNoteFiles.mockReturnValueOnce([mockFile]);
       mockApp.vault.cachedRead.mockResolvedValue("Note content here");
@@ -61,7 +71,7 @@ describe("FilterRetriever", () => {
     });
 
     it("should return empty when no [[note]] mentions in query", async () => {
-      const { extractNoteFiles } = jest.requireMock("@/utils");
+      const extractNoteFiles = jest.requireMock("@/utils").extractNoteFiles as jest.Mock;
       extractNoteFiles.mockReturnValueOnce([]);
 
       const retriever = new FilterRetriever(mockApp as App, {
@@ -76,22 +86,18 @@ describe("FilterRetriever", () => {
 
   describe("tag matches", () => {
     it("should return tag-matched notes with includeInContext true", async () => {
-      const obsidianMock = jest.requireMock("obsidian");
+      const obsidianMock = getObsidianMock();
 
-      const taggedFile = new (TFile as any)("projects/alpha.md");
-      Object.setPrototypeOf(taggedFile, TFile.prototype);
-      taggedFile.path = "projects/alpha.md";
-      taggedFile.basename = "alpha";
-      taggedFile.stat = { mtime: 2000, ctime: 1000 };
+      const taggedFile = createTFile("projects/alpha.md", { mtime: 2000, ctime: 1000 });
 
       mockApp.vault.getMarkdownFiles.mockReturnValue([taggedFile]);
-      mockApp.metadataCache.getFileCache.mockImplementation((file: any) => {
+      mockApp.metadataCache.getFileCache.mockImplementation((file: TFile) => {
         if (file.path === "projects/alpha.md") return { tags: [{ tag: "#project" }] };
         return null;
       });
       obsidianMock.getAllTags.mockImplementation((cache: { tags?: { tag: string }[] }) => {
         if (!cache?.tags) return [];
-        return cache.tags.map((t: { tag: string }) => t.tag);
+        return cache.tags.map((t) => t.tag);
       });
       mockApp.vault.cachedRead.mockResolvedValue("Alpha content");
 
@@ -110,22 +116,18 @@ describe("FilterRetriever", () => {
     });
 
     it("should support hierarchical prefix matching (#project matches #project/beta)", async () => {
-      const obsidianMock = jest.requireMock("obsidian");
+      const obsidianMock = getObsidianMock();
 
-      const betaFile = new (TFile as any)("projects/beta.md");
-      Object.setPrototypeOf(betaFile, TFile.prototype);
-      betaFile.path = "projects/beta.md";
-      betaFile.basename = "beta";
-      betaFile.stat = { mtime: 3000, ctime: 1000 };
+      const betaFile = createTFile("projects/beta.md", { mtime: 3000, ctime: 1000 });
 
       mockApp.vault.getMarkdownFiles.mockReturnValue([betaFile]);
-      mockApp.metadataCache.getFileCache.mockImplementation((file: any) => {
+      mockApp.metadataCache.getFileCache.mockImplementation((file: TFile) => {
         if (file.path === "projects/beta.md") return { tags: [{ tag: "#project/beta" }] };
         return null;
       });
       obsidianMock.getAllTags.mockImplementation((cache: { tags?: { tag: string }[] }) => {
         if (!cache?.tags) return [];
-        return cache.tags.map((t: { tag: string }) => t.tag);
+        return cache.tags.map((t) => t.tag);
       });
       mockApp.vault.cachedRead.mockResolvedValue("Beta content");
 
@@ -151,23 +153,18 @@ describe("FilterRetriever", () => {
     });
 
     it("should cap tag matches at maxK when returnAll is false", async () => {
-      const obsidianMock = jest.requireMock("obsidian");
+      const obsidianMock = getObsidianMock();
 
       // Create 10 files all matching the tag, but set maxK to 3
-      const files: TFile[] = Array.from({ length: 10 }, (_, i): TFile => {
-        const f: TFile = new (TFile as any)(`note${i}.md`);
-        Object.setPrototypeOf(f, TFile.prototype);
-        f.path = `note${i}.md`;
-        f.basename = `note${i}`;
-        f.stat = { mtime: 1000 + i, ctime: 500 } as TFile["stat"];
-        return f;
-      });
+      const files = Array.from({ length: 10 }, (_, i) =>
+        createTFile(`note${i}.md`, { mtime: 1000 + i, ctime: 500 })
+      );
 
       mockApp.vault.getMarkdownFiles.mockReturnValue(files);
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [{ tag: "#daily" }] });
       obsidianMock.getAllTags.mockImplementation((cache: { tags?: { tag: string }[] }) => {
         if (!cache?.tags) return [];
-        return cache.tags.map((t: { tag: string }) => t.tag);
+        return cache.tags.map((t) => t.tag);
       });
       mockApp.vault.cachedRead.mockResolvedValue("Content");
 
@@ -181,23 +178,18 @@ describe("FilterRetriever", () => {
     });
 
     it("should use RETURN_ALL_LIMIT when returnAll is true (tag queries need expanded limits)", async () => {
-      const obsidianMock = jest.requireMock("obsidian");
+      const obsidianMock = getObsidianMock();
 
       // Create 40 files all matching the tag, set maxK to 3 but returnAll to true
-      const files: TFile[] = Array.from({ length: 40 }, (_, i): TFile => {
-        const f: TFile = new (TFile as any)(`note${i}.md`);
-        Object.setPrototypeOf(f, TFile.prototype);
-        f.path = `note${i}.md`;
-        f.basename = `note${i}`;
-        f.stat = { mtime: 1000 + i, ctime: 500 } as TFile["stat"];
-        return f;
-      });
+      const files = Array.from({ length: 40 }, (_, i) =>
+        createTFile(`note${i}.md`, { mtime: 1000 + i, ctime: 500 })
+      );
 
       mockApp.vault.getMarkdownFiles.mockReturnValue(files);
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [{ tag: "#daily" }] });
       obsidianMock.getAllTags.mockImplementation((cache: { tags?: { tag: string }[] }) => {
         if (!cache?.tags) return [];
-        return cache.tags.map((t: { tag: string }) => t.tag);
+        return cache.tags.map((t) => t.tag);
       });
       mockApp.vault.cachedRead.mockResolvedValue("Content");
 
@@ -217,14 +209,10 @@ describe("FilterRetriever", () => {
 
   describe("deduplication", () => {
     it("should deduplicate title and tag matches by path (title wins)", async () => {
-      const obsidianMock = jest.requireMock("obsidian");
-      const { extractNoteFiles } = jest.requireMock("@/utils");
+      const obsidianMock = getObsidianMock();
+      const { extractNoteFiles } = getUtilsMock();
 
-      const sharedFile = new (TFile as any)("shared.md");
-      Object.setPrototypeOf(sharedFile, TFile.prototype);
-      sharedFile.path = "shared.md";
-      sharedFile.basename = "shared";
-      sharedFile.stat = { mtime: 1000, ctime: 500 };
+      const sharedFile = createTFile("shared.md", { mtime: 1000, ctime: 500 });
 
       // File appears in both title matches and tag matches
       extractNoteFiles.mockReturnValueOnce([sharedFile]);
@@ -232,7 +220,7 @@ describe("FilterRetriever", () => {
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [{ tag: "#tag1" }] });
       obsidianMock.getAllTags.mockImplementation((cache: { tags?: { tag: string }[] }) => {
         if (!cache?.tags) return [];
-        return cache.tags.map((t: { tag: string }) => t.tag);
+        return cache.tags.map((t) => t.tag);
       });
       mockApp.vault.cachedRead.mockResolvedValue("Shared content");
 
@@ -251,16 +239,14 @@ describe("FilterRetriever", () => {
 
   describe("time range", () => {
     it("should return time-filtered documents when timeRange is set", async () => {
-      const { extractNoteFiles } = jest.requireMock("@/utils");
+      const { extractNoteFiles } = getUtilsMock();
       extractNoteFiles.mockReturnValue([]);
 
       const now = Date.now();
-      const recentFile = {
-        path: "notes/recent.md",
-        basename: "recent",
-        stat: { mtime: now - 1000, ctime: now - 2000 },
-      };
-      Object.setPrototypeOf(recentFile, TFile.prototype);
+      const recentFile = createTFile("notes/recent.md", {
+        mtime: now - 1000,
+        ctime: now - 2000,
+      });
 
       mockApp.vault.getMarkdownFiles.mockReturnValue([recentFile]);
       mockApp.vault.cachedRead.mockResolvedValue("Recent content");
@@ -284,26 +270,21 @@ describe("FilterRetriever", () => {
     });
 
     it("should exclude files matching QA exclusion patterns in time-range searches", async () => {
-      const { shouldIndexFile } = jest.requireMock("@/search/searchUtils");
-      const { extractNoteFiles } = jest.requireMock("@/utils");
+      const { shouldIndexFile } = getSearchUtilsMock();
+      const { extractNoteFiles } = getUtilsMock();
       extractNoteFiles.mockReturnValue([]);
 
       const now = Date.now();
-      const validFile = {
-        path: "notes/valid.md",
-        basename: "valid",
-        stat: { mtime: now - 1000, ctime: now - 2000 },
-      };
-      const excludedFile = {
-        path: "copilot/excluded.md",
-        basename: "excluded",
-        stat: { mtime: now - 1000, ctime: now - 2000 },
-      };
-      [validFile, excludedFile].forEach((f) => {
-        Object.setPrototypeOf(f, TFile.prototype);
+      const validFile = createTFile("notes/valid.md", {
+        mtime: now - 1000,
+        ctime: now - 2000,
+      });
+      const excludedFile = createTFile("copilot/excluded.md", {
+        mtime: now - 1000,
+        ctime: now - 2000,
       });
 
-      shouldIndexFile.mockImplementation((file: any) => !file.path.startsWith("copilot/"));
+      shouldIndexFile.mockImplementation((file: TFile) => !file.path.startsWith("copilot/"));
       mockApp.vault.getMarkdownFiles.mockReturnValue([validFile, excludedFile]);
       mockApp.vault.cachedRead.mockResolvedValue("Content");
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [] });

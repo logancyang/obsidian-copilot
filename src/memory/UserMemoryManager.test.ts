@@ -21,15 +21,26 @@ import { getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
+import { mockTFile } from "@/__tests__/mockObsidian";
+
+// Typed accessor for private UserMemoryManager methods used in tests.
+type UserMemoryManagerInternal = {
+  updateMemory: (messages: ChatMessage[], chatModel?: BaseChatModel) => Promise<void>;
+  extractJsonFromResponse: (content: string) => string;
+  parseExistingConversations: (content: string) => string[];
+};
+const asInternal = (m: UserMemoryManager): UserMemoryManagerInternal =>
+  m as unknown as UserMemoryManagerInternal;
 
 // Helper to create TFile mock instances
 const createMockTFile = (path: string): TFile => {
-  const file: TFile = Object.create(TFile.prototype);
-  file.path = path;
-  file.name = path.split("/").pop() || "";
-  file.basename = file.name.replace(/\.[^/.]+$/, "");
-  file.extension = path.split(".").pop() || "";
-  return file;
+  const name = path.split("/").pop() || "";
+  return mockTFile({
+    path,
+    name,
+    basename: name.replace(/\.[^/.]+$/, ""),
+    extension: path.split(".").pop() || "",
+  });
 };
 
 describe("UserMemoryManager", () => {
@@ -58,12 +69,12 @@ describe("UserMemoryManager", () => {
       modify: jest.fn(),
       create: jest.fn(),
       createFolder: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<Vault>;
 
     // Mock app
     mockApp = {
       vault: mockVault,
-    } as any;
+    } as unknown as jest.Mocked<App>;
 
     // Reset ensureFolderExists mock
     (ensureFolderExists as jest.Mock).mockClear();
@@ -71,7 +82,7 @@ describe("UserMemoryManager", () => {
     // Mock chat model
     mockChatModel = {
       invoke: jest.fn(),
-    } as any;
+    } as unknown as jest.Mocked<BaseChatModel>;
 
     userMemoryManager = new UserMemoryManager(mockApp);
   });
@@ -159,7 +170,7 @@ describe("UserMemoryManager", () => {
       mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
 
       // Execute the updateMemory function directly to ensure proper awaiting
-      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
+      await asInternal(userMemoryManager).updateMemory(messages, mockChatModel);
 
       // Verify the end result: file was modified with new conversation
       const modifyCall = mockVault.modify.mock.calls[0];
@@ -183,7 +194,7 @@ describe("UserMemoryManager", () => {
       expect(mockChatModel.invoke).toHaveBeenCalledWith(
         expect.arrayContaining([
           expect.objectContaining({
-            content: expect.stringContaining("generate both a title and a summary"),
+            content: expect.stringContaining("generate both a title and a summary") as unknown,
           }),
         ])
       );
@@ -201,7 +212,7 @@ describe("UserMemoryManager", () => {
       const mockResponse = new AIMessageChunk({ content: "Invalid JSON response" });
       mockChatModel.invoke.mockResolvedValueOnce(mockResponse);
 
-      await (userMemoryManager as any).updateMemory(messages, mockChatModel);
+      await asInternal(userMemoryManager).updateMemory(messages, mockChatModel);
 
       // Should still create a conversation entry with fallback values
       const modifyCall = mockVault.modify.mock.calls[0];
@@ -229,7 +240,7 @@ describe("UserMemoryManager", () => {
 
 That's the JSON data.`;
 
-      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
       expect(result).toBe('{\n  "title": "Test Title",\n  "summary": "Test Summary"\n}');
     });
 
@@ -241,7 +252,7 @@ That's the JSON data.`;
 }
 \`\`\``;
 
-      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
       expect(result).toBe(
         '{\n  "title": "Unmarked Block",\n  "summary": "No language specified"\n}'
       );
@@ -250,14 +261,14 @@ That's the JSON data.`;
     it("should extract JSON object when no code blocks present", () => {
       const content = `Some text before {"title": "Inline JSON", "summary": "Direct JSON"} and after`;
 
-      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
       expect(result).toBe('{"title": "Inline JSON", "summary": "Direct JSON"}');
     });
 
     it("should return original content when no JSON patterns found", () => {
       const content = "No JSON here, just plain text";
 
-      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
       expect(result).toBe(content);
     });
 
@@ -269,7 +280,7 @@ That's the JSON data.`;
 }
 \`\`\``;
 
-      const result = (userMemoryManager as any).extractJsonFromResponse(content);
+      const result = asInternal(userMemoryManager).extractJsonFromResponse(content);
       expect(result).toContain('"title": "Multi-line Test"');
       expect(result).toContain("special characters: äöü");
     });
@@ -277,7 +288,7 @@ That's the JSON data.`;
 
   describe("parseExistingConversations", () => {
     it("should return empty array for empty string", () => {
-      const result = (userMemoryManager as any).parseExistingConversations("");
+      const result = asInternal(userMemoryManager).parseExistingConversations("");
       expect(result).toEqual([]);
     });
 
@@ -287,7 +298,7 @@ It has multiple lines but no conversations.
 # This is H1, not H2
 ### This is H3, not H2`;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([]);
     });
 
@@ -296,7 +307,7 @@ It has multiple lines but no conversations.
 **Time:** 2024-01-01 10:00
 **Summary:** User asked about creating daily note templates with automatic date formatting.`;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([
         `## Daily Note Template Setup
 **Time:** 2024-01-01 10:00
@@ -317,7 +328,7 @@ It has multiple lines but no conversations.
 **Time:** 2024-01-01 11:00
 **Summary:** User learned about backlinks.`;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([
         `## First Conversation
 **Time:** 2024-01-01 09:00
@@ -343,7 +354,7 @@ It might contain important information, but it's before the first conversation.
 **Time:** 2024-01-01 10:00
 **Summary:** This conversation should also be included.`;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([
         `## First Conversation
 **Time:** 2024-01-01 09:00
@@ -363,7 +374,7 @@ It might contain important information, but it's before the first conversation.
 **Time:** 2024-01-01 10:00
 **Summary:** User inquired about linking notes.  `;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([
         `## First Conversation  
 **Time:** 2024-01-01 09:00
@@ -388,7 +399,7 @@ The conversation covered advanced features and included code examples.
 **Time:** 2024-01-01 10:00
 **Summary:** Short summary.`;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([
         `## Complex Conversation
 **Time:** 2024-01-01 09:00
@@ -409,7 +420,7 @@ The conversation covered advanced features and included code examples.`,
 **Time:** 2024-01-01 09:00
 **Summary:** This is the only conversation and it's at the end.`;
 
-      const result = (userMemoryManager as any).parseExistingConversations(content);
+      const result = asInternal(userMemoryManager).parseExistingConversations(content);
       expect(result).toEqual([
         `## Only Conversation
 **Time:** 2024-01-01 09:00

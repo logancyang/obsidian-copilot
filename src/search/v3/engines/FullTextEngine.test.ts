@@ -222,6 +222,16 @@ jest.mock("../chunks", () => {
 import { App, TFile } from "obsidian";
 import { FullTextEngine } from "./FullTextEngine";
 
+// Typed accessor for private FullTextEngine fields/methods used in tests.
+type FullTextEngineInternal = {
+  tokenizeMixed: (str: string) => string[];
+  getFieldWeight: (field: string) => number;
+  index: ({ destroy?: () => void; clear?: () => void } & Record<string, unknown>) | null;
+  indexedChunks: Set<string>;
+};
+const asInternal = (e: FullTextEngine): FullTextEngineInternal =>
+  e as unknown as FullTextEngineInternal;
+
 describe("FullTextEngine", () => {
   let engine: FullTextEngine;
   let mockApp: any;
@@ -304,7 +314,7 @@ describe("FullTextEngine", () => {
       vault: {
         getAbstractFileByPath: jest.fn((path: string) => {
           if (!path || path === "missing.md") return null;
-          const file: TFile = new (TFile as any)(path);
+          const file: TFile = new (TFile as unknown as new (path: string) => TFile)(path);
           // Make it pass instanceof TFile check
           Object.setPrototypeOf(file, TFile.prototype);
           return file;
@@ -345,7 +355,7 @@ describe("FullTextEngine", () => {
 
   describe("tokenizeMixed", () => {
     it("should tokenize ASCII words", () => {
-      const tokens = (engine as any).tokenizeMixed("Hello World TypeScript");
+      const tokens = asInternal(engine).tokenizeMixed("Hello World TypeScript");
 
       expect(tokens).toContain("hello");
       expect(tokens).toContain("world");
@@ -353,14 +363,14 @@ describe("FullTextEngine", () => {
     });
 
     it("should tokenize alphanumeric and underscores", () => {
-      const tokens = (engine as any).tokenizeMixed("test_123 var_name");
+      const tokens = asInternal(engine).tokenizeMixed("test_123 var_name");
 
       expect(tokens).toContain("test_123");
       expect(tokens).toContain("var_name");
     });
 
     it("should generate CJK bigrams", () => {
-      const tokens = (engine as any).tokenizeMixed("中文编程");
+      const tokens = asInternal(engine).tokenizeMixed("中文编程");
 
       expect(tokens).toContain("中文");
       expect(tokens).toContain("文编");
@@ -368,7 +378,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should handle mixed content", () => {
-      const tokens = (engine as any).tokenizeMixed("TypeScript 和 JavaScript 编程");
+      const tokens = asInternal(engine).tokenizeMixed("TypeScript 和 JavaScript 编程");
 
       expect(tokens).toContain("typescript");
       expect(tokens).toContain("javascript");
@@ -376,14 +386,14 @@ describe("FullTextEngine", () => {
     });
 
     it("should handle single CJK characters", () => {
-      const tokens = (engine as any).tokenizeMixed("中 文");
+      const tokens = asInternal(engine).tokenizeMixed("中 文");
 
       expect(tokens).toContain("中");
       expect(tokens).toContain("文");
     });
 
     it("should tokenize hash tags and their hierarchy variants", () => {
-      const tokens = (engine as any).tokenizeMixed("Working on #Project/Alpha and #deepWork");
+      const tokens = asInternal(engine).tokenizeMixed("Working on #Project/Alpha and #deepWork");
 
       expect(tokens).toEqual(
         expect.arrayContaining([
@@ -399,7 +409,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should not split hyphenated tags into partial word tokens", () => {
-      const tokens = (engine as any).tokenizeMixed("#copilot-conversation updates");
+      const tokens = asInternal(engine).tokenizeMixed("#copilot-conversation updates");
 
       expect(tokens).toContain("#copilot-conversation");
       expect(tokens).toContain("copilot-conversation");
@@ -408,7 +418,7 @@ describe("FullTextEngine", () => {
     });
 
     it("should return empty array for empty input", () => {
-      const tokens = (engine as any).tokenizeMixed("");
+      const tokens = asInternal(engine).tokenizeMixed("");
       expect(tokens).toEqual([]);
     });
   });
@@ -429,7 +439,7 @@ describe("FullTextEngine", () => {
       const candidates = Array.from({ length: 100 }, (_, i) => `note${i}.md`);
 
       // Mock vault to return files for all candidates
-      mockApp.vault.getAbstractFileByPath = jest.fn((path) => ({
+      mockApp.vault.getAbstractFileByPath = jest.fn((path: string) => ({
         path,
         basename: path.replace(".md", ""),
         stat: { mtime: Date.now() },
@@ -448,7 +458,7 @@ describe("FullTextEngine", () => {
     it("should handle missing files gracefully", async () => {
       mockApp.vault.getAbstractFileByPath = jest.fn((path: string) => {
         if (path === "missing.md") return null;
-        const file: TFile = new (TFile as any)(path);
+        const file: TFile = new (TFile as unknown as new (path: string) => TFile)(path);
         Object.setPrototypeOf(file, TFile.prototype);
         return file;
       });
@@ -477,7 +487,7 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["note1.md"]);
 
       // Mock the index to throw an error on destroy/clear
-      const mockIndex = (engine as any).index;
+      const mockIndex = asInternal(engine).index;
       if (mockIndex) {
         mockIndex.destroy = jest.fn(() => {
           throw new Error("Mock cleanup error");
@@ -491,15 +501,15 @@ describe("FullTextEngine", () => {
       expect(() => engine.clear()).not.toThrow();
 
       // Should still reset state
-      expect((engine as any).index).toBeNull();
-      expect((engine as any).indexedChunks.size).toBe(0);
+      expect(asInternal(engine).index).toBeNull();
+      expect(asInternal(engine).indexedChunks.size).toBe(0);
     });
 
     it("should skip unsafe vault paths", async () => {
       // Mock vault to return files for any safe path
       mockApp.vault.getAbstractFileByPath = jest.fn((path: string) => {
         if (path === "note1.md") {
-          const file: TFile = new (TFile as any)(path);
+          const file: TFile = new (TFile as unknown as new (path: string) => TFile)(path);
           Object.setPrototypeOf(file, TFile.prototype);
           return file;
         }
@@ -755,7 +765,9 @@ describe("FullTextEngine", () => {
 
   describe("getFieldWeight", () => {
     it("should return correct weights for known fields", () => {
-      const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
+      const getFieldWeight = asInternal(engine).getFieldWeight.bind(engine) as (
+        f: string
+      ) => number;
 
       expect(getFieldWeight("title")).toBe(5);
       expect(getFieldWeight("heading")).toBe(2.5);
@@ -768,7 +780,9 @@ describe("FullTextEngine", () => {
     });
 
     it("should return default weight for unknown fields", () => {
-      const getFieldWeight = (engine as any).getFieldWeight.bind(engine);
+      const getFieldWeight = asInternal(engine).getFieldWeight.bind(engine) as (
+        f: string
+      ) => number;
       expect(getFieldWeight("unknown")).toBe(1);
     });
   });
@@ -927,12 +941,12 @@ describe("FullTextEngine", () => {
     });
 
     it("should handle circular frontmatter safely", async () => {
-      const a: any = { name: "A" };
-      const b: any = { name: "B" };
+      const a: Record<string, unknown> = { name: "A" };
+      const b: Record<string, unknown> = { name: "B" };
       a.ref = b;
       b.ref = a; // circular
 
-      const propsCache: Record<string, unknown> = {
+      const propsCache: Record<string, { headings: unknown[]; frontmatter: unknown }> = {
         "circular.md": {
           headings: [],
           frontmatter: a,
@@ -951,13 +965,13 @@ describe("FullTextEngine", () => {
   describe("clear method", () => {
     it("should safely clear when index is null (not yet created)", () => {
       // Engine starts with null index
-      expect((engine as any).index).toBeNull();
+      expect(asInternal(engine).index).toBeNull();
 
       // Should not throw error when clearing uninitialized index
       expect(() => engine.clear()).not.toThrow();
 
       // Should still reset collections
-      expect((engine as any).indexedChunks.size).toBe(0);
+      expect(asInternal(engine).indexedChunks.size).toBe(0);
     });
 
     it("should properly clear after index has been created", async () => {
@@ -965,15 +979,15 @@ describe("FullTextEngine", () => {
       await engine.buildFromCandidates(["note1.md", "note2.md"]);
 
       // Verify index was created and chunks indexed
-      expect((engine as any).index).not.toBeNull();
-      expect((engine as any).indexedChunks.size).toBeGreaterThan(0);
+      expect(asInternal(engine).index).not.toBeNull();
+      expect(asInternal(engine).indexedChunks.size).toBeGreaterThan(0);
 
       // Clear should not throw
       expect(() => engine.clear()).not.toThrow();
 
       // Should reset state
-      expect((engine as any).index).toBeNull();
-      expect((engine as any).indexedChunks.size).toBe(0);
+      expect(asInternal(engine).index).toBeNull();
+      expect(asInternal(engine).indexedChunks.size).toBe(0);
     });
 
     it("should allow multiple clear calls safely", async () => {
@@ -986,20 +1000,20 @@ describe("FullTextEngine", () => {
       expect(() => engine.clear()).not.toThrow();
 
       // State should remain clean
-      expect((engine as any).index).toBeNull();
-      expect((engine as any).indexedChunks.size).toBe(0);
+      expect(asInternal(engine).index).toBeNull();
+      expect(asInternal(engine).indexedChunks.size).toBe(0);
     });
 
     it("should nullify MiniSearch index on clear", async () => {
       await engine.buildFromCandidates(["note1.md"]);
 
       // Verify index exists
-      expect((engine as any).index).not.toBeNull();
+      expect(asInternal(engine).index).not.toBeNull();
 
       engine.clear();
 
       // MiniSearch cleanup is just nullifying the reference
-      expect((engine as any).index).toBeNull();
+      expect(asInternal(engine).index).toBeNull();
     });
 
     it("should allow new index to be created after clear", async () => {
@@ -1008,28 +1022,28 @@ describe("FullTextEngine", () => {
 
       // Should be able to create a new index after clearing
       await engine.buildFromCandidates(["note2.md"]);
-      expect((engine as any).index).not.toBeNull();
-      expect((engine as any).indexedChunks.size).toBeGreaterThan(0);
+      expect(asInternal(engine).index).not.toBeNull();
+      expect(asInternal(engine).indexedChunks.size).toBeGreaterThan(0);
     });
 
     it("should handle index without destroy or clear methods", async () => {
       await engine.buildFromCandidates(["note1.md"]);
 
       // Mock index without cleanup methods
-      (engine as any).index = {
+      asInternal(engine).index = {
         someOtherMethod: jest.fn(),
       };
 
       // Should not throw and still reset
       expect(() => engine.clear()).not.toThrow();
-      expect((engine as any).index).toBeNull();
+      expect(asInternal(engine).index).toBeNull();
     });
 
     it("should continue cleanup even if index cleanup throws", async () => {
       await engine.buildFromCandidates(["note1.md"]);
 
       // Mock index that throws on cleanup
-      (engine as any).index = {
+      asInternal(engine).index = {
         destroy: jest.fn(() => {
           throw new Error("Mock cleanup failure");
         }),
@@ -1039,8 +1053,8 @@ describe("FullTextEngine", () => {
       expect(() => engine.clear()).not.toThrow();
 
       // Should still reset state
-      expect((engine as any).index).toBeNull();
-      expect((engine as any).indexedChunks.size).toBe(0);
+      expect(asInternal(engine).index).toBeNull();
+      expect(asInternal(engine).indexedChunks.size).toBe(0);
     });
 
     it("should reset memory manager during clear", async () => {

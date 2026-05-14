@@ -5,8 +5,8 @@ import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
 import { HybridRetriever } from "@/search/hybridRetriever";
 
 const optionsSpy: {
-  lexicalOptions?: Record<string, any>;
-  semanticOptions?: Record<string, any>;
+  lexicalOptions?: Record<string, unknown>;
+  semanticOptions?: Record<string, unknown>;
 } = {};
 
 let lexicalResults: Document[] = [];
@@ -14,18 +14,20 @@ let semanticResults: Document[] = [];
 
 jest.mock("@/search/v3/TieredLexicalRetriever", () => {
   return {
-    TieredLexicalRetriever: jest.fn().mockImplementation((_app: any, options: any) => {
-      optionsSpy.lexicalOptions = options;
-      return {
-        getRelevantDocuments: jest.fn(async () => lexicalResults),
-      };
-    }),
+    TieredLexicalRetriever: jest
+      .fn()
+      .mockImplementation((_app: unknown, options: Record<string, unknown>) => {
+        optionsSpy.lexicalOptions = options;
+        return {
+          getRelevantDocuments: jest.fn(async () => lexicalResults),
+        };
+      }),
   };
 });
 
 jest.mock("@/search/hybridRetriever", () => {
   return {
-    HybridRetriever: jest.fn().mockImplementation((options: any) => {
+    HybridRetriever: jest.fn().mockImplementation((options: Record<string, unknown>) => {
       optionsSpy.semanticOptions = options;
       return {
         getRelevantDocuments: jest.fn(async () => semanticResults),
@@ -35,7 +37,7 @@ jest.mock("@/search/hybridRetriever", () => {
 });
 
 describe("MergedSemanticRetriever", () => {
-  const mockApp = {} as any;
+  const mockApp = {} as unknown as App;
 
   beforeEach(() => {
     lexicalResults = [];
@@ -68,7 +70,7 @@ describe("MergedSemanticRetriever", () => {
     lexicalResults = [lexicalInput];
     semanticResults = [semanticInput];
 
-    const retriever = new MergedSemanticRetriever(mockApp as App, {
+    const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 5,
       salientTerms: [],
     });
@@ -102,7 +104,7 @@ describe("MergedSemanticRetriever", () => {
     lexicalResults = [lexicalInput];
     semanticResults = [semanticInput];
 
-    const retriever = new MergedSemanticRetriever(mockApp as App, {
+    const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 5,
       salientTerms: [],
     });
@@ -142,7 +144,7 @@ describe("MergedSemanticRetriever", () => {
     ];
     semanticResults = [];
 
-    const retriever = new MergedSemanticRetriever(mockApp as App, {
+    const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 5,
       salientTerms: [],
     });
@@ -175,7 +177,7 @@ describe("MergedSemanticRetriever", () => {
       }),
     ];
 
-    const retriever = new MergedSemanticRetriever(mockApp as App, {
+    const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 5,
       salientTerms: [],
     });
@@ -209,7 +211,7 @@ describe("MergedSemanticRetriever", () => {
       }),
     ];
 
-    const retriever = new MergedSemanticRetriever(mockApp as App, {
+    const retriever = new MergedSemanticRetriever(mockApp, {
       maxK: 1,
       salientTerms: [],
       returnAll: true,

@@ -1,5 +1,22 @@
-import { App, TFile } from "obsidian";
+import { App } from "obsidian";
 import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
+import { mockTFile } from "@/__tests__/mockObsidian";
+
+type MockApp = {
+  vault: {
+    getAbstractFileByPath: jest.Mock;
+    cachedRead: jest.Mock;
+    getMarkdownFiles: jest.Mock;
+  };
+  metadataCache: {
+    getFileCache: jest.Mock;
+  };
+};
+
+type MockChunkManager = {
+  getChunkTextSync: jest.Mock;
+  getChunkText: jest.Mock;
+};
 
 const retrieveMock = jest.fn();
 
@@ -32,12 +49,14 @@ jest.mock("./chunks", () => {
 });
 
 describe("TieredLexicalRetriever", () => {
-  let mockApp: any;
-  let mockChunkManager: any;
+  let mockApp: MockApp;
+  let mockChunkManager: MockChunkManager;
 
   beforeEach(() => {
     // Get reference to the mocked chunk manager
-    const chunksModule = jest.requireMock("./chunks");
+    const chunksModule = jest.requireMock<{ getSharedChunkManager: () => MockChunkManager }>(
+      "./chunks"
+    );
     mockChunkManager = chunksModule.getSharedChunkManager();
 
     retrieveMock.mockReset();
@@ -88,9 +107,7 @@ describe("TieredLexicalRetriever", () => {
       // Mock file system
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "note1.md" || path === "note2.md") {
-          const file: TFile = new (TFile as any)(path);
-          Object.setPrototypeOf(file, TFile.prototype);
-          file.stat = { mtime: 1000, ctime: 1000 } as TFile["stat"];
+          const file = mockTFile({ path, stat: { mtime: 1000, ctime: 1000, size: 0 } });
           return file;
         }
         return null;
@@ -116,7 +133,7 @@ describe("TieredLexicalRetriever", () => {
         },
       });
 
-      const chunkRetriever = new TieredLexicalRetriever(mockApp as App, {
+      const chunkRetriever = new TieredLexicalRetriever(mockApp as unknown as App, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
@@ -143,7 +160,7 @@ describe("TieredLexicalRetriever", () => {
           expandedQueries: [],
         },
       });
-      const emptyRetriever = new TieredLexicalRetriever(mockApp as App, {
+      const emptyRetriever = new TieredLexicalRetriever(mockApp as unknown as App, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
@@ -166,7 +183,7 @@ describe("TieredLexicalRetriever", () => {
         },
       });
 
-      const sortRetriever = new TieredLexicalRetriever(mockApp as App, {
+      const sortRetriever = new TieredLexicalRetriever(mockApp as unknown as App, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
@@ -207,15 +224,13 @@ describe("TieredLexicalRetriever", () => {
 
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "test.md") {
-          const file: TFile = new (TFile as any)(path);
-          Object.setPrototypeOf(file, TFile.prototype);
-          file.stat = { mtime: 1000, ctime: 1000 } as TFile["stat"];
+          const file = mockTFile({ path, stat: { mtime: 1000, ctime: 1000, size: 0 } });
           return file;
         }
         return null;
       });
 
-      const chunkRetriever = new TieredLexicalRetriever(mockApp as App, {
+      const chunkRetriever = new TieredLexicalRetriever(mockApp as unknown as App, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
@@ -243,7 +258,7 @@ describe("TieredLexicalRetriever", () => {
         },
       });
 
-      const emptyChunkRetriever = new TieredLexicalRetriever(mockApp as App, {
+      const emptyChunkRetriever = new TieredLexicalRetriever(mockApp as unknown as App, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],
@@ -258,9 +273,7 @@ describe("TieredLexicalRetriever", () => {
     it("should handle multiple chunks from same note correctly", async () => {
       mockApp.vault.getAbstractFileByPath.mockImplementation((path: string) => {
         if (path === "large.md" || path === "other.md") {
-          const file: TFile = new (TFile as any)(path);
-          Object.setPrototypeOf(file, TFile.prototype);
-          file.stat = { mtime: 1000, ctime: 1000 } as TFile["stat"];
+          const file = mockTFile({ path, stat: { mtime: 1000, ctime: 1000, size: 0 } });
           return file;
         }
         return null;
@@ -291,7 +304,7 @@ describe("TieredLexicalRetriever", () => {
         Promise.resolve(getMultiChunkContent(id))
       );
 
-      const multiChunkRetriever = new TieredLexicalRetriever(mockApp as App, {
+      const multiChunkRetriever = new TieredLexicalRetriever(mockApp as unknown as App, {
         minSimilarityScore: 0.1,
         maxK: 30,
         salientTerms: [],

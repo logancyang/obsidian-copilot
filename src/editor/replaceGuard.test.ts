@@ -376,7 +376,9 @@ describe("createMapPosReplaceGuard", () => {
 });
 
 describe("createHighlightReplaceGuard", () => {
-  const { SelectionHighlight } = jest.requireMock("./selectionHighlight");
+  const { SelectionHighlight } = jest.requireMock<{
+    SelectionHighlight: { getRange: jest.Mock };
+  }>("./selectionHighlight");
 
   const createMockEditorView = (docContent: string): EditorView => {
     return {

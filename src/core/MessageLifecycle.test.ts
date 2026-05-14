@@ -139,13 +139,13 @@ The team appears to be taking a pragmatic approach with a focused MVP scope and 
       context: {
         notes: expect.arrayContaining([
           expect.objectContaining({ basename: "meeting-notes-2024-01-15" }),
-        ]),
+        ]) as unknown,
       },
     });
 
     // AI response
     expect(finalDisplayMessages[1]).toMatchObject({
-      message: expect.stringContaining("Based on the meeting notes"),
+      message: expect.stringContaining("Based on the meeting notes") as unknown,
       sender: AI_SENDER,
     });
 

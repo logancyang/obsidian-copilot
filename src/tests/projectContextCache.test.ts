@@ -3,14 +3,19 @@ import { ContextCache, ProjectContextCache } from "@/cache/projectContextCache";
 import type { TFile } from "obsidian";
 
 // Mock dependencies
+interface MockFileStat {
+  mtime: number;
+  size: number;
+}
+
 jest.mock("obsidian", () => ({
   TFile: class MockTFile {
     path: string;
     extension: string;
     basename: string;
-    stat: any;
+    stat: MockFileStat;
 
-    constructor(path: string, extension: string, basename: string, stat: any) {
+    constructor(path: string, extension: string, basename: string, stat: MockFileStat) {
       this.path = path;
       this.extension = extension;
       this.basename = basename;
@@ -112,13 +117,26 @@ describe("ProjectContextCache", () => {
   let mockProject: ProjectConfig;
 
   // Mock files
-  const { TFile: MockedTFile } = jest.requireMock("obsidian");
-  const mockMarkdownFile = new MockedTFile("test/file.md", "md", "file", {
+  interface MockedTFileType {
+    path: string;
+    extension: string;
+    basename: string;
+    stat: MockFileStat;
+  }
+  const { TFile: MockedTFile } = jest.requireMock<{
+    TFile: new (
+      path: string,
+      extension: string,
+      basename: string,
+      stat: MockFileStat
+    ) => MockedTFileType;
+  }>("obsidian");
+  const mockMarkdownFile: MockedTFileType = new MockedTFile("test/file.md", "md", "file", {
     mtime: Date.now(),
     size: 100,
   });
 
-  const mockPdfFile = new MockedTFile("test/document.pdf", "pdf", "document", {
+  const mockPdfFile: MockedTFileType = new MockedTFile("test/document.pdf", "pdf", "document", {
     mtime: Date.now(),
     size: 200,
   });
@@ -128,7 +146,7 @@ describe("ProjectContextCache", () => {
     jest.clearAllMocks();
 
     // Mock globals
-    window.app = mockApp as any;
+    (window as unknown as { app: unknown }).app = mockApp;
 
     // Set up mock vault file retrieval
     mockApp.vault.getFiles.mockReturnValue([mockMarkdownFile, mockPdfFile]);
@@ -154,7 +172,7 @@ describe("ProjectContextCache", () => {
         inclusions: "**/*.md, **/*.pdf",
         exclusions: "",
       },
-    } as ProjectConfig;
+    } as unknown as ProjectConfig;
   });
 
   test("should store and retrieve file content", async () => {
@@ -203,11 +221,7 @@ describe("ProjectContextCache", () => {
     await projectContextCache.getOrInitializeCache(mockProject);
 
     // First add some context
-    await projectContextCache.setFileContext(
-      mockProject,
-      mockPdfFile.path as string,
-      "PDF content"
-    );
+    await projectContextCache.setFileContext(mockProject, mockPdfFile.path, "PDF content");
 
     // Then clean it up
     await projectContextCache.cleanupProjectFileReferences(mockProject);
@@ -408,8 +422,8 @@ describe("ProjectContextCache", () => {
     expect(mockApp.vault.adapter.write).toHaveBeenCalled();
 
     // Check that written content contains updated values
-    const writeCall = mockApp.vault.adapter.write.mock.calls[0];
-    const writtenContent = JSON.parse(writeCall[1] as string);
+    const writeCall = mockApp.vault.adapter.write.mock.calls[0] as unknown[];
+    const writtenContent = JSON.parse(writeCall[1] as string) as ContextCache;
     expect(writtenContent.markdownContext).toBe("Updated markdown content");
     expect(writtenContent.markdownNeedsReload).toBe(true);
   });
@@ -445,8 +459,8 @@ describe("ProjectContextCache", () => {
     expect(mockApp.vault.adapter.write).toHaveBeenCalled();
 
     // Check that written content contains updated values
-    const writeCall = mockApp.vault.adapter.write.mock.calls[0];
-    const writtenContent = JSON.parse(writeCall[1] as string);
+    const writeCall = mockApp.vault.adapter.write.mock.calls[0] as unknown[];
+    const writtenContent = JSON.parse(writeCall[1] as string) as ContextCache;
     expect(writtenContent.markdownContext).toBe("Async updated content");
     expect(writtenContent.webContexts["https://example.com"]).toBe("Async web content");
   });
@@ -460,7 +474,7 @@ describe("ProjectContextCache", () => {
         inclusions: "**/*.md, **/*.pdf",
         exclusions: "",
       },
-    } as ProjectConfig;
+    } as unknown as ProjectConfig;
 
     // Mock cache non-existence for this isolated project
     mockApp.vault.adapter.exists.mockImplementation((path) => {
@@ -506,7 +520,7 @@ describe("ProjectContextCache", () => {
       return Promise.resolve(JSON.stringify(currentCache));
     });
     mockApp.vault.adapter.write.mockImplementation((path, content) => {
-      currentCache = JSON.parse(content as string);
+      currentCache = JSON.parse(content as string) as ContextCache;
       return Promise.resolve();
     });
 
@@ -580,7 +594,7 @@ describe("ProjectContextCache", () => {
     const startTime = Date.now();
 
     mockApp.vault.adapter.write.mockImplementation((path, content) => {
-      const parsed = JSON.parse(content as string);
+      const parsed = JSON.parse(content as string) as ContextCache;
       currentCache = parsed;
 
       // Track what was written and when

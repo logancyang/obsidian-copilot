@@ -63,7 +63,9 @@ jest.mock("obsidian", () => {
   };
 });
 
-const { __renderMarkdownMock: renderMarkdownMock } = jest.requireMock("obsidian");
+const { __renderMarkdownMock: renderMarkdownMock } = jest.requireMock<{
+  __renderMarkdownMock: jest.Mock;
+}>("obsidian");
 
 // ---------------------------------------------------------------------------
 // Verifies that the HTML string passed to MarkdownRenderer.renderMarkdown

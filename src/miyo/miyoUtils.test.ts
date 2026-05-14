@@ -2,8 +2,8 @@ jest.mock("@/plusUtils", () => ({
   isSelfHostAccessValid: jest.fn(),
 }));
 
-import { getMiyoFilePath, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 import type { App } from "obsidian";
+import { getMiyoFilePath, getMiyoFolderName, getVaultRelativeMiyoPath } from "@/miyo/miyoUtils";
 
 describe("getMiyoFolderName", () => {
   it("uses the vault folder name even when an adapter exposes an absolute path", () => {

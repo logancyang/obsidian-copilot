@@ -2,10 +2,35 @@ import { StructuredTool } from "@langchain/core/tools";
 
 const mockRead = jest.fn();
 
+type ReadNoteResult = {
+  notePath: string;
+  status?: string;
+  message?: string;
+  noteTitle?: string;
+  heading?: string;
+  chunkId?: string;
+  chunkIndex?: number;
+  totalChunks?: number;
+  hasMore?: boolean;
+  nextChunkIndex?: number | null;
+  content?: string;
+  mtime?: number;
+  linkedNotes?: Array<{
+    linkText: string;
+    displayText: string;
+    section: string | undefined;
+    candidates: Array<{ path: string; title: string }>;
+  }>;
+  candidates?: Array<{ path: string; title: string }>;
+};
+
 // Helper to invoke tool and parse JSON result
-const invokeReadNoteTool = async (tool: StructuredTool, args: any): Promise<any> => {
-  const result = await tool.invoke(args);
-  return typeof result === "string" ? JSON.parse(result) : result;
+const invokeReadNoteTool = async (
+  tool: StructuredTool,
+  args: { notePath: string; chunkIndex?: number | string }
+): Promise<ReadNoteResult> => {
+  const result: unknown = await tool.invoke(args);
+  return (typeof result === "string" ? JSON.parse(result) : result) as ReadNoteResult;
 };
 
 class MockTFile {
@@ -27,7 +52,7 @@ jest.mock("obsidian", () => ({
 
 describe("readNoteTool", () => {
   let readNoteTool: StructuredTool;
-  let originalApp: any;
+  let originalApp: typeof window.app;
   let getAbstractFileByPathMock: jest.Mock;
   let getMarkdownFilesMock: jest.Mock;
   let getFirstLinkpathDestMock: jest.Mock;
@@ -56,7 +81,7 @@ describe("readNoteTool", () => {
         getLeavesOfType: jest.fn().mockReturnValue([]),
         getActiveFile: jest.fn().mockReturnValue(null),
       },
-    } as any;
+    } as unknown as typeof window.app;
 
     ({ readNoteTool } = await import("./NoteTools"));
   });
@@ -101,7 +126,7 @@ describe("readNoteTool", () => {
     const lines = Array.from({ length: 205 }, (_, i) => `Line ${i + 1}`);
     mockRead.mockResolvedValue(lines.join("\n"));
 
-    const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex: "1" as any });
+    const result = await invokeReadNoteTool(readNoteTool, { notePath, chunkIndex: "1" });
 
     expect(result.chunkIndex).toBe(1);
     expect(result.content).toBe(lines.slice(200).join("\n"));

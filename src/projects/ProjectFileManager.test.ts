@@ -1,6 +1,7 @@
-import { App, TFile, Vault } from "obsidian";
+import { App, Vault } from "obsidian";
 import { ProjectConfig } from "@/aiParams";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
+import { mockTFile } from "@/__tests__/mockObsidian";
 
 // ---------------------------------------------------------------------------
 // Module mocks
@@ -87,11 +88,7 @@ function makeConfig(
 /** Build a minimal Vault mock. */
 function makeMockVault(): jest.Mocked<Vault> {
   return {
-    create: jest.fn(async (path: string) => {
-      const file: TFile = Object.create(TFile.prototype);
-      Object.assign(file, { path });
-      return file;
-    }),
+    create: jest.fn(async (path: string) => mockTFile({ path })),
     // Reason: null = file does not exist yet, avoids collision error in createProject
     getAbstractFileByPath: jest.fn(() => null),
     adapter: { exists: jest.fn(async () => false) },

@@ -99,7 +99,7 @@ const mockFileMetadata = {
 const mockApp = {
   vault: new Obsidian.Vault(),
   metadataCache: mockMetadataCache,
-} as any;
+} as unknown as typeof window.app;
 
 describe("isFolderMatch", () => {
   it("should return file from the folder name 1", async () => {
@@ -321,9 +321,10 @@ describe("getNotesFromTags", () => {
   it("should handle both path and tags, returning files under the specified path with the specified tags", async () => {
     const mockVault = new Obsidian.Vault();
     const tags = ["#tag1"];
+    type TFileCtor = new (path: string) => TFile;
     const noteFiles: TFile[] = [
-      new (TFile as any)("test/test2/note1.md"),
-      new (TFile as any)("test/note2.md"),
+      new (TFile as unknown as TFileCtor)("test/test2/note1.md"),
+      new (TFile as unknown as TFileCtor)("test/note2.md"),
     ];
     const expectedPaths = ["test/test2/note1.md"];
 

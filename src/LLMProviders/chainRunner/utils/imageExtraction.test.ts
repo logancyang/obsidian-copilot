@@ -5,11 +5,11 @@ describe("Image extraction from content", () => {
   // Mock the global app object
   const mockApp = {
     metadataCache: {
-      getFirstLinkpathDest: jest.fn(),
+      getFirstLinkpathDest: jest.fn() as jest.Mock<{ path: string } | null, [string, string]>,
     },
   };
 
-  (window as any).app = mockApp;
+  (window as unknown as { app: typeof mockApp }).app = mockApp;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -33,7 +33,7 @@ describe("Image extraction from content", () => {
 
         if (resolvedFile) {
           // Use the resolved path
-          resolvedImages.push(resolvedFile.path as string);
+          resolvedImages.push(resolvedFile.path);
         } else {
           // If file not found, still include the raw filename
           resolvedImages.push(imageName);
@@ -69,7 +69,7 @@ describe("Image extraction from content", () => {
 
         if (resolvedFile) {
           // Use the resolved path
-          resolvedImages.push(resolvedFile.path as string);
+          resolvedImages.push(resolvedFile.path);
         } else {
           // If file not found, still include the raw path
           // Let ImageBatchProcessor handle validation

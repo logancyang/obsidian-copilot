@@ -239,11 +239,16 @@ describe("SystemPromptRegister", () => {
       jest.useFakeTimers();
 
       // Capture the settings change handler
-      const { subscribeToSettingsChange } = jest.requireMock("@/settings/model");
-      settingsChangeHandler = subscribeToSettingsChange.mock.calls[0]?.[0];
+      const { subscribeToSettingsChange } = jest.requireMock<{
+        subscribeToSettingsChange: jest.Mock;
+      }>("@/settings/model");
+      settingsChangeHandler = subscribeToSettingsChange.mock
+        .calls[0]?.[0] as typeof settingsChangeHandler;
 
       // Get reference to mock manager
-      const { SystemPromptManager } = jest.requireMock("@/system-prompts/systemPromptManager");
+      const { SystemPromptManager } = jest.requireMock<{
+        SystemPromptManager: { getInstance: () => { fetchPrompts: jest.Mock } };
+      }>("@/system-prompts/systemPromptManager");
       mockManager = SystemPromptManager.getInstance();
     });
 
@@ -280,10 +285,13 @@ describe("SystemPromptRegister", () => {
     });
 
     it("clears defaultSystemPromptTitle when prompt not found in new folder", async () => {
-      const { getSettings, updateSetting } = jest.requireMock("@/settings/model");
+      const { getSettings, updateSetting } = jest.requireMock<{
+        getSettings: jest.Mock;
+        updateSetting: jest.Mock;
+      }>("@/settings/model");
 
       // Set up: default prompt points to a prompt that won't exist in new folder
-      (getSettings as jest.Mock).mockReturnValue({
+      getSettings.mockReturnValue({
         defaultSystemPromptTitle: "OldDefault",
         userSystemPromptsFolder: "NewFolder",
       });
@@ -313,10 +321,13 @@ describe("SystemPromptRegister", () => {
     });
 
     it("does not clear prompts when they exist in new folder", async () => {
-      const { getSettings, updateSetting } = jest.requireMock("@/settings/model");
+      const { getSettings, updateSetting } = jest.requireMock<{
+        getSettings: jest.Mock;
+        updateSetting: jest.Mock;
+      }>("@/settings/model");
 
       // Set up: prompts exist in new folder
-      (getSettings as jest.Mock).mockReturnValue({
+      getSettings.mockReturnValue({
         defaultSystemPromptTitle: "ExistingPrompt",
         userSystemPromptsFolder: "NewFolder",
       });
