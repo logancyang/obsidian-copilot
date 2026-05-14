@@ -130,7 +130,7 @@ export function ChatSettingsPopover() {
    * Update model parameters (immediately update UI, delayed save)
    */
   const handleParamChange = useCallback(
-    (field: keyof CustomModel, value: any) => {
+    (field: keyof CustomModel, value: CustomModel[keyof CustomModel]) => {
       if (!localModel) return;
 
       const updatedModel = { ...localModel, [field]: value };

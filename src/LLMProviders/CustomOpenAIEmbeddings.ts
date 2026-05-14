@@ -1,10 +1,10 @@
-import { OpenAIEmbeddings, type OpenAIEmbeddingsParams } from "@langchain/openai";
+import { OpenAIEmbeddings } from "@langchain/openai";
 
 export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
-  private customConfig: any;
+  private customConfig: Record<string, unknown>;
 
-  constructor(config: any) {
-    super(config as OpenAIEmbeddingsParams);
+  constructor(config: Record<string, unknown>) {
+    super(config);
     // Store the config for our custom methods
     this.customConfig = config;
   }
@@ -29,17 +29,20 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
     };
 
     // Get the correct baseURL, apiKey, and fetch function from the configuration
-    const baseURL = this.customConfig.configuration?.baseURL || "https://api.openai.com/v1";
+    const configuration = this.customConfig.configuration as
+      | { baseURL?: string; fetch?: typeof fetch }
+      | undefined;
+    const baseURL = configuration?.baseURL || "https://api.openai.com/v1";
     const url = `${baseURL}/embeddings`;
-    const apiKey = this.customConfig.apiKey;
-    const fetchFn = this.customConfig.configuration?.fetch || fetch;
+    const apiKey = this.customConfig.apiKey as string;
+    const fetchFn = configuration?.fetch || fetch;
 
     const response = await fetchFn(url, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
-        ...(this.customConfig.headers || {}),
+        ...((this.customConfig.headers as Record<string, string>) || {}),
       },
       body: JSON.stringify(requestBody),
     });

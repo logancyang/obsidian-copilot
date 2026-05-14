@@ -11,14 +11,14 @@ import { ChatOpenAI } from "@langchain/openai";
 export interface ChatLMStudioInput {
   modelName?: string;
   apiKey?: string;
-  configuration?: any;
+  configuration?: Record<string, unknown>;
   temperature?: number;
   maxTokens?: number;
   topP?: number;
   frequencyPenalty?: number;
   streaming?: boolean;
   streamUsage?: boolean;
-  [key: string]: any;
+  [key: string]: unknown;
 }
 
 /**
@@ -79,7 +79,7 @@ export class ChatLMStudio extends ChatOpenAI {
       // `text: { format: undefined }` (serializes to `text: {}`) which LM Studio
       // rejects with "Required: text.format".
       modelKwargs: {
-        ...fields.modelKwargs,
+        ...(fields.modelKwargs as Record<string, unknown> | undefined),
         text: { format: { type: "text" } },
       },
     });

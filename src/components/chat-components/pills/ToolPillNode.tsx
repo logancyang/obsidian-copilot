@@ -75,7 +75,7 @@ export function $createToolPillNode(toolName: string): ToolPillNode {
   return new ToolPillNode(toolName);
 }
 
-export function $isToolPillNode(node: any): node is ToolPillNode {
+export function $isToolPillNode(node: LexicalNode): node is ToolPillNode {
   return node instanceof ToolPillNode;
 }
 

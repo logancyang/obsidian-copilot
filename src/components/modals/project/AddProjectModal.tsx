@@ -117,7 +117,7 @@ function AddProjectModalContent({
 
   const handleInputChange = (
     field: string,
-    value: string | number | string[] | Record<string, any>
+    value: string | number | string[] | Record<string, unknown>
   ) => {
     setFormData((prev) => {
       if (typeof value === "string") {
@@ -126,7 +126,7 @@ function AddProjectModalContent({
         }
       }
       if (Array.isArray(value) && value.every((item) => typeof item === "string")) {
-        value = (value as string[]).map((item) => item.trim()).filter(Boolean);
+        value = value.map((item) => item.trim()).filter(Boolean);
       }
 
       if (field.includes(".")) {

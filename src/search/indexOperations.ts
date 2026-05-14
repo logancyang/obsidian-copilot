@@ -188,7 +188,7 @@ export class IndexOperations {
               // Skip documents with invalid embeddings
               if (!embedding || !Array.isArray(embedding) || embedding.length === 0) {
                 logError(
-                  `Invalid embedding for document ${chunk.fileInfo.path}: ${JSON.stringify(embedding)}`
+                  `Invalid embedding for document ${String(chunk.fileInfo.path)}: ${JSON.stringify(embedding)}`
                 );
                 this.indexBackend.markFileMissingEmbeddings(chunk.fileInfo.path as string);
                 continue;
@@ -196,28 +196,28 @@ export class IndexOperations {
 
               docsToUpsert.push({
                 doc: {
-                  ...(chunk.fileInfo as SemanticIndexDocument),
+                  ...(chunk.fileInfo as unknown as SemanticIndexDocument),
                   id: this.getDocHash(chunk.content),
                   content: chunk.content,
                   embedding,
                   created_at: Date.now(),
                   nchars: chunk.content.length,
                 },
-                filePath: chunk.fileInfo.path,
+                filePath: chunk.fileInfo.path as string,
               });
             }
           } else {
             for (const chunk of batch) {
               docsToUpsert.push({
                 doc: {
-                  ...(chunk.fileInfo as SemanticIndexDocument),
+                  ...(chunk.fileInfo as unknown as SemanticIndexDocument),
                   id: this.getDocHash(chunk.content),
                   content: chunk.content,
                   embedding: [],
                   created_at: Date.now(),
                   nchars: chunk.content.length,
                 },
-                filePath: chunk.fileInfo.path,
+                filePath: chunk.fileInfo.path as string,
               });
             }
           }
@@ -262,7 +262,7 @@ export class IndexOperations {
           }
         } catch (err) {
           this.handleError(err, {
-            filePath: batch?.[0]?.fileInfo?.path,
+            filePath: batch?.[0]?.fileInfo?.path as string | undefined,
             errors,
             batch,
           });
@@ -320,10 +320,14 @@ export class IndexOperations {
     Array<{
       content: string;
       chunkId: string;
-      fileInfo: any;
+      fileInfo: Record<string, unknown>;
     }>
   > {
-    const allChunks: Array<{ content: string; chunkId: string; fileInfo: any }> = [];
+    const allChunks: Array<{
+      content: string;
+      chunkId: string;
+      fileInfo: Record<string, unknown>;
+    }> = [];
 
     // Process files in batches to bypass ChunkManager's 1000-file limit
     // The limit exists to protect memory during search queries, but indexing needs all files
@@ -486,7 +490,7 @@ export class IndexOperations {
     }
   }
 
-  private isStringLengthError(error: any): boolean {
+  private isStringLengthError(error: unknown): boolean {
     if (!error) return false;
 
     // Check if it's a direct RangeError
@@ -495,17 +499,22 @@ export class IndexOperations {
     }
 
     // Check the error message at any depth
-    const message: string = (error.message || error.toString()) as string;
+    const message: string =
+      error instanceof Error
+        ? error.message
+        : typeof error === "string"
+          ? error
+          : (JSON.stringify(error) ?? "");
     const lowerMessage = message.toLowerCase();
     return lowerMessage.includes("string length") || lowerMessage.includes("rangeerror");
   }
 
   private handleError(
-    error: any,
+    error: unknown,
     context?: {
       filePath?: string;
       errors?: string[];
-      batch?: Array<{ content: string; fileInfo: any }>;
+      batch?: Array<{ content: string; fileInfo: Record<string, unknown> }>;
     }
   ): void {
     const filePath = context?.filePath;
@@ -524,8 +533,8 @@ export class IndexOperations {
                 hasFileInfo: !!context.batch[0].fileInfo,
               }
             : "No chunks in batch",
-          errorType: error?.constructor?.name,
-          errorMessage: error?.message,
+          errorType: error instanceof Error ? error.constructor?.name : typeof error,
+          errorMessage: error instanceof Error ? error.message : String(error),
         });
       } else {
         console.error(`Error indexing file ${filePath}:`, error);
@@ -548,8 +557,8 @@ export class IndexOperations {
     // as they spam the user on every file event when the DB is not yet loaded.
   }
 
-  private isRateLimitError(err: any): boolean {
-    return (err?.message?.includes?.("rate limit") as boolean) || false;
+  private isRateLimitError(err: unknown): boolean {
+    return (err instanceof Error && err.message.toLowerCase().includes("rate limit")) || false;
   }
 
   private finalizeIndexing(errors: string[]): void {
@@ -613,7 +622,7 @@ export class IndexOperations {
         for (let i = 0; i < chunks.length; i++) {
           const chunk = chunks[i];
           await this.indexBackend.upsert({
-            ...(chunk.fileInfo as SemanticIndexDocument),
+            ...(chunk.fileInfo as unknown as SemanticIndexDocument),
             id: this.getDocHash(chunk.content),
             content: chunk.content,
             embedding: embeddings[i],
@@ -624,7 +633,7 @@ export class IndexOperations {
       } else {
         for (const chunk of chunks) {
           await this.indexBackend.upsert({
-            ...(chunk.fileInfo as SemanticIndexDocument),
+            ...(chunk.fileInfo as unknown as SemanticIndexDocument),
             id: this.getDocHash(chunk.content),
             content: chunk.content,
             embedding: [],

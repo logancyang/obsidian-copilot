@@ -18,6 +18,7 @@ import { ContextManager } from "./ContextManager";
 import { MessageRepository } from "./MessageRepository";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { ACTIVE_WEB_TAB_MARKER, USER_SENDER } from "@/constants";
+import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { TFile, Vault } from "obsidian";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import {
@@ -416,7 +417,7 @@ export class ChatManager {
     chainType: ChainType,
     includeActiveNote: boolean = false,
     includeActiveWebTab: boolean = false,
-    content?: any[],
+    content?: MessageContent[],
     updateLoadingMessage?: (message: string) => void
   ): Promise<string> {
     try {

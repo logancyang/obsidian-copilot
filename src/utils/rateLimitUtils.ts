@@ -11,15 +11,16 @@
  * @param error The error object to check
  * @returns true if the error is identified as a rate limit error
  */
-export function isRateLimitError(error: any): boolean {
+export function isRateLimitError(error: unknown): boolean {
   if (!error || typeof error !== "object") return false;
 
-  const errorMessage: string = error.message || error.toString();
+  const err = error as Record<string, unknown>;
+  const errorMessage: string = (err.message as string) || "";
   return (
     errorMessage.includes("Request rate limit exceeded") ||
     errorMessage.includes("RATE_LIMIT_EXCEEDED") ||
     errorMessage.includes("429") ||
-    error.status === 429
+    err.status === 429
   );
 }
 
@@ -28,8 +29,9 @@ export function isRateLimitError(error: any): boolean {
  * @param error The rate limit error object
  * @returns The retry time string if found, or 'some time' as fallback
  */
-export function extractRetryTime(error: any): string {
-  const errorMessage: string = error?.message || error?.toString() || "";
+export function extractRetryTime(error: unknown): string {
+  const err = error as Record<string, unknown> | null | undefined;
+  const errorMessage: string = (err?.message as string) || "";
   const retryMatch = errorMessage.match(/Try again in ([\d\w\s]+)/);
   return retryMatch ? retryMatch[1] : "some time";
 }

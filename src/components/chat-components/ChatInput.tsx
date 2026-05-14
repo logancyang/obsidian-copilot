@@ -22,9 +22,9 @@ import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { isAllowedFileForNoteContext } from "@/utils";
 import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
-import { App, Notice, TFile } from "obsidian";
+import { App, Notice, TFile, TFolder } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { $getSelection, $isRangeSelection } from "lexical";
+import { $getSelection, $isRangeSelection, LexicalEditor as LexicalEditorType } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
@@ -113,7 +113,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
   const containerRef = useRef<HTMLDivElement>(null);
-  const lexicalEditorRef = useRef<any>(null);
+  const lexicalEditorRef = useRef<LexicalEditorType | null>(null);
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
   const [isProjectLoading] = useProjectLoading();
@@ -153,7 +153,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
         title: pill.getTitle(),
         faviconUrl: pill.getFaviconUrl(),
       }));
-    }) as WebTabContext[];
+    });
   };
 
   // Toggle states for vault, web search, composer, and autonomous agent
@@ -375,7 +375,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   // Unified handler for adding to context (from popover @ mention)
-  const handleAddToContext = (category: string, data: any) => {
+  const handleAddToContext = (category: string, data: TFile | string | TFolder | WebTabContext) => {
     switch (category) {
       case "activeNote":
         // Set active note context flag (no pill needed - context badge shows it)
@@ -428,8 +428,13 @@ const ChatInput: React.FC<ChatInputProps> = ({
         break;
       case "webTabs":
         // Badge-only behavior (like notes): add to contextWebTabs state, no pill insertion
-        if (data && typeof data.url === "string") {
-          const normalized = normalizeWebTabContext(data as WebTabContext);
+        if (
+          data &&
+          typeof data === "object" &&
+          "url" in data &&
+          typeof (data as { url: unknown }).url === "string"
+        ) {
+          const normalized = normalizeWebTabContext(data);
           if (!normalized) break;
 
           // If selecting the active web tab, toggle the active badge instead
@@ -462,7 +467,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   // Unified handler for removing from context (from context menu badges)
-  const handleRemoveFromContext = (category: string, data: any) => {
+  const handleRemoveFromContext = (category: string, data: string) => {
     switch (category) {
       case "activeNote":
         // Remove active note pill from editor and turn off flag
@@ -638,7 +643,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
     };
   }, [app.workspace]);
 
-  const onEditorReady = useCallback((editor: any) => {
+  const onEditorReady = useCallback((editor: LexicalEditorType) => {
     lexicalEditorRef.current = editor;
   }, []);
 

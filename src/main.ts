@@ -912,7 +912,11 @@ export default class CopilotPlugin extends Plugin {
     await this.handleNewChat();
   }
 
-  async customSearchDB(query: string, salientTerms: string[], textWeight: number): Promise<any[]> {
+  async customSearchDB(
+    query: string,
+    salientTerms: string[],
+    textWeight: number
+  ): Promise<{ content: string; metadata: Record<string, unknown> }[]> {
     const settings = getSettings();
 
     // Run FilterRetriever for guaranteed title/tag matches

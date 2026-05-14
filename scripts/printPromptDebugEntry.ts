@@ -116,7 +116,7 @@ export async function run(args: string[]): Promise<void> {
   const chainContext = {
     memoryManager,
     userMemoryManager,
-  } as any;
+  } as unknown;
 
   const adapter = ModelAdapterFactory.createAdapter({
     modelName: "gpt-4",

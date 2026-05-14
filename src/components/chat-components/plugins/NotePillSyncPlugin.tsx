@@ -22,10 +22,13 @@ type NoteData = { path: string; basename: string };
  */
 const notePillConfig: PillSyncConfig<NoteData> = {
   isPillNode: $isNotePillNode,
-  extractData: (node: { getNotePath: () => string; getNoteTitle: () => string }) => ({
-    path: node.getNotePath(),
-    basename: node.getNoteTitle(),
-  }),
+  extractData: (node) => {
+    const noteNode = node as unknown as { getNotePath: () => string; getNoteTitle: () => string };
+    return {
+      path: noteNode.getNotePath(),
+      basename: noteNode.getNoteTitle(),
+    };
+  },
   getKey: (note: NoteData) => note.path, // Use path as unique key
 };
 

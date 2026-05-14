@@ -229,7 +229,7 @@ describe("BedrockChatModel streaming decode", () => {
 
       // Check that content is an array with thinking type
       expect(Array.isArray(chunk?.message.content)).toBe(true);
-      const content = chunk?.message.content as any[];
+      const content = chunk?.message.content as unknown[];
       expect(content).toHaveLength(1);
       expect(content[0]).toEqual({
         type: "thinking",
@@ -276,7 +276,7 @@ describe("BedrockChatModel streaming decode", () => {
 
       // Check that content is an array with text type
       expect(Array.isArray(chunk?.message.content)).toBe(true);
-      const content = chunk?.message.content as any[];
+      const content = chunk?.message.content as unknown[];
       expect(content).toHaveLength(1);
       expect(content[0]).toEqual({
         type: "text",
@@ -317,7 +317,7 @@ describe("BedrockChatModel streaming decode", () => {
 
       expect(thinkingResult.deltaChunks).toHaveLength(1);
       const thinkingChunk = thinkingResult.deltaChunks[0];
-      expect((thinkingChunk?.message.content as any[])[0]?.type).toBe("thinking");
+      expect((thinkingChunk?.message.content as Array<{ type: string }>)[0]?.type).toBe("thinking");
 
       // Second chunk: text
       const textPayload = JSON.stringify({
@@ -346,7 +346,7 @@ describe("BedrockChatModel streaming decode", () => {
 
       expect(textResult.deltaChunks).toHaveLength(1);
       const textChunk = textResult.deltaChunks[0];
-      expect((textChunk?.message.content as any[])[0]?.type).toBe("text");
+      expect((textChunk?.message.content as Array<{ type: string }>)[0]?.type).toBe("text");
     });
 
     it("extractStreamText can fallback to extract thinking content", () => {

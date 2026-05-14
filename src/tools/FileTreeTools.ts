@@ -9,12 +9,12 @@ interface FileTreeNode {
   extensionCounts?: Record<string, number>;
 }
 
-function isTFolder(item: any): item is TFolder {
-  return "children" in item && "path" in item;
+function isTFolder(item: unknown): item is TFolder {
+  return typeof item === "object" && item !== null && "children" in item && "path" in item;
 }
 
-function isTFile(item: any): item is TFile {
-  return "path" in item && !("children" in item);
+function isTFile(item: unknown): item is TFile {
+  return typeof item === "object" && item !== null && "path" in item && !("children" in item);
 }
 
 function getFileExtension(filename: string): string {

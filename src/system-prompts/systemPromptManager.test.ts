@@ -52,7 +52,7 @@ describe("SystemPromptManager", () => {
 
   beforeEach(() => {
     // Reset the singleton instance before each test
-    (SystemPromptManager as any).instance = undefined;
+    (SystemPromptManager as unknown as Record<string, unknown>).instance = undefined;
 
     // Clear all mocks
     jest.clearAllMocks();
@@ -92,7 +92,7 @@ describe("SystemPromptManager", () => {
     });
 
     it("throws error if vault not provided on first call", () => {
-      (SystemPromptManager as any).instance = undefined;
+      (SystemPromptManager as unknown as Record<string, unknown>).instance = undefined;
       expect(() => SystemPromptManager.getInstance()).toThrow(
         "Vault is required for first initialization"
       );

@@ -41,7 +41,7 @@ function CustomCommandSettingsModalContent({
   const [command, setCommand] = useState(initialCommand);
   const [errors, setErrors] = useState<FormErrors>({});
 
-  const handleUpdate = (field: keyof CustomCommand, value: any) => {
+  const handleUpdate = (field: keyof CustomCommand, value: CustomCommand[keyof CustomCommand]) => {
     setCommand((prev) => ({
       ...prev,
       [field]: value,

@@ -209,8 +209,8 @@ async function performLexicalSearch({
     source: doc.metadata.source,
     mtime: doc.metadata.mtime ?? null,
     ctime: doc.metadata.ctime ?? null,
-    chunkId: (doc.metadata as any).chunkId ?? null,
-    isChunk: (doc.metadata as any).isChunk ?? false,
+    chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
+    isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
     explanation: doc.metadata.explanation ?? null,
     isFilterResult: isFilter,
     matchType: isFilter ? doc.metadata.source || "filter" : (undefined as string | undefined),
@@ -316,8 +316,8 @@ const semanticSearchTool = createLangChainTool({
         source: doc.metadata.source,
         mtime: doc.metadata.mtime ?? null,
         ctime: doc.metadata.ctime ?? null,
-        chunkId: (doc.metadata as any).chunkId ?? null,
-        isChunk: (doc.metadata as any).isChunk ?? false,
+        chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
+        isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
         explanation: doc.metadata.explanation ?? null,
       };
     });
@@ -433,8 +433,8 @@ async function performMiyoSearch({
     source: doc.metadata.source,
     mtime: doc.metadata.mtime ?? null,
     ctime: doc.metadata.ctime ?? null,
-    chunkId: (doc.metadata as any).chunkId ?? null,
-    isChunk: (doc.metadata as any).isChunk ?? false,
+    chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
+    isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
     explanation: doc.metadata.explanation ?? null,
     isFilterResult: isFilter,
     matchType: isFilter ? doc.metadata.source || "filter" : (undefined as string | undefined),
@@ -523,10 +523,10 @@ const indexTool = createLangChainTool({
               `Semantic search index has been refreshed with ${count} documents.`,
           documentCount: count,
         };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           success: false,
-          message: `Failed to index with semantic search: ${error.message}`,
+          message: `Failed to index with semantic search: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
     } else {

@@ -311,7 +311,7 @@ export function useStreamingChatSession(
         const stream = await chainWithSignal.stream({ input: prompt });
 
         for await (const chunk of stream) {
-          thinkStreamer.processChunk(chunk);
+          thinkStreamer.processChunk(chunk as Parameters<typeof thinkStreamer.processChunk>[0]);
           if (abortController.signal.aborted) break;
         }
       } catch (error) {

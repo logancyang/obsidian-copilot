@@ -11,7 +11,7 @@ const LEGACY_INDEX_SUFFIX = ".json";
 export interface ChunkMetadata {
   numPartitions: number;
   vectorLength: number;
-  schema: any;
+  schema: Record<string, string>;
   lastModified: number;
   documentPartitions: Record<string, number>;
 }
@@ -54,10 +54,10 @@ export class ChunkedStorage {
   }
 
   private distributeDocumentsToPartitions(
-    documents: any[],
+    documents: Record<string, unknown>[],
     numPartitions: number
-  ): Map<number, any[]> {
-    const partitions = new Map<number, any[]>();
+  ): Map<number, Record<string, unknown>[]> {
+    const partitions = new Map<number, Record<string, unknown>[]>();
     const documentPartitions: Record<string, number> = {};
 
     for (let i = 0; i < numPartitions; i++) {
@@ -106,6 +106,7 @@ export class ChunkedStorage {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is required here as it controls Orama's type inference
   async saveDatabase(db: Orama<any>): Promise<void> {
     try {
       const rawData: RawData = save(db);
@@ -125,10 +126,10 @@ export class ChunkedStorage {
       }
 
       // NOTE: Orama RawData docs can be either an array or an object
-      const docsData = (rawData as any).docs?.docs;
-      const rawDocs: any[] = Array.isArray(docsData)
-        ? docsData
-        : Object.values((docsData as Record<string, unknown>) || {});
+      const docsData = (rawData as unknown as { docs?: { docs?: unknown } }).docs?.docs;
+      const rawDocs: Record<string, unknown>[] = Array.isArray(docsData)
+        ? (docsData as Record<string, unknown>[])
+        : (Object.values((docsData as Record<string, unknown>) || {}) as Record<string, unknown>[]);
 
       if (getSettings().debug) {
         logInfo(`Starting save with ${rawDocs.length ?? 0} total documents`);
@@ -161,7 +162,7 @@ export class ChunkedStorage {
         schema: db.schema,
         lastModified: Date.now(),
         documentPartitions: Object.fromEntries(
-          rawDocs.map((doc: any) => [
+          rawDocs.map((doc) => [
             doc.id,
             this.assignDocumentToPartition(String(doc.id), numPartitions),
           ])
@@ -174,7 +175,7 @@ export class ChunkedStorage {
         ...rawData,
         docs: { docs: {}, count: 0 },
         index: {
-          ...(rawData as any).index,
+          ...(rawData as unknown as { index: Record<string, unknown> }).index,
           vectorIndexes: undefined,
         },
       };
@@ -186,13 +187,24 @@ export class ChunkedStorage {
           index: {
             vectorIndexes: {
               embedding: {
-                size: (rawData as any).index.vectorIndexes.embedding.size,
+                size: (
+                  rawData as unknown as {
+                    index: {
+                      vectorIndexes: {
+                        embedding: { size: number; vectors: Record<string, unknown> };
+                      };
+                    };
+                  }
+                ).index.vectorIndexes.embedding.size,
                 vectors: Object.fromEntries(
                   Object.entries(
-                    (rawData as any).index.vectorIndexes.embedding.vectors as Record<
-                      string,
-                      unknown
-                    >
+                    (
+                      rawData as unknown as {
+                        index: {
+                          vectorIndexes: { embedding: { vectors: Record<string, unknown> } };
+                        };
+                      }
+                    ).index.vectorIndexes.embedding.vectors
                   ).filter(([id]) => docs.some((doc) => doc.id === id))
                 ),
               },
@@ -234,6 +246,7 @@ export class ChunkedStorage {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is required here as it controls Orama's type inference
   async loadDatabase(): Promise<Orama<any>> {
     try {
       const legacyPath = this.getLegacyPath();
@@ -241,7 +254,7 @@ export class ChunkedStorage {
       // Try loading legacy format first
       if (await this.app.vault.adapter.exists(legacyPath)) {
         const legacyData = JSON.parse(await this.app.vault.adapter.read(legacyPath)) as RawData & {
-          schema?: any;
+          schema?: Record<string, string>;
         };
         if (!legacyData?.schema) {
           throw new CustomError("Invalid legacy database format");
@@ -294,14 +307,14 @@ export class ChunkedStorage {
       }
 
       // Create new docs object based on internalDocumentIDStore order
-      const orderedDocs: Record<string, any> = {};
+      const orderedDocs: Record<string, unknown> = {};
       let nextDocId = 1;
 
       for (const internalId of mergedData.internalDocumentIDStore.internalIdToId) {
         // Find document in any chunk
         const doc = allChunks
           .flatMap((chunk) => Object.values(chunk.docs.docs as Record<string, unknown>))
-          .find((doc: any) => doc.id === internalId);
+          .find((doc) => (doc as Record<string, unknown>).id === internalId);
 
         if (doc) {
           orderedDocs[nextDocId.toString()] = doc;

@@ -53,7 +53,7 @@ export function getDomainFromUrl(url: string): string {
 
 // Add custom error type at the top of the file
 interface APIError extends Error {
-  json?: any;
+  json?: unknown;
 }
 
 // Error message constants
@@ -71,26 +71,29 @@ export interface ErrorDetail {
   reason?: string;
 }
 
-export function extractErrorDetail(error: any): ErrorDetail {
-  const errorDetail: ErrorDetail = error?.detail || {};
+export function extractErrorDetail(error: unknown): ErrorDetail {
+  const err = error as Record<string, unknown> | null | undefined;
+  const errorDetail: ErrorDetail = (err?.detail as ErrorDetail) || {};
   return {
     status: errorDetail.status,
-    message: errorDetail.message || (error?.message as string | undefined),
+    message: errorDetail.message || (err?.message as string | undefined),
     reason: errorDetail.reason,
   };
 }
 
-export function isLicenseKeyError(error: any): boolean {
+export function isLicenseKeyError(error: unknown): boolean {
   const errorDetail = extractErrorDetail(error);
+  const err = error as Record<string, unknown> | null | undefined;
+  const message = err?.message as string | undefined;
   return Boolean(
     errorDetail.reason === "Invalid license key" ||
-      error?.message === "Invalid license key" ||
-      error?.message?.includes("status 403") ||
+      message === "Invalid license key" ||
+      message?.includes("status 403") ||
       errorDetail.status === 403
   );
 }
 
-export function getApiErrorMessage(error: any): string {
+export function getApiErrorMessage(error: unknown): string {
   const errorDetail = extractErrorDetail(error);
   if (isLicenseKeyError(error)) {
     return ERROR_MESSAGES.INVALID_LICENSE_KEY_USER;
@@ -275,11 +278,15 @@ export const stringToChainType = (chain: string): ChainType => {
 // TODO: These chain validation functions are deprecated
 // Remove after confirming chainManager no longer uses them
 export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
-  return Boolean((chain as any).last?.modelName || (chain as any).last?.model);
+  const c = chain as unknown as Record<string, unknown>;
+  const last = c.last as Record<string, unknown> | undefined;
+  return Boolean(last?.modelName || last?.model);
 };
 
 export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
-  return (chain as any).last?.retriever !== undefined;
+  const c = chain as unknown as Record<string, unknown>;
+  const last = c.last as Record<string, unknown> | undefined;
+  return last?.retriever !== undefined;
 };
 
 export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
@@ -642,7 +649,7 @@ export function isNoteTitleUnique(title: string, vault: Vault): boolean {
 
 // Helper function to determine if we should show the full path for a file
 export function shouldShowPath(file: TFile): boolean {
-  return (file as any).needsPathDisplay === true;
+  return (file as unknown as Record<string, unknown>).needsPathDisplay === true;
 }
 
 /**
@@ -674,7 +681,7 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
   return Array.from(titlesSet);
 }
 
-export function extractJsonFromCodeBlock(content: string): any {
+export function extractJsonFromCodeBlock(content: string): unknown {
   const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
   const jsonContent = codeBlockMatch ? codeBlockMatch[1].trim() : content.trim();
   return JSON.parse(jsonContent);
@@ -938,10 +945,7 @@ function createReadableStreamFromString(input: string) {
 
 // err2String is now exported from '@/errorFormat' to avoid circular dependencies and duplication.
 
-export function omit<T extends Record<string, any>, K extends keyof T>(
-  obj: T,
-  keys: K[]
-): Omit<T, K> {
+export function omit<T extends object, K extends keyof T>(obj: T, keys: K[]): Omit<T, K> {
   const result = { ...obj };
   keys.forEach((key) => {
     delete result[key];
@@ -1158,7 +1162,8 @@ export function isOSeriesModel(model: BaseChatModel | string): boolean {
   }
 
   // For BaseChatModel instances
-  const modelName: string = (model as any).modelName || (model as any).model || "";
+  const m = model as unknown as Record<string, unknown>;
+  const modelName: string = (m.modelName as string) || (m.model as string) || "";
   return modelName.startsWith("o1") || modelName.startsWith("o3") || modelName.startsWith("o4");
 }
 
@@ -1168,7 +1173,8 @@ export function isGPT5Model(model: BaseChatModel | string): boolean {
   }
 
   // For BaseChatModel instances
-  const modelName: string = (model as any).modelName || (model as any).model || "";
+  const m = model as unknown as Record<string, unknown>;
+  const modelName: string = (m.modelName as string) || (m.model as string) || "";
   return modelName.startsWith("gpt-5");
 }
 
@@ -1179,8 +1185,9 @@ export function isGPT5Model(model: BaseChatModel | string): boolean {
  * @returns True when the model name indicates a Codex model.
  */
 export function isCodexModel(model: BaseChatModel | string): boolean {
+  const m = model as unknown as Record<string, unknown>;
   const modelName: string =
-    typeof model === "string" ? model : (model as any).modelName || (model as any).model || "";
+    typeof model === "string" ? model : (m.modelName as string) || (m.model as string) || "";
   return modelName.toLowerCase().includes("codex");
 }
 
@@ -1215,10 +1222,9 @@ export interface ModelInfo {
 }
 
 export function getModelInfo(model: BaseChatModel | string): ModelInfo {
+  const m = model as unknown as Record<string, unknown>;
   const modelName: string =
-    typeof model === "string"
-      ? model
-      : ((model as any).modelName as string) || ((model as any).model as string) || "";
+    typeof model === "string" ? model : (m.modelName as string) || (m.model as string) || "";
 
   const isOSeries = isOSeriesModel(modelName);
   const isGPT5 = isGPT5Model(modelName);
@@ -1316,7 +1322,7 @@ export function checkModelApiKey(
  * Extracts text content from a message chunk that could be either a string
  * or an array of content objects (Claude 3.7 format)
  */
-export function extractTextFromChunk(content: any): string {
+export function extractTextFromChunk(content: unknown): string {
   if (typeof content === "string") {
     return content;
   }
@@ -1326,8 +1332,8 @@ export function extractTextFromChunk(content: any): string {
       .map((item) => item.text as string)
       .join("");
   }
-  // For any other type, try to convert to string or return empty
-  return String(content || "");
+  // For any other type, return empty string
+  return "";
 }
 
 /**
@@ -1337,7 +1343,7 @@ export function extractTextFromChunk(content: any): string {
  * @param text - The text or content array to remove think tags from
  * @returns The text with think tags removed
  */
-export function removeThinkTags(text: any): string {
+export function removeThinkTags(text: unknown): string {
   // First convert any content format to plain text
   const plainText = extractTextFromChunk(text);
   // Remove complete think tags and their content
@@ -1354,7 +1360,7 @@ export function removeThinkTags(text: any): string {
  * @param text - The text or content array to remove error tags from
  * @returns The text with error tags removed
  */
-export function removeErrorTags(text: any): string {
+export function removeErrorTags(text: unknown): string {
   // First convert any content format to plain text
   const plainText = extractTextFromChunk(text);
   // Then remove error tags
@@ -1542,7 +1548,9 @@ export async function openFileInWorkspace(file: TFile, focusIfOpen: boolean = tr
       leaf.view.getViewType() === "pdf" ||
       leaf.view.getViewType() === "canvas"
     ) {
-      const viewFile = (leaf.view as any).file;
+      const viewFile = (leaf.view as unknown as Record<string, unknown>).file as
+        | { path: string }
+        | undefined;
       if (viewFile && viewFile.path === file.path) {
         existingLeaf = leaf;
       }

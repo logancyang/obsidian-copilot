@@ -278,7 +278,10 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
     try {
       // Create message content array
-      const content: any[] = [];
+      type MessageContentItem =
+        | { type: "text"; text: string }
+        | { type: "image_url"; image_url: { url: string } };
+      const content: MessageContentItem[] = [];
 
       // Add text content if present
       if (inputMessage) {

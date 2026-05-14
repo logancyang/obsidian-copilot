@@ -11,6 +11,17 @@ jest.mock("@/chainFactory", () => ({
 import { ContextProcessor } from "@/contextProcessor";
 import { DATAVIEW_BLOCK_TAG } from "@/constants";
 
+// Typed helper to access plugins on the mocked global app
+function getPlugins(): Record<string, unknown> {
+  return (window.app as unknown as { plugins: { plugins: Record<string, unknown> } }).plugins
+    .plugins;
+}
+
+function setPlugins(plugins: Record<string, unknown>): void {
+  (window.app as unknown as { plugins: { plugins: Record<string, unknown> } }).plugins.plugins =
+    plugins;
+}
+
 // Mock the global app object for Dataview plugin access
 window.app = {
   plugins: {
@@ -25,7 +36,7 @@ describe("ContextProcessor - Dataview Integration", () => {
   beforeEach(() => {
     contextProcessor = ContextProcessor.getInstance();
     // Reset plugins for each test
-    (window.app as any).plugins.plugins = {};
+    setPlugins({});
     // Save and mock console.error to suppress expected error messages
     originalConsoleError = console.error;
     console.error = jest.fn();
@@ -44,7 +55,7 @@ describe("ContextProcessor - Dataview Integration", () => {
     });
 
     it("should return content unchanged when Dataview API is not available", async () => {
-      (window.app as any).plugins.plugins.dataview = {};
+      getPlugins().dataview = {};
       const content = "```dataview\nLIST\n```";
       const result = await contextProcessor.processDataviewBlocks(content, "test.md");
       expect(result).toBe(content);
@@ -54,7 +65,7 @@ describe("ContextProcessor - Dataview Integration", () => {
   describe("processDataviewBlocks - Regex Pattern Matching", () => {
     beforeEach(() => {
       // Mock successful Dataview plugin with API
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -105,7 +116,7 @@ describe("ContextProcessor - Dataview Integration", () => {
 
   describe("processDataviewBlocks - Multiple Blocks", () => {
     beforeEach(() => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest
             .fn()
@@ -172,7 +183,7 @@ LIST
 
   describe("processDataviewBlocks - Query Execution", () => {
     it("should include both original query and executed results", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -194,7 +205,7 @@ LIST
     });
 
     it("should handle query timeout gracefully", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockImplementation(
             () =>
@@ -213,7 +224,7 @@ LIST
     }, 10000); // Increase test timeout to 10s
 
     it("should handle query execution errors", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: false,
@@ -229,7 +240,7 @@ LIST
     });
 
     it("should handle dataviewjs with unsupported message", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn(),
         },
@@ -244,7 +255,7 @@ LIST
 
   describe("processDataviewBlocks - Result Formatting", () => {
     it("should format LIST results correctly", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -265,7 +276,7 @@ LIST
     });
 
     it("should format TABLE results correctly", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -291,7 +302,7 @@ LIST
     });
 
     it("should format TASK results correctly", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -314,7 +325,7 @@ LIST
     });
 
     it("should handle empty results", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -333,7 +344,7 @@ LIST
     });
 
     it("should handle null values gracefully", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -354,7 +365,7 @@ LIST
     });
 
     it("should handle arrays in values", async () => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,
@@ -375,7 +386,7 @@ LIST
 
   describe("processDataviewBlocks - Edge Cases", () => {
     beforeEach(() => {
-      (window.app as any).plugins.plugins.dataview = {
+      getPlugins().dataview = {
         api: {
           query: jest.fn().mockResolvedValue({
             successful: true,

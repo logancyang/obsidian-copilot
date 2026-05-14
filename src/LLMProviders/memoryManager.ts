@@ -48,7 +48,7 @@ export default class MemoryManager {
     await this.memory.clear();
   }
 
-  async loadMemoryVariables(): Promise<any> {
+  async loadMemoryVariables(): Promise<Record<string, unknown>> {
     const variables = await this.memory.loadMemoryVariables({});
     if (this.debug) logInfo("Loaded memory variables:", variables);
     return variables;
@@ -59,7 +59,10 @@ export default class MemoryManager {
    * The output (assistant response) is compacted to reduce memory bloat from
    * accumulated tool results (localSearch, readNote, etc.).
    */
-  async saveContext(input: any, output: any): Promise<void> {
+  async saveContext(
+    input: Record<string, unknown>,
+    output: Record<string, unknown> | string
+  ): Promise<void> {
     // Compact the output to prevent memory bloat from tool results
     const compactedOutput =
       typeof output === "string"
@@ -73,7 +76,7 @@ export default class MemoryManager {
       logInfo("Saving to memory - Input:", input, "Output (compacted):", compactedOutput);
     }
     await this.memory.saveContext(
-      input as Parameters<typeof this.memory.saveContext>[0],
+      input,
       compactedOutput as Parameters<typeof this.memory.saveContext>[1]
     );
   }

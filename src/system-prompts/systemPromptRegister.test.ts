@@ -69,7 +69,7 @@ describe("SystemPromptRegister", () => {
   let mockVault: Vault;
   let register: SystemPromptRegister;
 
-  let vaultEventHandlers: Record<string, (...args: any[]) => unknown>;
+  let vaultEventHandlers: Record<string, (...args: unknown[]) => unknown>;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -79,7 +79,7 @@ describe("SystemPromptRegister", () => {
 
     mockPlugin = {} as Plugin;
     mockVault = {
-      on: jest.fn((event: string, handler: (...args: any[]) => unknown) => {
+      on: jest.fn((event: string, handler: (...args: unknown[]) => unknown) => {
         vaultEventHandlers[event] = handler;
       }),
       off: jest.fn(),

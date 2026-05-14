@@ -1,6 +1,7 @@
 import * as searchUtils from "@/search/searchUtils";
+import { mockTFile, mockTFolder } from "@/__tests__/mockObsidian";
 import { ToolManager } from "@/tools/toolManager";
-import { TFolder } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import { buildFileTree, createGetFileTreeTool } from "./FileTreeTools";
 
 // Mock the searchUtils functions
@@ -9,82 +10,66 @@ jest.mock("@/search/searchUtils", () => ({
   shouldIndexFile: jest.fn(),
 }));
 
-// Mock TFile class
-class MockTFile {
-  vault: any;
-  stat: { ctime: number; mtime: number; size: number };
-  basename: string;
-  extension: string;
-  name: string;
-  parent: TFolder;
-  path: string;
-
-  constructor(path: string, parent: TFolder) {
-    this.path = path;
-    this.name = path.split("/").pop() || "";
-    this.basename = this.name.split(".")[0];
-    this.extension = this.name.split(".")[1] || "";
-    this.parent = parent;
-    this.vault = {};
-    this.stat = {
-      ctime: Date.now(),
-      mtime: Date.now(),
-      size: 0,
-    };
-  }
+/**
+ * Build a TFolder with the given path, parent, and children.
+ */
+function makeFolder(path: string, parent: TFolder | null, children: (TFile | TFolder)[]): TFolder {
+  const folder = mockTFolder({ path, name: path.split("/").pop() ?? "", parent, children });
+  return folder;
 }
 
-// Mock TFolder class
-class MockTFolder {
-  vault: any;
-  name: string;
-  path: string;
-  parent: TFolder | null;
-  children: Array<MockTFile | MockTFolder>;
-
-  constructor(path: string, parent: TFolder | null) {
-    this.path = path;
-    this.name = path.split("/").pop() || "";
-    this.parent = parent;
-    this.vault = {};
-    this.children = [];
-  }
-
-  isRoot(): boolean {
-    return this.parent === null;
-  }
+/**
+ * Build a TFile with the given path and parent.
+ */
+function makeFile(path: string, parent: TFolder): TFile {
+  const name = path.split("/").pop() ?? "";
+  const basename = name.includes(".") ? name.split(".")[0] : name;
+  const extension = name.includes(".") ? (name.split(".")[1] ?? "") : "";
+  return mockTFile({
+    path,
+    name,
+    basename,
+    extension,
+    parent,
+    stat: { ctime: Date.now(), mtime: Date.now(), size: 0 },
+  });
 }
 
 describe("FileTreeTools", () => {
-  let root: MockTFolder;
+  let root: TFolder;
 
   beforeEach(() => {
-    root = new MockTFolder("", null);
+    // We need to build the tree bottom-up, then attach children.
+    // Use Object.assign after creation to set children (mockTFolder returns a writable object).
+    root = mockTFolder({ path: "", name: "", parent: null, children: [] });
 
-    // Create a mock file structure
-    const docs = new MockTFolder("docs", root);
-    const projects = new MockTFolder("docs/projects", docs);
-    const notes = new MockTFolder("docs/notes", docs);
+    const docs = makeFolder("docs", root, []);
+    const projects = makeFolder("docs/projects", docs, []);
+    const notes = makeFolder("docs/notes", docs, []);
 
-    docs.children = [projects, notes, new MockTFile("docs/readme.md", docs)];
-
-    projects.children = [
-      new MockTFile("docs/projects/project1.md", projects),
-      new MockTFile("docs/projects/project2.md", projects),
-      new MockTFile("docs/projects/data.json", projects),
+    (projects as TFolder & { children: (TFile | TFolder)[] }).children = [
+      makeFile("docs/projects/project1.md", projects),
+      makeFile("docs/projects/project2.md", projects),
+      makeFile("docs/projects/data.json", projects),
     ];
 
-    notes.children = [
-      new MockTFile("docs/notes/note1.md", notes),
-      new MockTFile("docs/notes/note2.md", notes),
-      new MockTFile("docs/notes/image.png", notes),
+    (notes as TFolder & { children: (TFile | TFolder)[] }).children = [
+      makeFile("docs/notes/note1.md", notes),
+      makeFile("docs/notes/note2.md", notes),
+      makeFile("docs/notes/image.png", notes),
     ];
 
-    root.children = [
+    (docs as TFolder & { children: (TFile | TFolder)[] }).children = [
+      projects,
+      notes,
+      makeFile("docs/readme.md", docs),
+    ];
+
+    (root as TFolder & { children: (TFile | TFolder)[] }).children = [
       docs,
-      new MockTFile("readme.md", root),
-      new MockTFile("config.json", root),
-      new MockTFile("text", root),
+      makeFile("readme.md", root),
+      makeFile("config.json", root),
+      makeFile("text", root),
     ];
 
     // Reset mocks before each test

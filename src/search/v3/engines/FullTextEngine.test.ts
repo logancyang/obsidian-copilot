@@ -232,9 +232,21 @@ type FullTextEngineInternal = {
 const asInternal = (e: FullTextEngine): FullTextEngineInternal =>
   e as unknown as FullTextEngineInternal;
 
+interface MockApp {
+  vault: {
+    getAbstractFileByPath: jest.Mock;
+    cachedRead: jest.Mock;
+  };
+  metadataCache: {
+    getFileCache: jest.Mock;
+    resolvedLinks: Record<string, Record<string, number>>;
+    getBacklinksForFile: jest.Mock;
+  };
+}
+
 describe("FullTextEngine", () => {
   let engine: FullTextEngine;
-  let mockApp: any;
+  let mockApp: MockApp;
 
   beforeEach(() => {
     // Mock metadata cache
@@ -350,7 +362,7 @@ describe("FullTextEngine", () => {
       },
     };
 
-    engine = new FullTextEngine(mockApp as App);
+    engine = new FullTextEngine(mockApp as unknown as App);
   });
 
   describe("tokenizeMixed", () => {

@@ -14,7 +14,7 @@ export class ActionBlockStreamer {
 
   constructor(
     private toolManager: typeof ToolManager,
-    private writeFileTool: any
+    private writeFileTool: unknown
   ) {}
 
   private findCompleteBlock(str: string) {
@@ -32,21 +32,23 @@ export class ActionBlockStreamer {
     };
   }
 
-  async *processChunk(chunk: any): AsyncGenerator<any, void, unknown> {
+  async *processChunk(
+    chunk: Record<string, unknown>
+  ): AsyncGenerator<Record<string, unknown>, void, unknown> {
     // Handle different chunk formats
     let chunkContent = "";
 
     // Handle Claude thinking model array-based content
     if (Array.isArray(chunk.content)) {
-      for (const item of chunk.content) {
+      for (const item of chunk.content as Array<{ type?: string; text?: unknown }>) {
         if (item.type === "text" && item.text != null) {
-          chunkContent += item.text;
+          chunkContent += typeof item.text === "string" ? item.text : "";
         }
       }
     }
     // Handle standard string content
     else if (chunk.content != null) {
-      chunkContent = chunk.content;
+      chunkContent = typeof chunk.content === "string" ? chunk.content : "";
     }
 
     // Add to buffer
@@ -79,8 +81,8 @@ export class ActionBlockStreamer {
         // Format tool result using ToolResultFormatter for consistency with agent mode
         const formattedResult = ToolResultFormatter.format("writeFile", result as string);
         yield { ...chunk, content: `\n${formattedResult}\n` };
-      } catch (err: any) {
-        yield { ...chunk, content: `\nError: ${err?.message || err}\n` };
+      } catch (err: unknown) {
+        yield { ...chunk, content: `\nError: ${(err as Error)?.message ?? String(err)}\n` };
       }
 
       // Remove processed block from buffer

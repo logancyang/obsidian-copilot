@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { TFile } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import { TypeaheadMenuPopover } from "./TypeaheadMenuPopover";
 import {
   useAtMentionCategories,
@@ -8,11 +8,12 @@ import {
   CategoryOption,
 } from "./hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "./hooks/useAtMentionSearch";
+import type { WebTabContext } from "@/types/message";
 
 interface AtMentionTypeaheadProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (category: AtMentionCategory, data: any) => void;
+  onSelect: (category: AtMentionCategory, data: TFile | string | TFolder | WebTabContext) => void;
   isCopilotPlus?: boolean;
   currentActiveFile?: TFile | null;
 }

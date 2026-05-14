@@ -28,10 +28,11 @@ export interface OramaDocument {
   tags: string[];
   extension: string;
   nchars: number;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
 }
 
 export class DBOperations {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   private oramaDb: Orama<any> | undefined;
   private chunkedStorage: ChunkedStorage | undefined;
   private isInitialized = false;
@@ -84,6 +85,7 @@ export class DBOperations {
     this.isInitialized = true;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   async initializeDB(embeddingInstance: Embeddings | undefined): Promise<Orama<any> | undefined> {
     try {
       if (!this.isInitialized) {
@@ -209,6 +211,7 @@ export class DBOperations {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   public getDb(): Orama<any> | undefined {
     if (!this.oramaDb) {
       console.warn("Database not initialized. Some features may be limited.");
@@ -267,6 +270,7 @@ export class DBOperations {
     this.hasUnsavedChanges = true;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   private async createNewDb(embeddingInstance: Embeddings | undefined): Promise<Orama<any>> {
     if (!embeddingInstance) {
       throw new CustomError("Embedding instance not found.");
@@ -298,17 +302,19 @@ export class DBOperations {
     return db;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   public static async getDocsByPath(db: Orama<any>, path: string) {
     if (!db) throw new Error("DB not initialized");
     if (!path) return;
     // Use getAllDocuments + JS filter for reliable path matching (handles Unicode/Chinese correctly)
     const allDocs = await DBOperations.getAllDocuments(db);
-    const filtered = allDocs.filter((doc: any) => doc.path === path);
+    const filtered = allDocs.filter((doc) => (doc as { path?: string }).path === path);
     // Return in same format as before (hits with document and score)
-    return filtered.map((doc: any) => ({ document: doc, score: 1 }));
+    return filtered.map((doc) => ({ document: doc, score: 1 }));
   }
 
   public static async getDocsByEmbedding(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
     db: Orama<any>,
     embedding: number[],
     options: {
@@ -326,6 +332,7 @@ export class DBOperations {
     return result.hits;
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   public static async getLatestFileMtime(db: Orama<any> | undefined): Promise<number> {
     if (!db) throw new Error("DB not initialized");
 
@@ -396,14 +403,14 @@ export class DBOperations {
         try {
           await insert(db, docToSave as Parameters<typeof insert>[1]);
           logInfo(
-            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${docToSave.id} in partition ${partition}`
+            `${existingDoc.hits.length > 0 ? "Updated" : "Inserted"} document ${String(docToSave.id)} in partition ${partition}`
           );
 
           this.markUnsavedChanges();
           return docToSave;
         } catch (insertErr) {
           logError(
-            `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
+            `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${String(docToSave.id)}:`,
             insertErr
           );
           // If we removed an existing document but failed to insert the new one,
@@ -418,7 +425,7 @@ export class DBOperations {
           return undefined;
         }
       } catch (err) {
-        logError(`Error upserting document ${docToSave.id}:`, err);
+        logError(`Error upserting document ${String(docToSave.id)}:`, err);
         return undefined;
       }
     });
@@ -529,13 +536,14 @@ export class DBOperations {
     return false;
   }
 
-  public static async getAllDocuments(db: Orama<any>): Promise<any[]> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
+  public static async getAllDocuments(db: Orama<any>): Promise<OramaDocument[]> {
     const result = await search(db, {
       term: "",
       limit: 100000,
       includeVectors: true,
     });
-    return result.hits.map((hit) => hit.document);
+    return result.hits.map((hit) => hit.document as unknown as OramaDocument);
   }
 
   public async garbageCollect(): Promise<number> {
@@ -674,28 +682,17 @@ export class DBOperations {
     });
   }
 
-  async getDocsJsonByPaths(paths: string[]): Promise<Record<string, any[]>> {
+  async getDocsJsonByPaths(paths: string[]): Promise<Record<string, OramaDocument[]>> {
     if (!this.oramaDb) {
       throw new CustomError("Semantic index database not found.");
     }
 
-    const result: Record<string, any[]> = {};
+    const result: Record<string, OramaDocument[]> = {};
 
     for (const path of paths) {
       const docs = await DBOperations.getDocsByPath(this.oramaDb, path);
       if (docs && docs.length > 0) {
-        result[path] = docs.map((hit) => ({
-          id: hit.document.id,
-          title: hit.document.title,
-          path: hit.document.path,
-          content: hit.document.content,
-          metadata: hit.document.metadata,
-          embedding: hit.document.embedding,
-          embeddingModel: hit.document.embeddingModel,
-          tags: hit.document.tags,
-          extension: hit.document.extension,
-          nchars: hit.document.nchars,
-        }));
+        result[path] = docs.map((hit) => hit.document);
       }
     }
 

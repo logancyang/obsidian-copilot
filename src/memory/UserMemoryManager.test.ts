@@ -17,7 +17,7 @@ import { UserMemoryManager } from "./UserMemoryManager";
 import { App, TFile, Vault } from "obsidian";
 import { ChatMessage } from "@/types/message";
 import { logError, logWarn } from "@/logger";
-import { getSettings } from "@/settings/model";
+import { CopilotSettings, getSettings } from "@/settings/model";
 import { ensureFolderExists } from "@/utils";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { AIMessageChunk } from "@langchain/core/messages";
@@ -48,7 +48,7 @@ describe("UserMemoryManager", () => {
   let mockApp: jest.Mocked<App>;
   let mockVault: jest.Mocked<Vault>;
   let mockChatModel: jest.Mocked<BaseChatModel>;
-  let mockSettings: any;
+  let mockSettings: Partial<CopilotSettings>;
 
   beforeEach(() => {
     jest.clearAllMocks();

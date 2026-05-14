@@ -148,11 +148,11 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
    * @returns A normalized LangChain message chunk.
    */
   protected override _convertCompletionsDeltaToBaseMessageChunk(
-    delta: Record<string, any>,
-    rawResponse: any,
+    delta: Record<string, unknown>,
+    rawResponse: unknown,
     // Reason: Parent expects OpenAI's ChatCompletionRole type, but we accept any string
     // to avoid coupling to the exact OpenAI SDK type. Cast is safe because we pass through.
-    defaultRole?: any
+    defaultRole?: string
   ): BaseMessageChunk {
     // Reason: Copilot API omits delta.role when proxying Claude models.
     // The parent converter uses `delta.role ?? defaultRole` to determine message type.

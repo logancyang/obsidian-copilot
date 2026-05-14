@@ -59,7 +59,7 @@ interface LexicalEditorProps {
   onWebTabsRemoved?: (removedWebTabs: WebTabContext[]) => void;
   onActiveWebTabAdded?: () => void;
   onActiveWebTabRemoved?: () => void;
-  onEditorReady?: (editor: any) => void;
+  onEditorReady?: (editor: LexicalEditorType) => void;
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
   isCopilotPlus?: boolean;

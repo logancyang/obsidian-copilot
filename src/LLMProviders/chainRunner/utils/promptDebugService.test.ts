@@ -9,7 +9,7 @@ const createAdapter = () => ({
       basePrompt: string,
       toolDescriptions: string,
       toolNames?: string[],
-      toolMetadata?: any[]
+      toolMetadata?: unknown[]
     ): PromptSection[] => [
       {
         id: "system",

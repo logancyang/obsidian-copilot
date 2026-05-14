@@ -47,7 +47,9 @@ export class OramaIndexBackend implements SemanticIndexBackend {
    * Insert or update a document in Orama.
    */
   public async upsert(doc: SemanticIndexDocument): Promise<SemanticIndexDocument | undefined> {
-    return (await this.dbOps.upsert(doc)) as SemanticIndexDocument | undefined;
+    return (await this.dbOps.upsert(doc as unknown as Record<string, unknown>)) as
+      | SemanticIndexDocument
+      | undefined;
   }
 
   /**
@@ -59,7 +61,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   public async upsertBatch(docs: SemanticIndexDocument[]): Promise<number> {
     let processed = 0;
     for (const doc of docs) {
-      const result = await this.dbOps.upsert(doc);
+      const result = await this.dbOps.upsert(doc as unknown as Record<string, unknown>);
       if (result) {
         processed += 1;
       }
@@ -114,7 +116,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
     if (!hits) {
       return [];
     }
-    return hits.map((hit) => hit.document as SemanticIndexDocument);
+    return hits.map((hit) => hit.document);
   }
 
   /**
@@ -197,6 +199,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   /**
    * Return the underlying Orama database instance when available.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   public getDb(): Orama<any> | undefined {
     return this.dbOps.getDb();
   }

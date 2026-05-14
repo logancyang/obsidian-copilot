@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle, CircleDashed, FileText, Loader2, X } from "lucide-react";
-import { Platform, TFile } from "obsidian";
+import { Platform, TFile, TFolder } from "obsidian";
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -32,10 +32,10 @@ interface ChatContextMenuProps {
   contextFolders: string[];
   contextWebTabs: WebTabContext[];
   selectedTextContexts?: SelectedTextContext[];
-  onRemoveContext: (category: string, data: any) => void;
+  onRemoveContext: (category: string, data: string) => void;
   showProgressCard: () => void;
   showIndexingCard?: () => void;
-  onTypeaheadSelect: (category: string, data: any) => void;
+  onTypeaheadSelect: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 }
 
@@ -44,7 +44,7 @@ function ContextSelection({
   onRemoveContext,
 }: {
   selectedText: SelectedTextContext;
-  onRemoveContext: (category: string, data: any) => void;
+  onRemoveContext: (category: string, data: string) => void;
 }) {
   // Handle web selected text
   if (isWebSelectedTextContext(selectedText)) {
@@ -123,7 +123,10 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   };
 
   // Simple wrapper that adds focus management to the ContextControl handler
-  const handleTypeaheadSelect = (category: string, data: any) => {
+  const handleTypeaheadSelect = (
+    category: string,
+    data: TFile | string | TFolder | WebTabContext
+  ) => {
     // Delegate to ContextControl handler
     onTypeaheadSelect(category, data);
 

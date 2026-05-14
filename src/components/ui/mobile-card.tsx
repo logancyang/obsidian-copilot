@@ -12,7 +12,7 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronRight, GripVertical, MoreVertical } from "lucide-react";
 
-export interface MobileCardDropdownAction<T = any> {
+export interface MobileCardDropdownAction<T = object> {
   icon: React.ReactNode;
   label: string;
   onClick: (item: T) => void | Promise<void>;

@@ -14,7 +14,7 @@ import { BrevilabsClient } from "./brevilabsClient";
 import { CustomJinaEmbeddings } from "./CustomJinaEmbeddings";
 import { CustomOpenAIEmbeddings } from "./CustomOpenAIEmbeddings";
 
-type EmbeddingConstructorType = new (config: any) => Embeddings;
+type EmbeddingConstructorType = new (config: Record<string, unknown>) => Embeddings;
 
 const EMBEDDING_PROVIDER_CONSTRUCTORS = {
   [EmbeddingModelProviders.COPILOT_PLUS]: CustomOpenAIEmbeddings,
@@ -180,7 +180,7 @@ export default class EmbeddingManager {
     }
   }
 
-  private async getEmbeddingConfig(customModel: CustomModel): Promise<any> {
+  private async getEmbeddingConfig(customModel: CustomModel): Promise<Record<string, unknown>> {
     const settings = getSettings();
     const modelName = customModel.name;
 

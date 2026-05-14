@@ -58,7 +58,7 @@ type AgentSource = {
   title: string;
   path: string;
   score: number;
-  explanation?: any;
+  explanation?: unknown;
 };
 
 /**
@@ -476,11 +476,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
       this.lastDisplayedContent = "";
       return loopResult.finalResponse;
-    } catch (error: any) {
+    } catch (error: unknown) {
       // Always stop the reasoning timer on error
       this.stopReasoningTimer();
 
-      if (error.name === "AbortError" || abortController.signal.aborted) {
+      if ((error as { name?: string }).name === "AbortError" || abortController.signal.aborted) {
         logInfo("Autonomous agent stream aborted by user", {
           reason: abortController.signal.reason,
         });
@@ -538,7 +538,11 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
    */
   private async prepareAgentConversation(
     userMessage: ChatMessage,
-    chatModel: any,
+    chatModel: BaseChatModel & {
+      modelName?: string;
+      model?: string;
+      bindTools?: (tools: unknown[]) => unknown;
+    },
     _updateLoadingMessage?: (message: string) => void // Unused, kept for potential future use
   ): Promise<AgentRunContext> {
     const messages: BaseMessage[] = [];
@@ -622,7 +626,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     // Extract user content (L3 smart references + L5) from base messages
     const userMessageContent = baseMessages.find((m) => m.role === "user");
     if (userMessageContent) {
-      const isMultimodal = this.isMultimodalModel(chatModel as BaseChatModel);
+      const isMultimodal = this.isMultimodalModel(chatModel);
       const content: string | MessageContent[] = isMultimodal
         ? await this.buildMessageContent(userMessageContent.content, userMessage)
         : userMessageContent.content;
@@ -713,7 +717,8 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         // 2. Model returned only thinking/reasoning content that gets filtered
         let finalContent = content;
         if (!finalContent || finalContent.trim() === "") {
-          const rawToolCallChunks = (aiMessage as any).tool_call_chunks ?? [];
+          const rawToolCallChunks =
+            (aiMessage as { tool_call_chunks?: unknown[] }).tool_call_chunks ?? [];
           logWarn(
             `[Agent] Empty response detected (iteration ${iteration}). ` +
               `Content length: ${content?.length ?? 0}, ` +
@@ -1048,7 +1053,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         if (chunkContent) rawContent += chunkContent;
 
         // Process chunk through ThinkBlockStreamer to strip thinking content
-        thinkStreamer.processChunk(chunk);
+        thinkStreamer.processChunk(chunk as Parameters<typeof thinkStreamer.processChunk>[0]);
       }
 
       // Close the streamer to finalize content (handles unclosed think blocks, etc.)
@@ -1083,9 +1088,9 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         aiMessage,
         streamingResult,
       };
-    } catch (error: any) {
-      logError(`Stream error: ${error.message}`);
-      if (error.name === "AbortError" || abortController.signal.aborted) {
+    } catch (error: unknown) {
+      logError(`Stream error: ${(error as Error).message}`);
+      if ((error as { name?: string }).name === "AbortError" || abortController.signal.aborted) {
         const streamingResult = thinkStreamer.close();
         return {
           content: streamingResult.content,

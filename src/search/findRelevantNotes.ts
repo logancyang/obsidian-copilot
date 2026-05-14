@@ -35,6 +35,7 @@ function shouldUseMiyoForRelevantNotes(): boolean {
  * @param currentFilePath - The current file path.
  * @returns A map of the highest score hits for each note.
  */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- InternalTypedDocument<any> is required as Orama controls this type
 function getHighestScoreHits(hits: Result<InternalTypedDocument<any>>[], currentFilePath: string) {
   const hitMap = new Map<string, number>();
   for (const hit of hits) {
@@ -103,6 +104,7 @@ async function calculateSimilarityScoreFromOrama({
   filePath,
   currentNoteEmbeddings,
 }: {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   db: Orama<any>;
   filePath: string;
   currentNoteEmbeddings: number[][];

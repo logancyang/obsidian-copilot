@@ -70,7 +70,7 @@ describe("parseTextForPills", () => {
       });
 
       // Mock TFile constructor to set properties
-      MockTFile.mockImplementation(function (this: any) {
+      MockTFile.mockImplementation(function (this: Record<string, unknown>) {
         this.basename = "Valid Note";
         this.path = "Valid Note.md";
       });
@@ -279,7 +279,7 @@ describe("parseTextForPills", () => {
         return null;
       });
 
-      MockTFile.mockImplementation(function (this: any) {
+      MockTFile.mockImplementation(function (this: Record<string, unknown>) {
         this.basename = "Test Note";
         this.path = "Test Note.md";
       });

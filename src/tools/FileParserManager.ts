@@ -384,18 +384,19 @@ export class Docs4LLMParser implements FileParser {
         content = markdownParts.join("\n\n");
       } else if (typeof docs4llmResponse.response === "object") {
         // Handle single object response (backward compatibility)
-        if (docs4llmResponse.response.md) {
-          content = docs4llmResponse.response.md;
-        } else if (docs4llmResponse.response.text) {
-          content = docs4llmResponse.response.text;
-        } else if (docs4llmResponse.response.content) {
-          content = docs4llmResponse.response.content;
+        const resp = docs4llmResponse.response as Record<string, unknown>;
+        if (resp.md) {
+          content = resp.md as string;
+        } else if (resp.text) {
+          content = resp.text as string;
+        } else if (resp.content) {
+          content = resp.content as string;
         } else {
           // If no markdown/text/content field, stringify the entire response
           content = JSON.stringify(docs4llmResponse.response, null, 2);
         }
       } else {
-        content = String(docs4llmResponse.response);
+        content = JSON.stringify(docs4llmResponse.response);
       }
 
       // Cache the converted content
@@ -421,7 +422,7 @@ export class Docs4LLMParser implements FileParser {
     }
   }
 
-  private showRateLimitNotice(error: any): void {
+  private showRateLimitNotice(error: unknown): void {
     const now = Date.now();
 
     // Only show one rate limit notice per minute to avoid spam

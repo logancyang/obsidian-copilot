@@ -3,11 +3,11 @@ import { logError } from "@/logger";
 import { App, Modal, Setting, TFile } from "obsidian";
 
 export class SourcesModal extends Modal {
-  sources: { title: string; path: string; score: number; explanation?: any }[];
+  sources: { title: string; path: string; score: number; explanation?: unknown }[];
 
   constructor(
     app: App,
-    sources: { title: string; path: string; score: number; explanation?: any }[]
+    sources: { title: string; path: string; score: number; explanation?: unknown }[]
   ) {
     super(app);
     this.sources = sources;
@@ -24,7 +24,7 @@ export class SourcesModal extends Modal {
 
   private createSourceList(
     container: HTMLElement,
-    sources: { title: string; path: string; score: number; explanation?: any }[]
+    sources: { title: string; path: string; score: number; explanation?: unknown }[]
   ) {
     const list = container.createEl("ul");
     list.addClass("tw-list-none", "tw-p-0");
@@ -58,7 +58,14 @@ export class SourcesModal extends Modal {
         const filePath = source.path || source.title;
         const file = this.app.vault.getAbstractFileByPath(filePath);
         if (file instanceof TFile) {
-          const dragManager = (this.app as any).dragManager;
+          const dragManager = (
+            this.app as unknown as {
+              dragManager?: {
+                dragLink: (e: DragEvent, text: string) => unknown;
+                onDragStart: (e: DragEvent, data: unknown) => void;
+              };
+            }
+          ).dragManager;
           if (!dragManager) return;
           const linkText = this.app.metadataCache.fileToLinktext(file, "");
           const dragData = dragManager.dragLink(e, linkText);
@@ -99,7 +106,7 @@ export class SourcesModal extends Modal {
     });
   }
 
-  private addExplanation(container: HTMLElement, explanation: any): HTMLElement {
+  private addExplanation(container: HTMLElement, explanation: unknown): HTMLElement {
     const explanationDiv = container.createDiv({ cls: "search-explanation" });
     explanationDiv.addClass(
       "tw-ml-[2.5em]",
@@ -111,11 +118,13 @@ export class SourcesModal extends Modal {
       "tw-border-l-border"
     );
 
+    // Cast to a typed record for safe property access
+    const exp = explanation as Record<string, unknown>;
     const details: string[] = [];
 
     // Add lexical matches
-    if (explanation.lexicalMatches && explanation.lexicalMatches.length > 0) {
-      const lexicalMatches = explanation.lexicalMatches as { field: string; query: string }[];
+    if (exp.lexicalMatches && (exp.lexicalMatches as unknown[]).length > 0) {
+      const lexicalMatches = exp.lexicalMatches as { field: string; query: string }[];
       const fields = new Set(lexicalMatches.map((m) => m.field));
       const queries = new Set(lexicalMatches.map((m) => m.query));
       details.push(
@@ -124,21 +133,27 @@ export class SourcesModal extends Modal {
     }
 
     // Add semantic score
-    if (explanation.semanticScore !== undefined && explanation.semanticScore > 0) {
-      details.push(`Semantic: ${(explanation.semanticScore * 100).toFixed(1)}% similarity`);
+    if (exp.semanticScore !== undefined && (exp.semanticScore as number) > 0) {
+      details.push(`Semantic: ${((exp.semanticScore as number) * 100).toFixed(1)}% similarity`);
     }
 
     // Add folder boost
-    if (explanation.folderBoost) {
+    if (exp.folderBoost) {
+      const fb = exp.folderBoost as { boostFactor: number; documentCount: number; folder?: string };
       details.push(
-        `Folder boost: ${explanation.folderBoost.boostFactor.toFixed(2)}x (${explanation.folderBoost.documentCount} docs in ${explanation.folderBoost.folder || "root"})`
+        `Folder boost: ${fb.boostFactor.toFixed(2)}x (${fb.documentCount} docs in ${fb.folder || "root"})`
       );
     }
 
     // Add graph connections (new query-aware boost)
-    if (explanation.graphConnections) {
-      const gc = explanation.graphConnections;
-      const connectionParts = [];
+    if (exp.graphConnections) {
+      const gc = exp.graphConnections as {
+        backlinks: number;
+        coCitations: number;
+        sharedTags: number;
+        score: number;
+      };
+      const connectionParts: string[] = [];
       if (gc.backlinks > 0) connectionParts.push(`${gc.backlinks} backlinks`);
       if (gc.coCitations > 0) connectionParts.push(`${gc.coCitations} co-citations`);
       if (gc.sharedTags > 0) connectionParts.push(`${gc.sharedTags} shared tags`);
@@ -151,16 +166,15 @@ export class SourcesModal extends Modal {
     }
 
     // Add old graph boost (if still present for backwards compatibility)
-    if (explanation.graphBoost && !explanation.graphConnections) {
-      details.push(
-        `Graph boost: ${explanation.graphBoost.boostFactor.toFixed(2)}x (${explanation.graphBoost.connections} connections)`
-      );
+    if (exp.graphBoost && !exp.graphConnections) {
+      const gb = exp.graphBoost as { boostFactor: number; connections: number };
+      details.push(`Graph boost: ${gb.boostFactor.toFixed(2)}x (${gb.connections} connections)`);
     }
 
     // Add base vs final score if boosted
-    if (explanation.baseScore !== explanation.finalScore) {
+    if (exp.baseScore !== exp.finalScore) {
       details.push(
-        `Score: ${explanation.baseScore.toFixed(4)} → ${explanation.finalScore.toFixed(4)}`
+        `Score: ${(exp.baseScore as number).toFixed(4)} → ${(exp.finalScore as number).toFixed(4)}`
       );
     }
 

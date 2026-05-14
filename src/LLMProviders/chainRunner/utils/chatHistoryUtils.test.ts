@@ -148,7 +148,7 @@ describe("chatHistoryUtils", () => {
         },
       ];
 
-      const messages: { role: string; content: any }[] = [];
+      const messages: { role: string; content: string | unknown[] }[] = [];
       addChatHistoryToMessages(rawHistory, messages);
 
       expect(messages).toEqual([

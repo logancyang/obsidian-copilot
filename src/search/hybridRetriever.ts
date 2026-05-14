@@ -162,7 +162,7 @@ export class HybridRetriever extends BaseRetriever {
 
     const db = await VectorStoreManager.getInstance().getDb();
 
-    const searchParams: any = {
+    const searchParams: Record<string, unknown> = {
       similarity: this.options.minSimilarityScore,
       limit: this.options.maxK,
       includeVectors: true,
@@ -239,7 +239,6 @@ export class HybridRetriever extends BaseRetriever {
         mtime: { between: [startTime, endTime] },
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
       const timeIntervalResults = await search(db, searchParams);
 
       // Convert timeIntervalResults to Document objects
@@ -277,7 +276,6 @@ export class HybridRetriever extends BaseRetriever {
 
     logInfo("Orama search params:\n", searchParams);
 
-    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
     const searchResults = await search(db, searchParams);
 
     // Add null check and validation for search results

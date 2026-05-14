@@ -6,7 +6,7 @@ import { logInfo } from "@/logger";
 
 export interface ProcessedMessage {
   role: "user" | "assistant";
-  content: any; // string or MessageContent[]
+  content: string | unknown[]; // string or MessageContent[]
 }
 
 /**
@@ -16,28 +16,29 @@ export interface ProcessedMessage {
  * @param rawHistory Array of messages from memory.loadMemoryVariables()
  * @returns Array of processed messages safe for LLM consumption
  */
-export function processRawChatHistory(rawHistory: any[]): ProcessedMessage[] {
+export function processRawChatHistory(rawHistory: unknown[]): ProcessedMessage[] {
   const messages: ProcessedMessage[] = [];
 
   for (const message of rawHistory) {
     if (!message) continue;
+    const msg = message as Record<string, unknown>;
 
     // Check if this is a BaseMessage with _getType method
-    if (typeof message._getType === "function") {
-      const messageType = message._getType();
+    if (typeof msg._getType === "function") {
+      const messageType = (msg._getType as () => string)();
 
       // Only process human and AI messages
       if (messageType === "human") {
-        messages.push({ role: "user", content: message.content });
+        messages.push({ role: "user", content: msg.content as string | unknown[] });
       } else if (messageType === "ai") {
-        messages.push({ role: "assistant", content: message.content });
+        messages.push({ role: "assistant", content: msg.content as string | unknown[] });
       }
       // Skip system messages and unknown types
-    } else if (message.content !== undefined) {
+    } else if (msg.content !== undefined) {
       // Fallback for other message formats - try to infer role
-      const role = inferMessageRole(message);
+      const role = inferMessageRole(msg);
       if (role) {
-        messages.push({ role, content: message.content });
+        messages.push({ role, content: msg.content as string | unknown[] });
       }
     }
   }
@@ -49,7 +50,7 @@ export function processRawChatHistory(rawHistory: any[]): ProcessedMessage[] {
  * Try to infer the role from various message format properties
  * @returns 'user' | 'assistant' | null
  */
-function inferMessageRole(message: any): "user" | "assistant" | null {
+function inferMessageRole(message: Record<string, unknown>): "user" | "assistant" | null {
   // Check various properties that might indicate the role
   if (message.role === "human" || message.role === "user" || message.sender === "user") {
     return "user";
@@ -69,8 +70,8 @@ function inferMessageRole(message: any): "user" | "assistant" | null {
  * @param messages Target messages array to add to
  */
 export function addChatHistoryToMessages(
-  rawHistory: any[],
-  messages: Array<{ role: string; content: any }>
+  rawHistory: unknown[],
+  messages: Array<{ role: string; content: string | unknown[] }>
 ): void {
   const processedHistory = processRawChatHistory(rawHistory);
   for (const msg of processedHistory) {
@@ -87,14 +88,17 @@ export interface ChatHistoryEntry {
  * Extract text content from potentially multimodal message content.
  * Replaces non-text content (images) with placeholder.
  */
-function extractTextContent(content: any): string {
+function extractTextContent(content: string | unknown[]): string {
   if (typeof content === "string") {
     return content;
   } else if (Array.isArray(content)) {
     // Extract text from multimodal content, skip image_url payloads
     const textParts: string = content
-      .filter((item: any) => item.type === "text")
-      .map((item: any): string => (item.text as string) || "")
+      .filter(
+        (item): item is { type: string; text?: string } =>
+          typeof item === "object" && item !== null && (item as { type?: unknown }).type === "text"
+      )
+      .map((item): string => item.text || "")
       .join(" ");
     return textParts || "[Image content]";
   }
@@ -229,13 +233,15 @@ export function extractConversationTurns(processedHistory: ProcessedMessage[]): 
  * @returns The processed history that was added
  */
 export async function loadAndAddChatHistory(
-  memory: any,
-  messages: Array<{ role: string; content: any }>
+  memory: {
+    loadMemoryVariables: (vars: Record<string, unknown>) => Promise<{ history?: unknown[] }>;
+  },
+  messages: Array<{ role: string; content: string | unknown[] }>
 ): Promise<ProcessedMessage[]> {
   const memoryVariables = await memory.loadMemoryVariables({});
   const rawHistory = memoryVariables.history || [];
 
-  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory as any[]) : [];
+  const processedHistory = rawHistory.length ? processRawChatHistory(rawHistory) : [];
 
   // Add history messages directly (already compacted at save time)
   for (const msg of processedHistory) {

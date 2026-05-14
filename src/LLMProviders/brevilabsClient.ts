@@ -23,8 +23,8 @@ export interface RerankResponse {
 }
 
 export interface ToolCall {
-  tool: any;
-  args: any;
+  tool: unknown;
+  args: unknown;
 }
 
 export interface Url4llmResponse {
@@ -38,7 +38,7 @@ export interface Pdf4llmResponse {
 }
 
 export interface Docs4llmResponse {
-  response: any;
+  response: unknown;
   elapsed_time_ms: number;
 }
 
@@ -64,7 +64,7 @@ export interface Youtube4llmResponse {
 }
 
 export interface Twitter4llmResponse {
-  response: any;
+  response: string;
   elapsed_time_ms: number;
 }
 
@@ -98,7 +98,7 @@ export class BrevilabsClient {
 
   private async makeRequest<T>(
     endpoint: string,
-    body: any,
+    body: Record<string, unknown>,
     method = "POST",
     excludeAuthHeader = false,
     skipLicenseCheck = false
@@ -112,7 +112,7 @@ export class BrevilabsClient {
     const url = new URL(`${BREVILABS_API_BASE_URL}${endpoint}`);
     if (method === "GET") {
       // Add query parameters for GET requests
-      Object.entries(body as Record<string, unknown>).forEach(([key, value]) => {
+      Object.entries(body).forEach(([key, value]) => {
         url.searchParams.append(key, value as string);
       });
     }
@@ -194,10 +194,10 @@ export class BrevilabsClient {
    * unknown error.
    */
   async validateLicenseKey(
-    context?: Record<string, any>
+    context?: Record<string, unknown>
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
     // Build the request body with proper structure
-    const requestBody: Record<string, any> = {
+    const requestBody: Record<string, unknown> = {
       license_key: await getDecryptedKey(getSettings().plusLicenseKey),
     };
 

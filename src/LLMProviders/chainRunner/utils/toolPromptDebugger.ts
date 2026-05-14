@@ -6,7 +6,7 @@ import { processRawChatHistory, processedMessagesToTextOnly } from "./chatHistor
  */
 export interface BuildPromptDebugSectionsOptions {
   systemSections: PromptSection[];
-  rawHistory?: any[];
+  rawHistory?: unknown[];
   adapterName: string;
   originalUserMessage: string;
   enhancedUserMessage: string;
