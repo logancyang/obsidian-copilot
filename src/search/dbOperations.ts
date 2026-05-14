@@ -400,7 +400,7 @@ export class DBOperations {
           );
 
           this.markUnsavedChanges();
-          return docToSave as unknown;
+          return docToSave;
         } catch (insertErr) {
           logError(
             `Failed to ${existingDoc.hits.length > 0 ? "update" : "insert"} document ${docToSave.id}:`,
