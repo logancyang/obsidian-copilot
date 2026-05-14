@@ -721,6 +721,26 @@ export async function migrateDiskSecretsToKeychain(
     // Reason: `persistSecretsToKeychain` is the same code path used by every
     // future save in keychain-only mode — using it here keeps the migration
     // and steady-state paths in lockstep.
+    //
+    // DESIGN NOTE — keychain residue from a failed *first-stage* persist is
+    // accepted, not cleaned. Scope: this note covers ONLY the
+    // `persistSecretsToKeychain(target, ...)` call below failing (typically its
+    // internal `saveData(stripped)` throwing) — NOT the later reconciliation
+    // pass, which on failure deliberately commits the migrated state.
+    // When this first-stage call writes the keychain but then throws, its
+    // rollback restores the keychain to `lastPersistedSettings ?? prev` — which
+    // for a disk-mode vault still holds the plaintext secrets, so the keychain keeps
+    // a copy of them. Trigger requires `saveData()` to throw mid-migration
+    // (disk full / permissions) — uncommon. Impact is benign: the first-stage
+    // failure leaves the vault disk-mode (`_keychainOnly` never flips in memory
+    // or on disk), so `loadSettingsWithKeychain` never hydrates from the
+    // keychain; the residue is dormant and self-heals on the next successful
+    // Migrate (overwrites the same IDs) or Delete All Keys (enumerate + clear).
+    // It is not a credential leak — the keychain is at least as protected as
+    // the data.json copy that already exists. A migration-specific rollback
+    // branch (snapshot the real keychain baseline / tombstone the IDs this call
+    // wrote) is complexity not justified by dormant, self-healing residue.
+    // If a future review flags this again, point them at this note.
     const target = { ...sanitized, _keychainOnly: true } as CopilotSettings;
     await persistSecretsToKeychain(target, saveData, current);
 
