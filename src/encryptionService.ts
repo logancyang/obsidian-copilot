@@ -37,15 +37,6 @@ const WEBCRYPTO_PREFIX = "enc_web_";
 const ENCRYPTION_PREFIX = "enc_";
 const DECRYPTION_PREFIX = "dec_";
 
-// Reason: returned by getDecryptedKey when a DESKTOP_PREFIX key is hit on
-// mobile. Used because dispatch-map builders in chatModelManager.ts /
-// embeddingManager.ts await all provider keys eagerly; a throw would kill
-// the chat even when the actually-selected provider has a valid key.
-// Exported so callers can pattern-match on the sentinel later if we want to
-// surface a more targeted error when the bad key is the one being used.
-export const DESKTOP_KEY_ON_MOBILE_SENTINEL =
-  "__COPILOT_KEY_ENCRYPTED_ON_DESKTOP_REENTER_ON_MOBILE__";
-
 // Add these constants for the Web Crypto implementation
 const ENCRYPTION_KEY = new TextEncoder().encode("obsidian-copilot-v1");
 const ALGORITHM = { name: "AES-GCM", iv: new Uint8Array(12) };
@@ -78,43 +69,6 @@ export async function getEncryptedKey(apiKey: string): Promise<string> {
   return isDecrypted(apiKey) ? apiKey.replace(DECRYPTION_PREFIX, "") : apiKey;
 }
 
-/**
- * Scan settings for API keys still encrypted with the desktop-only prefix.
- * Used on mobile to surface which fields the user must re-enter — they were
- * encrypted with Electron's safeStorage and cannot be decrypted on mobile.
- *
- * Returns the human-readable field names (e.g. "plusLicenseKey",
- * "activeModels[gpt-5.5]") in the order they appear in settings.
- */
-export function findDesktopEncryptedKeyFields(settings: Readonly<CopilotSettings>): string[] {
-  const found: string[] = [];
-
-  for (const key of Object.keys(settings)) {
-    const value = settings[key as keyof CopilotSettings];
-    if (typeof value === "string" && value.startsWith(DESKTOP_PREFIX)) {
-      found.push(key);
-    }
-  }
-
-  if (Array.isArray(settings.activeModels)) {
-    for (const model of settings.activeModels) {
-      if (typeof model.apiKey === "string" && model.apiKey.startsWith(DESKTOP_PREFIX)) {
-        found.push(`activeModels[${model.name}]`);
-      }
-    }
-  }
-
-  if (Array.isArray(settings.activeEmbeddingModels)) {
-    for (const model of settings.activeEmbeddingModels) {
-      if (typeof model.apiKey === "string" && model.apiKey.startsWith(DESKTOP_PREFIX)) {
-        found.push(`activeEmbeddingModels[${model.name}]`);
-      }
-    }
-  }
-
-  return found;
-}
-
 export async function getDecryptedKey(apiKey: string): Promise<string> {
   if (!apiKey || isPlainText(apiKey)) {
     return apiKey;
@@ -123,21 +77,15 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
     return apiKey.replace(DECRYPTION_PREFIX, "");
   }
 
-  // Handle different encryption methods
+  // Handle different encryption methods (legacy data only — new keys are
+  // saved plaintext per the deprecation above).
   if (apiKey.startsWith(DESKTOP_PREFIX)) {
-    // Reason: DESKTOP_PREFIX keys are encrypted with Electron's safeStorage
-    // (Keychain / DPAPI / libsecret). Mobile has no Electron and no
-    // safeStorage, so a desktop-encrypted key synced to mobile via Obsidian
-    // Sync cannot be decrypted there. Return a sentinel string instead of
-    // throwing — chatModelManager.ts and embeddingManager.ts eagerly await
-    // getDecryptedKey for EVERY provider when building their dispatch map
-    // literal, so a throw here kills the entire chat even if the user is
-    // using a different provider with a perfectly valid key. The startup
-    // Notice in main.ts lists which fields need re-entry; this sentinel
-    // ensures map construction succeeds for the providers that *don't* use
-    // a desktop-encrypted key.
     if (Platform.isMobile) {
-      return DESKTOP_KEY_ON_MOBILE_SENTINEL;
+      throw new Error(
+        "An API key was encrypted on desktop with OS-level encryption that's " +
+          "unavailable on mobile. Please re-enter your API keys in Copilot " +
+          "settings on this device."
+      );
     }
     const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
     const buffer = Buffer.from(base64Data, "base64");
