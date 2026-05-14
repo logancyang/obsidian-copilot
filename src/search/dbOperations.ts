@@ -368,7 +368,7 @@ export class DBOperations {
     };
   }
 
-  async upsert(docToSave: any): Promise<unknown> {
+  async upsert(docToSave: OramaDocument): Promise<unknown> {
     if (!this.oramaDb) throw new Error("DB not initialized");
     const db = this.oramaDb;
 

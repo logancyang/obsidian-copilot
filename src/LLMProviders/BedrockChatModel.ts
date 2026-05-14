@@ -391,13 +391,14 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       const fallback = await this._generate(messages, options, runManager);
       const fallbackText = fallback.generations[0]?.text ?? "";
       if (fallbackText) {
+        const fallbackMetadata: Record<string, unknown> = fallback.llmOutput ?? {};
         yield new ChatGenerationChunk({
           message: new AIMessageChunk({
             content: fallbackText,
-            response_metadata: fallback.llmOutput ?? {},
+            response_metadata: fallbackMetadata,
           }),
           text: fallbackText,
-          generationInfo: fallback.llmOutput ?? {},
+          generationInfo: fallbackMetadata,
         });
       }
     }
@@ -1251,7 +1252,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     const systemPrompts: string[] = [];
 
     messages.forEach((message) => {
-      const messageType = message.getType();
+      const messageType = message.type;
 
       // Handle system messages (always text-only)
       if (messageType === "system") {
