@@ -1,5 +1,68 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.3.1 🔐
+
+This release is all about keeping your API keys safe and your plugin running smoothly everywhere. **API keys can now be stored in Obsidian's built-in Keychain** so they never touch `data.json`, the encryption toggle is removed (it was more trouble than it was worth), and a wave of reliability fixes ensures chat works correctly on mobile, in popout windows, and with Plus mode. Underneath, **@zeroliu landed nineteen back-to-back PRs of code-quality work** — tightening ESLint, eliminating ~395 `any` types, swapping out unmaintained dependencies, and modernizing the React layer. Huge thanks to both @Emt-lin (Keychain) and @zeroliu (codebase hardening) for carrying this release. 🙌
+
+> ⚠️ **Requires Obsidian 1.11.4+.** The `minAppVersion` is bumped from 1.7.2 to 1.11.4 because the Keychain feature relies on Obsidian's `app.secretStorage` API, which only exists in 1.11.4 and later.
+
+- 🔐 **API keys now live in the Obsidian Keychain** — Fresh installs automatically store all API keys in Obsidian's vault-scoped Keychain instead of `data.json`. Existing users can opt in at any time via the new "API Key Storage" section in Advanced Settings. A guided migration wizard walks you through the move, and keys are stripped from `data.json` the moment migration completes. Each device has its own Keychain, so re-entering keys on a new device is expected. (@Emt-lin)
+  - The Advanced Settings panel shows your current storage mode and surfaces a clear warning if a synced vault arrives on a device whose Keychain is empty (so you know exactly why chat isn't working yet).
+  - A "Delete All Keys" option in Advanced Settings purges secrets from both the Keychain and `data.json` in one go.
+  - The Reset Settings button no longer touches API keys. Use "Delete All Keys" if you want them gone.
+- 🚫 **Encryption toggle removed in favor of the Keychain** — With API keys moving to the Obsidian Keychain, the standalone "Enable Encryption" toggle is no longer needed and has been retired. It also didn't survive a sync to mobile cleanly, which caused intermittent chat failures for some users. Migrate to the Keychain for proper secret storage; existing encrypted blobs are still decrypted transparently on read so nothing breaks. (@logancyang)
+  - Mobile users whose vault contained desktop-encrypted keys now see a startup notice listing exactly which fields need to be re-entered, rather than a confusing 401 error mid-chat.
+- 📱 **Image send on mobile is fixed** — Sending images was broken for all mobile users since 3.3.0 due to a missing Buffer polyfill. Fixed. (@logancyang)
+- ⌨️ **Quick Command shortcuts and icons restored** — The Cmd+Enter (Replace) and Cmd+Shift+Enter (Insert) shortcuts in the Quick Command result modal were broken if any global Obsidian hotkey was bound to Cmd+Enter. Fixed, and the inline shortcut glyphs next to the Insert/Replace buttons are back too. (@zeroliu)
+- 🧠 **Plus mode: no more surprise getFileTree calls** — When you have a note attached in context and ask "what's this note about?", the planner no longer fires a `getFileTree` tool call first. It now knows the content is already in context and answers directly. Explicit "list folders" or "find other notes" requests still trigger the tool as expected. (@logancyang)
+- 🏷️ **Settings version chip and Reset button are visible again** — Obsidian's own CSS was hiding the version chip and Reset Settings button at the top of the settings panel. Fixed by swapping the `<h1>` for a semantically equivalent `<div>` that Obsidian's styles don't suppress. (@logancyang)
+- 🛡️ **Supply-chain attestations for release assets** — Release artifacts (`main.js`, `manifest.json`, `styles.css`) are now cryptographically signed and published to Sigstore's transparency log. You can verify any release asset with `gh attestation verify`. (@logancyang)
+- 🧹 **Major codebase hardening pass** — @zeroliu landed a sustained ESLint and type-safety campaign across the repo: ~395 `any` types removed, dozens of type-aware rules turned on, unsafe assignments/returns/member-access/arguments locked down, floating promises explicitly handled, deprecated dependencies swapped, dead CSS removed, the global `app` reference replaced with a `useApp()` hook, and a long tail of smaller wins. See the full PR list below.
+
+More details in the changelog:
+
+### Improvements
+
+- #2364 feat(keychain): migrate API key storage to Obsidian Keychain @Emt-lin
+- #2431 ci(release): publish artifact attestations for release assets @logancyang
+- #2448 refactor(react): replace global `app` with useApp() hook @zeroliu
+
+### Bug Fixes
+
+- #2457 fix(plus): planner skips getFileTree when active note is attached @logancyang
+- #2455 fix(keychain): empty-keychain banner, reset modal copy, lifecycle reset @logancyang
+- #2446 fix(encryption): deprecate encryption toggle; fix mobile chat failure on desktop-encrypted keys @logancyang
+- #2445 fix(settings): restore version chip + reset button hidden by Obsidian h1 CSS @logancyang
+- #2443 fix(mobile): import Buffer from the polyfill so image send works on mobile @logancyang
+- #2442 fix(quick-command): restore Cmd+Enter shortcut and shortcut hint icons @zeroliu
+
+### Code Quality (@zeroliu)
+
+- #2453 chore(lint): fix no-array-index-key and other React lint warnings
+- #2452 chore(eslint): enable no-explicit-any; fix ~395 violations
+- #2451 chore(styles): drop dead CSS, reduce !important, fix duplicate selectors
+- #2450 chore(lint): fix deprecation and template-literal lint warnings
+- #2449 chore(icons): drop deprecated lucide Youtube icon; reuse Globe
+- #2447 chore(deps): swap unmaintained/legacy deps per e18e module-replacements
+- #2444 chore(types): tighten any types and fix langchain getType deprecation
+- #2441 chore(eslint): enable no-unnecessary-type-assertion and no-misused-promises
+- #2440 chore(eslint): enable @typescript-eslint/no-unsafe-argument and fix violations
+- #2439 chore(eslint): enable @typescript-eslint/unbound-method
+- #2438 chore(eslint): enable no-unsafe-member-access; fix 124 violations
+- #2437 chore(eslint): enable @typescript-eslint/no-floating-promises
+- #2436 chore(eslint): enable @typescript-eslint/no-unsafe-return
+- #2435 chore(test): type test mocks to satisfy @typescript-eslint/no-unsafe-call
+- #2434 chore(eslint): enable no-unsafe-assignment for tests
+- #2433 chore(eslint): remove redundant non-TS rule overrides
+- #2424 chore(lint): enable 4 type-aware quick-win rules and fix violations
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.3.0 🚀
 
 The headline of this release is a big one: **your projects now live as notes in your vault**, not buried in `data.json`. Update and your existing projects migrate automatically. Everything else in this release is quality and polish: a 1.8 MB bundle reduction, mobile support declared official, fresh built-in models, and a wave of reliability fixes for Korean/CJK input, Miyo, Ollama, popout windows, and more!
