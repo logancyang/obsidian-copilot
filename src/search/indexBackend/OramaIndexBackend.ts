@@ -47,9 +47,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
    * Insert or update a document in Orama.
    */
   public async upsert(doc: SemanticIndexDocument): Promise<SemanticIndexDocument | undefined> {
-    return (await this.dbOps.upsert(doc as unknown as Record<string, unknown>)) as
-      | SemanticIndexDocument
-      | undefined;
+    return (await this.dbOps.upsert(doc)) as SemanticIndexDocument | undefined;
   }
 
   /**
@@ -61,7 +59,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   public async upsertBatch(docs: SemanticIndexDocument[]): Promise<number> {
     let processed = 0;
     for (const doc of docs) {
-      const result = await this.dbOps.upsert(doc as unknown as Record<string, unknown>);
+      const result = await this.dbOps.upsert(doc);
       if (result) {
         processed += 1;
       }
