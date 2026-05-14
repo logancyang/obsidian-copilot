@@ -797,10 +797,15 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
         const chatModel = this.chainManager.chatModelManager.getChatModel();
         // Reason: detect active-note attachment from the envelope so the planner
         // can avoid calling getFileTree just to read a note that's already in
-        // context. See issue #2456.
+        // context. See issue #2456. Scope to current-turn segments only: in
+        // compacted envelopes L3_TURN merges prior-turn context into a single
+        // "compacted_context" segment (metadata.source === "compacted"), so an
+        // <active_note> tag from an earlier turn could otherwise falsely trigger
+        // the optimization.
         const l3TurnForPlanning = envelope.layers.find((l) => l.id === "L3_TURN");
-        const hasActiveContextNote =
-          !!l3TurnForPlanning && /<active_note/.test(l3TurnForPlanning.text);
+        const hasActiveContextNote = !!l3TurnForPlanning?.segments?.some(
+          (seg) => seg.metadata?.source === "current_turn" && /<active_note[\s>]/.test(seg.content)
+        );
         const planningResult = await this.planToolCalls(
           messageForAnalysis,
           chatModel,
