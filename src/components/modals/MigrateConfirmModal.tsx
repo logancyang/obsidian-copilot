@@ -53,7 +53,9 @@ function MigrateConfirmContent({ onConfirm, onCancel }: MigrateConfirmContentPro
       </div>
 
       <p className="tw-m-0 tw-text-muted">
-        Move your API keys from <code>data.json</code> to this device&apos;s Obsidian Keychain.{" "}
+        Move your API keys from <code className={"tw-text-muted tw-bg-muted/10"}>data.json</code>{" "}
+        to this device&apos;s{" "}
+        <code className={"tw-text-accent tw-bg-muted/10"}>Obsidian Keychain</code>.{" "}
         <code>data.json</code> will be stripped of API keys after migration.
       </p>
 
