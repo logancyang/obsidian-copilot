@@ -102,19 +102,6 @@ If your plugin does not need CSS, delete this file.
   border-radius: 3px;
 }
 
-.remove-note {
-  padding: 0 4px;
-  cursor: pointer;
-  opacity: 0.5;
-  background: none !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.remove-note:hover {
-  opacity: 1;
-}
-
 .context-note .note-name {
   max-width: 150px;
   overflow: hidden;
@@ -164,35 +151,6 @@ If your plugin does not need CSS, delete this file.
 .select-wrapper {
   position: relative;
   display: inline-block;
-}
-
-.chat-icon-button.clickable-icon,
-.chat-icon-selection,
-.model-select-button,
-.submit-button,
-.chain-select-button {
-  display: flex;
-  align-items: center;
-  gap: 2px;
-  padding: 0;
-  background: none !important;
-  border: none !important;
-  box-shadow: none !important;
-  color: var(--text-muted);
-  font-size: 10px;
-  cursor: pointer;
-  opacity: 0.5;
-  transition: opacity 0.2s ease;
-}
-
-.chat-icon-button.clickable-icon:hover,
-.chat-icon-selection:hover,
-.model-select-button:hover,
-.submit-button:hover,
-.chain-select-button:hover {
-  background: none !important;
-  color: var(--text-normal);
-  opacity: 1;
 }
 
 @keyframes flash {
@@ -351,26 +309,12 @@ If your plugin does not need CSS, delete this file.
   position: relative;
 }
 
-.submit-button svg,
-.model-select-button svg,
-.chain-select-button svg {
-  width: 12px;
-  height: 12px;
-}
-
 .message {
   display: flex;
   padding: 0;
   border-radius: 4px;
   position: relative;
   margin-bottom: 0;
-}
-
-.message-content {
-  word-wrap: break-word;
-  overflow-wrap: break-word;
-  word-break: break-word;
-  line-height: 1.6 !important;
 }
 
 .message-content p {
@@ -409,6 +353,7 @@ If your plugin does not need CSS, delete this file.
   border-radius: 4px;
   padding: 10px;
   border: 1px solid var(--background-modifier-border);
+  position: relative;
 }
 
 .message-content pre code {
@@ -420,11 +365,6 @@ If your plugin does not need CSS, delete this file.
   white-space: pre-wrap;
   word-wrap: break-word;
   overflow-wrap: break-word;
-}
-
-/* Style for the copy button in code blocks */
-.message-content pre {
-  position: relative;
 }
 
 .message-content pre .copy-code-button {
@@ -529,7 +469,7 @@ If your plugin does not need CSS, delete this file.
   text-align: center;
   vertical-align: middle;
   padding: 0.5em;
-  border: none !important;
+  border: none;
   height: 2.5em;
 }
 
