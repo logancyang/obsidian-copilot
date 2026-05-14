@@ -14,20 +14,22 @@ interface ModelCapabilityIconsProps {
   iconSize?: number;
 }
 
+const EMPTY_CAPABILITIES: ModelCapability[] = [];
+
 export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
-  capabilities = [],
+  capabilities = EMPTY_CAPABILITIES,
   iconSize = 16,
 }) => {
   return (
     <>
       {capabilities
         .sort((a, b) => a.localeCompare(b))
-        .map((cap, index) => {
+        .map((cap) => {
           switch (cap) {
             case ModelCapability.REASONING:
               return (
                 <Lightbulb
-                  key={index}
+                  key={cap}
                   className="tw-text-model-capabilities-blue"
                   style={{ width: iconSize, height: iconSize }}
                 />
@@ -35,7 +37,7 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
             case ModelCapability.VISION:
               return (
                 <Eye
-                  key={index}
+                  key={cap}
                   className="tw-text-model-capabilities-green"
                   style={{ width: iconSize, height: iconSize }}
                 />
@@ -43,7 +45,7 @@ export const ModelCapabilityIcons: React.FC<ModelCapabilityIconsProps> = ({
             case ModelCapability.WEB_SEARCH:
               return (
                 <Globe
-                  key={index}
+                  key={cap}
                   className="tw-text-model-capabilities-blue"
                   style={{ width: iconSize, height: iconSize }}
                 />

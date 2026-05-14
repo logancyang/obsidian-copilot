@@ -22,6 +22,8 @@ import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
+const EMPTY_SELECTED_TEXT_CONTEXTS: SelectedTextContext[] = [];
+
 interface ChatContextMenuProps {
   includeActiveNote: boolean;
   currentActiveFile: TFile | null;
@@ -104,7 +106,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   contextUrls,
   contextFolders,
   contextWebTabs,
-  selectedTextContexts = [],
+  selectedTextContexts = EMPTY_SELECTED_TEXT_CONTEXTS,
   onRemoveContext,
   showProgressCard,
   showIndexingCard,

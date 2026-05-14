@@ -215,6 +215,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicate notes (see MessageContext.test.tsx duplicate-handling cases)
         <Tooltip key={`note-${index}-${note.path}`}>
           <TooltipTrigger asChild>
             <div>
@@ -225,6 +226,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         </Tooltip>
       ))}
       {context.urls.map((url, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicate urls (see MessageContext.test.tsx duplicate-handling cases)
         <Tooltip key={`url-${index}-${url}`}>
           <TooltipTrigger asChild>
             <div>
@@ -235,6 +237,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         </Tooltip>
       ))}
       {context.webTabs?.map((webTab, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicates; index disambiguates same-url entries
         <Tooltip key={`webTab-${index}-${webTab.url}`}>
           <TooltipTrigger asChild>
             <div>
@@ -254,6 +257,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         </Tooltip>
       ))}
       {context.tags?.map((tag, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicates; index disambiguates same-value entries
         <Tooltip key={`tag-${index}-${tag}`}>
           <TooltipTrigger asChild>
             <div>
@@ -264,6 +268,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         </Tooltip>
       ))}
       {context.folders?.map((folder, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicates; index disambiguates same-value entries
         <Tooltip key={`folder-${index}-${folder}`}>
           <TooltipTrigger asChild>
             <div>
@@ -274,6 +279,7 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
         </Tooltip>
       ))}
       {context.selectedTextContexts?.map((selectedText, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- context arrays may contain duplicates; index disambiguates same-id entries
         <Tooltip key={`selectedText-${index}-${selectedText.id}`}>
           <TooltipTrigger asChild>
             <div>
@@ -864,7 +870,8 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
       // Set unmounting flag immediately
       isUnmountingRef.current = true;
 
-      // Defer cleanup to avoid React rendering conflicts
+      // Defer cleanup to avoid React rendering conflicts.
+      // eslint-disable-next-line @eslint-react/web-api/no-leaked-timeout -- fire-and-forget defer; no cleanup target available inside an effect-cleanup
       window.setTimeout(() => {
         // Clean up component
         if (currentComponentRef.current) {
@@ -924,6 +931,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             (item, index) => {
               if (item.type === "text") {
                 return (
+                  // eslint-disable-next-line @eslint-react/no-array-index-key -- content array is fixed once message is rendered; items not reordered
                   <div key={index}>
                     {message.sender === USER_SENDER ? (
                       <div className="tw-whitespace-pre-wrap tw-break-words tw-text-[calc(var(--font-text-size)_-_2px)] tw-font-normal">
@@ -939,6 +947,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
                 );
               } else if (item.type === "image_url") {
                 return (
+                  // eslint-disable-next-line @eslint-react/no-array-index-key -- content array is fixed once message is rendered; items not reordered
                   <div key={index} className="message-image-content">
                     <img
                       src={item.image_url!.url}

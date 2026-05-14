@@ -67,7 +67,7 @@ export function ChatSettingsPopover() {
       : "";
 
   // Read state from session atom
-  const [disableBuiltin, setDisableBuiltin] = useState(getDisableBuiltinSystemPrompt());
+  const [disableBuiltin, setDisableBuiltin] = useState(() => getDisableBuiltinSystemPrompt());
   const [showConfirmation, setShowConfirmation] = useState(false);
   const confirmationRef = useRef<HTMLDivElement>(null);
 

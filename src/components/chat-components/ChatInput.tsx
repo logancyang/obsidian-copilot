@@ -740,13 +740,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
       {selectedImages.length > 0 && (
         <div className="selected-images">
           {selectedImages.map((file, index) => (
-            <div key={index} className="image-preview-container">
+            <div
+              key={`${file.name}-${file.size}-${file.lastModified}`}
+              className="image-preview-container"
+            >
               <img
                 src={URL.createObjectURL(file)}
                 alt={file.name}
                 className="selected-image-preview"
               />
               <button
+                type="button"
                 className="remove-image-button"
                 onClick={() => setSelectedImages((prev) => prev.filter((_, i) => i !== index))}
                 title="Remove image"

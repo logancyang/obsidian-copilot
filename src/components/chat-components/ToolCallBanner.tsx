@@ -133,6 +133,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
             {!actuallyExecuting && onAccept && onReject && (
               <>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onAccept();
@@ -143,6 +144,7 @@ export const ToolCallBanner: React.FC<ToolCallBannerProps> = ({
                   <Check className="tw-size-4 tw-text-success" />
                 </button>
                 <button
+                  type="button"
                   onClick={(e) => {
                     e.stopPropagation();
                     onReject();

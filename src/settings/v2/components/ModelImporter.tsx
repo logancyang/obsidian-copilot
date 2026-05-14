@@ -46,6 +46,7 @@ function renderVerificationMessage(message: string): React.ReactNode {
       if (match) {
         return (
           <a
+            // eslint-disable-next-line @eslint-react/no-array-index-key -- static one-shot render of a parsed markdown paragraph; nodes are not reordered
             key={j}
             href={match[2]}
             target="_blank"
@@ -59,6 +60,7 @@ function renderVerificationMessage(message: string): React.ReactNode {
       return part;
     });
     return (
+      // eslint-disable-next-line @eslint-react/no-array-index-key -- static one-shot render of parsed markdown paragraphs; paragraphs are not reordered
       <p key={i} className={i > 0 ? "tw-mt-1" : ""}>
         {nodes}
       </p>

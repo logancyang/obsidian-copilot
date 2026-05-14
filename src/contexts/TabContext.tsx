@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from "react";
+import React, { createContext, useContext, useMemo, useState } from "react";
 
 interface TabContextType {
   selectedTab: string;
@@ -10,22 +10,18 @@ const TabContext = createContext<TabContextType | undefined>(undefined);
 
 export const TabProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [selectedTab, setSelectedTab] = useState("basic");
-  const [modalContainer, setModalContainer] = useState<HTMLElement | null>(null);
-  const hasInitialized = useRef(false);
-
-  useEffect(() => {
-    if (!hasInitialized.current) {
-      const modal = activeDocument.querySelector(".modal-container") as HTMLElement;
-      setModalContainer(modal);
-      hasInitialized.current = true;
-    }
-  }, []);
-
-  return (
-    <TabContext.Provider value={{ selectedTab, setSelectedTab, modalContainer }}>
-      {children}
-    </TabContext.Provider>
+  // Compute the modal container lazily once; activeDocument is stable at provider
+  // mount inside an Obsidian modal, so avoid an effect that would re-render.
+  const [modalContainer] = useState<HTMLElement | null>(() =>
+    activeDocument.querySelector(".modal-container")
   );
+
+  const value = useMemo(
+    () => ({ selectedTab, setSelectedTab, modalContainer }),
+    [selectedTab, modalContainer]
+  );
+
+  return <TabContext.Provider value={value}>{children}</TabContext.Provider>;
 };
 
 export const useTab = () => {

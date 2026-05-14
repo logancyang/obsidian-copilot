@@ -428,6 +428,7 @@ export function registerCommands(
       }
 
       // Map hits to chunks (getDocsByPath returns {document, score} format)
+      // eslint-disable-next-line obsidianmd/prefer-active-doc -- `document` is a property name on Orama hits, not the global
       const chunks: any[] = hits.map((hit: { document: any }): any => hit.document);
       const content = [
         `# Embedding Debug: ${activeFile.basename}`,

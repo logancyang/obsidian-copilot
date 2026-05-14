@@ -65,13 +65,13 @@ const CopilotSpinner: React.FC = () => {
       viewBox={`0 0 ${gridSize} ${gridSize}`}
       className="copilot-spinner"
     >
-      {sigmaDots.map((dot, index) => {
+      {sigmaDots.map((dot) => {
         const cx = dot.col * (dotSize + gap) + dotSize / 2;
         const cy = dot.row * (dotSize + gap) + dotSize / 2;
 
         return (
           <circle
-            key={index}
+            key={`${dot.row}-${dot.col}`}
             cx={cx}
             cy={cy}
             r={dotSize / 2}
@@ -164,6 +164,7 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
         {steps.length > 0 && (
           <ul className="agent-reasoning-steps">
             {steps.map((step, i) => (
+              // eslint-disable-next-line @eslint-react/no-array-index-key -- steps are append-only with no stable id; text may repeat
               <li key={i} className="agent-reasoning-step">
                 {step}
               </li>

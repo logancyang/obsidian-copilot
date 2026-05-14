@@ -51,25 +51,26 @@ function AddProjectModalContent({
   });
 
   const [formData, setFormData] = useState<ProjectConfig>(
-    initialProject || {
-      id: randomUUID(),
-      name: "",
-      description: "",
-      systemPrompt: "",
-      projectModelKey: "",
-      modelConfigs: {
-        temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
-        maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
-      },
-      contextSource: {
-        inclusions: "",
-        exclusions: "",
-        webUrls: "",
-        youtubeUrls: "",
-      },
-      created: Date.now(),
-      UsageTimestamps: Date.now(),
-    }
+    () =>
+      initialProject || {
+        id: randomUUID(),
+        name: "",
+        description: "",
+        systemPrompt: "",
+        projectModelKey: "",
+        modelConfigs: {
+          temperature: DEFAULT_MODEL_SETTING.TEMPERATURE,
+          maxTokens: DEFAULT_MODEL_SETTING.MAX_TOKENS,
+        },
+        contextSource: {
+          inclusions: "",
+          exclusions: "",
+          webUrls: "",
+          youtubeUrls: "",
+        },
+        created: Date.now(),
+        UsageTimestamps: Date.now(),
+      }
   );
 
   // URL items derived from formData for UrlTagInput

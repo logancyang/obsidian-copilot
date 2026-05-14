@@ -27,7 +27,7 @@ export function NoteCommandPlugin({
 
   // Use shared preview cache
   const [previewCache] = useState(() => new NotePreviewCache());
-  const [previewContent, setPreviewContent] = useState<Map<string, string>>(new Map());
+  const [previewContent, setPreviewContent] = useState<Map<string, string>>(() => new Map());
 
   // Function to load note content for preview using shared cache
   const loadNoteContent = useCallback(

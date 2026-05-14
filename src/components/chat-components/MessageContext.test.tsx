@@ -31,11 +31,13 @@ function MessageContext({ context }: { context: ChatMessage["context"] }) {
   return (
     <div className="tw-flex tw-flex-wrap tw-gap-2">
       {context.notes.map((note, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- mirrors the production component; context arrays may contain duplicates
         <div key={`${index}-${note.path}`} data-testid="note-badge">
           <span>{note.basename}</span>
         </div>
       ))}
       {context.urls.map((url, index) => (
+        // eslint-disable-next-line @eslint-react/no-array-index-key -- mirrors the production component; context arrays may contain duplicates
         <div key={`${index}-${url}`} data-testid="url-badge">
           <span>{url}</span>
         </div>

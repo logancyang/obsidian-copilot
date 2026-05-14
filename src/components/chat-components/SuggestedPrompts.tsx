@@ -104,9 +104,9 @@ export const SuggestedPrompts: React.FC<SuggestedPromptsProps> = ({ onClick }) =
         </CardHeader>
         <CardContent className="tw-p-2 tw-pt-0">
           <div className="tw-flex tw-flex-col tw-gap-2">
-            {prompts.map((prompt, i) => (
+            {prompts.map((prompt) => (
               <div
-                key={i}
+                key={prompt.text}
                 className="tw-flex tw-justify-between tw-gap-2 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-2 tw-text-sm"
               >
                 <div className="tw-flex tw-flex-col tw-gap-1">

@@ -218,9 +218,9 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
                         </Badge>
                       )}
                     </div>
-                    {mdProcessingFiles.map((path, i) => (
+                    {mdProcessingFiles.map((path) => (
                       <div
-                        key={`md-proc-${i}`}
+                        key={`md-proc-${path}`}
                         className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-border tw-border-border tw-bg-primary tw-p-2"
                       >
                         <Loader2 className="tw-size-3.5 tw-animate-spin tw-text-loading" />
@@ -232,9 +232,9 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
                         </TruncatedText>
                       </div>
                     ))}
-                    {mdFailedFiles.map((item, i) => (
+                    {mdFailedFiles.map((item) => (
                       <div
-                        key={`md-fail-${i}`}
+                        key={`md-fail-${item.path}`}
                         className="tw-rounded-md tw-border tw-border-border tw-bg-primary tw-p-2"
                       >
                         <div className="tw-flex tw-items-center tw-gap-2">

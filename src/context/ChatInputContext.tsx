@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useCallback, useState } from "react";
+import React, { createContext, useContext, useCallback, useMemo, useState } from "react";
 import { INSERT_TEXT_WITH_PILLS_COMMAND } from "@/components/chat-components/utils/lexicalTextUtils";
 import { LexicalEditor } from "lexical";
 
@@ -59,12 +59,15 @@ export function ChatInputProvider({ children }: ChatInputProviderProps): JSX.Ele
     }
   }, [focusHandler]);
 
-  const contextValue: ChatInputContextType = {
-    insertTextWithPills,
-    focusInput,
-    registerEditor,
-    registerFocusHandler,
-  };
+  const contextValue = useMemo<ChatInputContextType>(
+    () => ({
+      insertTextWithPills,
+      focusInput,
+      registerEditor,
+      registerFocusHandler,
+    }),
+    [insertTextWithPills, focusInput, registerEditor, registerFocusHandler]
+  );
 
   return <ChatInputContext.Provider value={contextValue}>{children}</ChatInputContext.Provider>;
 }

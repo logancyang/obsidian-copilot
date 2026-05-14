@@ -77,7 +77,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
   };
 
   const [dialogElement, setDialogElement] = useState<HTMLDivElement | null>(null);
-  const [isOpen, setIsOpen] = useState(hasRequiredExtraSettings(defaultProvider));
+  const [isOpen, setIsOpen] = useState(() => hasRequiredExtraSettings(defaultProvider));
   const [isVerifying, setIsVerifying] = useState(false);
   const [verifyStatus, setVerifyStatus] = useState<"idle" | "success" | "failed">("idle");
   const [errors, setErrors] = useState<FormErrors>({
@@ -179,7 +179,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     return baseModel;
   };
 
-  const [model, setModel] = useState<CustomModel>(getInitialModel());
+  const [model, setModel] = useState<CustomModel>(() => getInitialModel());
 
   /**
    * Updates model state and resets verify status when connection-related fields change.
@@ -207,7 +207,7 @@ export const ModelAddDialog: React.FC<ModelAddDialogProps> = ({
     };
   };
 
-  const [providerInfo, setProviderInfo] = useState<ProviderMetadata>(
+  const [providerInfo, setProviderInfo] = useState<ProviderMetadata>(() =>
     getProviderInfo(defaultProvider)
   );
 

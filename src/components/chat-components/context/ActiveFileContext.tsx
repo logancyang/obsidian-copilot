@@ -1,4 +1,4 @@
-import React, { createContext, useContext } from "react";
+import React, { createContext, useContext, useMemo } from "react";
 import { TFile } from "obsidian";
 
 /**
@@ -36,9 +36,6 @@ interface ActiveFileProviderProps {
  * to all descendant components
  */
 export function ActiveFileProvider({ currentActiveFile, children }: ActiveFileProviderProps) {
-  return (
-    <ActiveFileContext.Provider value={{ currentActiveFile }}>
-      {children}
-    </ActiveFileContext.Provider>
-  );
+  const value = useMemo(() => ({ currentActiveFile }), [currentActiveFile]);
+  return <ActiveFileContext.Provider value={value}>{children}</ActiveFileContext.Provider>;
 }

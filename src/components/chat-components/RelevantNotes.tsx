@@ -252,12 +252,14 @@ function RelevantNotePopover({
         <span className="tw-text-xs tw-text-muted">{note.note.path}</span>
         <div className="tw-flex tw-gap-2">
           <button
+            type="button"
             onClick={onAddToChat}
             className="tw-inline-flex tw-items-center tw-gap-2 tw-border tw-border-solid tw-border-border !tw-bg-transparent !tw-shadow-none hover:!tw-bg-interactive-hover"
           >
             Add to Chat <PlusCircle className="tw-size-4" />
           </button>
           <button
+            type="button"
             onClick={(e) => {
               const openInNewLeaf = e.metaKey || e.ctrlKey;
               onNavigateToNote(openInNewLeaf);

@@ -151,6 +151,7 @@ function ApiKeyModalContent({ onClose, onGoToModelTab }: ApiKeyModalContentProps
                     configuration (Base URL, Deployment Name, etc.).
                   </p>
                   <button
+                    type="button"
                     onClick={() => {
                       onGoToModelTab();
                       onClose();
