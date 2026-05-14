@@ -92,7 +92,6 @@ export default [
       "@typescript-eslint/no-unsafe-call": "off", // 679 violations
 
       // --- Medium: promise / method ergonomics ---
-      "@typescript-eslint/unbound-method": "off", // 68 violations
       // Enabled in the TS-only block below.
 
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
@@ -173,6 +172,7 @@ export default [
       ],
       "@typescript-eslint/no-floating-promises": "error",
       "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/unbound-method": "error",
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
@@ -221,6 +221,19 @@ export default [
     files: ["src/logger.ts", "scripts/**"],
     rules: {
       "obsidianmd/rule-custom-message": "off",
+    },
+  },
+
+  // Jest assertions like `expect(mock.method).toHaveBeenCalled()` reference
+  // methods unbound by design. The rule has no clean workaround for jest
+  // patterns (binding changes the reference identity and breaks the assertion),
+  // so disable it in tests. Scoped to .ts/.tsx because the @typescript-eslint
+  // plugin is only registered for those files. Placed last so it overrides the
+  // TS-only block above.
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/unbound-method": "off",
     },
   },
 ];

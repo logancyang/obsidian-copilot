@@ -86,7 +86,8 @@ const processColorObject =
  * bg-modifier-error/50
  * text-background-modifier-success/30
  */
-export const colorOpacityPlugin = plugin(function (this: void, { addUtilities, theme, e }) {
+export const colorOpacityPlugin = plugin(function (this: void, api) {
+  const { theme, e } = api;
   const opacityUtilities: Record<string, any> = {};
 
   // 处理所有颜色相关的主题配置
@@ -104,5 +105,5 @@ export const colorOpacityPlugin = plugin(function (this: void, { addUtilities, t
   processThemeColors("borderColor", "");
   processThemeColors("colors");
 
-  addUtilities(opacityUtilities);
+  api.addUtilities(opacityUtilities);
 });
