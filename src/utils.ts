@@ -1,3 +1,8 @@
+// Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
+// so the same Buffer code path works on desktop (Electron) and mobile (WebView).
+// eslint-disable-next-line import/no-nodejs-modules
+import { Buffer } from "buffer";
+
 import { Document } from "@/chainFactory";
 import { ChainType } from "@/chainType";
 import {
@@ -883,6 +888,8 @@ export async function safeFetch(
         return response.arrayBuffer;
       }
       const base64 = response.text.replace(/^data:.*;base64,/, "");
+      // Reason: Buffer (from the `buffer` polyfill imported above) is the
+      // cross-platform path — bare global Buffer is undefined in mobile WebView.
       const buf = Buffer.from(base64, "base64");
       return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
     },
