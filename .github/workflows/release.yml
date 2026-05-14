@@ -24,7 +24,9 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write  # required to create GitHub releases and tags
+      contents: write       # required to create GitHub releases and tags
+      attestations: write   # required to publish artifact attestations
+      id-token: write       # required for the workflow's OIDC token (used to sign attestations)
 
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -169,7 +171,25 @@ jobs:
           echo "Release-asset manifest.json (prerelease):"
           cat manifest.json
 
-      # ── Step 10: Create GitHub Release ───────────────────────────────────────
+      # ── Step 10: Generate build provenance attestation ──────────────────────
+      # Cryptographically signs main.js / manifest.json / styles.css with the
+      # workflow's OIDC identity and publishes the attestation to Sigstore's
+      # public transparency log. Anyone can later verify a downloaded asset
+      # was actually built by this workflow on this commit with:
+      #   gh attestation verify main.js --owner logancyang --repo logancyang/obsidian-copilot
+      #
+      # Runs AFTER the prerelease manifest swap so the attested manifest.json
+      # exactly matches the file uploaded to the GitHub Release.
+      - name: Generate artifact attestation
+        if: steps.semver.outputs.is_release == 'true' && steps.check_existing.outputs.exists != 'true'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            main.js
+            manifest.json
+            styles.css
+
+      # ── Step 11: Create GitHub Release ───────────────────────────────────────
       # --target pins the tag to the exact merge commit SHA so concurrent
       # merges cannot cause the release tag to point at a different commit.
       # When the PR title is a prerelease semver (X.Y.Z-tag.N), pass --prerelease
