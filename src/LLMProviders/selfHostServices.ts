@@ -168,7 +168,7 @@ export async function selfHostYoutube4llm(url: string): Promise<Youtube4llmRespo
     if (!jobId) {
       throw new Error("Supadata returned async status but no job_id");
     }
-    return await pollSupadataJob(jobId, apiKey, startTime);
+    return await pollSupadataJob(jobId as string, apiKey, startTime);
   }
 
   const text = await response.text();

@@ -90,7 +90,7 @@ export function AtMentionCommandPlugin({
 
   // Selection handler
   const handleSelect = useCallback(
-    (option: any) => {
+    (option: CategoryOption | AtMentionOption) => {
       if (extendedState.mode === "category" && isCategoryOption(option) && !currentQuery) {
         // Category was selected - switch to search mode for that category
         setExtendedState((prev) => ({
@@ -186,7 +186,7 @@ export function AtMentionCommandPlugin({
     <>
       {state.isOpen && (
         <TypeaheadMenuPortal
-          options={displayOptions as any[]}
+          options={displayOptions}
           selectedIndex={state.selectedIndex}
           onSelect={handleSelect}
           onHighlight={handleHighlight}

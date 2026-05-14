@@ -76,7 +76,7 @@ function getZodDescription(schema: z.ZodType): string {
     schema instanceof z.ZodNullable ||
     schema instanceof z.ZodDefault
   ) {
-    return getZodDescription(schema._def.innerType);
+    return getZodDescription(schema._def.innerType as z.ZodType);
   }
 
   // @ts-ignore - accessing private _def property
@@ -91,9 +91,9 @@ export function extractParametersFromZod(schema: z.ZodType): Record<string, stri
   const descriptions: Record<string, string> = {};
 
   if (schema instanceof z.ZodObject) {
-    const shape = schema.shape;
+    const shape = schema.shape as Record<string, z.ZodType>;
     for (const [key, value] of Object.entries(shape)) {
-      const zodField = value as z.ZodType;
+      const zodField = value;
       descriptions[key] = getZodDescription(zodField) || "No description";
     }
   } else if (schema instanceof z.ZodVoid) {

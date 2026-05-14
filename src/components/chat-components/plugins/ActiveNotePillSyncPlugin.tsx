@@ -1,6 +1,6 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useEffect } from "react";
-import { $getRoot, LexicalNode } from "lexical";
+import { $getRoot, type LexicalNode } from "lexical";
 import { $isActiveNotePillNode } from "../pills/ActiveNotePillNode";
 
 /**
@@ -42,9 +42,8 @@ export function ActiveNotePillSyncPlugin({
           }
 
           // Only traverse children if the node has the getChildren method
-          const maybeContainer = node as LexicalNode & { getChildren?: () => LexicalNode[] };
-          if (typeof maybeContainer.getChildren === "function") {
-            const children = maybeContainer.getChildren();
+          if ("getChildren" in node && typeof node.getChildren === "function") {
+            const children = node.getChildren() as LexicalNode[];
             for (const child of children) {
               if (foundActiveNotePill) return; // Early exit if found
               traverse(child);

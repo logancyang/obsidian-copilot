@@ -324,9 +324,8 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
           if (fmMatch) {
             const parsed = parseYaml(fmMatch[1]);
             if (parsed && typeof parsed === "object") {
-              existingId = String(
-                (parsed as Record<string, unknown>)[COPILOT_PROJECT_ID] ?? ""
-              ).trim();
+              const raw = (parsed as Record<string, unknown>)[COPILOT_PROJECT_ID];
+              existingId = (typeof raw === "string" ? raw : "").trim();
             }
           }
         } catch {

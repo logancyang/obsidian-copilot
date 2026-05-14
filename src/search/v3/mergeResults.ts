@@ -26,12 +26,12 @@ export function mergeFilterAndSearchResults(
   const filterPaths = new Set<string>();
   for (const doc of filterDocs) {
     if (doc.metadata?.path) {
-      filterPaths.add(doc.metadata.path);
+      filterPaths.add(doc.metadata.path as string);
     }
   }
 
   const dedupedSearchDocs = searchDocs.filter((doc) => {
-    const docPath = doc.metadata?.path;
+    const docPath = doc.metadata?.path as string | undefined;
     return !docPath || !filterPaths.has(docPath);
   });
 

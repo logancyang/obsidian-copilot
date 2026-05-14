@@ -30,7 +30,7 @@ describe("toolResultUtils", () => {
 
     it("should handle empty or null results", () => {
       expect(truncateToolResult("")).toBe("");
-      expect(truncateToolResult(null as any)).toBe(null);
+      expect(truncateToolResult(null as unknown as string)).toBe(null);
     });
   });
 

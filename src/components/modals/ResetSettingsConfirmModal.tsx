@@ -2,7 +2,7 @@ import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { App } from "obsidian";
 
 export class ResetSettingsConfirmModal extends ConfirmModal {
-  constructor(app: App, onConfirm: () => void) {
+  constructor(app: App, onConfirm: () => void | Promise<void>) {
     super(
       app,
       onConfirm,

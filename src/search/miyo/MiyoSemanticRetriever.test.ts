@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import { getMiyoFolderName } from "@/miyo/miyoUtils";
 import { MiyoSemanticRetriever } from "@/search/miyo/MiyoSemanticRetriever";
 import { getSettings } from "@/settings/model";
@@ -33,7 +34,7 @@ jest.mock("@/miyo/MiyoClient", () => ({
 function createRetriever(
   options: Partial<ConstructorParameters<typeof MiyoSemanticRetriever>[1]> = {}
 ) {
-  return new MiyoSemanticRetriever({ vault: {}, metadataCache: {} } as any, {
+  return new MiyoSemanticRetriever({ vault: {}, metadataCache: {} } as unknown as App, {
     maxK: 10,
     salientTerms: [],
     minSimilarityScore: 0.2,

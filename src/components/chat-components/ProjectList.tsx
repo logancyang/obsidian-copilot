@@ -1,4 +1,5 @@
 import { ProjectConfig, setCurrentProject } from "@/aiParams";
+import type CopilotPlugin from "@/main";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
@@ -139,7 +140,7 @@ function ProjectItem({
                   // Reason: hidden-folder files are not in vault cache, so openLinkText silently fails.
                   const fileInCache = app.vault.getAbstractFileByPath(record.filePath);
                   if (fileInCache) {
-                    app.workspace.openLinkText(record.filePath, "", true);
+                    void app.workspace.openLinkText(record.filePath, "", true);
                   } else {
                     new Notice(
                       "Project file is in a hidden folder and cannot be opened from the file explorer."
@@ -198,7 +199,7 @@ export const ProjectList = memo(
     projects: ProjectConfig[];
     defaultOpen?: boolean;
     app: App;
-    plugin?: any; // CopilotPlugin, optional for backwards compatibility
+    plugin?: CopilotPlugin; // optional for backwards compatibility
     onProjectAdded: (project: ProjectConfig) => Promise<void>;
     onEditProject: (originP: ProjectConfig, updateP: ProjectConfig) => Promise<void>;
     hasMessages?: boolean;
@@ -228,15 +229,8 @@ export const ProjectList = memo(
     }, [projects, selectedProject, showChatUI]);
 
     // Get the project usage manager for subscription
-    const projectUsageTimestampsManager = (
-      plugin as
-        | {
-            projectManager?: {
-              getProjectUsageTimestampsManager?: () => RecentUsageManager<string>;
-            };
-          }
-        | undefined
-    )?.projectManager?.getProjectUsageTimestampsManager?.();
+    const projectUsageTimestampsManager =
+      plugin?.projectManager?.getProjectUsageTimestampsManager?.();
     const projectUsageRevision = useRecentUsageManagerRevision(projectUsageTimestampsManager);
 
     // Auto collapse when messages appear

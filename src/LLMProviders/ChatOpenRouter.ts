@@ -158,14 +158,16 @@ export class ChatOpenRouter extends ChatOpenAI {
     const openaiMessages = this.toOpenRouterMessages(messages);
 
     const stream = (await this.openaiClient.chat.completions.create({
-      ...params,
+      ...(params as Record<string, unknown>),
       messages: openaiMessages,
       stream: true,
       stream_options: {
         ...(params.stream_options ?? {}),
         include_usage: true,
       },
-    })) as unknown as AsyncIterable<OpenRouterChatChunk>;
+    } as Parameters<
+      typeof this.openaiClient.chat.completions.create
+    >[0])) as unknown as AsyncIterable<OpenRouterChatChunk>;
 
     let usageSummary: OpenRouterUsage | undefined;
 
@@ -243,7 +245,7 @@ export class ChatOpenRouter extends ChatOpenAI {
           role: "tool",
           content: msg.content,
           tool_call_id: msg.tool_call_id,
-        } as OpenRouterMessageParam;
+        };
       }
 
       if (msg.additional_kwargs?.function_call) {
@@ -384,7 +386,7 @@ export class ChatOpenRouter extends ChatOpenAI {
       return undefined;
     }
 
-    return candidate.filter((detail) => detail !== undefined && detail !== null);
+    return (candidate as unknown[]).filter((detail) => detail !== undefined && detail !== null);
   }
 
   /**
@@ -404,8 +406,12 @@ export class ChatOpenRouter extends ChatOpenAI {
           if (typeof part === "string") {
             return part;
           }
-          if (part && typeof part === "object" && typeof part.text === "string") {
-            return part.text;
+          if (
+            part &&
+            typeof part === "object" &&
+            typeof (part as { text?: unknown }).text === "string"
+          ) {
+            return (part as { text: string }).text;
           }
           return "";
         })

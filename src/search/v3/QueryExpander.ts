@@ -194,7 +194,7 @@ Format:
     const typed = response as { content?: unknown; text?: unknown } | null | undefined;
     return typeof response === "string"
       ? response
-      : String(typed?.content ?? typed?.text ?? "").trim() || null;
+      : String((typed?.content ?? typed?.text ?? "") as any).trim() || null;
   }
 
   /**
@@ -477,7 +477,7 @@ Format:
   private cacheResult(query: string, expanded: ExpandedQuery): void {
     // Map maintains insertion order for simple LRU
     if (this.cache.size >= this.config.cacheSize) {
-      const firstKey = this.cache.keys().next().value;
+      const firstKey: string | undefined = this.cache.keys().next().value;
       if (firstKey) {
         this.cache.delete(firstKey);
       }

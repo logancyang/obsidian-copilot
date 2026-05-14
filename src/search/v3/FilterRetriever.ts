@@ -146,12 +146,12 @@ export class FilterRetriever {
     const documentMap = new Map<string, Document>();
 
     for (const doc of dailyNotesWithContext) {
-      documentMap.set(doc.metadata.path, doc);
+      documentMap.set(doc.metadata.path as string, doc);
     }
 
     for (const doc of timeFilteredDocuments) {
-      if (!documentMap.has(doc.metadata.path)) {
-        documentMap.set(doc.metadata.path, {
+      if (!documentMap.has(doc.metadata.path as string)) {
+        documentMap.set(doc.metadata.path as string, {
           ...doc,
           metadata: {
             ...doc.metadata,
@@ -380,8 +380,9 @@ export class FilterRetriever {
     const result: Document[] = [];
     for (const docs of sets) {
       for (const doc of docs) {
-        if (!seen.has(doc.metadata.path)) {
-          seen.add(doc.metadata.path);
+        const path = doc.metadata.path as string;
+        if (!seen.has(path)) {
+          seen.add(path);
           result.push(doc);
         }
       }

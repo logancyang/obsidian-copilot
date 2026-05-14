@@ -24,7 +24,7 @@ import { AIMessageChunk } from "@langchain/core/messages";
 
 // Helper to create TFile mock instances
 const createMockTFile = (path: string): TFile => {
-  const file = Object.create(TFile.prototype);
+  const file: TFile = Object.create(TFile.prototype);
   file.path = path;
   file.name = path.split("/").pop() || "";
   file.basename = file.name.replace(/\.[^/.]+$/, "");

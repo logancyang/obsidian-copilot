@@ -674,7 +674,11 @@ REMEMBER: It is better to say "I only searched your notes, not the web" than to 
  */
 export class ModelAdapterFactory {
   static createAdapter(model: BaseChatModel): ModelAdapter {
-    const modelName = ((model as any).modelName || (model as any).model || "").toLowerCase();
+    const modelName: string = (
+      ((model as any).modelName as string) ||
+      ((model as any).model as string) ||
+      ""
+    ).toLowerCase();
 
     logInfo(`Creating model adapter for: ${modelName}`);
 

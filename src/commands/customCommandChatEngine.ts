@@ -54,8 +54,10 @@ export async function createChatChain(
       memory: () => memory.loadMemoryVariables({}),
     },
     {
-      input: (previousOutput: { input: string }) => previousOutput.input,
-      history: (previousOutput: { memory: { history: unknown } }) => previousOutput.memory.history,
+      input: (previousOutput: { input: string; memory: { history: unknown } }) =>
+        previousOutput.input,
+      history: (previousOutput: { input: string; memory: { history: unknown } }) =>
+        previousOutput.memory.history,
     },
     chatPrompt,
     chatModel,

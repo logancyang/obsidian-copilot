@@ -20,7 +20,7 @@ jest.mock("@/system-prompts/state", () => ({
 jest.mock("@/settings/model", () => {
   const actual = jest.requireActual("@/settings/model");
   return {
-    ...actual,
+    ...(actual as object),
     getSettings: jest.fn(() => ({ userSystemPrompt: "" })),
   };
 });
@@ -185,7 +185,7 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
       miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
     };
 
-    const sanitized = sanitizeSettings(legacySettings as any);
+    const sanitized = sanitizeSettings(legacySettings);
 
     expect(sanitized.enableMiyo).toBe(true);
     expect(sanitized.miyoServerUrl).toBe("http://127.0.0.1:8742");
@@ -209,7 +209,7 @@ describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
       miyoRemoteVaultPath: "\\\\Mac\\Home\\Downloads\\graham-essays-main",
     };
 
-    const sanitized = sanitizeSettings(legacySettings as any);
+    const sanitized = sanitizeSettings(legacySettings);
     const sanitizedRecord = sanitized as unknown as Record<string, unknown>;
 
     expect(sanitized.userId).toBeTruthy();

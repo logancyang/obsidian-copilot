@@ -175,7 +175,7 @@ export function $findNotePills(): NotePillNode[] {
     }
 
     if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren();
+      const children = node.getChildren() as LexicalNode[];
       for (const child of children) {
         traverse(child);
       }
@@ -194,13 +194,10 @@ export function $removePillsByPath(notePath: string): number {
     if ($isNotePillNode(node) && node.getNotePath() === notePath) {
       node.remove();
       removedCount++;
-    } else {
-      const maybeContainer = node as LexicalNode & { getChildren?: () => LexicalNode[] };
-      if (typeof maybeContainer.getChildren === "function") {
-        const children = maybeContainer.getChildren();
-        for (const child of children) {
-          traverse(child);
-        }
+    } else if ("getChildren" in node && typeof node.getChildren === "function") {
+      const children = node.getChildren() as LexicalNode[];
+      for (const child of children) {
+        traverse(child);
       }
     }
   }

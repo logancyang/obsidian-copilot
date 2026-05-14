@@ -14,7 +14,7 @@ export class FuzzyMatcher {
 
     const dp: number[][] = Array(m + 1)
       .fill(null)
-      .map(() => Array(n + 1).fill(0));
+      .map((): number[] => Array<number>(n + 1).fill(0));
 
     for (let i = 0; i <= m; i++) dp[i][0] = i;
     for (let j = 0; j <= n; j++) dp[0][j] = j;

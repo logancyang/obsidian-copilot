@@ -1,3 +1,4 @@
+import type { App } from "obsidian";
 import { Document } from "@langchain/core/documents";
 import { MergedSemanticRetriever } from "./MergedSemanticRetriever";
 import { TieredLexicalRetriever } from "./TieredLexicalRetriever";
@@ -67,7 +68,7 @@ describe("MergedSemanticRetriever", () => {
     lexicalResults = [lexicalInput];
     semanticResults = [semanticInput];
 
-    const retriever = new MergedSemanticRetriever(mockApp, {
+    const retriever = new MergedSemanticRetriever(mockApp as App, {
       maxK: 5,
       salientTerms: [],
     });
@@ -101,7 +102,7 @@ describe("MergedSemanticRetriever", () => {
     lexicalResults = [lexicalInput];
     semanticResults = [semanticInput];
 
-    const retriever = new MergedSemanticRetriever(mockApp, {
+    const retriever = new MergedSemanticRetriever(mockApp as App, {
       maxK: 5,
       salientTerms: [],
     });
@@ -141,7 +142,7 @@ describe("MergedSemanticRetriever", () => {
     ];
     semanticResults = [];
 
-    const retriever = new MergedSemanticRetriever(mockApp, {
+    const retriever = new MergedSemanticRetriever(mockApp as App, {
       maxK: 5,
       salientTerms: [],
     });
@@ -174,7 +175,7 @@ describe("MergedSemanticRetriever", () => {
       }),
     ];
 
-    const retriever = new MergedSemanticRetriever(mockApp, {
+    const retriever = new MergedSemanticRetriever(mockApp as App, {
       maxK: 5,
       salientTerms: [],
     });
@@ -208,7 +209,7 @@ describe("MergedSemanticRetriever", () => {
       }),
     ];
 
-    const retriever = new MergedSemanticRetriever(mockApp, {
+    const retriever = new MergedSemanticRetriever(mockApp as App, {
       maxK: 1,
       salientTerms: [],
       returnAll: true,

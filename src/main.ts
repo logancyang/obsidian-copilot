@@ -40,6 +40,7 @@ import {
   sanitizeSettings,
   setSettings,
   subscribeToSettingsChange,
+  type CopilotSettings,
 } from "@/settings/model";
 import { ChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
@@ -103,13 +104,15 @@ export default class CopilotPlugin extends Plugin {
 
   async onload(): Promise<void> {
     await this.loadSettings();
-    this.settingsUnsubscriber = subscribeToSettingsChange(async (prev, next) => {
-      if (next.enableEncryption) {
-        await this.saveData(await encryptAllKeys(next));
-      } else {
-        await this.saveData(next);
-      }
-      registerCommands(this, prev, next);
+    this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
+      void (async () => {
+        if (next.enableEncryption) {
+          await this.saveData(await encryptAllKeys(next));
+        } else {
+          await this.saveData(next);
+        }
+        registerCommands(this, prev, next);
+      })();
     });
     this.addSettingTab(new CopilotSettingTab(this.app, this));
 
@@ -121,8 +124,8 @@ export default class CopilotPlugin extends Plugin {
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    checkIsPlusUser();
-    refreshSelfHostModeValidation();
+    void checkIsPlusUser();
+    void refreshSelfHostModeValidation();
 
     // Initialize ProjectManager
     this.projectManager = ProjectManager.getInstance(this.app, this);
@@ -174,7 +177,7 @@ export default class CopilotPlugin extends Plugin {
     this.initActiveLeafChangeHandler();
 
     this.addRibbonIcon("message-square", "Open Copilot Chat", (evt: MouseEvent) => {
-      this.activateView();
+      void this.activateView();
     });
 
     registerCommands(this, undefined, getSettings());
@@ -225,10 +228,13 @@ export default class CopilotPlugin extends Plugin {
       });
 
       // Initialize custom commands
-      this.customCommandRegister.initialize().then(migrateCommands).then(suggestDefaultCommands);
+      void this.customCommandRegister
+        .initialize()
+        .then(migrateCommands)
+        .then(suggestDefaultCommands);
 
       // Initialize system prompts (independent from custom commands)
-      this.systemPromptRegister
+      void this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app.vault));
     });
@@ -319,7 +325,7 @@ export default class CopilotPlugin extends Plugin {
     eventSubtype?: string,
     checkSelectedText = true
   ) {
-    const selectedText = await editor.getSelection();
+    const selectedText = editor.getSelection();
 
     const isChatWindowActive = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE).length > 0;
 
@@ -340,7 +346,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   processSelection(editor: Editor, eventType: string, eventSubtype?: string) {
-    this.processText(editor, eventType, eventSubtype);
+    void this.processText(editor, eventType, eventSubtype);
   }
 
   emitChatIsVisible() {
@@ -573,15 +579,15 @@ export default class CopilotPlugin extends Plugin {
 
   processCustomPrompt(eventType: string, customPrompt: string) {
     const editor = this.getCurrentEditorOrDummy();
-    this.processText(editor, eventType, customPrompt, false);
+    void this.processText(editor, eventType, customPrompt, false);
   }
 
   toggleView() {
     const leaves = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE);
     if (leaves.length > 0) {
-      this.deactivateView();
+      void this.deactivateView();
     } else {
-      this.activateView();
+      void this.activateView();
     }
   }
 
@@ -613,7 +619,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   async loadSettings() {
-    const savedSettings = await this.loadData();
+    const savedSettings = (await this.loadData()) as CopilotSettings;
     const sanitizedSettings = sanitizeSettings(savedSettings);
     setSettings(sanitizedSettings);
   }
@@ -654,7 +660,7 @@ export default class CopilotPlugin extends Plugin {
       this.app,
       chatFiles,
       this.chatHistoryLastAccessedAtManager,
-      this.loadChatHistory.bind(this)
+      this.loadChatHistory.bind(this) as (file: TFile) => void
     ).open();
   }
 
@@ -764,7 +770,7 @@ export default class CopilotPlugin extends Plugin {
     const existingView = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE)[0];
     if (!existingView) {
       // Only activate the view if it's not already open
-      this.activateView();
+      await this.activateView();
     }
 
     // Load messages using ChatUIState (which now uses ChatPersistenceManager internally)

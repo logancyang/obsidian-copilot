@@ -221,7 +221,7 @@ export class ProjectContextCache {
       if (await this.vault.adapter.exists(cachePath)) {
         logInfo("File cache hit for project:", project.name);
         const cacheContent = await this.vault.adapter.read(cachePath);
-        const contextCache = JSON.parse(cacheContent);
+        const contextCache = JSON.parse(cacheContent) as ContextCache;
         // Store in memory cache
         this.memoryCache.set(cacheKey, contextCache);
         return contextCache;
@@ -290,7 +290,7 @@ export class ProjectContextCache {
       logInfo("Caching context for project:", project.name);
 
       // Create a deep copy to avoid reference issues
-      const contextCacheCopy = JSON.parse(JSON.stringify(contextCache));
+      const contextCacheCopy = JSON.parse(JSON.stringify(contextCache)) as ContextCache;
 
       // Store in memory cache
       this.memoryCache.set(cacheKey, contextCacheCopy);

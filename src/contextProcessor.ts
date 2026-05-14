@@ -146,7 +146,7 @@ export class ContextProcessor {
     const result = await dataviewApi.query(query, sourcePath);
 
     if (!result.successful) {
-      throw new Error(result.error || "Query failed");
+      throw new Error((result.error as string) || "Query failed");
     }
 
     // Format results based on type
@@ -163,11 +163,11 @@ export class ContextProcessor {
 
     // Handle different result types
     if (result.type === "list") {
-      return this.formatDataviewList(result.values);
+      return this.formatDataviewList(result.values as any[]);
     } else if (result.type === "table") {
-      return this.formatDataviewTable(result.headers, result.values);
+      return this.formatDataviewTable(result.headers as string[], result.values as any[][]);
     } else if (result.type === "task") {
-      return this.formatDataviewTasks(result.values);
+      return this.formatDataviewTasks(result.values as any[]);
     } else if (Array.isArray(result)) {
       return result.map((item) => this.formatDataviewValue(item)).join("\n");
     }

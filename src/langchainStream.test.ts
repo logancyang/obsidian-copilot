@@ -5,6 +5,7 @@ jest.mock("@/settings/model", () => ({
 import { AI_SENDER } from "@/constants";
 import { MissingApiKeyError } from "@/error";
 import { getAIResponse } from "@/langchainStream";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/message";
 
 describe("getAIResponse onboarding errors", () => {
@@ -17,7 +18,7 @@ describe("getAIResponse onboarding errors", () => {
       runChain: jest.fn(async () => {
         throw new MissingApiKeyError("API key is not configured for the selected model.");
       }),
-    } as unknown as any;
+    } as unknown as ChainManager;
 
     const userMessage: ChatMessage = {
       id: "user-1",

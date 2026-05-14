@@ -77,7 +77,7 @@ export class ActionBlockStreamer {
         });
 
         // Format tool result using ToolResultFormatter for consistency with agent mode
-        const formattedResult = ToolResultFormatter.format("writeFile", result);
+        const formattedResult = ToolResultFormatter.format("writeFile", result as string);
         yield { ...chunk, content: `\n${formattedResult}\n` };
       } catch (err: any) {
         yield { ...chunk, content: `\nError: ${err?.message || err}\n` };

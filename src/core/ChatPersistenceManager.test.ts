@@ -1,5 +1,7 @@
 import { ChatMessage } from "@/types/message";
-import { Notice, TFile } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
+import type { MessageRepository } from "./MessageRepository";
+import type ChainManager from "@/LLMProviders/chainManager";
 import { ChatPersistenceManager } from "./ChatPersistenceManager";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
@@ -25,20 +27,23 @@ jest.mock("@/aiParams", () => ({
   getCurrentProject: jest.fn().mockReturnValue(null),
 }));
 jest.mock("@/utils", () => ({
-  extractTextFromChunk: jest.fn((content) => {
+  extractTextFromChunk: jest.fn((content: unknown): string => {
     if (typeof content === "string") {
       return content;
     }
     if (Array.isArray(content)) {
-      return content
+      return (content as Array<{ type?: string; text?: string }>)
         .filter((item) => item?.type === "text")
         .map((item) => item?.text || "")
         .join("");
     }
     if (content && typeof content === "object" && "text" in content) {
-      return String((content as { text?: unknown }).text ?? "");
+      return String((content as { text?: string }).text ?? "");
     }
-    return String(content ?? "");
+    if (typeof content === "number" || typeof content === "boolean") {
+      return String(content);
+    }
+    return "";
   }),
   formatDateTime: jest.fn((date) => ({
     fileName: "20240923_221800",
@@ -120,7 +125,10 @@ describe("ChatPersistenceManager", () => {
     };
 
     // Create persistence manager
-    persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+    persistenceManager = new ChatPersistenceManager(
+      mockApp as App,
+      mockMessageRepo as MessageRepository
+    );
   });
 
   describe("formatChatContent", () => {
@@ -377,7 +385,11 @@ Nature's quiet song`);
         },
       } as any;
 
-      persistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo, chainManager);
+      persistenceManager = new ChatPersistenceManager(
+        mockApp as App,
+        mockMessageRepo as MessageRepository,
+        chainManager as ChainManager
+      );
       const mockFile = mockTFile({
         path: "test-folder/Summarize_weather_data@20240923_221800.md",
       });
@@ -792,7 +804,7 @@ Nature's quiet song`);
         },
       ];
 
-      const existingFallbackFile = Object.create(TFile.prototype);
+      const existingFallbackFile: TFile = Object.create(TFile.prototype);
       Object.assign(existingFallbackFile, {
         path: "test-folder/chat-1729873880000.md",
         basename: "chat-1729873880000",
@@ -886,7 +898,7 @@ Nature's quiet song`);
         },
       ];
 
-      const existingFile = Object.create(TFile.prototype);
+      const existingFile: TFile = Object.create(TFile.prototype);
       Object.assign(existingFile, {
         path: "test-folder/Hello_again@20240923_221800.md",
         basename: "Hello_again@20240923_221800",
@@ -939,7 +951,7 @@ Nature's quiet song`);
         },
       ];
 
-      const existingFile = Object.create(TFile.prototype);
+      const existingFile: TFile = Object.create(TFile.prototype);
       Object.assign(existingFile, {
         path: "test-folder/Conflict_message@20240923_221800.md",
         basename: "Conflict_message@20240923_221800",
@@ -1093,7 +1105,7 @@ ${formattedContent}`;
 
     it("should preserve context information through save and load cycle", async () => {
       // Create mock TFile for the note - must use Object.create to pass instanceof check
-      const mockTFile = Object.create(TFile.prototype);
+      const mockTFile: TFile = Object.create(TFile.prototype);
       mockTFile.basename = "typescript-guide.md";
       mockTFile.path = "docs/typescript-guide.md";
       mockTFile.extension = "md";
@@ -1105,7 +1117,10 @@ ${formattedContent}`;
       });
 
       // Recreate persistence manager with the updated mock
-      const testPersistenceManager = new ChatPersistenceManager(mockApp, mockMessageRepo);
+      const testPersistenceManager = new ChatPersistenceManager(
+        mockApp as App,
+        mockMessageRepo as MessageRepository
+      );
 
       const originalMessages: ChatMessage[] = [
         {
@@ -1639,7 +1654,7 @@ tags:
         },
       ];
 
-      const existingFile = Object.create(TFile.prototype);
+      const existingFile: TFile = Object.create(TFile.prototype);
       Object.assign(existingFile, {
         path: "test-folder/Conflict_test@20240923_221800.md",
         basename: "Conflict_test@20240923_221800",

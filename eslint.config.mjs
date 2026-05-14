@@ -93,21 +93,10 @@ export default [
       // this PR.
       "@typescript-eslint/no-unsafe-assignment": "off", // 879 violations
       "@typescript-eslint/no-unsafe-call": "off", // 679 violations
-      "@typescript-eslint/no-unsafe-argument": "off", // 368 violations
-      "@typescript-eslint/no-unsafe-return": "off", // 187 violations
 
       // --- Medium: promise / method ergonomics ---
-      "@typescript-eslint/unbound-method": "off", // 68 violations
-      "@typescript-eslint/no-misused-promises": "off", // 46 violations
-      "@typescript-eslint/no-unnecessary-type-assertion": "off", // 40 violations
-      "@typescript-eslint/no-floating-promises": "off", // 39 violations
-      "@typescript-eslint/await-thenable": "off", // 20 violations
+      // Enabled in the TS-only block below.
 
-      // --- Quick wins: small enough to fix and enable in a single PR ---
-      "@typescript-eslint/no-unsafe-enum-comparison": "off", // 11 violations
-      "@typescript-eslint/no-base-to-string": "off", // 7 violations
-      "@typescript-eslint/no-redundant-type-constituents": "off", // 5 violations
-      "@typescript-eslint/restrict-template-expressions": "off", // 1 violation
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
 
@@ -231,6 +220,17 @@ export default [
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
+      // checksVoidReturn relaxed for:
+      //   - attributes: async event handlers in JSX (onClick={async () => ...}) are
+      //     the standard React pattern; React already handles them correctly.
+      //   - inheritedMethods: Obsidian's Plugin.onload/onunload are commonly async.
+      "@typescript-eslint/no-misused-promises": [
+        "error",
+        { checksVoidReturn: { attributes: false, inheritedMethods: false } },
+      ],
+      "@typescript-eslint/no-floating-promises": "error",
+      "@typescript-eslint/no-unsafe-return": "error",
+      "@typescript-eslint/unbound-method": "error",
       // TypeScript handles undefined-identifier detection (and does so cross-realm
       // correctly); per typescript-eslint's own guidance, disable no-undef on TS.
       "no-undef": "off",
@@ -238,18 +238,15 @@ export default [
   },
 
   // Non-TS files aren't in tsconfig.json — disable type-aware rules that
-  // obsidianmd's recommended config enables globally. (The plugin lists some
-  // typed rules in its general rule bundle, not just the TS-only bundle, so
-  // they cascade to .js / package.json without parser services.)
+  // obsidianmd's recommended config enables globally. Most typed obsidianmd
+  // rules are already gated to **/*.ts(x); only no-plugin-as-component leaks
+  // out via recommendedPluginRulesConfig, and @typescript-eslint/no-deprecated
+  // is enabled globally.
   {
     files: ["**/*.js", "**/*.mjs", "**/*.cjs", "**/*.jsx", "**/package.json"],
     rules: {
       "@typescript-eslint/no-deprecated": "off",
       "obsidianmd/no-plugin-as-component": "off",
-      "obsidianmd/no-view-references-in-plugin": "off",
-      "obsidianmd/no-unsupported-api": "off",
-      "obsidianmd/prefer-file-manager-trash-file": "off",
-      "obsidianmd/prefer-instanceof": "off",
     },
   },
 
@@ -282,6 +279,19 @@ export default [
     files: ["src/logger.ts", "scripts/**"],
     rules: {
       "obsidianmd/rule-custom-message": "off",
+    },
+  },
+
+  // Jest assertions like `expect(mock.method).toHaveBeenCalled()` reference
+  // methods unbound by design. The rule has no clean workaround for jest
+  // patterns (binding changes the reference identity and breaks the assertion),
+  // so disable it in tests. Scoped to .ts/.tsx because the @typescript-eslint
+  // plugin is only registered for those files. Placed last so it overrides the
+  // TS-only block above.
+  {
+    files: ["**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/unbound-method": "off",
     },
   },
 ];

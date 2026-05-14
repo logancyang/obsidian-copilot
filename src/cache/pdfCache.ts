@@ -43,7 +43,7 @@ export class PDFCache {
       if (await app.vault.adapter.exists(cachePath)) {
         logInfo("Cache hit for PDF:", file.path);
         const cacheContent = await app.vault.adapter.read(cachePath);
-        return JSON.parse(cacheContent);
+        return JSON.parse(cacheContent) as Pdf4llmResponse;
       }
       logInfo("Cache miss for PDF:", file.path);
       return null;

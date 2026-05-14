@@ -21,7 +21,7 @@ import {
   DndContext,
   DragEndEvent,
   KeyboardSensor,
-  Modifier,
+  type Modifier,
   PointerSensor,
   useSensor,
   useSensors,

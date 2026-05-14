@@ -86,7 +86,7 @@ function buildEnvelopeWithL3Segments(segments: PromptLayerSegment[]): PromptCont
  */
 function createMockMessageRepo(
   messages: Array<{ id: string; sender: string; contextEnvelope?: PromptContextEnvelope }>
-) {
+): any {
   return {
     getDisplayMessages: () =>
       messages.map((msg) => ({
@@ -96,7 +96,7 @@ function createMockMessageRepo(
         isVisible: true,
         contextEnvelope: msg.contextEnvelope,
       })),
-  } as any;
+  };
 }
 
 describe("ContextManager L2 promotion filtering", () => {

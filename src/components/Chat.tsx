@@ -833,7 +833,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
                   new ContextManageModal(
                     app,
                     (updatedProject) => {
-                      handleEditProject(currentProject, updatedProject);
+                      void handleEditProject(currentProject, updatedProject);
                     },
                     currentProject
                   ).open();

@@ -146,14 +146,14 @@ const ChatInput: React.FC<ChatInputProps> = ({
       return webTabsFromPills;
     }
 
-    return editor.read(() => {
+    return editor.read((): WebTabContext[] => {
       const pills = $findWebTabPills();
       return pills.map((pill) => ({
         url: pill.getURL(),
         title: pill.getTitle(),
         faviconUrl: pill.getFaviconUrl(),
       }));
-    });
+    }) as WebTabContext[];
   };
 
   // Toggle states for vault, web search, composer, and autonomous agent
@@ -415,8 +415,8 @@ const ChatInput: React.FC<ChatInputProps> = ({
         break;
       case "folders":
         // For folders from context menu, update contextFolders directly (no pills in editor)
-        if (data && data.path) {
-          const folderPath = data.path;
+        if (data && typeof (data as { path?: unknown }).path === "string") {
+          const folderPath = (data as { path: string }).path;
           setContextFolders((prev) => {
             const exists = prev.find((f) => f === folderPath);
             if (!exists) {

@@ -1,4 +1,4 @@
-import { executeSequentialToolCall } from "./toolExecution";
+import { executeSequentialToolCall, type ToolCall } from "./toolExecution";
 import { createLangChainTool } from "@/tools/createLangChainTool";
 import { ToolRegistry } from "@/tools/ToolRegistry";
 import { z } from "zod";
@@ -147,7 +147,7 @@ describe("toolExecution", () => {
     });
 
     it("should handle invalid tool call", async () => {
-      const result = await executeSequentialToolCall(null as any, []);
+      const result = await executeSequentialToolCall(null as unknown as ToolCall, []);
 
       expect(result).toEqual({
         toolName: "unknown",

@@ -56,7 +56,7 @@ export function AtMentionTypeahead({
 
   // Handle selection
   const handleSelect = useCallback(
-    (option: any) => {
+    (option: CategoryOption | AtMentionOption) => {
       // Guard: never select disabled options (defensive check for click events)
       if ((option as { disabled?: boolean })?.disabled) return;
 
@@ -183,7 +183,7 @@ export function AtMentionTypeahead({
 
   return (
     <TypeaheadMenuPopover
-      options={searchResults as any[]}
+      options={searchResults}
       selectedIndex={selectedIndex}
       onSelect={handleSelect}
       onHighlight={handleHighlight}

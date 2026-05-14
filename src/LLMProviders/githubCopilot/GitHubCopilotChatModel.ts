@@ -25,7 +25,7 @@ function normalizeDeltaContent(content: unknown): string {
   if (content == null) return "";
   if (Array.isArray(content)) {
     return content
-      .map((part: unknown) => {
+      .map((part: unknown): string => {
         if (typeof part === "string") return part;
         if (
           part &&
@@ -105,7 +105,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
 
     const provider = GitHubCopilotProvider.getInstance();
     // scorecard: streaming requires fetch — cannot use requestUrl
-    const baseFetch = fetchImplementation ?? (configuration?.fetch as FetchImplementation) ?? fetch;
+    const baseFetch = fetchImplementation ?? configuration?.fetch ?? fetch;
     const authedFetch = GitHubCopilotChatModel.buildAuthedFetch(provider, baseFetch);
 
     super({
@@ -119,7 +119,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
       configuration: {
         ...(configuration ?? {}),
         // Reason: OpenAI SDK appends "/chat/completions" to baseURL automatically
-        baseURL: (configuration?.baseURL as string) ?? COPILOT_API_BASE,
+        baseURL: configuration?.baseURL ?? COPILOT_API_BASE,
         fetch: authedFetch,
       },
     });
@@ -169,8 +169,15 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
     // each delta is a single-use streaming chunk.
     delta.content = normalizeDeltaContent(delta.content);
 
-    // scorecard: kept for backwards compat with ChatOpenAICompletions
-    return super._convertCompletionsDeltaToBaseMessageChunk(delta, rawResponse, defaultRole);
+    // Reason: rawResponse and defaultRole are intentionally `any` here — the parent's
+    // signature uses tight OpenAI SDK types we don't want to couple to.
+    type SuperFn =
+      (typeof ChatOpenAICompletions.prototype)["_convertCompletionsDeltaToBaseMessageChunk"];
+    return super._convertCompletionsDeltaToBaseMessageChunk(
+      delta,
+      rawResponse as Parameters<SuperFn>[1],
+      defaultRole as Parameters<SuperFn>[2]
+    );
   }
 
   /**

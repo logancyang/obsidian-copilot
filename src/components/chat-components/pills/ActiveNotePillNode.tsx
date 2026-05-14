@@ -168,13 +168,10 @@ export function $removeActiveNotePills(): number {
     if ($isActiveNotePillNode(node)) {
       node.remove();
       removedCount++;
-    } else {
-      const maybeContainer = node as LexicalNode & { getChildren?: () => LexicalNode[] };
-      if (typeof maybeContainer.getChildren === "function") {
-        const children = maybeContainer.getChildren();
-        for (const child of children) {
-          traverse(child);
-        }
+    } else if ("getChildren" in node && typeof node.getChildren === "function") {
+      const children = node.getChildren() as LexicalNode[];
+      for (const child of children) {
+        traverse(child);
       }
     }
   }

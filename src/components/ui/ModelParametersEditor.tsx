@@ -47,7 +47,8 @@ export function ModelParametersEditor({
   onReset,
   showTokenLimit = true,
 }: ModelParametersEditorProps) {
-  const isOllamaModel = model.provider === ChatModelProviders.OLLAMA;
+  const provider = model.provider as ChatModelProviders;
+  const isOllamaModel = provider === ChatModelProviders.OLLAMA;
 
   // Parameter values: model.xxx ?? settings.xxx
   const temperature = model.temperature ?? settings.temperature;
@@ -66,7 +67,7 @@ export function ModelParametersEditor({
       model.name.startsWith("o3") ||
       model.name.startsWith("o4") ||
       model.name.startsWith("gpt-5")) &&
-    model.provider === ChatModelProviders.OPENAI;
+    provider === ChatModelProviders.OPENAI;
 
   // Check if model has REASONING capability enabled
   const hasReasoningCapability = model.capabilities?.includes(ModelCapability.REASONING) ?? false;
@@ -74,12 +75,11 @@ export function ModelParametersEditor({
   // Show reasoning effort for: OpenAI reasoning models, OpenRouter, LM Studio, or any model with REASONING capability
   const showReasoningEffort =
     isOpenAIReasoningModel ||
-    model.provider === ChatModelProviders.OPENROUTERAI ||
+    provider === ChatModelProviders.OPENROUTERAI ||
     model.provider === "lm_studio" ||
-    model.provider === ChatModelProviders.LM_STUDIO ||
+    provider === ChatModelProviders.LM_STUDIO ||
     hasReasoningCapability;
-  const showVerbosity =
-    model.name.startsWith("gpt-5") && model.provider === ChatModelProviders.OPENAI;
+  const showVerbosity = model.name.startsWith("gpt-5") && provider === ChatModelProviders.OPENAI;
 
   return (
     <div className="tw-space-y-4">

@@ -519,23 +519,29 @@ export const getDefaultModelAdapter = (provider: SettingKeyProviders) => {
   return (data: any): StandardModel[] => {
     // Try to detect common data structure patterns
     if (data.data && Array.isArray(data.data)) {
-      return data.data.map((model: any) => ({
-        id: model.id || model.name || String(Math.random()),
-        name: model.name || model.id || model.display_name || "Unknown Model",
-        provider: provider,
-      }));
+      return (data.data as any[]).map(
+        (model: any): StandardModel => ({
+          id: model.id || model.name || String(Math.random()),
+          name: model.name || model.id || model.display_name || "Unknown Model",
+          provider: provider,
+        })
+      );
     } else if (data.models && Array.isArray(data.models)) {
-      return data.models.map((model: any) => ({
-        id: model.id || model.name || String(Math.random()),
-        name: model.name || model.displayName || model.id || "Unknown Model",
-        provider: provider,
-      }));
+      return (data.models as any[]).map(
+        (model: any): StandardModel => ({
+          id: model.id || model.name || String(Math.random()),
+          name: model.name || model.displayName || model.id || "Unknown Model",
+          provider: provider,
+        })
+      );
     } else if (Array.isArray(data)) {
-      return data.map((model: any) => ({
-        id: model.id || model.name || String(Math.random()),
-        name: model.name || model.id || "Unknown Model",
-        provider: provider,
-      }));
+      return data.map(
+        (model: any): StandardModel => ({
+          id: model.id || model.name || String(Math.random()),
+          name: model.name || model.id || "Unknown Model",
+          provider: provider,
+        })
+      );
     }
     return [];
   };
@@ -552,10 +558,13 @@ export const getModelAdapter = (provider: SettingKeyProviders) => {
 /**
  * Parse model data and convert to standard format
  */
-export const parseModelsResponse = (provider: SettingKeyProviders, data: any): StandardModel[] => {
+export const parseModelsResponse = (
+  provider: SettingKeyProviders,
+  data: unknown
+): StandardModel[] => {
   const adapter = getModelAdapter(provider);
   try {
-    return adapter(data);
+    return adapter(data as never);
   } catch (error) {
     logError(`Error parsing ${provider} model data:`, error);
     return [];

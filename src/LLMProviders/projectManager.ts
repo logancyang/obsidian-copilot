@@ -57,11 +57,11 @@ export default class ProjectManager {
     this.loadTracker = ProjectLoadTracker.getInstance(this.app);
 
     // Set up subscriptions
-    subscribeToModelKeyChange(async () => {
-      await this.getCurrentChainManager().createChainWithNewModel();
+    subscribeToModelKeyChange(() => {
+      void this.getCurrentChainManager().createChainWithNewModel();
     });
 
-    subscribeToChainTypeChange(async () => {
+    subscribeToChainTypeChange(() => {
       // When switching from other modes to project mode, no need to update the chain.
       if (isProjectMode()) {
         return;
@@ -69,17 +69,18 @@ export default class ProjectManager {
       const settings = getSettings();
       const shouldAutoIndex =
         settings.enableSemanticSearchV3 &&
-        settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
+        (settings.indexVaultToVectorStore as VAULT_VECTOR_STORE_STRATEGY) ===
+          VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
         (getChainType() === ChainType.VAULT_QA_CHAIN ||
           getChainType() === ChainType.COPILOT_PLUS_CHAIN);
-      await this.getCurrentChainManager().createChainWithNewModel({
+      void this.getCurrentChainManager().createChainWithNewModel({
         refreshIndex: shouldAutoIndex,
       });
     });
 
     // Subscribe to Project changes
-    subscribeToProjectChange(async (project) => {
-      await this.switchProject(project);
+    subscribeToProjectChange((project) => {
+      void this.switchProject(project);
     });
 
     // Subscribe to project cache changes to monitor project modifications
@@ -936,7 +937,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
           await this.retryNonMarkdownFile(project, failedItem.path);
           break;
         default:
-          logWarn(`[retryFailedItem] Unknown item type: ${failedItem.type}`);
+          logWarn(`[retryFailedItem] Unknown item type: ${String(failedItem.type)}`);
           return;
       }
 

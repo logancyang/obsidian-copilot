@@ -82,7 +82,7 @@ describe("obsidianDailyNoteTool", () => {
     mockedRunCommand.mockResolvedValue(buildSuccessResult("daily", ""));
 
     const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_daily_note");
     expect(parsed.command).toBe("daily");
@@ -99,7 +99,7 @@ describe("obsidianDailyNoteTool", () => {
     );
 
     const response = await (obsidianDailyNoteTool as any).invoke({ command: "daily:read" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_daily_note");
     expect(parsed.command).toBe("daily:read");
@@ -119,7 +119,7 @@ describe("obsidianDailyNoteTool", () => {
       command: "daily:path",
       vault: "Work",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_daily_note");
     expect(parsed.command).toBe("daily:path");
@@ -157,7 +157,7 @@ describe("obsidianPropertiesTool", () => {
     );
 
     const response = await (obsidianPropertiesTool as any).invoke({ command: "properties" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_properties");
     expect(parsed.command).toBe("properties");
@@ -195,7 +195,7 @@ describe("obsidianPropertiesTool", () => {
       name: "tags",
       file: "My Note",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.content).toBe("project, review");
     expect(mockedRunCommand).toHaveBeenCalledWith({
@@ -232,7 +232,7 @@ describe("obsidianTasksTool", () => {
     );
 
     const response = await (obsidianTasksTool as any).invoke({ command: "tasks" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_tasks");
     expect(parsed.command).toBe("tasks");
@@ -297,7 +297,7 @@ describe("obsidianLinksTool", () => {
       command: "backlinks",
       file: "My Note",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_links");
     expect(parsed.command).toBe("backlinks");
@@ -329,7 +329,7 @@ describe("obsidianLinksTool", () => {
     );
 
     const response = await (obsidianLinksTool as any).invoke({ command: "orphans" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.content).toBe("Inbox/draft.md\nAttic/old.md");
   });
@@ -386,7 +386,7 @@ describe("obsidianTemplatesTool", () => {
     );
 
     const response = await (obsidianTemplatesTool as any).invoke({ command: "templates" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_templates");
     expect(parsed.command).toBe("templates");
@@ -420,7 +420,7 @@ describe("obsidianTemplatesTool", () => {
       command: "template:read",
       name: "Daily Note",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_templates");
     expect(parsed.command).toBe("template:read");
@@ -468,7 +468,7 @@ describe("obsidianBasesTool", () => {
     );
 
     const response = await (obsidianBasesTool as any).invoke({ command: "bases" });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_bases");
     expect(parsed.command).toBe("bases");
@@ -490,7 +490,7 @@ describe("obsidianBasesTool", () => {
       command: "base:views",
       file: "Projects",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_bases");
     expect(parsed.content).toBe("All Items\nBy Status\nKanban");
@@ -527,7 +527,7 @@ describe("obsidianBasesTool", () => {
       view: "All Items",
       format: "csv",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.content).toBe("Name,Status\nAlpha,Active\nBeta,Done");
     expect(mockedRunCommand).toHaveBeenCalledWith({
@@ -565,7 +565,7 @@ describe("obsidianBasesTool", () => {
       name: "Dune Messiah",
       content: "A book by Frank Herbert",
     });
-    const parsed = JSON.parse(response);
+    const parsed = JSON.parse(response as string);
 
     expect(parsed.type).toBe("obsidian_cli_bases");
     expect(parsed.command).toBe("base:create");

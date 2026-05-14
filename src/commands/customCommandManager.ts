@@ -83,7 +83,7 @@ export class CustomCommandManager {
   }
 
   async recordUsage(command: CustomCommand) {
-    this.updateCommand({ ...command, lastUsedMs: Date.now() }, command.title);
+    await this.updateCommand({ ...command, lastUsedMs: Date.now() }, command.title);
   }
 
   async updateCommand(command: CustomCommand, prevCommandTitle: string, skipStoreUpdate = false) {

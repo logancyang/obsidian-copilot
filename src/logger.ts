@@ -1,7 +1,7 @@
 import { getSettings } from "@/settings/model";
 import { logFileManager } from "@/logFileManager";
 
-export function logInfo(...args: any[]) {
+export function logInfo(...args: unknown[]) {
   if (getSettings().debug) {
     console.log(...args);
   }
@@ -9,7 +9,7 @@ export function logInfo(...args: any[]) {
   void logFileManager.append("INFO", ...args);
 }
 
-export function logError(...args: any[]) {
+export function logError(...args: unknown[]) {
   // Always include stack traces by default; console logs still respect debug
   if (getSettings().debug) {
     console.error(...args);
@@ -17,7 +17,7 @@ export function logError(...args: any[]) {
   void logFileManager.append("ERROR", ...args);
 }
 
-export function logWarn(...args: any[]) {
+export function logWarn(...args: unknown[]) {
   if (getSettings().debug) {
     console.warn(...args);
   }

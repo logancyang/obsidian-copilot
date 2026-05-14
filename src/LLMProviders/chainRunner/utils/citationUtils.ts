@@ -106,7 +106,7 @@ const MAX_FALLBACK_SOURCES = 20;
  * Adds fallback sources to response if citations are missing.
  */
 export function addFallbackSources(
-  response: string,
+  response: string | null | undefined,
   sources: { title?: string; path?: string }[],
   enableInlineCitations: boolean = true
 ): string {
@@ -141,7 +141,7 @@ export function addFallbackSources(
 /**
  * Sanitizes content to remove pre-existing citation markers to prevent number leakage.
  */
-export function sanitizeContentForCitations(text: string): string {
+export function sanitizeContentForCitations(text: string | null | undefined): string {
   if (!text) return "";
 
   // Remove inline footnote refs like [^12]
@@ -159,7 +159,7 @@ export function sanitizeContentForCitations(text: string): string {
 /**
  * Detects if response already has sources section or footnote definitions.
  */
-export function hasExistingCitations(response: string): boolean {
+export function hasExistingCitations(response: string | null | undefined): boolean {
   const content = response || "";
   const hasMarkdownHeading = /(^|\n)\s*#{1,6}\s*Sources\b/i.test(content);
   const hasPlainLabel = /(^|\n)\s*Sources\s*(?:[:-]\s*)?(\n|$)/i.test(content);
@@ -173,7 +173,7 @@ export function hasExistingCitations(response: string): boolean {
  * Detects if response contains inline citation markers in the body text (like [^1], [^2], etc.).
  * This is different from hasExistingCitations which checks for the Sources section.
  */
-export function hasInlineCitations(response: string): boolean {
+export function hasInlineCitations(response: string | null | undefined): boolean {
   const content = response || "";
   // Look for [^digits] patterns in the text (inline citations)
   // This should match [^1], [^2], etc. used in the body text
@@ -326,7 +326,7 @@ export function normalizeCitations(content: string, map: Map<number, number>): s
     changed = false;
 
     // Handle single citations: [^n] -> [n]
-    result = result.replace(/\[\^(\d+)\]/g, (match, n) => {
+    result = result.replace(/\[\^(\d+)\]/g, (match, n: string) => {
       const oldN = parseInt(n, 10);
       const newN = map.get(oldN) ?? oldN;
       const replacement = `[${newN}]`;
@@ -456,7 +456,7 @@ export function updateCitationsForConsolidation(
 ): string {
   if (consolidationMap.size === 0) return content;
 
-  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_match, nums) => {
+  return content.replace(/\[(\d+(?:\s*,\s*\d+)*)\]/g, (_match, nums: string) => {
     const parts = nums.split(/\s*,\s*/);
     const seen = new Set<number>();
     const unique: number[] = [];
@@ -485,7 +485,7 @@ export function deduplicateAdjacentCitations(content: string): string {
     // Match citation brackets separated by optional whitespace or connectors (" and ", ", ")
     result = result.replace(
       /\[(\d+(?:\s*,\s*\d+)*)\](?:\s*(?:and|,)\s*|\s*)\[(\d+(?:\s*,\s*\d+)*)\]/g,
-      (match, first, second) => {
+      (match, first: string, second: string) => {
         const firstNums = new Set(first.split(/\s*,\s*/).map((s: string) => s.trim()));
         const secondNums = second.split(/\s*,\s*/).map((s: string) => s.trim());
         if (secondNums.every((n: string) => firstNums.has(n))) {

@@ -105,7 +105,7 @@ export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: P
 
   /** Open parsed content preview for a cached item. */
   const handleOpenCachedItem = (item: ProcessingItem) => {
-    openCachedItemPreview(app, projectCache, item);
+    void openCachedItemPreview(app, projectCache, item);
   };
 
   return (

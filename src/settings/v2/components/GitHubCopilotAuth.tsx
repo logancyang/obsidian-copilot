@@ -270,7 +270,7 @@ export function GitHubCopilotAuth() {
             <Button
               onClick={() => {
                 if (!isAuthenticated && !isAuthenticating) {
-                  handleStartAuth();
+                  void handleStartAuth();
                 } else {
                   setExpanded(!expanded);
                 }

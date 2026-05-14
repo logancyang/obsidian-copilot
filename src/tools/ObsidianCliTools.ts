@@ -41,7 +41,7 @@ export const obsidianDailyNoteTool = createLangChainTool({
   func: async (args) => {
     const { command, vault } = args;
 
-    const params = buildCliParams(args as Record<string, unknown>);
+    const params = buildCliParams(args);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -107,7 +107,7 @@ export const obsidianPropertiesTool = createLangChainTool({
       throw new Error("name is required for property:read");
     }
 
-    const params = buildCliParams(args as Record<string, unknown>);
+    const params = buildCliParams(args);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -158,7 +158,7 @@ export const obsidianTasksTool = createLangChainTool({
   schema: tasksSchema,
   func: async (args) => {
     const { command, vault } = args;
-    const params = buildCliParams(args as Record<string, unknown>);
+    const params = buildCliParams(args);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -215,7 +215,7 @@ export const obsidianLinksTool = createLangChainTool({
   schema: linksSchema,
   func: async (args) => {
     const { command, vault } = args;
-    const params = buildCliParams(args as Record<string, unknown>);
+    const params = buildCliParams(args);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -262,7 +262,7 @@ export const obsidianTemplatesTool = createLangChainTool({
       throw new Error("name is required for template:read");
     }
 
-    const params = buildCliParams(args as Record<string, unknown>);
+    const params = buildCliParams(args);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);
@@ -343,7 +343,7 @@ export const obsidianBasesTool = createLangChainTool({
       throw new Error(`file or path is required for ${command}`);
     }
 
-    const params = buildCliParams(args as Record<string, unknown>);
+    const params = buildCliParams(args);
     const result = await runObsidianCliCommand({ command, vault, params });
 
     if (!result.ok) throwCliFailure(result);

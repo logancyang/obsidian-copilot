@@ -86,8 +86,8 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   const [resetKey, setResetKey] = React.useState(0);
   const { latestVersion, hasUpdate } = useLatestVersion(plugin.manifest.version);
 
-  const handleReset = async () => {
-    const modal = new ResetSettingsConfirmModal(app, async () => {
+  const handleReset = () => {
+    const modal = new ResetSettingsConfirmModal(app, () => {
       resetSettings();
       // Increment the key to force re-render of all components
       setResetKey((prev) => prev + 1);

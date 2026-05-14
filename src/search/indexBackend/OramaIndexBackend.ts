@@ -47,7 +47,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
    * Insert or update a document in Orama.
    */
   public async upsert(doc: SemanticIndexDocument): Promise<SemanticIndexDocument | undefined> {
-    return this.dbOps.upsert(doc);
+    return (await this.dbOps.upsert(doc)) as SemanticIndexDocument | undefined;
   }
 
   /**
