@@ -13,7 +13,7 @@ import { computeVerticalPlacement } from "@/utils/panelPlacement";
 import { computeSelectionAnchors } from "@/utils/selectionAnchors";
 import type { EditorView } from "@codemirror/view";
 import { PenLine } from "lucide-react";
-import { App, Component, MarkdownRenderer, Notice, MarkdownView } from "obsidian";
+import { App, Component, MarkdownRenderer, Notice, MarkdownView, Scope } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { createRoot, Root } from "react-dom/client";
@@ -486,6 +486,7 @@ export class CustomCommandChatModal {
   private container: HTMLElement | null = null;
   private highlightView: EditorView | null = null;
   private replaceGuard: ReplaceGuard | null = null;
+  private scope: Scope | null = null;
 
   constructor(
     private app: App,
@@ -646,6 +647,14 @@ export class CustomCommandChatModal {
   }
 
   open() {
+    // Reason: Push a Scope so user-bound global Cmd/Ctrl+Enter hotkeys don't fire
+    // while this modal is open. The Scope handlers return true to consume the event;
+    // the React onKeyDown inside MenuCommandModal does the actual Replace/Insert.
+    this.scope = new Scope();
+    this.scope.register(["Mod"], "Enter", () => true);
+    this.scope.register(["Mod", "Shift"], "Enter", () => true);
+    this.app.keymap.pushScope(this.scope);
+
     // Reason: Capture activeView once at open time to ensure document/window/editor
     // all reference the same view. Avoids subtle inconsistencies if the user switches
     // tabs between resolveDocument() and the selection snapshot below.
@@ -732,6 +741,10 @@ export class CustomCommandChatModal {
   }
 
   close() {
+    if (this.scope) {
+      this.app.keymap.popScope(this.scope);
+      this.scope = null;
+    }
     // Hide selection highlight
     if (this.highlightView) {
       SelectionHighlight.hide(this.highlightView);
