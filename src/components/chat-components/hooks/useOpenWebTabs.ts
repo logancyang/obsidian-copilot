@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Platform } from "obsidian";
+import { App, Platform } from "obsidian";
+import { useApp } from "@/context";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import type { WebTabContext } from "@/types/message";
 
@@ -26,7 +27,7 @@ export interface UseOpenWebTabsOptions {
  * Sorting ensures stable output ordering for equality checks.
  * Includes tabs with title but no URL (not yet loaded) with isLoaded=false.
  */
-function getOpenWebTabSnapshot(): WebTabContext[] {
+function getOpenWebTabSnapshot(app: App): WebTabContext[] {
   try {
     const service = getWebViewerService(app);
     const leaves = service.getLeaves();
@@ -115,6 +116,7 @@ function areWebTabSnapshotsEqual(a: WebTabContext[], b: WebTabContext[]): boolea
  * @param options.enabled - Whether to enable polling (default: true)
  */
 export function useOpenWebTabs(options: UseOpenWebTabsOptions = {}): WebTabContext[] {
+  const app = useApp();
   const { enabled = true } = options;
   const [tabs, setTabs] = useState<WebTabContext[]>([]);
   const rafIdRef = useRef<number | null>(null);
@@ -137,7 +139,7 @@ export function useOpenWebTabs(options: UseOpenWebTabsOptions = {}): WebTabConte
     /** Refresh state from the current Web Viewer tab snapshot. */
     const refresh = () => {
       if (disposed) return;
-      const next = getOpenWebTabSnapshot();
+      const next = getOpenWebTabSnapshot(app);
       setTabs((prev) => (areWebTabSnapshotsEqual(prev, next) ? prev : next));
     };
 
@@ -176,7 +178,7 @@ export function useOpenWebTabs(options: UseOpenWebTabsOptions = {}): WebTabConte
       app.workspace.offref(activeLeafRef);
       unsubscribeWebviewLoad();
     };
-  }, [enabled]);
+  }, [app, enabled]);
 
   return tabs;
 }

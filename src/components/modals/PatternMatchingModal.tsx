@@ -1,5 +1,6 @@
 import { App, Modal } from "obsidian";
 import { Button } from "@/components/ui/button";
+import { AppContext, useApp } from "@/context";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
 import {
@@ -62,6 +63,7 @@ function PatternMatchingModalContent({
   onUpdate: (value: string) => void;
   container: HTMLElement;
 }) {
+  const app = useApp();
   const [value, setValue] = useState(initialValue);
   const patterns = getDecodedPatterns(value);
   const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } =
@@ -280,11 +282,13 @@ export class PatternMatchingModal extends Modal {
     };
 
     this.root.render(
-      <PatternMatchingModalContent
-        value={this.value}
-        onUpdate={handleUpdate}
-        container={this.contentEl}
-      />
+      <AppContext.Provider value={this.app}>
+        <PatternMatchingModalContent
+          value={this.value}
+          onUpdate={handleUpdate}
+          container={this.contentEl}
+        />
+      </AppContext.Provider>
     );
   }
 

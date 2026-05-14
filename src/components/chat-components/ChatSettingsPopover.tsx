@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useApp } from "@/context";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ const RESETTABLE_MODEL_PARAMS: (keyof CustomModel)[] = [
 ];
 
 export function ChatSettingsPopover() {
+  const app = useApp();
   const settings = getSettings();
   const modelKey = getModelKey();
 

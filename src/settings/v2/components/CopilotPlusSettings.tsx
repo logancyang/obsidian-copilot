@@ -1,4 +1,5 @@
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { useApp } from "@/context";
 import { Badge } from "@/components/ui/badge";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { SettingItem } from "@/components/ui/setting-item";
@@ -12,6 +13,7 @@ import React, { useState } from "react";
 import { ToolSettingsSection } from "./ToolSettingsSection";
 
 export const CopilotPlusSettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   const [isValidatingSelfHost, setIsValidatingSelfHost] = useState(false);
   const isSelfHostEligible = useIsSelfHostEligible();

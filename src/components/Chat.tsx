@@ -569,7 +569,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       // and duplicate-id errors). reloadCurrentProject() handles its own error notices.
       const currentProject = getCurrentProject();
       if (currentProject?.id === project.id) {
-        void reloadCurrentProject();
+        void reloadCurrentProject(plugin.app);
       }
     },
     [plugin.app]

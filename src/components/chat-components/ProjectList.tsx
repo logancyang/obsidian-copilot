@@ -3,6 +3,7 @@ import type CopilotPlugin from "@/main";
 import { AddProjectModal } from "@/components/modals/project/AddProjectModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
+import { useApp } from "@/context";
 import { useChatInput } from "@/context/ChatInputContext";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import {
@@ -74,6 +75,7 @@ function ProjectItem({
   onEdit: (project: ProjectConfig) => void;
   onDelete: (project: ProjectConfig) => void;
 }) {
+  const app = useApp();
   return (
     <div
       className="tw-group tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-gap-2 tw-rounded-lg tw-border tw-border-solid tw-border-border tw-p-3 tw-transition-all tw-duration-200 tw-bg-secondary/40 hover:tw-border-interactive-accent hover:tw-text-accent hover:tw-shadow-[0_2px_12px_rgba(0,0,0,0.1)] active:tw-scale-[0.98]"

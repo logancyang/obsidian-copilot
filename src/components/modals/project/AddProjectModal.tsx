@@ -1,4 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
+import { AppContext, useApp } from "@/context";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { openCachedItemPreview } from "@/utils/cacheFileOpener";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
@@ -39,6 +40,7 @@ function AddProjectModalContent({
   onCancel,
   plugin,
 }: AddProjectModalContentProps) {
+  const app = useApp();
   const settings = useSettingsValue();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [touched, setTouched] = useState({
@@ -480,12 +482,14 @@ export class AddProjectModal extends Modal {
     };
 
     this.root.render(
-      <AddProjectModalContent
-        initialProject={this.initialProject}
-        onSave={handleSave}
-        onCancel={handleCancel}
-        plugin={this.plugin}
-      />
+      <AppContext.Provider value={this.app}>
+        <AddProjectModalContent
+          initialProject={this.initialProject}
+          onSave={handleSave}
+          onCancel={handleCancel}
+          plugin={this.plugin}
+        />
+      </AppContext.Provider>
     );
   }
 

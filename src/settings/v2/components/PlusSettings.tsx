@@ -1,4 +1,5 @@
 import { CopilotPlusWelcomeModal } from "@/components/modals/CopilotPlusWelcomeModal";
+import { useApp } from "@/context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -9,6 +10,7 @@ import { ExternalLink, Loader2 } from "lucide-react";
 import React, { useEffect, useState } from "react";
 
 export function PlusSettings() {
+  const app = useApp();
   const settings = useSettingsValue();
   const [error, setError] = useState<string | null>(null);
   const [isChecking, setIsChecking] = useState(false);

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Platform } from "obsidian";
 
+import { useApp } from "@/context";
 import { getWebViewerService } from "@/services/webViewerService/webViewerServiceSingleton";
 import type { ActiveWebTabStateSnapshot } from "@/services/webViewerService/webViewerServiceTypes";
 
@@ -18,6 +19,7 @@ const EMPTY_ACTIVE_WEB_TAB_STATE: ActiveWebTabStateSnapshot = {
  *   - activeOrLastWebTab: For pill display (active or last active tab)
  */
 export function useActiveWebTabState(): ActiveWebTabStateSnapshot {
+  const app = useApp();
   const [state, setState] = useState<ActiveWebTabStateSnapshot>(() => {
     if (!Platform.isDesktopApp) {
       return EMPTY_ACTIVE_WEB_TAB_STATE;
@@ -49,7 +51,7 @@ export function useActiveWebTabState(): ActiveWebTabStateSnapshot {
     return () => {
       unsubscribe?.();
     };
-  }, []);
+  }, [app]);
 
   return state;
 }

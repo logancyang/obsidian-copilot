@@ -11,7 +11,7 @@ export class TagSearchModal extends FuzzySuggestModal<string> {
 
   getItems(): string[] {
     // Get all Markdown files in the vault.
-    const files = app.vault.getMarkdownFiles();
+    const files = this.app.vault.getMarkdownFiles();
     const tagSet = new Set<string>();
 
     // Loop through each file and extract tags.

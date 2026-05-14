@@ -2,6 +2,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { useApp } from "@/context";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useChatInput } from "@/context/ChatInputContext";
@@ -106,6 +107,7 @@ function RelevantNote({
   onAddToChat: () => void;
   onNavigateToNote: (openInNewLeaf: boolean) => void;
 }) {
+  const app = useApp();
   const [isOpen, setIsOpen] = useState(false);
   const [fileContent, setFileContent] = useState<string | null>(null);
   const handleDragStart = useNoteDrag();
@@ -128,7 +130,7 @@ function RelevantNote({
       // Take first 1000 characters as preview
       setFileContent(cleanContent.slice(0, 1000) + (cleanContent.length > 1000 ? "..." : ""));
     }
-  }, [fileContent, note.note.path]);
+  }, [app, fileContent, note.note.path]);
 
   useEffect(() => {
     if (isOpen) {
@@ -272,6 +274,7 @@ function RelevantNotePopover({
 
 export const RelevantNotes = memo(
   ({ className, defaultOpen = false }: { className?: string; defaultOpen?: boolean }) => {
+    const app = useApp();
     const [refresher, setRefresher] = useState(0);
     const [isOpen, setIsOpen] = useState(defaultOpen);
     const relevantNotes = useRelevantNotes(refresher);

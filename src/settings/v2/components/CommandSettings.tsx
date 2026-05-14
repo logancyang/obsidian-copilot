@@ -46,6 +46,7 @@ import {
 import { generateDefaultCommands } from "@/commands/migrator";
 import { CustomCommand } from "@/commands/type";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
+import { useApp } from "@/context";
 import { SettingItem } from "@/components/ui/setting-item";
 import { Notice } from "obsidian";
 
@@ -57,6 +58,7 @@ const MobileCommandCard: React.FC<{
   onCopy: (command: CustomCommand) => void | Promise<void>;
   containerRef: React.RefObject<HTMLDivElement>;
 }> = ({ command, commands, onUpdate, onRemove, onCopy, containerRef }) => {
+  const app = useApp();
   const handleEdit = (cmd: CustomCommand) => {
     const modal = new CustomCommandSettingsModal(app, commands, cmd, async (updatedCommand) => {
       await onUpdate(updatedCommand, cmd.title);
@@ -172,6 +174,7 @@ const SortableTableRow: React.FC<{
   onRemove: (command: CustomCommand) => void | Promise<void>;
   onCopy: (command: CustomCommand) => void | Promise<void>;
 }> = ({ command, commands, onUpdate, onRemove, onCopy }) => {
+  const app = useApp();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: command.title,
   });
@@ -285,6 +288,7 @@ const SortableTableRow: React.FC<{
 };
 
 export const CommandSettings: React.FC = () => {
+  const app = useApp();
   const rawCommands = useCustomCommands();
   const commands = useMemo(() => {
     return sortCommandsByOrder([...rawCommands]);

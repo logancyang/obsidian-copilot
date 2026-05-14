@@ -1,5 +1,6 @@
 import { CustomModel } from "@/aiParams";
 import { SettingItem } from "@/components/ui/setting-item";
+import { useApp } from "@/context";
 import { BUILTIN_CHAT_MODELS, BUILTIN_EMBEDDING_MODELS } from "@/constants";
 import EmbeddingManager from "@/LLMProviders/embeddingManager";
 import ProjectManager from "@/LLMProviders/projectManager";
@@ -13,6 +14,7 @@ import { Notice } from "obsidian";
 import React, { useState } from "react";
 
 export const ModelSettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showAddEmbeddingDialog, setShowAddEmbeddingDialog] = useState(false);

@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { ObsidianNativeSelect } from "@/components/ui/obsidian-native-select";
+import { useApp } from "@/context";
 import { logFileManager } from "@/logFileManager";
 import { flushRecordedPromptPayloadToLog } from "@/LLMProviders/chainRunner/utils/promptPayloadRecorder";
 import { updateSetting, useSettingsValue } from "@/settings/model";
@@ -10,6 +11,7 @@ import { getPromptFilePath, SystemPromptAddModal } from "@/system-prompts";
 import { useSystemPrompts } from "@/system-prompts/state";
 
 export const AdvancedSettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   const prompts = useSystemPrompts();
 

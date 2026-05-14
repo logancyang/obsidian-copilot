@@ -1,9 +1,10 @@
 import { EVENT_NAMES } from "@/constants";
-import { EventTargetContext } from "@/context";
+import { EventTargetContext, useApp } from "@/context";
 import { TFile } from "obsidian";
 import { useContext, useEffect, useState } from "react";
 
 export function useActiveFile() {
+  const app = useApp();
   const [activeFile, setActiveFile] = useState<TFile | null>(null);
   const eventTarget = useContext(EventTargetContext);
 
@@ -16,7 +17,7 @@ export function useActiveFile() {
     return () => {
       eventTarget?.removeEventListener(EVENT_NAMES.ACTIVE_LEAF_CHANGE, handleActiveLeafChange);
     };
-  }, [eventTarget]);
+  }, [app, eventTarget]);
 
   return activeFile;
 }

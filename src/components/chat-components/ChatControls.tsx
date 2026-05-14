@@ -13,6 +13,7 @@ import { navigateToPlusPage, useIsPlusUser } from "@/plusUtils";
 import { updateSetting, useSettingsValue } from "@/settings/model";
 import { Docs4LLMParser } from "@/tools/FileParserManager";
 import { isRateLimitError } from "@/utils/rateLimitUtils";
+import { useApp } from "@/context";
 import { DropdownMenu, DropdownMenuTrigger } from "@radix-ui/react-dropdown-menu";
 import {
   AlertTriangle,
@@ -28,7 +29,7 @@ import {
   Sparkles,
   SquareArrowOutUpRight,
 } from "lucide-react";
-import { Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import React from "react";
 import {
   ChatHistoryItem,
@@ -89,7 +90,7 @@ export async function forceReindexVault() {
   }
 }
 
-export async function reloadCurrentProject() {
+export async function reloadCurrentProject(app: App) {
   const currentProject = getCurrentProject();
   if (!currentProject) {
     new Notice("No project is currently selected to reload.");
@@ -131,7 +132,7 @@ export async function reloadCurrentProject() {
   }
 }
 
-export async function forceRebuildCurrentProjectContext() {
+export async function forceRebuildCurrentProjectContext(app: App) {
   const currentProject = getCurrentProject();
   if (!currentProject) {
     new Notice("No project is currently selected to rebuild.");
@@ -213,6 +214,7 @@ export function ChatControls({
   onOpenSourceFile,
   latestTokenCount,
 }: ChatControlsProps) {
+  const app = useApp();
   const settings = useSettingsValue();
   const [selectedChain, setSelectedChain] = useChainType();
   const isPlusUser = useIsPlusUser();
@@ -409,14 +411,14 @@ export function ChatControls({
               <>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
-                  onSelect={() => void reloadCurrentProject()}
+                  onSelect={() => void reloadCurrentProject(app)}
                 >
                   <RefreshCw className="tw-size-4" />
                   Reload Current Project
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   className="tw-flex tw-items-center tw-gap-2"
-                  onSelect={() => void forceRebuildCurrentProjectContext()}
+                  onSelect={() => void forceRebuildCurrentProjectContext(app)}
                 >
                   <AlertTriangle className="tw-size-4" />
                   Force Rebuild Context

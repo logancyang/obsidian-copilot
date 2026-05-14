@@ -4,6 +4,7 @@ import { Notice } from "obsidian";
 
 import { RebuildIndexConfirmModal } from "@/components/modals/RebuildIndexConfirmModal";
 import { SemanticSearchToggleModal } from "@/components/modals/SemanticSearchToggleModal";
+import { useApp } from "@/context";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
@@ -12,6 +13,7 @@ import { getModelKeyFromModel, updateSetting, useSettingsValue } from "@/setting
 import { PatternListEditor } from "@/settings/v2/components/PatternListEditor";
 
 export const QASettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   const isMiyoSearchActive = settings.enableMiyo;
   const visibleEmbeddingModels = settings.activeEmbeddingModels;

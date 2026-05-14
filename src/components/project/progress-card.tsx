@@ -23,6 +23,7 @@ import type { ProcessingItem } from "@/components/project/processingAdapter";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { splitUrlsStringToArray } from "@/projects/projectUtils";
 import CopilotPlugin from "@/main";
+import { useApp } from "@/context";
 import { logError } from "@/logger";
 
 interface ProgressCardProps {
@@ -32,6 +33,7 @@ interface ProgressCardProps {
 }
 
 export default function ProgressCard({ plugin, setHiddenCard, onEditContext }: ProgressCardProps) {
+  const app = useApp();
   const [isExpanded, setIsExpanded] = useState(false);
   const [contextLoadState] = useProjectContextLoad();
   const totalFiles = contextLoadState.total;

@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { getModelDisplayWithIcons } from "@/components/ui/model-display";
 import { SettingItem } from "@/components/ui/setting-item";
 import { DEFAULT_OPEN_AREA, PLUS_UTM_MEDIUMS, SEND_SHORTCUT } from "@/constants";
+import { useApp } from "@/context";
 import { useTab } from "@/contexts/TabContext";
 import { cn } from "@/lib/utils";
 import { createPlusPageUrl } from "@/plusUtils";
@@ -25,6 +26,7 @@ const ChainType2Label: Record<ChainType, string> = {
 };
 
 export const BasicSettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   const { setSelectedTab } = useTab();
   const [isChecking, setIsChecking] = useState(false);

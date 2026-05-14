@@ -12,6 +12,7 @@ import {
   buildProcessingItems,
   type ProcessingAdapterResult,
 } from "@/components/project/processingAdapter";
+import { useApp } from "@/context";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { TFile } from "obsidian";
@@ -50,6 +51,7 @@ export interface UseProjectProcessingDataResult {
 export function useProjectProcessingData(
   params: UseProjectProcessingDataParams
 ): UseProjectProcessingDataResult {
+  const app = useApp();
   const { cacheProject, contextSource } = params;
 
   // Reason: Load the project's persistent context cache.
@@ -105,7 +107,7 @@ export function useProjectProcessingData(
     setProjectFiles(
       app.vault.getFiles().filter((file) => shouldIndexFile(file, inclusions, exclusions, true))
     );
-  }, [cacheProject, effectiveInclusions, effectiveExclusions]);
+  }, [app, cacheProject, effectiveInclusions, effectiveExclusions]);
 
   // Reason: Static method — the set of supported extensions never changes at runtime.
   const supportedExtensions = useMemo(() => FileParserManager.getProjectSupportedExtensions(), []);

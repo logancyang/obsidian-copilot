@@ -16,6 +16,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useApp } from "@/context";
 import { cn } from "@/lib/utils";
 import {
   categorizePatterns,
@@ -50,6 +51,7 @@ export const PatternListEditor: React.FC<PatternListEditorProps> = ({
   maxCollapsedHeight = 84,
   maxExpandedHeight = 200,
 }) => {
+  const app = useApp();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const [contentHeight, setContentHeight] = useState<number>(0);

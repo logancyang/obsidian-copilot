@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { TFile } from "obsidian";
+import { useApp } from "@/context";
 
 /**
  * Returns a drag-start handler that integrates with Obsidian's native dragManager API.
@@ -16,24 +17,28 @@ import { TFile } from "obsidian";
  * ```
  */
 export function useNoteDrag() {
-  const handleDragStart = useCallback((e: React.DragEvent, file: TFile): void => {
-    const dragManager = (
-      app as unknown as {
-        dragManager?: {
-          dragLink: (event: DragEvent, linkText: string) => unknown;
-          onDragStart: (event: DragEvent, data: unknown) => void;
-        };
-      }
-    ).dragManager;
-    if (!dragManager) return;
+  const app = useApp();
+  const handleDragStart = useCallback(
+    (e: React.DragEvent, file: TFile): void => {
+      const dragManager = (
+        app as unknown as {
+          dragManager?: {
+            dragLink: (event: DragEvent, linkText: string) => unknown;
+            onDragStart: (event: DragEvent, data: unknown) => void;
+          };
+        }
+      ).dragManager;
+      if (!dragManager) return;
 
-    // Mark this drag as internal so the chat drop zone overlay doesn't appear
-    e.dataTransfer.setData("copilot/internal-drag", "true");
+      // Mark this drag as internal so the chat drop zone overlay doesn't appear
+      e.dataTransfer.setData("copilot/internal-drag", "true");
 
-    const linkText = app.metadataCache.fileToLinktext(file, "");
-    const dragData = dragManager.dragLink(e.nativeEvent, linkText);
-    dragManager.onDragStart(e.nativeEvent, dragData);
-  }, []);
+      const linkText = app.metadataCache.fileToLinktext(file, "");
+      const dragData = dragManager.dragLink(e.nativeEvent, linkText);
+      dragManager.onDragStart(e.nativeEvent, dragData);
+    },
+    [app]
+  );
 
   return handleDragStart;
 }

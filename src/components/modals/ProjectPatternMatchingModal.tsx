@@ -18,6 +18,7 @@ import { File, FileText, Folder, Tag, Wrench, X } from "lucide-react";
 import { App, Modal, TFile } from "obsidian";
 import React, { useState } from "react";
 import { createRoot, Root } from "react-dom/client";
+import { AppContext, useApp } from "@/context";
 import { CustomPatternInputModal } from "./CustomPatternInputModal";
 import { ExtensionInputModal } from "./ExtensionInputModal";
 import { FolderSearchModal } from "./FolderSearchModal";
@@ -62,6 +63,7 @@ function ProjectPatternMatchingModalContent({
   onUpdate: (value: string) => void;
   container: HTMLElement;
 }) {
+  const app = useApp();
   const [value, setValue] = useState(initialValue);
   const patterns = getDecodedPatterns(value);
   const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } =
@@ -279,11 +281,13 @@ export class ProjectPatternMatchingModal extends Modal {
     };
 
     this.root.render(
-      <ProjectPatternMatchingModalContent
-        value={this.value}
-        onUpdate={handleUpdate}
-        container={this.contentEl}
-      />
+      <AppContext.Provider value={this.app}>
+        <ProjectPatternMatchingModalContent
+          value={this.value}
+          onUpdate={handleUpdate}
+          container={this.contentEl}
+        />
+      </AppContext.Provider>
     );
   }
 
