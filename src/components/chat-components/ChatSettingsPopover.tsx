@@ -12,7 +12,7 @@ import { SettingSwitch } from "@/components/ui/setting-switch";
 import { ModelParametersEditor } from "@/components/ui/ModelParametersEditor";
 import { CustomModel, getModelKey } from "@/aiParams";
 import { getSettings, updateSetting } from "@/settings/model";
-import debounce from "lodash.debounce";
+import { debounce } from "@/utils/debounce";
 import {
   getDefaultSystemPromptTitle,
   getDisableBuiltinSystemPrompt,
@@ -83,8 +83,8 @@ export function ChatSettingsPopover() {
     }
   }, [showConfirmation]);
 
-  // Debounced save function - must be defined before handleOpenChange
-  // Reference: Command module uses lodash.debounce which has cancel() method
+  // Debounced save function - must be defined before handleOpenChange.
+  // Uses debounce.cancel() / debounce.flush() to manage pending writes on unmount.
   const debouncedSave = useMemo(
     () =>
       debounce((updatedModel: CustomModel) => {

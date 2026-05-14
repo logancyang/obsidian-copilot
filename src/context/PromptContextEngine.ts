@@ -1,4 +1,4 @@
-import { SHA256 } from "crypto-js";
+import { sha256 } from "@/utils/hash";
 import { logInfo } from "@/logger";
 import {
   PROMPT_LAYER_LABELS,
@@ -125,11 +125,11 @@ export class PromptContextEngine {
   }
 
   /**
-   * Compute a SHA-256 hash for the supplied value.
-   * Uses crypto-js for mobile compatibility (no Node.js crypto).
+   * Compute a SHA-256 hash for the supplied value. Pure-JS so it works on
+   * Obsidian mobile (no node:crypto, no sync Web Crypto).
    */
   private hash(value: string): string {
-    return SHA256(value || "").toString();
+    return sha256(value || "");
   }
 
   /**

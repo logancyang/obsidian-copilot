@@ -1,5 +1,5 @@
 // __mocks__/obsidian.js
-import yaml from "js-yaml";
+import { parse as parseYamlString } from "yaml";
 
 module.exports = {
   // Reason: normalizePath is used by projectPaths.ts; identity function is sufficient for tests
@@ -32,7 +32,7 @@ module.exports = {
     isDesktop: true,
   },
   parseYaml: jest.fn().mockImplementation((content) => {
-    return yaml.load(content);
+    return parseYamlString(content);
   }),
   Modal: class Modal {
     constructor() {

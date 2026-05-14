@@ -1,6 +1,6 @@
 import { atom } from "jotai";
 import { TFile, TFolder, TAbstractFile } from "obsidian";
-import debounce from "lodash.debounce";
+import { debounce } from "@/utils/debounce";
 import { settingsStore } from "@/settings/model";
 import { getTagsFromNote, isAllowedFileForNoteContext } from "@/utils";
 import { logInfo } from "@/logger";
@@ -161,7 +161,7 @@ export class VaultDataManager {
   };
 
   /**
-   * Debounced notes refresh - batches rapid file operations using lodash.debounce
+   * Debounced notes refresh - batches rapid file operations via debounce
    */
   private debouncedRefreshNotes = debounce(() => this.refreshNotes(), VAULT_DEBOUNCE_DELAY, {
     leading: true,
@@ -169,7 +169,7 @@ export class VaultDataManager {
   });
 
   /**
-   * Debounced folders refresh - batches rapid file operations using lodash.debounce
+   * Debounced folders refresh - batches rapid file operations via debounce
    */
   private debouncedRefreshFolders = debounce(() => this.refreshFolders(), VAULT_DEBOUNCE_DELAY, {
     leading: true,
@@ -177,7 +177,7 @@ export class VaultDataManager {
   });
 
   /**
-   * Debounced frontmatter tags refresh - batches rapid file operations using lodash.debounce
+   * Debounced frontmatter tags refresh - batches rapid file operations via debounce
    */
   private debouncedRefreshTagsFrontmatter = debounce(
     () => this.refreshTagsFrontmatter(),
@@ -189,7 +189,7 @@ export class VaultDataManager {
   );
 
   /**
-   * Debounced all tags refresh - batches rapid file operations using lodash.debounce
+   * Debounced all tags refresh - batches rapid file operations via debounce
    */
   private debouncedRefreshTagsAll = debounce(() => this.refreshTagsAll(), VAULT_DEBOUNCE_DELAY, {
     leading: true,

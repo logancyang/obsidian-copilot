@@ -8,7 +8,7 @@ import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, insert, Orama, remove, removeMultiple, search } from "@orama/orama";
 import { Mutex } from "async-mutex";
-import { MD5 } from "crypto-js";
+import { md5 } from "@/utils/hash";
 import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";
 import { getMatchingPatterns, getVectorLength, shouldIndexFile } from "./searchUtils";
@@ -260,7 +260,7 @@ export class DBOperations {
 
   private getVaultIdentifier(): string {
     const vaultName = this.app.vault.getName();
-    return MD5(vaultName).toString();
+    return md5(vaultName);
   }
 
   public markUnsavedChanges() {

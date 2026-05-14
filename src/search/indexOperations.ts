@@ -12,7 +12,7 @@ import { RateLimiter } from "@/rateLimiter";
 import { ChunkManager, getSharedChunkManager } from "@/search/v3/chunks";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { formatDateTime } from "@/utils";
-import { MD5 } from "crypto-js";
+import { md5 } from "@/utils/hash";
 import { App, Notice, TFile } from "obsidian";
 import type {
   SemanticIndexBackend,
@@ -379,7 +379,7 @@ export class IndexOperations {
   }
 
   private getDocHash(sourceDocument: string): string {
-    return MD5(sourceDocument).toString();
+    return md5(sourceDocument);
   }
 
   private async getFilesToIndex(overwrite?: boolean): Promise<TFile[]> {

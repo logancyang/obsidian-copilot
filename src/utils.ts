@@ -1112,16 +1112,7 @@ export async function insertIntoEditor(message: string, replace: boolean = false
   finalizeInsertion();
 }
 
-export function debounce<T extends (...args: any[]) => void>(
-  func: T,
-  wait: number
-): (...args: Parameters<T>) => void {
-  let timeout: number;
-  return (...args: Parameters<T>) => {
-    window.clearTimeout(timeout);
-    timeout = window.setTimeout(() => func(...args), wait);
-  };
-}
+export { debounce } from "@/utils/debounce";
 
 /**
  * Compare two semantic version strings.

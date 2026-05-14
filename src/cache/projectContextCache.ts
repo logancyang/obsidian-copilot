@@ -3,9 +3,9 @@ import { FileCache } from "@/cache/fileCache";
 import { logError, logInfo, logWarn } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getCachedProjects } from "@/projects/state";
-import { MD5 } from "crypto-js";
+import { md5 } from "@/utils/hash";
 import { TAbstractFile, TFile, Vault } from "obsidian";
-import debounce from "lodash.debounce";
+import { debounce } from "@/utils/debounce";
 import { Mutex } from "async-mutex";
 
 export interface ContextCache {
@@ -173,7 +173,7 @@ export class ProjectContextCache {
 
   private getCacheKey(project: ProjectConfig): string {
     // Use project ID as cache key
-    return MD5(project.id).toString();
+    return md5(project.id);
   }
 
   private getCachePath(cacheKey: string): string {

@@ -1,5 +1,5 @@
 import obsidianmd from "eslint-plugin-obsidianmd";
-import reactPlugin from "eslint-plugin-react";
+import eslintReact from "@eslint-react/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import tailwind from "eslint-plugin-tailwindcss";
 import globals from "globals";
@@ -26,10 +26,10 @@ export default [
 
   // React + tailwind plugins ship flat configs with no `files` filter, so
   // they'd cascade onto package.json (which uses the JSON parser) and crash.
-  // Constrain them to JS/TS sources.
+  // Constrain them to JSX/TSX sources where React/JSX rules actually apply.
   {
-    files: ["**/*.{js,jsx,mjs,cjs,ts,tsx}"],
-    ...reactPlugin.configs.flat.recommended,
+    files: ["**/*.{jsx,tsx}"],
+    ...eslintReact.configs.recommended,
   },
   {
     files: ["**/*.{js,jsx,mjs,cjs,ts,tsx}"],
@@ -53,7 +53,7 @@ export default [
       },
     },
     settings: {
-      react: { version: "detect" },
+      "react-x": { version: "detect" },
       tailwindcss: {
         callees: ["classnames", "clsx", "ctl", "cn", "cva"],
         config: "./tailwind.config.js",
@@ -63,7 +63,6 @@ export default [
     rules: {
       // Carry-over from legacy .eslintrc
       "no-prototype-builtins": "off",
-      "react/prop-types": "off",
       "tailwindcss/classnames-order": "error",
       "tailwindcss/enforces-negative-arbitrary-values": "error",
       "tailwindcss/enforces-shorthand": "error",
@@ -268,15 +267,7 @@ export default [
         "error",
         {
           presets: ["native", "microutilities", "preferred"],
-          allowed: [
-            "crypto-js",
-            "dotenv",
-            "js-yaml",
-            "lodash.debounce",
-            "eslint-plugin-react",
-            "lint-staged",
-            "npm-run-all",
-          ],
+          allowed: [],
         },
       ],
     },

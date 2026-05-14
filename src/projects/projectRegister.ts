@@ -21,7 +21,7 @@ import {
 import { loadAllProjects } from "@/projects/projectUtils";
 import { PROJECT_CONFIG_FILE_NAME, PROJECTS_UNSUPPORTED_FOLDER_NAME } from "@/projects/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
-import debounce from "lodash.debounce";
+import { debounce } from "@/utils/debounce";
 import { App, Notice, TAbstractFile, Vault } from "obsidian";
 
 /**

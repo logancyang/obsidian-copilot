@@ -9,6 +9,10 @@ module.exports = {
     "\\.(css|less|scss|sass)$": "identity-obj-proxy",
     "^@/(.*)$": "<rootDir>/src/$1",
     "^obsidian$": "<rootDir>/__mocks__/obsidian.js",
+    // The yaml package's "exports" field defaults to a browser ESM entry under
+    // jsdom; Jest can't parse ESM without extra config, so point at the CJS
+    // build it ships under dist/.
+    "^yaml$": "<rootDir>/node_modules/yaml/dist/index.js",
   },
   testRegex: ".*\\.test\\.(jsx?|tsx?)$",
   moduleFileExtensions: ["ts", "tsx", "js", "jsx", "json", "node"],

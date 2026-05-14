@@ -42,11 +42,9 @@ jest.mock("@/search/searchUtils", () => ({
   }),
 }));
 
-// Mock crypto-js
-jest.mock("crypto-js", () => ({
-  MD5: jest.fn().mockImplementation((str) => ({
-    toString: () => `mocked-hash-${str}`,
-  })),
+// Mock md5 so the cache key in tests is predictable
+jest.mock("@/utils/hash", () => ({
+  md5: jest.fn().mockImplementation((str: string) => `mocked-hash-${str}`),
 }));
 
 // Mock plusUtils

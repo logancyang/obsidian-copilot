@@ -17,7 +17,7 @@ import {
 } from "@/system-prompts/state";
 import { getSettings, subscribeToSettingsChange, updateSetting } from "@/settings/model";
 import { SystemPromptManager } from "@/system-prompts/systemPromptManager";
-import debounce from "lodash.debounce";
+import { debounce } from "@/utils/debounce";
 import { logError, logInfo } from "@/logger";
 
 /**

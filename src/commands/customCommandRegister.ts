@@ -9,7 +9,7 @@ import {
 } from "@/commands/customCommandUtils";
 import { Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
-import debounce from "lodash.debounce";
+import { debounce } from "@/utils/debounce";
 import { CustomCommand } from "@/commands/type";
 import {
   deleteCachedCommand,
