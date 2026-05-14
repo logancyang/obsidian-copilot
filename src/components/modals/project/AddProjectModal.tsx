@@ -218,7 +218,7 @@ function AddProjectModalContent({
 
     try {
       setIsSubmitting(true);
-      await onSave(saveData as ProjectConfig);
+      await onSave(saveData);
     } catch (e) {
       new Notice(err2String(e));
       setTouched((prev) => ({

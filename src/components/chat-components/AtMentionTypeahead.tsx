@@ -183,7 +183,7 @@ export function AtMentionTypeahead({
 
   return (
     <TypeaheadMenuPopover
-      options={searchResults as any[]}
+      options={searchResults}
       selectedIndex={selectedIndex}
       onSelect={handleSelect}
       onHighlight={handleHighlight}

@@ -57,11 +57,11 @@ export default class ProjectManager {
     this.loadTracker = ProjectLoadTracker.getInstance(this.app);
 
     // Set up subscriptions
-    subscribeToModelKeyChange(async () => {
-      await this.getCurrentChainManager().createChainWithNewModel();
+    subscribeToModelKeyChange(() => {
+      void this.getCurrentChainManager().createChainWithNewModel();
     });
 
-    subscribeToChainTypeChange(async () => {
+    subscribeToChainTypeChange(() => {
       // When switching from other modes to project mode, no need to update the chain.
       if (isProjectMode()) {
         return;
@@ -72,14 +72,14 @@ export default class ProjectManager {
         settings.indexVaultToVectorStore === VAULT_VECTOR_STORE_STRATEGY.ON_MODE_SWITCH &&
         (getChainType() === ChainType.VAULT_QA_CHAIN ||
           getChainType() === ChainType.COPILOT_PLUS_CHAIN);
-      await this.getCurrentChainManager().createChainWithNewModel({
+      void this.getCurrentChainManager().createChainWithNewModel({
         refreshIndex: shouldAutoIndex,
       });
     });
 
     // Subscribe to Project changes
-    subscribeToProjectChange(async (project) => {
-      await this.switchProject(project);
+    subscribeToProjectChange((project) => {
+      void this.switchProject(project);
     });
 
     // Subscribe to project cache changes to monitor project modifications

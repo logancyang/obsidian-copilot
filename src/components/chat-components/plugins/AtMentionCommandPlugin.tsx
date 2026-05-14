@@ -186,7 +186,7 @@ export function AtMentionCommandPlugin({
     <>
       {state.isOpen && (
         <TypeaheadMenuPortal
-          options={displayOptions as any[]}
+          options={displayOptions}
           selectedIndex={state.selectedIndex}
           onSelect={handleSelect}
           onHighlight={handleHighlight}

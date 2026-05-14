@@ -90,7 +90,7 @@ describe("TieredLexicalRetriever", () => {
         if (path === "note1.md" || path === "note2.md") {
           const file = new (TFile as any)(path);
           Object.setPrototypeOf(file, (TFile as any).prototype);
-          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          file.stat = { mtime: 1000, ctime: 1000 };
           return file;
         }
         return null;
@@ -209,7 +209,7 @@ describe("TieredLexicalRetriever", () => {
         if (path === "test.md") {
           const file = new (TFile as any)(path);
           Object.setPrototypeOf(file, (TFile as any).prototype);
-          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          file.stat = { mtime: 1000, ctime: 1000 };
           return file;
         }
         return null;
@@ -260,7 +260,7 @@ describe("TieredLexicalRetriever", () => {
         if (path === "large.md" || path === "other.md") {
           const file = new (TFile as any)(path);
           Object.setPrototypeOf(file, (TFile as any).prototype);
-          (file as any).stat = { mtime: 1000, ctime: 1000 };
+          file.stat = { mtime: 1000, ctime: 1000 };
           return file;
         }
         return null;

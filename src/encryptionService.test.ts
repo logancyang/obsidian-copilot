@@ -15,7 +15,7 @@ const mockElectron = {
 
 jest.mock("electron", () => mockElectron);
 
-window.TextEncoder = TextEncoder as any;
+window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder as any;
 
 // Now we can import our modules

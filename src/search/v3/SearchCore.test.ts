@@ -114,7 +114,7 @@ describe("SearchCore retrieve", () => {
   });
 
   it("should pass queries and salient terms as recall queries", async () => {
-    const searchCore = new SearchCore(mockApp as any);
+    const searchCore = new SearchCore(mockApp);
 
     const retrieveResult = await searchCore.retrieve("#ProjectAlpha/Phase1 update");
 
@@ -128,7 +128,7 @@ describe("SearchCore retrieve", () => {
   });
 
   it("should bypass ceilings when returnAll is enabled", async () => {
-    const searchCore = new SearchCore(mockApp as any);
+    const searchCore = new SearchCore(mockApp);
 
     buildFromCandidatesMock.mockResolvedValueOnce(5);
     batchCachedReadGrepMock.mockResolvedValueOnce(["note1.md", "note2.md"]);

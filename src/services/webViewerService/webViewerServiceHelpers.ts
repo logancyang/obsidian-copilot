@@ -251,7 +251,7 @@ function tryExtractPluginApi(entry: unknown): WebViewerPluginApi | null {
     typeof maybe.openUrl === "function" || typeof maybe.handleOpenUrl === "function";
 
   if (hasOpenCapability) {
-    return maybe as WebViewerPluginApi;
+    return maybe;
   }
   return null;
 }

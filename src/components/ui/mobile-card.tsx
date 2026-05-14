@@ -15,7 +15,7 @@ import { ChevronDown, ChevronRight, GripVertical, MoreVertical } from "lucide-re
 export interface MobileCardDropdownAction<T = any> {
   icon: React.ReactNode;
   label: string;
-  onClick: (item: T) => void;
+  onClick: (item: T) => void | Promise<void>;
   variant?: "default" | "destructive";
 }
 

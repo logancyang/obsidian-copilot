@@ -243,7 +243,7 @@ export class ChatOpenRouter extends ChatOpenAI {
           role: "tool",
           content: msg.content,
           tool_call_id: msg.tool_call_id,
-        } as OpenRouterMessageParam;
+        };
       }
 
       if (msg.additional_kwargs?.function_call) {

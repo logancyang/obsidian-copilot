@@ -101,7 +101,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
 
     const provider = GitHubCopilotProvider.getInstance();
     // scorecard: streaming requires fetch — cannot use requestUrl
-    const baseFetch = fetchImplementation ?? (configuration?.fetch as FetchImplementation) ?? fetch;
+    const baseFetch = fetchImplementation ?? configuration?.fetch ?? fetch;
     const authedFetch = GitHubCopilotChatModel.buildAuthedFetch(provider, baseFetch);
 
     super({
@@ -115,7 +115,7 @@ export class GitHubCopilotChatModel extends ChatOpenAICompletions {
       configuration: {
         ...(configuration ?? {}),
         // Reason: OpenAI SDK appends "/chat/completions" to baseURL automatically
-        baseURL: (configuration?.baseURL as string) ?? COPILOT_API_BASE,
+        baseURL: configuration?.baseURL ?? COPILOT_API_BASE,
         fetch: authedFetch,
       },
     });
