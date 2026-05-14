@@ -937,7 +937,7 @@ modified: ${stat ? new Date(stat.mtime).toISOString() : "unknown"}`;
           await this.retryNonMarkdownFile(project, failedItem.path);
           break;
         default:
-          logWarn(`[retryFailedItem] Unknown item type: ${String(failedItem.type)}`);
+          logWarn("[retryFailedItem] Unknown item type:", failedItem.type);
           return;
       }
 

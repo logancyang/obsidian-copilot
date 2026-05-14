@@ -86,7 +86,7 @@ const processColorObject =
  * bg-modifier-error/50
  * text-background-modifier-success/30
  */
-export const colorOpacityPlugin = plugin(function (this: void, api) {
+export const colorOpacityPlugin = plugin((api) => {
   const { theme, e } = api;
   const opacityUtilities: Record<string, any> = {};
 

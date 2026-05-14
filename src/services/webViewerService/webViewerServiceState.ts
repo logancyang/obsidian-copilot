@@ -324,7 +324,7 @@ export class WebViewerStateManager {
     // Initialize snapshot eagerly
     this.recomputeActiveWebTabState({
       trigger: "active-leaf-change",
-      activeLeaf: this.app.workspace.activeLeaf ?? null,
+      activeLeaf: this.app.workspace.getActiveLeaf(),
     });
     // Initial subscription to webview events
     this.subscribeToWebviewLoadEvents();
