@@ -1015,7 +1015,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             />
           )}
 
-          <div className="message-content">{renderMessageContent()}</div>
+          <div className="message-content tw-break-words !tw-leading-[1.6]">
+            {renderMessageContent()}
+          </div>
 
           {message.responseMetadata?.wasTruncated && message.sender !== USER_SENDER && (
             <TokenLimitWarning message={message} app={app} />

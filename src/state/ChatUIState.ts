@@ -1,6 +1,7 @@
 import { ChainType } from "@/chainType";
 import { logInfo } from "@/logger";
 import { ChatManager } from "@/core/ChatManager";
+import { MessageContent } from "@/imageProcessing/imageProcessor";
 import { ChatMessage, MessageContext } from "@/types/message";
 import { TFile } from "obsidian";
 
@@ -63,7 +64,7 @@ export class ChatUIState {
     chainType: ChainType,
     includeActiveNote: boolean = false,
     includeActiveWebTab: boolean = false,
-    content?: any[],
+    content?: MessageContent[],
     updateLoadingMessage?: (message: string) => void
   ): Promise<string> {
     const messageId = await this.chatManager.sendMessage(

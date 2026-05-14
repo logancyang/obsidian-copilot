@@ -12,7 +12,7 @@ jest.mock("obsidian", () => {
     }
 
     // Add instanceof compatibility
-    static [Symbol.hasInstance](instance: any): boolean {
+    static [Symbol.hasInstance](instance: unknown): boolean {
       return Boolean(
         instance && typeof instance === "object" && "path" in instance && "basename" in instance
       );
@@ -43,9 +43,19 @@ type ChunkManagerInternal = {
 const asChunkInternal = (m: ChunkManager): ChunkManagerInternal =>
   m as unknown as ChunkManagerInternal;
 
+interface MockApp {
+  vault: {
+    getAbstractFileByPath: jest.Mock;
+    cachedRead: jest.Mock;
+  };
+  metadataCache: {
+    getFileCache: jest.Mock;
+  };
+}
+
 describe("ChunkManager", () => {
   let chunkManager: ChunkManager;
-  let mockApp: any;
+  let mockApp: MockApp;
   // Cache mock files to ensure consistent mtime across calls
   let mockFileCache: Map<string, TFile>;
 
@@ -150,7 +160,7 @@ describe("ChunkManager", () => {
       },
     };
 
-    chunkManager = new ChunkManager(mockApp as App);
+    chunkManager = new ChunkManager(mockApp as unknown as App);
   });
 
   afterEach(() => {
@@ -498,7 +508,7 @@ describe("ChunkManager", () => {
   describe("cache behavior", () => {
     it("should evict cache when memory limit is exceeded", async () => {
       // Mock a manager with very small cache limit
-      const smallCacheManager = new ChunkManager(mockApp as App);
+      const smallCacheManager = new ChunkManager(mockApp as unknown as App);
       asChunkInternal(smallCacheManager).maxCacheBytes = 1000; // 1KB limit
 
       // Add multiple large documents
@@ -724,7 +734,7 @@ describe("ChunkManager", () => {
       ];
 
       for (const testCase of testCases) {
-        const manager = new ChunkManager(mockApp as App);
+        const manager = new ChunkManager(mockApp as unknown as App);
         const generatedId = asChunkInternal(manager).generateChunkId("test.md", testCase.index);
         expect(generatedId).toBe(`test.md#${testCase.expected}`);
       }

@@ -75,7 +75,7 @@ export interface ModelAdapter {
    * @param response - The model's response text containing tool calls
    * @returns Array of parsed tool calls
    */
-  parseToolCalls?(response: string): any[];
+  parseToolCalls?(response: string): unknown[];
 
   /**
    * Check if model needs special handling
@@ -288,7 +288,7 @@ class GPTModelAdapter extends BaseModelAdapter {
    * Check if this is a GPT-5 model
    * @returns True if the model is in the GPT-5 family
    */
-  protected isGPT5Model(): boolean {
+  isGPT5Model(): boolean {
     return this.modelName.includes("gpt-5") || this.modelName.includes("gpt5");
   }
   buildSystemPromptSections(
@@ -675,8 +675,8 @@ REMEMBER: It is better to say "I only searched your notes, not the web" than to 
 export class ModelAdapterFactory {
   static createAdapter(model: BaseChatModel): ModelAdapter {
     const modelName: string = (
-      ((model as any).modelName as string) ||
-      ((model as any).model as string) ||
+      (model as { modelName?: string }).modelName ||
+      (model as { model?: string }).model ||
       ""
     ).toLowerCase();
 
@@ -686,7 +686,7 @@ export class ModelAdapterFactory {
     if (modelName.includes("gpt")) {
       const adapter = new GPTModelAdapter(modelName);
       // Log if it's a GPT-5 model for debugging
-      if ((adapter as any).isGPT5Model()) {
+      if (adapter.isGPT5Model()) {
         logInfo("Using GPTModelAdapter with GPT-5 specific enhancements");
       } else {
         logInfo("Using GPTModelAdapter");

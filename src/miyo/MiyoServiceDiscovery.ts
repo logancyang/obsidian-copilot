@@ -12,7 +12,7 @@ export interface MiyoServiceConfig {
   pid: number;
 }
 
-type NodeRequire = (id: string) => any;
+type NodeRequire = (id: string) => unknown;
 type ServiceConfigReadResult = MiyoServiceConfig | "missing" | null;
 
 /**

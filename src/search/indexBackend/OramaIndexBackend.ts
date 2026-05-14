@@ -114,7 +114,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
     if (!hits) {
       return [];
     }
-    return hits.map((hit) => hit.document as SemanticIndexDocument);
+    return hits.map((hit) => hit.document);
   }
 
   /**
@@ -197,6 +197,7 @@ export class OramaIndexBackend implements SemanticIndexBackend {
   /**
    * Return the underlying Orama database instance when available.
    */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Orama<any> is the correct API type
   public getDb(): Orama<any> | undefined {
     return this.dbOps.getDb();
   }

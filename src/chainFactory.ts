@@ -38,7 +38,7 @@ export interface ConversationalRetrievalChainParams {
   };
 }
 
-export interface Document<T = Record<string, any>> {
+export interface Document<T = Record<string, unknown>> {
   // Structure of Document, possibly including pageContent, metadata, etc.
   pageContent: string;
   metadata: T;

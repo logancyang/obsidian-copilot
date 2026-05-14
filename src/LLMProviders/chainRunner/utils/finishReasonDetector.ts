@@ -28,7 +28,9 @@ export interface FinishReasonResult {
  * @param chunk The streaming chunk from the LLM (AIMessageChunk)
  * @returns FinishReasonResult with truncation status and details
  */
-export function detectTruncation(chunk: any): FinishReasonResult {
+export function detectTruncation(chunk: {
+  response_metadata?: Record<string, unknown>;
+}): FinishReasonResult {
   const metadata = chunk.response_metadata || {};
 
   // OpenAI, DeepSeek, Mistral, Groq use "length"
@@ -69,7 +71,10 @@ export function detectTruncation(chunk: any): FinishReasonResult {
  * @param chunk The streaming chunk from the LLM
  * @returns Token usage object or null if not available
  */
-export function extractTokenUsage(chunk: any): {
+export function extractTokenUsage(chunk: {
+  response_metadata?: Record<string, unknown>;
+  usage_metadata?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+}): {
   inputTokens?: number;
   outputTokens?: number;
   totalTokens?: number;
@@ -78,31 +83,47 @@ export function extractTokenUsage(chunk: any): {
 
   // OpenAI format: tokenUsage with camelCase
   if (metadata.tokenUsage) {
+    const tu = metadata.tokenUsage as {
+      promptTokens?: number;
+      completionTokens?: number;
+      totalTokens?: number;
+    };
     return {
-      inputTokens: metadata.tokenUsage.promptTokens,
-      outputTokens: metadata.tokenUsage.completionTokens,
-      totalTokens: metadata.tokenUsage.totalTokens,
+      inputTokens: tu.promptTokens,
+      outputTokens: tu.completionTokens,
+      totalTokens: tu.totalTokens,
     };
   }
 
   // Anthropic/Bedrock/others format: usage with snake_case or camelCase
   if (metadata.usage) {
+    const u = metadata.usage as {
+      input_tokens?: number;
+      inputTokens?: number;
+      inputTokenCount?: number;
+      prompt_tokens?: number;
+      output_tokens?: number;
+      outputTokens?: number;
+      outputTokenCount?: number;
+      completion_tokens?: number;
+      total_tokens?: number;
+      totalTokens?: number;
+    };
     return {
       inputTokens:
-        metadata.usage.input_tokens ||
-        metadata.usage.inputTokens || // Bedrock camelCase
-        metadata.usage.inputTokenCount || // Bedrock invocationMetrics
-        metadata.usage.prompt_tokens,
+        u.input_tokens ||
+        u.inputTokens || // Bedrock camelCase
+        u.inputTokenCount || // Bedrock invocationMetrics
+        u.prompt_tokens,
       outputTokens:
-        metadata.usage.output_tokens ||
-        metadata.usage.outputTokens || // Bedrock camelCase
-        metadata.usage.outputTokenCount || // Bedrock invocationMetrics
-        metadata.usage.completion_tokens,
+        u.output_tokens ||
+        u.outputTokens || // Bedrock camelCase
+        u.outputTokenCount || // Bedrock invocationMetrics
+        u.completion_tokens,
       totalTokens:
-        metadata.usage.total_tokens ||
-        metadata.usage.totalTokens || // Bedrock camelCase
-        (metadata.usage.input_tokens || metadata.usage.inputTokenCount || 0) +
-          (metadata.usage.output_tokens || metadata.usage.outputTokenCount || 0),
+        u.total_tokens ||
+        u.totalTokens || // Bedrock camelCase
+        (u.input_tokens || u.inputTokenCount || 0) + (u.output_tokens || u.outputTokenCount || 0),
     };
   }
 

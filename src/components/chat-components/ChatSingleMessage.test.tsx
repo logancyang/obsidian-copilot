@@ -97,7 +97,7 @@ describe("think block rendering — closing tags are not consumed by indented co
   });
 
   beforeAll(() => {
-    (window as any).activeDocument = window.document;
+    (window as unknown as Record<string, unknown>).activeDocument = window.document;
   });
 
   /**
@@ -279,7 +279,7 @@ describe("ChatSingleMessage", () => {
   });
 
   beforeAll(() => {
-    (window as any).activeDocument = window.document;
+    (window as unknown as Record<string, unknown>).activeDocument = window.document;
   });
 
   it("normalizes rendered footnotes for assistant messages", async () => {

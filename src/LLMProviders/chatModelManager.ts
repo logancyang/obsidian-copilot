@@ -38,35 +38,29 @@ import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
-import { ChatLMStudio, type ChatLMStudioInput } from "./ChatLMStudio";
+import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
-import {
-  GitHubCopilotResponsesModel,
-  type GitHubCopilotResponsesModelParams,
-} from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
+import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
 
 // Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
 // tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
 // vocabulary from tiktoken.pages.dev, which blocks all LLM calls when the CDN is
 // unreachable. This char/4 estimation is the same fallback LangChain uses internally
 // before tiktoken loads. Actual token usage comes from API response metadata.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- patching a private prototype method requires any cast
 (BaseLanguageModel.prototype as any).getNumTokens = async (
   content: string | Array<{ type: string; text?: string }>
 ) => {
   const text =
     typeof content === "string"
       ? content
-      : content
-          .map((item: any): string =>
-            typeof item === "string" ? item : ((item.text as string) ?? "")
-          )
-          .join("");
+      : content.map((item: { type: string; text?: string }): string => item.text ?? "").join("");
   return Math.ceil(text.length / 4);
 };
 
 type ChatConstructorType = {
-  new (config: any): any;
+  new (config: Record<string, unknown>): BaseChatModel;
 };
 
 const CHAT_PROVIDER_CONSTRUCTORS = {
@@ -253,7 +247,7 @@ export default class ChatModelManager {
           },
         }),
       },
-      [ChatModelProviders.AZURE_OPENAI]: await (async (): Promise<any> => {
+      [ChatModelProviders.AZURE_OPENAI]: await (async (): Promise<Record<string, unknown>> => {
         const azureUrl = normalizeAzureUrl(customModel.baseUrl);
         return {
           modelName: customModel.baseUrl
@@ -495,7 +489,7 @@ export default class ChatModelManager {
     maxTokens: number,
     _temperature: number | undefined,
     customModel?: CustomModel
-  ): any {
+  ): Record<string, unknown> {
     const settings = getSettings();
     const modelInfo = getModelInfo(modelName);
     const resolvedTemperature = this.getTemperatureForModel(
@@ -504,7 +498,7 @@ export default class ChatModelManager {
       settings
     );
 
-    const config: any = {
+    const config: Record<string, unknown> = {
       maxTokens,
       temperature: resolvedTemperature,
     };
@@ -597,7 +591,7 @@ export default class ChatModelManager {
    * This prevents passing undefined values to providers that don't support them
    */
   private getProviderSpecificParams(provider: ChatModelProviders, customModel: CustomModel) {
-    const params: Record<string, any> = {};
+    const params: Record<string, unknown> = {};
 
     // Add topP only if defined
     if (customModel.topP !== undefined) {
@@ -693,8 +687,9 @@ export default class ChatModelManager {
   }
 
   getProviderConstructor(model: CustomModel): ChatConstructorType {
-    const constructor: ChatConstructorType =
-      CHAT_PROVIDER_CONSTRUCTORS[model.provider as ChatModelProviders];
+    const constructor: ChatConstructorType = CHAT_PROVIDER_CONSTRUCTORS[
+      model.provider as ChatModelProviders
+    ] as unknown as ChatConstructorType;
     if (!constructor) {
       console.warn(`Unknown provider: ${model.provider} for model: ${model.name}`);
       throw new Error(`Unknown provider: ${model.provider} for model: ${model.name}`);
@@ -828,7 +823,7 @@ export default class ChatModelManager {
     const modelInfo = getModelInfo(model.name);
 
     // For GPT-5 models, automatically use Responses API for proper verbosity support
-    const constructorConfig: any = { ...modelConfig };
+    const constructorConfig: Record<string, unknown> = { ...modelConfig };
     const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
     if (
       modelInfo.isGPT5 &&
@@ -850,20 +845,18 @@ export default class ChatModelManager {
       (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
       model.useResponsesApi !== false
     ) {
-      const lmStudioInstance = new ChatLMStudio(constructorConfig as ChatLMStudioInput);
+      const lmStudioInstance = new ChatLMStudio(constructorConfig);
       logInfo(`[ChatModelManager] Using Responses API for LM Studio model: ${model.name}`);
       return lmStudioInstance;
     }
 
     if (useCopilotResponses) {
-      return new GitHubCopilotResponsesModel(
-        constructorConfig as GitHubCopilotResponsesModelParams
-      );
+      return new GitHubCopilotResponsesModel(constructorConfig);
     }
 
     const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
 
-    return newModelInstance as BaseChatModel;
+    return newModelInstance;
   }
 
   validateChatModel(chatModel: BaseChatModel): boolean {
@@ -917,7 +910,7 @@ export default class ChatModelManager {
       const pingMaxTokens = modelInfo.isThinkingEnabled ? 4096 : 30;
       const tokenConfig = { maxTokens: pingMaxTokens };
 
-      const constructorConfig: any = {
+      const constructorConfig: Record<string, unknown> = {
         ...pingConfig,
         ...tokenConfig,
       };
@@ -940,11 +933,9 @@ export default class ChatModelManager {
       const testModel =
         (model.provider as ChatModelProviders) === ChatModelProviders.LM_STUDIO &&
         model.useResponsesApi !== false
-          ? new ChatLMStudio(constructorConfig as ChatLMStudioInput)
+          ? new ChatLMStudio(constructorConfig)
           : useCopilotResponses
-            ? new GitHubCopilotResponsesModel(
-                constructorConfig as GitHubCopilotResponsesModelParams
-              )
+            ? new GitHubCopilotResponsesModel(constructorConfig)
             : new (this.getProviderConstructor(modelToTest))(constructorConfig);
       await testModel.invoke([{ role: "user", content: "hello" }], {
         timeout: 8000,

@@ -10,7 +10,7 @@ const MockedToolManager = ToolManager as jest.Mocked<typeof ToolManager>;
 const MockedToolResultFormatter = ToolResultFormatter as jest.Mocked<typeof ToolResultFormatter>;
 
 describe("ActionBlockStreamer", () => {
-  let writeFileTool: any;
+  let writeFileTool: unknown;
   let streamer: ActionBlockStreamer;
 
   beforeEach(() => {
@@ -24,8 +24,8 @@ describe("ActionBlockStreamer", () => {
   });
 
   // Helper function to process chunks and collect results
-  async function processChunks(chunks: { content: string | null }[]): Promise<any[]> {
-    const outputContents: any[] = [];
+  async function processChunks(chunks: { content: string | null }[]): Promise<unknown[]> {
+    const outputContents: unknown[] = [];
     for (const chunk of chunks) {
       for await (const result of streamer.processChunk(chunk)) {
         // Always push the content, even if it's null, undefined, or empty string

@@ -15,7 +15,9 @@ export class LLMChainRunner extends BaseChainRunner {
    * Construct messages array using envelope-based context (L1-L5 layers)
    * Requires context envelope - throws error if unavailable
    */
-  private async constructMessages(userMessage: ChatMessage): Promise<any[]> {
+  private async constructMessages(
+    userMessage: ChatMessage
+  ): Promise<{ role: string; content: string | unknown[] }[]> {
     // Require envelope for LLM chain
     if (!userMessage.contextEnvelope) {
       throw new Error(
@@ -32,7 +34,7 @@ export class LLMChainRunner extends BaseChainRunner {
       debug: false,
     });
 
-    const messages: { role: string; content: any }[] = [];
+    const messages: { role: string; content: string | unknown[] }[] = [];
 
     // Add system message (L1)
     const systemMessage = baseMessages.find((m) => m.role === "system");
@@ -115,9 +117,13 @@ export class LLMChainRunner extends BaseChainRunner {
 
       // Stream with abort signal
       const chatStream = await withSuppressedTokenWarnings(() =>
-        this.chainManager.chatModelManager.getChatModel().stream(messages, {
-          signal: abortController.signal,
-        })
+        this.chainManager.chatModelManager.getChatModel().stream(
+          // ProviderMessage[] format matches what getChatModel().stream() accepts at runtime
+          messages as never,
+          {
+            signal: abortController.signal,
+          }
+        )
       );
 
       for await (const chunk of chatStream) {
@@ -125,7 +131,7 @@ export class LLMChainRunner extends BaseChainRunner {
           logInfo("Stream iteration aborted", { reason: abortController.signal.reason });
           break;
         }
-        streamer.processChunk(chunk);
+        streamer.processChunk(chunk as Parameters<typeof streamer.processChunk>[0]);
       }
     } catch (error: unknown) {
       // Check if the error is due to abort signal

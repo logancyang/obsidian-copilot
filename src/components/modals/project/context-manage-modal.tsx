@@ -64,7 +64,7 @@ type ActiveSection = "tags" | "folders" | "files" | "extensions" | "ignoreFiles"
 type ActiveItem = string | null;
 
 interface SectionHeaderProps {
-  IconComponent: React.ComponentType<any>;
+  IconComponent: React.ComponentType<{ className?: string }>;
   title: string;
   iconColorClassName: string;
   onAddClick: () => void;
@@ -112,7 +112,7 @@ interface SectionItem {
 
 interface SectionListProps {
   title: string;
-  IconComponent: React.ComponentType<any>;
+  IconComponent: React.ComponentType<{ className?: string }>;
   iconColorClassName: string;
   items: SectionItem[];
   activeItem: string | null;

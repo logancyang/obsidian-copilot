@@ -137,7 +137,7 @@ export class TieredLexicalRetriever extends BaseRetriever {
    * Supports both chunk IDs (note_path#chunk_index) and note IDs.
    */
   private async convertToDocuments(
-    searchResults: Array<{ id: string; score: number; engine?: string; explanation?: any }>
+    searchResults: Array<{ id: string; score: number; engine?: string; explanation?: unknown }>
   ): Promise<Document[]> {
     const documents: Document[] = [];
 
@@ -155,7 +155,10 @@ export class TieredLexicalRetriever extends BaseRetriever {
           // Get chunk content (not full note content)
           // Prefer async getter to auto-regenerate on cache miss; fall back to sync for test mocks
           let chunkContent = "";
-          const cm: any = this.chunkManager as any;
+          const cm = this.chunkManager as unknown as {
+            getChunkText?: (id: string) => Promise<string>;
+            getChunkTextSync?: (id: string) => string | undefined;
+          };
           if (typeof cm.getChunkText === "function") {
             chunkContent = await cm.getChunkText(result.id);
           } else if (typeof cm.getChunkTextSync === "function") {

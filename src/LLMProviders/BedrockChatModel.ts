@@ -133,12 +133,18 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   /**
    * Convert LangChain tools to Claude's tool format for Bedrock.
    */
-  private convertToolsToClaude(tools: StructuredToolInterface[]): any[] {
+  private convertToolsToClaude(tools: StructuredToolInterface[]): Array<{
+    name: string;
+    description: string;
+    input_schema: Record<string, unknown>;
+  }> {
     return tools.map((tool) => {
-      let inputSchema: any = { type: "object", properties: {} };
+      let inputSchema: Record<string, unknown> = { type: "object", properties: {} };
       if (tool.schema) {
         // Use LangChain's schema conversion utilities
-        inputSchema = isInteropZodSchema(tool.schema) ? toJsonSchema(tool.schema) : tool.schema;
+        inputSchema = (
+          isInteropZodSchema(tool.schema) ? toJsonSchema(tool.schema) : tool.schema
+        ) as Record<string, unknown>;
       }
       return {
         name: tool.name,
@@ -151,19 +157,26 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   /**
    * Extract tool calls from Claude's response format.
    */
-  private extractToolCalls(data: any): any[] | undefined {
-    if (!Array.isArray(data?.content)) return undefined;
+  private extractToolCalls(
+    data: unknown
+  ):
+    | Array<{ id: string; name: string; args: Record<string, unknown>; type: "tool_call" }>
+    | undefined {
+    const dataObj = data as Record<string, unknown> | null | undefined;
+    if (!Array.isArray(dataObj?.content)) return undefined;
 
-    const toolUseBlocks: any[] = data.content.filter((block: any) => block.type === "tool_use");
+    const toolUseBlocks = (dataObj.content as Record<string, unknown>[]).filter(
+      (block) => block.type === "tool_use"
+    );
 
     if (toolUseBlocks.length === 0) return undefined;
 
-    return toolUseBlocks.map((block: any) => ({
+    return toolUseBlocks.map((block) => ({
       id: block.id as string,
       name: block.name as string,
       args: (block.input || {}) as Record<string, unknown>,
       type: "tool_call" as const,
-    })) as Array<{ id: string; name: string; args: Record<string, unknown>; type: "tool_call" }>;
+    }));
   }
 
   async _generate(
@@ -188,7 +201,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       throw new Error(`Amazon Bedrock request failed with status ${response.status}: ${errorText}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as Record<string, unknown>;
     const text = this.extractText(data);
     const toolCalls = this.extractToolCalls(data);
 
@@ -306,13 +319,14 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
         byteBuffer = new Uint8Array(remainingBytes);
 
         for (const messagePayload of messages) {
-          const outerEvent = this.safeJsonParse(messagePayload);
-          if (!outerEvent) {
+          const parsedOuter = this.safeJsonParse(messagePayload);
+          if (!parsedOuter || typeof parsedOuter !== "object") {
             logWarn(
               `[${requestId}] Failed to parse event JSON: ${messagePayload.slice(0, 100)}...`
             );
             continue;
           }
+          const outerEvent = parsedOuter as Record<string, unknown>;
 
           // Handle AWS EventStream format where bytes field is at top level
           let eventToProcess = outerEvent;
@@ -404,7 +418,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
   }
 
-  private safeJsonParse(value: string): any {
+  private safeJsonParse(value: string): unknown {
     try {
       return JSON.parse(value);
     } catch {
@@ -420,18 +434,21 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
    * @returns Claude-style content array or null if not classifiable
    */
   private buildContentItemsFromDelta(
-    event: any
+    event: Record<string, unknown>
   ): Array<{ type: string; text?: string; thinking?: string }> | null {
     if (!event || typeof event !== "object") {
       return null;
     }
 
     // Check for content_block_delta format (nested delta)
-    const delta = event.content_block_delta?.delta || event.contentBlockDelta?.delta || event.delta;
+    const contentBlockDelta = event.content_block_delta as Record<string, unknown> | undefined;
+    const contentBlockDeltaCamel = event.contentBlockDelta as Record<string, unknown> | undefined;
+    const deltaUnknown = contentBlockDelta?.delta ?? contentBlockDeltaCamel?.delta ?? event.delta;
 
-    if (!delta || typeof delta !== "object") {
+    if (!deltaUnknown || typeof deltaUnknown !== "object") {
       return null;
     }
+    const delta = deltaUnknown as Record<string, unknown>;
 
     const deltaType = delta.type;
 
@@ -461,27 +478,29 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
    * Returns tool_call_chunks format that LangChain can concatenate.
    */
   private extractToolCallChunk(
-    event: any
+    event: Record<string, unknown>
   ): { id?: string; index: number; name?: string; args?: string } | null {
     if (!event || typeof event !== "object") {
       return null;
     }
 
     // Handle content_block_start with tool_use - initial tool call info
-    if (event.type === "content_block_start" && event.content_block?.type === "tool_use") {
+    const contentBlock = event.content_block as Record<string, unknown> | undefined;
+    if (event.type === "content_block_start" && contentBlock?.type === "tool_use") {
       return {
-        id: event.content_block.id,
-        index: event.index ?? 0,
-        name: event.content_block.name,
+        id: contentBlock.id as string | undefined,
+        index: typeof event.index === "number" ? event.index : 0,
+        name: contentBlock.name as string | undefined,
         args: "",
       };
     }
 
     // Handle content_block_delta with input_json_delta - partial tool args
-    if (event.type === "content_block_delta" && event.delta?.type === "input_json_delta") {
+    const eventDelta = event.delta as Record<string, unknown> | undefined;
+    if (event.type === "content_block_delta" && eventDelta?.type === "input_json_delta") {
       return {
-        index: event.index ?? 0,
-        args: event.delta.partial_json || "",
+        index: typeof event.index === "number" ? event.index : 0,
+        args: typeof eventDelta.partial_json === "string" ? eventDelta.partial_json : "",
       };
     }
 
@@ -489,7 +508,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
   }
 
   private async processStreamEvent(
-    event: any,
+    event: Record<string, unknown>,
     runManager: CallbackManagerForLLMRun | undefined,
     currentUsage?: Record<string, unknown>,
     currentStopReason?: string
@@ -506,23 +525,25 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     let hasText = false;
     const debugSummaries: string[] = [];
 
-    if (event?.type === "chunk" && typeof event.chunk?.bytes === "string") {
-      const decodedPayloads = this.decodeChunkBytes(event.chunk.bytes as string);
+    const eventChunk = event.chunk as Record<string, unknown> | undefined;
+    if (event?.type === "chunk" && typeof eventChunk?.bytes === "string") {
+      const decodedPayloads = this.decodeChunkBytes(eventChunk.bytes);
 
       for (const payload of decodedPayloads) {
-        const innerEvent = this.safeJsonParse(payload);
-        if (!innerEvent) {
+        const parsedInner = this.safeJsonParse(payload);
+        if (!parsedInner || typeof parsedInner !== "object") {
           debugSummaries.push(`Failed to parse inner payload: ${this.describePayload(payload)}`);
           continue;
         }
+        const innerEvent = parsedInner as Record<string, unknown>;
 
-        const chunkMetadata = this.buildChunkMetadata(innerEvent as Record<string, unknown>);
+        const chunkMetadata = this.buildChunkMetadata(innerEvent);
 
         // Try to build structured content (Claude-style arrays)
-        const contentItems = this.buildContentItemsFromDelta(innerEvent as Record<string, unknown>);
+        const contentItems = this.buildContentItemsFromDelta(innerEvent);
 
         // Check for tool call chunks first (content_block_start with tool_use, or input_json_delta)
-        const toolCallChunk = this.extractToolCallChunk(innerEvent as Record<string, unknown>);
+        const toolCallChunk = this.extractToolCallChunk(innerEvent);
         if (toolCallChunk) {
           const messageChunk = new AIMessageChunk({
             content: "",
@@ -595,9 +616,10 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
           } else {
             // Only log if it's an unexpected event type that should have had content
             // But don't warn for tool-related events which are handled above
+            const innerDelta = innerEvent.delta as Record<string, unknown> | undefined;
             if (
               innerEvent.type === "content_block_delta" &&
-              innerEvent.delta?.type !== "input_json_delta"
+              innerDelta?.type !== "input_json_delta"
             ) {
               const summary = `No content in content_block_delta event: ${this.describeEvent(innerEvent)}`;
               debugSummaries.push(summary);
@@ -617,13 +639,13 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
         }
       }
     } else {
-      const chunkMetadata = this.buildChunkMetadata(event as Record<string, unknown>);
+      const chunkMetadata = this.buildChunkMetadata(event);
 
       // Try to build structured content (Claude-style arrays)
-      const contentItems = this.buildContentItemsFromDelta(event as Record<string, unknown>);
+      const contentItems = this.buildContentItemsFromDelta(event);
 
       // Check for tool call chunks first
-      const toolCallChunk = this.extractToolCallChunk(event as Record<string, unknown>);
+      const toolCallChunk = this.extractToolCallChunk(event);
       if (toolCallChunk) {
         const messageChunk = new AIMessageChunk({
           content: "",
@@ -942,18 +964,28 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return metadata;
   }
 
-  private extractStreamText(event: any): string | null {
+  private extractStreamText(event: Record<string, unknown>): string | null {
     if (!event || typeof event !== "object") {
       return null;
     }
 
+    const evDelta = event.delta as Record<string, unknown> | undefined;
+    const evContentBlockDelta = event.content_block_delta as Record<string, unknown> | undefined;
+    const evContentBlockDeltaCamel = event.contentBlockDelta as Record<string, unknown> | undefined;
+    const evContentBlockDeltaInner = evContentBlockDelta?.delta as
+      | Record<string, unknown>
+      | undefined;
+    const evContentBlockDeltaCamelInner = evContentBlockDeltaCamel?.delta as
+      | Record<string, unknown>
+      | undefined;
+
     // Check for thinking/reasoning fields first (fallback for non-streaming or debugging)
     // This ensures thinking content is never silently dropped
     const thinkingCandidates: Array<unknown> = [
-      event.delta?.thinking,
-      event.content_block_delta?.delta?.thinking,
-      event.contentBlockDelta?.delta?.thinking,
-      event.delta?.reasoning_content, // Deepseek compatibility
+      evDelta?.thinking,
+      evContentBlockDeltaInner?.thinking,
+      evContentBlockDeltaCamelInner?.thinking,
+      evDelta?.reasoning_content, // Deepseek compatibility
       event.reasoning_content,
     ];
 
@@ -977,19 +1009,27 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       }
     }
 
+    const evMessage = event.message as Record<string, unknown> | undefined;
+    const evMessageStop = event.messageStop as Record<string, unknown> | undefined;
+    const evMessageStopSnake = event.message_stop as Record<string, unknown> | undefined;
+    const evMessageStopMsg = evMessageStop?.message as Record<string, unknown> | undefined;
+    const evMessageStopSnakeMsg = evMessageStopSnake?.message as
+      | Record<string, unknown>
+      | undefined;
+
     const nestedCandidates: Array<unknown> = [
-      event.delta?.text,
-      event.delta?.output_text,
-      event.delta?.content,
-      event.contentBlockDelta?.delta?.text,
-      event.contentBlockDelta?.delta?.output_text,
-      event.contentBlockDelta?.delta?.content,
-      event.content_block_delta?.delta?.text,
-      event.content_block_delta?.delta?.output_text,
-      event.content_block_delta?.delta?.content,
-      event.message?.content,
-      event.messageStop?.message?.content,
-      event.message_stop?.message?.content,
+      evDelta?.text,
+      evDelta?.output_text,
+      evDelta?.content,
+      evContentBlockDeltaCamelInner?.text,
+      evContentBlockDeltaCamelInner?.output_text,
+      evContentBlockDeltaCamelInner?.content,
+      evContentBlockDeltaInner?.text,
+      evContentBlockDeltaInner?.output_text,
+      evContentBlockDeltaInner?.content,
+      evMessage?.content,
+      evMessageStopMsg?.content,
+      evMessageStopSnakeMsg?.content,
       event.content,
     ];
 
@@ -1014,20 +1054,24 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     if (Array.isArray(candidate)) {
       const combined = candidate
-        .map((part: any): string => {
+        .map((part: unknown): string => {
           if (typeof part === "string") {
             return part;
           }
           if (part && typeof part === "object") {
-            if (typeof part.text === "string") {
-              return part.text as string;
+            const partObj = part as Record<string, unknown>;
+            if (typeof partObj.text === "string") {
+              return partObj.text;
             }
-            if (typeof part.value === "string") {
-              return part.value as string;
+            if (typeof partObj.value === "string") {
+              return partObj.value;
             }
-            if (Array.isArray(part.content)) {
-              return (part.content as any[])
-                .map((sub: any) => (typeof sub?.text === "string" ? (sub.text as string) : ""))
+            if (Array.isArray(partObj.content)) {
+              return (partObj.content as unknown[])
+                .map((sub: unknown) => {
+                  const subObj = sub as Record<string, unknown> | null | undefined;
+                  return typeof subObj?.text === "string" ? subObj.text : "";
+                })
                 .join("");
             }
           }
@@ -1071,7 +1115,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return null;
   }
 
-  private extractUsage(event: any): Record<string, unknown> | undefined {
+  private extractUsage(event: Record<string, unknown>): Record<string, unknown> | undefined {
     if (!event || typeof event !== "object") {
       return undefined;
     }
@@ -1093,29 +1137,31 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
 
     if (event.messageStop && typeof event.messageStop === "object") {
-      return this.extractUsage(event.messageStop);
+      return this.extractUsage(event.messageStop as Record<string, unknown>);
     }
 
     if (event.message_stop && typeof event.message_stop === "object") {
-      return this.extractUsage(event.message_stop);
+      return this.extractUsage(event.message_stop as Record<string, unknown>);
     }
 
     return undefined;
   }
 
-  private extractStopReason(event: any): string | undefined {
+  private extractStopReason(event: Record<string, unknown>): string | undefined {
     if (!event || typeof event !== "object") {
       return undefined;
     }
 
+    const evMessageStop = event.messageStop as Record<string, unknown> | undefined;
+    const evMessageStopSnake = event.message_stop as Record<string, unknown> | undefined;
     const stopReason =
       event.stop_reason ||
       event.stopReason ||
       event.completionReason ||
       event.completion_reason ||
       event.reason ||
-      event.messageStop?.stopReason ||
-      event.message_stop?.stop_reason ||
+      evMessageStop?.stopReason ||
+      evMessageStopSnake?.stop_reason ||
       (event.type === "message_stop" ? event.reason : undefined);
 
     return typeof stopReason === "string" ? stopReason : undefined;
@@ -1342,9 +1388,13 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
               type: "text",
               text: block.text,
             });
-          } else if (block.type === "image_url" && block.image_url?.url) {
+          } else if (
+            block.type === "image_url" &&
+            (block.image_url as Record<string, unknown> | undefined)?.url
+          ) {
             // Image block in OpenAI format - convert to Claude format
-            const claudeImage = this.convertImageContent(block.image_url.url as string);
+            const imageUrlBlock = block.image_url as Record<string, unknown>;
+            const claudeImage = this.convertImageContent(imageUrlBlock.url as string);
             if (claudeImage) {
               contentBlocks.push(claudeImage);
             }
@@ -1423,7 +1473,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
    */
   private normaliseMessageContent(
     message: BaseMessage
-  ): string | Array<{ type: string; [key: string]: any }> {
+  ): string | Array<{ type: string; [key: string]: unknown }> {
     const { content } = message;
 
     // Handle string content (simple text message)
@@ -1463,7 +1513,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
             }
             return null;
           })
-          .filter((part): part is { type: string; [key: string]: any } => part !== null);
+          .filter((part): part is { type: string; [key: string]: unknown } => part !== null);
       }
 
       // No images, flatten to string
@@ -1494,20 +1544,21 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return "";
   }
 
-  private extractText(data: any): string {
+  private extractText(data: Record<string, unknown>): string {
     if (typeof data?.outputText === "string") {
-      return data.outputText as string;
+      return data.outputText;
     }
 
     if (Array.isArray(data?.content)) {
-      return (data.content as any[])
-        .map((item: any): string => {
+      return (data.content as unknown[])
+        .map((item: unknown): string => {
           if (!item) return "";
           if (typeof item === "string") return item;
           if (typeof item === "object") {
-            if (typeof item.text === "string") return item.text as string;
-            if (item.text && typeof item.text === "object" && "text" in item.text) {
-              return (item.text.text as string | undefined) ?? "";
+            const itemObj = item as Record<string, unknown>;
+            if (typeof itemObj.text === "string") return itemObj.text;
+            if (itemObj.text && typeof itemObj.text === "object" && "text" in itemObj.text) {
+              return ((itemObj.text as Record<string, unknown>).text as string | undefined) ?? "";
             }
           }
           return "";
@@ -1516,11 +1567,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     }
 
     if (typeof data?.completion === "string") {
-      return data.completion as string;
+      return data.completion;
     }
 
     if (typeof data?.resultText === "string") {
-      return data.resultText as string;
+      return data.resultText;
     }
 
     return "";

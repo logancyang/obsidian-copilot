@@ -170,7 +170,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * @returns Decorated Document instance
    */
   private decorateDocument(doc: Document, source: SourceKind): Document {
-    const metadata: Record<string, any> = {
+    const metadata: Record<string, unknown> = {
       ...(doc.metadata ?? {}),
       source,
     };
@@ -203,7 +203,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * @param metadata - Document metadata bag
    * @returns Numeric score or zero when unavailable
    */
-  private extractBaseScore(metadata: Record<string, any>): number {
+  private extractBaseScore(metadata: Record<string, unknown>): number {
     const candidates = [metadata?.rerank_score, metadata?.score];
     for (const value of candidates) {
       if (typeof value === "number" && !Number.isNaN(value)) {
@@ -227,7 +227,7 @@ export class MergedSemanticRetriever extends BaseRetriever {
    * @param metadata - Document metadata bag
    * @returns True if tag matches were present in the explanation
    */
-  private hasTagMatch(metadata: Record<string, any>): boolean {
+  private hasTagMatch(metadata: Record<string, unknown>): boolean {
     const explanation = metadata?.explanation as { lexicalMatches?: unknown } | undefined;
     if (!explanation) {
       return false;

@@ -73,6 +73,8 @@ export default [
         callees: ["classnames", "clsx", "ctl", "cn", "cva"],
         config: "./tailwind.config.js",
         cssFiles: ["**/*.css", "!**/node_modules", "!**/.*", "!**/dist", "!**/build"],
+        // Obsidian-provided utility classes used in JSX but not defined in our CSS.
+        whitelist: ["clickable-icon"],
       },
     },
     rules: {
@@ -239,7 +241,6 @@ export default [
       },
     },
     rules: {
-      "@typescript-eslint/no-explicit-any": "off",
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],

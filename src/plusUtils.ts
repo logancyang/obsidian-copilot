@@ -134,7 +134,9 @@ export function useIsPlusUser(): boolean | undefined {
  * Check if the user is a Plus user.
  * When self-host mode is valid, this returns true to allow offline usage.
  */
-export async function checkIsPlusUser(context?: Record<string, any>): Promise<boolean | undefined> {
+export async function checkIsPlusUser(
+  context?: Record<string, unknown>
+): Promise<boolean | undefined> {
   // Self-host mode with valid plan validation bypasses license check
   if (isSelfHostModeValid()) {
     return true;

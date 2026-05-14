@@ -1,6 +1,7 @@
 import React from "react";
 import { $isToolPillNode, ToolPillNode } from "../pills/ToolPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
+import type { LexicalNode } from "lexical";
 
 /**
  * Props for the ToolPillSyncPlugin component
@@ -17,7 +18,7 @@ interface ToolPillSyncPluginProps {
  */
 const toolPillConfig: PillSyncConfig<string> = {
   isPillNode: $isToolPillNode,
-  extractData: (node: any) => (node as ToolPillNode).getToolName(),
+  extractData: (node: LexicalNode) => (node as ToolPillNode).getToolName(),
 };
 
 /**

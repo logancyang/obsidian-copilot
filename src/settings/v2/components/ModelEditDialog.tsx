@@ -66,7 +66,7 @@ export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
 
   // Function to update local state immediately
   const handleLocalUpdate = useCallback(
-    (field: keyof CustomModel, value: any) => {
+    (field: keyof CustomModel, value: CustomModel[keyof CustomModel]) => {
       setLocalModel((prevModel) => {
         const updatedModel = {
           ...prevModel,

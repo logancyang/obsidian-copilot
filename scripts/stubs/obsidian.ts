@@ -88,6 +88,6 @@ export class Modal {
   }
 }
 
-export function parseYaml(_: string): any {
+export function parseYaml(_: string): unknown {
   return {};
 }

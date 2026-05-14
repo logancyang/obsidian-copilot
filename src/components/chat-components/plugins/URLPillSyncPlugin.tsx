@@ -1,6 +1,7 @@
 import React from "react";
 import { $isURLPillNode, URLPillNode } from "../pills/URLPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
+import type { LexicalNode } from "lexical";
 
 /**
  * Props for the URLPillSyncPlugin component
@@ -17,7 +18,7 @@ interface URLPillSyncPluginProps {
  */
 const urlPillConfig: PillSyncConfig<string> = {
   isPillNode: $isURLPillNode,
-  extractData: (node: any) => (node as URLPillNode).getURL(),
+  extractData: (node: LexicalNode) => (node as URLPillNode).getURL(),
 };
 
 /**

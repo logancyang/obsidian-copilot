@@ -85,14 +85,14 @@ function buildLayeredViewFromMessages(
   };
 
   // Helper to extract text content from message
-  const getTextContent = (msg: any): string => {
+  const getTextContent = (msg: { role?: unknown; content?: unknown }): string => {
     if (typeof msg.content === "string") {
-      return msg.content as string;
+      return msg.content;
     }
     if (Array.isArray(msg.content)) {
-      const textParts: string[] = msg.content
-        .filter((item: any) => item.type === "text")
-        .map((item: any): string => item.text as string);
+      const textParts: string[] = (msg.content as Array<{ type?: string; text?: string }>)
+        .filter((item) => item.type === "text")
+        .map((item): string => item.text ?? "");
       return textParts.join("\n");
     }
     return "";
@@ -103,7 +103,7 @@ function buildLayeredViewFromMessages(
   let historyCount = 0;
 
   for (let i = 0; i < messageArray.length; i++) {
-    const msg: any = messageArray[i];
+    const msg = messageArray[i] as { role?: unknown; content?: unknown };
     const content = getTextContent(msg);
 
     if (msg.role === "system") {
@@ -194,7 +194,9 @@ function buildLayeredViewFromMessages(
   }
 
   // Last user message
-  const lastMsg: any = messageArray[messageArray.length - 1];
+  const lastMsg = messageArray[messageArray.length - 1] as
+    | { role?: unknown; content?: unknown }
+    | undefined;
   if (lastMsg && lastMsg.role === "user") {
     lines.push("━━━ USER MESSAGE ━━━");
     lines.push("");

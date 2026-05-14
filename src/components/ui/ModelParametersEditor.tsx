@@ -31,7 +31,7 @@ const PARAM_RANGES = {
 interface ModelParametersEditorProps {
   model: CustomModel;
   settings: CopilotSettings;
-  onChange: (field: keyof CustomModel, value: any) => void;
+  onChange: (field: keyof CustomModel, value: CustomModel[keyof CustomModel]) => void;
   onReset?: (field: keyof CustomModel) => void;
   showTokenLimit?: boolean; // Whether to show Token limit, defaults to true
 }

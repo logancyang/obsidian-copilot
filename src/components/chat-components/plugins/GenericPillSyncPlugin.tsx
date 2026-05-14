@@ -7,9 +7,9 @@ import { $getRoot, LexicalNode } from "lexical";
  */
 export interface PillSyncConfig<T> {
   /** Function to check if a node is of this pill type */
-  isPillNode: (node: any) => boolean;
+  isPillNode: (node: LexicalNode) => boolean;
   /** Function to extract data from the pill node */
-  extractData: (node: any) => T;
+  extractData: (node: LexicalNode) => T;
   /** Function to create a unique identity key for deduplication and removal detection */
   getKey?: (item: T) => string;
   /**

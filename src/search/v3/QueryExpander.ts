@@ -123,7 +123,7 @@ Format:
         this.config.timeout,
         "Query expansion"
       );
-    } catch (error: any) {
+    } catch (error: unknown) {
       if (error instanceof TimeoutError) {
         logInfo(`QueryExpander: Timeout reached for "${query}"`);
         return this.fallbackExpansion(query);
@@ -189,12 +189,18 @@ Format:
    * @param response - The LLM response object or string
    * @returns The extracted text content or null if empty
    */
-  private extractContent(response: any): string | null {
+  private extractContent(response: unknown): string | null {
     // Elegant extraction with nullish coalescing
     const typed = response as { content?: unknown; text?: unknown } | null | undefined;
+    const extracted = typed?.content ?? typed?.text ?? "";
     return typeof response === "string"
       ? response
-      : String((typed?.content ?? typed?.text ?? "") as any).trim() || null;
+      : (typeof extracted === "string"
+          ? extracted
+          : typeof extracted === "number"
+            ? String(extracted)
+            : ""
+        ).trim() || null;
   }
 
   /**

@@ -631,7 +631,7 @@ Here's what I found in the note.`;
       const result = compactChatHistoryContent(content, { verbatimThreshold: 1000 });
 
       expect(Array.isArray(result)).toBe(true);
-      const resultArray = result as any[];
+      const resultArray = result as Array<{ type: string; text: string }>;
       expect(resultArray[0].type).toBe("text");
       expect(resultArray[0].text.length).toBeLessThan(originalText.length);
       expect(resultArray[1]).toEqual(content[1]); // Image unchanged

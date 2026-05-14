@@ -120,7 +120,7 @@ export class ThinkBlockStreamer {
     }
   }
 
-  private handleClaudeChunk(content: any[]) {
+  private handleClaudeChunk(content: Array<{ type?: string; text?: string; thinking?: string }>) {
     let textContent = "";
     let hasThinkingContent = false;
     for (const item of content) {
@@ -157,10 +157,13 @@ export class ThinkBlockStreamer {
     return hasThinkingContent;
   }
 
-  private handleDeepseekChunk(chunk: any) {
+  private handleDeepseekChunk(chunk: {
+    content?: string;
+    additional_kwargs?: { reasoning_content?: string };
+  }) {
     // Handle standard string content
     if (typeof chunk.content === "string") {
-      this.fullResponse += stripSpecialTokens(chunk.content as string);
+      this.fullResponse += stripSpecialTokens(chunk.content);
     }
 
     // Handle deepseek reasoning/thinking content
@@ -200,7 +203,13 @@ export class ThinkBlockStreamer {
    * - Models that only populate reasoning_details (without delta.reasoning) won't show thinking
    * - This is acceptable for now as most models use delta.reasoning for streaming
    */
-  private handleOpenRouterChunk(chunk: any) {
+  private handleOpenRouterChunk(chunk: {
+    content?: string;
+    additional_kwargs?: {
+      delta?: { reasoning?: string };
+      reasoning_details?: unknown[];
+    };
+  }) {
     // Only process delta.reasoning (streaming), ignore reasoning_details entirely
     if (chunk.additional_kwargs?.delta?.reasoning) {
       // Skip thinking content if excludeThinking is enabled
@@ -233,7 +242,14 @@ export class ThinkBlockStreamer {
    * Accumulate native tool call chunks during streaming.
    * LangChain providers send tool_call_chunks with incremental data.
    */
-  private handleToolCallChunks(chunk: any) {
+  private handleToolCallChunks(chunk: {
+    tool_call_chunks?: Array<{
+      index?: number;
+      id?: string;
+      name?: string;
+      args?: string;
+    }>;
+  }) {
     // Check for tool_call_chunks in the chunk (LangChain streaming format)
     const toolCallChunks = chunk.tool_call_chunks;
     if (!toolCallChunks || !Array.isArray(toolCallChunks)) {
@@ -253,7 +269,17 @@ export class ThinkBlockStreamer {
     }
   }
 
-  processChunk(chunk: any) {
+  processChunk(chunk: {
+    response_metadata?: Record<string, unknown>;
+    usage_metadata?: { input_tokens?: number; output_tokens?: number; total_tokens?: number };
+    tool_call_chunks?: Array<{ index?: number; id?: string; name?: string; args?: string }>;
+    content?: string | Array<{ type?: string; text?: string; thinking?: string }>;
+    additional_kwargs?: {
+      reasoning_content?: string;
+      delta?: { reasoning?: string };
+      reasoning_details?: unknown[];
+    };
+  }) {
     // Detect truncation using multi-provider detector
     const truncationResult = detectTruncation(chunk);
     if (truncationResult.wasTruncated) {
@@ -290,16 +316,17 @@ export class ThinkBlockStreamer {
     // Route based on the actual chunk format
     if (Array.isArray(chunk.content)) {
       // Claude format with content array
-      this.handleClaudeChunk(chunk.content as any[]);
+      // chunk.content is Array<...> in this branch (checked by Array.isArray guard above)
+      this.handleClaudeChunk(chunk.content);
     } else if (chunk.additional_kwargs?.reasoning_content) {
       // Deepseek format with reasoning_content
-      this.handleDeepseekChunk(chunk);
+      this.handleDeepseekChunk(chunk as Parameters<typeof this.handleDeepseekChunk>[0]);
     } else if (isThinkingChunk) {
       // OpenRouter format with delta.reasoning or reasoning_details
-      this.handleOpenRouterChunk(chunk);
+      this.handleOpenRouterChunk(chunk as Parameters<typeof this.handleOpenRouterChunk>[0]);
     } else {
       // Default case: regular content or other formats
-      this.handleDeepseekChunk(chunk);
+      this.handleDeepseekChunk(chunk as Parameters<typeof this.handleDeepseekChunk>[0]);
     }
 
     // Handle text-level think tags (e.g., from nvidia/nemotron models)

@@ -228,7 +228,7 @@ export interface GroqModel {
   owned_by: string;
   active?: boolean;
   context_window?: number;
-  public_apps?: any;
+  public_apps?: unknown;
 }
 
 // XAI response model definition
@@ -515,30 +515,44 @@ export const providerAdapters: ProviderModelAdapters = {
  * Default model adapter - handles unknown provider or format model data
  * Attempts to detect common data structure patterns and extract relevant information
  */
+/** Coerce an unknown model field value to a string, falling back to a default. */
+const toStr = (val: unknown, fallback: string): string =>
+  typeof val === "string" && val.length > 0
+    ? val
+    : typeof val === "number"
+      ? String(val)
+      : fallback;
+
 export const getDefaultModelAdapter = (provider: SettingKeyProviders) => {
-  return (data: any): StandardModel[] => {
+  return (data: Record<string, unknown>): StandardModel[] => {
     // Try to detect common data structure patterns
     if (data.data && Array.isArray(data.data)) {
-      return (data.data as any[]).map(
-        (model: any): StandardModel => ({
-          id: model.id || model.name || String(Math.random()),
-          name: model.name || model.id || model.display_name || "Unknown Model",
+      return (data.data as Record<string, unknown>[]).map(
+        (model): StandardModel => ({
+          id: toStr(model.id, "") || toStr(model.name, String(Math.random())),
+          name:
+            toStr(model.name, "") ||
+            toStr(model.id, "") ||
+            toStr(model.display_name, "Unknown Model"),
           provider: provider,
         })
       );
     } else if (data.models && Array.isArray(data.models)) {
-      return (data.models as any[]).map(
-        (model: any): StandardModel => ({
-          id: model.id || model.name || String(Math.random()),
-          name: model.name || model.displayName || model.id || "Unknown Model",
+      return (data.models as Record<string, unknown>[]).map(
+        (model): StandardModel => ({
+          id: toStr(model.id, "") || toStr(model.name, String(Math.random())),
+          name:
+            toStr(model.name, "") ||
+            toStr(model.displayName, "") ||
+            toStr(model.id, "Unknown Model"),
           provider: provider,
         })
       );
     } else if (Array.isArray(data)) {
-      return data.map(
-        (model: any): StandardModel => ({
-          id: model.id || model.name || String(Math.random()),
-          name: model.name || model.id || "Unknown Model",
+      return (data as Record<string, unknown>[]).map(
+        (model): StandardModel => ({
+          id: toStr(model.id, "") || toStr(model.name, String(Math.random())),
+          name: toStr(model.name, "") || toStr(model.id, "Unknown Model"),
           provider: provider,
         })
       );

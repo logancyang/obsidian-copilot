@@ -21,7 +21,7 @@ const createMockFile = (path: string): TFile =>
 describe("ContextProcessor - Embedded Notes", () => {
   let contextProcessor: ContextProcessor;
   let vault: Vault;
-  let fileParserManager: any;
+  let fileParserManager: unknown;
   let fileCaches: FileCacheMap;
   let fileContents: FileContentMap;
   let fileIndex: Map<string, TFile>;
@@ -41,7 +41,7 @@ describe("ContextProcessor - Embedded Notes", () => {
       getFileCache: jest.fn((file: TFile) => fileCaches[file.path] ?? {}),
     };
 
-    (window as any).app = {
+    (window as unknown as Record<string, unknown>).app = {
       metadataCache: metadataCacheMock,
     };
 
@@ -51,7 +51,7 @@ describe("ContextProcessor - Embedded Notes", () => {
       },
     } as unknown as Vault;
 
-    (vault as any).getAbstractFileByPath = jest.fn();
+    (vault as Vault & Record<string, unknown>).getAbstractFileByPath = jest.fn();
 
     fileParserManager = {
       supportsExtension: jest.fn(

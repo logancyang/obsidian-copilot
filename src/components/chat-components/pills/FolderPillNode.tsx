@@ -121,7 +121,7 @@ export function $createFolderPillNode(folderPath: string): FolderPillNode {
   return new FolderPillNode(folderPath);
 }
 
-export function $isFolderPillNode(node: any): node is FolderPillNode {
+export function $isFolderPillNode(node: LexicalNode): node is FolderPillNode {
   return node instanceof FolderPillNode;
 }
 

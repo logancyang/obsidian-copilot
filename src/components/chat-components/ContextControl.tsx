@@ -1,7 +1,7 @@
 import React from "react";
 
 import { SelectedTextContext, WebTabContext } from "@/types/message";
-import { TFile } from "obsidian";
+import { TFile, TFolder } from "obsidian";
 import { ChatContextMenu } from "./ChatContextMenu";
 
 interface ChatControlsProps {
@@ -16,11 +16,11 @@ interface ChatControlsProps {
   selectedTextContexts?: SelectedTextContext[];
   showProgressCard: () => void;
   showIndexingCard?: () => void;
-  lexicalEditorRef?: React.RefObject<any>;
+  lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 
   // Unified handlers
-  onAddToContext: (category: string, data: any) => void;
-  onRemoveFromContext: (category: string, data: any) => void;
+  onAddToContext: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
+  onRemoveFromContext: (category: string, data: string) => void;
 }
 
 export const ContextControl: React.FC<ChatControlsProps> = ({
@@ -39,12 +39,15 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   onAddToContext,
   onRemoveFromContext,
 }) => {
-  const handleRemoveContext = (category: string, data: any) => {
+  const handleRemoveContext = (category: string, data: string) => {
     // Delegate to unified handler
     onRemoveFromContext(category, data);
   };
 
-  const handleTypeaheadSelect = (category: string, data: any) => {
+  const handleTypeaheadSelect = (
+    category: string,
+    data: TFile | string | TFolder | WebTabContext
+  ) => {
     // Delegate to unified handler
     onAddToContext(category, data);
   };

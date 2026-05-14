@@ -1,3 +1,4 @@
+import type ChainManager from "@/LLMProviders/chainManager";
 import MemoryManager from "@/LLMProviders/memoryManager";
 import { ModelAdapterFactory } from "@/LLMProviders/chainRunner/utils/modelAdapter";
 import { buildAgentPromptDebugReport } from "@/LLMProviders/chainRunner/utils/promptDebugService";
@@ -116,7 +117,7 @@ export async function run(args: string[]): Promise<void> {
   const chainContext = {
     memoryManager,
     userMemoryManager,
-  } as any;
+  } as unknown as ChainManager;
 
   const adapter = ModelAdapterFactory.createAdapter({
     modelName: "gpt-4",

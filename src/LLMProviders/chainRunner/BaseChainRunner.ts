@@ -110,8 +110,9 @@ export abstract class BaseChainRunner implements ChainRunner {
       updateCurrentAiMessage("");
     }
     // Log compact memory summary and a truncated final response (~300 chars)
-    const historyMessages = (this.chainManager.memoryManager.getMemory().chatHistory as any)
-      .messages;
+    const historyMessages = (
+      this.chainManager.memoryManager.getMemory().chatHistory as { messages?: unknown[] }
+    ).messages;
     logInfo("Chat memory updated:\n", {
       turns: Array.isArray(historyMessages) ? historyMessages.length : 0,
     });
@@ -120,8 +121,8 @@ export abstract class BaseChainRunner implements ChainRunner {
     try {
       const { parseToolCallMarkers } = await import("./utils/toolCallParser");
       const parsed = parseToolCallMarkers(fullAIResponse);
-      let textOnly = parsed.segments
-        .map((seg: { type: string; content: string }) => (seg.type === "text" ? seg.content : ""))
+      let textOnly = (parsed.segments as { type: string; content: string }[])
+        .map((seg) => (seg.type === "text" ? seg.content : ""))
         .join("")
         .trim();
       if (!textOnly) textOnly = fullAIResponse || "";
@@ -146,15 +147,16 @@ export abstract class BaseChainRunner implements ChainRunner {
    * @param error - Raw provider error object.
    * @param processErrorChunk - Callback used to stream error text to the UI.
    */
-  protected async handleError(error: any, processErrorChunk: (message: string) => void) {
+  protected async handleError(error: unknown, processErrorChunk: (message: string) => void) {
     const msg = err2String(error);
     logError("Error during LLM invocation:", msg);
-    const errorData = error?.response?.data?.error || msg;
-    const errorCode = errorData?.code || msg;
+    const errorData =
+      (error as { response?: { data?: { error?: unknown } } })?.response?.data?.error || msg;
+    const errorCode = (errorData as { code?: string })?.code || msg;
     let errorMessage = "";
 
     // Check for specific error messages
-    if (error?.message?.includes("Invalid license key")) {
+    if ((error as { message?: string })?.message?.includes("Invalid license key")) {
       errorMessage = "Invalid Copilot Plus license key. Please check your license key in settings.";
     } else if (errorCode === "model_not_found") {
       errorMessage =
@@ -200,7 +202,16 @@ export abstract class BaseChainRunner implements ChainRunner {
    * @returns True if the error indicates an authentication problem.
    */
   private isAuthenticationError(error: unknown, normalizedMessage: string): boolean {
-    const responseError = (error as { response?: { status?: number; data?: any } })?.response;
+    const responseError = (
+      error as {
+        response?: {
+          status?: number;
+          data?: {
+            error?: { status?: number | string; code?: string; message?: string; type?: string };
+          };
+        };
+      }
+    )?.response;
     const errorData = responseError?.data?.error ?? (error as { error?: unknown })?.error;
     const rawStatus = responseError?.status ?? (errorData as { status?: number | string })?.status;
     const statusCode = typeof rawStatus === "string" ? Number.parseInt(rawStatus, 10) : rawStatus;

@@ -12,14 +12,14 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ChevronDown, ChevronRight, GripVertical, MoreVertical } from "lucide-react";
 
-export interface MobileCardDropdownAction<T = any> {
+export interface MobileCardDropdownAction<T = object> {
   icon: React.ReactNode;
   label: string;
   onClick: (item: T) => void | Promise<void>;
   variant?: "default" | "destructive";
 }
 
-const EMPTY_DROPDOWN_ACTIONS: ReadonlyArray<MobileCardDropdownAction<any>> = [];
+const EMPTY_DROPDOWN_ACTIONS: [] = [];
 
 export interface MobileCardProps<T extends object> {
   id: string;
@@ -55,7 +55,7 @@ export function MobileCard<T extends object>({
   defaultExpanded = false,
   expandedContent,
   primaryAction,
-  dropdownActions = EMPTY_DROPDOWN_ACTIONS as Array<MobileCardDropdownAction<T>>,
+  dropdownActions = EMPTY_DROPDOWN_ACTIONS,
   containerRef,
   className,
   onExpandToggle,

@@ -73,7 +73,7 @@ jest.mock("./chunks", () => {
 import { SearchCore, selectDiverseTopK } from "./SearchCore";
 
 describe("SearchCore retrieve", () => {
-  let mockApp: any;
+  let mockApp: unknown;
 
   beforeEach(() => {
     buildFromCandidatesMock.mockReset();

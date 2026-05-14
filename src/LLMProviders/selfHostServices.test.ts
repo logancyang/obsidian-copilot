@@ -4,7 +4,7 @@ import { hasSelfHostSearchKey, selfHostWebSearch } from "./selfHostServices";
 
 const mockGetSettings = jest.fn();
 jest.mock("@/settings/model", () => ({
-  getSettings: (): any => mockGetSettings(),
+  getSettings: (): unknown => mockGetSettings(),
 }));
 
 jest.mock("@/encryptionService", () => ({

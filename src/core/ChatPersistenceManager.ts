@@ -6,7 +6,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { sanitizeVaultPathSegment } from "@/projects/projectUtils";
 import { filterChatHistoryFiles, readChatPathProjectId } from "@/utils/chatHistoryUtils";
 import { getSettings } from "@/settings/model";
-import { ChatMessage } from "@/types/message";
+import { ChatMessage, MessageContext } from "@/types/message";
 import {
   ensureFolderExists,
   extractTextFromChunk,
@@ -419,7 +419,7 @@ export class ChatPersistenceManager {
       const contentLines = fullContent.split("\n");
       let messageText = fullContent;
       let timestamp = "Unknown time";
-      let contextInfo: any = undefined;
+      let contextInfo: MessageContext | undefined = undefined;
 
       // Check for context and timestamp lines
       let endIndex = contentLines.length;
@@ -492,8 +492,8 @@ export class ChatPersistenceManager {
   /**
    * Parse context string back into context object
    */
-  private parseContextString(contextStr: string): any {
-    const context: any = {
+  private parseContextString(contextStr: string): MessageContext | undefined {
+    const context: MessageContext = {
       notes: [],
       urls: [],
       tags: [],
@@ -581,9 +581,9 @@ export class ChatPersistenceManager {
     if (
       context.notes.length > 0 ||
       context.urls.length > 0 ||
-      context.tags.length > 0 ||
-      context.folders.length > 0 ||
-      context.webTabs.length > 0
+      (context.tags?.length ?? 0) > 0 ||
+      (context.folders?.length ?? 0) > 0 ||
+      (context.webTabs?.length ?? 0) > 0
     ) {
       return context;
     }

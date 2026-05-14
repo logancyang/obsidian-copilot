@@ -1,3 +1,4 @@
+import { StructuredTool } from "@langchain/core/tools";
 import { logError, logInfo, logWarn } from "@/logger";
 import { checkIsPlusUser, isSelfHostModeValid } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
@@ -30,7 +31,7 @@ export interface ToolExecutionResult {
  */
 export async function executeSequentialToolCall(
   toolCall: ToolCall,
-  availableTools: any[],
+  availableTools: Pick<StructuredTool, "name" | "invoke">[],
   originalUserMessage?: string
 ): Promise<ToolExecutionResult> {
   const DEFAULT_TOOL_TIMEOUT = 120000; // 120 seconds timeout per tool
@@ -49,7 +50,7 @@ export async function executeSequentialToolCall(
     const tool = availableTools.find((t) => t.name === toolCall.name);
 
     if (!tool) {
-      const availableToolNames = availableTools.map((t): string => t.name as string).join(", ");
+      const availableToolNames = availableTools.map((t): string => t.name).join(", ");
       return {
         toolName: toolCall.name,
         result: `Error: Tool '${toolCall.name}' not found. Available tools: ${availableToolNames}. Make sure you have the tool enabled in the Agent settings.`,
@@ -213,7 +214,10 @@ export function getToolEmoji(toolName: string): string {
 /**
  * Get user confirmation message for tool call
  */
-export function getToolConfirmtionMessage(toolName: string, toolArgs?: any): string | null {
+export function getToolConfirmtionMessage(
+  toolName: string,
+  toolArgs?: Record<string, unknown>
+): string | null {
   if (toolName == "writeFile" || toolName == "editFile") {
     return "Accept / reject in the Preview";
   }
@@ -283,11 +287,11 @@ export function logToolResult(toolName: string, result: ToolExecutionResult): vo
  * If path is not available, falls back to title
  */
 export function deduplicateSources(
-  sources: { title: string; path: string; score: number; explanation?: any }[]
-): { title: string; path: string; score: number; explanation?: any }[] {
+  sources: { title: string; path: string; score: number; explanation?: unknown }[]
+): { title: string; path: string; score: number; explanation?: unknown }[] {
   const uniqueSources = new Map<
     string,
-    { title: string; path: string; score: number; explanation?: any }
+    { title: string; path: string; score: number; explanation?: unknown }
   >();
 
   for (const source of sources) {

@@ -99,7 +99,7 @@ describe("MessageRepository", () => {
       messageRepo.addMessage("Hello", "Hello", "user");
 
       // Make message invisible by directly accessing internal array
-      const internalMessages = (messageRepo as any).messages as StoredMessage[];
+      const internalMessages = (messageRepo as unknown as { messages: StoredMessage[] }).messages;
       internalMessages[0].isVisible = false;
 
       const messages = messageRepo.getDisplayMessages();

@@ -6,6 +6,7 @@ import { ModelCapability, ReasoningEffort, Verbosity } from "@/constants";
 import { settingsAtom, settingsStore } from "@/settings/model";
 import { SelectedTextContext } from "@/types/message";
 import { atom, useAtom } from "jotai";
+import { TFile } from "obsidian";
 
 const userModelKeyAtom = atom<string | null>(null);
 const modelKeyAtom = atom(
@@ -128,7 +129,7 @@ export interface ModelConfig {
 export interface SetChainOptions {
   prompt?: ChatPromptTemplate;
   chatModel?: BaseChatModel;
-  noteFile?: any;
+  noteFile?: TFile;
   abortController?: AbortController;
   refreshIndex?: boolean;
 }

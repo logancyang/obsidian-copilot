@@ -8,7 +8,7 @@ export interface FileCacheEntry<T> {
 }
 
 export class FileCache<T> {
-  private static instance: FileCache<any>;
+  private static instance: FileCache<unknown>;
   private cacheDir: string;
   private memoryCache: Map<string, FileCacheEntry<T>> = new Map();
 

@@ -1,4 +1,5 @@
 import plugin from "tailwindcss/plugin";
+import type { CSSRuleObject } from "tailwindcss/types/config";
 
 // Types
 interface ColorValue {
@@ -25,7 +26,8 @@ const getPropertyPrefix = (property: ColorProperty): string => {
 
 // Utility Generator
 const generateUtility =
-  (e: any) => (property: ColorProperty, name: string, color: string, opacity: number) => {
+  (e: (className: string) => string) =>
+  (property: ColorProperty, name: string, color: string, opacity: number) => {
     const prefix = getPropertyPrefix(property);
     const className = `${prefix}-${name}/${opacity}`;
 
@@ -37,24 +39,26 @@ const generateUtility =
   };
 
 // Color Processing
-const generateAllUtilities = (e: any) => (color: string, name: string, opacity: number) => {
-  const properties: ColorProperty[] = ["background-color", "border-color", "color"];
-  const utilities = properties.map((property) =>
-    generateUtility(e)(property, name, color, opacity)
-  );
+const generateAllUtilities =
+  (e: (className: string) => string) => (color: string, name: string, opacity: number) => {
+    const properties: ColorProperty[] = ["background-color", "border-color", "color"];
+    const utilities = properties.map((property) =>
+      generateUtility(e)(property, name, color, opacity)
+    );
 
-  return Object.assign({}, ...utilities) as Record<string, unknown>;
-};
+    return Object.assign({}, ...utilities) as CSSRuleObject;
+  };
 
 const generateOpacityClasses =
-  (e: any, opacityUtilities: Record<string, any>) => (color: string, name: string) => {
+  (e: (className: string) => string, opacityUtilities: CSSRuleObject) =>
+  (color: string, name: string) => {
     Array.from({ length: 10 }, (_, i) => (i + 1) * 10).forEach((opacity) => {
       Object.assign(opacityUtilities, generateAllUtilities(e)(color, name, opacity));
     });
   };
 
 const processColorObject =
-  (e: any, opacityUtilities: Record<string, any>) =>
+  (e: (className: string) => string, opacityUtilities: CSSRuleObject) =>
   (colorValue: string | ColorValue, baseName: string, parentPath: string[] = []) => {
     const currentPath = [...parentPath, baseName];
 
@@ -88,7 +92,7 @@ const processColorObject =
  */
 export const colorOpacityPlugin = plugin((api) => {
   const { theme, e } = api;
-  const opacityUtilities: Record<string, any> = {};
+  const opacityUtilities: CSSRuleObject = {};
 
   // 处理所有颜色相关的主题配置
   const processThemeColors = (themeKey: string, prefix?: string) => {
