@@ -226,7 +226,6 @@ export default [
       },
     },
     rules: {
-      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-empty-function": "off",
       "@typescript-eslint/ban-ts-comment": "off",
       "@typescript-eslint/no-unused-vars": ["error", { args: "none" }],
