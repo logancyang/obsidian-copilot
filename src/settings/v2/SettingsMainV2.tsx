@@ -98,12 +98,21 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
   return (
     <TabProvider>
       <div>
-        <div className="tw-flex tw-flex-col tw-gap-2">
-          <h1 className="tw-flex tw-flex-col tw-gap-2 sm:tw-flex-row sm:tw-items-center sm:tw-justify-between">
+        <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
+          {/* Reason: Obsidian's settings modal CSS hides plugin-rendered <h1>
+              elements (display: none) because Obsidian reserves the top-level
+              heading for itself. Use a div with heading-equivalent styling. */}
+          <div
+            role="heading"
+            aria-level={1}
+            className="tw-flex tw-flex-col tw-gap-2 tw-text-base tw-font-semibold sm:tw-flex-row sm:tw-items-center sm:tw-justify-between"
+          >
             <div className="tw-flex tw-items-center tw-gap-2">
               <span>Copilot Settings</span>
               <div className="tw-flex tw-items-center tw-gap-1">
-                <span className="tw-text-xs tw-text-muted">v{plugin.manifest.version}</span>
+                <span className="tw-text-xs tw-font-normal tw-text-muted">
+                  v{plugin.manifest.version}
+                </span>
                 {latestVersion && (
                   <>
                     {hasUpdate ? (
@@ -111,12 +120,15 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                         href="obsidian://show-plugin?id=copilot"
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="tw-text-xs tw-text-accent hover:tw-underline"
+                        className="tw-text-xs tw-font-normal tw-text-accent hover:tw-underline"
                       >
                         (Update to v{latestVersion})
                       </a>
                     ) : (
-                      <span className="tw-text-xs tw-text-normal"> (up to date)</span>
+                      <span className="tw-text-xs tw-font-normal tw-text-normal">
+                        {" "}
+                        (up to date)
+                      </span>
                     )}
                   </>
                 )}
@@ -127,7 +139,7 @@ const SettingsMainV2: React.FC<SettingsMainV2Props> = ({ plugin }) => {
                 Reset Settings
               </Button>
             </div>
-          </h1>
+          </div>
         </div>
         {/* Add the key prop to force re-render */}
         <SettingsContent key={resetKey} />
