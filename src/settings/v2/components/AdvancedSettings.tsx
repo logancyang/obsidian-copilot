@@ -97,16 +97,6 @@ export const AdvancedSettings: React.FC = () => {
 
         <SettingItem
           type="switch"
-          title="Enable Encryption"
-          description="Enable encryption for the API keys."
-          checked={settings.enableEncryption}
-          onCheckedChange={(checked) => {
-            updateSetting("enableEncryption", checked);
-          }}
-        />
-
-        <SettingItem
-          type="switch"
           title="Debug Mode"
           description="Debug mode will log some debug message to the console."
           checked={settings.debug}

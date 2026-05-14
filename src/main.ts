@@ -21,7 +21,7 @@ import { ProjectRegister } from "@/projects/projectRegister";
 import { ABORT_REASON, CHAT_VIEWTYPE, DEFAULT_OPEN_AREA, EVENT_NAMES } from "@/constants";
 import { ChatManager } from "@/core/ChatManager";
 import { MessageRepository } from "@/core/MessageRepository";
-import { encryptAllKeys, findDesktopEncryptedKeyFields } from "@/encryptionService";
+import { findDesktopEncryptedKeyFields } from "@/encryptionService";
 import { logError, logInfo, logWarn } from "@/logger";
 import { logFileManager } from "@/logFileManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -124,11 +124,10 @@ export default class CopilotPlugin extends Plugin {
 
     this.settingsUnsubscriber = subscribeToSettingsChange((prev, next) => {
       void (async () => {
-        if (next.enableEncryption) {
-          await this.saveData(await encryptAllKeys(next));
-        } else {
-          await this.saveData(next);
-        }
+        // Reason: encryption-at-rest is deprecated. encryptAllKeys is a no-op
+        // now; new keys are saved plaintext. Existing encrypted keys remain
+        // in data.json and are decrypted lazily by getDecryptedKey when read.
+        await this.saveData(next);
         registerCommands(this, prev, next);
       })();
     });

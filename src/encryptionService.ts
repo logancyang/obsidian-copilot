@@ -26,12 +26,25 @@ function getSafeStorage(): SafeStorage | null {
   return safeStorageInternal;
 }
 
-// Add new prefixes to distinguish encryption methods
+// Encryption-at-rest is deprecated as of this commit. `getEncryptedKey`
+// and `encryptAllKeys` are now no-ops, so new keys are saved plaintext.
+// We still decrypt legacy `enc_*` blobs at read time via `getDecryptedKey`
+// for backwards compatibility; existing keys migrate organically the next
+// time the user re-saves them.
 const DESKTOP_PREFIX = "enc_desk_";
 const WEBCRYPTO_PREFIX = "enc_web_";
 // Keep old prefix for backward compatibility
 const ENCRYPTION_PREFIX = "enc_";
 const DECRYPTION_PREFIX = "dec_";
+
+// Reason: returned by getDecryptedKey when a DESKTOP_PREFIX key is hit on
+// mobile. Used because dispatch-map builders in chatModelManager.ts /
+// embeddingManager.ts await all provider keys eagerly; a throw would kill
+// the chat even when the actually-selected provider has a valid key.
+// Exported so callers can pattern-match on the sentinel later if we want to
+// surface a more targeted error when the bad key is the one being used.
+export const DESKTOP_KEY_ON_MOBILE_SENTINEL =
+  "__COPILOT_KEY_ENCRYPTED_ON_DESKTOP_REENTER_ON_MOBILE__";
 
 // Add these constants for the Web Crypto implementation
 const ENCRYPTION_KEY = new TextEncoder().encode("obsidian-copilot-v1");
@@ -44,76 +57,25 @@ async function getEncryptionKey(): Promise<CryptoKey> {
   ]);
 }
 
+/**
+ * No-op: encryption-at-rest is deprecated. Returns settings unchanged.
+ * Existing encrypted keys (`enc_*`) stay in data.json and are decrypted at
+ * read time via getDecryptedKey for backwards compatibility. New keys are
+ * saved plaintext.
+ */
 export async function encryptAllKeys(
   settings: Readonly<CopilotSettings>
 ): Promise<Readonly<CopilotSettings>> {
-  if (!settings.enableEncryption) {
-    return settings;
-  }
-  const newSettings = { ...settings };
-  const keysToEncrypt = Object.keys(settings).filter(
-    (key) =>
-      key.toLowerCase().includes("apikey") ||
-      key === "plusLicenseKey" ||
-      key === "githubCopilotAccessToken" ||
-      key === "githubCopilotToken"
-  );
-
-  for (const key of keysToEncrypt) {
-    const apiKey = settings[key as keyof CopilotSettings] as string;
-    (newSettings[key as keyof CopilotSettings] as any) = await getEncryptedKey(apiKey);
-  }
-
-  if (Array.isArray(settings.activeModels)) {
-    newSettings.activeModels = await Promise.all(
-      settings.activeModels.map(async (model) => ({
-        ...model,
-        apiKey: await getEncryptedKey(model.apiKey || ""),
-      }))
-    );
-  }
-
-  if (Array.isArray(settings.activeEmbeddingModels)) {
-    newSettings.activeEmbeddingModels = await Promise.all(
-      settings.activeEmbeddingModels.map(async (model) => ({
-        ...model,
-        apiKey: await getEncryptedKey(model.apiKey || ""),
-      }))
-    );
-  }
-
-  return newSettings;
+  return settings;
 }
 
+/**
+ * No-op: encryption-at-rest is deprecated. Strips the `dec_` marker if
+ * present and returns the raw plaintext key.
+ */
 export async function getEncryptedKey(apiKey: string): Promise<string> {
-  if (!apiKey || apiKey.startsWith(ENCRYPTION_PREFIX)) {
-    return apiKey;
-  }
-
-  if (isDecrypted(apiKey)) {
-    apiKey = apiKey.replace(DECRYPTION_PREFIX, "");
-  }
-
-  try {
-    // Reason: only attempt safeStorage encryption on desktop. Mobile has no
-    // Electron, so a safeStorage-encrypted blob saved on mobile would be
-    // unusable here (and could even sync back to desktop if Obsidian Sync
-    // pushes it). Belt-and-suspenders: even if getSafeStorage() somehow
-    // returned a truthy value on mobile, we want the WebCrypto path.
-    if (Platform.isDesktop && getSafeStorage()?.isEncryptionAvailable()) {
-      const encryptedBuffer = getSafeStorage()!.encryptString(apiKey);
-      return DESKTOP_PREFIX + encryptedBuffer.toString("base64");
-    }
-
-    // Fallback to Web Crypto API (always used on mobile)
-    const key = await getEncryptionKey();
-    const encodedData = new TextEncoder().encode(apiKey);
-    const encryptedData = await crypto.subtle.encrypt(ALGORITHM, key, encodedData);
-    return WEBCRYPTO_PREFIX + arrayBufferToBase64(encryptedData);
-  } catch (error) {
-    console.error("Encryption failed:", error);
-    return apiKey;
-  }
+  if (!apiKey) return apiKey;
+  return isDecrypted(apiKey) ? apiKey.replace(DECRYPTION_PREFIX, "") : apiKey;
 }
 
 /**
@@ -163,18 +125,19 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
 
   // Handle different encryption methods
   if (apiKey.startsWith(DESKTOP_PREFIX)) {
-    // Reason: DESKTOP_PREFIX keys are encrypted with Electron's safeStorage,
-    // which uses OS-level encryption (Keychain / DPAPI / libsecret). Mobile
-    // has no Electron and no safeStorage, so a desktop-encrypted key synced
-    // to mobile via Obsidian Sync cannot be decrypted there. Throw a clear,
-    // actionable error instead of letting Buffer.from / safeStorage crash
-    // with a cryptic "Can't find variable: Buffer".
+    // Reason: DESKTOP_PREFIX keys are encrypted with Electron's safeStorage
+    // (Keychain / DPAPI / libsecret). Mobile has no Electron and no
+    // safeStorage, so a desktop-encrypted key synced to mobile via Obsidian
+    // Sync cannot be decrypted there. Return a sentinel string instead of
+    // throwing — chatModelManager.ts and embeddingManager.ts eagerly await
+    // getDecryptedKey for EVERY provider when building their dispatch map
+    // literal, so a throw here kills the entire chat even if the user is
+    // using a different provider with a perfectly valid key. The startup
+    // Notice in main.ts lists which fields need re-entry; this sentinel
+    // ensures map construction succeeds for the providers that *don't* use
+    // a desktop-encrypted key.
     if (Platform.isMobile) {
-      throw new Error(
-        "This API key was encrypted on desktop with OS-level encryption that's " +
-          "unavailable on mobile. Please re-enter your API key in Copilot settings " +
-          "on this device to use it here."
-      );
+      return DESKTOP_KEY_ON_MOBILE_SENTINEL;
     }
     const base64Data = apiKey.replace(DESKTOP_PREFIX, "");
     const buffer = Buffer.from(base64Data, "base64");
@@ -221,15 +184,6 @@ function isPlainText(key: string): boolean {
 
 function isDecrypted(keyBuffer: string): boolean {
   return keyBuffer.startsWith(DECRYPTION_PREFIX);
-}
-
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = "";
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return window.btoa(binary);
 }
 
 function base64ToArrayBuffer(base64: string): ArrayBuffer {

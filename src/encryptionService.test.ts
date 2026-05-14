@@ -69,21 +69,21 @@ describe("EncryptionService", () => {
     jest.resetModules();
   });
 
-  describe("getEncryptedKey", () => {
-    it("should encrypt an API key", async () => {
+  describe("getEncryptedKey (deprecated no-op)", () => {
+    it("should return plaintext key unchanged", async () => {
       const apiKey = "testApiKey";
-      const encryptedKey = await getEncryptedKey(apiKey);
-      // The key is base64 encoded, so we should expect that format
-      expect(encryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-      // Verify we can decrypt it back
-      const decryptedKey = await getDecryptedKey(encryptedKey);
-      expect(decryptedKey).toBe(apiKey);
+      const result = await getEncryptedKey(apiKey);
+      expect(result).toBe(apiKey);
     });
 
-    it("should return the original key if already encrypted", async () => {
-      const apiKey = "enc_testApiKey";
-      const encryptedKey = await getEncryptedKey(apiKey);
-      expect(encryptedKey).toBe(apiKey);
+    it("should strip the dec_ prefix when present", async () => {
+      const result = await getEncryptedKey("dec_testApiKey");
+      expect(result).toBe("testApiKey");
+    });
+
+    it("should return empty string for empty input", async () => {
+      const result = await getEncryptedKey("");
+      expect(result).toBe("");
     });
   });
 
@@ -102,8 +102,8 @@ describe("EncryptionService", () => {
     });
   });
 
-  describe("encryptAllKeys", () => {
-    it("should encrypt all keys containing 'apikey'", async () => {
+  describe("encryptAllKeys (deprecated no-op)", () => {
+    it("should return settings unchanged regardless of enableEncryption", async () => {
       const settings = {
         enableEncryption: true,
         openAIApiKey: "testApiKey",
@@ -111,28 +111,8 @@ describe("EncryptionService", () => {
         userSystemPrompt: "shouldBeIgnored",
       } as unknown as CopilotSettings;
 
-      const newSettings = await encryptAllKeys(settings);
-      expect(newSettings.openAIApiKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-      expect(newSettings.cohereApiKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-      expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
-
-      // Verify we can decrypt the keys back
-      const decryptedOpenAI = await getDecryptedKey(newSettings.openAIApiKey);
-      const decryptedCohere = await getDecryptedKey(newSettings.cohereApiKey);
-      expect(decryptedOpenAI).toBe("testApiKey");
-      expect(decryptedCohere).toBe("anotherTestApiKey");
-    });
-
-    it("should not encrypt keys when encryption is not enabled", async () => {
-      const newSettings = await encryptAllKeys({
-        enableEncryption: false,
-        openAIApiKey: "testApiKey",
-        cohereApiKey: "anotherTestApiKey",
-        userSystemPrompt: "shouldBeIgnored",
-      } as unknown as CopilotSettings);
-      expect(newSettings.openAIApiKey).toBe("testApiKey");
-      expect(newSettings.cohereApiKey).toBe("anotherTestApiKey");
-      expect(newSettings.userSystemPrompt).toBe("shouldBeIgnored");
+      const result = await encryptAllKeys(settings);
+      expect(result).toBe(settings);
     });
   });
 });
@@ -153,41 +133,23 @@ describe("Cross-platform compatibility", () => {
     console.error = originalConsoleError;
   });
 
-  it("should encrypt and decrypt consistently on mobile", async () => {
-    // Mock as mobile by making safeStorage unavailable
-    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
+  it("should decrypt legacy WebCrypto-encrypted keys on mobile", async () => {
+    // Simulate a key encrypted with the legacy WebCrypto path (the only path
+    // mobile ever used, and the path desktop fell back to when safeStorage
+    // wasn't available). The mocked subtle.decrypt strips the `_encrypted`
+    // suffix the encrypt mock appends.
+    const enc = (await mockSubtle.encrypt(
+      null,
+      null,
+      new TextEncoder().encode("testApiKey").buffer
+    )) as ArrayBuffer;
+    const encBytes = new Uint8Array(enc);
+    let binary = "";
+    for (let i = 0; i < encBytes.length; i++) binary += String.fromCharCode(encBytes[i]);
+    const webEncryptedKey = "enc_web_" + window.btoa(binary);
 
-    const originalKey = "testApiKey";
-    const encryptedKey = await getEncryptedKey(originalKey);
-    expect(encryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-
-    // Reset the mock counts before decryption
-    mockSubtle.encrypt.mockClear();
-    mockSubtle.decrypt.mockClear();
-
-    const decryptedKey = await getDecryptedKey(encryptedKey);
-    expect(decryptedKey).toBe(originalKey);
-
-    // On mobile, we should use Web Crypto API for decryption
+    const decryptedKey = await getDecryptedKey(webEncryptedKey);
+    expect(decryptedKey).toBe("testApiKey");
     expect(mockSubtle.decrypt).toHaveBeenCalled();
-  });
-
-  it("should be able to decrypt mobile-encrypted keys on desktop", async () => {
-    // First encrypt on mobile
-    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
-
-    const originalKey = "testApiKey";
-    const mobileEncryptedKey = await getEncryptedKey(originalKey);
-    expect(mobileEncryptedKey).toMatch(/^enc_(desk|web)_[A-Za-z0-9+/=]+$/);
-    expect(mockSubtle.encrypt).toHaveBeenCalled();
-
-    // Reset the mock counts before desktop decryption
-    mockSubtle.encrypt.mockClear();
-    mockSubtle.decrypt.mockClear();
-
-    // Then decrypt on desktop
-    mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(true);
-    const decryptedKey = await getDecryptedKey(mobileEncryptedKey);
-    expect(decryptedKey).toBe(originalKey);
   });
 });
