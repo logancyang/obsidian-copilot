@@ -1,7 +1,6 @@
 // src/editor/replaceGuard.ts
 
-import type { ChangeDesc } from "@codemirror/state";
-import type { EditorView } from "@codemirror/view";
+import type { ChangeDesc, EditorView } from "@/editor/codemirror";
 import type { WorkspaceLeaf } from "obsidian";
 import { SelectionHighlight } from "./selectionHighlight";
 import { logError } from "@/logger";

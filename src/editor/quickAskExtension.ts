@@ -7,8 +7,7 @@
  * that occur when dispatching from within ViewPlugin.update().
  */
 
-import { StateEffect } from "@codemirror/state";
-import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
+import { EditorView, StateEffect, ViewPlugin, type ViewUpdate } from "@/editor/codemirror";
 import { QuickAskOverlay } from "@/components/quick-ask/QuickAskOverlay";
 import type { QuickAskWidgetPayload } from "@/components/quick-ask/types";
 import { mapQuickAskAnchorPositions } from "@/utils/quickAskAnchorMapping";

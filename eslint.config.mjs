@@ -141,6 +141,42 @@ export default [
     },
   },
 
+  // @codemirror/state and @codemirror/view are provided by Obsidian at runtime
+  // (declared as peerDependencies on `obsidian` and marked external in our
+  // esbuild config), so they intentionally aren't listed in our package.json
+  // — when they were, the obsidian community-plugins review ran out of memory
+  // analyzing the resulting dep tree. All imports of these packages must go
+  // through the `src/editor/codemirror.ts` barrel so we can scope the
+  // `import/no-extraneous-dependencies` exemption to a single file. The
+  // barrel itself is exempted here; everywhere else, the
+  // `no-restricted-imports` rule below blocks direct @codemirror imports.
+  {
+    files: ["src/editor/codemirror.ts"],
+    rules: {
+      "import/no-extraneous-dependencies": "off",
+    },
+  },
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/editor/codemirror.ts"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@codemirror/state", "@codemirror/view"],
+              message:
+                "Import codemirror symbols from '@/editor/codemirror' instead. " +
+                "Direct imports from @codemirror/* are restricted because those packages " +
+                "are intentionally absent from package.json (see src/editor/codemirror.ts).",
+            },
+          ],
+        },
+      ],
+    },
+  },
+
   // Test files need Jest globals
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],

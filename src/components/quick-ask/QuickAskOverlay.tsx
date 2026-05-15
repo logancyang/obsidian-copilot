@@ -6,7 +6,7 @@
  * QuickAskPanel fills its container and delegates resize events here.
  */
 
-import { EditorView } from "@codemirror/view";
+import { EditorView } from "@/editor/codemirror";
 import type { Editor } from "obsidian";
 import React from "react";
 import { Root } from "react-dom/client";
