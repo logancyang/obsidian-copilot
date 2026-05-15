@@ -1478,14 +1478,12 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       // prefixes (e.g. "global.anthropic.claude-opus-4-7-20260115-v1:0").
       const opusMinorMatch = this.modelName.match(/claude-opus-4-(\d+)/);
       const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
+      // Opus 4.7+ defaults thinking.display to "omitted" so thinking summaries
+      // never reach the UI; force "summarized" for the adaptive branch. Pre-4.7
+      // models default to "summarized" server-side.
       payload.thinking = usesAdaptiveThinking
-        ? { type: "adaptive" }
+        ? { type: "adaptive", display: "summarized" }
         : { type: "enabled", budget_tokens: 2048 };
-      if (usesAdaptiveThinking) {
-        // Opus 4.7+ defaults output_config.display to "omitted" so thinking summaries
-        // never reach the UI. Pre-4.7 models default to "summarized" server-side.
-        payload.output_config = { display: "summarized" };
-      }
       // When thinking is enabled, temperature must be 1
       // https://docs.claude.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
       payload.temperature = 1;

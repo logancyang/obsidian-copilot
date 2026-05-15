@@ -22,8 +22,9 @@ type ImageContent = {
 } | null;
 
 type RequestBody = {
-  thinking?: { type: "enabled"; budget_tokens: number } | { type: "adaptive" };
-  output_config?: { display: "summarized" | "omitted" };
+  thinking?:
+    | { type: "enabled"; budget_tokens: number }
+    | { type: "adaptive"; display?: "summarized" | "omitted" };
   temperature?: number;
   anthropic_version?: string;
   messages: Array<{
@@ -459,14 +460,13 @@ describe("BedrockChatModel streaming decode", () => {
       expect(requestBody.thinking).toBeDefined();
     });
 
-    it("uses adaptive thinking and summarized display for claude-opus-4-7", () => {
+    it("uses adaptive thinking with summarized display for claude-opus-4-7", () => {
       const model = createModel(true, "anthropic.claude-opus-4-7-20260115-v1:0");
       const requestBody = asInternal(model).buildRequestBody([
         { role: "user", content: "test", getType: () => "human" },
       ]);
 
-      expect(requestBody.thinking).toEqual({ type: "adaptive" });
-      expect(requestBody.output_config).toEqual({ display: "summarized" });
+      expect(requestBody.thinking).toEqual({ type: "adaptive", display: "summarized" });
       expect(requestBody.temperature).toBe(1);
     });
 
@@ -476,18 +476,16 @@ describe("BedrockChatModel streaming decode", () => {
         { role: "user", content: "test", getType: () => "human" },
       ]);
 
-      expect(requestBody.thinking).toEqual({ type: "adaptive" });
-      expect(requestBody.output_config).toEqual({ display: "summarized" });
+      expect(requestBody.thinking).toEqual({ type: "adaptive", display: "summarized" });
     });
 
-    it("keeps legacy thinking for opus-4-6 and earlier, no output_config", () => {
+    it("keeps legacy thinking for opus-4-6 and earlier", () => {
       const model = createModel(true, "anthropic.claude-opus-4-6-20250115-v1:0");
       const requestBody = asInternal(model).buildRequestBody([
         { role: "user", content: "test", getType: () => "human" },
       ]);
 
       expect(requestBody.thinking).toEqual({ type: "enabled", budget_tokens: 2048 });
-      expect(requestBody.output_config).toBeUndefined();
     });
 
     it("keeps legacy thinking for sonnet-4 and 3-7-sonnet", () => {

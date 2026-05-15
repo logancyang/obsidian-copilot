@@ -248,18 +248,15 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         ...(isThinkingEnabled && {
+          // Opus 4.7+ defaults thinking.display to "omitted" so thinking summaries
+          // never reach the UI; force "summarized" for the adaptive branch. Pre-4.7
+          // models default to "summarized" server-side and don't need this.
           thinking: usesAdaptiveThinking
-            ? { type: "adaptive" as const }
+            ? { type: "adaptive" as const, display: "summarized" as const }
             : {
                 type: "enabled" as const,
                 budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
               },
-          // Opus 4.7+ defaults output_config.display to "omitted" so thinking summaries
-          // never reach the UI. Pre-4.7 models still default to "summarized" server-side
-          // and don't need this.
-          ...(usesAdaptiveThinking && {
-            outputConfig: { display: "summarized" as const },
-          }),
         }),
       },
       [ChatModelProviders.AZURE_OPENAI]: await (async (): Promise<Record<string, unknown>> => {
