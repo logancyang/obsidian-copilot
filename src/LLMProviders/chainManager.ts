@@ -166,12 +166,8 @@ export default class ChainManager {
 
     this.validateChainType(chainType);
 
-    if (
-      chainType === ChainType.VAULT_QA_CHAIN ||
-      chainType === ChainType.COPILOT_PLUS_CHAIN ||
-      chainType === ChainType.PROJECT_CHAIN
-    ) {
-      await this.initializeQAChain(options);
+    if (options.refreshIndex) {
+      await this.refreshVaultIndex();
     }
 
     setChainType(chainType);
@@ -199,17 +195,14 @@ export default class ChainManager {
     }
   }
 
-  private async initializeQAChain(options: SetChainOptions) {
-    // Handle index refresh if needed
-    if (options.refreshIndex) {
-      const settings = getSettings();
-      if (settings.enableSemanticSearchV3) {
-        // Use VectorStoreManager for Orama indexing
-        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
-      }
-      // V3 search builds indexes on demand, no action needed
+  private async refreshVaultIndex(): Promise<void> {
+    // V3 (on-demand) search builds indexes lazily, so a refresh is only meaningful
+    // when the legacy Orama-backed semantic search is enabled.
+    if (!getSettings().enableSemanticSearchV3) {
+      return;
     }
+    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+    await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
   }
 
   async runChain(
