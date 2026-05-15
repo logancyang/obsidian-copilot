@@ -746,6 +746,7 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
           showIndexingCard={showIndexingCard}
           onAddToContext={handleAddToContext}
           onRemoveFromContext={handleRemoveFromContext}
+          hideAddContextButton={isAgentMode}
         />
       )}
 
