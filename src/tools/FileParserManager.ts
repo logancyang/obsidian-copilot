@@ -76,7 +76,7 @@ class SelfHostPdfParser {
   }
 }
 
-export class MarkdownParser implements FileParser {
+class MarkdownParser implements FileParser {
   supportedExtensions = ["md", "base"];
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
@@ -84,7 +84,7 @@ export class MarkdownParser implements FileParser {
   }
 }
 
-export class PDFParser implements FileParser {
+class PDFParser implements FileParser {
   supportedExtensions = ["pdf"];
   private brevilabsClient: BrevilabsClient;
   private pdfCache: PDFCache;
@@ -147,7 +147,7 @@ export class PDFParser implements FileParser {
   }
 }
 
-export class CanvasParser implements FileParser {
+class CanvasParser implements FileParser {
   supportedExtensions = ["canvas"];
 
   async parseFile(file: TFile, vault: Vault): Promise<string> {
@@ -173,7 +173,7 @@ export class CanvasParser implements FileParser {
  * Reason: The static method needs these extensions at UI layer (before any real API client exists),
  * so we can't safely construct Docs4LLMParser just to read a property.
  */
-export const DOCS4LLM_SUPPORTED_EXTENSIONS: readonly string[] = [
+const DOCS4LLM_SUPPORTED_EXTENSIONS: readonly string[] = [
   // Base types
   "pdf",
 

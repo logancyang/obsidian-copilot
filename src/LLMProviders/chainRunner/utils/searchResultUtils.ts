@@ -26,7 +26,7 @@ export interface SearchDoc {
  * Quality summary for search results.
  * Helps the LLM evaluate whether results are adequate or if re-search is needed.
  */
-export interface QualitySummary {
+interface QualitySummary {
   high: number; // Count of results with score >= 0.7
   medium: number; // Count of results with score >= 0.3 and < 0.7
   low: number; // Count of results with score < 0.3
@@ -212,7 +212,7 @@ function toIsoString(ts: unknown): string {
  * Create a concise, single-line summary of an explanation object.
  * Includes lexical matches, semantic score, folder/graph boosts, and score adjustments.
  */
-export function summarizeExplanation(explanation: unknown): string {
+function summarizeExplanation(explanation: unknown): string {
   if (!explanation) return "";
 
   const parts: string[] = [];

@@ -176,5 +176,3 @@ export const AgentReasoningBlock: React.FC<AgentReasoningBlockProps> = ({
     </Collapsible>
   );
 };
-
-export default AgentReasoningBlock;

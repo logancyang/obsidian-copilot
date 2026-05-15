@@ -79,7 +79,7 @@ export function $isToolPillNode(node: LexicalNode): node is ToolPillNode {
   return node instanceof ToolPillNode;
 }
 
-export function $findToolPills(): ToolPillNode[] {
+function $findToolPills(): ToolPillNode[] {
   const root = $getRoot();
   const pills: ToolPillNode[] = [];
 

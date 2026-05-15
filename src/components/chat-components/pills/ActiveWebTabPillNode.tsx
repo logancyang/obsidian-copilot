@@ -174,34 +174,6 @@ export function $isActiveWebTabPillNode(
 }
 
 /**
- * Check whether the editor currently contains an active web tab pill.
- * Used to determine if Active Web Tab should be included at send time,
- * avoiding async pill-sync race conditions.
- * @returns True if at least one ActiveWebTabPillNode exists in the editor
- */
-export function $hasActiveWebTabPill(): boolean {
-  const root = $getRoot();
-
-  function traverse(node: LexicalNode): boolean {
-    if ($isActiveWebTabPillNode(node)) {
-      return true;
-    }
-
-    if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = (node as { getChildren: () => LexicalNode[] }).getChildren();
-      for (const child of children) {
-        if (traverse(child)) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
-  return traverse(root);
-}
-
-/**
  * Removes all active web tab pills from the editor.
  * @returns The number of pills removed
  */

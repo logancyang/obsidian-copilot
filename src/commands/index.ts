@@ -36,11 +36,7 @@ import { setSelectedTextContexts } from "@/aiParams";
 /**
  * Add a command to the plugin. Supports async callbacks; errors are logged.
  */
-export function addCommand(
-  plugin: CopilotPlugin,
-  id: CommandId,
-  callback: () => void | Promise<void>
-) {
+function addCommand(plugin: CopilotPlugin, id: CommandId, callback: () => void | Promise<void>) {
   plugin.addCommand({
     id,
     name: COMMAND_NAMES[id],
@@ -78,7 +74,7 @@ function addEditorCommand(
 /**
  * Add a check command to the plugin.
  */
-export function addCheckCommand(
+function addCheckCommand(
   plugin: CopilotPlugin,
   id: CommandId,
   callback: (checking: boolean) => boolean | void

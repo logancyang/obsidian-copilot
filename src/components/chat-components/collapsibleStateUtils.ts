@@ -1,4 +1,4 @@
-export const COPILOT_COLLAPSIBLE_DOM_ID_PREFIX = "copilot-collapsible";
+const COPILOT_COLLAPSIBLE_DOM_ID_PREFIX = "copilot-collapsible";
 
 declare global {
   interface Window {

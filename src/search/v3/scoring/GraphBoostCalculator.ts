@@ -30,7 +30,7 @@ export interface GraphBoostConfig {
 /**
  * Default configuration
  */
-export const DEFAULT_CONFIG: GraphBoostConfig = {
+const DEFAULT_CONFIG: GraphBoostConfig = {
   enabled: true,
   maxCandidates: 10,
   backlinkWeight: 1.0,

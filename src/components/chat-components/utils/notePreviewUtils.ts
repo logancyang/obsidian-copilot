@@ -11,10 +11,7 @@ declare const app: App;
  * @param maxLength - Maximum length for truncated content (default: 500)
  * @returns Promise resolving to processed content string
  */
-export async function loadNoteContentForPreview(
-  file: TFile,
-  maxLength: number = 500
-): Promise<string> {
+async function loadNoteContentForPreview(file: TFile, maxLength: number = 500): Promise<string> {
   try {
     // Handle PDF and canvas files - treat as empty content (no preview)
     if (file.extension === "pdf" || file.extension === "canvas") {

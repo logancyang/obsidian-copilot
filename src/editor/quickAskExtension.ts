@@ -103,10 +103,3 @@ export const quickAskOverlayPlugin = ViewPlugin.fromClass(
     }
   }
 );
-
-/**
- * Creates the Quick Ask CM6 extension array.
- */
-export function createQuickAskExtension() {
-  return [quickAskOverlayPlugin];
-}

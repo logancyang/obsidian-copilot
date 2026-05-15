@@ -60,7 +60,7 @@ export const projectContextLoadAtom = atom<ProjectContextLoadState>({
   total: [],
 });
 
-export interface IndexingProgressState {
+interface IndexingProgressState {
   isActive: boolean;
   isPaused: boolean;
   isCancelled: boolean;
@@ -70,7 +70,7 @@ export interface IndexingProgressState {
   completionStatus: "none" | "success" | "cancelled" | "error";
 }
 
-export const indexingProgressAtom = atom<IndexingProgressState>({
+const indexingProgressAtom = atom<IndexingProgressState>({
   isActive: false,
   isPaused: false,
   isCancelled: false,
@@ -237,24 +237,8 @@ export function subscribeToProjectChange(
   });
 }
 
-export function useCurrentProject() {
-  return useAtom(currentProjectAtom, {
-    store: settingsStore,
-  });
-}
-
 export function setProjectLoading(loading: boolean) {
   settingsStore.set(projectLoadingAtom, loading);
-}
-
-export function isProjectLoading(): boolean {
-  return settingsStore.get(projectLoadingAtom);
-}
-
-export function subscribeToProjectLoadingChange(callback: (loading: boolean) => void): () => void {
-  return settingsStore.sub(projectLoadingAtom, () => {
-    callback(settingsStore.get(projectLoadingAtom));
-  });
 }
 
 export function useProjectLoading() {
@@ -275,11 +259,6 @@ export function getSelectedTextContexts(): SelectedTextContext[] {
   return settingsStore.get(selectedTextContextsAtom);
 }
 
-export function addSelectedTextContext(context: SelectedTextContext) {
-  const current = getSelectedTextContexts();
-  setSelectedTextContexts([...current, context]);
-}
-
 export function removeSelectedTextContext(id: string) {
   const current = getSelectedTextContexts();
   setSelectedTextContexts(current.filter((context) => context.id !== id));
@@ -293,13 +272,6 @@ export function useSelectedTextContexts() {
   return useAtom(selectedTextContextsAtom, {
     store: settingsStore,
   });
-}
-
-/**
- * Gets the project context load state from the atom.
- */
-export function getProjectContextLoadState(): Readonly<ProjectContextLoadState> {
-  return settingsStore.get(projectContextLoadAtom);
 }
 
 /**
@@ -320,17 +292,6 @@ export function updateProjectContextLoadState<K extends keyof ProjectContextLoad
     ...prev,
     [key]: valueFn(prev[key]),
   }));
-}
-
-/**
- * Subscribes to changes in the project context load state.
- */
-export function subscribeToProjectContextLoadChange(
-  callback: (state: ProjectContextLoadState) => void
-): () => void {
-  return settingsStore.sub(projectContextLoadAtom, () => {
-    callback(settingsStore.get(projectContextLoadAtom));
-  });
 }
 
 /**

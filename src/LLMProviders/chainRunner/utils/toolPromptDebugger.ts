@@ -4,7 +4,7 @@ import { processRawChatHistory, processedMessagesToTextOnly } from "./chatHistor
 /**
  * Options for building prompt debug sections with annotated provenance.
  */
-export interface BuildPromptDebugSectionsOptions {
+interface BuildPromptDebugSectionsOptions {
   systemSections: PromptSection[];
   rawHistory?: unknown[];
   adapterName: string;
@@ -27,9 +27,7 @@ export interface PromptDebugReport {
  * @param options - Data required to assemble annotated prompt sections.
  * @returns Prompt sections with provenance metadata.
  */
-export function buildPromptDebugSections(
-  options: BuildPromptDebugSectionsOptions
-): PromptSection[] {
+function buildPromptDebugSections(options: BuildPromptDebugSectionsOptions): PromptSection[] {
   const { systemSections, rawHistory, adapterName, originalUserMessage, enhancedUserMessage } =
     options;
   const sections: PromptSection[] = [...systemSections];
@@ -76,7 +74,7 @@ export function buildPromptDebugSections(
  * @param sections - Prompt sections with provenance metadata.
  * @returns Multiline string with section headers that identify code sources.
  */
-export function formatPromptSectionsWithAnnotations(sections: PromptSection[]): string {
+function formatPromptSectionsWithAnnotations(sections: PromptSection[]): string {
   return sections
     .map((section) => {
       const header = `[Section: ${section.label} | Source: ${section.source}]`;

@@ -39,11 +39,9 @@ export {
   getProjectFolderPath,
   getProjectConfigFilePath,
   isProjectConfigFile,
-  getProjectFolderNameFromConfigPath,
   sanitizeVaultPathSegment,
   splitUrlsStringToArray,
   readFrontmatterFieldFromFile,
-  readFrontmatterListFromFile,
 } from "@/projects/projectPaths";
 
 /**

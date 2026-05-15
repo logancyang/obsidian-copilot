@@ -16,7 +16,7 @@ export interface FolderBoostConfig {
 /**
  * Default configuration for folder boost
  */
-export const DEFAULT_FOLDER_BOOST_CONFIG: FolderBoostConfig = {
+const DEFAULT_FOLDER_BOOST_CONFIG: FolderBoostConfig = {
   enabled: true,
   minDocsForBoost: 2,
   maxBoostFactor: 1.15, // Max 15% boost, aligned with graph boost

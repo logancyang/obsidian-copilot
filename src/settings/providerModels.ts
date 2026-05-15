@@ -427,7 +427,7 @@ export type ProviderModelAdapters = {
  * Provider model adapters - converts different provider model data to standard format
  * These adapters extract model information from API responses and return in a unified format
  */
-export const providerAdapters: ProviderModelAdapters = {
+const providerAdapters: ProviderModelAdapters = {
   [ChatModelProviders.OPENAI]: (data): StandardModel[] =>
     data.data?.map((model) => ({
       id: model.id,
@@ -523,7 +523,7 @@ const toStr = (val: unknown, fallback: string): string =>
       ? String(val)
       : fallback;
 
-export const getDefaultModelAdapter = (provider: SettingKeyProviders) => {
+const getDefaultModelAdapter = (provider: SettingKeyProviders) => {
   return (data: Record<string, unknown>): StandardModel[] => {
     // Try to detect common data structure patterns
     if (data.data && Array.isArray(data.data)) {
@@ -565,7 +565,7 @@ export const getDefaultModelAdapter = (provider: SettingKeyProviders) => {
  * Get adapter function
  * Uses provider-specific adapter if available, otherwise falls back to default adapter
  */
-export const getModelAdapter = (provider: SettingKeyProviders) => {
+const getModelAdapter = (provider: SettingKeyProviders) => {
   return providerAdapters[provider] || getDefaultModelAdapter(provider);
 };
 

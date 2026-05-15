@@ -22,7 +22,7 @@ export interface CategoryOption extends TypeaheadOption {
   icon: React.ReactNode;
 }
 
-export const CATEGORY_OPTIONS: CategoryOption[] = [
+const CATEGORY_OPTIONS: CategoryOption[] = [
   {
     key: "notes",
     title: "Notes",

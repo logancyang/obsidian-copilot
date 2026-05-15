@@ -52,7 +52,7 @@ interface ObsidianAppWithPlugins {
   };
 }
 
-export async function refreshVaultIndex() {
+async function refreshVaultIndex() {
   try {
     const { getSettings } = await import("@/settings/model");
     const settings = getSettings();
@@ -78,7 +78,7 @@ export async function refreshVaultIndex() {
   }
 }
 
-export async function forceReindexVault() {
+async function forceReindexVault() {
   try {
     const { getSettings } = await import("@/settings/model");
     const settings = getSettings();
@@ -146,7 +146,7 @@ export async function reloadCurrentProject(app: App) {
   }
 }
 
-export async function forceRebuildCurrentProjectContext(app: App) {
+async function forceRebuildCurrentProjectContext(app: App) {
   const currentProject = getCurrentProject();
   if (!currentProject) {
     new Notice("No project is currently selected to rebuild.");

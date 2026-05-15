@@ -6,7 +6,6 @@
  */
 
 import { AIMessage, ToolMessage } from "@langchain/core/messages";
-import { ToolCall as LangChainToolCall } from "@langchain/core/messages/tool";
 import { logError } from "@/logger";
 
 /**
@@ -25,37 +24,6 @@ export interface ToolCallChunk {
   id?: string;
   name: string;
   args: string; // JSON string accumulated from chunks
-}
-
-/**
- * Extract native tool calls from an AIMessage.
- * Returns empty array if no tool calls present.
- *
- * @param message - AIMessage from LLM response
- * @returns Array of standardized tool calls
- */
-export function extractNativeToolCalls(message: AIMessage): NativeToolCall[] {
-  const toolCalls = message.tool_calls;
-
-  if (!toolCalls || toolCalls.length === 0) {
-    return [];
-  }
-
-  return toolCalls.map((tc: LangChainToolCall) => ({
-    id: tc.id || generateToolCallId(),
-    name: tc.name,
-    args: (tc.args as Record<string, unknown>) || {},
-  }));
-}
-
-/**
- * Check if an AIMessage contains tool calls
- *
- * @param message - AIMessage to check
- * @returns true if message has tool calls
- */
-export function hasToolCalls(message: AIMessage): boolean {
-  return (message.tool_calls?.length ?? 0) > 0;
 }
 
 /**

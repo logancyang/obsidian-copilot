@@ -6,7 +6,6 @@ module.exports = {
     "^.+\\.(js|jsx|ts|tsx)$": "ts-jest",
   },
   moduleNameMapper: {
-    "\\.(css|less|scss|sass)$": "identity-obj-proxy",
     "^@/(.*)$": "<rootDir>/src/$1",
     "^obsidian$": "<rootDir>/__mocks__/obsidian.js",
     // The yaml package's "exports" field defaults to a browser ESM entry under

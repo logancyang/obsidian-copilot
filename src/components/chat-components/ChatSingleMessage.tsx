@@ -91,7 +91,7 @@ const INLINE_CITATION_RE = /\[(\d+(?:\s*,\s*\d+)*)\]/g;
  * to the corresponding source note. Reads the source mapping from the
  * rendered .copilot-sources section in the same message.
  */
-export const linkInlineCitations = (root: HTMLElement): void => {
+const linkInlineCitations = (root: HTMLElement): void => {
   // Build citation number -> source anchor mapping from the rendered sources section.
   // We store the anchor element (not just the href) so we can copy Obsidian-specific
   // attributes like data-href and class="internal-link" onto the inline citation link.

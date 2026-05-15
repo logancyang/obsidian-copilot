@@ -18,16 +18,6 @@ export function isFileWritePending(filePath: string) {
   return pendingFileWritesAtom.has(filePath);
 }
 
-export function createCachedCommand(command: CustomCommand): CustomCommand {
-  const commands = customCommandsStore.get(customCommandsAtom);
-  const existingCommand = commands.find((c) => c.title === command.title);
-  if (existingCommand) {
-    return existingCommand;
-  }
-  customCommandsStore.set(customCommandsAtom, [...commands, command]);
-  return command;
-}
-
 export function deleteCachedCommand(title: string) {
   const commands = customCommandsStore.get(customCommandsAtom);
   customCommandsStore.set(

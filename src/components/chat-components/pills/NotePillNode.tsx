@@ -165,27 +165,6 @@ export function $isNotePillNode(node: LexicalNode | null | undefined): node is N
   return node instanceof NotePillNode;
 }
 
-export function $findNotePills(): NotePillNode[] {
-  const root = $getRoot();
-  const pills: NotePillNode[] = [];
-
-  function traverse(node: LexicalNode) {
-    if (node instanceof NotePillNode) {
-      pills.push(node);
-    }
-
-    if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = node.getChildren() as LexicalNode[];
-      for (const child of children) {
-        traverse(child);
-      }
-    }
-  }
-
-  traverse(root);
-  return pills;
-}
-
 export function $removePillsByPath(notePath: string): number {
   const root = $getRoot();
   let removedCount = 0;

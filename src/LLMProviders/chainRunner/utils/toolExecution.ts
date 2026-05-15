@@ -15,7 +15,7 @@ export interface ToolCall {
   args: Record<string, unknown>;
 }
 
-export interface ToolExecutionResult {
+interface ToolExecutionResult {
   toolName: string;
   result: string;
   success: boolean;
@@ -146,7 +146,7 @@ export async function executeSequentialToolCall(
 /**
  * Get display name for tool (user-friendly version)
  */
-export function getToolDisplayName(toolName: string): string {
+function getToolDisplayName(toolName: string): string {
   // Special handling for localSearch to show the actual search type being used
   if (toolName === "localSearch") {
     const settings = getSettings();
@@ -184,7 +184,7 @@ export function getToolDisplayName(toolName: string): string {
 /**
  * Get emoji for tool display
  */
-export function getToolEmoji(toolName: string): string {
+function getToolEmoji(toolName: string): string {
   const emojiMap: Record<string, string> = {
     localSearch: "🔍",
     webSearch: "🌐",
@@ -209,32 +209,6 @@ export function getToolEmoji(toolName: string): string {
   };
 
   return emojiMap[toolName] || "🔧";
-}
-
-/**
- * Get user confirmation message for tool call
- */
-export function getToolConfirmtionMessage(
-  toolName: string,
-  toolArgs?: Record<string, unknown>
-): string | null {
-  if (toolName == "writeFile" || toolName == "editFile") {
-    return "Accept / reject in the Preview";
-  }
-
-  // Display salient terms for lexical search
-  if (toolName === "localSearch" && toolArgs?.salientTerms) {
-    const settings = getSettings();
-    // Only show salient terms for lexical search (index-free)
-    if (!settings.enableSemanticSearchV3) {
-      const terms = Array.isArray(toolArgs.salientTerms) ? toolArgs.salientTerms : [];
-      if (terms.length > 0) {
-        return `Terms: ${terms.slice(0, 3).join(", ")}${terms.length > 3 ? "..." : ""}`;
-      }
-    }
-  }
-
-  return null;
 }
 
 /**

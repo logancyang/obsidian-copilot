@@ -25,7 +25,6 @@ import {
   safeFetchNoThrow,
   shouldUseGitHubCopilotResponsesApi,
 } from "@/utils";
-import { HarmBlockThreshold, HarmCategory } from "@google/generative-ai";
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
@@ -42,6 +41,14 @@ import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
+import type { SafetySetting } from "@google/generative-ai";
+
+const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
+  { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" } as SafetySetting,
+  { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" } as SafetySetting,
+  { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" } as SafetySetting,
+  { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" } as SafetySetting,
+];
 
 // Patch BaseLanguageModel.prototype.getNumTokens once at module load to prevent
 // tiktoken CDN fetches. LangChain's default getNumTokens() downloads a ~3MB BPE
@@ -290,24 +297,7 @@ export default class ChatModelManager {
       [ChatModelProviders.GOOGLE]: {
         apiKey: await getDecryptedKey(customModel.apiKey || settings.googleApiKey),
         model: modelName,
-        safetySettings: [
-          {
-            category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_HATE_SPEECH,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-          {
-            category: HarmCategory.HARM_CATEGORY_HARASSMENT,
-            threshold: HarmBlockThreshold.BLOCK_NONE,
-          },
-        ],
+        safetySettings: GOOGLE_SAFETY_SETTINGS_BLOCK_NONE,
         baseUrl: customModel.baseUrl,
       },
       [ChatModelProviders.XAI]: {

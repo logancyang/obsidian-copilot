@@ -386,7 +386,7 @@ export function getExtensionPattern(extension: string): string {
  * Get a list of internal Copilot file paths that must be excluded from searches.
  * Includes the rolling log file path (e.g., "copilot/copilot-log.md").
  */
-export function getInternalExcludePaths(): string[] {
+function getInternalExcludePaths(): string[] {
   return [logFileManager.getLogPath()];
 }
 
@@ -394,7 +394,7 @@ export function getInternalExcludePaths(): string[] {
  * Get a list of internal Copilot folder prefixes that must be excluded from searches.
  * Any file whose path starts with one of these prefixes is considered internal.
  */
-export function getInternalExcludeFolderPrefixes(): string[] {
+function getInternalExcludeFolderPrefixes(): string[] {
   const settings = getSettings();
   const projectsFolder = (settings.projectsFolder || "").trim();
   if (projectsFolder) {
@@ -412,7 +412,7 @@ export function getInternalExcludeFolderPrefixes(): string[] {
  * Checks both exact path matches (log file) and folder prefix matches (projects folder).
  * @param filePath - Full path to the file in the vault
  */
-export function isInternalExcludedPath(filePath: string): boolean {
+function isInternalExcludedPath(filePath: string): boolean {
   const excludes = new Set(getInternalExcludePaths());
   if (excludes.has(filePath)) return true;
 

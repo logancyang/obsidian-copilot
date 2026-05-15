@@ -4,7 +4,6 @@ import { CopilotPlusExpiredModal } from "@/components/modals/CopilotPlusExpiredM
 import {
   ChatModelProviders,
   ChatModels,
-  DEFAULT_SETTINGS,
   EmbeddingModelProviders,
   EmbeddingModels,
   PlusUtmMedium,
@@ -16,15 +15,11 @@ import { Notice } from "obsidian";
 import React from "react";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
-export const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
+const DEFAULT_COPILOT_PLUS_CHAT_MODEL_KEY =
   DEFAULT_COPILOT_PLUS_CHAT_MODEL + "|" + ChatModelProviders.COPILOT_PLUS;
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL = EmbeddingModels.COPILOT_PLUS_SMALL;
 export const DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL_KEY =
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL + "|" + EmbeddingModelProviders.COPILOT_PLUS;
-
-// Default models for free users (imported from DEFAULT_SETTINGS)
-export const DEFAULT_FREE_CHAT_MODEL_KEY = DEFAULT_SETTINGS.defaultModelKey;
-export const DEFAULT_FREE_EMBEDDING_MODEL_KEY = DEFAULT_SETTINGS.embeddingModelKey;
 
 // ============================================================================
 // SELF-HOST MODE VALIDATION
@@ -152,7 +147,7 @@ export async function checkIsPlusUser(
 }
 
 /** Check if the user is on a plan that qualifies for self-host mode. */
-export async function isSelfHostEligiblePlan(): Promise<boolean> {
+async function isSelfHostEligiblePlan(): Promise<boolean> {
   if (!getSettings().plusLicenseKey) {
     return false;
   }

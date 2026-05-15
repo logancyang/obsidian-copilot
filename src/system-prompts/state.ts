@@ -1,5 +1,5 @@
 import { atom, createStore, useAtom } from "jotai";
-import { useAtomValue, useSetAtom } from "jotai";
+import { useAtomValue } from "jotai";
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { getSettings, updateSetting } from "@/settings/model";
 
@@ -17,22 +17,6 @@ const disableBuiltinSystemPromptAtom = atom<boolean>(false);
  */
 export function useSystemPrompts(): UserSystemPrompt[] {
   return useAtomValue(systemPromptsAtom, { store: systemPromptsStore });
-}
-
-/**
- * React hook to get the selected prompt title
- * @returns Currently selected prompt title
- */
-export function useSelectedPromptTitle(): string {
-  return useAtomValue(selectedPromptTitleAtom, { store: systemPromptsStore });
-}
-
-/**
- * React hook to set the selected prompt title
- * @returns Setter function for selected prompt title
- */
-export function useSetSelectedPromptTitle() {
-  return useSetAtom(selectedPromptTitleAtom, { store: systemPromptsStore });
 }
 
 /**
@@ -119,14 +103,6 @@ export function setDisableBuiltinSystemPrompt(disable: boolean): void {
  */
 export function getDisableBuiltinSystemPrompt(): boolean {
   return systemPromptsStore.get(disableBuiltinSystemPromptAtom);
-}
-
-/**
- * React hook to use disable builtin system prompt state
- * @returns Tuple of [disabled, setDisabled]
- */
-export function useDisableBuiltinSystemPrompt() {
-  return useAtom(disableBuiltinSystemPromptAtom, { store: systemPromptsStore });
 }
 
 /**

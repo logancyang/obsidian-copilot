@@ -17,7 +17,7 @@ export interface ErrorMarker {
   endIndex: number;
 }
 
-export interface ParsedMessage {
+interface ParsedMessage {
   segments: Array<{
     type: "text" | "toolCall" | "error";
     content: string;
@@ -45,7 +45,7 @@ function encodeResultForMarker(result: string): string {
 /**
  * Decode tool result previously encoded for marker embedding
  */
-export function decodeResultFromMarker(result: string | undefined): string | undefined {
+function decodeResultFromMarker(result: string | undefined): string | undefined {
   if (typeof result !== "string") return result;
   if (!result.startsWith("ENC:")) return result;
   try {
@@ -63,38 +63,6 @@ export function decodeResultFromMarker(result: string | undefined): string | und
  */
 function buildOmittedResultMessage(toolName: string): string {
   return `Tool '${toolName}' ${TOOL_RESULT_OMITTED_THRESHOLD_MESSAGE}`;
-}
-
-/**
- * For logging only: decode any encoded tool results embedded in markers
- */
-export function decodeToolCallMarkerResults(message: string): string {
-  if (!message || typeof message !== "string") return message;
-  return message.replace(
-    /<!--TOOL_CALL_END:([^:]+):(ENC:[\s\S]*?)-->/g,
-    (_match, id: string, encoded: string) => {
-      const decoded = decodeResultFromMarker(encoded) || encoded;
-      return `<!--TOOL_CALL_END:${id}:${decoded}-->`;
-    }
-  );
-}
-
-/**
- * Ensure any TOOL_CALL_END results are encoded. Useful for sanitizing messages
- * that might contain unencoded results due to legacy or partial updates.
- */
-export function ensureEncodedToolCallMarkerResults(message: string): string {
-  if (!message || typeof message !== "string") return message;
-  return message.replace(
-    /<!--TOOL_CALL_END:([^:]+):([\s\S]*?)-->/g,
-    (_match, id: string, content: string) => {
-      if (content.startsWith("ENC:")) {
-        return _match;
-      }
-      const safe = encodeResultForMarker(content);
-      return `<!--TOOL_CALL_END:${id}:${safe}-->`;
-    }
-  );
 }
 
 /**

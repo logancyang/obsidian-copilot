@@ -15,11 +15,9 @@ import {
   ProviderMetadata,
   SettingKeyProviders,
   TEXT_READABLE_EXTENSIONS,
-  USER_SENDER,
 } from "@/constants";
 import { logInfo, logWarn } from "@/logger";
 import { CopilotSettings } from "@/settings/model";
-import { ChatMessage } from "@/types/message";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { MemoryVariables } from "@langchain/core/memory";
 import { RunnableSequence } from "@langchain/core/runnables";
@@ -57,7 +55,7 @@ interface APIError extends Error {
 }
 
 // Error message constants
-export const ERROR_MESSAGES = {
+const ERROR_MESSAGES = {
   INVALID_LICENSE_KEY_USER:
     "Invalid Copilot Plus license key. Please check your license key in settings.",
   UNKNOWN_ERROR: "An unknown error occurred",
@@ -65,13 +63,13 @@ export const ERROR_MESSAGES = {
 } as const;
 
 // Error handling utilities
-export interface ErrorDetail {
+interface ErrorDetail {
   status?: number;
   message?: string;
   reason?: string;
 }
 
-export function extractErrorDetail(error: unknown): ErrorDetail {
+function extractErrorDetail(error: unknown): ErrorDetail {
   const err = error as Record<string, unknown> | null | undefined;
   const errorDetail: ErrorDetail = (err?.detail as ErrorDetail) || {};
   return {
@@ -81,7 +79,7 @@ export function extractErrorDetail(error: unknown): ErrorDetail {
   };
 }
 
-export function isLicenseKeyError(error: unknown): boolean {
+function isLicenseKeyError(error: unknown): boolean {
   const errorDetail = extractErrorDetail(error);
   const err = error as Record<string, unknown> | null | undefined;
   const message = err?.message as string | undefined;
@@ -103,10 +101,6 @@ export function getApiErrorMessage(error: unknown): string {
     (errorDetail.reason ? `Error: ${errorDetail.reason}` : ERROR_MESSAGES.UNKNOWN_ERROR)
   );
 }
-
-export const getModelNameFromKey = (modelKey: string): string => {
-  return modelKey.split("|")[0];
-};
 
 export const isFolderMatch = (fileFullpath: string, inputPath: string): boolean => {
   const fileSegments = fileFullpath.split("/").map((segment) => segment.toLowerCase());
@@ -160,7 +154,7 @@ export function stripHash(tag: string): string {
 /**
  * Options for {@link stripFrontmatter}.
  */
-export interface StripFrontmatterOptions {
+interface StripFrontmatterOptions {
   /**
    * When true (default), trims leading whitespace after the frontmatter block.
    * When false, preserves leading whitespace from the body, but still removes
@@ -260,30 +254,15 @@ export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile
   return filesWithTag;
 }
 
-// TODO: Chain type conversion still needed for chain runner selection
-// This function is still used but the underlying chain infrastructure is deprecated
-export const stringToChainType = (chain: string): ChainType => {
-  switch (chain) {
-    case "llm_chain":
-      return ChainType.LLM_CHAIN;
-    case "vault_qa":
-      return ChainType.VAULT_QA_CHAIN;
-    case "copilot_plus":
-      return ChainType.COPILOT_PLUS_CHAIN;
-    default:
-      throw new Error(`Unknown chain type: ${chain}`);
-  }
-};
-
 // TODO: These chain validation functions are deprecated
 // Remove after confirming chainManager no longer uses them
-export const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
+const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
   const c = chain as unknown as Record<string, unknown>;
   const last = c.last as Record<string, unknown> | undefined;
   return Boolean(last?.modelName || last?.model);
 };
 
-export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
+const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
   const c = chain as unknown as Record<string, unknown>;
   const last = c.last as Record<string, unknown> | undefined;
   return last?.retriever !== undefined;
@@ -291,26 +270,6 @@ export const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain 
 
 export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
   return isLLMChain(chain) || isRetrievalQAChain(chain);
-};
-
-// Returns the last N messages from the chat history,
-// last one being the newest ai message
-export const getChatContext = (chatHistory: ChatMessage[], contextSize: number) => {
-  if (chatHistory.length === 0) {
-    return [];
-  }
-  const lastAiMessageIndex = chatHistory
-    .slice()
-    .reverse()
-    .findIndex((msg) => msg.sender !== USER_SENDER);
-  if (lastAiMessageIndex === -1) {
-    // No ai messages found, return an empty array
-    return [];
-  }
-
-  const lastIndex = chatHistory.length - 1 - lastAiMessageIndex;
-  const startIndex = Math.max(0, lastIndex - contextSize + 1);
-  return chatHistory.slice(startIndex, lastIndex + 1);
 };
 
 export interface FormattedDateTime {
@@ -379,9 +338,6 @@ export function stringToFormattedDateTime(timestamp: string): FormattedDateTime 
   };
 }
 
-// Re-export for backward compatibility (constants now live in @/constants)
-export { ALLOWED_NOTE_CONTEXT_EXTENSIONS, TEXT_READABLE_EXTENSIONS };
-
 /**
  * Check if a file has a text-readable extension (md, canvas, base).
  */
@@ -439,23 +395,6 @@ export function isAllowedFileForChainContext(file: TFile | null, chainType: Chai
   return isPlusChain(chainType);
 }
 
-export async function getAllNotesContent(vault: Vault): Promise<string> {
-  const vaultNotes: string[] = [];
-
-  const markdownFiles = vault.getMarkdownFiles();
-
-  for (const file of markdownFiles) {
-    const fileContent = await vault.cachedRead(file);
-    // Import is not available at the top level due to circular dependency
-    const { VAULT_NOTE_TAG } = await import("@/constants");
-    vaultNotes.push(
-      `<${VAULT_NOTE_TAG}>\n<path>${file.path}</path>\n<content>\n${fileContent}\n</content>\n</${VAULT_NOTE_TAG}>`
-    );
-  }
-
-  return vaultNotes.join("\n\n");
-}
-
 export function areEmbeddingModelsSame(
   model1: string | undefined,
   model2: string | undefined
@@ -472,54 +411,6 @@ export function areEmbeddingModelsSame(
     return true;
   }
   return model1 === model2;
-}
-
-// Basic prompts
-export function sendNotesContentPrompt(notes: { name: string; content: string }[]): string {
-  const formattedNotes = notes.map((note) => `## ${note.name}\n\n${note.content}`).join("\n\n");
-
-  return (
-    `Please read the notes below and be ready to answer questions about them. ` +
-    `If there's no information about a certain topic, just say the note ` +
-    `does not mention it. ` +
-    `The content of the notes is between "/***/":\n\n/***/\n\n${formattedNotes}\n\n/***/\n\n` +
-    `Please reply with the following word for word:` +
-    `"OK I've read these notes. ` +
-    `Feel free to ask related questions, such as 'give me a summary of these notes in bullet points', 'what key questions do these notes answer', etc. "\n`
-  );
-}
-
-function getNoteTitleAndTags(noteWithTag: {
-  name: string;
-  content: string;
-  tags?: string[];
-}): string {
-  return (
-    `[[${noteWithTag.name}]]` +
-    (noteWithTag.tags && noteWithTag.tags.length > 0 ? `\ntags: ${noteWithTag.tags.join(",")}` : "")
-  );
-}
-
-function getChatContextStr(chatNoteContextPath: string, chatNoteContextTags: string[]): string {
-  const pathStr = chatNoteContextPath ? `\nChat context by path: ${chatNoteContextPath}` : "";
-  const tagsStr =
-    chatNoteContextTags?.length > 0
-      ? `\nChat context by tags: ${chatNoteContextTags.join(",")}`
-      : "";
-  return pathStr + tagsStr;
-}
-
-export function getSendChatContextNotesPrompt(
-  notes: { name: string; content: string }[],
-  chatNoteContextPath: string,
-  chatNoteContextTags: string[]
-): string {
-  const noteTitles = notes.map((note) => getNoteTitleAndTags(note)).join("\n\n");
-  return (
-    `Please read the notes below and be ready to answer questions about them. ` +
-    getChatContextStr(chatNoteContextPath, chatNoteContextTags) +
-    `\n\n${noteTitles}`
-  );
 }
 
 export interface ChatHistoryEntry {
@@ -642,14 +533,9 @@ export function extractTemplateNoteFiles(query: string, vault: Vault): TFile[] {
 }
 
 // Helper function to check if a note title is unique in the vault
-export function isNoteTitleUnique(title: string, vault: Vault): boolean {
+function isNoteTitleUnique(title: string, vault: Vault): boolean {
   const files = vault.getMarkdownFiles();
   return files.filter((f) => f.basename === title).length === 1;
-}
-
-// Helper function to determine if we should show the full path for a file
-export function shouldShowPath(file: TFile): boolean {
-  return (file as unknown as Record<string, unknown>).needsPathDisplay === true;
 }
 
 /**
@@ -679,12 +565,6 @@ export function extractUniqueTitlesFromDocs(docs: Document[]): string[] {
   });
 
   return Array.from(titlesSet);
-}
-
-export function extractJsonFromCodeBlock(content: string): unknown {
-  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
-  const jsonContent = codeBlockMatch ? codeBlockMatch[1].trim() : content.trim();
-  return JSON.parse(jsonContent);
 }
 
 const YOUTUBE_URL_REGEX =
@@ -776,14 +656,6 @@ export function isTwitterUrl(url: string): boolean {
   } catch {
     return false;
   }
-}
-
-/**
- * Extract first YouTube URL from text (legacy function for backward compatibility)
- */
-export function extractYoutubeUrl(text: string): string | null {
-  const match = text.match(YOUTUBE_URL_REGEX);
-  return match ? match[0] : null;
 }
 
 /**
@@ -975,14 +847,6 @@ export function getProviderLabel(provider: string, model?: CustomModel): string 
   return baseLabel + (model?.believerExclusive && baseLabel === "Copilot Plus" ? "(Believer)" : "");
 }
 
-export function getProviderHost(provider: string): string {
-  return ProviderInfo[provider as Provider]?.host || "";
-}
-
-export function getProviderKeyManagementURL(provider: string): string {
-  return ProviderInfo[provider as Provider]?.keyManagementURL || "";
-}
-
 /**
  * Cleans a message by removing Think blocks, Action blocks (writeFile), tool call markers,
  * and agent reasoning blocks for copying to clipboard or inserting at cursor.
@@ -1167,7 +1031,7 @@ export function isOSeriesModel(model: BaseChatModel | string): boolean {
   return modelName.startsWith("o1") || modelName.startsWith("o3") || modelName.startsWith("o4");
 }
 
-export function isGPT5Model(model: BaseChatModel | string): boolean {
+function isGPT5Model(model: BaseChatModel | string): boolean {
   if (typeof model === "string") {
     return model.startsWith("gpt-5");
   }
@@ -1184,7 +1048,7 @@ export function isGPT5Model(model: BaseChatModel | string): boolean {
  * @param model - Model instance or model name string.
  * @returns True when the model name indicates a Codex model.
  */
-export function isCodexModel(model: BaseChatModel | string): boolean {
+function isCodexModel(model: BaseChatModel | string): boolean {
   const m = model as unknown as Record<string, unknown>;
   const modelName: string =
     typeof model === "string" ? model : (m.modelName as string) || (m.model as string) || "";

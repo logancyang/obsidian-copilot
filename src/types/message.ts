@@ -45,15 +45,6 @@ export interface WebSelectedTextContext extends BaseSelectedTextContext {
 export type SelectedTextContext = NoteSelectedTextContext | WebSelectedTextContext;
 
 /**
- * Type guard for note selected text context
- */
-export function isNoteSelectedTextContext(
-  ctx: SelectedTextContext
-): ctx is NoteSelectedTextContext {
-  return ctx.sourceType === "note";
-}
-
-/**
  * Type guard for web selected text context
  */
 export function isWebSelectedTextContext(ctx: SelectedTextContext): ctx is WebSelectedTextContext {

@@ -11,7 +11,7 @@ type MetadataCacheWithTags = MetadataCache & {
   getFrontmatterTags?: () => Record<string, number> | null;
 };
 
-export const TagListToolSchema = z
+const TagListToolSchema = z
   .object({
     includeInline: z
       .boolean()
@@ -265,4 +265,4 @@ export const createGetTagListTool = () =>
     },
   });
 
-export { collectTagEntries, enforceSizeLimit };
+export { enforceSizeLimit };

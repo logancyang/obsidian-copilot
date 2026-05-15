@@ -16,15 +16,6 @@ const projectConfigsAtom = atom<ProjectConfig[]>((get) =>
 );
 
 /**
- * React hook: get all project file records.
- * This is the single entry point for UI components to read projects.
- * @returns Array of ProjectFileRecord
- */
-export function useProjectRecords(): ProjectFileRecord[] {
-  return useAtomValue(projectRecordsAtom, { store: projectsStore });
-}
-
-/**
  * React hook: get all ProjectConfig objects (convenience wrapper).
  * Uses a derived atom so the array reference is stable across re-renders.
  * @returns Array of ProjectConfig

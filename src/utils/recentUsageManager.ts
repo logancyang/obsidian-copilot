@@ -73,7 +73,7 @@ function normalizeTimestampMs(value: unknown): number | null {
  * - `name`: ascending by `name` (using default locale comparison via Intl.Collator)
  * - `manual`: ascending by `manualOrder` (falls back to `name` when unavailable)
  */
-export function createSortComparator<T>(
+function createSortComparator<T>(
   strategy: SortStrategy,
   getters: RecentUsageSortGetters<T>
 ): (a: T, b: T) => number {

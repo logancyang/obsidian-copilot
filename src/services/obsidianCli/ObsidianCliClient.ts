@@ -3,7 +3,7 @@ import { Platform } from "obsidian";
 /**
  * Default CLI executable name registered by Obsidian.
  */
-export const DEFAULT_OBSIDIAN_CLI_BINARY = "obsidian";
+const DEFAULT_OBSIDIAN_CLI_BINARY = "obsidian";
 
 /**
  * Known desktop fallback paths for Obsidian CLI on macOS installs.
@@ -16,12 +16,12 @@ const OBSIDIAN_CLI_MACOS_FALLBACK_BINARIES = [
 /**
  * Default timeout for CLI command execution.
  */
-export const DEFAULT_OBSIDIAN_CLI_TIMEOUT_MS = 15_000;
+const DEFAULT_OBSIDIAN_CLI_TIMEOUT_MS = 15_000;
 
 /**
  * Default maximum process output buffer (1 MB).
  */
-export const DEFAULT_OBSIDIAN_CLI_MAX_BUFFER_BYTES = 1_048_576;
+const DEFAULT_OBSIDIAN_CLI_MAX_BUFFER_BYTES = 1_048_576;
 
 /**
  * Supported primitive parameter value types for CLI serialization.

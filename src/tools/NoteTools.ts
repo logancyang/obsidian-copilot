@@ -467,4 +467,4 @@ const readNoteTool = createLangChainTool({
   },
 });
 
-export { readNoteSchema, readNoteTool };
+export { readNoteTool };

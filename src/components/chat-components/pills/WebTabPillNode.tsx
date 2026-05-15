@@ -208,32 +208,6 @@ export function $findWebTabPills(): WebTabPillNode[] {
   return pills;
 }
 
-/**
- * Check if a WebTabPillNode with the given URL exists in the editor.
- * Must be called within a Lexical read/update context.
- * Uses early-exit traversal for better performance.
- */
-export function $hasWebTabPillWithUrl(url: string): boolean {
-  const root = $getRoot();
-
-  function traverse(node: LexicalNode): boolean {
-    if (node instanceof WebTabPillNode && node.getURL() === url) {
-      return true; // Early exit on match
-    }
-    if ("getChildren" in node && typeof node.getChildren === "function") {
-      const children = (node as { getChildren: () => LexicalNode[] }).getChildren();
-      for (const child of children) {
-        if (traverse(child)) {
-          return true; // Propagate early exit
-        }
-      }
-    }
-    return false;
-  }
-
-  return traverse(root);
-}
-
 /** Remove WebTabPillNodes by URL. */
 export function $removeWebTabPillsByUrl(url: string): void {
   const pills = $findWebTabPills();

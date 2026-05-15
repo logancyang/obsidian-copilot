@@ -157,7 +157,7 @@ export function $createURLPillNode(url: string, title?: string, isActive = false
   return new URLPillNode(url, title, isActive);
 }
 
-export function $findURLPills(): URLPillNode[] {
+function $findURLPills(): URLPillNode[] {
   const root = $getRoot();
   const pills: URLPillNode[] = [];
 

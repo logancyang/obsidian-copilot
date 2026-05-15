@@ -55,12 +55,6 @@ const ENCRYPTION_PREFIX = "enc_";
 const DECRYPTION_PREFIX = "dec_";
 
 /**
- * @deprecated getDecryptedKey() now returns "" on failure instead of this sentinel.
- * Kept only for backward compatibility with code that may still reference it.
- */
-export const DECRYPTION_FAILURE_MESSAGE = "Copilot failed to decrypt API keys!";
-
-/**
  * Check whether a value looks like a well-formed encrypted Copilot secret
  * (recognized prefix + plausible base64 payload).
  *
@@ -292,19 +286,6 @@ export async function getDecryptedKey(apiKey: string): Promise<string> {
     console.error("Decryption failed:", err);
     return "";
   }
-}
-
-/**
- * Decrypt an API key and throw when decryption fails.
- * Use in workflows that must not proceed with undecryptable values
- * (e.g., configuration export).
- */
-export async function getDecryptedKeyOrThrow(apiKey: string): Promise<string> {
-  const decrypted = await getDecryptedKey(apiKey);
-  if (!decrypted) {
-    throw new Error("Failed to decrypt API key.");
-  }
-  return decrypted;
 }
 
 // ---------------------------------------------------------------------------

@@ -12,12 +12,12 @@ export const AI_SENDER = "ai";
 
 // Default folder names
 export const COPILOT_FOLDER_ROOT = "copilot";
-export const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
-export const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
-export const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
-export const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
-export const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
-export const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
+const DEFAULT_CHAT_HISTORY_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-conversations`;
+const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-prompts`;
+const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
+const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
+const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
+const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
   1. Never mention that you do not have access to something. Always rely on the user provided context.
@@ -110,20 +110,17 @@ export const VARIABLE_NOTE_TAG = "variable_note";
 export const EMBEDDED_PDF_TAG = "embedded_pdf";
 export const EMBEDDED_NOTE_TAG = "embedded_note";
 export const DATAVIEW_BLOCK_TAG = "dataview_block";
-export const VAULT_NOTE_TAG = "vault_note";
 export const RETRIEVED_DOCUMENT_TAG = "retrieved_document";
 export const WEB_TAB_CONTEXT_TAG = "web_tab_context";
 export const ACTIVE_WEB_TAB_CONTEXT_TAG = "active_web_tab";
 export const YOUTUBE_VIDEO_CONTEXT_TAG = "youtube_video_context";
 /** Marker text used as placeholder for active web tab in serialized content */
 export const ACTIVE_WEB_TAB_MARKER = "{activeWebTab}";
-export const EMPTY_INDEX_ERROR_MESSAGE =
-  "Copilot index does not exist. Please index your vault first!\n\n1. Set a working embedding model in QA settings. If it's not a local model, don't forget to set the API key. \n\n2. Click 'Refresh Index for Vault' and wait for indexing to complete. If you encounter the rate limiting error, please turn your request per second down in QA setting.";
 export const CHUNK_SIZE = 6000;
 export const TEXT_WEIGHT = 0.4;
 export const MAX_CHARS_FOR_LOCAL_SEARCH_CONTEXT = 448000;
 export const LLM_TIMEOUT_MS = 30000; // 30 seconds timeout for LLM operations
-export const DEFAULT_MAX_SOURCE_CHUNKS = 30; // Default max chunks for search results (with diverse top-K)
+const DEFAULT_MAX_SOURCE_CHUNKS = 30; // Default max chunks for search results (with diverse top-K)
 export const AGENT_LOOP_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes timeout for agent loop
 export const AGENT_MAX_ITERATIONS_LIMIT = 16; // Maximum allowed value for agent iterations setting
 export const LOADING_MESSAGES = {
@@ -176,11 +173,8 @@ export enum ChatModels {
   COPILOT_PLUS_FLASH = "copilot-plus-flash",
   GPT_5_5 = "gpt-5.5",
   GPT_5_4_mini = "gpt-5.4-mini",
-  GPT_5_4_nano = "gpt-5.4-nano",
   GPT_41 = "gpt-4.1",
   GPT_41_mini = "gpt-4.1-mini",
-  GPT_41_nano = "gpt-4.1-nano",
-  O4_mini = "o4-mini",
   GEMINI_3_PRO_PREVIEW = "gemini-3.1-pro-preview",
   GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview",
   GEMINI_3_FLASH_LITE = "gemini-3.1-flash-lite",
@@ -458,7 +452,6 @@ export enum EmbeddingModelProviders {
 }
 
 export enum EmbeddingModels {
-  OPENAI_EMBEDDING_ADA_V2 = "text-embedding-ada-002",
   OPENAI_EMBEDDING_SMALL = "text-embedding-3-small",
   OPENAI_EMBEDDING_LARGE = "text-embedding-3-large",
   AZURE_OPENAI = "azure-openai",

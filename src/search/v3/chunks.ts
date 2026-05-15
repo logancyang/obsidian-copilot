@@ -30,7 +30,7 @@ export interface ChunkOptions {
 /**
  * Default chunking options using CHUNK_SIZE constant
  */
-export const DEFAULT_CHUNK_OPTIONS: ChunkOptions = {
+const DEFAULT_CHUNK_OPTIONS: ChunkOptions = {
   maxChars: CHUNK_SIZE,
   overlap: 0,
   maxBytesTotal: 10 * 1024 * 1024, // 10MB default
@@ -642,14 +642,4 @@ export function getSharedChunkManager(app: App): ChunkManager {
     sharedInstance = new ChunkManager(app);
   }
   return sharedInstance;
-}
-
-/**
- * Reset the shared instance (for testing or plugin reload)
- */
-export function resetSharedChunkManager(): void {
-  if (sharedInstance) {
-    sharedInstance.clearCache();
-  }
-  sharedInstance = null;
 }

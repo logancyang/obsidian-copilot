@@ -2,7 +2,7 @@
  * Utility functions for handling tool results
  */
 
-export const DEFAULT_TOOL_RESULT_MAX_LENGTH = 10000; // Default max length for tool results in chat memory
+const DEFAULT_TOOL_RESULT_MAX_LENGTH = 10000; // Default max length for tool results in chat memory
 
 /**
  * Get the configured max length for tool results
@@ -73,7 +73,7 @@ export function processToolResults(
  * @param errorMessage - The error message to wrap
  * @returns Formatted error string with errorChunk tags
  */
-export function wrapErrorChunk(errorMessage: string): string {
+function wrapErrorChunk(errorMessage: string): string {
   return `<errorChunk>${errorMessage}</errorChunk>`;
 }
 

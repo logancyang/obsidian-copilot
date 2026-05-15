@@ -7,7 +7,7 @@ import { type PropsWithChildren, useRef, useState } from "react";
 const TOLERANCE = 2;
 // detects text-overflow ellipses being used
 // ref: https://stackoverflow.com/questions/7738117/html-text-overflow-ellipsis-detection
-export function isEllipsesActive(
+function isEllipsesActive(
   textRef: React.MutableRefObject<HTMLDivElement | null>,
   lineClamp?: number
 ): boolean {

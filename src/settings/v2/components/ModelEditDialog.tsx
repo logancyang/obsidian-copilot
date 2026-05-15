@@ -34,7 +34,7 @@ interface ModelEditModalContentProps {
   onCancel: () => void;
 }
 
-export const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
+const ModelEditModalContent: React.FC<ModelEditModalContentProps> = ({
   model,
   onUpdate,
   isEmbeddingModel,

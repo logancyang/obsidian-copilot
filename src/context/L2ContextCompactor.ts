@@ -34,7 +34,7 @@ export { compactBySection, truncateWithEllipsis } from "./compactionUtils";
 export { getSourceType as detectSourceType } from "./contextBlockRegistry";
 
 // Re-export chat history compaction for backwards compatibility
-export { compactAssistantOutput, compactChatHistoryContent } from "./ChatHistoryCompactor";
+export { compactChatHistoryContent } from "./ChatHistoryCompactor";
 
 /**
  * Extract the source identifier from an XML block.

@@ -12,7 +12,7 @@ import { App, TFile } from "obsidian";
  * @param basename - File basename to check
  * @returns true if the basename starts with a known project prefix
  */
-export function hasKnownProjectPrefix(basename: string): boolean {
+function hasKnownProjectPrefix(basename: string): boolean {
   const records = getCachedProjectRecords();
 
   // Reason: check precise prefix matching against known cached project IDs first.
@@ -39,7 +39,7 @@ function coerceProjectId(projectId: unknown): string | undefined {
  * Read the projectId from a chat file's frontmatter.
  * Tries metadataCache first, falls back to adapter read for hidden-directory files.
  */
-export async function readChatFileProjectId(app: App, file: TFile): Promise<string | undefined> {
+async function readChatFileProjectId(app: App, file: TFile): Promise<string | undefined> {
   const fm = app.metadataCache.getFileCache(file)?.frontmatter;
   let projectId: unknown = fm?.projectId;
 
@@ -207,15 +207,6 @@ export function extractChatLastAccessedAtMs(file: TFile): number | null {
   }
 
   return null;
-}
-
-/**
- * Extract chat last accessed date from a file.
- * Uses extractChatLastAccessedAtMs and returns a Date when available, null otherwise.
- */
-export function extractChatLastAccessedAt(file: TFile): Date | null {
-  const lastAccessedAtMs = extractChatLastAccessedAtMs(file);
-  return lastAccessedAtMs ? new Date(lastAccessedAtMs) : null;
 }
 
 /**

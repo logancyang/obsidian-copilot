@@ -49,7 +49,7 @@ export interface PillData {
 /**
  * Generic function to create pill nodes based on type and data
  */
-export function $createPillNode(pillData: PillData) {
+function $createPillNode(pillData: PillData) {
   const { type, title, data } = pillData;
 
   switch (type) {

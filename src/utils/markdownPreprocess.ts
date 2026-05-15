@@ -11,7 +11,7 @@
  * Reason: LLMs typically output LaTeX using `\[` / `\(` delimiters,
  * but Obsidian's MarkdownRenderer only recognizes `$` / `$$` delimiters.
  */
-export function normalizeLatexDelimiters(content: string): string {
+function normalizeLatexDelimiters(content: string): string {
   // Reason: Split on fenced code blocks and inline code so we never
   // rewrite LaTeX-like delimiters inside code spans/blocks.
   const parts = content.split(/(```[\s\S]*?```|`[^`]*`)/g);
@@ -35,7 +35,7 @@ export function normalizeLatexDelimiters(content: string): string {
  * Converts ```dataview to ```text and ```dataviewjs to ```javascript
  * so they display as static code examples instead of executing queries.
  */
-export function escapeDataviewCodeBlocks(text: string): string {
+function escapeDataviewCodeBlocks(text: string): string {
   text = text.replace(/```dataview(\s*(?:\n|$))/g, "```text$1");
   text = text.replace(/```dataviewjs(\s*(?:\n|$))/g, "```javascript$1");
   return text;
@@ -46,7 +46,7 @@ export function escapeDataviewCodeBlocks(text: string): string {
  * Converts ```tasks to ```text so they display as static code examples
  * instead of executing task queries.
  */
-export function escapeTasksCodeBlocks(text: string): string {
+function escapeTasksCodeBlocks(text: string): string {
   return text.replace(/```tasks(\s*(?:\n|$))/g, "```text$1");
 }
 

@@ -125,7 +125,7 @@ export function $isFolderPillNode(node: LexicalNode): node is FolderPillNode {
   return node instanceof FolderPillNode;
 }
 
-export function $findFolderPills(): FolderPillNode[] {
+function $findFolderPills(): FolderPillNode[] {
   const root = $getRoot();
   const pills: FolderPillNode[] = [];
 

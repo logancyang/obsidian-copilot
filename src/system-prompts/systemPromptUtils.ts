@@ -71,7 +71,7 @@ export function getPromptFilePath(title: string): string {
  * @param title - The title of the prompt
  * @param folder - Optional folder path (defaults to current settings folder)
  */
-export function getPromptFilePathInFolder(title: string, folder?: string): string {
+function getPromptFilePathInFolder(title: string, folder?: string): string {
   const folderPath = folder ? normalizePath(folder) : getSystemPromptsFolder();
   return normalizePath(`${folderPath}/${title}.md`);
 }
@@ -195,31 +195,6 @@ export async function ensurePromptFrontmatter(file: TFile, prompt: UserSystemPro
       if (frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] == null) {
         frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] = lastUsedMs;
       }
-    });
-  } finally {
-    if (!alreadyPending) {
-      removePendingFileWrite(file.path);
-    }
-  }
-}
-
-/**
- * Update the last used timestamp for a system prompt
- */
-export async function updatePromptLastUsed(title: string): Promise<void> {
-  const filePath = getPromptFilePath(title);
-  const file = app.vault.getAbstractFileByPath(filePath);
-  if (!(file instanceof TFile)) return;
-
-  // Check if already pending to avoid nested add/remove issues
-  const alreadyPending = isPendingFileWrite(file.path);
-
-  try {
-    if (!alreadyPending) {
-      addPendingFileWrite(file.path);
-    }
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
-      frontmatter[COPILOT_SYSTEM_PROMPT_LAST_USED] = Date.now();
     });
   } finally {
     if (!alreadyPending) {

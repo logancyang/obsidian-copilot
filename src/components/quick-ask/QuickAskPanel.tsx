@@ -20,9 +20,6 @@ import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { useQuickAskSession } from "./useQuickAskSession";
 import { QuickAskMessageComponent } from "./QuickAskMessage";
 import { QuickAskInput } from "./QuickAskInput";
-// TODO: Uncomment when Edit/Edit-Direct modes are implemented
-// import { ModeSelector } from "./ModeSelector";
-// import { modeRegistry } from "./modeRegistry";
 import type { QuickAskPanelProps } from "./types";
 import type { ReplaceInvalidReason } from "@/editor/replaceGuard";
 import { Button } from "@/components/ui/button";
@@ -43,8 +40,6 @@ export function QuickAskPanel({
 }: QuickAskPanelProps) {
   // UI state
   const [inputText, setInputText] = useState("");
-  // TODO: Uncomment when Edit/Edit-Direct modes are implemented
-  // const [mode, setMode] = useState<QuickAskMode>("ask");
   const chatAreaRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isChatPinnedToBottomRef = useRef(true);
@@ -80,17 +75,6 @@ export function QuickAskPanel({
   // Previously used selectionFrom/selectionTo props that were stale and never updated.
   const selectionRange = replaceGuard.getRange();
   const hasSelection = !!selectionRange && selectionRange.from !== selectionRange.to;
-  // TODO: Uncomment when Edit/Edit-Direct modes are implemented
-  // const availableModes = modeRegistry.getAvailable(hasSelection);
-
-  // Keep mode valid when selection state changes
-  // TODO: Uncomment when Edit/Edit-Direct modes are implemented
-  // useEffect(() => {
-  //   const modes = modeRegistry.getAvailable(hasSelection);
-  //   if (!modes.some((m) => m.id === mode)) {
-  //     setMode(modes[0]?.id ?? "ask");
-  //   }
-  // }, [hasSelection, mode]);
 
   const lastMessageId = messages[messages.length - 1]?.id;
   const lastAssistantIdx = useMemo(() => {
@@ -350,15 +334,6 @@ export function QuickAskPanel({
       {/* Toolbar - always at bottom */}
       <div className="tw-mt-auto tw-flex tw-items-center tw-justify-between tw-gap-2 tw-border-t tw-border-solid tw-border-border tw-px-3 tw-py-1.5">
         <div className="tw-flex tw-items-center tw-gap-1">
-          {/* TODO: Uncomment when Edit/Edit-Direct modes are implemented
-          <ModeSelector
-            modes={availableModes}
-            value={mode}
-            onChange={setMode}
-            disabled={isStreaming}
-          />
-          */}
-
           <ModelSelector
             size="sm"
             variant="ghost"

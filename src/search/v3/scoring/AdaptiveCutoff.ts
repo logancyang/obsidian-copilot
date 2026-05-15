@@ -21,7 +21,7 @@ export interface AdaptiveCutoffConfig {
 /**
  * Default configuration
  */
-export const DEFAULT_ADAPTIVE_CUTOFF_CONFIG: AdaptiveCutoffConfig = {
+const DEFAULT_ADAPTIVE_CUTOFF_CONFIG: AdaptiveCutoffConfig = {
   floor: 3,
   ceiling: 30,
   relativeThreshold: 0.3,

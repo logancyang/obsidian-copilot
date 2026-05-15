@@ -1,0 +1,7 @@
+{
+  "$schema": "https://unpkg.com/knip@5/schema.json",
+  "entry": ["src/main.ts", "scripts/printPromptDebug.js", "scripts/printPromptDebugEntry.ts"],
+  "project": ["src/**/*.{ts,tsx,js,jsx}", "scripts/**/*.{ts,js,mjs}"],
+  "ignore": ["src/styles/tailwind.css", "src/integration_tests/**"],
+  "ignoreDependencies": ["buffer"]
+}
