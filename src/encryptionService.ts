@@ -110,11 +110,8 @@ function looksLikeBase64(data: string): boolean {
 // ---------------------------------------------------------------------------
 
 const WEBCRYPTO_IV_LENGTH = 12;
-const WEBCRYPTO_KEY_STORAGE_KEY = "obsidian-copilot:webcrypto-key:v1";
 /** Magic header for portable payloads (hardcoded key + random IV). */
 const WEBCRYPTO_PORTABLE_MAGIC = new Uint8Array([0x43, 0x50, 0x30, 0x30]); // "CP00"
-/** Magic header for legacy per-device payloads (kept for backward-compat decryption). */
-const WEBCRYPTO_DEVICE_MAGIC = new Uint8Array([0x43, 0x50, 0x30, 0x31]); // "CP01"
 
 /**
  * Portable AES-GCM key material shared across all devices.
@@ -126,32 +123,6 @@ const LEGACY_WEBCRYPTO_IV = new Uint8Array(WEBCRYPTO_IV_LENGTH);
 function assertWebCryptoAvailable(): void {
   if (!window.crypto?.subtle) {
     throw new Error("WebCrypto API is not available in this environment.");
-  }
-}
-
-function getLocalStorageSafe(): Storage | null {
-  try {
-    return window.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Read an existing per-device AES-256 key from localStorage.
- * Reason: kept for backward-compat decryption of CP01 payloads.
- */
-async function getExistingWebCryptoKey(): Promise<CryptoKey | null> {
-  try {
-    const storage = getLocalStorageSafe();
-    if (!storage) return null;
-    const existing = storage.getItem(WEBCRYPTO_KEY_STORAGE_KEY);
-    if (!existing) return null;
-    const raw = base64ToArrayBuffer(existing);
-    return await crypto.subtle.importKey("raw", raw, "AES-GCM", false, ["encrypt", "decrypt"]);
-  } catch (error) {
-    console.warn("Failed to load WebCrypto key from localStorage.", error);
-    return null;
   }
 }
 
@@ -174,7 +145,7 @@ function hasWebCryptoMagic(bytes: Uint8Array, magic: Uint8Array): boolean {
 
 /**
  * Decrypt a WEBCRYPTO_PREFIX value.
- * Supports portable CP00, legacy per-device CP01, and legacy fixed-IV formats.
+ * Supports portable CP00 and legacy fixed-IV formats.
  */
 async function decryptWebCryptoValue(base64Data: string): Promise<string> {
   assertWebCryptoAvailable();
@@ -189,21 +160,6 @@ async function decryptWebCryptoValue(base64Data: string): Promise<string> {
     const iv = raw.slice(ivStart, ivEnd);
     const ciphertext = raw.slice(ivEnd);
     const key = await getPortableWebCryptoKey();
-    const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
-    return new TextDecoder().decode(decrypted);
-  }
-
-  // Legacy per-device format: [CP01][IV][CIPHERTEXT]
-  if (hasWebCryptoMagic(raw, WEBCRYPTO_DEVICE_MAGIC)) {
-    const ivStart = WEBCRYPTO_DEVICE_MAGIC.length;
-    const ivEnd = ivStart + WEBCRYPTO_IV_LENGTH;
-    if (raw.length <= ivEnd) throw new Error("Invalid WebCrypto CP01 payload: too short.");
-
-    const iv = raw.slice(ivStart, ivEnd);
-    const ciphertext = raw.slice(ivEnd);
-    const key = await getExistingWebCryptoKey();
-    if (!key) throw new Error("Per-device WebCrypto key unavailable for CP01 decryption.");
-
     const decrypted = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ciphertext);
     return new TextDecoder().decode(decrypted);
   }

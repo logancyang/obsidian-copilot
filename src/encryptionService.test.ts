@@ -31,34 +31,6 @@ window.atob = jest
   .fn()
   .mockImplementation((str: string) => Buffer.from(str, "base64").toString("latin1"));
 
-/**
- * Ensure `window.localStorage` is usable for tests.
- */
-function ensureTestLocalStorage(): { clear: () => void } {
-  try {
-    const storage = window.localStorage;
-    storage.setItem("__copilot_test__", "1");
-    storage.removeItem("__copilot_test__");
-    return { clear: () => window.localStorage.clear() };
-  } catch {
-    const data = new Map<string, string>();
-    const shim = {
-      getItem: jest.fn((key: string) => data.get(key) ?? null),
-      setItem: jest.fn((key: string, value: string) => {
-        data.set(key, value);
-      }),
-      removeItem: jest.fn((key: string) => {
-        data.delete(key);
-      }),
-      clear: jest.fn(() => data.clear()),
-    };
-    Object.defineProperty(window, "localStorage", { value: shim, configurable: true });
-    return { clear: () => data.clear() };
-  }
-}
-
-const testLocalStorage = ensureTestLocalStorage();
-
 let randomCounter = 1;
 Object.defineProperty(window.crypto, "getRandomValues", {
   value: jest.fn((arr: Uint8Array) => {
@@ -94,7 +66,6 @@ describe("EncryptionService", () => {
   beforeEach(() => {
     jest.clearAllMocks();
     randomCounter = 1;
-    testLocalStorage.clear();
     mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(true);
   });
 
@@ -147,57 +118,6 @@ describe("EncryptionService", () => {
       const base64 = Buffer.from(ciphertext).toString("base64");
       const decrypted = await getDecryptedKey(`enc_web_${base64}`);
       expect(decrypted).toBe(plaintext);
-    });
-
-    it("should decrypt CP01 per-device payloads when localStorage key exists", async () => {
-      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
-
-      // Reason: CP01 uses a per-device AES key stored in localStorage.
-      // Seed it so getExistingWebCryptoKey() returns a usable key.
-      const keyBytes = new Uint8Array(32);
-      window.localStorage.setItem(
-        "obsidian-copilot:webcrypto-key:v1",
-        Buffer.from(keyBytes).toString("base64")
-      );
-
-      const plaintext = "cp01DeviceSecret";
-      const iv = new Uint8Array(12);
-      iv[0] = 2;
-
-      const ciphertext = new Uint8Array(
-        await crypto.subtle.encrypt(
-          { name: "AES-GCM", iv },
-          "mockCryptoKey" as unknown as CryptoKey,
-          new TextEncoder().encode(plaintext)
-        )
-      );
-
-      const cp01 = new Uint8Array([0x43, 0x50, 0x30, 0x31]); // "CP01"
-      const payload = new Uint8Array(cp01.length + iv.length + ciphertext.length);
-      payload.set(cp01, 0);
-      payload.set(iv, cp01.length);
-      payload.set(ciphertext, cp01.length + iv.length);
-
-      const base64 = Buffer.from(payload).toString("base64");
-      const decrypted = await getDecryptedKey(`enc_web_${base64}`);
-      expect(decrypted).toBe(plaintext);
-    });
-
-    it("should return empty string for CP01 when localStorage key is missing", async () => {
-      mockElectron.remote.safeStorage.isEncryptionAvailable.mockReturnValue(false);
-      // Reason: no key in localStorage — CP01 decryption should fail gracefully.
-
-      const cp01 = new Uint8Array([0x43, 0x50, 0x30, 0x31]); // "CP01"
-      const iv = new Uint8Array(12);
-      const fakeCiphertext = new Uint8Array([1, 2, 3, 4]);
-      const payload = new Uint8Array(cp01.length + iv.length + fakeCiphertext.length);
-      payload.set(cp01, 0);
-      payload.set(iv, cp01.length);
-      payload.set(fakeCiphertext, cp01.length + iv.length);
-
-      const base64 = Buffer.from(payload).toString("base64");
-      const result = await getDecryptedKey(`enc_web_${base64}`);
-      expect(result).toBe("");
     });
 
     it("should decrypt legacy enc_ prefix payloads via WebCrypto fallback", async () => {
