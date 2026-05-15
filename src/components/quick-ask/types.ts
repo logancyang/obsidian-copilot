@@ -2,7 +2,7 @@
  * Type definitions for Quick Ask feature.
  */
 
-import type { EditorView } from "@/editor/codemirror";
+import type { EditorView } from "@codemirror/view";
 import type { Editor } from "obsidian";
 import type CopilotPlugin from "@/main";
 import type { ReplaceGuard } from "@/editor/replaceGuard";

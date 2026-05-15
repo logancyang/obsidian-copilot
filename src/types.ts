@@ -1,4 +1,4 @@
-import type { EditorView } from "@/editor/codemirror";
+import type { EditorView } from "@codemirror/view";
 import { type TFile } from "obsidian";
 
 declare module "obsidian" {

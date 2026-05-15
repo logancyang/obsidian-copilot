@@ -3,7 +3,8 @@
  * Manages the lifecycle of Quick Ask panels and integrates with CM6.
  */
 
-import { EditorView, type Extension } from "@/editor/codemirror";
+import type { Extension } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import { MarkdownView } from "obsidian";
 import { quickAskWidgetEffect, quickAskOverlayPlugin } from "./quickAskExtension";
 import { QuickAskOverlay } from "@/components/quick-ask/QuickAskOverlay";

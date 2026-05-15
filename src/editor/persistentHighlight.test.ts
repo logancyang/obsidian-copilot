@@ -1,5 +1,6 @@
 import { createPersistentHighlight } from "./persistentHighlight";
-import { EditorState, EditorView } from "@/editor/codemirror";
+import { EditorState } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 
 describe("createPersistentHighlight", () => {
   describe("factory isolation", () => {

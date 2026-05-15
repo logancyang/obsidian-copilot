@@ -6,7 +6,7 @@
  * conflicts with SelectionHighlight used by QuickAsk and CustomCommandModal.
  */
 
-import { EditorView } from "@/editor/codemirror";
+import { EditorView } from "@codemirror/view";
 import { MarkdownView, type WorkspaceLeaf } from "obsidian";
 
 import type CopilotPlugin from "@/main";

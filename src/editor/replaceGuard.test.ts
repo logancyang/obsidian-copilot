@@ -3,7 +3,7 @@ import {
   createHighlightReplaceGuard,
   getErrorMessage,
 } from "./replaceGuard";
-import type { EditorView } from "@/editor/codemirror";
+import type { EditorView } from "@codemirror/view";
 import type { WorkspaceLeaf } from "obsidian";
 
 // Mock dependencies
@@ -318,7 +318,7 @@ describe("createMapPosReplaceGuard", () => {
         mapPos: (pos: number, assoc: number) => pos + 3,
       };
 
-      guard.onDocChanged?.(mockChanges as unknown as import("@/editor/codemirror").ChangeDesc);
+      guard.onDocChanged?.(mockChanges as unknown as import("@codemirror/state").ChangeDesc);
 
       expect(guard.getRange()).toEqual({ from: 3, to: 8 });
     });

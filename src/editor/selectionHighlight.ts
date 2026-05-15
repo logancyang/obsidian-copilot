@@ -8,7 +8,8 @@
  * factory, preserving the original public API for backwards compatibility.
  */
 
-import { EditorView, StateEffect } from "@/editor/codemirror";
+import { StateEffect } from "@codemirror/state";
+import { EditorView } from "@codemirror/view";
 import { logError } from "@/logger";
 import {
   createPersistentHighlight,

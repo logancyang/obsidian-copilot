@@ -7,14 +7,8 @@
  * (e.g. QuickAsk and Chat) can coexist without state conflicts.
  */
 
-import {
-  Decoration,
-  EditorView,
-  StateEffect,
-  StateField,
-  type Extension,
-  type StateEffectType,
-} from "@/editor/codemirror";
+import { StateEffect, StateEffectType, StateField, type Extension } from "@codemirror/state";
+import { Decoration, EditorView } from "@codemirror/view";
 
 // ============================================================================
 // Types

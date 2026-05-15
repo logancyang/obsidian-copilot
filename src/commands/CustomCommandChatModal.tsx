@@ -11,7 +11,7 @@ import { logError } from "@/logger";
 import { cleanMessageForCopy, findCustomModel, insertIntoEditor } from "@/utils";
 import { computeVerticalPlacement } from "@/utils/panelPlacement";
 import { computeSelectionAnchors } from "@/utils/selectionAnchors";
-import type { EditorView } from "@/editor/codemirror";
+import type { EditorView } from "@codemirror/view";
 import { PenLine } from "lucide-react";
 import { App, Component, MarkdownRenderer, Notice, MarkdownView, Scope } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
