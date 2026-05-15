@@ -121,6 +121,26 @@ export default [
     },
   },
 
+  // Guardrail: every standalone React root in the plugin must go through
+  // `createPluginRoot` so descendants can rely on `useApp()` unconditionally
+  // (the bug class fixed in PR #2466). Forbid importing `createRoot` from
+  // `react-dom/client` anywhere except the helper itself.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/utils/react/createPluginRoot.tsx"],
+    rules: {
+      "no-restricted-syntax": [
+        "error",
+        {
+          selector:
+            "ImportDeclaration[source.value='react-dom/client'] ImportSpecifier[imported.name='createRoot']",
+          message:
+            "Use createPluginRoot from '@/utils/react/createPluginRoot' instead. It wraps the root in <AppContext.Provider> so descendants can rely on useApp() unconditionally (see PR #2466).",
+        },
+      ],
+    },
+  },
+
   // Test files need Jest globals
   {
     files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
