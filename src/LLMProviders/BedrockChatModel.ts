@@ -1475,8 +1475,10 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     if (this.enableThinking) {
       // claude-opus-4-7+ rejects { type: "enabled", budget_tokens } with a 400 and requires
       // { type: "adaptive" }. Unanchored match because Bedrock IDs include provider/profile
-      // prefixes (e.g. "global.anthropic.claude-opus-4-7-20260115-v1:0").
-      const opusMinorMatch = this.modelName.match(/claude-opus-4-(\d+)/);
+      // prefixes (e.g. "global.anthropic.claude-opus-4-7-20260115-v1:0"). Constrain the minor
+      // to 1-2 digits followed by a delimiter so dated snapshot IDs like
+      // "claude-opus-4-20250514-v1:0" aren't misread as Opus 4.20250514.
+      const opusMinorMatch = this.modelName.match(/claude-opus-4-(\d{1,2})(?:[-.]|$)/);
       const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
       // Opus 4.7+ defaults thinking.display to "omitted" so thinking summaries
       // never reach the UI; force "summarized" for the adaptive branch. Pre-4.7

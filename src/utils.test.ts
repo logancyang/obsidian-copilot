@@ -975,4 +975,13 @@ describe("getModelInfo", () => {
     expect(bare.isThinkingEnabled).toBe(true);
     expect(bare.usesAdaptiveThinking).toBe(false);
   });
+
+  it("does not treat dated snapshot IDs as adaptive thinking minors", () => {
+    // claude-opus-4-20250514 is the dated snapshot of Opus 4.0, not Opus 4.20250514.
+    expect(getModelInfo("claude-opus-4-20250514").usesAdaptiveThinking).toBe(false);
+    // claude-opus-4-1-20250805 is dated 4.1.
+    expect(getModelInfo("claude-opus-4-1-20250805").usesAdaptiveThinking).toBe(false);
+    // Dated 4.7 still matches because the minor is delimited by "-".
+    expect(getModelInfo("claude-opus-4-7-20260115").usesAdaptiveThinking).toBe(true);
+  });
 });

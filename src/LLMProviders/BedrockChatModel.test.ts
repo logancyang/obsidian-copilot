@@ -503,6 +503,24 @@ describe("BedrockChatModel streaming decode", () => {
         ]).thinking
       ).toEqual({ type: "enabled", budget_tokens: 2048 });
     });
+
+    it("keeps legacy thinking for dated Opus 4.0 snapshot IDs", () => {
+      // anthropic.claude-opus-4-20250514-v1:0 is the dated snapshot of Opus 4.0, not 4.20250514.
+      const opus40 = createModel(true, "anthropic.claude-opus-4-20250514-v1:0");
+      expect(
+        asInternal(opus40).buildRequestBody([
+          { role: "user", content: "test", getType: () => "human" },
+        ]).thinking
+      ).toEqual({ type: "enabled", budget_tokens: 2048 });
+
+      // anthropic.claude-opus-4-1-20250805-v1:0 is dated 4.1, not adaptive.
+      const opus41 = createModel(true, "anthropic.claude-opus-4-1-20250805-v1:0");
+      expect(
+        asInternal(opus41).buildRequestBody([
+          { role: "user", content: "test", getType: () => "human" },
+        ]).thinking
+      ).toEqual({ type: "enabled", budget_tokens: 2048 });
+    });
   });
 
   describe("vision support", () => {

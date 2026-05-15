@@ -1080,7 +1080,9 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
 
   // claude-opus-4-7 and later reject the legacy { type: "enabled", budget_tokens } shape
   // with a 400 and require { type: "adaptive" }. Detect by minor version on the opus-4 line.
-  const opusMinorMatch = modelName.match(/^claude-opus-4-(\d+)/);
+  // Constrain the minor to 1-2 digits followed by a delimiter or end-of-string so dated
+  // snapshot IDs (e.g. "claude-opus-4-20250514") aren't misread as Opus 4.20250514.
+  const opusMinorMatch = modelName.match(/^claude-opus-4-(\d{1,2})(?:[-.]|$)/);
   const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
 
   return {
