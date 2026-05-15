@@ -1473,12 +1473,14 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     // Handle thinking mode for Claude models
     // Only enable if user has explicitly enabled REASONING capability for this model
     if (this.enableThinking) {
-      // Enable thinking mode for Claude models on Bedrock
-      // This allows the model to generate reasoning tokens
-      payload.thinking = {
-        type: "enabled",
-        budget_tokens: 2048,
-      };
+      // claude-opus-4-7+ rejects { type: "enabled", budget_tokens } with a 400 and requires
+      // { type: "adaptive" }. Unanchored match because Bedrock IDs include provider/profile
+      // prefixes (e.g. "global.anthropic.claude-opus-4-7-20260115-v1:0").
+      const opusMinorMatch = this.modelName.match(/claude-opus-4-(\d+)/);
+      const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
+      payload.thinking = usesAdaptiveThinking
+        ? { type: "adaptive" }
+        : { type: "enabled", budget_tokens: 2048 };
       // When thinking is enabled, temperature must be 1
       // https://docs.claude.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
       payload.temperature = 1;
