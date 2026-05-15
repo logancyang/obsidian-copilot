@@ -1,6 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
-import { v4 as uuidv4 } from "uuid";
 
 import { type ChainType } from "@/chainType";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
@@ -371,7 +370,7 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
   } = rawSettings;
 
   if (!settingsToSanitize.userId) {
-    settingsToSanitize.userId = uuidv4();
+    settingsToSanitize.userId = crypto.randomUUID();
   }
 
   // fix: Maintain consistency between EmbeddingModelProviders.AZURE_OPENAI and ChatModelProviders.AZURE_OPENAI,

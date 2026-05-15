@@ -28,12 +28,9 @@ import {
 import { ChatAnthropic } from "@langchain/anthropic";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { BaseLanguageModel } from "@langchain/core/language_models/base";
-import { ChatDeepSeek } from "@langchain/deepseek";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-import { ChatGroq } from "@langchain/groq";
 import { ChatOllama } from "@langchain/ollama";
 import { ChatOpenAI } from "@langchain/openai";
-import { ChatXAI } from "@langchain/xai";
 import { MissingApiKeyError, MissingPlusLicenseError } from "@/error";
 import { Notice } from "obsidian";
 import { ChatOpenRouter } from "./ChatOpenRouter";
@@ -41,6 +38,9 @@ import { ChatLMStudio } from "./ChatLMStudio";
 import { BedrockChatModel, type BedrockChatModelFields } from "./BedrockChatModel";
 import { GitHubCopilotChatModel } from "@/LLMProviders/githubCopilot/GitHubCopilotChatModel";
 import { GitHubCopilotResponsesModel } from "@/LLMProviders/githubCopilot/GitHubCopilotResponsesModel";
+// Reason: `import type` is erased at build time, so this keeps the runtime
+// bundle free of @google/generative-ai while staying compatible with the
+// type LangChain's ChatGoogleGenerativeAI expects for safetySettings.
 import type { SafetySetting } from "@google/generative-ai";
 
 const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
@@ -76,16 +76,16 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.ANTHROPIC]: ChatAnthropic,
   [ChatModelProviders.COHEREAI]: ChatOpenAI,
   [ChatModelProviders.GOOGLE]: ChatGoogleGenerativeAI,
-  [ChatModelProviders.XAI]: ChatXAI,
+  [ChatModelProviders.XAI]: ChatOpenAI,
   [ChatModelProviders.OPENROUTERAI]: ChatOpenRouter,
   [ChatModelProviders.OLLAMA]: ChatOllama,
   [ChatModelProviders.LM_STUDIO]: ChatOpenRouter,
-  [ChatModelProviders.GROQ]: ChatGroq,
+  [ChatModelProviders.GROQ]: ChatOpenAI,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatOpenAI,
-  [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
+  [ChatModelProviders.DEEPSEEK]: ChatOpenAI,
   [ChatModelProviders.AMAZON_BEDROCK]: BedrockChatModel,
   [ChatModelProviders.GITHUB_COPILOT]: GitHubCopilotChatModel,
 } as const;
@@ -301,9 +301,12 @@ export default class ChatModelManager {
         baseUrl: customModel.baseUrl,
       },
       [ChatModelProviders.XAI]: {
+        modelName: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.xaiApiKey),
-        model: modelName,
-        // This langchainjs XAI client does not support baseURL override
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.XAI].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [ChatModelProviders.OPENROUTERAI]: {
         modelName: modelName,
@@ -328,8 +331,12 @@ export default class ChatModelManager {
         enablePromptCaching: customModel.enablePromptCaching ?? true,
       },
       [ChatModelProviders.GROQ]: {
+        modelName: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.groqApiKey),
-        model: modelName,
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.GROQ].curlBaseURL,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
       },
       [ChatModelProviders.OLLAMA]: {
         // ChatOllama has `model` instead of `modelName`!!
@@ -416,7 +423,7 @@ export default class ChatModelManager {
         modelName: modelName,
         apiKey: await getDecryptedKey(customModel.apiKey || settings.deepseekApiKey),
         configuration: {
-          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.DEEPSEEK].host,
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.DEEPSEEK].curlBaseURL,
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
       },
@@ -599,6 +606,8 @@ export default class ChatModelManager {
           ChatModelProviders.MISTRAL,
           ChatModelProviders.DEEPSEEK,
           ChatModelProviders.SILICONFLOW,
+          ChatModelProviders.GROQ,
+          ChatModelProviders.XAI,
         ].includes(provider)
       ) {
         params.topP = customModel.topP;
@@ -619,6 +628,8 @@ export default class ChatModelManager {
           ChatModelProviders.MISTRAL,
           ChatModelProviders.DEEPSEEK,
           ChatModelProviders.SILICONFLOW,
+          ChatModelProviders.GROQ,
+          ChatModelProviders.XAI,
         ].includes(provider)
       ) {
         params.frequencyPenalty = customModel.frequencyPenalty;

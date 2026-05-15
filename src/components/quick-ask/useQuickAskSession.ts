@@ -5,7 +5,6 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { Notice } from "obsidian";
-import { v4 as uuidv4 } from "uuid";
 
 import {
   useStreamingChatSession,
@@ -103,7 +102,7 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
       // Reason: selectedText context is handled by the prompt processing pipeline,
       // so displayContent does not embed <selected_text> XML tags.
       const userMessage: QuickAskMessage = {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         role: "user",
         content: input,
         timestamp: Date.now(),
@@ -136,7 +135,7 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
       if (result) {
         // Add assistant message on success
         const assistantMessage: QuickAskMessage = {
-          id: uuidv4(),
+          id: crypto.randomUUID(),
           role: "assistant",
           content: result,
           timestamp: Date.now(),

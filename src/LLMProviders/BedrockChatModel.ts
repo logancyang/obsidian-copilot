@@ -1,7 +1,4 @@
-// Reason: `buffer` is the npm polyfill (browser-compatible), bundled by esbuild
-// so the same Buffer code path works on desktop (Electron) and mobile (WebView).
-// eslint-disable-next-line import/no-nodejs-modules
-import { Buffer } from "buffer";
+import { base64ToArrayBuffer } from "@/utils/base64";
 
 import {
   BaseChatModel,
@@ -821,9 +818,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
   private decodeBase64ToUint8Array(encoded: string): Uint8Array | null {
     try {
-      // Reason: Buffer (from the `buffer` polyfill imported above) is the
-      // cross-platform path — bare global Buffer is undefined in mobile WebView.
-      return new Uint8Array(Buffer.from(encoded, "base64"));
+      return new Uint8Array(base64ToArrayBuffer(encoded));
     } catch {
       return null;
     }
@@ -851,15 +846,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       return "";
     }
 
-    if (typeof TextDecoder !== "undefined") {
-      return new TextDecoder().decode(bytes);
-    }
-
-    if (typeof Buffer !== "undefined") {
-      return Buffer.from(bytes).toString("utf-8");
-    }
-
-    return "";
+    return new TextDecoder().decode(bytes);
   }
 
   private splitJsonLines(value: string): string[] {

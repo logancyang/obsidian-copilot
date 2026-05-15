@@ -1,6 +1,5 @@
 import { CustomModel } from "@/aiParams";
 import { type CopilotSettings } from "@/settings/model";
-import { v4 as uuidv4 } from "uuid";
 import { ChainType } from "./chainType";
 import { PromptSortStrategy } from "./types";
 
@@ -884,7 +883,7 @@ export const RESTRICTION_MESSAGES = {
 } as const;
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
-  userId: uuidv4(),
+  userId: crypto.randomUUID(),
   isPlusUser: false,
   plusLicenseKey: "",
   openAIApiKey: "",

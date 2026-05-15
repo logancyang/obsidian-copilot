@@ -62,7 +62,7 @@ const testLocalStorage = ensureTestLocalStorage();
 let randomCounter = 1;
 Object.defineProperty(window.crypto, "getRandomValues", {
   value: jest.fn((arr: Uint8Array) => {
-    for (let i = 0; i < arr.length; i++) arr[i] = (randomCounter++ & 0xff);
+    for (let i = 0; i < arr.length; i++) arr[i] = randomCounter++ & 0xff;
     return arr;
   }),
   configurable: true,

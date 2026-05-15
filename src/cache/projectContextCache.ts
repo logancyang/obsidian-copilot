@@ -6,7 +6,7 @@ import { getCachedProjects } from "@/projects/state";
 import { md5 } from "@/utils/hash";
 import { TAbstractFile, TFile, Vault } from "obsidian";
 import { debounce } from "@/utils/debounce";
-import { Mutex } from "async-mutex";
+import { Mutex } from "@/utils/asyncMutex";
 
 export interface ContextCache {
   // Markdown context

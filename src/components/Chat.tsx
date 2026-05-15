@@ -53,7 +53,6 @@ import { appendUniqueFiles } from "@/utils/fileListUtils";
 import { Notice, TFile } from "obsidian";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
-import { v4 as uuidv4 } from "uuid";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 
@@ -347,7 +346,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
       // Clear input and images
       setInputMessage("");
       setSelectedImages([]);
-      streamingMessageIdRef.current = `msg-${uuidv4()}`;
+      streamingMessageIdRef.current = `msg-${crypto.randomUUID()}`;
       safeSet.setLoading(true);
       safeSet.setLoadingMessage(LOADING_MESSAGES.DEFAULT);
 
@@ -455,7 +454,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
       // Clear current AI message and set loading state
       safeSet.setCurrentAiMessage("");
-      streamingMessageIdRef.current = `msg-${uuidv4()}`;
+      streamingMessageIdRef.current = `msg-${crypto.randomUUID()}`;
       safeSet.setLoading(true);
       try {
         const success = await chatUIState.regenerateMessage(
@@ -523,7 +522,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
 
           // If there were AI responses, generate new ones
           if (hadAIResponses) {
-            streamingMessageIdRef.current = `msg-${uuidv4()}`;
+            streamingMessageIdRef.current = `msg-${crypto.randomUUID()}`;
             safeSet.setLoading(true);
             try {
               const llmMessage = chatUIState.getLLMMessage(messageToEdit.id!);

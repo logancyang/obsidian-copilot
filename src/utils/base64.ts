@@ -1,16 +1,26 @@
-// Reason: explicit import from the `buffer` npm polyfill (a browser-compatible
-// drop-in, not a runtime use of Node's built-in). Mobile Obsidian's WebView has
-// no Node globals, so bare `Buffer` throws "Can't find variable: Buffer" on iOS
-// WebKit. esbuild bundles this polyfill into main.js so the same code path
-// works on both desktop and mobile.
-// eslint-disable-next-line import/no-nodejs-modules
-import { Buffer } from "buffer";
+/**
+ * Native base64 ↔ ArrayBuffer conversion. Works on both desktop (Electron)
+ * and mobile (WebView) — no Node Buffer polyfill required since both
+ * environments expose `atob`/`btoa`.
+ */
 
 export function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  return Buffer.from(buffer).toString("base64");
+  const bytes = new Uint8Array(buffer);
+  // Build the binary string in chunks to avoid blowing the call stack on
+  // large inputs (String.fromCharCode(...bytes) fails on multi-MB buffers).
+  const CHUNK = 0x8000;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + CHUNK)));
+  }
+  return btoa(binary);
 }
 
 export function base64ToArrayBuffer(base64: string): ArrayBuffer {
-  const buf = Buffer.from(base64, "base64");
-  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength) as ArrayBuffer;
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
 }

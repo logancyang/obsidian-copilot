@@ -3,7 +3,6 @@ import ChainManager from "@/LLMProviders/chainManager";
 import { ChatMessage } from "@/types/message";
 import { err2String, formatDateTime } from "./utils";
 import { logError } from "@/logger";
-import { v4 as uuidv4 } from "uuid";
 import { formatErrorChunk } from "@/utils/toolResultUtils";
 
 export type Role = "assistant" | "user" | "system";
@@ -36,7 +35,7 @@ export const getAIResponse = async (
     const errorMessage = formatErrorChunk("Model request failed: " + err2String(error));
 
     addMessage({
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       sender: AI_SENDER,
       isErrorMessage: true,
       message: errorMessage,

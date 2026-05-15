@@ -1,8 +1,20 @@
 import "web-streams-polyfill/dist/polyfill.min.js";
 import { TextEncoder, TextDecoder } from "util";
+import { webcrypto } from "crypto";
 
 window.TextEncoder = TextEncoder;
 window.TextDecoder = TextDecoder;
+
+// jsdom 20 ships a Web Crypto stub without `randomUUID`; backfill from Node so
+// production code that uses `crypto.randomUUID()` works in tests too.
+ 
+if (
+  typeof window.crypto === "undefined" ||
+  typeof window.crypto.randomUUID !== "function"
+) {
+  // eslint-disable-next-line obsidianmd/no-global-this
+  Object.defineProperty(globalThis, "crypto", { value: webcrypto, configurable: true });
+}
 
 // Polyfill Obsidian's Node.doc / Node.win augmentation so plugin code that
 // reads `element.doc` / `element.win` works under jsdom.

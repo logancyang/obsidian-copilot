@@ -8,7 +8,6 @@
 import * as actions from "@/services/webViewerService/webViewerServiceActions";
 import type { WebViewerLeaf } from "@/services/webViewerService/webViewerServiceTypes";
 import type { WebSelectedTextContext } from "@/types/message";
-import { v4 as uuidv4 } from "uuid";
 
 // ============================================================================
 // Types
@@ -224,7 +223,7 @@ export class WebSelectionTracker {
 
       // Create web selection context
       const context: WebSelectedTextContext = {
-        id: uuidv4(),
+        id: crypto.randomUUID(),
         content: selectedMarkdown,
         sourceType: "web",
         title: pageInfo.title || "Untitled",

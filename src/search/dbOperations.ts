@@ -7,7 +7,7 @@ import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { areEmbeddingModelsSame } from "@/utils";
 import { Embeddings } from "@langchain/core/embeddings";
 import { create, insert, Orama, remove, removeMultiple, search } from "@orama/orama";
-import { Mutex } from "async-mutex";
+import { Mutex } from "@/utils/asyncMutex";
 import { md5 } from "@/utils/hash";
 import { App, Notice, Platform } from "obsidian";
 import { ChunkedStorage } from "./chunkedStorage";

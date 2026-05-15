@@ -80,7 +80,6 @@ import {
   resolveFileByPath,
   trashFile,
 } from "@/utils/vaultAdapterUtils";
-import { v4 as uuidv4 } from "uuid";
 
 // Removed unused FileTrackingState interface
 
@@ -528,7 +527,7 @@ export default class CopilotPlugin extends Plugin {
 
     // Create selected text context
     const selectedTextContext: NoteSelectedTextContext = {
-      id: uuidv4(),
+      id: crypto.randomUUID(),
       content: selectedText,
       sourceType: "note",
       noteTitle: activeFile.basename,

@@ -1,7 +1,7 @@
 import { logInfo, logWarn } from "@/logger";
 import { CHUNK_SIZE } from "@/constants";
 import { App, TFile } from "obsidian";
-import { RecursiveCharacterTextSplitter } from "@langchain/textsplitters";
+import { RecursiveCharacterTextSplitter } from "./recursiveSplitter";
 import { MemoryManager } from "./utils/MemoryManager";
 
 /**
@@ -58,11 +58,10 @@ export class ChunkManager {
    * Create a text splitter configured for the given options
    */
   private createSplitter(options: ChunkOptions): RecursiveCharacterTextSplitter {
-    return RecursiveCharacterTextSplitter.fromLanguage("markdown", {
+    return new RecursiveCharacterTextSplitter({
       chunkSize: options.maxChars,
       chunkOverlap: options.overlap,
       separators: ["\n\n", "\n", ". ", " ", ""], // Explicit separators for determinism
-      keepSeparator: false, // Consistent separator handling
     });
   }
 
@@ -428,7 +427,6 @@ export class ChunkManager {
         const splitter = this.createSplitter(options);
         const docs = await splitter.createDocuments([content], [], {
           chunkHeader: header,
-          appendChunkOverlapHeader: options.overlap > 0,
         });
         const coalescedContents = this.coalesceTinySplitChunks(
           docs.map((doc) => doc.pageContent),
