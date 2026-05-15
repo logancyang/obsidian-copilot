@@ -1481,6 +1481,11 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       payload.thinking = usesAdaptiveThinking
         ? { type: "adaptive" }
         : { type: "enabled", budget_tokens: 2048 };
+      if (usesAdaptiveThinking) {
+        // Opus 4.7+ defaults output_config.display to "omitted" so thinking summaries
+        // never reach the UI. Pre-4.7 models default to "summarized" server-side.
+        payload.output_config = { display: "summarized" };
+      }
       // When thinking is enabled, temperature must be 1
       // https://docs.claude.com/en/docs/build-with-claude/extended-thinking#important-considerations-when-using-extended-thinking
       payload.temperature = 1;

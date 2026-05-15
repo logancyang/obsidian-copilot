@@ -254,6 +254,12 @@ export default class ChatModelManager {
                 type: "enabled" as const,
                 budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
               },
+          // Opus 4.7+ defaults output_config.display to "omitted" so thinking summaries
+          // never reach the UI. Pre-4.7 models still default to "summarized" server-side
+          // and don't need this.
+          ...(usesAdaptiveThinking && {
+            outputConfig: { display: "summarized" as const },
+          }),
         }),
       },
       [ChatModelProviders.AZURE_OPENAI]: await (async (): Promise<Record<string, unknown>> => {
