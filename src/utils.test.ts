@@ -966,8 +966,7 @@ describe("getModelInfo", () => {
   });
 
   it("does not affect other thinking-enabled families", () => {
-    expect(getModelInfo("claude-sonnet-4-6").usesAdaptiveThinking).toBe(false);
-    expect(getModelInfo("claude-sonnet-4-7").usesAdaptiveThinking).toBe(false);
+    expect(getModelInfo("claude-sonnet-4-5").usesAdaptiveThinking).toBe(false);
     expect(getModelInfo("claude-3-7-sonnet-20250219").usesAdaptiveThinking).toBe(false);
   });
 

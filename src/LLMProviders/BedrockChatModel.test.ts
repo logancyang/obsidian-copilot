@@ -487,9 +487,9 @@ describe("BedrockChatModel streaming decode", () => {
     });
 
     it("keeps legacy thinking for sonnet-4 and 3-7-sonnet", () => {
-      const sonnet4 = createModel(true, "anthropic.claude-sonnet-4-7-20260115-v1:0");
+      const sonnet45 = createModel(true, "anthropic.claude-sonnet-4-5-20250929-v1:0");
       expect(
-        asInternal(sonnet4).buildRequestBody([
+        asInternal(sonnet45).buildRequestBody([
           { role: "user", content: "test", getType: () => "human" },
         ]).thinking
       ).toEqual({ type: "enabled", budget_tokens: 2048 });
