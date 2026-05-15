@@ -142,7 +142,9 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       let inputSchema: Record<string, unknown> = { type: "object", properties: {} };
       if (tool.schema) {
         // Use LangChain's schema conversion utilities
-        inputSchema = isInteropZodSchema(tool.schema) ? toJsonSchema(tool.schema) : tool.schema;
+        inputSchema = (
+          isInteropZodSchema(tool.schema) ? toJsonSchema(tool.schema) : tool.schema
+        ) as Record<string, unknown>;
       }
       return {
         name: tool.name,

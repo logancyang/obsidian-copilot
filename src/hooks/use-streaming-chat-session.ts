@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RunnableSequence } from "@langchain/core/runnables";
-import type { ChatBufferMemory } from "@/LLMProviders/chatBufferMemory";
+import type { BaseChatMemory } from "@langchain/classic/memory";
 
 import type { CustomModel } from "@/aiParams";
 import { createChatChain, createChatMemory } from "@/commands/customCommandChatEngine";
@@ -70,7 +70,7 @@ export interface StreamingChatSessionApi {
   reset: () => void;
 
   /** Get the current memory instance (for saving partial context on stop). */
-  getMemory: () => ChatBufferMemory | null;
+  getMemory: () => BaseChatMemory | null;
 
   /** Get the latest streaming text from ref (bypasses RAF throttle). */
   getLatestStreamingText: () => string;
@@ -78,7 +78,7 @@ export interface StreamingChatSessionApi {
 
 interface ChainAndMemory {
   chain: RunnableSequence;
-  memory: ChatBufferMemory;
+  memory: BaseChatMemory;
 }
 
 /** Returns a stable key for caching chain per model. */
@@ -129,7 +129,7 @@ export function useStreamingChatSession(
     onNonAbortErrorRef.current = onNonAbortError;
   }, [onNoModel, onNonAbortError]);
 
-  const memoryRef = useRef<ChatBufferMemory | null>(null);
+  const memoryRef = useRef<BaseChatMemory | null>(null);
   const chainRef = useRef<RunnableSequence | null>(null);
   const currentModelKeyRef = useRef<string | null>(null);
   const currentSystemPromptRef = useRef<string | null>(null);
@@ -215,7 +215,7 @@ export function useStreamingChatSession(
     return !hasSavedContextOnceRef.current;
   }, []);
 
-  const getMemory = useCallback((): ChatBufferMemory | null => {
+  const getMemory = useCallback((): BaseChatMemory | null => {
     return memoryRef.current;
   }, []);
 
@@ -283,7 +283,7 @@ export function useStreamingChatSession(
       const thinkStreamer = new ThinkBlockStreamer(turnScopedDelta, excludeThinking);
 
       let didNonAbortError = false;
-      let memory: ChatBufferMemory | null = null;
+      let memory: BaseChatMemory | null = null;
       let prompt = "";
       let committed: string | null = null;
 

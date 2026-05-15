@@ -1,12 +1,12 @@
 import { compactAssistantOutput } from "@/context/ChatHistoryCompactor";
 import { logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { BaseChatMemory, BufferWindowMemory } from "@langchain/classic/memory";
 import { BaseChatMessageHistory } from "@langchain/core/chat_history";
-import { ChatBufferMemory } from "./chatBufferMemory";
 
 export default class MemoryManager {
   private static instance: MemoryManager;
-  private memory: ChatBufferMemory;
+  private memory: BaseChatMemory;
   private debug: boolean;
 
   private constructor() {
@@ -27,7 +27,7 @@ export default class MemoryManager {
 
   private initMemory(chatHistory?: BaseChatMessageHistory): void {
     const chatContextTurns = getSettings().contextTurns;
-    this.memory = new ChatBufferMemory({
+    this.memory = new BufferWindowMemory({
       k: chatContextTurns * 2,
       memoryKey: "history",
       inputKey: "input",
@@ -39,7 +39,7 @@ export default class MemoryManager {
     }
   }
 
-  getMemory(): ChatBufferMemory {
+  getMemory(): BaseChatMemory {
     return this.memory;
   }
 

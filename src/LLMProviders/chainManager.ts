@@ -5,6 +5,7 @@ import {
   SetChainOptions,
   setChainType,
 } from "@/aiParams";
+import ChainFactory, { Document } from "@/chainFactory";
 import { ChainType } from "@/chainType";
 import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
@@ -19,14 +20,14 @@ import { logError, logInfo } from "@/logger";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import { ChatMessage } from "@/types/message";
-import { findCustomModel, isOSeriesModel } from "@/utils";
+import { findCustomModel, isOSeriesModel, isSupportedChain } from "@/utils";
 import { MissingModelKeyError } from "@/error";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
   MessagesPlaceholder,
 } from "@langchain/core/prompts";
-import { Document } from "@langchain/core/documents";
+import { RunnableSequence } from "@langchain/core/runnables";
 import { App, Notice } from "obsidian";
 import ChatModelManager from "./chatModelManager";
 import MemoryManager from "./memoryManager";
@@ -34,6 +35,10 @@ import PromptManager from "./promptManager";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
 
 export default class ChainManager {
+  // TODO: These chains are deprecated since we now use direct chat model calls in chain runners
+  // Consider removing after verifying no dependencies remain
+  private chain: RunnableSequence;
+  private retrievalChain: RunnableSequence;
   private retrievedDocuments: Document[] = [];
 
   public getRetrievedDocuments(): Document[] {
@@ -69,6 +74,16 @@ export default class ChainManager {
     await this.createChainWithNewModel();
   }
 
+  // TODO: These methods are deprecated - chain runners now use direct chat model calls
+  // Remove after confirming no usage remains
+  public getChain(): RunnableSequence {
+    return this.chain;
+  }
+
+  public getRetrievalChain(): RunnableSequence {
+    return this.retrievalChain;
+  }
+
   private validateChainType(chainType: ChainType): void {
     if (chainType === undefined || chainType === null) throw new Error("No chain type set");
   }
@@ -82,6 +97,17 @@ export default class ChainManager {
       const errorMsg =
         "Chat model is not initialized properly, check your API key in Copilot setting and make sure you have API access.";
       throw new MissingModelKeyError(errorMsg);
+    }
+  }
+
+  // TODO: This method is deprecated - chain validation no longer needed
+  // Remove after confirming no dependencies
+  private validateChainInitialization() {
+    if (!this.chain || !isSupportedChain(this.chain)) {
+      logInfo("Reinitializing chat chain after detecting missing or unsupported instance.");
+      void this.createChainWithNewModel({}, false).catch((err) =>
+        logError("createChainWithNewModel failed", err)
+      );
     }
   }
 
@@ -149,6 +175,9 @@ export default class ChainManager {
         this.pendingModelError = null;
       }
 
+      // Must update the chatModel for chain because ChainFactory always
+      // retrieves the old chain without the chatModel change if it exists!
+      // Create a new chain with the new chatModel
       await this.setChain(chainType, options);
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
@@ -158,6 +187,8 @@ export default class ChainManager {
     }
   }
 
+  // TODO: This method is deprecated - chain runners now handle chain logic directly
+  // Remove after confirming no usage remains
   async setChain(chainType: ChainType, options: SetChainOptions = {}): Promise<void> {
     if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
       console.error("setChain failed: No chat model set.");
@@ -166,11 +197,98 @@ export default class ChainManager {
 
     this.validateChainType(chainType);
 
-    if (options.refreshIndex) {
-      await this.refreshVaultIndex();
-    }
+    // Get chatModel, memory, prompt, and embeddingAPI from respective managers
+    const chatModel = this.chatModelManager.getChatModel();
+    const memory = this.memoryManager.getMemory();
+    const chatPrompt = this.promptManager.getChatPrompt();
 
-    setChainType(chainType);
+    switch (chainType) {
+      case ChainType.LLM_CHAIN: {
+        // TODO: LLMChainRunner now handles this directly without chains
+        this.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        });
+
+        setChainType(ChainType.LLM_CHAIN);
+        break;
+      }
+
+      case ChainType.VAULT_QA_CHAIN: {
+        // TODO: VaultQAChainRunner now handles this directly without chains
+        await this.initializeQAChain(options);
+
+        // Create retriever based on semantic search setting
+        const settings = getSettings();
+        const retriever = settings.enableSemanticSearchV3
+          ? new (await import("@/search/hybridRetriever")).HybridRetriever({
+              minSimilarityScore: 0.01,
+              maxK: settings.maxSourceChunks,
+              salientTerms: [],
+            })
+          : new (await import("@/search/v3/TieredLexicalRetriever")).TieredLexicalRetriever(app, {
+              minSimilarityScore: 0.01,
+              maxK: settings.maxSourceChunks,
+              salientTerms: [],
+              textWeight: undefined,
+              returnAll: false,
+              useRerankerThreshold: undefined,
+            });
+
+        // Create new conversational retrieval chain
+        this.retrievalChain = ChainFactory.createConversationalRetrievalChain(
+          {
+            llm: chatModel,
+            retriever: retriever,
+            systemMessage: getSystemPrompt(),
+          },
+          this.storeRetrieverDocuments.bind(this) as (
+            documents: import("@langchain/core/documents").Document[]
+          ) => void,
+          getSettings().debug
+        );
+
+        setChainType(ChainType.VAULT_QA_CHAIN);
+        if (getSettings().debug) {
+          logInfo("New Vault QA chain with hybrid retriever created for entire vault");
+          logInfo("Set chain:", ChainType.VAULT_QA_CHAIN);
+        }
+        break;
+      }
+
+      case ChainType.COPILOT_PLUS_CHAIN: {
+        // For initial load of the plugin
+        await this.initializeQAChain(options);
+        this.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        });
+
+        setChainType(ChainType.COPILOT_PLUS_CHAIN);
+        break;
+      }
+
+      case ChainType.PROJECT_CHAIN: {
+        // For initial load of the plugin
+        await this.initializeQAChain(options);
+        this.chain = ChainFactory.createNewLLMChain({
+          llm: chatModel,
+          memory: memory,
+          prompt: options.prompt || chatPrompt,
+          abortController: options.abortController,
+        });
+        setChainType(ChainType.PROJECT_CHAIN);
+        break;
+      }
+
+      default:
+        this.validateChainType(chainType);
+        break;
+    }
   }
 
   private getChainRunner(): ChainRunner {
@@ -195,14 +313,17 @@ export default class ChainManager {
     }
   }
 
-  private async refreshVaultIndex(): Promise<void> {
-    // V3 (on-demand) search builds indexes lazily, so a refresh is only meaningful
-    // when the legacy Orama-backed semantic search is enabled.
-    if (!getSettings().enableSemanticSearchV3) {
-      return;
+  private async initializeQAChain(options: SetChainOptions) {
+    // Handle index refresh if needed
+    if (options.refreshIndex) {
+      const settings = getSettings();
+      if (settings.enableSemanticSearchV3) {
+        // Use VectorStoreManager for Orama indexing
+        const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
+        await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
+      }
+      // V3 search builds indexes on demand, no action needed
     }
-    const VectorStoreManager = (await import("@/search/vectorStoreManager")).default;
-    await VectorStoreManager.getInstance().indexVaultToVectorStore(false);
   }
 
   async runChain(
@@ -225,6 +346,7 @@ export default class ChainManager {
     );
 
     this.validateChatModel();
+    this.validateChainInitialization();
 
     const chatModel = this.chatModelManager.getChatModel();
 
