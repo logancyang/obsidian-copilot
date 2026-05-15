@@ -78,7 +78,6 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@langchain/anthropic": "^1.0.0",
     "@langchain/classic": "^1.0.9",
-    "@langchain/community": "^1.0.0",
     "@langchain/core": "^1.1.29",
     "@langchain/deepseek": "^1.0.0",
     "@langchain/google-genai": "^2.1.23",
