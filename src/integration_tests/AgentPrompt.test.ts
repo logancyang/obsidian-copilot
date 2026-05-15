@@ -86,19 +86,6 @@ Array.prototype.contains = Array.prototype.includes;
 // Increase test timeout to 120 seconds for real LLM calls
 jest.setTimeout(120000);
 
-// Mock only the essential dependencies
-jest.mock("@/chainFactory", () => ({
-  ChainType: {
-    LLM_CHAIN: "llm_chain",
-    VAULT_QA_CHAIN: "vault_qa",
-    COPILOT_PLUS_CHAIN: "copilot_plus",
-    PROJECT_CHAIN: "project",
-  },
-  default: jest.fn().mockImplementation(() => ({
-    instances: new Map(),
-  })),
-}));
-
 // Mock Obsidian - essential for tool initialization
 jest.mock("obsidian", () => ({
   App: jest.fn(),
