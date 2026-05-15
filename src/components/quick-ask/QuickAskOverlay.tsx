@@ -12,6 +12,7 @@ import React from "react";
 import { createRoot, Root } from "react-dom/client";
 import { updateDynamicStyleClass, clearDynamicStyleClass } from "@/utils/dom/dynamicStyleManager";
 import { QuickAskPanel } from "./QuickAskPanel";
+import { AppContext } from "@/context";
 import type CopilotPlugin from "@/main";
 import type { ReplaceGuard } from "@/editor/replaceGuard";
 import type { ResizeDirection } from "@/hooks/use-resizable";
@@ -239,17 +240,19 @@ export class QuickAskOverlay {
     }
 
     this.root.render(
-      <QuickAskPanel
-        plugin={this.options.plugin}
-        editor={this.options.editor}
-        view={this.options.view}
-        selectedText={this.options.selectedText}
-        replaceGuard={this.options.replaceGuard}
-        onClose={this.closeWithAnimation}
-        onDragOffset={this.handleDragOffset}
-        onResizeStart={this.handleResizeStart}
-        hasCustomHeight={this.hasUserResizedHeight}
-      />
+      <AppContext.Provider value={this.options.plugin.app}>
+        <QuickAskPanel
+          plugin={this.options.plugin}
+          editor={this.options.editor}
+          view={this.options.view}
+          selectedText={this.options.selectedText}
+          replaceGuard={this.options.replaceGuard}
+          onClose={this.closeWithAnimation}
+          onDragOffset={this.handleDragOffset}
+          onResizeStart={this.handleResizeStart}
+          hasCustomHeight={this.hasUserResizedHeight}
+        />
+      </AppContext.Provider>
     );
   }
 
