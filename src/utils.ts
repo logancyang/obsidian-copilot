@@ -1063,6 +1063,7 @@ export interface ModelInfo {
   isOSeries: boolean;
   isGPT5: boolean;
   isThinkingEnabled: boolean;
+  usesAdaptiveThinking: boolean;
 }
 
 export function getModelInfo(model: BaseChatModel | string): ModelInfo {
@@ -1077,10 +1078,16 @@ export function getModelInfo(model: BaseChatModel | string): ModelInfo {
     modelName.startsWith("claude-sonnet-4") ||
     modelName.startsWith("claude-opus-4");
 
+  // claude-opus-4-7 and later reject the legacy { type: "enabled", budget_tokens } shape
+  // with a 400 and require { type: "adaptive" }. Detect by minor version on the opus-4 line.
+  const opusMinorMatch = modelName.match(/^claude-opus-4-(\d+)/);
+  const usesAdaptiveThinking = opusMinorMatch ? parseInt(opusMinorMatch[1], 10) >= 7 : false;
+
   return {
     isOSeries,
     isGPT5,
     isThinkingEnabled,
+    usesAdaptiveThinking,
   };
 }
 

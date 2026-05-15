@@ -201,7 +201,7 @@ export default class ChatModelManager {
 
     const modelName = customModel.name;
     const modelInfo = getModelInfo(modelName);
-    const { isThinkingEnabled } = modelInfo;
+    const { isThinkingEnabled, usesAdaptiveThinking } = modelInfo;
     const resolvedTemperature = this.getTemperatureForModel(modelInfo, customModel, settings);
     const maxTokens = customModel.maxTokens ?? settings.maxTokens;
 
@@ -248,10 +248,12 @@ export default class ChatModelManager {
           fetch: customModel.enableCors ? safeFetch : undefined,
         },
         ...(isThinkingEnabled && {
-          thinking: {
-            type: "enabled",
-            budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
-          },
+          thinking: usesAdaptiveThinking
+            ? { type: "adaptive" as const }
+            : {
+                type: "enabled" as const,
+                budget_tokens: ChatModelManager.ANTHROPIC_THINKING_BUDGET_TOKENS,
+              },
         }),
       },
       [ChatModelProviders.AZURE_OPENAI]: await (async (): Promise<Record<string, unknown>> => {

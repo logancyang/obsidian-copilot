@@ -4,6 +4,7 @@ import {
   extractNoteFiles,
   extractTemplateNoteFiles,
   formatDateTime,
+  getModelInfo,
   getNotesFromPath,
   getNotesFromTags,
   getUtf8ByteLength,
@@ -939,5 +940,40 @@ describe("stringToFormattedDateTime", () => {
     const after = Date.now();
     expect(result.epoch).toBeGreaterThanOrEqual(before);
     expect(result.epoch).toBeLessThanOrEqual(after);
+  });
+});
+
+describe("getModelInfo", () => {
+  it("flags claude-opus-4-7 as adaptive thinking", () => {
+    const info = getModelInfo("claude-opus-4-7");
+    expect(info.isThinkingEnabled).toBe(true);
+    expect(info.usesAdaptiveThinking).toBe(true);
+  });
+
+  it("flags claude-opus-4-8 and higher as adaptive thinking", () => {
+    expect(getModelInfo("claude-opus-4-8").usesAdaptiveThinking).toBe(true);
+    expect(getModelInfo("claude-opus-4-12").usesAdaptiveThinking).toBe(true);
+  });
+
+  it("keeps claude-opus-4-6 and earlier on legacy thinking", () => {
+    const six = getModelInfo("claude-opus-4-6");
+    expect(six.isThinkingEnabled).toBe(true);
+    expect(six.usesAdaptiveThinking).toBe(false);
+
+    const zero = getModelInfo("claude-opus-4-0");
+    expect(zero.isThinkingEnabled).toBe(true);
+    expect(zero.usesAdaptiveThinking).toBe(false);
+  });
+
+  it("does not affect other thinking-enabled families", () => {
+    expect(getModelInfo("claude-sonnet-4-6").usesAdaptiveThinking).toBe(false);
+    expect(getModelInfo("claude-sonnet-4-7").usesAdaptiveThinking).toBe(false);
+    expect(getModelInfo("claude-3-7-sonnet-20250219").usesAdaptiveThinking).toBe(false);
+  });
+
+  it("does not match unversioned claude-opus-4 prefix", () => {
+    const bare = getModelInfo("claude-opus-4");
+    expect(bare.isThinkingEnabled).toBe(true);
+    expect(bare.usesAdaptiveThinking).toBe(false);
   });
 });
