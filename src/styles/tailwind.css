@@ -522,11 +522,11 @@ If your plugin does not need CSS, delete this file.
 }
 
 .switch.disabled input:checked + .slider {
-  background-color: #ccc;
+  background-color: #cccccc;
 }
 
 .switch.disabled input:focus + .slider {
-  box-shadow: 0 0 1px #ccc;
+  box-shadow: 0 0 1px #cccccc;
 }
 
 .switch.disabled input:checked + .slider:before {
@@ -561,7 +561,7 @@ If your plugin does not need CSS, delete this file.
   padding: 8px;
   font-size: 14px;
   line-height: 1.5;
-  border: 1px solid #ccc;
+  border: 1px solid #cccccc;
   border-radius: 4px;
   resize: vertical;
   overflow-y: hidden;
