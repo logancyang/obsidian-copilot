@@ -89,6 +89,24 @@ const createModel = (enableThinking = false): BedrockChatModel =>
     fetchImplementation: jest.fn(),
   });
 
+const createModelWithFetch = (
+  fetchMock: jest.Mock,
+  opts?: { modelId?: string; noStream?: boolean }
+): BedrockChatModel =>
+  new BedrockChatModel({
+    modelId: opts?.modelId ?? "anthropic.claude-sonnet-4-5-20250929-v1:0",
+    apiKey: "test-key",
+    endpoint: "https://example.com/model/anthropic.claude-sonnet-4-5-20250929-v1%3A0/invoke",
+    ...(opts?.noStream
+      ? {}
+      : {
+          streamEndpoint:
+            "https://example.com/model/anthropic.claude-sonnet-4-5-20250929-v1%3A0/invoke-with-response-stream",
+        }),
+    anthropicVersion: "bedrock-2023-05-31",
+    fetchImplementation: fetchMock,
+  });
+
 describe("BedrockChatModel streaming decode", () => {
   it("decodes simple base64 JSON payloads", () => {
     const payload = JSON.stringify({
@@ -655,5 +673,70 @@ describe("BedrockChatModel streaming decode", () => {
         expect(requestBody.messages[0].content[1].type).toBe("image");
       });
     });
+  });
+});
+
+describe("BedrockChatModel inference-profile error rewriting", () => {
+  const awsInferenceProfileError = JSON.stringify({
+    message:
+      "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+  });
+
+  const makeErrorResponse = (status: number, body: string): Response =>
+    ({
+      ok: false,
+      status,
+      text: () => Promise.resolve(body),
+    }) as unknown as Response;
+
+  it("rewrites 400 inference-profile error in non-streaming path to actionable message", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
+    const model = createModelWithFetch(fetchMock, { noStream: true });
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    await expect(model._generate(messages as never, {})).rejects.toThrow(
+      /cross-region inference profile ID/
+    );
+  });
+
+  it("rewrites 400 inference-profile error in streaming path to actionable message", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
+    const model = createModelWithFetch(fetchMock);
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    const gen = model._streamResponseChunks(messages as never, {});
+    await expect(gen.next()).rejects.toThrow(/cross-region inference profile ID/);
+  });
+
+  it("includes the bare model ID in the rewritten message", async () => {
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, awsInferenceProfileError));
+    const model = createModelWithFetch(fetchMock, { noStream: true });
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    await expect(model._generate(messages as never, {})).rejects.toThrow(
+      /anthropic\.claude-sonnet-4-5/
+    );
+  });
+
+  it("does not rewrite a 400 error that is unrelated to inference profiles", async () => {
+    const genericBody = JSON.stringify({ message: "ValidationException: bad request" });
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, genericBody));
+    const model = createModelWithFetch(fetchMock, { noStream: true });
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    await expect(model._generate(messages as never, {})).rejects.toThrow(
+      /Amazon Bedrock request failed with status 400/
+    );
+  });
+
+  it("does not rewrite non-400 errors", async () => {
+    const body = JSON.stringify({ message: "Internal Server Error" });
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(500, body));
+    const model = createModelWithFetch(fetchMock, { noStream: true });
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    await expect(model._generate(messages as never, {})).rejects.toThrow(
+      /Amazon Bedrock request failed with status 500/
+    );
   });
 });

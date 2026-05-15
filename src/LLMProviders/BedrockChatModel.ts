@@ -42,6 +42,33 @@ export interface BedrockChatModelFields extends BaseChatModelParams {
 }
 
 /**
+ * Rewrites Bedrock HTTP error messages into actionable text when possible.
+ * Falls back to the original "Amazon Bedrock ... failed with status N: body" form.
+ */
+function rewriteBedrockErrorMessage(status: number, body: string, streaming = false): string {
+  const prefix = streaming
+    ? "Amazon Bedrock streaming request failed with status"
+    : "Amazon Bedrock request failed with status";
+
+  if (status === 400) {
+    // Stable AWS error sentinel — matched on substring because the error shape is
+    // documented and unlikely to change.
+    if (body.includes("isn't supported") && body.includes("inference profile")) {
+      const modelIdMatch = body.match(/model ID ([^\s]+) with/);
+      const bareId = modelIdMatch?.[1] ?? "<model-id>";
+      return (
+        `This Bedrock model requires a cross-region inference profile ID, not a bare regional model ID. ` +
+        `Update the model name in Settings → Models to use one of the prefixed forms: ` +
+        `global.anthropic.<id> (recommended), us.anthropic.<id>, eu.anthropic.<id>, or apac.anthropic.<id>. ` +
+        `The current value "${bareId}" is not accepted by AWS on-demand throughput.`
+      );
+    }
+  }
+
+  return `${prefix} ${status}: ${body}`;
+}
+
+/**
  * Lightweight ChatModel integration for Amazon Bedrock using a simple API key header.
  * This implementation issues JSON requests against the public Bedrock runtime endpoint.
  */
@@ -142,9 +169,9 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
       let inputSchema: Record<string, unknown> = { type: "object", properties: {} };
       if (tool.schema) {
         // Use LangChain's schema conversion utilities
-        inputSchema = (
-          isInteropZodSchema(tool.schema) ? toJsonSchema(tool.schema) : tool.schema
-        ) as Record<string, unknown>;
+        inputSchema = isInteropZodSchema(tool.schema)
+          ? toJsonSchema(tool.schema)
+          : tool.schema;
       }
       return {
         name: tool.name,
@@ -198,7 +225,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(`Amazon Bedrock request failed with status ${response.status}: ${errorText}`);
+      throw new Error(rewriteBedrockErrorMessage(response.status, errorText));
     }
 
     const data = (await response.json()) as Record<string, unknown>;
@@ -280,9 +307,7 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
 
     if (!response.ok) {
       const errorText = await response.text();
-      throw new Error(
-        `Amazon Bedrock streaming request failed with status ${response.status}: ${errorText}`
-      );
+      throw new Error(rewriteBedrockErrorMessage(response.status, errorText, true));
     }
 
     if (!response.body) {
