@@ -4,7 +4,6 @@
  */
 
 import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChatMemory, BufferMemory } from "@langchain/classic/memory";
 import {
   ChatPromptTemplate,
   HumanMessagePromptTemplate,
@@ -12,13 +11,14 @@ import {
   SystemMessagePromptTemplate,
 } from "@langchain/core/prompts";
 import ChatModelManager from "@/LLMProviders/chatModelManager";
+import { ChatBufferMemory } from "@/LLMProviders/chatBufferMemory";
 import { CustomModel } from "@/aiParams";
 
 /**
- * Creates a new BufferMemory instance for chat history.
+ * Creates a new ChatBufferMemory instance for chat history.
  */
-export function createChatMemory(): BufferMemory {
-  return new BufferMemory({
+export function createChatMemory(): ChatBufferMemory {
+  return new ChatBufferMemory({
     returnMessages: true,
     memoryKey: "history",
   });
@@ -35,7 +35,7 @@ export function createChatMemory(): BufferMemory {
 export async function createChatChain(
   selectedModel: CustomModel,
   systemPrompt: string,
-  memory: BaseChatMemory
+  memory: ChatBufferMemory
 ): Promise<RunnableSequence> {
   const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
 

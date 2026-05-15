@@ -1,11 +1,3 @@
-jest.mock("@/chainFactory", () => ({
-  ChainType: {
-    LLM_CHAIN: "llm_chain",
-    COPILOT_PLUS_CHAIN: "copilot_plus",
-    PROJECT_CHAIN: "project_chain",
-  },
-}));
-
 import { ContextProcessor } from "@/contextProcessor";
 import type { FileParserManager } from "@/tools/FileParserManager";
 import { EMBEDDED_NOTE_TAG } from "@/constants";

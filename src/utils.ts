@@ -3,7 +3,6 @@
 // eslint-disable-next-line import/no-nodejs-modules
 import { Buffer } from "buffer";
 
-import { Document } from "@/chainFactory";
 import { ChainType } from "@/chainType";
 import {
   ALLOWED_NOTE_CONTEXT_EXTENSIONS,
@@ -19,9 +18,8 @@ import {
 import { logInfo, logWarn } from "@/logger";
 import { CopilotSettings } from "@/settings/model";
 import { BaseChatModel } from "@langchain/core/language_models/chat_models";
+import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
-import { RunnableSequence } from "@langchain/core/runnables";
-import { BaseChain, RetrievalQAChain } from "@langchain/classic/chains";
 import { DateTime } from "luxon";
 import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
@@ -253,24 +251,6 @@ export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile
 
   return filesWithTag;
 }
-
-// TODO: These chain validation functions are deprecated
-// Remove after confirming chainManager no longer uses them
-const isLLMChain = (chain: RunnableSequence): chain is RunnableSequence => {
-  const c = chain as unknown as Record<string, unknown>;
-  const last = c.last as Record<string, unknown> | undefined;
-  return Boolean(last?.modelName || last?.model);
-};
-
-const isRetrievalQAChain = (chain: BaseChain): chain is RetrievalQAChain => {
-  const c = chain as unknown as Record<string, unknown>;
-  const last = c.last as Record<string, unknown> | undefined;
-  return last?.retriever !== undefined;
-};
-
-export const isSupportedChain = (chain: RunnableSequence): chain is RunnableSequence => {
-  return isLLMChain(chain) || isRetrievalQAChain(chain);
-};
 
 export interface FormattedDateTime {
   fileName: string;
