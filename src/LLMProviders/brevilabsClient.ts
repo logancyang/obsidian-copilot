@@ -51,7 +51,7 @@ async function buildMultipartFromFormData(
     offset += part.byteLength;
   }
   return {
-    body: out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength) as ArrayBuffer,
+    body: out.buffer.slice(out.byteOffset, out.byteOffset + out.byteLength),
     contentType: `multipart/form-data; boundary=${boundary}`,
   };
 }
@@ -64,7 +64,7 @@ function parseBrevilabsResponse<T>(
   response: { status: number; json: unknown },
   endpoint: string
 ): { data: T | null; error?: Error } {
-  let data: any = response.json;
+  let data: unknown = response.json;
   if (typeof data === "string") {
     try {
       data = JSON.parse(data);
@@ -73,17 +73,16 @@ function parseBrevilabsResponse<T>(
     }
   }
   if (response.status < 200 || response.status >= 300) {
-    try {
-      const errorDetail = data.detail;
-      const error = new Error(errorDetail.reason);
-      error.name = errorDetail.error;
+    const detail = (data as { detail?: { reason?: string; error?: string } } | null)?.detail;
+    if (detail?.reason) {
+      const error = new Error(detail.reason);
+      if (detail.error) error.name = detail.error;
       return { data: null, error };
-    } catch {
-      return { data: null, error: new Error(`HTTP error: ${response.status}`) };
     }
+    return { data: null, error: new Error(`HTTP error: ${response.status}`) };
   }
   logInfo(`[API ${endpoint} request]:`, data);
-  return { data };
+  return { data: data as T };
 }
 
 export interface RerankResponse {
