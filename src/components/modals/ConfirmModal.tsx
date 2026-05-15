@@ -1,8 +1,9 @@
 import { Button } from "@/components/ui/button";
 import { logError } from "@/logger";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal } from "obsidian";
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 function ConfirmModalContent({
   content,
@@ -57,7 +58,7 @@ export class ConfirmModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = () => {
       this.confirmed = true;

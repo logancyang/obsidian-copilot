@@ -1,8 +1,9 @@
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 function ExtensionInputModalContent({
   onConfirm,
@@ -72,7 +73,7 @@ export class ExtensionInputModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = (extension: string) => {
       this.onConfirm(extension);

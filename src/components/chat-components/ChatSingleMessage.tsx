@@ -747,6 +747,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
             }
 
             const rootRecord = ensureToolCallRoot(
+              app,
               messageId.current,
               rootsRef.current,
               toolCallId,
@@ -781,6 +782,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
             // Use dedicated error block root to prevent ID collisions with tool calls
             const rootRecord = ensureErrorBlockRoot(
+              app,
               messageId.current,
               errorRootsRef.current,
               errorId,

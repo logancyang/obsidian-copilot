@@ -1,11 +1,11 @@
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Change, diffArrays } from "diff";
 import { Check, X as XIcon } from "lucide-react";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { memo, useMemo, useRef, useState } from "react";
-import { createRoot } from "react-dom/client";
 import { Button } from "../ui/button";
 import { SettingSwitch } from "../ui/setting-switch";
 import { getChangeBlocks } from "@/composerUtils";
@@ -208,7 +208,7 @@ interface ExtendedChange extends Change {
 }
 
 export class ApplyView extends ItemView {
-  private root: ReturnType<typeof createRoot> | null = null;
+  private root: ReturnType<typeof createPluginRoot> | null = null;
   private state: ApplyViewState | null = null;
   private result: ApplyViewResult | null = null;
 
@@ -252,7 +252,7 @@ export class ApplyView extends ItemView {
 
     const rootEl = contentEl.createDiv();
     if (!this.root) {
-      this.root = createRoot(rootEl);
+      this.root = createPluginRoot(rootEl, this.app);
     }
 
     // Pass a close function that takes a result

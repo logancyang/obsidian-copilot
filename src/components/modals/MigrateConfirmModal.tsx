@@ -28,10 +28,11 @@
  */
 
 import { Button } from "@/components/ui/button";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Info, ShieldCheck, Smartphone } from "lucide-react";
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 interface MigrateConfirmContentProps {
   onConfirm: () => void;
@@ -53,8 +54,8 @@ function MigrateConfirmContent({ onConfirm, onCancel }: MigrateConfirmContentPro
       </div>
 
       <p className="tw-m-0 tw-text-muted">
-        Move your API keys from <code className={"tw-text-muted tw-bg-muted/10"}>data.json</code>{" "}
-        to this device&apos;s{" "}
+        Move your API keys from <code className={"tw-text-muted tw-bg-muted/10"}>data.json</code> to
+        this device&apos;s{" "}
         <code className={"tw-text-accent tw-bg-muted/10"}>Obsidian Keychain</code>.{" "}
         <code>data.json</code> will be stripped of API keys after migration.
       </p>
@@ -131,7 +132,7 @@ export class MigrateConfirmModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = () => {
       this.confirmed = true;

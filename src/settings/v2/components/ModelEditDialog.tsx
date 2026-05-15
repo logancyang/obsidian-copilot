@@ -20,7 +20,8 @@ import { debounce, getProviderInfo, getProviderLabel } from "@/utils";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { App, Modal, Platform } from "obsidian";
 import React, { useCallback, useMemo, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { ModelParametersEditor } from "@/components/ui/ModelParametersEditor";
 
 interface ModelEditModalContentProps {
@@ -368,7 +369,7 @@ export class ModelEditModal extends Modal {
     if (Platform.isMobile) {
       modalEl.addClass("tw-h-4/5");
     }
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleUpdate = (
       isEmbeddingModel: boolean,

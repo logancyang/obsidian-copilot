@@ -2,13 +2,14 @@ import ChainManager from "@/LLMProviders/chainManager";
 import Chat from "@/components/Chat";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_VIEWTYPE } from "@/constants";
-import { AppContext, EventTargetContext } from "@/context";
+import { EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
 import { FileParserManager } from "@/tools/FileParserManager";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, Platform, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 export default class CopilotView extends ItemView {
   private get chainManager(): ChainManager {
@@ -55,7 +56,7 @@ export default class CopilotView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.root = createRoot(this.containerEl.children[1]);
+    this.root = createPluginRoot(this.containerEl.children[1], this.app);
     const handleSaveAsNote = (saveFunction: () => Promise<void>) => {
       this.handleSaveAsNote = saveFunction;
     };
@@ -77,7 +78,7 @@ export default class CopilotView extends ItemView {
     this.windowMigrationDestroy = this.containerEl.onWindowMigrated(() => {
       if (!this.root) return;
       this.root.unmount();
-      this.root = createRoot(this.containerEl.children[1]);
+      this.root = createPluginRoot(this.containerEl.children[1], this.app);
       this.renderView(handleSaveAsNote, updateUserMessageHistory);
     });
 
@@ -182,20 +183,18 @@ export default class CopilotView extends ItemView {
     if (!this.root) return;
 
     this.root.render(
-      <AppContext.Provider value={this.app}>
-        <EventTargetContext.Provider value={this.eventTarget}>
-          <Tooltip.Provider delayDuration={0}>
-            <Chat
-              chainManager={this.chainManager}
-              updateUserMessageHistory={updateUserMessageHistory}
-              fileParserManager={this.fileParserManager}
-              plugin={this.plugin}
-              onSaveChat={handleSaveAsNote}
-              chatUIState={this.plugin.chatUIState}
-            />
-          </Tooltip.Provider>
-        </EventTargetContext.Provider>
-      </AppContext.Provider>
+      <EventTargetContext.Provider value={this.eventTarget}>
+        <Tooltip.Provider delayDuration={0}>
+          <Chat
+            chainManager={this.chainManager}
+            updateUserMessageHistory={updateUserMessageHistory}
+            fileParserManager={this.fileParserManager}
+            plugin={this.plugin}
+            onSaveChat={handleSaveAsNote}
+            chatUIState={this.plugin.chatUIState}
+          />
+        </Tooltip.Provider>
+      </EventTargetContext.Provider>
     );
   }
 

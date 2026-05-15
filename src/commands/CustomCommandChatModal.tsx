@@ -16,7 +16,8 @@ import { PenLine } from "lucide-react";
 import { App, Component, MarkdownRenderer, Notice, MarkdownView, Scope } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { CustomCommand } from "@/commands/type";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import {
@@ -650,7 +651,7 @@ export class CustomCommandChatModal {
     this.container.className = "copilot-menu-command-modal-container";
     doc.body.appendChild(this.container);
 
-    this.root = createRoot(this.container);
+    this.root = createPluginRoot(this.container, this.app);
 
     // Capture ReplaceGuard (replaces captureReplaceSnapshot)
     const { selectedText, command, systemPrompt, behaviorConfig } = this.configs;

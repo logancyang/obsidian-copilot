@@ -829,11 +829,7 @@ describe("migrateDiskSecretsToKeychain", () => {
     keychain.setSecretById.mockReset();
     keychain.setSecretById.mockReturnValue(undefined);
     const cleanSave = jest.fn().mockResolvedValue(undefined);
-    await mod.persistSettings(
-      mockSettings.current,
-      cleanSave,
-      mockSettings.current
-    );
+    await mod.persistSettings(mockSettings.current, cleanSave, mockSettings.current);
     await mod.flushPersistence();
 
     // Step 3: the lock must be lifted so the next migration attempt can run.
@@ -867,9 +863,9 @@ describe("migrateDiskSecretsToKeychain", () => {
     });
 
     const saveData = jest.fn().mockResolvedValue(undefined);
-    await expect(
-      mod.persistSettings(mockSettings.current, saveData)
-    ).rejects.toThrow(/undecryptable secrets/);
+    await expect(mod.persistSettings(mockSettings.current, saveData)).rejects.toThrow(
+      /undecryptable secrets/
+    );
     await mod.flushPersistence();
 
     expect(keychain.setSecretById).not.toHaveBeenCalled();
@@ -878,9 +874,7 @@ describe("migrateDiskSecretsToKeychain", () => {
     // canClearDiskSecrets returns false here for a different reason
     // (isKeychainOnly), so we test the lock directly by reading the exposed
     // helper through a disk-mode probe.
-    expect(
-      mod.canClearDiskSecrets(makeSettings({ openAIApiKey: "sk-live" }))
-    ).toBe(true);
+    expect(mod.canClearDiskSecrets(makeSettings({ openAIApiKey: "sk-live" }))).toBe(true);
   });
 });
 
@@ -934,11 +928,7 @@ describe("canClearDiskSecrets", () => {
       jest.fn().mockResolvedValue(undefined)
     );
 
-    expect(
-      mod.canClearDiskSecrets(
-        makeSettings({ _keychainOnly: true })
-      )
-    ).toBe(false);
+    expect(mod.canClearDiskSecrets(makeSettings({ _keychainOnly: true }))).toBe(false);
   });
 
   it("returns false when keychain is unavailable", async () => {

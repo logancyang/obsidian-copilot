@@ -9,10 +9,10 @@
 import { EditorView } from "@codemirror/view";
 import type { Editor } from "obsidian";
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 import { updateDynamicStyleClass, clearDynamicStyleClass } from "@/utils/dom/dynamicStyleManager";
 import { QuickAskPanel } from "./QuickAskPanel";
-import { AppContext } from "@/context";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import type CopilotPlugin from "@/main";
 import type { ReplaceGuard } from "@/editor/replaceGuard";
 import type { ResizeDirection } from "@/hooks/use-resizable";
@@ -240,19 +240,17 @@ export class QuickAskOverlay {
     }
 
     this.root.render(
-      <AppContext.Provider value={this.options.plugin.app}>
-        <QuickAskPanel
-          plugin={this.options.plugin}
-          editor={this.options.editor}
-          view={this.options.view}
-          selectedText={this.options.selectedText}
-          replaceGuard={this.options.replaceGuard}
-          onClose={this.closeWithAnimation}
-          onDragOffset={this.handleDragOffset}
-          onResizeStart={this.handleResizeStart}
-          hasCustomHeight={this.hasUserResizedHeight}
-        />
-      </AppContext.Provider>
+      <QuickAskPanel
+        plugin={this.options.plugin}
+        editor={this.options.editor}
+        view={this.options.view}
+        selectedText={this.options.selectedText}
+        replaceGuard={this.options.replaceGuard}
+        onClose={this.closeWithAnimation}
+        onDragOffset={this.handleDragOffset}
+        onResizeStart={this.handleResizeStart}
+        hasCustomHeight={this.hasUserResizedHeight}
+      />
     );
   }
 
@@ -341,7 +339,7 @@ export class QuickAskOverlay {
     overlayRoot.appendChild(overlayContainer);
     this.overlayContainer = overlayContainer;
 
-    this.root = createRoot(overlayContainer);
+    this.root = createPluginRoot(overlayContainer, this.options.plugin.app);
     this.renderPanel();
 
     // Reason: Reset side lock on scroll/resize so placement is re-evaluated

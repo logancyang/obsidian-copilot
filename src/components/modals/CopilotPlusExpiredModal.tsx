@@ -1,12 +1,12 @@
 import React from "react";
 import { App, Modal } from "obsidian";
-import { createRoot } from "react-dom/client";
 import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
 import { isPlusModel, navigateToPlusPage } from "@/plusUtils";
 import { PLUS_UTM_MEDIUMS } from "@/constants";
 import { ExternalLink } from "lucide-react";
 import { getSettings } from "@/settings/model";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 function CopilotPlusExpiredModalContent({ onCancel }: { onCancel: () => void }) {
   const settings = getSettings();
@@ -56,7 +56,7 @@ export class CopilotPlusExpiredModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleCancel = () => {
       this.close();

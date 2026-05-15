@@ -1,8 +1,8 @@
 import React from "react";
 import { App, Modal } from "obsidian";
-import { createRoot } from "react-dom/client";
 import { Root } from "react-dom/client";
 import { Button } from "@/components/ui/button";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import {
   DEFAULT_COPILOT_PLUS_CHAT_MODEL,
   DEFAULT_COPILOT_PLUS_EMBEDDING_MODEL,
@@ -77,7 +77,7 @@ export class CopilotPlusWelcomeModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = () => {
       applyPlusSettings();

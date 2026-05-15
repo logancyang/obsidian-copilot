@@ -1,10 +1,12 @@
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 import { ErrorBlock } from "@/components/chat-components/ErrorBlock";
 import { ToolCallBanner } from "@/components/chat-components/ToolCallBanner";
 import type { ErrorMarker, ToolCallMarker } from "@/LLMProviders/chainRunner/utils/toolCallParser";
 import { logWarn } from "@/logger";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
+import type { App } from "obsidian";
 
 declare global {
   interface Window {
@@ -156,6 +158,7 @@ const scheduleToolCallRootDisposal = (
  * Ensure a React root exists for the provided tool call container and return the root record.
  */
 export const ensureToolCallRoot = (
+  app: App,
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
   toolCallId: string,
@@ -194,7 +197,7 @@ export const ensureToolCallRoot = (
 
   if (!record) {
     record = {
-      root: createRoot(container),
+      root: createPluginRoot(container, app),
       isUnmounting: false,
       container,
     };
@@ -210,6 +213,7 @@ export const ensureToolCallRoot = (
  * Uses a separate registry from tool calls to prevent ID collisions and race conditions.
  */
 export const ensureErrorBlockRoot = (
+  app: App,
   messageId: string,
   messageRoots: Map<string, ToolCallRootRecord>,
   errorId: string,
@@ -247,7 +251,7 @@ export const ensureErrorBlockRoot = (
 
   if (!record) {
     record = {
-      root: createRoot(container),
+      root: createPluginRoot(container, app),
       isUnmounting: false,
       container,
     };

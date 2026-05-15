@@ -11,7 +11,8 @@ import { ChevronDown, ChevronRight, ChevronUp, Info } from "lucide-react";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 import { App, Modal } from "obsidian";
 import React, { useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 interface ApiKeyModalContentProps {
   onClose: () => void;
@@ -183,7 +184,7 @@ export class ApiKeyDialog extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     this.root.render(
       <ApiKeyModalContent onClose={() => this.close()} onGoToModelTab={this.onGoToModelTab} />

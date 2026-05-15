@@ -5,9 +5,8 @@ import { getSettings } from "@/settings/model";
 import { logInfo, logError } from "@/logger";
 import { App, Notice, PluginSettingTab } from "obsidian";
 import React from "react";
-import { createRoot } from "react-dom/client";
 import SettingsMainV2 from "@/settings/v2/SettingsMainV2";
-import { AppContext } from "@/context";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 export class CopilotSettingTab extends PluginSettingTab {
   plugin: CopilotPlugin;
@@ -66,12 +65,8 @@ export class CopilotSettingTab extends PluginSettingTab {
     containerEl.empty();
     containerEl.addClass("tw-select-text");
     const div = containerEl.createDiv("div");
-    const sections = createRoot(div);
+    const sections = createPluginRoot(div, this.app);
 
-    sections.render(
-      <AppContext.Provider value={this.app}>
-        <SettingsMainV2 plugin={this.plugin} />
-      </AppContext.Provider>
-    );
+    sections.render(<SettingsMainV2 plugin={this.plugin} />);
   }
 }

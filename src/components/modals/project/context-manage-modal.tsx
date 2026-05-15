@@ -38,8 +38,9 @@ import {
 } from "lucide-react";
 import { App, Modal, Notice, Platform, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 
 function FileIcon({ extension, size = "tw-size-4" }: { extension: string; size?: string }) {
   const ext = extension.toLowerCase().replace("*.", "");
@@ -1380,7 +1381,7 @@ export class ContextManageModal extends Modal {
 
   onOpen() {
     const { contentEl, modalEl } = this;
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     modalEl.addClass("tw-min-w-[50vw]");
 

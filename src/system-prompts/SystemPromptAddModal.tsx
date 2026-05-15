@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Lightbulb } from "lucide-react";
 import { App, Modal, Notice, Platform } from "obsidian";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { UserSystemPrompt } from "@/system-prompts/type";
 import { validatePromptName } from "@/system-prompts/systemPromptUtils";
 import { SystemPromptManager } from "@/system-prompts/systemPromptManager";
@@ -239,7 +240,7 @@ export class SystemPromptAddModal extends Modal {
       modalEl.addClass("tw-h-4/5");
     }
 
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleConfirm = async (prompt: UserSystemPrompt) => {
       const now = Date.now();

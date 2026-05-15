@@ -1,5 +1,5 @@
 import { ProjectConfig } from "@/aiParams";
-import { AppContext, useApp } from "@/context";
+import { useApp } from "@/context";
 import { ContextManageModal } from "@/components/modals/project/context-manage-modal";
 import { openCachedItemPreview } from "@/utils/cacheFileOpener";
 import type { ProcessingItem } from "@/components/project/processingAdapter";
@@ -23,9 +23,10 @@ import { checkModelApiKey, err2String, randomUUID } from "@/utils";
 import { Settings } from "lucide-react";
 import { type UrlItem, parseProjectUrls, serializeProjectUrls } from "@/utils/urlTagUtils";
 import type CopilotPlugin from "@/main";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal, Notice } from "obsidian";
 import React, { useMemo, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 interface AddProjectModalContentProps {
   initialProject?: ProjectConfig;
@@ -471,7 +472,7 @@ export class AddProjectModal extends Modal {
     // Reason: Ensure the modal is wide enough for card layout and tall enough for ScrollArea
     modalEl.addClass("!tw-max-h-[85vh]");
 
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
 
     const handleSave = async (project: ProjectConfig) => {
       await this.onSave(project);
@@ -483,14 +484,12 @@ export class AddProjectModal extends Modal {
     };
 
     this.root.render(
-      <AppContext.Provider value={this.app}>
-        <AddProjectModalContent
-          initialProject={this.initialProject}
-          onSave={handleSave}
-          onCancel={handleCancel}
-          plugin={this.plugin}
-        />
-      </AppContext.Provider>
+      <AddProjectModalContent
+        initialProject={this.initialProject}
+        onSave={handleSave}
+        onCancel={handleCancel}
+        plugin={this.plugin}
+      />
     );
   }
 
