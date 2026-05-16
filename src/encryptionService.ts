@@ -41,7 +41,8 @@ function getSafeStorage(): SafeStorage | null {
   if (safeStorageInternal) return safeStorageInternal;
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
-    safeStorageInternal = require("electron")?.remote?.safeStorage as SafeStorage | null;
+    const electron = require("electron") as { remote?: { safeStorage?: SafeStorage } } | undefined;
+    safeStorageInternal = electron?.remote?.safeStorage ?? null;
     return safeStorageInternal;
   } catch {
     return null;

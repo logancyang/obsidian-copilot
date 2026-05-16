@@ -1224,7 +1224,7 @@ Include your extracted terms as: [SALIENT_TERMS: term1, term2, term3]`;
     }
 
     try {
-      const parsed = JSON.parse(toolResult.result);
+      const parsed = JSON.parse(toolResult.result) as { type?: unknown; documents?: unknown };
       const searchResults =
         parsed &&
         typeof parsed === "object" &&

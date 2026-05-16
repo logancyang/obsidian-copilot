@@ -371,13 +371,14 @@ export class Docs4LLMParser implements FileParser {
       } else if (Array.isArray(docs4llmResponse.response)) {
         // Handle array of documents from docs4llm
         const markdownParts: string[] = [];
-        for (const doc of docs4llmResponse.response) {
-          if (doc.content) {
+        for (const rawDoc of docs4llmResponse.response) {
+          const doc = rawDoc as { content?: { md?: string; text?: string } } | null | undefined;
+          if (doc?.content) {
             // Prioritize markdown content, then fallback to text content
             if (doc.content.md) {
-              markdownParts.push(doc.content.md as string);
+              markdownParts.push(doc.content.md);
             } else if (doc.content.text) {
-              markdownParts.push(doc.content.text as string);
+              markdownParts.push(doc.content.text);
             }
           }
         }

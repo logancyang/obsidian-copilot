@@ -1030,8 +1030,14 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
         })
       );
 
-      for await (const chunk of stream) {
+      for await (const rawChunk of stream) {
         if (abortController.signal.aborted) break;
+
+        const chunk = rawChunk as {
+          response_metadata?: { finish_reason?: string };
+          tool_call_chunks?: unknown;
+          content?: unknown;
+        };
 
         // Check for MALFORMED_FUNCTION_CALL error - throw to trigger fallback
         const finishReason = chunk.response_metadata?.finish_reason;

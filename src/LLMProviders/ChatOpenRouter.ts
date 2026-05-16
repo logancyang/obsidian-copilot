@@ -448,13 +448,19 @@ export class ChatOpenRouter extends ChatOpenAI {
       return undefined;
     }
 
-    return toolCalls.map((call) => ({
-      name: call?.function?.name,
-      args: call?.function?.arguments,
-      id: call?.id,
-      index: call?.index,
-      type: "tool_call_chunk" as const,
-    }));
+    return toolCalls.map((rawCall) => {
+      const call = rawCall as
+        | { function?: { name?: string; arguments?: string }; id?: string; index?: number }
+        | null
+        | undefined;
+      return {
+        name: call?.function?.name,
+        args: call?.function?.arguments,
+        id: call?.id,
+        index: call?.index,
+        type: "tool_call_chunk" as const,
+      };
+    });
   }
 
   /**

@@ -334,7 +334,7 @@ export function normalizeCitations(content: string, map: Map<number, number>): s
     });
 
     // Handle multiple citations: [^n, ^m] -> [n, m]
-    result = result.replace(/\[\^(\d+(?:\s*,\s*\^?\d+)*)\]/g, (match, citationList) => {
+    result = result.replace(/\[\^(\d+(?:\s*,\s*\^?\d+)*)\]/g, (match, citationList: string) => {
       // Split and process each number in the list
       const processedNumbers = citationList
         .split(",")

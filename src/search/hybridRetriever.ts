@@ -260,7 +260,7 @@ export class HybridRetriever extends BaseRetriever {
               created_at: hit.document.created_at,
               nchars: hit.document.nchars,
               // Expose chunkId explicitly for cross-engine deduplication
-              chunkId: hit.document.metadata?.chunkId,
+              chunkId: (hit.document.metadata as { chunkId?: string } | undefined)?.chunkId,
             },
           })
       );
@@ -268,8 +268,8 @@ export class HybridRetriever extends BaseRetriever {
       // Combine and deduplicate results
       const combinedResults = [...dailyNoteResultsWithContext, ...timeIntervalDocuments];
       const uniqueResults = Array.from(
-        new Set(combinedResults.map((doc): string => doc.metadata.id as string))
-      ).map((id) => combinedResults.find((doc) => doc.metadata.id === id));
+        new Set(combinedResults.map((doc): string => (doc.metadata as { id: string }).id))
+      ).map((id) => combinedResults.find((doc) => (doc.metadata as { id: string }).id === id));
 
       return uniqueResults.filter((doc): doc is Document => doc !== undefined);
     }
@@ -316,7 +316,7 @@ export class HybridRetriever extends BaseRetriever {
             created_at: hit.document.created_at,
             nchars: hit.document.nchars,
             // Expose chunkId explicitly for cross-engine deduplication
-            chunkId: hit.document.metadata?.chunkId,
+            chunkId: (hit.document.metadata as { chunkId?: string } | undefined)?.chunkId,
           },
         });
       })

@@ -10,7 +10,6 @@ const LEGACY_INDEX_SUFFIX = ".json";
 
 export interface ChunkMetadata {
   numPartitions: number;
-  vectorLength: number;
   schema: Record<string, string>;
   lastModified: number;
   documentPartitions: Record<string, number>;
@@ -138,7 +137,6 @@ export class ChunkedStorage {
       if (!rawDocs || rawDocs.length === 0) {
         const metadata: ChunkMetadata = {
           numPartitions,
-          vectorLength: db.schema.embedding.match(/\d+/)[0],
           schema: db.schema,
           lastModified: Date.now(),
           documentPartitions: {},
@@ -158,7 +156,6 @@ export class ChunkedStorage {
 
       const metadata: ChunkMetadata = {
         numPartitions,
-        vectorLength: db.schema.embedding.match(/\d+/)[0],
         schema: db.schema,
         lastModified: Date.now(),
         documentPartitions: Object.fromEntries(
@@ -242,7 +239,7 @@ export class ChunkedStorage {
       }
     } catch (error) {
       console.error(`Error saving database:`, error);
-      throw new CustomError(`Failed to save database: ${error.message}`);
+      throw new CustomError(`Failed to save database: ${(error as Error).message}`);
     }
   }
 
@@ -285,14 +282,19 @@ export class ChunkedStorage {
       });
 
       // Load and merge all partitions
-      let mergedData = null;
-      const allChunks = [];
+      type ChunkData = {
+        internalDocumentIDStore: { internalIdToId: string[] };
+        docs: { docs: Record<string, unknown>; count: number };
+        index: { vectorIndexes: { embedding: { vectors: Record<string, unknown> } } };
+      };
+      let mergedData: ChunkData | null = null;
+      const allChunks: ChunkData[] = [];
 
       // First, load all chunks
       for (let i = 0; i < metadata.numPartitions; i++) {
         const chunkPath = this.getChunkPath(i);
         if (await this.app.vault.adapter.exists(chunkPath)) {
-          const chunkData = JSON.parse(await this.app.vault.adapter.read(chunkPath));
+          const chunkData = JSON.parse(await this.app.vault.adapter.read(chunkPath)) as ChunkData;
           allChunks.push(chunkData);
 
           // First chunk contains global data
@@ -313,7 +315,7 @@ export class ChunkedStorage {
       for (const internalId of mergedData.internalDocumentIDStore.internalIdToId) {
         // Find document in any chunk
         const doc = allChunks
-          .flatMap((chunk) => Object.values(chunk.docs.docs as Record<string, unknown>))
+          .flatMap((chunk) => Object.values(chunk.docs.docs))
           .find((doc) => (doc as Record<string, unknown>).id === internalId);
 
         if (doc) {
@@ -333,16 +335,13 @@ export class ChunkedStorage {
       // upsert cycles. These "ghost" IDs cause position mismatches after load,
       // where some user IDs point to wrong doc positions or undefined entries.
       mergedData.internalDocumentIDStore.internalIdToId = Object.values(orderedDocs).map(
-        (doc: { id: string }): string => doc.id
+        (doc): string => (doc as { id: string }).id
       );
 
       // Merge vectors from all chunks
       mergedData.index.vectorIndexes.embedding.vectors = Object.assign(
         {},
-        ...allChunks.map(
-          (chunk) =>
-            (chunk.index?.vectorIndexes?.embedding?.vectors as Record<string, unknown>) || {}
-        )
+        ...allChunks.map((chunk) => chunk.index?.vectorIndexes?.embedding?.vectors || {})
       );
 
       // Load merged data into database
@@ -350,7 +349,7 @@ export class ChunkedStorage {
       return newDb;
     } catch (error) {
       console.error(`Error loading database:`, error);
-      throw new CustomError(`Failed to load database: ${error.message}`);
+      throw new CustomError(`Failed to load database: ${(error as Error).message}`);
     }
   }
 
@@ -373,7 +372,7 @@ export class ChunkedStorage {
       }
     } catch (error) {
       console.error(`Error clearing storage:`, error);
-      throw new CustomError(`Failed to clear storage: ${error.message}`);
+      throw new CustomError(`Failed to clear storage: ${(error as Error).message}`);
     }
   }
 

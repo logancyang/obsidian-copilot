@@ -103,10 +103,8 @@ export default [
       // are candidates to enable in small follow-up PRs.
 
       // --- Heavy: any-flow through Obsidian/LangChain APIs ---
-      // no-unsafe-member-access: enabled globally; tests and heavy source files
-      // are exempted via per-file overrides below (see "no-unsafe-member-access
-      // exemptions"). Remaining source files (≤5 violations each) were fixed in
-      // this PR.
+      // no-unsafe-member-access: enabled globally; tests are exempted via the
+      // test-file override below.
       "@typescript-eslint/no-unsafe-assignment": "off", // enabled for tests below; follow-up PR for production
       "@typescript-eslint/no-unsafe-call": "off", // 107 violations
 
@@ -154,58 +152,6 @@ export default [
       "import/no-nodejs-modules": "off",
       // Tests use intentional `any` mocks; disable type-safety rules that flood
       // the test suite without adding signal.
-      "@typescript-eslint/no-unsafe-member-access": "off",
-    },
-  },
-
-  // no-unsafe-member-access exemptions: heavy source files that flow `any`
-  // through Obsidian / LangChain / Bedrock APIs. Counts are current as of the
-  // PR that enabled the rule; pick these off one at a time in follow-up PRs.
-  {
-    files: [
-      "src/LLMProviders/BedrockChatModel.ts", // 106
-      "src/LLMProviders/ChatOpenRouter.ts", // 28
-      "src/LLMProviders/CustomOpenAIEmbeddings.ts", // 16
-      "src/LLMProviders/brevilabsClient.ts", // 7
-      "src/LLMProviders/chainRunner/AutonomousAgentChainRunner.ts", // 13
-      "src/LLMProviders/chainRunner/BaseChainRunner.ts", // 7
-      "src/LLMProviders/chainRunner/CopilotPlusChainRunner.ts", // 55
-      "src/LLMProviders/chainRunner/VaultQAChainRunner.ts", // 9
-      "src/LLMProviders/chainRunner/utils/ActionBlockStreamer.ts", // 8
-      "src/LLMProviders/chainRunner/utils/ThinkBlockStreamer.ts", // 33
-      "src/LLMProviders/chainRunner/utils/chatHistoryUtils.ts", // 17
-      "src/LLMProviders/chainRunner/utils/citationUtils.ts", // 11
-      "src/LLMProviders/chainRunner/utils/finishReasonDetector.ts", // 29
-      "src/LLMProviders/chainRunner/utils/modelAdapter.ts", // 9
-      "src/LLMProviders/chainRunner/utils/promptPayloadRecorder.ts", // 12
-      "src/LLMProviders/chainRunner/utils/searchResultUtils.ts", // 81
-      "src/LLMProviders/chainRunner/utils/toolExecution.ts", // 9
-      "src/LLMProviders/chatModelManager.ts", // 9
-      "src/LLMProviders/selfHostServices.ts", // 9
-      "src/commands/customCommandManager.ts", // 10
-      "src/commands/customCommandUtils.ts", // 10
-      "src/commands/index.ts", // 14
-      "src/components/chat-components/ChatControls.tsx", // 8
-      "src/components/chat-components/ChatInput.tsx", // 14
-      "src/components/modals/SourcesModal.tsx", // 33
-      "src/contextProcessor.ts", // 17
-      "src/core/ChatPersistenceManager.ts", // 10
-      "src/encryptionService.ts", // 6
-      "src/projects/projectUtils.ts", // 38
-      "src/search/chunkedStorage.ts", // 28
-      "src/search/dbOperations.ts", // 27
-      "src/search/hybridRetriever.ts", // 11
-      "src/search/indexOperations.ts", // 15
-      "src/search/v3/TieredLexicalRetriever.ts", // 9
-      "src/settings/providerModels.ts", // 20
-      "src/system-prompts/systemPromptUtils.ts", // 9
-      "src/tools/FileParserManager.ts", // 11
-      "src/tools/SearchTools.ts", // 11
-      "src/tools/ToolResultFormatter.ts", // 106
-      "src/utils.ts", // 49
-      "src/utils/rateLimitUtils.ts", // 10
-    ],
-    rules: {
       "@typescript-eslint/no-unsafe-member-access": "off",
     },
   },

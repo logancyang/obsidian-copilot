@@ -411,7 +411,7 @@ export interface ChatHistoryEntry {
 // TODO: Deprecated, use chatHistoryUtils.processRawChatHistory instead
 export function extractChatHistory(memoryVariables: MemoryVariables): ChatHistoryEntry[] {
   const chatHistory: ChatHistoryEntry[] = [];
-  const { history } = memoryVariables;
+  const history = memoryVariables.history as Array<{ content?: string }>;
 
   for (let i = 0; i < history.length; i += 2) {
     const userMessage = history[i]?.content || "";
@@ -694,12 +694,21 @@ export async function safeFetch(
 
   // Check if response is error status (only throw if throwOnHttpError is true)
   if (throwOnHttpError && response.status >= 400) {
-    let errorJson;
+    type ErrorJson = {
+      detail?: { reason?: string; message?: string } | string;
+      reason?: string;
+      message?: string;
+    };
+    let errorJson: ErrorJson | null = null;
     try {
-      errorJson = typeof response.json === "string" ? JSON.parse(response.json) : response.json;
+      errorJson = (
+        typeof response.json === "string" ? JSON.parse(response.json) : response.json
+      ) as ErrorJson;
     } catch {
       try {
-        errorJson = typeof response.text === "string" ? JSON.parse(response.text) : response.text;
+        errorJson = (
+          typeof response.text === "string" ? JSON.parse(response.text) : response.text
+        ) as ErrorJson;
       } catch {
         errorJson = null;
       }
@@ -710,15 +719,13 @@ export async function safeFetch(
     error.json = errorJson;
 
     // Handle nested error structure
-    if (
-      errorJson?.detail?.reason === "Invalid license key" ||
-      errorJson?.reason === "Invalid license key"
-    ) {
+    const detail = errorJson && typeof errorJson.detail === "object" ? errorJson.detail : undefined;
+    if (detail?.reason === "Invalid license key" || errorJson?.reason === "Invalid license key") {
       error.message = "Invalid license key";
-    } else if (errorJson?.detail?.message || errorJson?.message) {
-      const message = errorJson?.detail?.message || errorJson?.message;
-      const reason = errorJson?.detail?.reason || errorJson?.reason;
-      error.message = reason ? `${message}: ${reason}` : message;
+    } else if (detail?.message || errorJson?.message) {
+      const message = detail?.message || errorJson?.message;
+      const reason = detail?.reason || errorJson?.reason;
+      error.message = reason ? `${message}: ${reason}` : (message ?? "");
     } else if (errorJson?.detail) {
       error.message = JSON.stringify(errorJson.detail);
     } else if (errorJson) {
@@ -990,7 +997,7 @@ export async function checkLatestVersion(): Promise<{
       url: "https://api.github.com/repos/logancyang/obsidian-copilot/releases/latest",
       method: "GET",
     });
-    const version = response.json.tag_name.replace("v", "");
+    const version = (response.json as { tag_name: string }).tag_name.replace("v", "");
     return { version, error: null };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : "Failed to check for updates";
@@ -1180,9 +1187,9 @@ export function extractTextFromChunk(content: unknown): string {
     return content;
   }
   if (Array.isArray(content)) {
-    return content
+    return (content as Array<{ type?: string; text?: string }>)
       .filter((item) => item.type === "text")
-      .map((item) => item.text as string)
+      .map((item) => item.text ?? "")
       .join("");
   }
   // For any other type, return empty string
@@ -1236,12 +1243,12 @@ export async function withSuppressedTokenWarnings<T>(fn: () => Promise<T>): Prom
 
   try {
     // Replace with filtered version
-    console.warn = function (...args) {
+    console.warn = function (...args: unknown[]) {
       // Ignore token counting warnings
+      const first = args[0];
       if (
-        args[0]?.includes &&
-        (args[0].includes("Failed to calculate number of tokens") ||
-          args[0].includes("Unknown model"))
+        typeof first === "string" &&
+        (first.includes("Failed to calculate number of tokens") || first.includes("Unknown model"))
       ) {
         return;
       }

@@ -492,7 +492,7 @@ export function getNextCustomCommandOrder(): number {
 export async function ensureCommandFrontmatter(file: TFile, command: CustomCommand) {
   try {
     addPendingFileWrite(file.path);
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       if (frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] == null) {
         frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
       }
