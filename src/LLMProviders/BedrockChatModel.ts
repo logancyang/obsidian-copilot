@@ -44,25 +44,34 @@ export interface BedrockChatModelFields extends BaseChatModelParams {
 /**
  * Rewrites Bedrock HTTP error messages into actionable text when possible.
  * Falls back to the original "Amazon Bedrock ... failed with status N: body" form.
+ *
+ * The detection uses two stable substrings from the AWS ValidationException body
+ * ("on-demand throughput" and "inference profile") rather than the apostrophe-bearing
+ * phrase "isn't supported", because AWS has been observed serving both straight (')
+ * and curly (’) apostrophe variants. False positives are harmless: the rewritten
+ * message still names the bare model ID from the original body.
  */
 function rewriteBedrockErrorMessage(status: number, body: string, streaming = false): string {
   const prefix = streaming
     ? "Amazon Bedrock streaming request failed with status"
     : "Amazon Bedrock request failed with status";
 
-  if (status === 400) {
-    // Stable AWS error sentinel — matched on substring because the error shape is
-    // documented and unlikely to change.
-    if (body.includes("isn't supported") && body.includes("inference profile")) {
-      const modelIdMatch = body.match(/model ID ([^\s]+) with/);
-      const bareId = modelIdMatch?.[1] ?? "<model-id>";
-      return (
-        `This Bedrock model requires a cross-region inference profile ID, not a bare regional model ID. ` +
-        `Update the model name in Settings → Models to use one of the prefixed forms: ` +
-        `global.anthropic.<id> (recommended), us.anthropic.<id>, eu.anthropic.<id>, or apac.anthropic.<id>. ` +
-        `The current value "${bareId}" is not accepted by AWS on-demand throughput.`
-      );
-    }
+  if (
+    status === 400 &&
+    body.includes("on-demand throughput") &&
+    body.includes("inference profile")
+  ) {
+    const modelIdMatch = body.match(/model ID ([^\s]+) with/);
+    const bareId = modelIdMatch?.[1] ?? "<model-id>";
+    // Provider segment of the model ID (e.g. "anthropic" from "anthropic.claude-...").
+    // Falls back to a generic placeholder when the ID isn't in <provider>.<model> form.
+    const providerSegment = bareId.includes(".") ? bareId.split(".")[0] : "<provider>";
+    return (
+      `This Bedrock model requires a cross-region inference profile ID, not a bare regional model ID. ` +
+      `Update the model name in Settings → Models to use one of the prefixed forms: ` +
+      `global.${providerSegment}.<id> (recommended), us.${providerSegment}.<id>, eu.${providerSegment}.<id>, or apac.${providerSegment}.<id>. ` +
+      `The current value "${bareId}" is not accepted by AWS on-demand throughput.`
+    );
   }
 
   return `${prefix} ${status}: ${body}`;
@@ -168,10 +177,13 @@ export class BedrockChatModel extends BaseChatModel<BedrockChatModelCallOptions>
     return tools.map((tool) => {
       let inputSchema: Record<string, unknown> = { type: "object", properties: {} };
       if (tool.schema) {
-        // Use LangChain's schema conversion utilities
-        inputSchema = isInteropZodSchema(tool.schema)
+        // Use LangChain's schema conversion utilities. The result is cast via `unknown`
+        // because `toJsonSchema` returns a `JsonSchema7Type` union without an index
+        // signature, which TypeScript cannot directly assign to `Record<string, unknown>`.
+        const converted: unknown = isInteropZodSchema(tool.schema)
           ? toJsonSchema(tool.schema)
           : tool.schema;
+        inputSchema = converted as Record<string, unknown>;
       }
       return {
         name: tool.name,

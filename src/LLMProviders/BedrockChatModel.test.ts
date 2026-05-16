@@ -739,4 +739,30 @@ describe("BedrockChatModel inference-profile error rewriting", () => {
       /Amazon Bedrock request failed with status 500/
     );
   });
+
+  it("rewrites the error even when AWS uses a curly apostrophe in 'isn’t supported'", async () => {
+    const curlyApostropheBody = JSON.stringify({
+      message:
+        "Invocation of model ID anthropic.claude-sonnet-4-5 with on-demand throughput isn’t supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+    });
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, curlyApostropheBody));
+    const model = createModelWithFetch(fetchMock, { noStream: true });
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    await expect(model._generate(messages as never, {})).rejects.toThrow(
+      /cross-region inference profile ID/
+    );
+  });
+
+  it("uses the provider segment from the bare model ID in the prefix guidance", async () => {
+    const nonAnthropicBody = JSON.stringify({
+      message:
+        "Invocation of model ID meta.llama4-maverick-17b with on-demand throughput isn't supported. Retry your request with the ID or ARN of an inference profile that contains this model.",
+    });
+    const fetchMock = jest.fn().mockResolvedValue(makeErrorResponse(400, nonAnthropicBody));
+    const model = createModelWithFetch(fetchMock, { noStream: true });
+
+    const messages = [{ content: "hi", getType: () => "human", type: "human" }];
+    await expect(model._generate(messages as never, {})).rejects.toThrow(/global\.meta\.<id>/);
+  });
 });
