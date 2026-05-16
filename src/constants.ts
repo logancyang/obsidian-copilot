@@ -885,7 +885,7 @@ export const RESTRICTION_MESSAGES = {
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
-  isPlusUser: false,
+  isPlusUser: true,
   plusLicenseKey: "",
   openAIApiKey: "",
   openAIOrgId: "",
