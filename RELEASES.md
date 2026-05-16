@@ -1,5 +1,41 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.3.2 🛠️
+
+This patch is all about stability and speed. **Claude Opus 4.7+ now works correctly with adaptive thinking** on both direct Anthropic and AWS Bedrock, project-mode file ingestion is fixed, Quick Ask no longer crashes on `@`-mention, and the plugin is 75 KB lighter thanks to a clean dependency deduplication. Kudos to @logancyang and @zeroliu for the focused clean-up!
+
+- 🧠 **Claude Opus 4.7+ adaptive thinking is fixed** — Adding `claude-opus-4-7` (or any Opus 4.7+) as a model and enabling reasoning used to return a 400 error because the plugin was sending the legacy `thinking.type=enabled` shape, which Opus 4.7+ no longer accepts. It now correctly sends `thinking.type=adaptive` and requests a summarized display so the thinking block appears in chat. Both the direct Anthropic and AWS Bedrock code paths are fixed. (@logancyang)
+- 📂 **Project-mode file ingestion is fixed** — PDFs, images, audio files, and Office docs added to a project's source files were silently failing to upload because Obsidian's CORS-bypass path can't handle native `FormData` streams. The upload path now uses `requestUrl` with a manually-constructed multipart body, matching how the rest of the plugin talks to Brevilabs. (@zeroliu)
+- 💬 **Quick Ask no longer crashes on `@`-mention** — Opening the Quick Ask panel and typing `@` to mention a note was crashing with "useApp() called outside of AppContext.Provider". Fixed by wrapping the panel's React root in the same `AppContext` that the main chat view uses. (@zeroliu)
+- ⚡ **75 KB smaller bundle** — `@langchain/community` is dropped (Jina embeddings now run against a hand-rolled Obsidian-native client), and `openai` is bumped to v6 to eliminate a duplicate copy of the SDK that was sneaking in alongside `@langchain/openai`. The plugin is now around 3.3 MB. (@zeroliu)
+- 🔴 **Clearer error when a Bedrock model ID is missing its inference-profile prefix** — If you configure a bare regional Bedrock model ID (e.g. `anthropic.claude-sonnet-4-6` without a `global.`, `us.`, etc. prefix), the error used to surface as raw JSON. It now shows a plain-English message pointing you to Settings → Models and listing the four valid prefix forms. (@logancyang)
+- 🧹 **React state management cleanup** — 56 `setState`-in-`useEffect` anti-patterns were replaced with idiomatic React patterns across 21 files: derived state via `useMemo`, `useSyncExternalStore` for external stores, and `key`-prop resets where appropriate. Side effects include: the token-count badge in chat now updates correctly after regeneration, chain/setting toggles in ChatInput no longer flash stale state, and the draggable quick-command modal no longer resets your resize when content grows. (@zeroliu)
+
+More details in the changelog:
+
+### Improvements
+
+- #2460 chore(deps): remove unused deps and dead code to shrink bundle @zeroliu
+- #2463 chore(deps): drop @langchain/community + bump openai to v6 to dedupe SDKs @zeroliu
+- #2467 chore(react): centralize React root creation via createPluginRoot helper @zeroliu
+- #2469 Remove dead ChainFactory and chain validation helpers @zeroliu
+- #2470 style(css): expand #ccc to 6-digit hex format for consistency @zeroliu
+
+### Bug Fixes
+
+- #2399 fix(brevilabs): rewrite uploads via requestUrl multipart (W8/9) @zeroliu
+- #2454 chore(lint): fix no-direct-set-state-in-use-effect violations @zeroliu
+- #2466 fix(quick-ask): provide AppContext to overlay panel @zeroliu
+- #2471 fix(anthropic+bedrock): adaptive thinking + summarized display for claude-opus-4-7+ @logancyang
+- #2472 fix(bedrock): explain inference-profile requirement when AWS rejects on-demand model ID @logancyang
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.3.1 🔐
 
 This release is all about keeping your API keys safe and your plugin running smoothly everywhere. **API keys can now be stored in Obsidian's built-in Keychain** so they never touch `data.json`, the encryption toggle is removed (it was more trouble than it was worth), and a wave of reliability fixes ensures chat works correctly on mobile, in popout windows, and with Plus mode. Underneath, **@zeroliu landed nineteen back-to-back PRs of code-quality work** — tightening ESLint, eliminating ~395 `any` types, swapping out unmaintained dependencies, and modernizing the React layer. Huge thanks to both @Emt-lin (Keychain) and @zeroliu (codebase hardening) for carrying this release. 🙌

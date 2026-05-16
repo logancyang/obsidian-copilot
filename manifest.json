@@ -1,7 +1,7 @@
 {
   "id": "copilot",
   "name": "Copilot",
-  "version": "3.3.1",
+  "version": "3.3.2",
   "minAppVersion": "1.11.4",
   "isDesktopOnly": false,
   "description": "Your AI Copilot: Chat with Your Second Brain, Learn Faster, Work Smarter.",
