@@ -55,13 +55,13 @@ export class CustomOpenAIEmbeddings extends OpenAIEmbeddings {
       );
     }
 
-    const responseData = await response.json();
+    const responseData = (await response.json()) as { data?: Array<{ embedding?: unknown }> };
 
     if (!responseData.data || !Array.isArray(responseData.data)) {
       throw new Error("Invalid API response format: missing or invalid data array");
     }
 
-    return (responseData.data as Array<{ embedding?: unknown }>).map((item) => {
+    return responseData.data.map((item) => {
       if (!item.embedding || !Array.isArray(item.embedding)) {
         throw new Error("Invalid API response format: missing or invalid embedding array");
       }

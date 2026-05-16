@@ -62,7 +62,7 @@ export async function writeProjectFrontmatter(
   const webUrls = splitUrlsStringToArray(project.contextSource?.webUrls || "");
   const youtubeUrls = splitUrlsStringToArray(project.contextSource?.youtubeUrls || "");
 
-  await app.fileManager.processFrontMatter(file, (frontmatter) => {
+  await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
     // Reason: project.id is the stable logical identity, always set by createProject/migration.
     // Do NOT fallback to folderName — with name-based folders, folderName is derived from
     // project name, not id, so it cannot serve as an id substitute.
@@ -423,7 +423,7 @@ export async function ensureProjectFrontmatter(
   try {
     if (!alreadyPending) addPendingFileWrite(file.path);
 
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       // Reason: do NOT fallback to record.folderName for id — with name-based folders,
       // folderName is derived from project name, not id.
       if (frontmatter[COPILOT_PROJECT_ID] == null && record.project.id) {

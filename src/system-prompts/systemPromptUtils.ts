@@ -185,7 +185,7 @@ export async function ensurePromptFrontmatter(file: TFile, prompt: UserSystemPro
     if (!alreadyPending) {
       addPendingFileWrite(file.path);
     }
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       if (frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] == null) {
         frontmatter[COPILOT_SYSTEM_PROMPT_CREATED] = createdMs;
       }
@@ -247,7 +247,7 @@ export async function updatePromptDefaultFlag(
     if (!alreadyPending) {
       addPendingFileWrite(file.path);
     }
-    await app.fileManager.processFrontMatter(file, (frontmatter) => {
+    await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
       if (isDefault) {
         frontmatter[COPILOT_SYSTEM_PROMPT_DEFAULT] = true;
       } else {
