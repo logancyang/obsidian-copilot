@@ -198,6 +198,7 @@ export enum ChatModels {
   OPENROUTER_GROK_4_3 = "x-ai/grok-4.3",
   SILICONFLOW_DEEPSEEK_V3 = "deepseek-ai/DeepSeek-V3",
   SILICONFLOW_DEEPSEEK_R1 = "deepseek-ai/DeepSeek-R1",
+  MINIMAX_M27 = "MiniMax-M2.7",
 }
 
 // Model Providers
@@ -219,6 +220,8 @@ export enum ChatModelProviders {
   COHEREAI = "cohereai",
   SILICONFLOW = "siliconflow",
   GITHUB_COPILOT = "github-copilot",
+  MINIMAX = "minimax",
+  MINIMAX_CN = "minimax-cn",
 }
 
 export enum ModelCapability {
@@ -433,6 +436,22 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     enabled: false,
     isBuiltIn: false,
     baseUrl: "https://api.siliconflow.com/v1",
+    capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.MINIMAX_M27,
+    provider: ChatModelProviders.MINIMAX,
+    enabled: false,
+    isBuiltIn: true,
+    baseUrl: "https://api.minimax.io/v1",
+    capabilities: [ModelCapability.REASONING],
+  },
+  {
+    name: ChatModels.MINIMAX_M27,
+    provider: ChatModelProviders.MINIMAX_CN,
+    enabled: false,
+    isBuiltIn: true,
+    baseUrl: "https://api.minimaxi.com/v1",
     capabilities: [ModelCapability.REASONING],
   },
 ];
@@ -669,6 +688,22 @@ export const ProviderInfo: Record<Provider, ProviderMetadata> = {
     listModelURL: "https://api.siliconflow.com/v1/models",
     testModel: ChatModels.SILICONFLOW_DEEPSEEK_V3,
   },
+  [ChatModelProviders.MINIMAX]: {
+    label: "MiniMax",
+    host: "https://api.minimax.io/v1",
+    curlBaseURL: "https://api.minimax.io/v1",
+    keyManagementURL: "https://platform.minimax.io/user-center/basic-information/interface-key",
+    listModelURL: "https://api.minimax.io/v1/models",
+    testModel: ChatModels.MINIMAX_M27,
+  },
+  [ChatModelProviders.MINIMAX_CN]: {
+    label: "MiniMax (CN)",
+    host: "https://api.minimaxi.com/v1",
+    curlBaseURL: "https://api.minimaxi.com/v1",
+    keyManagementURL: "https://platform.minimaxi.com/user-center/basic-information/interface-key",
+    listModelURL: "https://api.minimaxi.com/v1/models",
+    testModel: ChatModels.MINIMAX_M27,
+  },
   [ChatModelProviders.OLLAMA]: {
     label: "Ollama",
     host: "http://localhost:11434/v1/",
@@ -752,6 +787,8 @@ export const ProviderSettingsKeyMap: Record<SettingKeyProviders, keyof CopilotSe
   "amazon-bedrock": "amazonBedrockApiKey",
   siliconflow: "siliconflowApiKey",
   "github-copilot": "githubCopilotToken",
+  minimax: "minimaxApiKey",
+  "minimax-cn": "minimaxCnApiKey",
 };
 
 export enum VAULT_VECTOR_STORE_STRATEGY {
@@ -905,6 +942,8 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   amazonBedrockApiKey: "",
   amazonBedrockRegion: "",
   siliconflowApiKey: "",
+  minimaxApiKey: "",
+  minimaxCnApiKey: "",
   // GitHub Copilot OAuth tokens
   githubCopilotAccessToken: "",
   githubCopilotToken: "",

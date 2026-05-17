@@ -83,6 +83,8 @@ const CHAT_PROVIDER_CONSTRUCTORS = {
   [ChatModelProviders.GROQ]: ChatGroq,
   [ChatModelProviders.OPENAI_FORMAT]: ChatOpenAI,
   [ChatModelProviders.SILICONFLOW]: ChatOpenAI,
+  [ChatModelProviders.MINIMAX]: ChatOpenAI,
+  [ChatModelProviders.MINIMAX_CN]: ChatOpenAI,
   [ChatModelProviders.COPILOT_PLUS]: ChatOpenRouter,
   [ChatModelProviders.MISTRAL]: ChatOpenAI,
   [ChatModelProviders.DEEPSEEK]: ChatDeepSeek,
@@ -152,6 +154,8 @@ export default class ChatModelManager {
     [ChatModelProviders.DEEPSEEK]: () => getSettings().deepseekApiKey,
     [ChatModelProviders.AMAZON_BEDROCK]: () => getSettings().amazonBedrockApiKey,
     [ChatModelProviders.SILICONFLOW]: () => getSettings().siliconflowApiKey,
+    [ChatModelProviders.MINIMAX]: () => getSettings().minimaxApiKey,
+    [ChatModelProviders.MINIMAX_CN]: () => getSettings().minimaxCnApiKey,
     [ChatModelProviders.GITHUB_COPILOT]: () =>
       getSettings().githubCopilotToken || getSettings().githubCopilotAccessToken,
   } as const;
@@ -401,6 +405,34 @@ export default class ChatModelManager {
           customModel
         ),
       },
+      [ChatModelProviders.MINIMAX]: {
+        modelName: modelName,
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.minimaxApiKey),
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.MINIMAX].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+        ...this.getOpenAISpecialConfig(
+          modelName,
+          customModel.maxTokens ?? settings.maxTokens,
+          customModel.temperature ?? settings.temperature,
+          customModel
+        ),
+      },
+      [ChatModelProviders.MINIMAX_CN]: {
+        modelName: modelName,
+        apiKey: await getDecryptedKey(customModel.apiKey || settings.minimaxCnApiKey),
+        configuration: {
+          baseURL: customModel.baseUrl || ProviderInfo[ChatModelProviders.MINIMAX_CN].host,
+          fetch: customModel.enableCors ? safeFetch : undefined,
+        },
+        ...this.getOpenAISpecialConfig(
+          modelName,
+          customModel.maxTokens ?? settings.maxTokens,
+          customModel.temperature ?? settings.temperature,
+          customModel
+        ),
+      },
       [ChatModelProviders.COPILOT_PLUS]: {
         modelName: modelName,
         apiKey: await getDecryptedKey(settings.plusLicenseKey),
@@ -604,6 +636,8 @@ export default class ChatModelManager {
           ChatModelProviders.MISTRAL,
           ChatModelProviders.DEEPSEEK,
           ChatModelProviders.SILICONFLOW,
+          ChatModelProviders.MINIMAX,
+          ChatModelProviders.MINIMAX_CN,
         ].includes(provider)
       ) {
         params.topP = customModel.topP;
@@ -624,6 +658,8 @@ export default class ChatModelManager {
           ChatModelProviders.MISTRAL,
           ChatModelProviders.DEEPSEEK,
           ChatModelProviders.SILICONFLOW,
+          ChatModelProviders.MINIMAX,
+          ChatModelProviders.MINIMAX_CN,
         ].includes(provider)
       ) {
         params.frequencyPenalty = customModel.frequencyPenalty;
