@@ -15,7 +15,7 @@ import { ACTIVE_WEB_TAB_MARKER } from "@/constants";
 import { BasePillNode, getEditorDocument, SerializedBasePillNode } from "./BasePillNode";
 import { TruncatedPillText } from "./TruncatedPillText";
 import { PillBadge } from "./PillBadge";
-import { useActiveWebTabState } from "../hooks/useActiveWebTabState";
+import { useActiveWebTabState } from "@/components/chat-components/hooks/useActiveWebTabState";
 
 export type SerializedActiveWebTabPillNode = SerializedBasePillNode;
 

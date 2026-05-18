@@ -3,7 +3,7 @@ import { TFile } from "obsidian";
 import { FileText, FileClock } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { useAllNotes } from "./useAllNotes";
-import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import { getSettings } from "@/settings/model";
 
 export interface NoteSearchOption extends TypeaheadOption {

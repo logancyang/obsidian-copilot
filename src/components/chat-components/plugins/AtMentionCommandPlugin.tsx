@@ -1,16 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TFile, App } from "obsidian";
-import { TypeaheadMenuPortal } from "../TypeaheadMenuPortal";
-import { useTypeaheadPlugin } from "../hooks/useTypeaheadPlugin";
-import { $replaceTriggeredTextWithPill, PillData } from "../utils/lexicalTextUtils";
+import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
+import { useTypeaheadPlugin } from "@/components/chat-components/hooks/useTypeaheadPlugin";
+import {
+  $replaceTriggeredTextWithPill,
+  PillData,
+} from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-} from "../hooks/useAtMentionCategories";
-import { useAtMentionSearch } from "../hooks/useAtMentionSearch";
+} from "@/components/chat-components/hooks/useAtMentionCategories";
+import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
 
 // Get app instance
 declare const app: App;

@@ -1,7 +1,7 @@
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useEffect } from "react";
 import { $getRoot, type LexicalNode } from "lexical";
-import { $isActiveNotePillNode } from "../pills/ActiveNotePillNode";
+import { $isActiveNotePillNode } from "@/components/chat-components/pills/ActiveNotePillNode";
 
 /**
  * Props for the ActiveNotePillSyncPlugin component

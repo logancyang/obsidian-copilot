@@ -2,7 +2,7 @@ import { ABORT_REASON, AI_SENDER } from "@/constants";
 import { logError, logInfo } from "@/logger";
 import { ChatMessage, ResponseMetadata } from "@/types/message";
 import { err2String, formatDateTime } from "@/utils";
-import ChainManager from "../chainManager";
+import ChainManager from "@/LLMProviders/chainManager";
 
 export interface ChainRunner {
   run(

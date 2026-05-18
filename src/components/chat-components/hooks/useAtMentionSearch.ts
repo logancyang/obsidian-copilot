@@ -3,7 +3,7 @@ import { Platform, TFolder, TFile } from "obsidian";
 import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
-import { AVAILABLE_TOOLS } from "../constants/tools";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import { useAllNotes } from "./useAllNotes";
 import { useAllFolders } from "./useAllFolders";
 import { useOpenWebTabs } from "./useOpenWebTabs";

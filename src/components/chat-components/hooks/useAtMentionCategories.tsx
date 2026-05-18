@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Platform, TFile, TFolder } from "obsidian";
 import { FileText, Wrench, Folder, Globe, Image } from "lucide-react";
-import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
 export type AtMentionCategory =

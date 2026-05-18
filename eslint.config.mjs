@@ -119,16 +119,35 @@ export default [
     },
   },
 
-  // Guardrail: every standalone React root in the plugin must go through
-  // `createPluginRoot` so descendants can rely on `useApp()` unconditionally
-  // (the bug class fixed in PR #2466). Forbid importing `createRoot` from
-  // `react-dom/client` anywhere except the helper itself.
+  // Two AST-level import bans, combined in one block:
+  //
+  // 1. Parent-relative imports (`../foo`, `..`) — use the `@/` path alias
+  //    instead. Survives file moves, keeps grep unambiguous, avoids long
+  //    `../../../` chains. Same-directory `./foo` remains allowed.
+  //
+  // 2. `createRoot` from `react-dom/client` outside `createPluginRoot` —
+  //    every standalone React root must go through that helper so descendants
+  //    can rely on `useApp()` unconditionally (bug class fixed in PR #2466).
+  //
+  // Both selectors must live in the same block: flat config replaces (does
+  // not merge) rule values when the same rule key appears in multiple
+  // matching blocks, so splitting them would silently disable the earlier
+  // ban on every file the later block also matches.
+  //
+  // `createPluginRoot.tsx` is exempted via `ignores` — it owns `createRoot`,
+  // and has no parent imports today.
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/utils/react/createPluginRoot.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
+        {
+          selector:
+            "ImportDeclaration[source.value=/^\\.\\.($|\\u002f)/], ImportExpression[source.value=/^\\.\\.($|\\u002f)/]",
+          message:
+            "Parent-relative imports (`../foo`) are banned. Use the `@/` path alias (e.g. `@/components/Foo`) instead.",
+        },
         {
           selector:
             "ImportDeclaration[source.value='react-dom/client'] ImportSpecifier[imported.name='createRoot']",
