@@ -7,7 +7,6 @@ import {
   AGENT_CHAT_MODE,
   CopilotAgentView,
   createAgentSessionManager,
-  initializeSkillManager,
   PlanPreviewView,
   PLAN_PREVIEW_VIEW_TYPE,
   SkillManager,
@@ -299,10 +298,6 @@ export default class CopilotPlugin extends Plugin {
       void this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app.vault));
-
-      if (this.agentSessionManager) {
-        initializeSkillManager(this.app, this.agentSessionManager);
-      }
     });
 
     // Initialize automatic selection handler

@@ -59,43 +59,25 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
 }
 
 /**
- * Initialise the SkillManager singleton and kick off the first discovery
- * pass. Called once from `main.ts` on plugin load — the host doesn't need
- * to know how the backend skill dirs are collected. Skill-set changes
- * restart the affected backend when its descriptor opts in via
- * `restartOnManagedSkillsChange`, so native skill command caches stay fresh.
- */
-export function initializeSkillManager(
-  app: App,
-  agentSessionManager: AgentSessionManager
-): SkillManager {
-  const manager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel());
-  manager.subscribeToSkillSetChange((backendId) => {
-    const descriptor = backendRegistry[backendId];
-    if (!descriptor?.restartOnManagedSkillsChange) return;
-    void agentSessionManager
-      .restartBackend(backendId, "managed skills changed")
-      .catch((error) =>
-        logError(`[Skills] Failed to refresh backend after skill change: ${backendId}`, error)
-      );
-  });
-  void manager.refresh().catch((error) => {
-    logError("[Skills] Initial discovery pass failed", error);
-  });
-  return manager;
-}
-
-/**
- * Single seam between the plugin host (`main.ts`) and Agent Mode. Wires the
- * default permission prompter into a fresh `AgentSessionManager` and kicks
- * off every registered backend descriptor's load-time reconcile (e.g. clear
- * stale managed install). The manager itself is backend-agnostic — backends
- * are spawned lazily on first session creation.
+ * Single seam between the plugin host (`main.ts`) and Agent Mode. Initialises
+ * the SkillManager singleton, wires the default permission prompter into a
+ * fresh `AgentSessionManager`, kicks off every registered backend
+ * descriptor's load-time reconcile (e.g. clear stale managed install), and
+ * starts the model-catalog preload probes. The manager itself is
+ * backend-agnostic — backends are spawned lazily on first session creation.
+ *
+ * SkillManager must be initialised before the preload probes fire: the
+ * Claude descriptor's `getSkillCreationDirective` reads
+ * `SkillManager.getInstance()` synchronously inside `newSession()`, which
+ * the probe calls. Doing it in this function (rather than from `main.ts`
+ * via a separate call) keeps the dependency order obvious and prevents the
+ * preload race that would otherwise throw "called before initialize".
  *
  * `main.ts` calls this once on plugin load. To swap prompters, shut down
  * the existing manager and call this again.
  */
 export function createAgentSessionManager(app: App, plugin: CopilotPlugin): AgentSessionManager {
+  const skillManager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel());
   const preloader = new AgentModelPreloader(app, plugin, (id) => backendRegistry[id]);
   const persistenceManager = new AgentChatPersistenceManager(app);
   // Mutable ref breaks the construction cycle: the prompter needs the
@@ -113,6 +95,21 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     persistenceManager,
   });
   managerRef = manager;
+  // Skill-set changes restart the affected backend when its descriptor
+  // opts in via `restartOnManagedSkillsChange`, so native skill command
+  // caches stay fresh.
+  skillManager.subscribeToSkillSetChange((backendId) => {
+    const descriptor = backendRegistry[backendId];
+    if (!descriptor?.restartOnManagedSkillsChange) return;
+    void manager
+      .restartBackend(backendId, "managed skills changed")
+      .catch((error) =>
+        logError(`[Skills] Failed to refresh backend after skill change: ${backendId}`, error)
+      );
+  });
+  void skillManager.refresh().catch((error) => {
+    logError("[Skills] Initial discovery pass failed", error);
+  });
   // Non-blocking — plugin load should not wait on disk reconcile.
   for (const descriptor of listBackendDescriptors()) {
     descriptor
