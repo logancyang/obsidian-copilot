@@ -22,6 +22,7 @@ import {
   updateSetting,
   useSettingsValue,
 } from "@/settings/model";
+import { acpFrameSink } from "@/agentMode";
 import { ArrowUpRight, Info, Plus, ShieldCheck, Trash2, Unlock } from "lucide-react";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { MigrateConfirmModal } from "@/components/modals/MigrateConfirmModal";
@@ -449,6 +450,54 @@ export const AdvancedSettings: React.FC = () => {
           >
             Create Log File
           </Button>
+        </SettingItem>
+
+        <SettingItem
+          type="switch"
+          title="Log Full Agent Mode Frames"
+          description={`Writes diagnostic Agent Mode frames as NDJSON outside your vault at ${acpFrameSink.getPath()}. Frames include prompts, tool inputs/outputs, and attachments; oversized frames are summarized to avoid runaway logs. Sensitive content lands on disk in plaintext. Leave off unless actively debugging.`}
+          checked={settings.agentMode.debugFullFrames}
+          onCheckedChange={(checked) => {
+            setSettings((cur) => ({
+              agentMode: { ...cur.agentMode, debugFullFrames: checked },
+            }));
+          }}
+        />
+
+        <SettingItem
+          type="custom"
+          title="Agent Mode Frame Log"
+          description={`Open or clear the Agent Mode frame log (${acpFrameSink.getPath()}).`}
+        >
+          <div className="tw-flex tw-gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await acpFrameSink.open();
+                } catch {
+                  new Notice("Failed to open Agent Mode frame log.");
+                }
+              }}
+            >
+              Open
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await acpFrameSink.clear();
+                  new Notice("Agent Mode frame log cleared.");
+                } catch {
+                  new Notice("Failed to clear Agent Mode frame log.");
+                }
+              }}
+            >
+              Clear
+            </Button>
+          </div>
         </SettingItem>
       </section>
     </div>

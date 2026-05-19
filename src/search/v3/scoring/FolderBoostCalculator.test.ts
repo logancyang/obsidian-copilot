@@ -1,5 +1,5 @@
 import { App } from "obsidian";
-import { NoteIdRank } from "../interfaces";
+import { NoteIdRank } from "@/search/v3/interfaces";
 import { FolderBoostCalculator } from "./FolderBoostCalculator";
 
 // Mock Obsidian app with vault

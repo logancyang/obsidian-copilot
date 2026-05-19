@@ -1,5 +1,8 @@
 import React from "react";
-import { $isFolderPillNode, FolderPillNode } from "../pills/FolderPillNode";
+import {
+  $isFolderPillNode,
+  FolderPillNode,
+} from "@/components/chat-components/pills/FolderPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 import type { LexicalNode } from "lexical";
 

@@ -12,8 +12,8 @@ import {
   KEY_TAB_COMMAND,
   BLUR_COMMAND,
 } from "lexical";
-import { tryToPositionRange } from "../TypeaheadMenuPortal";
-import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { tryToPositionRange } from "@/components/chat-components/TypeaheadMenuPortal";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 
 export interface TypeaheadState {
   isOpen: boolean;

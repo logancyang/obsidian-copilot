@@ -1,6 +1,9 @@
 import React from "react";
-import { $isWebTabPillNode, WebTabPillNode } from "../pills/WebTabPillNode";
-import { $isActiveWebTabPillNode } from "../pills/ActiveWebTabPillNode";
+import {
+  $isWebTabPillNode,
+  WebTabPillNode,
+} from "@/components/chat-components/pills/WebTabPillNode";
+import { $isActiveWebTabPillNode } from "@/components/chat-components/pills/ActiveWebTabPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 import type { WebTabContext } from "@/types/message";
 

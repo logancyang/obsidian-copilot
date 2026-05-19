@@ -36,12 +36,6 @@ The Obsidian desktop app includes a CLI for plugin development. Use the full pat
 /Applications/Obsidian.app/Contents/MacOS/obsidian <command>
 ```
 
-**Plugin reload** (after `npm run build`):
-
-```bash
-/Applications/Obsidian.app/Contents/MacOS/obsidian plugin:reload id=copilot
-```
-
 **Console debugging** (requires attaching debugger first):
 
 ```bash
@@ -65,28 +59,24 @@ Run `obsidian help` for the full command list.
 ### Core Systems
 
 1. **LLM Provider System** (`src/LLMProviders/`)
-
    - Provider implementations for OpenAI, Anthropic, Google, Azure, local models
    - `LLMProviderManager` handles provider lifecycle and switching
    - Stream-based responses with error handling and rate limiting
    - Custom model configuration support
 
 2. **Chain Factory Pattern** (`src/chainFactory.ts`)
-
    - Different chain types for various AI operations (chat, copilot, adhoc prompts)
    - LangChain integration for complex workflows
    - Memory management for conversation context
    - Tool integration (search, file operations, time queries)
 
 3. **Vector Store & Search** (`src/search/`)
-
    - `VectorStoreManager` manages embeddings and semantic search
    - `ChunkedStorage` for efficient large document handling
    - Event-driven index updates via `IndexManager`
    - Multiple embedding providers support
 
 4. **UI Component System** (`src/components/`)
-
    - React functional components with Radix UI primitives
    - Tailwind CSS with class variance authority (CVA)
    - Modal system for user interactions
@@ -94,7 +84,6 @@ Run `obsidian help` for the full command list.
    - Settings UI with versioned components
 
 5. **Message Management Architecture** (`src/core/`, `src/state/`)
-
    - **MessageRepository** (`src/core/MessageRepository.ts`): Single source of truth for all messages
      - Stores each message once with both `displayText` and `processedText`
      - Provides computed views for UI display and LLM processing
@@ -116,7 +105,6 @@ Run `obsidian help` for the full command list.
      - Reprocesses context when messages are edited
 
 6. **Settings Management**
-
    - Jotai for atomic settings state management
    - React contexts for feature-specific state
 
@@ -147,14 +135,12 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 ### Core Classes and Flow
 
 1. **MessageRepository** (`src/core/MessageRepository.ts`)
-
    - Single source of truth for all messages
    - Stores `StoredMessage` objects with both `displayText` and `processedText`
    - Provides computed views via `getDisplayMessages()` and `getLLMMessages()`
    - No complex dual-array synchronization or ID matching
 
 2. **ChatManager** (`src/core/ChatManager.ts`)
-
    - Central business logic coordinator
    - Orchestrates MessageRepository, ContextManager, and LLM operations
    - Handles all message CRUD operations with proper error handling
@@ -166,14 +152,12 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
      - Creates new empty repository for each project (no message caching)
 
 3. **ChatUIState** (`src/state/ChatUIState.ts`)
-
    - Clean UI-only state manager
    - Delegates all business logic to ChatManager
    - Provides React integration with subscription mechanism
    - Replaces legacy SharedState with minimal, focused approach
 
 4. **ContextManager** (`src/core/ContextManager.ts`)
-
    - Handles context processing (notes, URLs, selected text)
    - Reprocesses context when messages are edited
    - Ensures fresh context for LLM processing
@@ -233,6 +217,8 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 - **Tailwind classes**: Use Tailwind utility classes in components (see `tailwind.config.js` for available classes)
 - **Custom CSS**: Add custom styles to `src/styles/tailwind.css` after the `@import` statements
 - After editing CSS, always run `npm run build` to regenerate `styles.css`
+- **No arbitrary font-size values**: Never use Tailwind's arbitrary-value syntax for typography (e.g. `tw-text-[10.5px]`, `tw-text-[13px]`). Stick to the configured `fontSize` tokens (`tw-text-ui-smaller`, `tw-text-ui-small`, `tw-text-xs`, `tw-text-smallest`, etc.) so type stays consistent with Obsidian's CSS variables. If none of the existing tokens fit, extend the `fontSize` scale in `tailwind.config.js` rather than hard-coding a pixel value at the call site.
+- **No inline `style={{ ... }}`**: Reserve the `style` prop for values that must change dynamically at runtime (computed positions, animated transforms). Static visual changes belong in Tailwind classes or the shared component (e.g. `Button` variants/sizes) — do not zero out component chrome with inline `border: 0`, `background: "transparent"`, `padding: 0`, etc.
 
 ## Testing Guidelines
 

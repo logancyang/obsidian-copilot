@@ -17,7 +17,7 @@ import { logInfo, logError } from "@/logger";
 import type { WebTabContext } from "@/types/message";
 
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
-import ChatInput from "@/components/chat-components/ChatInput";
+import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
@@ -44,7 +44,7 @@ import { useIsPlusUser } from "@/plusUtils";
 import { ProjectFileManager } from "@/projects/ProjectFileManager";
 import { useProjects } from "@/projects/state";
 import { useSettingsValue } from "@/settings/model";
-import { ChatUIState } from "@/state/ChatUIState";
+import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { FileParserManager } from "@/tools/FileParserManager";
 import { ChatMessage } from "@/types/message";
 import { err2String, isPlusChain } from "@/utils";
@@ -66,7 +66,7 @@ interface ChatProps {
   fileParserManager: FileParserManager;
   plugin: CopilotPlugin;
   mode?: ChatMode;
-  chatUIState: ChatUIState;
+  chatUIState: ChatManagerChatUIState;
 }
 
 // Internal component that has access to the ChatInput context
@@ -372,7 +372,6 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
         await handleSaveAsNote();
       }
 
-      // Get the LLM message for AI processing
       const llmMessage = chatUIState.getLLMMessage(messageId);
       if (llmMessage) {
         await getAIResponse(

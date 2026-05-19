@@ -1,3 +1,4 @@
+import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { RelevantNotes } from "@/components/chat-components/RelevantNotes";
 import { SuggestedPrompts } from "@/components/chat-components/SuggestedPrompts";
@@ -6,7 +7,7 @@ import { useChatScrolling } from "@/hooks/useChatScrolling";
 import { useSettingsValue } from "@/settings/model";
 import { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
-import React, { memo, useEffect, useState } from "react";
+import React, { memo } from "react";
 
 interface ChatMessagesProps {
   chatHistory: ChatMessage[];
@@ -37,27 +38,12 @@ const ChatMessages = memo(
     onReplaceChat,
     showHelperComponents = true,
   }: ChatMessagesProps) => {
-    const [loadingDots, setLoadingDots] = useState("");
-
     const settings = useSettingsValue();
 
     // Chat scrolling behavior
     const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
       chatHistory,
     });
-
-    useEffect(() => {
-      let intervalId: number;
-      if (loading) {
-        intervalId = window.setInterval(() => {
-          setLoadingDots((dots) => (dots.length < 6 ? dots + "." : ""));
-        }, 200);
-      } else {
-        // eslint-disable-next-line @eslint-react/hooks-extra/no-direct-set-state-in-use-effect
-        setLoadingDots("");
-      }
-      return () => window.clearInterval(intervalId);
-    }, [loading]);
 
     if (!chatHistory.filter((message) => message.isVisible).length && !currentAiMessage) {
       return (
@@ -68,13 +54,10 @@ const ChatMessages = memo(
           {showHelperComponents && settings.showSuggestedPrompts && (
             <SuggestedPrompts onClick={onReplaceChat} />
           )}
+          {loading && <BottomLoadingIndicator label={loadingMessage} />}
         </div>
       );
     }
-
-    const getLoadingMessage = () => {
-      return loadingMessage ? `${loadingMessage} ${loadingDots}` : loadingDots;
-    };
 
     return (
       <div className="tw-flex tw-h-full tw-flex-1 tw-flex-col tw-overflow-hidden">
@@ -114,7 +97,7 @@ const ChatMessages = memo(
               )
             );
           })}
-          {(currentAiMessage || loading) && (
+          {currentAiMessage ? (
             <div
               className="tw-w-full"
               style={{
@@ -126,7 +109,7 @@ const ChatMessages = memo(
                 message={{
                   id: streamingMessageId ?? undefined,
                   sender: "AI",
-                  message: currentAiMessage || getLoadingMessage(),
+                  message: currentAiMessage,
                   isVisible: true,
                   timestamp: null,
                 }}
@@ -135,7 +118,16 @@ const ChatMessages = memo(
                 onDelete={() => {}}
               />
             </div>
-          )}
+          ) : loading ? (
+            <div
+              className="tw-w-full"
+              style={{
+                minHeight: `${containerMinHeight}px`,
+              }}
+            >
+              <BottomLoadingIndicator label={loadingMessage} />
+            </div>
+          ) : null}
         </div>
       </div>
     );

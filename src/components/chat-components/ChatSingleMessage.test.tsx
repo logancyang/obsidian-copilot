@@ -48,6 +48,10 @@ jest.mock("obsidian", () => {
     MarkdownView: class {},
     TFile: class {},
     App: class {},
+    ItemView: class {
+      containerEl = document.createElement("div");
+    },
+    WorkspaceLeaf: class {},
     Platform: {
       isMobile: false,
     },

@@ -5,7 +5,7 @@ import {
   INSERT_TEXT_WITH_PILLS_COMMAND,
   $insertTextWithPills,
   InsertTextOptions,
-} from "../utils/lexicalTextUtils";
+} from "@/components/chat-components/utils/lexicalTextUtils";
 
 /**
  * Plugin that registers the INSERT_TEXT_WITH_PILLS_COMMAND to allow

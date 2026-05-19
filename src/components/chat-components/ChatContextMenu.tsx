@@ -37,8 +37,12 @@ interface ChatContextMenuProps {
   onRemoveContext: (category: string, data: string) => void;
   showProgressCard: () => void;
   showIndexingCard?: () => void;
-  onTypeaheadSelect: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
+  onTypeaheadSelect: (
+    category: string,
+    data: TFile | string | TFolder | WebTabContext | null
+  ) => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
+  hideAddContextButton?: boolean;
 }
 
 function ContextSelection({
@@ -112,6 +116,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   showIndexingCard,
   onTypeaheadSelect,
   lexicalEditorRef,
+  hideAddContextButton = false,
 }) => {
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
@@ -189,30 +194,34 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
 
   return (
     <div className="tw-flex tw-w-full tw-items-start tw-gap-1">
-      <div className="tw-flex tw-h-full tw-items-start">
-        <Popover open={showTypeahead} onOpenChange={setShowTypeahead}>
-          <PopoverTrigger asChild>
-            <Button
-              ref={buttonRef}
-              variant="ghost2"
-              size="fit"
-              className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
-            >
-              <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
-              {!hasContext && <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="tw-w-[400px] tw-p-0" align="start" side="top" sideOffset={4}>
-            <AtMentionTypeahead
-              isOpen={showTypeahead}
-              onClose={handleTypeaheadClose}
-              onSelect={handleTypeaheadSelect}
-              isCopilotPlus={isCopilotPlus}
-              currentActiveFile={currentActiveFile}
-            />
-          </PopoverContent>
-        </Popover>
-      </div>
+      {!hideAddContextButton && (
+        <div className="tw-flex tw-h-full tw-items-start">
+          <Popover open={showTypeahead} onOpenChange={setShowTypeahead}>
+            <PopoverTrigger asChild>
+              <Button
+                ref={buttonRef}
+                variant="ghost2"
+                size="fit"
+                className="tw-ml-1 tw-rounded-sm tw-border tw-border-solid tw-border-border tw-text-muted"
+              >
+                <span className="tw-text-base tw-font-medium tw-leading-none">@</span>
+                {!hasContext && (
+                  <span className="tw-pr-1 tw-text-sm tw-leading-4">Add context</span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="tw-w-[400px] tw-p-0" align="start" side="top" sideOffset={4}>
+              <AtMentionTypeahead
+                isOpen={showTypeahead}
+                onClose={handleTypeaheadClose}
+                onSelect={handleTypeaheadSelect}
+                isCopilotPlus={isCopilotPlus}
+                currentActiveFile={currentActiveFile}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+      )}
       <div className="tw-flex tw-flex-1 tw-flex-wrap tw-gap-1">
         {activeNoteVisible && currentActiveFile && (
           <ContextActiveNoteBadge

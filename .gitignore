@@ -18,6 +18,7 @@ styles.css
 
 # obsidian
 data.json
+data/
 
 # Exclude macOS Finder (System Explorer) View States
 .DS_Store
@@ -31,3 +32,7 @@ data.json
 
 # Development session tracking
 TODO.md
+
+# ACP full-frame debug log (vault sidecar, may contain prompt/tool data)
+copilot/acp-frames.ndjson
+copilot/acp-frames.old.ndjson

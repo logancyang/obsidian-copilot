@@ -7,7 +7,7 @@ import {
   NodeKey,
   SerializedLexicalNode,
 } from "lexical";
-import { IPillNode } from "../plugins/PillDeletionPlugin";
+import { IPillNode } from "@/components/chat-components/plugins/PillDeletionPlugin";
 import { PillBadge } from "./PillBadge";
 
 /**

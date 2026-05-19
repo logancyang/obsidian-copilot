@@ -2,8 +2,10 @@
 const nodeModuleShim = {
   name: "node-module-shim",
   setup(build) {
-    // Intercept node:module imports and provide a shim
-    build.onResolve({ filter: /^node:module$/ }, (args) => {
+    // Intercept node:module / module imports and provide a shim. Both prefixed
+    // and bare forms are matched — @anthropic-ai/claude-agent-sdk imports the
+    // bare form, while @langchain/community uses node:module.
+    build.onResolve({ filter: /^(node:)?module$/ }, (args) => {
       return {
         path: args.path,
         namespace: "node-module-shim",

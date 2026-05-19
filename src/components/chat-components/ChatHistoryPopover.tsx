@@ -19,7 +19,14 @@ export interface ChatHistoryItem {
   title: string;
   createdAt: Date;
   lastAccessedAt: Date;
+  /** Backend that produced this chat (Agent Mode only). Used to resolve a
+   * brand icon in the popover via the caller-supplied `getIcon` resolver. */
+  backendId?: string;
 }
+
+type ChatHistoryIconResolver = (
+  item: ChatHistoryItem
+) => React.ComponentType<{ className?: string }> | undefined;
 
 interface ChatHistoryPopoverProps {
   children: React.ReactNode;
@@ -28,6 +35,10 @@ interface ChatHistoryPopoverProps {
   onDeleteChat: (id: string) => Promise<void>;
   onLoadChat?: (id: string) => Promise<void>;
   onOpenSourceFile?: (id: string) => Promise<void>;
+  /** Optional resolver that maps a history item to a row icon. When it
+   * returns `undefined` (or is not supplied), the row falls back to
+   * `MessageCircle`. */
+  getIcon?: ChatHistoryIconResolver;
 }
 
 export function ChatHistoryPopover({
@@ -37,6 +48,7 @@ export function ChatHistoryPopover({
   onDeleteChat,
   onLoadChat,
   onOpenSourceFile,
+  getIcon,
 }: ChatHistoryPopoverProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -306,6 +318,7 @@ export function ChatHistoryPopover({
                             onOpenSourceFile={onOpenSourceFile}
                             isMobile={isMobile}
                             confirmDeleteId={confirmDeleteId}
+                            getIcon={getIcon}
                           />
                         ))}
                       </div>
@@ -344,6 +357,7 @@ interface ChatHistoryItemProps {
   onOpenSourceFile?: (id: string) => void;
   isMobile: boolean;
   confirmDeleteId: string | null;
+  getIcon?: ChatHistoryIconResolver;
 }
 
 function ChatHistoryItem({
@@ -360,11 +374,13 @@ function ChatHistoryItem({
   onOpenSourceFile,
   isMobile,
   confirmDeleteId,
+  getIcon,
 }: ChatHistoryItemProps) {
+  const RowIcon = getIcon?.(chat) ?? MessageCircle;
   if (isEditing) {
     return (
       <div className="tw-flex tw-items-center tw-gap-2 tw-rounded-md tw-p-2">
-        <MessageCircle className="tw-size-3 tw-shrink-0 tw-text-muted" />
+        <RowIcon className="tw-size-3 tw-shrink-0 tw-text-muted" />
         <Input
           value={editingTitle}
           onChange={(e) => onEditingTitleChange(e.target.value)}
@@ -395,7 +411,7 @@ function ChatHistoryItem({
       )}
       onClick={() => onLoadChat(chat.id)}
     >
-      <MessageCircle className="tw-size-3 tw-shrink-0 tw-text-muted" />
+      <RowIcon className="tw-size-3 tw-shrink-0 tw-text-muted" />
 
       <div className="tw-min-w-0 tw-flex-1">
         <span className="tw-block tw-truncate tw-text-sm tw-font-medium tw-text-normal">

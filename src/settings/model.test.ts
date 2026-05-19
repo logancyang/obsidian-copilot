@@ -175,6 +175,93 @@ describe("sanitizeSettings - autoAddSelectionToContext migration", () => {
   });
 });
 
+describe("sanitizeSettings - agentMode shape migration", () => {
+  it("creates a default agentMode slice when missing", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: undefined as unknown as never,
+    });
+    expect(sanitized.agentMode).toEqual({
+      enabled: false,
+      byok: {},
+      mcpServers: [],
+      activeBackend: "opencode",
+      backends: {},
+      debugFullFrames: false,
+      skills: { folder: "copilot/skills", importSkipList: [] },
+    });
+  });
+
+  it("leaves backends empty when no legacy fields and no existing slice", () => {
+    const sanitized = sanitizeSettings({
+      ...DEFAULT_SETTINGS,
+      agentMode: { enabled: true, byok: {}, mcpServers: [] },
+    } as unknown as CopilotSettings);
+    expect(sanitized.agentMode.backends).toEqual({});
+  });
+
+  it("preserves an already-migrated backends.opencode slice", () => {
+    const migrated = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        backends: {
+          opencode: { binaryPath: "/new/opencode", binaryVersion: "2.0.0", binarySource: "custom" },
+        },
+      },
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(migrated);
+
+    expect(sanitized.agentMode.backends.opencode).toEqual({
+      binaryPath: "/new/opencode",
+      binaryVersion: "2.0.0",
+      binarySource: "custom",
+    });
+  });
+
+  it("defaults binarySource to 'managed' when path is set but source is missing or invalid", () => {
+    const legacy = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        backends: {
+          opencode: { binaryPath: "/p", binaryVersion: "1.0.0", binarySource: "garbage" },
+        },
+      },
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(legacy);
+
+    expect(sanitized.agentMode.backends.opencode?.binarySource).toBe("managed");
+  });
+
+  it("clears binarySource when no binaryPath is set", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        backends: { opencode: { binarySource: "managed" } },
+      },
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.agentMode.backends.opencode).toEqual({
+      binaryPath: undefined,
+      binaryVersion: undefined,
+      binarySource: undefined,
+    });
+  });
+});
+
 describe("sanitizeSettings - legacy Miyo settings cleanup", () => {
   it("migrates legacy Miyo settings and strips obsolete remote vault path state", () => {
     const legacySettings = {

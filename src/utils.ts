@@ -83,9 +83,9 @@ function isLicenseKeyError(error: unknown): boolean {
   const message = err?.message as string | undefined;
   return Boolean(
     errorDetail.reason === "Invalid license key" ||
-      message === "Invalid license key" ||
-      message?.includes("status 403") ||
-      errorDetail.status === 403
+    message === "Invalid license key" ||
+    message?.includes("status 403") ||
+    errorDetail.status === 403
   );
 }
 
