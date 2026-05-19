@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+OBSIDIAN_BIN="/Applications/Obsidian.app/Contents/MacOS/obsidian"
+
+if [[ -z "${COPILOT_TEST_VAULT_PATH:-}" ]]; then
+  cat >&2 <<'EOF'
+error: COPILOT_TEST_VAULT_PATH is not set.
+
+Set it once at the user level (e.g. in ~/.zshrc or ~/.config/fish/config.fish)
+to the absolute path of an Obsidian vault you've opened at least once:
+
+  export COPILOT_TEST_VAULT_PATH="$HOME/Obsidian/CopilotTestVault"
+
+Then re-run: npm run test:vault
+EOF
+  exit 1
+fi
+
+VAULT_PATH="$COPILOT_TEST_VAULT_PATH"
+
+if [[ ! -d "$VAULT_PATH" ]]; then
+  echo "error: vault directory not found: $VAULT_PATH" >&2
+  exit 1
+fi
+
+if [[ ! -d "$VAULT_PATH/.obsidian" ]]; then
+  echo "error: $VAULT_PATH has no .obsidian/ folder." >&2
+  echo "Open the folder as a vault in Obsidian once, then re-run." >&2
+  exit 1
+fi
+
+WORKTREE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$WORKTREE_ROOT"
+
+echo "==> Installing dependencies"
+npm install --prefer-offline --no-audit --no-fund
+
+echo "==> Building plugin"
+npm run build
+
+PLUGIN_ID="$(node -p "require('./manifest.json').id")"
+if [[ -z "$PLUGIN_ID" ]]; then
+  echo "error: could not read plugin id from manifest.json" >&2
+  exit 1
+fi
+
+PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
+mkdir -p "$PLUGIN_DIR"
+
+echo "==> Linking artifacts into $PLUGIN_DIR"
+for f in main.js manifest.json styles.css; do
+  if [[ ! -f "$WORKTREE_ROOT/$f" ]]; then
+    echo "error: expected build artifact missing: $WORKTREE_ROOT/$f" >&2
+    exit 1
+  fi
+  ln -sfn "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
+done
+
+echo "==> Reloading plugin in Obsidian"
+if [[ ! -x "$OBSIDIAN_BIN" ]]; then
+  echo "warning: Obsidian CLI not found at $OBSIDIAN_BIN; skipping reload." >&2
+else
+  if ! "$OBSIDIAN_BIN" plugin:enable id="$PLUGIN_ID" >/dev/null 2>&1 \
+     || ! "$OBSIDIAN_BIN" plugin:reload id="$PLUGIN_ID" >/dev/null 2>&1; then
+    echo "warning: Obsidian doesn't appear to be running. Start it and the symlinked plugin will load on next open." >&2
+  fi
+fi
+
+echo
+echo "Done."
+echo "  worktree: $WORKTREE_ROOT"
+echo "  vault:    $VAULT_PATH"
+echo "  plugin:   $PLUGIN_ID"

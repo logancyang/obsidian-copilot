@@ -19,7 +19,8 @@
     "test": "jest --testPathIgnorePatterns=src/integration_tests/",
     "test:integration": "jest src/integration_tests/",
     "prepare": "husky",
-    "prompt:debug": "node scripts/printPromptDebug.js"
+    "prompt:debug": "node scripts/printPromptDebug.js",
+    "test:vault": "bash scripts/test-vault.sh"
   },
   "keywords": [],
   "author": "Logan Yang",
