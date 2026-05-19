@@ -19,6 +19,8 @@ export interface ToolSummary {
   outcome: (part: ToolCallPart) => string | null;
   /** Tool-aware aggregate stat for N consecutive same-key parts. */
   aggregate: (parts: ToolCallPart[]) => { line: string; outcome: string };
+  /** Full tool input shown only in the expanded card. Null hides. */
+  expandedDetails?: (part: ToolCallPart) => string | null;
 }
 
 /**
@@ -202,6 +204,14 @@ const BASH_SUMMARY: ToolSummary = {
     line: `Ran ${pluralize(parts.length, "command")}${statusSuffix(parts)}`,
     outcome: "",
   }),
+  expandedDetails: (p) => {
+    const input = p.input as { command?: unknown; description?: unknown } | null | undefined;
+    if (typeof input?.command !== "string" || input.command.length === 0) return null;
+    if (typeof input.description === "string" && input.description.length > 0) {
+      return `# ${input.description}\n${input.command}`;
+    }
+    return input.command;
+  },
 };
 
 const SEARCH_VAULT_SUMMARY: ToolSummary = {

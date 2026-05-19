@@ -4,7 +4,6 @@
   - [x] Load chat history from agents
   - [x] Save chat history to notes
 - [x] P0: Thoroughly assess whether migrating to Anthropic agent SDK is worth it.
-- [ ] P0: [Bug] effort is not passed to claude code correctly on first load if not making any changes
 - [ ] P0: Test Windows devices
 - [ ] P0: Make sure bash command shows what command it runs (visibility)
 - [ ] P0: Provide copilot specific system prompt
