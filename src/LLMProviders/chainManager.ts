@@ -143,11 +143,13 @@ export default class ChainManager {
         this.pendingModelError = null;
       }
 
-      // Chain-type housekeeping. Inlined (was once a separate `setChain` method)
-      // because it does NOT actually set chain type — the atom is owned by the
-      // caller (UI dropdowns / `applyPlusSettings`). Writing the captured local
-      // `chainType` back to the atom here is what caused an infinite
-      // stale-closure bounce on apply-Plus-key. See chainManager.test.ts.
+      // Chain-type housekeeping. Do NOT write `chainType` back to the atom —
+      // the atom is owned by the UI dropdowns and `applyPlusSettings`. The
+      // captured local `chainType` may already be stale by the time we reach
+      // here (we just awaited `setChatModel(...)`), and writing it back used
+      // to create a self-sustaining `setChainType` → ProjectManager
+      // subscriber → `createChainWithNewModel` loop that froze Obsidian on
+      // apply-Plus-key.
       if (this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
         this.validateChainType(chainType);
         if (options.refreshIndex) {
