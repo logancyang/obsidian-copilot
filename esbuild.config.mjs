@@ -17,7 +17,7 @@ const svgrPlugin = {
       const svg = await readFile(args.path, "utf8");
       const contents = await svgrTransform(
         svg,
-        { jsxRuntime: "automatic", typescript: false, plugins: [jsxPlugin] },
+        { jsxRuntime: "classic", typescript: false, plugins: [jsxPlugin] },
         { filePath: args.path, caller: { name: "esbuild-plugin-inline-svgr" } }
       );
       return { contents, loader: "jsx" };
