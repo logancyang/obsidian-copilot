@@ -12,6 +12,7 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 - **NEVER RUN `npm run dev`** - The user will handle all builds manually
 - `npm run build` - Production build (TypeScript check + minified output)
+- `npm run test:vault` - macOS only. Installs deps, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the current worktree into `$COPILOT_TEST_VAULT_PATH/.obsidian/plugins/copilot/`, then reloads the plugin via the Obsidian CLI. Requires the user-level env var `COPILOT_TEST_VAULT_PATH` to be set to a vault that has been opened in Obsidian at least once. Use this when the user asks you to load the plugin into their test vault — it replaces manual build + copy + reload.
 
 ### Code Quality
 

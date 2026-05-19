@@ -53,6 +53,34 @@ In the case of Copilot for Obsidian, you will need to:
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
 
+#### Fast Iteration with `npm run test:vault` (macOS)
+
+If you work across multiple worktrees or just want one command to build and load the plugin into a test vault, use `npm run test:vault`. It runs `npm install`, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the worktree into the vault's `.obsidian/plugins/copilot/` folder, and reloads the plugin in Obsidian via its CLI.
+
+**One-time setup:**
+
+1. Create or pick a vault dedicated to plugin testing and open it in Obsidian at least once so `.obsidian/` is created.
+2. Enable community plugins in that vault (Settings → Community plugins → Turn on).
+3. Set an env var pointing at the vault path. Add this to `~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`:
+
+   ```bash
+   export COPILOT_TEST_VAULT_PATH="$HOME/Obsidian/CopilotTestVault"
+   ```
+
+**Per change:**
+
+From any worktree, run:
+
+```bash
+npm run test:vault
+```
+
+The script installs deps, builds the plugin, symlinks the build artifacts into the vault, then calls `plugin:enable` and `plugin:reload` on the Obsidian CLI. If Obsidian isn't running, the symlinks are still in place — start Obsidian and the new build will load.
+
+Because the script symlinks files (not the worktree root), the vault's plugin `data.json` (settings, chat history) stays vault-local and is preserved across worktrees and rebuilds.
+
+Requires macOS with Obsidian installed at `/Applications/Obsidian.app`.
+
 ## Commit Signing
 
 Commits to `master` must be signed and verified by GitHub. The easiest path is SSH signing using your existing SSH key.
