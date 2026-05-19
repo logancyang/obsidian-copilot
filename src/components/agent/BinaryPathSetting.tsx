@@ -15,6 +15,13 @@ interface Props {
   onSave: (path: string) => Promise<string | null>;
   /** When true, a successful auto-detect immediately invokes `onSave`. */
   persistOnAutoDetect?: boolean;
+  /**
+   * Custom detector. Used when the backend has a richer install lookup than
+   * a generic `which`/`where` PATH search — e.g. Claude knows about
+   * `~/.local/bin/claude`, Volta, asdf, NVM. Falls back to
+   * {@link detectBinary} when omitted.
+   */
+  detect?: () => Promise<string | null>;
 }
 
 /**
@@ -31,6 +38,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
   notFoundHint,
   onSave,
   persistOnAutoDetect = false,
+  detect,
 }) => {
   const [pathInput, setPathInput] = React.useState(initialPath);
   const [error, setError] = React.useState<string | null>(null);
@@ -59,7 +67,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
     setBusy(true);
     setError(null);
     try {
-      const found = await detectBinary(binaryName);
+      const found = detect ? await detect() : await detectBinary(binaryName);
       if (!found) {
         setError(
           notFoundHint ??
@@ -82,7 +90,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
     } finally {
       setBusy(false);
     }
-  }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect]);
+  }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect, detect]);
 
   return (
     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 sm:tw-w-[360px]">
