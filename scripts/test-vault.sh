@@ -49,13 +49,28 @@ PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
 mkdir -p "$PLUGIN_DIR"
 
 echo "==> Linking artifacts into $PLUGIN_DIR"
-for f in main.js manifest.json styles.css; do
+for f in main.js styles.css; do
   if [[ ! -f "$WORKTREE_ROOT/$f" ]]; then
     echo "error: expected build artifact missing: $WORKTREE_ROOT/$f" >&2
     exit 1
   fi
   ln -sfn "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
 done
+
+# Write a branch- and timestamp-tagged manifest.json (real file, not a symlink)
+# so Obsidian's Community plugins list visibly reflects which worktree/branch
+# is loaded and when this build was deployed.
+BRANCH="$(git -C "$WORKTREE_ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+BUILD_TS="$(date +%Y%m%d-%H%M%S)"
+echo "==> Writing branch-tagged manifest.json (branch: $BRANCH, build: $BUILD_TS)"
+rm -f "$PLUGIN_DIR/manifest.json"
+SRC="$WORKTREE_ROOT/manifest.json" DEST="$PLUGIN_DIR/manifest.json" BRANCH="$BRANCH" BUILD_TS="$BUILD_TS" node -e '
+  const fs = require("fs");
+  const m = JSON.parse(fs.readFileSync(process.env.SRC, "utf8"));
+  m.name = m.name + " [" + process.env.BRANCH + " @ " + process.env.BUILD_TS + "]";
+  m.description = "[branch: " + process.env.BRANCH + " | build: " + process.env.BUILD_TS + "] " + m.description;
+  fs.writeFileSync(process.env.DEST, JSON.stringify(m, null, 2) + "\n");
+'
 
 echo "==> Reloading plugin in Obsidian"
 if [[ ! -x "$OBSIDIAN_BIN" ]]; then
@@ -70,5 +85,7 @@ fi
 echo
 echo "Done."
 echo "  worktree: $WORKTREE_ROOT"
+echo "  branch:   $BRANCH"
+echo "  build:    $BUILD_TS"
 echo "  vault:    $VAULT_PATH"
 echo "  plugin:   $PLUGIN_ID"
