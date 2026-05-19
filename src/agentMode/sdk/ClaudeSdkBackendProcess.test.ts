@@ -193,6 +193,63 @@ describe("ClaudeSdkBackendProcess.prompt happy path", () => {
     // First turn → sessionId is seeded, no resume.
     expect(call.options.sessionId).toBe(sessionId);
     expect(call.options.resume).toBeUndefined();
+    // No skill-creation directive opt passed → no systemPrompt override.
+    expect(call.options.systemPrompt).toBeUndefined();
+  });
+
+  it("forwards the spawn-time skill-creation directive via systemPrompt append", async () => {
+    queryMock.mockImplementation(() =>
+      makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
+    );
+
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      getSkillCreationDirective: () => "DO THIS THING WITH SKILLS",
+    });
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+    const calls = getPromptQueryCalls();
+    const opts = (calls[0][0] as { options: Record<string, unknown> }).options;
+    expect(opts.systemPrompt).toEqual({
+      type: "preset",
+      preset: "claude_code",
+      append: "DO THIS THING WITH SKILLS",
+    });
+  });
+
+  it("captures the directive at newSession time and ignores later setting changes mid-session", async () => {
+    queryMock.mockImplementation(() =>
+      makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
+    );
+
+    let current = "FIRST DIRECTIVE";
+    const proc = new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      getSkillCreationDirective: () => current,
+    });
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    // Mutate the "setting" after newSession → the session's first turn must
+    // still use the original directive, proving capture-at-spawn semantics.
+    current = "SECOND DIRECTIVE";
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
+
+    const opts = (getPromptQueryCalls()[0][0] as { options: Record<string, unknown> }).options;
+    expect(opts.systemPrompt).toEqual({
+      type: "preset",
+      preset: "claude_code",
+      append: "FIRST DIRECTIVE",
+    });
   });
 
   it("buffers events emitted before a session handler is registered and replays them", async () => {

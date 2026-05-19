@@ -4,6 +4,14 @@ import { logInfo, logWarn } from "@/logger";
 import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
+import {
+  buildSkillCreationDirective,
+  composeDenyList,
+  DEFAULT_SKILLS_FOLDER,
+  getManagedSkills,
+  SkillManager,
+} from "@/agentMode/skills";
+import { OpencodeBackendDescriptor } from "./descriptor";
 import { selectCopilotPrompt } from "./prompts";
 
 /**
@@ -209,7 +217,19 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
   // CLI-coding-agent prompt — wrong domain for an Obsidian vault assistant.
   // opencode's `cfg.agent.<id>` merge is field-wise, so adding `prompt` to
   // the built-in `build` agent leaves its native permissions intact.
-  const prompt = selectCopilotPrompt(s.agentMode?.backends?.opencode?.defaultModel?.baseModelId);
+  const basePrompt = selectCopilotPrompt(
+    s.agentMode?.backends?.opencode?.defaultModel?.baseModelId
+  );
+  // Append the spawn-time skill-creation directive so agent-authored skills
+  // land in the canonical managed folder instead of `.opencode/skills/`.
+  // Folder is read live from settings on each spawn — see the Skills
+  // Management spec.
+  const skillsFolder = s.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+  const skillManagerReady = SkillManager.hasInstance();
+  const skillsDirs = skillManagerReady
+    ? Object.values(SkillManager.getInstance().getAgentDirsProjectRel())
+    : [];
+  const prompt = `${basePrompt}\n\n${buildSkillCreationDirective("opencode", skillsFolder, skillsDirs)}`;
   config.agent = {
     [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
       prompt,
@@ -240,6 +260,56 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
   const selectedMode = s.agentMode?.backends?.opencode?.selectedMode ?? "default";
   config.default_agent =
     OPENCODE_CANONICAL_MODE_AGENT_IDS[selectedMode] ?? OPENCODE_COPILOT_BUILD_AGENT_ID;
+
+  // Synthesize deny rules for managed skills that OpenCode would
+  // cross-discover (via `.claude/skills/` and `.agents/skills/`) but are
+  // not enabled for OpenCode in their `metadata.copilot-enabled-agents`.
+  // Read SkillManager live at spawn time — same pattern as the
+  // skill-creation directive. If SkillManager isn't initialised yet (plugin
+  // still booting; OpenCode session spawned before the Skills tab has
+  // hydrated), fall back to an empty deny list — the next reconciliation
+  // pass + session restart closes the eventual-consistency window.
+  //
+  // Note: we intentionally do NOT set `OPENCODE_DISABLE_EXTERNAL_SKILLS` or
+  // `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS`. We want OpenCode to walk the
+  // cross-discovery paths so the per-name `permission.skill.<name> = "deny"`
+  // entries below can take effect.
+  if (!skillManagerReady) {
+    // SkillManager initialises asynchronously from `main.ts onload`. If
+    // OpenCode spawns before that finishes, we ship an empty deny list
+    // for this session — the next OpenCode spawn (after SkillManager
+    // hydrates) gets the correct one.
+    logInfo(
+      "[AgentMode] SkillManager not yet initialised at OpenCode spawn — shipping empty deny list; next session will pick it up."
+    );
+  }
+  const managedSkills = skillManagerReady ? getManagedSkills() : [];
+  const denyNames = composeDenyList(
+    managedSkills,
+    OpencodeBackendDescriptor.id,
+    OpencodeBackendDescriptor.crossDiscoveredAgents
+  );
+  if (denyNames.length > 0) {
+    // Be additive: opencode's config schema allows `permission` as a
+    // top-level key with sub-fields (`skill`, `tool`, `write`, …). Preserve
+    // any existing `permission.*` settings the user may have provided
+    // through other surfaces.
+    const existingPermission = config.permission as Record<string, unknown> | undefined;
+    const existingSkillMap = existingPermission?.skill as Record<string, string> | undefined;
+    const mergedSkillMap: Record<string, string> = { ...(existingSkillMap ?? {}) };
+    for (const name of denyNames) {
+      // User-provided entries win — if the user explicitly allowed a skill
+      // we'd otherwise deny, respect their override.
+      if (!(name in mergedSkillMap)) mergedSkillMap[name] = "deny";
+    }
+    config.permission = {
+      ...(existingPermission ?? {}),
+      skill: mergedSkillMap,
+    };
+    logInfo(
+      `[AgentMode] opencode deny list: ${denyNames.length} cross-discovered skill(s) denied (${denyNames.join(", ")})`
+    );
+  }
 
   return config;
 }

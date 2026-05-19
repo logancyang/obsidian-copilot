@@ -304,6 +304,23 @@ export class AgentMessageStore {
     return true;
   }
 
+  /**
+   * Whether an assistant placeholder has emitted any user-visible activity.
+   * Used to distinguish a legitimate completed turn from a blank backend
+   * response that would otherwise render as an empty assistant block.
+   */
+  hasAssistantActivity(id: string): boolean {
+    const msg = this.messages.find((m) => m.id === id);
+    if (!msg) return false;
+    if (msg.displayText.trim().length > 0) return true;
+    return (msg.parts ?? []).some((part) => {
+      if (part.kind === "text" || part.kind === "thought") {
+        return part.text.trim().length > 0;
+      }
+      return true;
+    });
+  }
+
   deleteMessage(id: string): boolean {
     const idx = this.messages.findIndex((m) => m.id === id);
     if (idx === -1) return false;

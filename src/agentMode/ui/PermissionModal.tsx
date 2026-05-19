@@ -7,9 +7,10 @@ import type {
   PermissionPrompt,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal } from "obsidian";
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 interface ContentProps {
   request: PermissionPrompt;
@@ -124,7 +125,7 @@ class PermissionModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
     this.root.render(
       <PermissionContent
         request={this.request}

@@ -45,6 +45,13 @@ export class AgentModelPreloader {
     this.notify();
   }
 
+  /** Remove the cached entry for `backendId` after its backend is restarted. */
+  clearCached(backendId: BackendId): void {
+    if (this.disposed) return;
+    if (!this.cache.delete(backendId)) return;
+    this.notify();
+  }
+
   /** Best-effort probe; failures are logged and swallowed. Dedupes per backend. */
   preload(backendId: BackendId): Promise<void> {
     if (this.disposed) return Promise.resolve();

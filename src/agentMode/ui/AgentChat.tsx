@@ -12,7 +12,10 @@ import { ChatInputProvider } from "@/context/ChatInputContext";
 import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
+import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
 import type { AgentChatMessage, CurrentPlan } from "@/agentMode/session/types";
+import { CustomCommandManager } from "@/commands/customCommandManager";
+import { getCachedCustomCommands } from "@/commands/state";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
 import {
@@ -21,6 +24,7 @@ import {
   useSelectedTextContexts,
 } from "@/aiParams";
 import {
+  isNoteSelectedTextContext,
   isWebSelectedTextContext,
   type MessageContext,
   type SelectedTextContext,
@@ -231,9 +235,26 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     candidateNotes.push(...contextNotes);
     const notes = dedupeBy(candidateNotes, (n) => n.path);
 
+    // Slash-menu CustomCommands are inserted as literal `/<title>` text by
+    // SlashCommandPlugin. Skills are recognized by the backend via its
+    // command catalog, but CustomCommands aren't — expand the body here so
+    // the backend sees the real prompt. (Mirrors ChatManager's processPrompt
+    // call on the non-agent path.)
+    const noteSelection = selectedTextContexts.find(isNoteSelectedTextContext);
+    const expanded = await expandCustomCommandPrefix(
+      text,
+      getCachedCustomCommands(),
+      app.vault,
+      noteSelection?.content ?? "",
+      app.workspace.getActiveFile()
+    );
+    if (expanded.matched) {
+      void CustomCommandManager.getInstance().recordUsage(expanded.matched);
+    }
+
     const item: QueuedAgentMessage = {
       id: `queued-${uuidv4()}`,
-      text,
+      text: expanded.text,
       rawInput,
       context: buildMessageContext(notes, selectedTextContexts),
       hadUnsupportedAttachments,

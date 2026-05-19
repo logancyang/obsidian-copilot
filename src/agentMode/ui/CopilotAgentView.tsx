@@ -2,12 +2,13 @@ import { AgentModeChat } from "@/agentMode/ui/AgentModeChat";
 import { attachChatViewLayoutObservers } from "@/components/chat-components/attachChatViewLayoutObservers";
 import { ChatViewLayout } from "@/components/chat-components/ChatViewLayout";
 import { CHAT_AGENT_VIEWTYPE } from "@/constants";
-import { AppContext, EventTargetContext } from "@/context";
+import { EventTargetContext } from "@/context";
 import CopilotPlugin from "@/main";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ItemView, WorkspaceLeaf } from "obsidian";
 import * as React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 export default class CopilotAgentView extends ItemView {
   private root: Root | null = null;
@@ -43,7 +44,7 @@ export default class CopilotAgentView extends ItemView {
   }
 
   async onOpen(): Promise<void> {
-    this.root = createRoot(this.containerEl.children[1]);
+    this.root = createPluginRoot(this.containerEl.children[1], this.app);
     this.renderChat();
     this.layout = new ChatViewLayout(this.containerEl, this.app.workspace);
 
@@ -61,19 +62,17 @@ export default class CopilotAgentView extends ItemView {
     if (!this.root) return;
 
     this.root.render(
-      <AppContext.Provider value={this.app}>
-        <EventTargetContext.Provider value={this.eventTarget}>
-          <Tooltip.Provider delayDuration={0}>
-            <AgentModeChat
-              plugin={this.plugin}
-              onSaveChat={(fn) => {
-                this.handleSaveAsNote = fn;
-              }}
-              updateUserMessageHistory={(msg) => this.plugin.updateUserMessageHistory(msg)}
-            />
-          </Tooltip.Provider>
-        </EventTargetContext.Provider>
-      </AppContext.Provider>
+      <EventTargetContext.Provider value={this.eventTarget}>
+        <Tooltip.Provider delayDuration={0}>
+          <AgentModeChat
+            plugin={this.plugin}
+            onSaveChat={(fn) => {
+              this.handleSaveAsNote = fn;
+            }}
+            updateUserMessageHistory={(msg) => this.plugin.updateUserMessageHistory(msg)}
+          />
+        </Tooltip.Provider>
+      </EventTargetContext.Provider>
     );
   }
 

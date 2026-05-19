@@ -1,7 +1,7 @@
 # Agent Mode — layer rules
 
 Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
-(see root `.eslintrc`). The list below mirrors `boundaries/elements` and
+(see root `eslint.config.mjs`). The list below mirrors `boundaries/elements` and
 `boundaries/dependencies` exactly — when in doubt, the lint config wins.
 
 1. **`session/`** — **the contract layer.** Hosts the
@@ -22,6 +22,8 @@ Six element types, strict imports. Enforced by `eslint-plugin-boundaries`
    backend.
 6. **`ui/`** — backend-agnostic React UI. — permission modals, model pickers, and
    trail rendering all read session-domain types;
+7. **`skills/`** — canonical-store discovery, symlink lifecycle, reconciliation,
+   and the Skills settings UI.
 
 ## Why two adapters under one session
 
@@ -72,7 +74,7 @@ Then in either case:
 ## Adding a new layer
 
 1. Create `src/agentMode/<layer>/`.
-2. Add an entry under `boundaries/elements` in root `.eslintrc` and a
+2. Add an entry under `boundaries/elements` in root `eslint.config.mjs` and a
    corresponding rule in `boundaries/dependencies`.
 3. Re-export from `src/agentMode/index.ts` if it should be visible to
    plugin host code.
@@ -92,7 +94,25 @@ Then in either case:
 - "Knows about a specific binary, install path, BYOK keys, vendor models" → `backends/<id>/`
 - "React component or modal" → `ui/` (generic) or `backends/<id>/`
   (backend-specific)
+- "Canonical-store skill discovery, symlink lifecycle, SKILL.md
+  parser/serializer, Skills settings tab (reads `backends/registry.ts`
+  for the brand list)" → `skills/`
 - "Plugin-level wiring" → `index.ts` only
+
+## Modals and dialogs
+
+**Always prefer Obsidian's native `Modal`** (from `obsidian`) over the
+Radix-based `Dialog` primitive in `@/components/ui/dialog`. The native
+modal gives us correct popout-window behavior, native header chrome,
+ESC handling, and visual consistency with the rest of the plugin.
+
+The standard pattern (see `src/components/modals/ConfirmModal.tsx` and
+`src/agentMode/skills/ui/DeleteConfirmDialog.tsx`):
+
+Only reach for the Radix `Dialog` when the surface needs to live
+_inside_ an existing React tree (e.g. nested inside another modal)
+and spawning a separate Obsidian `Modal` would break the focus or
+layout flow.
 
 ## BackendDescriptor surface
 

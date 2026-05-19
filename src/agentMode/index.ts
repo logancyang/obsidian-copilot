@@ -6,11 +6,9 @@ import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionManager } from "./session/AgentSessionManager";
+import { SkillManager } from "./skills";
 import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
 
-// Public surface for the rest of the plugin. External code should import from
-// `@/agentMode` (this file), never deep paths into acp/, session/, backends/,
-// or ui/.
 export { AGENT_CHAT_MODE } from "./session/AgentChatPersistenceManager";
 export { AgentModeChat } from "./ui/AgentModeChat";
 export { default as CopilotAgentView } from "./ui/CopilotAgentView";
@@ -24,7 +22,7 @@ export type { AgentModelPickerOverride } from "./ui/useAgentModelPicker";
 export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
-export type { BackendDescriptor, BackendId, InstallState } from "./session/types";
+export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
 export { isAgentModelEnabled, writeAgentModelOverride } from "./session/modelEnable";
 export { getBackendModelOverrides } from "./session/backendSettingsAccess";
 export type {
@@ -43,6 +41,49 @@ export { PlanPreviewView, PLAN_PREVIEW_VIEW_TYPE } from "./ui/PlanPreviewView";
 export type { PlanPreviewViewState } from "./ui/PlanPreviewView";
 export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/registry";
 export { frameSink as acpFrameSink } from "./session/debugSink";
+export { SkillManager, SkillsSettings, useManagedSkills } from "./skills";
+export type { Skill } from "./skills";
+
+/**
+ * Collect each registered backend's project-relative skills directory into
+ * a `BackendId → path` map. The skills layer is forbidden by
+ * `boundaries/dependencies` from importing the registry, so this lives in
+ * the host-side barrel and is injected into `SkillManager.initialize`.
+ */
+function collectAgentSkillsDirsProjectRel(): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const descriptor of listBackendDescriptors()) {
+    out[descriptor.id] = descriptor.skillsProjectDir;
+  }
+  return out;
+}
+
+/**
+ * Initialise the SkillManager singleton and kick off the first discovery
+ * pass. Called once from `main.ts` on plugin load — the host doesn't need
+ * to know how the backend skill dirs are collected. Skill-set changes
+ * restart the affected backend when its descriptor opts in via
+ * `restartOnManagedSkillsChange`, so native skill command caches stay fresh.
+ */
+export function initializeSkillManager(
+  app: App,
+  agentSessionManager: AgentSessionManager
+): SkillManager {
+  const manager = SkillManager.initialize(app, collectAgentSkillsDirsProjectRel());
+  manager.subscribeToSkillSetChange((backendId) => {
+    const descriptor = backendRegistry[backendId];
+    if (!descriptor?.restartOnManagedSkillsChange) return;
+    void agentSessionManager
+      .restartBackend(backendId, "managed skills changed")
+      .catch((error) =>
+        logError(`[Skills] Failed to refresh backend after skill change: ${backendId}`, error)
+      );
+  });
+  void manager.refresh().catch((error) => {
+    logError("[Skills] Initial discovery pass failed", error);
+  });
+  return manager;
+}
 
 /**
  * Single seam between the plugin host (`main.ts`) and Agent Mode. Wires the

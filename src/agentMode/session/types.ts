@@ -1,3 +1,4 @@
+import type React from "react";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 
 export type { BackendDescriptor, InstallState } from "./descriptor";
@@ -5,6 +6,18 @@ export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./pl
 
 /** Stable identifier for a registered backend. New backends extend the registry; the type stays open. */
 export type BackendId = string;
+
+/**
+ * Slim projection of a backend descriptor for UI surfaces that only need to
+ * render an agent's identity (label + brand glyph). The shape is decoupled
+ * from the full descriptor so consumers depend on just id/label/icon and
+ * adding a new backend never requires touching them.
+ */
+export interface AgentBrand {
+  readonly id: BackendId;
+  readonly displayName: string;
+  readonly Icon: React.ComponentType<{ className?: string }>;
+}
 
 /**
  * Opaque identifier for an agent-side session. Backends mint these (ACP

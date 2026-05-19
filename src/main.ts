@@ -7,8 +7,10 @@ import {
   AGENT_CHAT_MODE,
   CopilotAgentView,
   createAgentSessionManager,
+  initializeSkillManager,
   PlanPreviewView,
   PLAN_PREVIEW_VIEW_TYPE,
+  SkillManager,
   type AgentSessionManager,
 } from "@/agentMode";
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
@@ -297,6 +299,10 @@ export default class CopilotPlugin extends Plugin {
       void this.systemPromptRegister
         .initialize()
         .then(() => migrateSystemPromptsFromSettings(this.app.vault));
+
+      if (this.agentSessionManager) {
+        initializeSkillManager(this.app, this.agentSessionManager);
+      }
     });
 
     // Initialize automatic selection handler
@@ -336,6 +342,11 @@ export default class CopilotPlugin extends Plugin {
     this.systemPromptRegister.cleanup();
     this.projectRegister.cleanup();
     this.settingsUnsubscriber?.();
+
+    // Tear down skills vault watchers + debounce timers.
+    if (SkillManager.hasInstance()) {
+      SkillManager.getInstance().dispose();
+    }
 
     // Cleanup selection handler
     this.cleanupSelectionHandler();

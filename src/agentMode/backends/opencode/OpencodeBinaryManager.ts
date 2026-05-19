@@ -10,6 +10,7 @@ import { IncomingMessage } from "node:http";
 import { FileSystemAdapter, requestUrl } from "obsidian";
 import * as path from "node:path";
 import { promisify } from "node:util";
+import { renameWithRetry } from "@/agentMode/skills/renameWithRetry";
 import { expectedBinaryName, resolveOpencodeTarget } from "./platformResolver";
 
 const execFileAsync = promisify(execFile);
@@ -396,20 +397,6 @@ async function readManifest(p: string): Promise<InstallManifest | null> {
 
 async function removeDir(p: string): Promise<void> {
   await fs.promises.rm(p, { recursive: true, force: true });
-}
-
-async function renameWithRetry(from: string, to: string, attempts = 3): Promise<void> {
-  let lastErr: unknown;
-  for (let i = 0; i < attempts; i++) {
-    try {
-      await fs.promises.rename(from, to);
-      return;
-    } catch (e) {
-      lastErr = e;
-      await new Promise((r) => window.setTimeout(r, 200));
-    }
-  }
-  throw lastErr;
 }
 
 /**

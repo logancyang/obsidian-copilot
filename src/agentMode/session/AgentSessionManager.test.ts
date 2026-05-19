@@ -149,6 +149,7 @@ function buildManager(): AgentSessionManager {
     subscribe: jest.fn(() => () => {}),
     shutdown: jest.fn(),
     setCached: jest.fn(),
+    clearCached: jest.fn(),
   };
   return new AgentSessionManager(
     buildApp(),
@@ -218,6 +219,9 @@ describe("AgentSessionManager.createSession", () => {
       shutdown: jest.fn(),
       setCached: jest.fn((id: string, state: unknown) => {
         cache.set(id, state);
+      }),
+      clearCached: jest.fn((id: string) => {
+        cache.delete(id);
       }),
     };
     const descriptor = buildDescriptor();
@@ -388,6 +392,45 @@ describe("AgentSessionManager.setActiveSession", () => {
     const a = await mgr.createSession();
     expect(() => mgr.setActiveSession("nope")).not.toThrow();
     expect(mgr.getActiveSession()).toBe(a);
+  });
+});
+
+describe("AgentSessionManager.restartBackend", () => {
+  it("returns false when the backend has not been started", async () => {
+    const mgr = buildManager();
+
+    await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(false);
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+  });
+
+  it("restarts an idle backend and replaces the active affected session", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+
+    await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
+
+    expect(mockSessionCancel).toHaveBeenCalledWith();
+    expect(mockSessionDispose).toHaveBeenCalledWith();
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.getSessions()).toHaveLength(1);
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
+  it("defers restart until an active turn leaves running", async () => {
+    const mgr = buildManager();
+    const first = await mgr.createSession();
+    getSessionTestHandle(first).setStatus("running");
+
+    await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(true);
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+
+    getSessionTestHandle(first).setStatus("idle");
+    await new Promise((resolve) => window.setTimeout(resolve, 0));
+
+    expect(mockBackendShutdown).toHaveBeenCalledTimes(1);
+    expect(mgr.getActiveSession()).not.toBe(first);
+    expect(mgr.getActiveSession()?.backendId).toBe("opencode");
   });
 });
 
@@ -624,6 +667,7 @@ describe("AgentSessionManager.applySelection", () => {
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
       setCached: jest.fn(),
+      clearCached: jest.fn(),
     };
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -713,6 +757,7 @@ describe("AgentSessionManager.applySelection", () => {
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
       setCached: jest.fn(),
+      clearCached: jest.fn(),
     };
     const mgr = new AgentSessionManager(
       buildApp(),

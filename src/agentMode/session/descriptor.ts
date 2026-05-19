@@ -40,6 +40,33 @@ export interface BackendDescriptor {
    */
   readonly Icon: React.ComponentType<{ className?: string }>;
 
+  /**
+   * Project-relative POSIX path of the directory this backend reads skills
+   * from. No leading slash. The symlink fanout writes
+   * `<vault>/<skillsProjectDir>/<skill-name>` for every enabled skill.
+   */
+  readonly skillsProjectDir: string;
+
+  /**
+   * Other backends whose skill directories this backend also loads skills
+   * from at spawn time, beyond its own `skillsProjectDir`. Drives the deny
+   * list for cross-discovered managed skills (see
+   * `skills/denyListComposer.ts`).
+   *
+   * Required (not optional) so a new backend must make an explicit decision.
+   * `[]` is the right answer when there is no cross-discovery surface.
+   */
+  readonly crossDiscoveredAgents: ReadonlyArray<BackendId>;
+
+  /**
+   * When true, the host restarts this backend whenever the effective managed
+   * skill set changes. Set for backends (opencode) whose native skill-command
+   * cache is built at spawn and won't otherwise pick up symlink fanout changes.
+   *
+   * Required (not optional) so a new backend must make an explicit decision.
+   */
+  readonly restartOnManagedSkillsChange: boolean;
+
   /** Sync read of install/setup state from settings + last-known disk reconcile. */
   getInstallState(settings: CopilotSettings): InstallState;
 

@@ -124,13 +124,10 @@ const WorkedForBlock: React.FC<WorkedForBlockProps> = ({ research, durationMs, a
     <Collapsible
       open={isExpanded}
       onOpenChange={setIsExpanded}
-      className={cn(
-        "tw-mb-2 tw-mt-1 tw-w-full tw-text-ui-medium max-md:tw-mb-1.5 max-md:tw-mt-0.5",
-        "copilot-divider-b tw-pb-2"
-      )}
+      className="tw-mb-2 tw-mt-1 tw-w-full max-md:tw-mb-1.5 max-md:tw-mt-0.5"
     >
       <CollapsibleTrigger asChild>
-        <div className="tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-1.5 tw-text-left tw-text-ui-small tw-text-muted hover:tw-text-normal">
+        <div className="copilot-divider-b tw-flex tw-w-full tw-cursor-pointer tw-items-center tw-gap-1.5 tw-pb-2 tw-text-left tw-text-sm tw-text-muted hover:tw-text-normal">
           <span className="tw-flex tw-size-icon-xs tw-shrink-0 tw-items-center tw-justify-center">
             <Sparkles className="tw-size-3 tw-text-muted" />
           </span>

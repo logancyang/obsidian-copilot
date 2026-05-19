@@ -2,18 +2,12 @@ import obsidianmd from "eslint-plugin-obsidianmd";
 import eslintReact from "@eslint-react/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import tailwind from "eslint-plugin-tailwindcss";
+import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
 
 export default [
   {
-    ignores: [
-      "node_modules/**",
-      "main.js",
-      "styles.css",
-      "data.json",
-      "designdocs/**",
-      "docs/**",
-    ],
+    ignores: ["node_modules/**", "main.js", "styles.css", "data.json", "designdocs/**", "docs/**"],
   },
 
   // obsidianmd recommended brings:
@@ -172,6 +166,10 @@ export default [
       // Tests use intentional `any` mocks; disable type-safety rules that flood
       // the test suite without adding signal.
       "@typescript-eslint/no-unsafe-member-access": "off",
+      // Tests freely reach across layers and import ACP wire types directly to
+      // build fixtures; the layer enforcement only applies to production code.
+      "boundaries/dependencies": "off",
+      "no-restricted-imports": "off",
     },
   },
 
@@ -222,13 +220,120 @@ export default [
   // detectBinary / rendererEventsShim are sibling utilities pulled in by
   // agent-mode wiring and share the same Electron-renderer assumptions.
   {
-    files: [
-      "src/agentMode/**",
-      "src/utils/detectBinary.ts",
-      "src/utils/rendererEventsShim.ts",
-    ],
+    files: ["src/agentMode/**", "src/utils/detectBinary.ts", "src/utils/rendererEventsShim.ts"],
     rules: {
       "import/no-nodejs-modules": "off",
+    },
+  },
+
+  // Element types (order matters — first match wins; files before folders):
+  //   registry     src/agentMode/backends/registry.ts (file)
+  //   barrel       src/agentMode/index.ts (file)
+  //   session      src/agentMode/session
+  //   acp          src/agentMode/acp
+  //   sdk          src/agentMode/sdk
+  //   backend      src/agentMode/backends/<name>
+  //   ui           src/agentMode/ui
+  //   skills       src/agentMode/skills
+  //   host         src/** (everything else under src/)
+  {
+    files: ["src/**/*.{ts,tsx,js,jsx}"],
+    plugins: { boundaries },
+    settings: {
+      // Required so `eslint-plugin-boundaries` can resolve `@/*` path aliases
+      // to their `src/*` targets.
+      "import/resolver": {
+        typescript: { project: "./tsconfig.json" },
+        node: true,
+      },
+      "boundaries/include": ["src/**/*"],
+      "boundaries/elements": [
+        { type: "registry", pattern: "src/agentMode/backends/registry.ts", mode: "file" },
+        { type: "barrel", pattern: "src/agentMode/index.ts", mode: "file" },
+        { type: "session", pattern: "src/agentMode/session" },
+        { type: "acp", pattern: "src/agentMode/acp" },
+        { type: "sdk", pattern: "src/agentMode/sdk" },
+        { type: "backend", pattern: "src/agentMode/backends/*", capture: ["name"] },
+        { type: "ui", pattern: "src/agentMode/ui" },
+        { type: "skills", pattern: "src/agentMode/skills" },
+        { type: "host", pattern: "src/**" },
+      ],
+    },
+    rules: {
+      "boundaries/dependencies": [
+        "error",
+        {
+          default: "disallow",
+          rules: [
+            { from: { type: "session" }, allow: { to: { type: ["session", "host"] } } },
+            { from: { type: "acp" }, allow: { to: { type: ["acp", "session", "host"] } } },
+            { from: { type: "sdk" }, allow: { to: { type: ["sdk", "session", "host"] } } },
+            {
+              from: { type: "backend" },
+              allow: [
+                { to: { type: ["acp", "sdk", "session", "skills", "host"] } },
+                { to: { type: "backend", captured: { name: "{{from.captured.name}}" } } },
+                { to: { type: "backend", captured: { name: "shared" } } },
+              ],
+            },
+            { from: { type: "registry" }, allow: { to: { type: ["backend", "session", "host"] } } },
+            {
+              from: { type: "ui" },
+              allow: {
+                to: { type: ["ui", "session", "registry", "skills", "host"] },
+              },
+            },
+            {
+              from: { type: "skills" },
+              allow: { to: { type: ["skills", "session", "host", "registry"] } },
+            },
+            {
+              from: { type: "barrel" },
+              allow: {
+                to: {
+                  type: ["acp", "session", "sdk", "backend", "registry", "ui", "skills", "host"],
+                },
+              },
+            },
+            { from: { type: "host" }, allow: { to: { type: ["host", "barrel"] } } },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Re-disable boundaries/dependencies for tests — the block above otherwise
+  // re-enables the rule for test files via the broader `src/**` pattern.
+  {
+    files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
+    rules: {
+      "boundaries/dependencies": "off",
+    },
+  },
+
+  // Only acp/ may import `@agentclientprotocol/sdk`. Tests are exempted via
+  // the test block; acp/ itself is exempted below.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@agentclientprotocol/sdk",
+              message:
+                "ACP wire types are confined to src/agentMode/acp/. session/, sdk/, ui/, backends/, and skills/ should depend on the session-domain types in @/agentMode/session/types instead. See src/agentMode/AGENTS.md.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/agentMode/acp/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": "off",
     },
   },
 

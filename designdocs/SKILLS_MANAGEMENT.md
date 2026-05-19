@@ -2,1074 +2,1131 @@
 
 ## Context
 
-Copilot for Obsidian now spawns three coding-agent backends — Claude Code
-(in-process SDK), Codex (`@zed-industries/codex-acp` subprocess), and
-OpenCode (subprocess) — each with its own skill / agent / command discovery
-system. In parallel, Copilot has its own legacy "Custom Commands" feature
-(markdown files in the vault, surfaced in Settings → Commands, the chat
-slash menu, the context menu, and the Obsidian command palette).
+Copilot for Obsidian now spawns three coding-agent backends — Claude
+Code (in-process SDK), Codex (`@zed-industries/codex-acp` subprocess),
+and OpenCode (subprocess) — each with its own skill discovery system
+under a different directory in the vault. In parallel, Copilot has its
+own legacy "Custom Commands" feature.
 
 Today the user has to learn three or four different skill systems, and
-agent-side skills are invisible to Copilot — they can't be browsed,
-toggled, or shared across agents. The legacy custom-command flow also
-doesn't take advantage of agent capabilities (tool use, file edits) and
-uses a different invocation paradigm than every CLI agent.
+agent-side skills are invisible to Copilot — they can't be browsed or
+toggled per agent. This proposal adds a new **Skills** tab in Settings
+that becomes the central place to organize every skill the user wants
+Copilot to manage.
 
-This proposal consolidates everything under one **Skills** tab backed by a
-single canonical location: `<vault>/copilot/skills/`. Every skill Copilot
-manages lives there. Per-agent visibility is a per-skill toggle that fans
-out into each agent's project directory via symlinks.
+The design is intentionally small:
 
-We take a **cc-switch-style ownership** stance: Copilot owns the skills
-domain. Existing skills the user already authored under
-`<vault>/.claude/skills/`, `<vault>/.opencode/skills/`, or
-`<vault>/.agents/skills/` are brought under management via a one-time,
-opt-in **Import** flow that moves the file into `copilot/skills/` and
-leaves a symlink at the original location so the owning agent keeps
-working with zero behavior change. Users who decline import keep their
-files in place; those skills are simply outside Copilot's management
-(the owning agent still uses them natively).
+- The Skills tab is empty until the user does something with it.
+- If we detect existing skills under `.claude/skills/`,
+  `.agents/skills/`, or `.opencode/skills/`, we show one friendly
+  consent card. One click moves all of them into a canonical store
+  and leaves symlinks behind so the owning agents keep working.
+- If we don't detect anything, the tab is just on — no opt-in screen.
+- Managed skills get inline per-agent toggles (Claude / Codex /
+  OpenCode). Toggling on creates a symlink in that agent's folder;
+  toggling off removes it. The canonical file is never touched.
+- The legacy **Custom Commands** tab stays exactly as it is. The two
+  systems coexist. After the user hits Enter, `/skill-name` and
+  `/command-name` look identical in the chat.
+- User-scope skills (`~/.claude/skills/`, `~/.codex/skills/`,
+  `~/.config/opencode/skills/`) are explicitly ignored. The owning
+  CLI keeps using them; Copilot pretends they don't exist.
 
-User-level skill directories (`~/.claude/skills/`, `~/.codex/skills/`,
-`~/.config/opencode/skills/`) are explicitly **out of scope for v1** —
-they belong to cc-switch / the agent's own install and we defer
-discovery and management of them to a future version (see Non-goals).
+The on-disk skill format follows the **Agent Skills specification**
+(<https://agentskills.io/specification>) for the shared fields
+(`name`, `description`, `license`, `compatibility`, `metadata`,
+`allowed-tools`). Three Claude Code-only flags
+(`disable-model-invocation`, `model`, `user-invocable`) are written
+as top-level frontmatter keys in Claude Code's native style so
+Claude's loader picks them up directly. The single Copilot-only
+field — which agents have a symlink — lives inside the spec's
+`metadata` escape hatch as `metadata.copilot-enabled-agents`.
 
-The legacy Custom Commands tab is replaced; existing commands migrate
-into managed skills on opt-in.
+## Per-agent landscape
 
-The design has two audiences:
+| Backend  | Project-level skill paths in the vault                                                                                                                                                                   |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Claude   | `.claude/skills/<name>/SKILL.md`                                                                                                                                                                         |
+| Codex    | `.agents/skills/<name>/SKILL.md` (walks up to filesystem/git root; use `path.parse(cwd).root` as the stop sentinel — `'/'` won't terminate on Windows)                                                   |
+| OpenCode | `.opencode/skills/<name>/SKILL.md`; **also** reads `.claude/skills/` and `.agents/skills/` cross-discovery, gated by `OPENCODE_DISABLE_EXTERNAL_SKILLS` / `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` env vars |
 
-- **New users** — never created a skill, possibly don't know what one
-  is. Open the Skills tab, see an empty-state card, create their first
-  skill via chat. Never have to think about file locations.
-- **Hardcore users** — already have skills authored under a specific
-  agent's project directory from using Claude Code, Codex, and OpenCode
-  against this vault. Open the Skills tab, see an Import dialog listing
-  every detected skill, accept or skip per row, then land in a unified
-  grid where every imported skill has three per-agent toggles.
-
-Key references:
-
-- `designdocs/todo/AGENT_MODE_TODOS.md` line 21 (P1 Skills; line 88 P2
-  "Slash command support. Revamp current slash command to function like
-  skills").
-- User-scope discovery is deferred to v2 (see Non-goals).
-
-## Per-agent landscape (paths we discover for import + symlink into for fanout)
-
-| Backend  | Project-level paths (vault)                                                                                                                                                                                                                                            |
-| -------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Claude   | `.claude/skills/<name>/SKILL.md`, `.claude/agents/<name>.md`, `.claude/commands/<name>.md`                                                                                                                                                                             |
-| Codex    | `.agents/skills/<name>/SKILL.md` (walks up to filesystem/git root; use `path.parse(cwd).root` as the stop sentinel — `'/'` won't terminate on Windows); `AGENTS.md`                                                                                                    |
-| OpenCode | `.opencode/skills/<name>/SKILL.md`, `.opencode/agents/<name>.md`, `.opencode/commands/<name>.md`; **also** reads `.claude/skills/` and `.agents/skills/` cross-discovery, gated by `OPENCODE_DISABLE_EXTERNAL_SKILLS` / `OPENCODE_DISABLE_CLAUDE_CODE_SKILLS` env vars |
-
-**Skill format consensus**: a directory containing `SKILL.md` with YAML
-frontmatter (`name`, `description`) plus optional supporting files. All
-three CLIs converge on this. Frontmatter dialect varies (Claude has the
-richest); we adopt a portable subset and round-trip per-agent extras
-unchanged.
+All three CLIs converge on the same on-disk format: a directory
+containing `SKILL.md` with YAML frontmatter plus optional supporting
+files. We adopt the Agent Skills spec verbatim.
 
 ## Goals
 
-1. **One home, one grid**: every Copilot-managed skill lives at
-   `<vault>/copilot/skills/<name>/`. The Settings → Skills tab shows them
-   all in one card grid with no scope chrome.
-2. **Per-agent toggles, default off**: every card has three per-agent
-   toggles (Claude / Codex / OpenCode), all off by default for newly
-   imported or discovered skills. Toggling on creates a symlink in that
-   agent's project dir; toggling off removes it. Carve-out: skills
-   created via `skill-creator`, imported during the explicit import
-   flow, or migrated from legacy custom commands auto-enable the
-   relevant agent at creation/import time as part of the user's
-   explicit consent.
-3. **Opt-in import for existing agent-folder skills**: the first time
-   the Skills tab is opened with detected skills under
-   `.claude/skills/`, `.agents/skills/`, or `.opencode/skills/`, the
-   user sees an **Import** dialog with per-row Import / Skip choices.
-   Imported skills land in `copilot/skills/` with a symlink left at
-   their original location so the owning agent keeps working unchanged.
-   Skipped skills are untouched and remain outside Copilot's management.
-   The Import dialog is re-runnable at any time.
-4. **New-user onboarding**: when discovery returns zero skills, the
-   Skills tab renders a single onboarding card pointing at the
-   conversational `skill-creator`.
-5. **Replace legacy Custom Commands**: provide a per-command, opt-in
-   migration path that produces managed skills. Keep the quick-command
-   UX (selection → palette/context menu → modal → insert/replace)
-   working under the new model.
-6. **Skill creation is conversational**, not a settings UI. Ship a
-   built-in `skill-creator` skill so agents can scaffold new skills in
-   `<vault>/copilot/skills/`.
+1. **One home for managed skills.** Every Copilot-managed skill lives
+   at `<vault>/copilot/skills/<name>/`. The Skills tab shows them in
+   one list with no scope chrome.
+2. **Per-agent toggles via symlinks.** The list row shows three
+   agent-icon toggles. Toggling on creates a symlink in that agent's
+   project dir; toggling off removes it. The canonical file is never
+   touched.
+3. **Opt-in bulk import — only when there's something to import.** If
+   we find pre-existing agent-folder skills, we show a friendly
+   consent card. One click brings them all under management. If we
+   find nothing, the tab is just on.
+4. **Storage that plays well with every loader.** Shared fields
+   follow the Agent Skills spec verbatim. Claude-only flags
+   (`disable-model-invocation`, `model`, `user-invocable`) are
+   written at top level in Claude's native style so Claude's loader
+   honors them without translation. The single Copilot-only field
+   lives under `metadata.copilot-enabled-agents`.
+5. **Coexist with the Custom Commands tab.** The legacy tab stays
+   unchanged. Both surfaces appear in the slash menu; on name
+   collision the skill wins.
 
 ## Non-goals
 
-- **User-scope skill discovery / management** — deferred to a future
-  version. v1 only sees skills inside the vault. cc-switch territory
-  (`~/.claude/skills/`, `~/.codex/skills/`, `~/.config/opencode/skills/`)
-  is untouched.
-- **In-place management of skills the user declined to import** — if
-  the user clicks Skip in the Import dialog, that skill stays where it
-  is and Copilot makes no claim over it. We don't show toggles, we
-  don't surface it in the Skills tab. The user can re-run import to
-  bring it under management later.
-- A visual editor for SKILL.md.
-- Cross-vault skill sync.
+- **User-scope skills** (`~/.claude/skills/`, `~/.codex/skills/`,
+  `~/.config/opencode/skills/`) — not detected, not warned, not
+  listed. The owning CLI uses them; Copilot pretends they don't exist.
+- **Conversational skill creation** (`skill-creator`) — deferred. v1
+  has no "New skill" CTA on the Skills tab; users author skills by
+  hand or import from agent folders.
+- **A visual SKILL.md editor.** Edit opens the file in Obsidian's
+  editor.
+- **Per-row collision resolution UI on import.** v1 auto-suffixes
+  (`foo-2`, `foo-3`, …).
+- **Honoring Claude-only flags on OpenCode / Codex.** `model`,
+  `disable-model-invocation`, and `user-invocable` are Claude
+  Code-only in v1. OpenCode and Codex silently ignore them.
+- **Cross-vault skill sync.**
 
 ## On-disk layout
 
+The canonical store location is **user-configurable** via the
+`agentMode.skills.folder` setting (see §Skills folder setting). The
+default is `copilot/skills`, resolved relative to the vault root.
+The rest of this doc uses the literal `copilot/skills` for
+readability; everywhere it appears in a path (including the
+lifecycle table, consent card, reconciliation rules, milestone
+checkpoints, and spawn-time directives), substitute the configured
+value. The placeholder `<skills-folder>` is used in a few places
+where the configurability is load-bearing for understanding.
+
 ```
 <vault>/
-  copilot/
-    skills/                              ← canonical home for every managed skill
-      <skill-name>/
-        SKILL.md                         ← per-skill state in `copilot:`
-                                           frontmatter block
-        ...support files
+  <skills-folder>/                       ← canonical home for every managed skill
+                                           (default: copilot/skills)
+    <skill-name>/
+      SKILL.md                           ← spec frontmatter, Copilot state in metadata
+      ...support files
   .claude/skills/<name>                  ← symlink/junction → absolute
-                                           <vault>/copilot/skills/<name>
+                                           <vault>/<skills-folder>/<name>
                                            when Claude toggle is on
-                                         (real dir IFF the skill was
-                                          skipped during Import — outside
-                                          Copilot's management)
   .agents/skills/<name>                  ← symlink/junction (Codex) — same rule
   .opencode/skills/<name>                ← symlink/junction (OpenCode) — same rule
 ```
 
 Discovery operates in two modes:
 
-- **Steady-state** (every load): walk `<vault>/copilot/skills/` only.
-  This is the canonical store and the fast path. Build an in-memory
-  `Skill[]`.
-- **Import detection** (on demand and on first run): walk every
+- **Steady-state** (every load): walk `<vault>/<skills-folder>/` only.
+  Build an in-memory `Skill[]`.
+- **Import detection** (on first open and on demand): walk every
   per-agent project path and identify entries that are real
-  directories (i.e. not symlinks pointing at `<vault>/copilot/skills/`).
-  These are import candidates. Symlinks already pointing at the
-  canonical store are ignored (they belong to imported skills).
+  directories (not symlinks pointing at `<vault>/<skills-folder>/`).
+  These are import candidates.
 
-### Storage — in SKILL.md frontmatter
+### Skills folder setting
 
-Per-skill state lives in the skill file itself under a `copilot:` block,
-keeping every skill self-contained and vault-portable.
+`agentMode.skills.folder` — string, defaults to `"copilot/skills"`.
+Stored under `agentMode.skills` alongside the rest of the skills
+schema in `src/settings/model.ts`.
+
+**Resolution**:
+
+- Always interpreted as a vault-root-relative POSIX path. Leading
+  `/` and `./` are stripped before use. `..` segments are rejected
+  (validation error in the settings UI).
+- Empty / whitespace-only value falls back to the default.
+- Forward slashes only on disk; the UI shows the value as the user
+  typed it.
+
+**Settings UI surface** (in the Skills tab, header area or top of
+the settings panel — implementation choice):
+
+- Text input labeled "Skills folder" with the configured value.
+- Inline helper text: "Where Copilot stores managed skills inside
+  your vault. Existing skills won't move automatically — see below."
+- Save is disabled while the value fails validation (empty after
+  trim, contains `..`, or contains an OS-illegal segment).
+
+**Changing the folder** leaves canonical files alone but tears
+down the agent fanout that pointed at the old location:
+
+1. Persist the new value to settings.
+2. Do **not** move existing skills automatically — moving a
+   directory that is the target of live symlinks/junctions requires
+   per-agent retargeting and atomic-replace semantics we'd rather
+   not ship silently. The canonical files stay where they are.
+3. **Sweep agent dirs**: for each entry under
+   `.<agent>/skills/*`, if it's a symlink/junction whose absolute
+   target resolves into the **previous** configured folder, remove
+   it. Real directories and symlinks pointing anywhere else are
+   left untouched (user-owned). The canonical SKILL.md files are
+   the source of truth — `copilot-enabled-agents` lets us rebuild
+   the fanout later if the user flips the setting back.
+4. Re-run discovery against the new path on the next Skills-tab
+   open. The grid reflects whatever lives at the new location
+   (likely empty on first switch).
+5. Surface a one-time notice in the Skills tab body when the new
+   folder is empty but the old folder still contains skills:
+
+   > Your skills folder changed to `<new>`. The agent symlinks
+   > that pointed at `<old>` have been removed. Move those skills
+   > into `<new>` (drag in Obsidian or in your file explorer) to
+   > relink them, or switch the setting back to restore the fanout.
+
+   Users who need migration can change the setting back (fanout
+   rebuilds automatically from `copilot-enabled-agents`), move the
+   files by hand, then flip the setting forward again.
+
+6. Reconciliation only ever operates against the **currently
+   configured** folder. Flipping back to a previously configured
+   folder rebuilds the symlinks from each canonical SKILL.md's
+   `copilot-enabled-agents` — nothing is lost.
+
+**Spawn-time directive** (see §Decisions captured — "Spawn-time
+system prompt steers skill creation into the managed folder")
+must template the **currently configured** folder, not a hardcoded
+`copilot/skills`. Each backend's `descriptor.ts` reads the live
+setting at spawn time.
+
+### Frontmatter
+
+Shared fields follow the agentskills.io spec verbatim. Claude
+Code-only flags are written at top level in Claude's native style.
+The single Copilot-only field — agent symlink fanout — lives inside
+`metadata`.
 
 ```yaml
 ---
-name: review-prose
-description: Critique writing for clarity, voice, and rhythm.
-copilot:
-  enabledAgents: [claude, opencode] # which agents have a symlink today
-  preferredModel: <optional model key override>
-allowed-tools: [Read, Grep, WebSearch] # optional Claude-style passthrough
+name:
+  review-prose # spec: required, 1–64 chars, lowercase a-z/0-9/-,
+  #       no leading/trailing/consecutive hyphens,
+  #       must match parent directory name
+description: Critique writing for clarity, voice, and rhythm. # spec: required, ≤1024 chars
+allowed-tools: Read Grep WebSearch # spec experimental + Claude native; space-separated
+model: claude-opus-4-7 # Claude Code native; omitted = agent default
+disable-model-invocation: false # Claude Code native; default false
+user-invocable: true # Claude Code style (kebab-case top-level); default true
+metadata:
+  copilot-enabled-agents: "claude,opencode"
 ---
-<skill body — substitution placeholders allowed>
+<skill body — pure markdown, no Copilot directives>
 ```
 
-`copilot.enabledAgents` is the source of truth for which agents have a
-symlink in their project dir. The on-disk symlinks are derived from this
-field; on startup we reconcile (create missing symlinks, remove orphans).
-The `copilot:` namespace keeps Copilot-owned config separate from
-per-agent passthrough fields (`allowed-tools`, `model`, `tools`, …) that
-we round-trip unchanged. **Default for newly-imported or auto-discovered
-managed skills is `enabledAgents: []`** — denied for every agent until
-the user toggles on. Carve-outs:
+Rules:
 
-- Skills imported via the Import dialog ship with the originating agent
-  pre-enabled (the user's explicit Import click is the consent moment).
-- Skills authored via `skill-creator` ship with the active backend
-  pre-enabled.
-- Skills migrated from legacy custom commands ship with the active
-  backend pre-enabled.
+- **Shared fields** (`name`, `description`, `license`,
+  `compatibility`, `allowed-tools`, `metadata`) — written exactly as
+  the agentskills.io spec defines them.
+- **Claude Code-only flags** — top-level keys in Claude's native
+  kebab-case style. Claude's loader picks them up directly via the
+  symlink at `.claude/skills/<name>/`, which means we don't need to
+  synthesize deny rules at spawn time for them.
+  - `model` — model key passed to Claude. Omitted = Claude default.
+  - `disable-model-invocation` — boolean. When `true`, Claude cannot
+    auto-invoke the skill from its own reasoning. The user can still
+    call it via the chat slash menu. Default `false`.
+  - `user-invocable` — boolean (Claude-style kebab-case; not a
+    native Claude field but follows the convention). When `false`,
+    the skill is hidden from the chat slash menu. Enforced
+    Copilot-side. Default `true`. (No palette / right-click surface
+    for managed skills in v1 — see §M7.)
+- **`metadata.copilot-enabled-agents`** — comma-separated list of
+  `claude`, `codex`, `opencode`. Source of truth for which agents
+  have a symlink in their project dir. Empty string = none.
+  Lives in `metadata` because it has no Claude-native analog.
+- Unknown top-level fields the spec doesn't define are tolerated on
+  read (OpenCode and Codex are permissive); we only emit the keys
+  listed above. Unknown `metadata` keys (e.g. `author`, `version`)
+  are preserved on round-trip but never read or written by Copilot.
+- The on-disk symlinks are derived from `copilot-enabled-agents`; on
+  startup we reconcile (create missing symlinks, remove orphans).
 
-There is no `data.json` enable map under this design — per-skill state
-travels with the skill file. This is a deliberate change from the prior
-two-scope draft, which needed a separate map for project-only skills.
+There is no `data.json` enable map and no separate skip-list.
+Per-skill state travels with the skill file.
 
 ### Windows compatibility
 
-The canonical-home + symlink fanout is the only piece of this design that
-isn't portable as written. Concrete differences vs POSIX:
-
-- **Symlink → directory junction.** `fs.symlink()` on Windows requires
-  admin privileges or Developer Mode (Settings → Privacy & security →
-  For developers); a stock Obsidian process gets `EPERM`. Use
-  `fs.symlink(absoluteTarget, linkPath, 'junction')` for directory
-  fanout on `process.platform === 'win32'`. Junctions: directory-only
-  (✓ matches our case), require **absolute** targets (so resolve before
-  passing — relative `../../copilot/skills/<name>` will not work),
-  same-volume only (✓ inside one vault).
-- **Privilege fallback.** Wrap the first `fs.symlink` call site. On
-  `EPERM` surface a one-time notice in the Skills tab ("Multi-agent
-  fanout requires Developer Mode on Windows; until then enabled
-  per-agent toggles will be no-ops") rather than crashing discovery.
-  We do **not** silently substitute a copy-based fanout in v1 — that
-  would diverge state between agents on Edit and is out of scope.
-- **Atomic-replace + rename retry.** The `.<name>.replacing` pattern
-  (used by Import in M2 and toggle-flip in M3) hits `EBUSY`/`EPERM`
-  whenever Obsidian's vault watcher, OneDrive/Dropbox, or AV holds an
-  open handle. Reuse the existing rename-with-retry helper from
-  `OpencodeBinaryManager` (`src/agentMode/backends/opencode/OpencodeBinaryManager.ts:401-413`)
-  rather than re-implementing.
-- **Sync-folder caveat.** When the vault lives inside OneDrive / iCloud
-  Drive / Dropbox on Windows, sync clients sometimes replace junctions
-  with shortcuts or skip them entirely. Detect this via substring match
-  on the absolute vault path and render a one-line warning in the
-  Skills tab ("This vault is inside `<provider>`; managed-scope fanout
-  may not survive cloud sync").
+- **Directory junction instead of symlink.** `fs.symlink()` on Windows
+  requires admin privileges or Developer Mode (Settings → Privacy &
+  security → For developers); a stock Obsidian process gets `EPERM`.
+  Use `fs.symlink(absoluteTarget, linkPath, 'junction')` on
+  `process.platform === 'win32'`. Junctions are directory-only (✓),
+  require **absolute** targets (resolve before passing), and are
+  same-volume only (✓).
+- **Privilege fallback.** On `EPERM`, surface a one-time notice in
+  the Skills tab ("Multi-agent fanout requires Developer Mode on
+  Windows; until then enabled per-agent toggles will be no-ops"). The
+  canonical SKILL.md is still authoritative; the user can fix it later
+  by enabling Developer Mode and re-toggling.
+- **Rename-with-retry.** Bulk-move (M2) and atomic-replace on toggle
+  flip (M3) hit `EBUSY` / `EPERM` whenever Obsidian's vault watcher,
+  OneDrive / Dropbox, or AV holds an open handle. Reuse the existing
+  helper at
+  `src/agentMode/backends/opencode/OpencodeBinaryManager.ts:401-413`.
+- **Sync-folder caveat.** When the vault lives inside OneDrive /
+  iCloud Drive / Dropbox on Windows, sync clients sometimes replace
+  junctions with shortcuts or skip them entirely. Detect via substring
+  match on the absolute vault path and render a one-line warning in
+  the Skills tab.
 
 ## Skill lifecycle
 
-Every managed skill has the same set of actions. There is no scope
-distinction.
-
-| Action             | Effect                                                                                                                                                  |
-| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Toggle agent X on  | Create symlink/junction at `<vault>/.<X-dir>/skills/<name>` → `<vault>/copilot/skills/<name>` (absolute target). Update `copilot.enabledAgents`.        |
-| Toggle agent X off | Remove that symlink. Canonical copy untouched. Update `copilot.enabledAgents`.                                                                          |
-| Edit               | Open `<vault>/copilot/skills/<name>/SKILL.md` in the Obsidian editor (cleanly vault-indexed; no synthetic TFile dance needed).                          |
-| Delete             | Remove the canonical directory and every symlink under each agent's project dir. Confirmation dialog required. (Vault sync / git is the rollback path.) |
+| Action             | Effect                                                                                                                                                                                                                        |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Toggle agent X on  | Create symlink/junction at `<vault>/.<X-dir>/skills/<name>` → `<vault>/copilot/skills/<name>` (absolute target). Append `X` to `metadata.copilot-enabled-agents`.                                                             |
+| Toggle agent X off | Remove that symlink. Canonical copy untouched. Remove `X` from `metadata.copilot-enabled-agents`.                                                                                                                             |
+| Edit SKILL.md      | Open `<vault>/copilot/skills/<name>/SKILL.md` in Obsidian's editor. Body and frontmatter both editable; reconciliation picks up changes on next focus.                                                                        |
+| Edit settings      | Open per-skill modal (name, description, allowed-tools, Claude-only flags). See §Edit settings modal. Renames are an atomic dir-rename + per-agent symlink swap (delete old `<old-name>` link, create new `<new-name>` link). |
+| Delete             | Remove the canonical directory and every symlink under each agent's project dir. Confirmation dialog lists the concrete paths (see §States). Vault sync / git is the rollback path.                                           |
 
 Toggle ops are atomic-replace-friendly: if the target path already
-exists (e.g. a leftover real dir from an aborted Import), rename it to
+exists (e.g. a leftover real dir from an aborted move), rename it to
 `.<name>.replacing`, create the link with an absolute target, then
 delete the `.replacing` directory.
 
-## Import existing skills (replaces the prior "Promote" action)
+## The consent card (first-run import)
 
-The Import flow brings a user's pre-existing agent-folder skills under
-Copilot management. It is **opt-in per skill** and runs in two contexts:
+When the Skills tab opens and discovery finds ≥1 importable skill (a
+real directory under `.<agent>/skills/<name>/` that is not a symlink
+to `<vault>/copilot/skills/`), the tab body shows a single card:
 
-1. **First-run prompt**: the first time the Skills tab is opened and
-   discovery detects ≥1 importable skill (a real directory under
-   `.<agent>/skills/<name>/` that is not a symlink to
-   `<vault>/copilot/skills/`), we open the Import dialog automatically.
-2. **Manual re-run**: a "Find existing skills" action in the Skills tab
-   header re-runs discovery and reopens the dialog. Useful after the
-   user authors a new skill via Claude Code's CLI (or similar) and
-   wants Copilot to pick it up.
+```
+You already have some skills in this vault
 
-### Dialog UX
+We spotted <N> skills tucked inside your agent folders.
+Copilot can bring them together in one place so it's easier
+to see them, share them across agents, and tweak them.
 
-A modal listing every importable candidate, grouped by source agent,
-showing for each row:
+▸ skill-a, skill-b, skill-c                  (from Claude)
+▸ research-helper                            (from Codex)
+▸ writing-coach, daily-note                  (from OpenCode)
 
-- Skill name and one-line description (parsed from frontmatter).
-- Source path (`<vault>/.claude/skills/<name>/`, etc.).
-- Per-row action: **Import** / **Skip**.
-- Bulk action at top: **Import All**.
-- Per-row resolve UI for name collisions (see below).
+Your agents will keep working exactly the same — we just
+leave shortcuts behind so nothing breaks. If two skills
+share a name we'll add a small suffix (foo-2, foo-3, …).
 
-After the user clicks Confirm, each Imported row runs the import flow
-in sequence. Skipped rows are remembered (in `data.json` under
-`agentMode.skills.skippedImports: ["<source-path>", …]`) so we don't
-re-prompt for them on every Skills-tab open. The user can clear that
-list by re-running import via the header action.
+[ Not now ]                          [ Bring them together ]
+```
 
-### Import flow per skill (atomic)
+The preview list is read-only — no per-row toggles, no collision UI.
 
-1. **Move** `<vault>/.<agent>/skills/<name>/` → `<vault>/copilot/skills/<name>/`.
-   - Use the rename-with-retry helper from `OpencodeBinaryManager`
-     (`src/agentMode/backends/opencode/OpencodeBinaryManager.ts:401-413`)
-     to absorb `EBUSY`/`EPERM` from vault-watcher / sync / AV holds.
-2. **Verify** the canonical copy reads cleanly (SKILL.md frontmatter
-   parses, expected files present). On failure, move back and abort
-   this row.
-3. **Stamp `copilot:` frontmatter**: write
-   `enabledAgents: [<source-agent>]` and any `preferredModel`
-   already in the file. Round-trip every other frontmatter key
-   byte-for-byte.
-4. **Atomic-replace** the original directory path with a symlink (POSIX)
-   / directory junction (Windows) pointing at the canonical copy:
-   - Create the link at the original path with an **absolute** target.
-   - The original path was already moved in step 1, so this is a
-     simple create — no rename dance needed.
-   - On Windows without privilege, skip the symlink and surface the
-     one-time EPERM notice. The skill is still imported into the
-     canonical store; the originating agent will not see it until the
-     user enables Developer Mode and re-toggles.
-5. An interrupted run can leave the canonical copy without the symlink;
-   on next Skills-tab load we reconcile by walking
-   `copilot.enabledAgents` and recreating any missing links.
+- **Bring them together** runs the bulk move. Each skill lands with
+  `metadata.copilot-enabled-agents` set to its source agent.
+- **Not now** leaves everything in place. The tab then shows the
+  quiet placeholder. No persistent skip-list; a `Find existing skills`
+  header action re-runs detection on demand.
 
-### Name collisions on import
+If discovery returns zero candidates AND zero managed skills exist,
+the tab body is just one short line: "Skills you create or import
+will show up here." Skills is on by default — there's nothing to
+opt into.
 
-If `<vault>/copilot/skills/<name>/` already exists when importing a
-candidate of the same name, the dialog asks per row:
+### Bulk-move per skill (atomic)
 
-- **Rename** the imported skill (text input).
-- **Replace** the existing managed copy (destructive; requires a
-  second-tap confirmation).
-- **Skip** this row.
-
-We do not silently merge or overwrite.
+1. **Move** `<vault>/.<agent>/skills/<name>/` →
+   `<vault>/copilot/skills/<name>/`. Use the rename-with-retry helper.
+   On name collision in the canonical store, append the smallest
+   suffix (`-2`, `-3`, …) that keeps the name spec-valid.
+2. **Verify** the canonical copy parses (SKILL.md frontmatter is
+   valid per spec). On failure, move back and abort this row with a
+   one-line notice.
+3. **Stamp `metadata`**: set `copilot-enabled-agents` to the source
+   agent. Preserve every other frontmatter field byte-for-byte
+   (within the spec's allowed shape).
+4. **Atomic-replace** the original path with a symlink/junction to
+   the canonical copy, absolute target. On Windows without privilege,
+   skip the link and surface the one-time EPERM notice.
+5. An interrupted run can leave the canonical copy without the
+   symlink; reconciliation on next load walks
+   `copilot-enabled-agents` and recreates any missing links.
 
 ## Filtering enabled skills per backend
 
-Default state for every imported skill is **deny** (because
-`enabledAgents` starts at `[]` for auto-discovered cards, or at the
-single source agent for Import-confirmed cards).
+Default for every imported skill: `copilot-enabled-agents` includes
+the source agent only.
 
 The per-spawn deny list is rebuilt every time a backend launches a
-session, computed as `discovered_skills_for_<backend> − enabled_for_<backend>`,
+session, computed as `cross_discovered − enabled_for_<backend>`,
 where:
 
-- `discovered_skills_for_<backend>` = the union of
-  - real symlinks under `<vault>/.<backend-dir>/skills/` resolving to
-    `<vault>/copilot/skills/<name>/` (these are managed skills with the
-    backend toggled on — already implicitly enabled), and
-  - real directories under `<vault>/.<backend-dir>/skills/` that we
-    skipped during Import (outside Copilot's management — we leave them
-    alone).
-  - For OpenCode only: also includes managed skills that show up via
-    cross-discovery from `.claude/skills/` and `.agents/skills/` even
-    when OpenCode's own toggle is off. These are the cases where
-    spawn-time deny earns its keep.
-
+- `cross_discovered` = the set of managed skills the backend would
+  otherwise see via cross-discovery (OpenCode reads `.claude/skills/`
+  and `.agents/skills/` in addition to its own).
 - `enabled_for_<backend>` = managed skills whose
-  `copilot.enabledAgents` includes `<backend>`.
+  `copilot-enabled-agents` includes `<backend>`.
 
-**Claude Code (SDK)**: emit `permissions.deny: ["Skill(<name>)", …]`
-for every name in `discovered − enabled`. Verify the rule grammar at
-implementation time: research surfaced both `skillOverrides` and `Skill`
-permission rules. If `Skill(name)` deny doesn't take effect at runtime,
-fallback is `skillOverrides: { <name>: "off" }` per disabled name.
+**Claude (SDK)**: Claude's loader honors top-level
+`disable-model-invocation` and `model` natively via the symlink at
+`.claude/skills/<name>/`. We don't synthesize spawn-time deny rules
+for them. Claude has no cross-discovery to worry about, so its deny
+list is usually empty. (We still wire the deny mechanism for
+defense-in-depth and for any future cross-discovery surface.)
 
 **OpenCode**: extend `OPENCODE_CONFIG_CONTENT` (already injected at
 spawn by `OpencodeBackend.buildSpawnDescriptor`,
-`src/agentMode/backends/opencode/OpencodeBackend.ts:82-86`) with:
+`src/agentMode/backends/opencode/OpencodeBackend.ts:82-86`) with
+`permission.skill: { "<name>": "deny" }` per skill in
+`cross_discovered − enabled`. The Claude-only flags
+(`disable-model-invocation`, `user-invocable`, `model`) are unknown
+to OpenCode and are silently ignored by its frontmatter loader; we
+don't translate them.
 
-```js
-permission: {
-  skill: { "<name>": "deny" /* per disabled skill, including cross-discovered ones */ }
-}
+**Codex**: managed skills are governed by symlink presence only. If
+the Codex toggle is off, there is no symlink at
+`.agents/skills/<name>` and Codex cannot see the skill. The
+Claude-only flags are unknown to Codex and ignored.
+
+### Reconciliation — keeping the fanout in sync
+
+The managed folder and the per-agent symlink dirs stay aligned via
+a single idempotent reconciliation pass owned by `SkillManager`.
+**`metadata.copilot-enabled-agents` is the source of truth; the
+agent-dir symlinks are a derived view.** Whenever the two disagree,
+the filesystem is reshaped to match the metadata — never the
+reverse.
+
+#### What constitutes a "managed" entry
+
+For reconciliation purposes, an entry at `.<agent>/skills/<name>/`
+is **managed** (and therefore reconciliation's to touch) iff it's a
+symlink/junction whose absolute target resolves into the **current
+or any previously configured** skills folder. Everything else —
+real directories, symlinks pointing elsewhere, broken symlinks
+pointing into directories we never owned — is **user-owned** and
+reconciliation never modifies it. The "previously configured"
+allowance covers the brief window between a folder change and the
+sweep landing; outside that window the same rule lets us clean up
+state left by an aborted sweep.
+
+#### Triggers
+
+A pass runs (debounced 250ms, single-flight — see Concurrency):
+
+1. **Plugin load**, once, after `app.vault.onLayoutReady`.
+2. **Skills-tab open** and on Skills-tab focus regained.
+3. **App / window focus regained** — defensive; catches external
+   changes (git pull, file-manager edits, sync clients) made while
+   the plugin wasn't observing.
+4. **Vault-watcher events** scoped to:
+   - `<skills-folder>/**` — `create` / `modify` / `delete` /
+     `rename` on any `SKILL.md` or the parent dir.
+   - `.claude/skills/**`, `.agents/skills/**`,
+     `.opencode/skills/**` — link/dir mutations from outside
+     Copilot.
+5. **Immediately after every Copilot-initiated write** — toggle,
+   rename, delete, bulk import, folder change. The UI doesn't wait
+   for the watcher; the action runs reconciliation locally so the
+   grid reflects the new state on the same tick.
+
+Obsidian's `app.vault.on(...)` only fires for vault-indexed paths;
+symlink dirs and files outside the markdown tree can fall through.
+Use `fs.watch` (or `chokidar` if multi-platform reliability proves
+flaky) on the four watched roots above, scoped to the vault root,
+and tear the watchers down in `onunload`.
+
+#### The pass (idempotent)
+
+1. **Walk the canonical store.** Read every
+   `<skills-folder>/<name>/SKILL.md`, validate against the spec,
+   build `Skill[]`. Files that fail validation are skipped with a
+   one-line warning surfaced in the Skills tab (no symlink work is
+   done for an invalid skill — its symlinks, if any, fall through
+   to step 3 and are treated as orphans).
+2. **Forward sync** — for each skill, for each agent in
+   `metadata.copilot-enabled-agents`:
+   - Link missing → create it (absolute target).
+   - Link present, target resolves to current canonical → no-op.
+   - Link present, target resolves elsewhere or is broken →
+     atomic-replace via the §Skill lifecycle helper.
+   - A **real directory** sits at the path → log a one-line
+     warning and skip. Reconciliation never deletes real
+     directories. (This is the "import never completed" or
+     "user dropped a folder here" case; the user resolves it
+     by running the consent card or moving the dir.)
+3. **Reverse sync (orphan removal)** — for each agent path, list
+   entries and remove any link that meets all of:
+   - Is a symlink/junction (never a real dir).
+   - Resolves into the current or previously configured skills
+     folder.
+   - Its basename has no matching entry in step 1's `Skill[]`,
+     or its target's `<name>` no longer matches the link's
+     basename.
+4. **Emit state.** Publish the new `Skill[]` through `SkillManager`'s
+   subscription so `SkillsSettings.tsx` re-renders.
+
+#### Concurrency
+
+- **Single-flight.** `SkillManager` holds an `inFlight: Promise<void> | null`.
+  Triggers that fire while a pass is running coalesce to one
+  trailing pass scheduled when the current one settles.
+- **Debounce.** Watcher-driven triggers are debounced 250 ms so a
+  multi-file save or git checkout fires one pass, not N.
+- **UI writes are awaited.** Toggle / rename / delete handlers
+  `await` reconciliation before resolving so the grid never paints
+  a stale state.
+
+#### Failure handling
+
+- **Windows EPERM** on `fs.symlink(..., 'junction')` → per-skill
+  warning surfaced in the Skills tab, pass continues for the
+  remaining skills, metadata is **not** rolled back. The skill
+  re-attempts its fanout on every subsequent pass; the user enables
+  Developer Mode and the next trigger heals it.
+- **Parse errors** on `SKILL.md` → that skill is skipped with a
+  one-line warning; orphan removal in step 3 will clean its stale
+  symlinks since it's absent from `Skill[]`.
+- **Mid-pass `ENOENT` / `EBUSY`** (sync client or AV grabbed the
+  file) → use the existing rename-with-retry helper for writes;
+  swallow ENOENT on reads (the file was deleted out from under us;
+  the next pass picks up the new reality).
+- **All errors are non-fatal to the pass** — a partial reconcile is
+  better than a thrown promise that never re-emits state.
+
+## UI — V1 Tidy list row
+
+The Skills tab follows the **V1 Tidy list row** variant from the
+attached Claude design exploration (the `#v1` section in
+`Skills Tab v2.html`). The plugin matches the visual contract — not
+the literal HTML/CSS, which is a prototype.
+
+### Row anatomy
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ skill-name                                  [C][X][O]      ⋯     │
+│ One-line description from frontmatter.                            │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
-Cross-discovery (`.claude/skills/`, `.agents/skills/`) stays **on**
-intentionally: managed skills with Claude or Codex toggles on but
-OpenCode toggle off get denied per-name; this is more precise than a
-blanket cross-discovery shut-off that would also affect skills the
-user _did_ enable.
-
-**Codex**: in v1 Codex has no per-skill deny. Under the new model this
-is largely a non-issue:
-
-- Managed skills with Codex toggle off → no symlink at
-  `.agents/skills/<name>/` → Codex cannot see them. ✓
-- Skipped skills the user left under `.agents/skills/` → Codex sees
-  them natively, but they are explicitly outside Copilot's management
-  and we make no claim about hiding them. The user manages those via
-  Codex's own configuration.
-
-The previous design's "always visible to Codex regardless of toggle"
-warning is no longer needed for managed skills. (Skipped skills under
-`.agents/skills/` are an outside-Copilot concern, not a limitation we
-need to surface.)
-
-### Reconciliation on startup
-
-On Skills-tab load (and on relevant vault-watch events):
-
-1. Read every `copilot/skills/<name>/SKILL.md` to build the in-memory
-   `Skill[]`.
-2. For each skill, for each agent in `copilot.enabledAgents`, ensure
-   the corresponding symlink exists at `.<agent-dir>/skills/<name>/`.
-   If missing, create it. If present and pointing elsewhere, repair.
-3. For each agent path, find symlinks pointing at `copilot/skills/`
-   that no longer correspond to a managed skill (orphans) and remove
-   them. (Removal only — never delete real directories during
-   reconciliation.)
-
-This makes `copilot.enabledAgents` the source of truth and the
-filesystem a derived view that we keep aligned.
-
-## Quick commands
-
-**A skill is unified — it doesn't declare an execution mode.** The
-_invocation surface_ picks the runtime profile:
-
-| Surface                              | Tool profile          | Result rendering                                      |
-| ------------------------------------ | --------------------- | ----------------------------------------------------- |
-| Chat `/skill-name`                   | Active session's mode | Streamed into the chat trail (existing agent UI)      |
-| Palette / right-click on a selection | **Read-only profile** | Modal — see _Edit-preview rendering_ below (deferred) |
-
-In every surface, the slash menu / palette / context menu show only the
-skills currently **enabled** for the active backend.
-
-### Read-only tool profile
-
-For each backend, configure the spawn so write/exec tools are denied
-while read tools (Read, Grep, Glob, optionally WebSearch/WebFetch) stay
-on:
-
-- **Claude (SDK)**: pass `allowedTools` plus a `PreToolUse` hook (the
-  SDK adapter in `src/agentMode/sdk/` already accepts hooks) that denies
-  `Write`, `Edit`, `Bash`, `MultiEdit`, etc. silently — the model never
-  sees a permission error, the tool simply isn't available.
-- **Codex**: it already has `read-only` ACP mode (mapped to `plan`
-  today in `src/agentMode/backends/codex/descriptor.ts:127`); reuse for
-  quick-command spawns.
-- **OpenCode**: extend `OPENCODE_CONFIG_CONTENT` with `permission.tool`
-  / `permission.write` denials.
-
-### Edit-preview rendering — cross-cuts with chat agent mode (deferred)
-
-How a quick-command modal shows the user "here's what would change,
-accept or reject" is the **same problem** chat agent mode has when an
-agent calls `Edit` / `Write` and we want to preview the diff before it
-lands on disk. There is already a standing P1 for this in
-`designdocs/todo/AGENT_MODE_TODOS.md:27-28`. We will not solve this in
-two places:
-
-- The mechanism that captures, previews, and accept/rejects an agent's
-  proposed edit must work for both the chat-mode agent edit and the
-  quick-command surface.
-- Until that mechanism is designed, the quick-command surface ships
-  with a _minimal_ result modal (existing `CustomCommandChatModal` with
-  insert / replace / copy) and treats the agent's response as plain
-  markdown.
-- When the chat agent edit-preview lands, the quick-command surface
-  inherits it for free.
-
-### Trade-off accepted
-
-Today's path goes straight to the user's plain LLM provider (no agent),
-which works even when Agent Mode is disabled. Under this proposal,
-quick commands depend on having an agent backend installed.
-**Mitigation**: keep a fallback "plain LLM, no tools" path for users
-without any agent backend, reusing the existing
-`useStreamingChatSession` hook (`src/hooks/use-streaming-chat-session.ts`).
-
-### Substitution
-
-For the chat slash-command surface, SKILL.md placeholders (`$ARGUMENTS`,
-`$1`) are resolved by the agent's native skill resolver — we don't
-expand them plugin-side. For the quick-command surface, the user's
-selection is passed to the agent alongside the skill invocation; the
-exact wire format is settled with the edit-preview design.
-
-## Migration: Custom Commands → Skills (per-command opt-in)
-
-The Skills tab shows a dedicated **Legacy commands** section at the top
-listing every existing `CustomCommand`. Each row has a "Migrate to skill"
-action; nothing is moved automatically. Migration produces a managed skill
-with the active agent pre-enabled.
-
-For each command the user opts in:
-
-1. Parse current frontmatter → derive `name` (slugified `title`).
-2. Generate a one-line `description` via a single LLM call. The user
-   sees the proposed description in a confirmation dialog and can edit
-   before accepting.
-3. Wrap content into `SKILL.md`:
-   ```yaml
-   ---
-   name: <slug>
-   description: <user-confirmed one-liner>
-   copilot:
-     enabledAgents: [<active backend at migration time>]
-     preferredModel: <command.modelKey || empty>
-   ---
-   <command.content>
-   ```
-   Today's `showInSlashMenu` / `showInContextMenu` flags are dropped:
-   every migrated skill is invocable from chat, palette, and context
-   menu by default.
-4. Write to `<vault>/copilot/skills/<slug>/SKILL.md` and create a
-   symlink under the active backend's project dir.
-5. Delete the original legacy markdown file once the new SKILL.md is
-   written and verified (vault sync / git is the rollback path).
-6. Re-register palette + context-menu entries from the new skills set.
-
-The legacy command stays functional until migrated — both systems coexist
-during the migration window. The Legacy section is hidden once empty.
-
-## UX design brief (for Claude design)
-
-> Paste the body of this section into the Claude design tool. It is
-> intentionally self-contained — Claude design has no access to the rest
-> of this doc, our codebase, or Obsidian itself, so all the context it
-> needs to reason about the screens lives below. **Visual fidelity,
-> layout, iconography, and interaction polish are entirely the design
-> tool's call** — this brief only supplies product context, vocabulary,
-> jobs-to-be-done, and the user flows that must be expressible in the
-> final design.
-
-### Role and deliverable
-
-You are a UX designer. Design the settings surface for a feature called
-**Skills** in a desktop note-taking app plugin. Cover the screens and
-states listed at the end of this brief. Choose the visual language that
-fits — fidelity, density, color, and component style are up to you.
-Don't generate code; deliver a design.
-
-**Design for both ends of the spectrum.** The same surface has to land
-gracefully for someone who has never heard the word "skill" before
-(needs teaching and a single obvious next step) _and_ for a power user
-who arrives with skills already authored across multiple agent CLIs
-(needs a fast path to bring those under the plugin's management).
-The design should not feel built for only one of them.
-
-### Product context (assume zero prior knowledge)
-
-- **Obsidian** is a Markdown note-taking app for desktop. It has a
-  Plugin Settings dialog that opens as a modal over the app. That
-  dialog uses a **top-tab layout** for major settings areas. The
-  feature you're designing lives inside that dialog as one of those
-  tabs.
-- **Copilot for Obsidian** is a plugin that adds an AI assistant to
-  Obsidian. The assistant can run on top of one or more **agent
-  backends** the user has installed locally — three of them, all
-  terminal-based AI coding agents: **Claude Code**, **Codex**, and
-  **OpenCode**.
-- Today the assistant's settings dialog already has tabs for areas
-  like Basic, Model, Agent, QA, Commands, Plus, Advanced. We are
-  **replacing the existing "Commands" tab with a new "Skills" tab**.
-
-### Who the user is — two personas, one surface
-
-This tab serves two audiences. Don't pick one; design so the same
-layout teaches the first while staying out of the way of the second.
-
-1. **Newcomer.** Has Copilot installed and uses the assistant in chat,
-   but has never authored or managed a skill, may not have any agent
-   backend installed beyond the default, and doesn't know what
-   "agent" or "skill" mean. Needs the tab to teach what a skill is
-   and why they'd want one, make the path to creating one obvious,
-   and not punish them with jargon when they have nothing to manage.
-   Their home base is the **Empty state** and the **First-run** screen.
-
-2. **Power user.** Already runs Claude Code / Codex / OpenCode against
-   this vault, has skills authored under one or more of the agents'
-   project folders, and wants a single place to govern what each agent
-   can see in this vault. Their home base is the **Steady state**
-   _after_ the **Import dialog** has run.
-
-When in doubt about where to put weight, lean **newcomer** in copy and
-empty states (plain language, define jargon inline) and lean **power
-user** in density and information access.
-
-### Vocabulary the design needs to introduce visually
-
-- **Skill** — a reusable, named instruction set: a name, a one-line
-  description, a markdown body, and optional support files. Invoked
-  by name from chat (`/skill-name`), from a right-click on selected
-  text in a note, or from Obsidian's command palette.
-
-- **Agent backend** — Claude Code, Codex, OpenCode. Three independent
-  CLI tools, each with its own folder inside the vault where it looks
-  for skill files.
-
-- **Managed skill (the only kind shown on this tab)** — a skill the
-  plugin manages. It lives in the plugin's own folder
-  (`<vault>/copilot/skills/<name>/`). Visible to any combination of
-  the three agents, controlled by per-card toggles.
-
-- **Importable skill (shown only inside the Import dialog)** — a
-  skill the plugin detected in one of the agent CLIs' folders that is
-  _not yet_ managed. The user accepts or skips per row. Accepted
-  rows become managed skills (the file is moved into the plugin's
-  folder; a symlink is left in the agent's folder so the agent keeps
-  working without behavior change). Skipped rows are left exactly
-  as they are; the plugin makes no further claim over them.
-
-- **Default-deny with opt-in enable.** Every newly imported or
-  detected managed skill starts **disabled** for every agent. The
-  per-agent toggles let the user opt _in_. Toggling on adds a symlink
-  in that agent's folder; toggling off removes it. The canonical file
-  is never touched. Carve-outs: the originating agent of an imported
-  skill auto-enables on import; skills created via the conversational
-  `skill-creator` auto-enable on the active agent; legacy custom
-  commands migrated to skills auto-enable on the active agent at
-  migration time.
-
-- **Invocation surfaces** — every enabled skill is reachable from
-  three places at once: chat slash menu (`/skill-name`), right-click
-  on selected text inside a note, and Obsidian's command palette.
-  There is no per-surface toggle; if a skill is enabled for the
-  active agent, it's in all three.
-
-- **Skill creation is conversational, not a form.** The user creates
-  a new skill by talking to the assistant in chat — a built-in
-  `skill-creator` skill scaffolds the files. The Skills tab does not
-  contain a "create skill" form.
-
-### Jobs-to-be-done on this tab
-
-1. "Bring my existing agent-folder skills under the plugin's
-   management" (Import dialog flow).
-2. "Which skills can my agents currently see?" (steady-state grid).
-3. "Stop one of my agents from seeing a specific skill" (toggle off,
-   no destructive confirmation).
-4. "Let multiple agents share this skill" (flip more toggles on).
-5. "Edit / delete a skill the plugin owns."
-6. "Move my old custom commands into this new system, one at a time."
-7. "Take me to where I create a new skill."
-
-### Information architecture for the Skills tab body
-
-Top to bottom. Some sections are conditional.
-
-1. **Top-right actions** — two affordances:
-   - **"New skill"** — opens chat with `skill-creator` pre-staged.
-   - **"Find existing skills"** — re-opens the Import dialog. Subdued
-     when nothing is detectable.
-
-2. **Legacy commands section** (conditional) — present only while
-   un-migrated legacy custom commands exist. Each row shows the
-   legacy command's name, an auto-generated one-line description, and
-   a "Migrate to skill" action. Migrated rows leave; the section
-   disappears entirely when empty.
-
-3. **Skills list** — the main content. **One unified list** of every
-   managed skill. No scope badges. Every card has the same shape:
-   name, description, three agent toggles, an action menu.
-
-### What each skill entry must communicate
-
-- The skill's **name** and a one-line **description**.
-
-- **Agent visibility toggles** — three (Claude / Codex / OpenCode), all
-  starting **off** for newly-imported / auto-discovered skills.
-  Toggling on creates a symlink in that agent's folder; toggling off
-  removes it. The canonical file is never touched.
-
-- A **per-card action menu**:
-  - **Edit** — opens the underlying SKILL.md in Obsidian's main
-    editor; the Skills tab itself does not contain an editor.
-  - **Delete** — destructive; confirmation step required. Removes the
-    canonical directory and every symlink.
-
-The fact that every enabled skill is reachable via chat slash, context
-menu, and command palette is global, not per-skill — it likely belongs
-in the tab header or a single explainer rather than on every entry.
-
-### User flows the design must support end-to-end
-
-- **First-run import.** The user opens the tab for the first time
-  with skills already authored under `.<agent>/skills/` folders. A
-  modal appears listing every detected skill, grouped by source
-  agent. Each row has Import / Skip; the modal also has Import All.
-  Confirming runs the imports and dismisses the modal. The Skills
-  tab then shows the imported skills as managed cards, with the
-  source agent's toggle pre-enabled and the others off. **Never
-  silently moves files** — every import is an explicit user click.
-
-- **First-time discovery, no existing agent skills.** The user opens
-  the tab and the import dialog is empty (or never appears, depending
-  on the design choice). The list shows whatever managed skills
-  exist (likely none). The empty state takes over (see Screen D).
-
-- **Let an agent see a skill.** The user finds the skill, flips the
-  relevant per-agent toggle on. Happens immediately, no destructive
-  confirmation, because nothing irreversible is happening — just a
-  symlink in or out.
-
-- **Edit a skill.** The user clicks edit; the skill's markdown file
-  opens in Obsidian's main editor pane.
-
-- **Delete a skill.** Confirmation step required, because this
-  removes the canonical copy and every symlink.
-
-- **Re-run import.** The user adds a new skill via Claude Code's CLI
-  (or skipped one originally and changed their mind), then clicks
-  "Find existing skills" in the Skills tab header. The import dialog
-  re-opens with new candidates listed.
-
-- **Migrate a legacy command to a skill.** The user expands the
-  legacy section, reviews the auto-generated description, edits if
-  desired, then confirms. That row disappears from legacy and appears
-  in the main list with the active agent pre-enabled.
-
-- **Resolve a name collision during import.** If an imported skill's
-  name matches an existing managed skill, the row exposes Rename /
-  Replace / Skip choices inline before Confirm. Never silently merge
-  or overwrite.
-
-- **Create a new skill.** The tab makes it obvious that creation
-  happens in chat by invoking `skill-creator`. Explicitly _not_ a
-  form on this tab.
-
-### Specific screens / states the design must include
-
-- **Screen A — Steady-state grid (power-user home base, after import).**
-  The everyday view. Unified list of managed skills, each with three
-  agent toggles in a realistic mix (some on, some off). Top-right
-  actions ("New skill", "Find existing skills") visible. Legacy
-  section absent.
-
-- **Screen B — Import dialog (first run with detected agent skills).**
-  Modal listing every importable candidate, grouped by source agent
-  (Claude / Codex / OpenCode), with Import / Skip per row plus an
-  Import All bulk action. Show a few candidates with the name
-  collision UI inline (Rename / Replace / Skip).
-
-- **Screen C — First-run (newcomer-leaning, no detected agent skills).**
-  No import dialog. The list is empty (or shows just one or two
-  managed skills if they exist). The "New skill" affordance is
-  prominent. Onboarding copy explains what a skill is.
-
-- **Screen D — Empty state (newcomer's first impression).** Nothing
-  detected anywhere — no managed skills, no agent-folder skills, no
-  legacy commands. The whole tab body becomes a single onboarding
-  moment for someone who doesn't yet know what a skill is:
-  - Plain-language explainer (one or two short paragraphs, no
-    jargon — define "skill" inline).
-  - One or two concrete example use-cases.
-  - A single CTA that opens chat and pre-stages `skill-creator`.
-
-- **Screen E — Legacy commands migration.** Show the legacy section
-  expanded near the top with several rows. Convey what the per-row
-  "review and confirm migration" step looks like (the editable
-  description). Convey what the section looks like mid-migration as
-  it empties out.
-
-### Interaction notes that should shape the layout
-
-- Per-agent toggles must feel **cheap and reversible** — they only
-  symlink in or out. No destructive confirmation.
-- Edit always leaves the Skills tab; the tab is not a file editor.
-- Delete is destructive; confirmation step required.
-- The Import dialog is the only place file moves happen, and every
-  import is an explicit user click. Never quietly relocate files
-  outside this flow.
-
-### Out of scope — please don't invent these
-
-- No vault-wide "managed mode" toggle, no opt-in gate, no settings
-  switch for the whole tab. The tab itself is the gate.
-- No skill-creation form on the Skills tab. Creation lives in chat.
-- No in-place skill editor. Editing opens the file in Obsidian's
-  editor.
-- No diff / accept-reject preview UI for skill output. That's a
-  separate, deferred surface this tab does not own.
-- No per-skill toggles for individual invocation surfaces.
-- No surface for skipped agent-folder skills. They are explicitly
-  outside the plugin's management; if the user wants them back,
-  they re-run the Import dialog.
-- No backup folder / restore-from-backup flow — vault sync (git or
-  Obsidian Sync) is the rollback path.
-
-## Critical files (for implementation phase)
-
-- `src/agentMode/backends/{claude,codex,opencode}/descriptor.ts` — read
-  to understand spawn descriptor surface; OpenCode already injects
-  `OPENCODE_CONFIG_CONTENT` (we extend it to add per-name deny entries).
-- `src/agentMode/backends/registry.ts` — add per-backend skill path map.
+- **Left**: skill name (bold) + one-line description (muted).
+- **Right**: three agent icons (Claude / Codex / OpenCode) acting as
+  toggles. Brand-colored when enabled (Claude coral, Codex charcoal,
+  OpenCode green); dashed-outline + muted glyph when disabled. Tap to
+  flip — immediate effect, no confirmation.
+- **Far right**: ⋯ overflow menu (`Edit SKILL.md · Edit settings · Delete`).
+
+### States
+
+- **Consent-needed** — the consent card body (see §The consent card).
+- **Empty placeholder** — one short line ("Skills you create or
+  import will show up here.") shown when there are no managed skills
+  and no detectable candidates. No CTA in v1.
+- **Steady-state grid** — list of V1 rows.
+- **Edit settings modal** — per-skill modal; fields below.
+- **Delete confirmation** — modal body lists the concrete paths
+  that will be removed so the user can verify before confirming:
+
+  ```
+  Delete <name>?
+
+  This will remove:
+    • <vault>/copilot/skills/<name>/
+      (canonical SKILL.md and supporting files)
+    • <vault>/.claude/skills/<name>           (if linked)
+    • <vault>/.agents/skills/<name>           (if linked)
+    • <vault>/.opencode/skills/<name>         (if linked)
+
+  Vault sync / git is the only rollback path.
+
+  [ Cancel ]                       [ Delete skill ]
+  ```
+
+  Only the agent-symlink lines whose agent appears in
+  `metadata.copilot-enabled-agents` are rendered. The action button
+  uses the destructive variant.
+
+### Header action
+
+Top-right: **Find existing skills** — re-runs import detection and
+reopens the consent card.
+
+There is no **New skill** button in v1.
+
+### Visual language
+
+Use Obsidian's existing settings density and typography (Tailwind
+`text-normal`, `text-muted`, `border-border`). Do not replicate the
+prototype's Kalam / Caveat / JetBrains-Mono aesthetic — that is
+prototype chrome, not product chrome.
+
+### Edit settings modal
+
+Opened from the row's ⋯ menu. The single metadata surface for a
+managed skill — Markdown body editing is reserved for **Edit
+SKILL.md** (Obsidian's editor). Fields, top to bottom:
+
+- **Name** _(all agents)_ — text input mapped to the top-level
+  `name` field. Validated against the spec
+  (`^[a-z0-9]+(-[a-z0-9]+)*$`, 1–64 chars). Changing the value
+  triggers the rename mechanics below.
+- **Description** _(all agents)_ — text input mapped to the
+  top-level `description` field. 1–1024 chars, non-empty per spec.
+  Plain frontmatter rewrite; no symlink work.
+- **Allowed tools** _(all agents)_ — text input mapped to the
+  top-level `allowed-tools` field (space-separated string, spec
+  experimental + Claude native). No per-agent translation — the
+  value is the literal frontmatter string. Example:
+  `Read Grep Bash(git:*)`.
+- **Model override** _(Claude Code only)_ — text input mapped to
+  the top-level `model` field. UI label carries "(Claude Code only)".
+  Honored by Claude's loader directly; unknown to OpenCode / Codex.
+- **Don't let Claude invoke this on its own** _(Claude Code only)_
+  — checkbox mapped to the top-level `disable-model-invocation`
+  field. Honored by Claude's loader directly; unknown to OpenCode /
+  Codex.
+- **Show in slash menu** _(Claude Code only)_ —
+  checkbox mapped to the top-level `user-invocable` field (default
+  on). Enforced Copilot-side by hiding the skill from the chat
+  slash menu. Claude / OpenCode / Codex don't have a first-party
+  equivalent; we label it Claude-only to avoid implying parity.
+  (No palette / right-click surface in v1 — see §M7.)
+
+#### Rename mechanics
+
+A rename via this modal is the only interactive code path that
+mutates a skill's identity. The save action runs atomically:
+
+1. Validate the new `name` against the spec. Surface inline
+   validation errors and keep the dialog open.
+2. If another managed skill already owns the new name under
+   `copilot/skills/`, show an inline collision error and don't save.
+   **No auto-suffix in interactive edits** — auto-suffix is reserved
+   for bulk import where the user has no chance to intervene.
+3. Rename `copilot/skills/<old>/` → `copilot/skills/<new>/` via the
+   rename-with-retry helper (`OpencodeBinaryManager.ts:401-413`).
+4. For each agent in `metadata.copilot-enabled-agents`: **remove**
+   the old symlink at `.<agent>/skills/<old>/` and **create** a
+   fresh symlink at `.<agent>/skills/<new>/` pointing at the
+   renamed canonical (absolute target). The two paths are different,
+   so this is delete-old + create-new, not a same-path retarget;
+   use the atomic-replace strategy from §Skill lifecycle if a stale
+   entry from an aborted prior run already sits at the new path.
+   Old links must be gone before the operation reports success —
+   leaving them would leave the agent resolving `/old-name` to the
+   renamed skill.
+5. Rewrite the `name:` value inside SKILL.md so the spec's
+   parent-directory-match rule (see §Frontmatter) holds.
+6. On Windows-EPERM symlink failures, surface the same one-time
+   notice as toggle ops. The canonical rename still succeeds; the
+   user can re-toggle once Developer Mode is on.
+
+## Slash command
+
+Managed skills are invokable from the chat slash menu only. The
+command palette and editor right-click context menu are **out of
+scope for v1** for managed skills — see §Milestones / §M7 below.
+Legacy custom commands continue to surface on the palette and
+right-click as they always have, via the existing
+`CustomCommandRegister`; that path is untouched.
+
+### Chat slash menu
+
+- The slash menu lists managed skills currently enabled for the
+  active backend (i.e., `metadata.copilot-enabled-agents` includes
+  the active agent) **plus** every legacy custom command not hidden
+  by collision.
+- Skills with top-level `user-invocable: false` are hidden.
+- **Managed skill** → Copilot does nothing special. The user's
+  message reaches the agent containing the `/skill-name` literal;
+  the agent's native skill resolver picks it up via the symlink in
+  `.<agent>/skills/<name>/`. Args go to the agent verbatim.
+- **Legacy custom command** → the command body is passed to the
+  active agent at runtime (not pasted into the input).
+- **Visual identical**: after Enter, the chat bubble shows
+  `/skill-name` or `/command-name` and the agent streams its
+  response. The user doesn't need to know which mechanism is firing.
+- **Name collision**: managed skill wins on the slash menu. The
+  legacy custom command stays available on the palette / right-click
+  via its own registration.
+
+### Plain-LLM fallback
+
+When no agent backend is configured, route through
+`useStreamingChatSession` (`src/hooks/use-streaming-chat-session.ts`)
+with the skill body or command body as the prompt, args appended
+naively. Keeps Skills usable without Agent Mode.
+
+## Critical files
+
+- `src/agentMode/backends/{claude,codex,opencode}/descriptor.ts` —
+  spawn descriptor surface; OpenCode already injects
+  `OPENCODE_CONFIG_CONTENT` (we extend it to add per-name deny
+  entries and the read-only profile).
+- `src/agentMode/backends/registry.ts` — add per-backend skill path
+  map.
 - `src/commands/{type,state,customCommandRegister,contextMenu,CustomCommandChatModal,customCommandUtils}.ts`
-  — migration source + modal reuse for the "Ask" / "Edit" quick-command
-  surfaces.
+  — legacy command surface preserved; updated to route content to
+  the agent at runtime and to hide commands shadowed by managed
+  skills.
 - `src/components/chat-components/plugins/SlashCommandPlugin.tsx` —
-  rewire to skills.
-- `src/settings/v2/components/CommandSettings.tsx` — replace with
-  `SkillsSettings.tsx`.
+  rewire to managed skills + legacy commands; runtime injection
+  instead of paste; skill wins on name collision.
+- `src/settings/v2/components/SkillsSettings.tsx` (new) — V1 Tidy
+  list row grid, consent card, empty placeholder, Edit settings
+  modal, Delete confirmation.
+- `src/settings/v2/components/CommandSettings.tsx` — untouched.
 - `src/settings/model.ts` — extend `agentMode.skills` schema with
-  `skippedImports: string[]` (paths the user declined to import).
-- New: `src/skills/SkillManager.ts` — canonical-store discovery,
-  per-skill state, symlink lifecycle, import flow, reconciliation.
-- New: `src/skills/skillFormat.ts` — SKILL.md parse/serialize,
-  frontmatter contract.
-- New: `src/agentMode/sdk/skillDenyList.ts` and equivalents per
-  backend — emits the per-name deny snippet computed as
-  `discovered − enabled` from the canonical store.
+  `folder: string` (default `"copilot/skills"`). No `skippedImports`
+  field; per-skill state lives in SKILL.md.
+- `src/agentMode/skills/SkillManager.ts` (new) — canonical-store
+  discovery, bulk-move, symlink lifecycle, reconciliation.
+- `src/agentMode/skills/skillFormat.ts` (new) — SKILL.md
+  parse/serialize strictly against the agentskills.io spec. Validates
+  `name` constraints + parent-directory match. Preserves unknown
+  `metadata` keys on round-trip.
+- `src/agentMode/sdk/skillDenyList.ts` (new) and per-backend
+  equivalents — emit per-name deny snippets for cross-discovery only.
+  Claude's loader handles `disable-model-invocation` natively via
+  the symlink, so we don't synthesize deny rules for it.
+- `eslint.config.mjs` + `src/agentMode/CLAUDE.md` — register
+  `skills/` as a new Agent Mode layer with restricted cross-imports.
+  See §ESLint boundary updates below.
+
+## ESLint boundary updates
+
+Placing skills under `src/agentMode/skills/` makes it a new Agent
+Mode layer in the sense `src/agentMode/CLAUDE.md` describes
+("Adding a new layer"). Two follow-ups need to land in the same PR
+as M1 so the discipline isn't silently broken.
+
+### Boundary plugin status
+
+`src/agentMode/CLAUDE.md` references `eslint-plugin-boundaries` and a
+`boundaries/elements` / `boundaries/dependencies` discipline, but
+`eslint.config.mjs` does not currently register the plugin —
+`no-restricted-imports` is the only import-restriction rule named,
+and it is `off`. Before the rules below can be enforced, either:
+
+1. Wire `eslint-plugin-boundaries` into `eslint.config.mjs` with
+   `elements` covering every existing Agent Mode layer (`session`,
+   `acp`, `sdk`, `backends`, `ui`) plus the new `skills` element.
+2. Or, if pulling in the plugin in this PR is out of scope, encode
+   the same intent via `no-restricted-imports` with `patterns`
+   (zone-style) as an interim. Same rules, simpler surface.
+
+Whichever path is chosen, it should also retrofit the existing
+layers — leaving boundaries off everywhere except `skills/` would
+let the rest of Agent Mode drift further.
+
+### `skills/` element + dependency rules
+
+Add `skills` matching `src/agentMode/skills/**` with the following
+direction rules:
+
+- **Skills may import**:
+  - `src/agentMode/session/**` — types only (`SessionEvent`,
+    `BackendId`, descriptor surface).
+  - Shared utilities outside agent-mode that don't reach into
+    backend internals (`src/logger`, generic vault helpers).
+  - `node:fs`, `node:path` — already permitted by the
+    `src/agentMode/**` override at `eslint.config.mjs:240-248`,
+    which the new path inherits automatically. Confirm the inherited
+    `import/no-nodejs-modules: off` still matches once any new
+    boundaries config lands; if the glob narrows, re-add the
+    inheritance explicitly.
+- **Skills must NOT import**:
+  - `src/agentMode/acp/**` — ACP wire types are confined there.
+  - `src/agentMode/sdk/**` — sibling in-process driver layer.
+  - `src/agentMode/backends/**` — backend-specific internals.
+    Spawn descriptors consume skills, not the other way around.
+  - `src/agentMode/ui/**` — UI is a downstream consumer.
+- **Inbound (who may import `skills/`)**:
+  - `src/agentMode/backends/**` (spawn-time deny list composition;
+    `OPENCODE_CONFIG_CONTENT` extension).
+  - `src/agentMode/sdk/**` and `src/agentMode/ui/**` for the same
+    reason — they read managed-skill state.
+  - `src/settings/v2/components/SkillsSettings.tsx` — owns the
+    consent card, grid, and modals and calls into `SkillManager`.
+  - `src/main.ts` for plugin-level registration.
+
+### Doc updates that ride along
+
+- `src/agentMode/CLAUDE.md`: add `skills/` to the numbered layer list
+  with a one-line description ("canonical-store discovery, symlink
+  lifecycle, reconciliation; no agent-wire awareness"). Add `skills/`
+  to the "What lives where (cheatsheet)" section too.
+- This design doc — already reflects the new path under
+  `src/agentMode/skills/`.
+
+### M1 checkpoint add-on
+
+`npm run lint` passes after the new boundary rules land — confirms
+`skills/` cannot reach into `acp/`, `sdk/`, `backends/`, or `ui/`,
+and that consumers (`backends/<id>/descriptor.ts`,
+`SkillsSettings.tsx`, `main.ts`) can still import it.
 
 ## Decisions captured
 
-- **One canonical home, no scopes**: every Copilot-managed skill lives
-  at `<vault>/copilot/skills/<name>/`. There is no project-only scope,
-  no scope badges, and no Promote action. The `agentMode.skills.enabled`
-  map from the prior draft is dropped (per-skill state lives in
-  SKILL.md frontmatter only).
-- **Opt-in Import flow replaces Promote**: the user's existing
-  agent-folder skills are brought under management via an explicit
-  Import dialog, runnable on first open and re-runnable from the tab
-  header. Skipped skills are left untouched and are outside Copilot's
-  management.
-- **cc-switch-style ownership**: when the user accepts an Import row,
-  the skill file is moved into `copilot/skills/` and a symlink is
-  left at the original agent path so the owning agent keeps working
-  with zero behavior change. The "no move" promise is unverifiable
-  from the user's perspective (every operation goes through the
-  symlink and gets the same bytes), and the complexity of preserving
-  it doesn't earn its keep.
-- **Default-deny + opt-in enable**: every newly-imported or
-  auto-discovered managed skill starts disabled for every agent.
-  Carve-outs: imported skills auto-enable the originating agent;
-  skill-creator and legacy migrations auto-enable the active agent.
-- **Codex limitation evaporates for managed skills**: under symlink
-  fanout, toggling Codex off removes the symlink → Codex no longer
-  sees the skill. The previous "always visible regardless of toggle"
-  warning is no longer needed.
-- **OpenCode cross-discovery stays on**: per-name deny in OpenCode's
-  permission config is precise enough; no blanket
-  `OPENCODE_DISABLE_EXTERNAL_SKILLS` shut-off.
-- **Storage**: per-skill state in SKILL.md `copilot:` frontmatter
-  (single source of truth). `data.json` carries only
-  `agentMode.skills.skippedImports: string[]` so we don't re-prompt
-  for skipped skills on every load.
-- **Migration**: per-command opt-in; migrated skills land directly in
-  `copilot/skills/` with the active agent pre-enabled.
-- **Quick-command runtime**: unified across surfaces. Quick-command
-  surface spawns the active agent with a read-only tool profile;
-  v1 ships the existing insert/replace modal unchanged. Edit-preview
-  is deferred and shared with chat agent mode's edit-preview design.
-  Plain-LLM fallback when no agent backend is installed.
+- **One canonical home, no scopes.** Every managed skill lives at
+  `<vault>/<skills-folder>/<name>/`, where `<skills-folder>` is the
+  user-configurable `agentMode.skills.folder` (default
+  `copilot/skills`). No scope badges, no Promote action, no
+  project / user / managed distinction.
+- **Skills folder is user-configurable.** `agentMode.skills.folder`
+  lets users pick the vault-relative folder where managed skills
+  live. Default `copilot/skills`. Changing the value doesn't
+  auto-migrate existing skills — see §Skills folder setting.
+- **Consent only when there's something to consent to.** Friendly
+  card with one-click bulk move; quiet placeholder when there's
+  nothing detected.
+- **Shared frontmatter follows the agentskills.io spec.**
+  Claude-only flags (`model`, `disable-model-invocation`,
+  `user-invocable`) sit at top level in Claude's native kebab-case
+  style so Claude's loader honors them directly. The single
+  Copilot-only field lives under `metadata.copilot-enabled-agents`.
+- **Three Claude Code-only fields.** `model`,
+  `disable-model-invocation`, `user-invocable` are labeled
+  "(Claude Code only)" in the UI. Claude's loader enforces the
+  first two; `user-invocable` is enforced Copilot-side by hiding
+  the skill from the chat slash menu (managed skills have no
+  palette / right-click surface in v1 — see §M7). OpenCode and
+  Codex silently ignore all three.
+- **Slash unified.** Both legacy commands and managed skills go to
+  the agent at runtime; nothing pastes into the input. Skill wins
+  on name collision.
+- **User-scope skills ignored entirely.** Not detected, not warned,
+  not listed.
+- **No skill-creator in v1.** Conversational skill creation deferred.
+- **No Add CTA in v1.** Skills enter the managed store via the
+  consent card, by hand-authoring SKILL.md, or by an agent writing
+  one on the user's behalf (see next bullet). The Skills tab has no
+  "New skill" button and the empty state is just one line of copy.
+- **Edit settings is the single metadata surface.** The row's
+  ⋯ menu offers `Edit SKILL.md · Edit settings · Delete`. Body
+  editing goes through Obsidian's Markdown editor; frontmatter
+  editing (name, description, allowed-tools, three Claude-only
+  flags) goes through the modal. Renames are an atomic dir-rename
+  - symlink-retarget op.
+- **Delete confirmation lists concrete paths.** The modal body
+  enumerates `copilot/skills/<name>/` and every agent symlink
+  currently in `copilot-enabled-agents` so users can verify the
+  blast radius before confirming.
+- **Spawn-time system prompt steers skill creation into the
+  managed folder.** Every backend's spawn descriptor injects a
+  one-line directive: when the user asks the agent to create a
+  skill, write `<vault>/<skills-folder>/<name>/SKILL.md` with
+  spec-valid frontmatter and `metadata.copilot-enabled-agents`
+  pre-set to the authoring agent. `<skills-folder>` is templated
+  from `agentMode.skills.folder` at spawn time (default
+  `copilot/skills`). Never write into the agent-specific paths —
+  those are symlink-fanout locations Copilot reconciles
+  automatically.
+- **Custom Commands tab unchanged.** No migration UI; the two
+  systems coexist permanently as far as v1 is concerned.
 
 ## Milestones
 
 Each milestone is independently shippable and verifiable. Checkpoints
 are concrete pass/fail steps the user can run by hand.
 
-### M1 — Canonical-store discovery + read-only grid + new-user onboarding
+### M1 — Canonical-store discovery + read-only V1 grid + empty placeholder
 
 **Goal**: every skill in `<vault>/copilot/skills/` shows up in the
-Skills tab. New users see a clean onboarding card. Nothing is mutated.
+Skills tab. Empty placeholder when none. Nothing is mutated.
 
 **Scope**:
 
-- `src/skills/SkillManager.ts` discovery walks
-  `<vault>/copilot/skills/` only (steady-state path).
-- `src/skills/skillFormat.ts` parse/serialize SKILL.md with full
-  frontmatter round-trip (preserve unknown per-agent keys
-  byte-for-byte).
-- `SkillsSettings.tsx`: card grid. Toggles rendered but disabled / no
-  actions wired in this milestone.
-- Empty-state onboarding card when discovery returns zero skills.
+- `agentMode.skills.folder` setting wired in `src/settings/model.ts`
+  with default `"copilot/skills"`. Settings UI exposes a "Skills
+  folder" input with validation (no `..`, no empty, no leading `/`)
+  and the one-time notice for old-folder symlinks.
+- `src/agentMode/skills/SkillManager.ts` reads the configured folder
+  via the settings singleton (top-level orchestration only — inner
+  helpers receive the resolved absolute path as a parameter, per the
+  "Avoiding Deep Dependency Chains in Tests" rule in AGENTS.md) and
+  walks `<vault>/<skills-folder>/` only.
+- `src/agentMode/skills/skillFormat.ts` parses + validates SKILL.md against
+  the Agent Skills spec. Validates `name` (1–64 chars, lowercase
+  a–z/0–9/hyphens, no leading/trailing/consecutive hyphens, must
+  match parent dir) and `description` (1–1024 chars, non-empty).
+- `SkillsSettings.tsx`: V1 Tidy list row grid. Toggles rendered but
+  inert in this milestone.
+- Empty placeholder when discovery returns zero skills.
 - Legacy `CommandSettings.tsx` left in place.
 
 **Checkpoints**:
 
-1. Fresh vault, no managed skills → Skills tab shows the onboarding
-   card only.
-2. Hand-create `<vault>/copilot/skills/managedfoo/SKILL.md` → reload →
-   card "managedfoo" appears.
-3. SKILL.md with extra unknown frontmatter (e.g. `allowed-tools`,
-   `tools`, `model`) → unit test confirms round-trip is byte-equal.
+1. Fresh vault, no managed skills → Skills tab shows the empty
+   placeholder.
+2. Hand-create `<vault>/copilot/skills/managedfoo/SKILL.md` with
+   valid spec frontmatter → reload → row "managedfoo" appears.
+3. Hand-create a SKILL.md with an invalid `name` (uppercase,
+   leading hyphen, consecutive hyphens, mismatched parent dir) →
+   the row is skipped with a one-line warning in the tab.
+4. SKILL.md with extra `metadata` keys (e.g. `author`, `version`)
+   → round-trip unit test confirms unknown `metadata` keys are
+   preserved byte-equal.
+5. Default setting → discovery walks `<vault>/copilot/skills/`.
+   Change `agentMode.skills.folder` to `team-skills` → reload →
+   discovery walks `<vault>/team-skills/`; the original
+   `copilot/skills/` folder is ignored.
+6. Validation: set the folder to `../escape` or `/abs/path` → the
+   settings UI rejects the value and Save stays disabled. Empty
+   string trims to the default `copilot/skills` on save.
+7. Switching the folder while skills already exist in the old
+   location surfaces the one-time notice in the Skills tab body,
+   leaves the canonical files in the old folder untouched, and
+   **removes every agent symlink whose target resolves into the
+   old folder**. Flipping the setting back rebuilds those symlinks
+   from each canonical SKILL.md's `copilot-enabled-agents`.
 
-### M2 — Import existing skills (first-run + re-runnable dialog)
+### M2 — Consent card + bulk move
 
-**Goal**: existing skills under `.claude/skills/`, `.agents/skills/`,
-`.opencode/skills/` can be imported into the canonical store via an
-explicit dialog. Skipped skills are remembered.
+**Goal**: existing skills under `.claude/skills/`,
+`.agents/skills/`, `.opencode/skills/` can be imported into the
+canonical store via the consent card.
 
 **Scope**:
 
-- Import-detection walker scans every per-agent project path; emits
-  candidates that are real directories (not symlinks pointing at
-  `<vault>/copilot/skills/`) and not in
-  `agentMode.skills.skippedImports`.
-- Import dialog UI: per-row Import / Skip, Import All bulk action,
-  inline name-collision Rename / Replace / Skip.
-- First-run trigger: dialog auto-opens on Skills-tab first load with
-  ≥1 candidate. Re-run trigger: "Find existing skills" header action.
-- Import flow per row:
-  - Move source dir → `copilot/skills/<name>/` via rename-with-retry.
-  - Verify SKILL.md parses; on failure, move back and surface error.
-  - Stamp `copilot.enabledAgents: [<source-agent>]`,
-    `copilot.preferredModel` if previously known.
+- Import detection walker scans every per-agent project path and
+  emits candidates that are real directories (not symlinks pointing
+  at `<vault>/copilot/skills/`).
+- Consent card UI shown only when ≥1 candidate exists.
+  **Bring them together** runs the bulk move; **Not now** dismisses
+  the card and shows the placeholder / grid.
+- `Find existing skills` header action re-runs detection.
+- Bulk move per skill:
+  - Move source dir → `copilot/skills/<name>/` via
+    rename-with-retry. On name collision, smallest suffix
+    `-2`, `-3`, ….
+  - Verify SKILL.md parses; on failure, move back and surface a
+    one-line error.
+  - Stamp `metadata.copilot-enabled-agents` with the source agent.
   - Create symlink/junction at the original agent path → canonical
-    (absolute target). On Windows EPERM, surface the one-time notice
-    and proceed without the link.
-- Skipped paths added to `agentMode.skills.skippedImports`.
+    (absolute target). On Windows EPERM, surface the one-time
+    notice and proceed without the link.
 
 **Checkpoints**:
 
-1. Fresh vault with `.claude/skills/projfoo/SKILL.md` (real dir) →
-   open Skills tab → import dialog appears with `projfoo` listed
-   under Claude.
-2. Click Import on `projfoo` → confirm:
-   - `<vault>/copilot/skills/projfoo/` exists with original contents.
-   - `<vault>/.claude/skills/projfoo` is now a symlink to the canonical.
-   - `projfoo` SKILL.md has `copilot.enabledAgents: [claude]`.
-   - Card appears in main grid with Claude toggle on.
-3. Click Skip on a different candidate → dialog closes; that path
-   appears in `data.json` `skippedImports`; reopening Skills tab does
-   not re-prompt for it.
-4. Click "Find existing skills" header action → import dialog
-   re-opens with skipped + any new candidates.
-5. Name collision: managed `foo` exists, candidate `foo` discovered →
-   row exposes Rename / Replace / Skip; choosing Rename prompts for
-   new slug; nothing on disk mutates until Confirm.
+1. Fresh vault with `.claude/skills/foo/`, `.agents/skills/bar/`,
+   `.opencode/skills/baz/` (all real dirs) → open Skills tab →
+   consent card lists all 3 grouped by source.
+2. Click **Bring them together** →
+   `<vault>/copilot/skills/{foo,bar,baz}/` exist with original
+   contents; each agent folder has a symlink to the canonical;
+   each SKILL.md has `metadata.copilot-enabled-agents` set to its
+   source.
+3. Click **Not now** on a separate fixture → nothing moves;
+   placeholder / existing grid shown.
+4. Click `Find existing skills` header action → consent card
+   re-opens with current candidates.
+5. Name collision (managed `foo` already exists, candidate `foo`
+   under `.claude/skills/`) → imported as `foo-2`; both rows
+   present in the grid.
 
 ### M3 — Per-agent toggles for managed skills (symlinks)
 
 **Goal**: managed skills can be made visible to any subset of agents
-via per-agent toggles that maintain symlinks under the matching project
-paths. Edit and Delete actions wired up.
+via per-agent toggles. Edit and Delete actions wired up.
 
 **Scope**:
 
 - Toggle on for an agent → create a symlink (POSIX) / directory
   junction (Windows) at `<vault>/.<agent>/skills/<name>` →
-  absolute path of `<vault>/copilot/skills/<name>`. Atomic-replace if
-  the path already exists. Update `copilot.enabledAgents`.
-- Toggle off → remove the link. Canonical copy untouched. Update
-  `copilot.enabledAgents`.
-- On Windows without privilege to create symlinks/junctions: surface
-  the one-time notice; toggle state still reflects in the SKILL.md
-  but the on-disk fanout is a no-op until Developer Mode is enabled.
+  absolute path of `<vault>/copilot/skills/<name>`.
+  Atomic-replace if the path already exists. Append the agent to
+  `metadata.copilot-enabled-agents`.
+- Toggle off → remove the link. Canonical copy untouched. Remove
+  the agent from `metadata.copilot-enabled-agents`.
+- On Windows without privilege: surface the one-time notice; the
+  on-disk fanout is a no-op until Developer Mode is enabled.
 - Edit action opens `<vault>/copilot/skills/<name>/SKILL.md` in the
   Obsidian editor.
 - Delete action removes the canonical dir + every symlink (confirm
   dialog).
-- Reconciliation pass on Skills-tab load: walk
-  `copilot.enabledAgents` for every managed skill, ensure each
-  enabled agent has the symlink in place; remove orphan symlinks
-  pointing at the canonical store but not corresponding to any
-  managed skill.
+- Reconciliation pass on Skills-tab load and on relevant
+  vault-watch events.
 
 **Checkpoints**:
 
-1. Managed card "managedfoo" with all three toggles off → no symlinks
-   exist under any agent's project dir.
+1. Managed card "managedfoo" with all three toggles off → no
+   symlinks exist under any agent's project dir.
 2. Toggle Claude on → `<vault>/.claude/skills/managedfoo` is a
    symlink to `<vault>/copilot/skills/managedfoo`;
-   `copilot.enabledAgents` includes `claude`.
+   `metadata.copilot-enabled-agents` includes `claude`.
 3. Toggle Claude off → symlink removed; canonical copy intact;
-   `copilot.enabledAgents` no longer includes `claude`.
+   `metadata.copilot-enabled-agents` no longer includes `claude`.
 4. Toggle all three on → three symlinks (Claude / Codex / OpenCode).
-5. Edit the canonical SKILL.md body → invoke `/managedfoo` from any
-   enabled agent's session → updated body runs.
-6. Delete the skill → all symlinks gone, canonical dir gone.
-7. Manually rm a symlink that should exist per `copilot.enabledAgents`
-   → reload Skills tab → reconciliation recreates it.
+5. Edit the canonical SKILL.md body → invoke `/managedfoo` from
+   any enabled agent's session → updated body runs.
+6. Click ⋯ → **Delete** → confirmation modal lists
+   `<vault>/copilot/skills/managedfoo/` plus each agent's symlink
+   currently in `copilot-enabled-agents`. Confirm → all listed
+   paths removed; the canonical dir is gone; no orphan symlinks
+   remain.
+7. Manually `rm` a symlink that should exist per
+   `copilot-enabled-agents` → reload Skills tab → reconciliation
+   recreates it.
 
-### M4 — Spawn-time deny for OpenCode cross-discovery
+### M3.5 — Agent-authored skills land in the managed folder
 
-**Goal**: managed skills with OpenCode toggle off but Claude or Codex
-toggle on are denied per-name in OpenCode's permission config, so
-OpenCode's cross-discovery doesn't accidentally expose them.
+**Goal**: when a user asks the active agent to create a skill, the
+agent writes it under `<vault>/copilot/skills/<name>/` (not into an
+agent-specific path), and the Skills tab picks it up on the next
+reconciliation pass. Depends on M3's reconciliation.
 
 **Scope**:
 
-- Per-spawn deny list computed as `cross_discovered − enabled_for_opencode`.
-- Extend `OPENCODE_CONFIG_CONTENT` with `permission.skill: { "<name>":
-"deny" }` per affected name.
-- Claude (SDK) deny rules also wired in this milestone for symmetry,
-  even though under managed-only the Claude deny set is usually empty
-  (no cross-discovery to worry about). Useful for skipped skills that
-  happen to live in `.claude/skills/` and that the user toggles off
-  via some future surface — and as defense in depth.
+- Extend each backend's spawn-time system prompt with a one-line
+  directive (templated with the authoring agent's kebab-case name
+  so the skill comes out pre-enabled for it):
+
+  > When the user asks you to create a skill, write
+  > `<vault>/<skills-folder>/<name>/SKILL.md` with valid Agent
+  > Skills spec frontmatter — at minimum `name`, `description`,
+  > and `metadata.copilot-enabled-agents: "<this-agent>"` where
+  > `<this-agent>` is `claude` / `codex` / `opencode` for this
+  > session, and `<skills-folder>` is the value of
+  > `agentMode.skills.folder` interpolated at spawn time (default
+  > `copilot/skills`). Do not write into `.claude/skills/`,
+  > `.agents/skills/`, or `.opencode/skills/` — those are symlink
+  > locations managed by Copilot; the symlink for this agent will
+  > be created automatically on the next Skills-tab reconciliation.
+
+- Wire the directive in
+  `src/agentMode/backends/{claude,codex,opencode}/descriptor.ts`
+  alongside existing spawn-prompt assembly.
+- Reconciliation already lives in M3 — no changes needed here. If
+  the agent forgets the `copilot-enabled-agents` metadata, the row
+  appears with all toggles off and the user can flip them by hand.
 
 **Checkpoints**:
 
-1. Managed skill `foo` with `copilot.enabledAgents: [claude]` →
-   Claude session sees `foo`; OpenCode session has `foo` denied via
-   `permission.skill: { foo: "deny" }` in injected config (verify by
-   inspecting OpenCode spawn).
-2. Toggle OpenCode on for `foo` → next OpenCode spawn no longer
+1. In a Claude session, ask "create a skill that critiques prose" →
+   `<vault>/copilot/skills/<name>/SKILL.md` exists with spec-valid
+   frontmatter and `metadata.copilot-enabled-agents: "claude"`.
+   Reload Skills tab → row appears with Claude toggle on, others
+   off. The Claude symlink at `.claude/skills/<name>` exists.
+2. Repeat in an OpenCode session → same flow, OpenCode toggle on
+   by default and `.opencode/skills/<name>` symlink created.
+3. In a Claude session, explicitly say "save it under
+   `.claude/skills/`" → the agent should still steer the user back
+   to `copilot/skills/` (verifies directive strength). If it
+   complies with the user instead, the file is still picked up by
+   reconciliation only after the next Skills-tab import detection,
+   not automatically — which is the expected fallback behavior.
+
+### M4 — Edit settings modal
+
+**Goal**: per-skill name, description, and advanced options exposed
+via the row's ⋯ menu under **Edit settings**.
+
+**Scope**:
+
+- Modal with six fields: `name`, `description`, `allowed-tools`,
+  `model`, `disable-model-invocation`, `user-invocable`. All six
+  are top-level frontmatter keys. The three Claude-only fields
+  carry the "(Claude Code only)" label.
+- Name edit triggers the rename mechanics (atomic dir-rename +
+  symlink retarget per agent in `copilot-enabled-agents`).
+- Collision on rename → inline error, modal stays open, no
+  filesystem mutation.
+- Round-trip preserves unknown top-level keys and unknown
+  `metadata` keys.
+
+**Checkpoints**:
+
+1. Open Edit settings on `foo`, set `allowed-tools: "Read Grep"`,
+   `model: "claude-opus-4-7"`, `disable-model-invocation: true` →
+   reload → all values round-trip as top-level keys.
+2. Inspect SKILL.md against Claude's native loader → Claude reads
+   `model` and `disable-model-invocation` directly.
+3. Manually add a `metadata.author: "alice"` key → edit settings →
+   save → the foreign key is preserved byte-for-byte.
+4. Change `description` only → file rewritten with new
+   description; no symlink work performed.
+5. Rename `foo` → `bar` (with Claude and OpenCode toggles on) →
+   `copilot/skills/bar/` exists, `copilot/skills/foo/` gone,
+   `.claude/skills/bar` and `.opencode/skills/bar` are symlinks to
+   the renamed canonical, old symlinks gone, SKILL.md `name:` is
+   `bar`. Atomic — no in-between state where the symlinks dangle.
+6. Rename `foo` to an existing name `baz` → inline collision error
+   in the dialog; nothing on disk changes.
+7. Rename `foo` to an invalid name (uppercase, leading hyphen, etc.)
+   → inline validation error; nothing on disk changes.
+
+### M5 — Spawn-time deny (cross-discovery only)
+
+**Goal**: cross-discovery deny emits correctly per backend.
+Claude-only flags need no deny synthesis — Claude's loader honors
+them natively.
+
+**Scope**:
+
+- OpenCode `permission.skill` per-name deny for every managed skill
+  in `cross_discovered_for_opencode − enabled_for_opencode`.
+- Claude (SDK) deny mechanism wired for symmetry; the deny set is
+  usually empty (Claude has no cross-discovery surface). Useful as
+  defense-in-depth.
+- Codex: no per-skill deny; managed via symlink presence only.
+
+**Checkpoints**:
+
+1. Managed skill `foo` with `copilot-enabled-agents: "claude"` →
+   Claude session sees `foo`; OpenCode session has `foo` denied
+   via `permission.skill: { foo: "deny" }` in injected config
+   (verify by inspecting the spawn descriptor).
+2. Set `disable-model-invocation: true` on `foo` at the top level
+   → Claude session auto-invocation of `foo` is blocked (verify
+   via Claude's native loader behavior, not via our deny rules).
+   User-invocation surfaces unaffected.
+3. Toggle OpenCode on for `foo` → next OpenCode spawn no longer
    denies it; `foo` runs normally.
-3. Inspect Claude SDK spawn permissions on a fresh vault → deny list
-   is empty by default (sanity check).
 
-### M5 — Slash command in chat resolves to agent skill
+### M6 — Slash-command runtime unification
 
-**Goal**: `/skill-name [args]` in the chat input runs the skill via
-the active agent's native discovery. Plain-LLM fallback covers users
-without any agent backend.
+**Goal**: both managed skills and legacy custom commands run via
+the active agent at runtime. UX is visually identical.
 
 **Scope**:
 
-- Rewire `SlashCommandPlugin.tsx`: replace today's "paste content"
+- `SlashCommandPlugin.tsx`: replace today's paste-into-input
   handler with a send that delegates to the active agent session.
-  Slash menu lists managed skills currently enabled for the active
-  agent (i.e., have the active agent in `copilot.enabledAgents`).
-- Plain-LLM fallback: when no agent backend is configured, route
-  through `useStreamingChatSession` with the skill body as the prompt
-  and `args` appended.
+  The slash menu lists managed skills enabled for the active agent
+  plus legacy commands not hidden by collision.
+- Legacy custom command path: pass the command body to the agent
+  at runtime (not pasted into the input).
+- Managed skill path: do nothing special — the user message
+  contains `/skill-name` and the agent's native resolver picks it
+  up via the symlink.
+- Plain-LLM fallback when no agent backend is configured.
 
 **Checkpoints**:
 
-1. With Claude backend live and a managed skill `summarize` (Claude
-   toggle on), type `/summarize text` in chat → agent loads SKILL.md
-   (via the symlink) and runs it.
-2. Disable `summarize` on Claude → slash menu no longer lists it for
-   the active Claude session; typing `/summarize` produces "skill not
-   available" feedback.
-3. With Agent Mode disabled and no backend → `/summarize text` works
-   via plain-LLM fallback (verify network call goes to user's
-   configured LLM provider).
-4. Skill with `$ARGUMENTS` placeholder → agent expands it natively;
-   fallback path performs naive string substitution.
+1. With Claude backend live and a managed skill `summarize`
+   (Claude toggle on), type `/summarize text` and hit Enter →
+   chat shows `/summarize text`; agent loads SKILL.md via the
+   symlink and runs it. Nothing was pasted into the input.
+2. Repeat with a legacy `/oldcmd` → identical UX: chat shows
+   `/oldcmd`; agent receives the command body at runtime.
+3. Slash-name collision: managed `dup` exists and legacy `dup`
+   exists → only the managed skill is offered in the slash menu;
+   the command still resolves via its palette entry.
+4. Disable Claude toggle on `summarize` → slash menu no longer
+   lists it for the active Claude session.
+5. With Agent Mode disabled and no backend → `/summarize text`
+   works via plain-LLM fallback (verify network call goes to the
+   user's configured LLM provider).
 
-### M6 — Quick-command surface (palette + right-click) under read-only profile
+### M7 — Quick-command surface (palette + right-click) — **out of scope for v1**
 
-**Goal**: every enabled managed skill is invocable from the command
-palette and the right-click context menu against the user's current
-selection. Result opens the existing `CustomCommandChatModal`. The
-agent runs with write/exec tools denied.
+A previous iteration of this design proposed surfacing every
+enabled managed skill (and every non-shadowed legacy command) on
+the Obsidian command palette and the editor right-click context
+menu, with a read-only spawn profile. That surface is **explicitly
+out of scope for v1** — not deferred, not a follow-up. Managed
+skills are reachable only via the chat slash menu (M6); legacy
+custom commands continue to surface on the palette and right-click
+via their existing `CustomCommandRegister` wiring, unchanged.
 
-**Scope**:
-
-- Re-register palette + context-menu entries from `SkillManager`,
-  filtered to skills enabled for the active agent.
-- Read-only spawn profile per backend (see "Read-only tool profile").
-- Modal reuse from `CustomCommandChatModal` (insert / replace / copy).
-
-**Checkpoints**:
-
-1. Select text → right-click → "Skills →" submenu lists every enabled
-   managed skill → run one → modal opens with the result.
-2. Same flow via cmd-P with no selection → modal gets the empty-input
-   variant.
-3. Run a skill that asks the agent to edit a file → log shows
-   `Edit`/`Write` tool calls denied by the spawn profile (no file
-   mutation); agent still streams a final text result into the modal.
-4. Disable a skill on the active agent → it disappears from palette
-   and right-click immediately (no restart).
-
-### M7 — Legacy Custom Commands → managed skills migration
-
-**Goal**: every existing `CustomCommand` can be migrated into a
-managed skill. Old + new coexist during the migration window.
-
-**Scope**:
-
-- "Legacy commands" section atop the Skills tab.
-- Per-command "Migrate to skill" action: derive slug, propose
-  one-sentence description via single LLM call, show editable
-  confirmation dialog.
-- Write `<vault>/copilot/skills/<slug>/SKILL.md` with `copilot:`
-  frontmatter (`enabledAgents` = active backend at migration time;
-  symlink created accordingly).
-- Delete the original legacy markdown file once the new SKILL.md is
-  written and verified.
-- Re-register palette + context-menu entries from the new set.
-
-**Checkpoints**:
-
-1. Vault has 3 legacy commands → Legacy section shows 3 rows.
-2. Click "Migrate" → confirmation dialog with proposed description +
-   slug, both editable.
-3. Confirm → managed skill exists; original legacy `.md` is gone;
-   symlink to active agent's project dir is created; new card appears.
-4. Migrated skill is invocable via chat slash, palette, and context
-   menu without restart.
-5. Legacy section auto-hides once empty.
-6. Un-migrated commands still run via the legacy path during the
-   migration window.
-
-### M8 — `skill-creator` built-in + new-user onboarding wiring
-
-**Goal**: users can create skills conversationally; new users see a
-guided empty-state.
-
-**Scope**:
-
-- Bundle a `skill-creator` skill in plugin assets; copy into
-  `<vault>/copilot/skills/skill-creator/` on first run if missing.
-  The bundled skill-creator scaffolds new skills with
-  `copilot.enabledAgents: [<active backend>]`.
-- "New skill via chat" CTA in the Skills tab top-right opens chat with
-  `/skill-creator` pre-staged.
-- Empty-state card from M1 also points at this CTA.
-
-**Checkpoints**:
-
-1. Fresh vault → Skills tab shows onboarding card → click "Create your
-   first skill" → chat opens with `/skill-creator` ready to send.
-2. Walk through the conversation → `<vault>/copilot/skills/<new-name>/`
-   is created with a valid SKILL.md whose `copilot.enabledAgents`
-   contains the active backend; the matching project symlink exists.
-3. New skill appears as a card without reload; onboarding card
-   disappears. The active-backend toggle is on; others off.
-4. New skill is invocable via chat slash, palette, and context menu
-   immediately.
+Rationale: the slash menu already covers the user-invocable case,
+and a duplicate palette / right-click surface introduced collision
+rules and a read-only-profile dependency without a clear win over
+the chat surface. If we revisit this later it will be a fresh
+design pass, not a resurrection of the prior plan.

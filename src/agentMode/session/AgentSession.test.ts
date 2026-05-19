@@ -196,6 +196,49 @@ describe("AgentSession.sendPrompt", () => {
     expect(() => session.sendPrompt("second")).toThrow(/in flight/);
   });
 
+  it("marks an empty completed turn as a visible error message", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    await session.sendPrompt("hi").turn;
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.isErrorMessage).toBe(true);
+    expect(placeholder?.message).toMatch(/without returning any assistant text or tool activity/);
+  });
+
+  it("includes nested provider errors when a prompt rejects", async () => {
+    const mock = makeMockBackend();
+    const error = new Error("stream error");
+    (error as { cause?: unknown }).cause = {
+      data: {
+        error: {
+          type: "FreeUsageLimitError",
+          message: "Rate limit exceeded. Please try again later.",
+        },
+      },
+    };
+    mock.prompt.mockRejectedValueOnce(error);
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    await expect(session.sendPrompt("hi").turn).rejects.toThrow("stream error");
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.isErrorMessage).toBe(true);
+    expect(placeholder?.message).toContain("FreeUsageLimitError");
+    expect(placeholder?.message).toContain("Rate limit exceeded");
+  });
+
   it("agent_message_chunk is appended to placeholder displayText", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;

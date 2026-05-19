@@ -96,6 +96,9 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   id: "opencode",
   displayName: "opencode",
   Icon: OpencodeLogo,
+  skillsProjectDir: ".opencode/skills",
+  crossDiscoveredAgents: ["claude", "codex"],
+  restartOnManagedSkillsChange: true,
   wire: opencodeWire,
 
   getInstallState(settings: CopilotSettings): InstallState {

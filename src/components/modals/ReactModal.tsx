@@ -1,6 +1,7 @@
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal } from "obsidian";
 import type { ReactElement } from "react";
-import { createRoot, type Root } from "react-dom/client";
+import { type Root } from "react-dom/client";
 
 /**
  * Base class for Obsidian-hosted modals whose body is a React tree. Handles
@@ -23,7 +24,7 @@ export abstract class ReactModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
     this.root.render(this.renderContent(() => this.close()));
   }
 

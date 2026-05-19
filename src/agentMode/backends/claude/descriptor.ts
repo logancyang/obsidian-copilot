@@ -16,6 +16,11 @@ import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
+import {
+  buildSkillCreationDirective,
+  DEFAULT_SKILLS_FOLDER,
+  SkillManager,
+} from "@/agentMode/skills";
 import type {
   BackendConfigOption,
   CopilotMode,
@@ -104,6 +109,9 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   id: "claude",
   displayName: "Claude",
   Icon: ClaudeLogo,
+  skillsProjectDir: ".claude/skills",
+  crossDiscoveredAgents: [],
+  restartOnManagedSkillsChange: false,
   wire: claudeWire,
 
   getInstallState(settings: CopilotSettings): InstallState {
@@ -167,6 +175,20 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
+      // Spawn-time skill-creation directive: read the current
+      // `agentMode.skills.folder` so the directive templates the live value
+      // on every new session. See the Skills Management spec.
+      //
+      // Claude has no cross-discovery surface — it only loads
+      // `.claude/skills/`, and the symlink fanout already enforces
+      // visibility (no link = not seen). If the Claude Agent SDK ever
+      // grows a per-skill deny hook, wire `composeDenyList(getManagedSkills(),
+      // "claude")` in here.
+      getSkillCreationDirective: () => {
+        const folder = getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+        const dirs = Object.values(SkillManager.getInstance().getAgentDirsProjectRel());
+        return buildSkillCreationDirective("claude", folder, dirs);
+      },
     });
   },
 

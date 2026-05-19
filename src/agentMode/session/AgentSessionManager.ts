@@ -5,7 +5,7 @@ import { getSettings, setSettings } from "@/settings/model";
 import { err2String } from "@/utils";
 import type { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
 import { fileToHistoryItem } from "@/utils/chatHistoryUtils";
-import { App, FileSystemAdapter, Platform, TFile } from "obsidian";
+import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
@@ -68,6 +68,8 @@ export class AgentSessionManager {
   private disposed = false;
   private startingBackendId: BackendId | null = null;
   private lastError: string | null = null;
+  private readonly pendingBackendRestarts = new Map<BackendId, string>();
+  private readonly restartingBackends = new Set<BackendId>();
   private readonly preloader: AgentModelPreloader;
   /**
    * Resolves once the plugin-load preload phase has settled (regardless of
@@ -369,6 +371,32 @@ export class AgentSessionManager {
 
   getBackendProcess(backendId: BackendId): BackendProcess | null {
     return this.backends.get(backendId) ?? null;
+  }
+
+  /**
+   * Restart a backend process so spawn-time configuration, including native
+   * skill discovery and deny rules, is rebuilt from current settings. If a
+   * session on that backend is busy, the restart is deferred until it is idle.
+   *
+   * Returns `true` when a running backend was restarted or a restart was
+   * scheduled; `false` when no backend process exists yet.
+   */
+  async restartBackend(backendId: BackendId, reason: string): Promise<boolean> {
+    if (this.disposed) return false;
+    const inflight = this.starting.get(backendId);
+    if (inflight) {
+      await inflight.catch(() => undefined);
+    }
+    const backend = this.backends.get(backendId);
+    if (!backend) return false;
+    if (this.hasBusySession(backendId)) {
+      const prev = this.pendingBackendRestarts.get(backendId);
+      this.pendingBackendRestarts.set(backendId, prev ? `${prev}; ${reason}` : reason);
+      logInfo(`[AgentMode] deferred ${backendId} backend restart: ${reason}`);
+      return true;
+    }
+    await this.restartBackendNow(backendId, reason);
+    return true;
   }
 
   /** Cached unified backend state for `backendId`, populated by the model preloader. */
@@ -791,6 +819,7 @@ export class AgentSessionManager {
       onStatusChanged: (next) => {
         const wasRunning = prev === "running";
         prev = next;
+        void this.flushDeferredBackendRestartIfReady(session.backendId);
         if (!wasRunning) return;
         if (!ATTENTION_TRIGGER_STATUSES.has(next)) return;
         if (this.activeSessionId === session.internalId) return;
@@ -854,6 +883,59 @@ export class AgentSessionManager {
       return await startPromise;
     } finally {
       this.starting.delete(backendId);
+    }
+  }
+
+  /** Whether any session for `backendId` is not safe to dispose yet. */
+  private hasBusySession(backendId: BackendId): boolean {
+    return Array.from(this.sessions.values()).some((session) => {
+      if (session.backendId !== backendId) return false;
+      const status = session.getStatus();
+      return status === "starting" || status === "running" || status === "awaiting_permission";
+    });
+  }
+
+  /** Execute a pending backend restart once every session for that backend is idle. */
+  private async flushDeferredBackendRestartIfReady(backendId: BackendId): Promise<void> {
+    const reason = this.pendingBackendRestarts.get(backendId);
+    if (!reason) return;
+    if (this.hasBusySession(backendId)) return;
+    this.pendingBackendRestarts.delete(backendId);
+    try {
+      await this.restartBackendNow(backendId, reason);
+    } catch (err) {
+      this.lastError = err2String(err);
+      logError(`[AgentMode] deferred ${backendId} backend restart failed`, err);
+      this.notify();
+    }
+  }
+
+  /** Immediately tear down `backendId` and replace the active affected tab. */
+  private async restartBackendNow(backendId: BackendId, reason: string): Promise<void> {
+    if (this.restartingBackends.has(backendId)) return;
+    const proc = this.backends.get(backendId);
+    if (!proc) return;
+    this.restartingBackends.add(backendId);
+    logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
+    try {
+      const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
+      const shouldCreateReplacement =
+        affected.length > 0 && affected.some((s) => s.internalId === this.activeSessionId);
+      for (const session of affected) {
+        await this.closeSession(session.internalId);
+      }
+      await proc.shutdown();
+      if (this.backends.get(backendId) === proc) {
+        this.backends.delete(backendId);
+      }
+      this.preloader.clearCached(backendId);
+      new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed after skill changes.`);
+      if (shouldCreateReplacement && !this.disposed) {
+        await this.createSession(backendId);
+      }
+      this.notify();
+    } finally {
+      this.restartingBackends.delete(backendId);
     }
   }
 }

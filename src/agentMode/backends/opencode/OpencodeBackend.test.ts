@@ -1,5 +1,6 @@
 import { ChatModelProviders } from "@/constants";
 import { resetSettings, setSettings, updateSetting } from "@/settings/model";
+import type { Skill } from "@/agentMode/skills";
 import { buildOpencodeConfig, OPENCODE_PROVIDER_MAP, OpencodeBackend } from "./OpencodeBackend";
 import { COPILOT_PROMPT_BASE, selectCopilotPrompt } from "./prompts";
 
@@ -8,6 +9,44 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+
+// Mock the skills package so we can drive the deny-list synthesis path
+// without booting the real jotai store / Obsidian App singleton.
+let mockSkills: Skill[] = [];
+let mockSkillManagerReady = false;
+
+jest.mock("@/agentMode/skills", () => {
+  const actual = jest.requireActual("@/agentMode/skills");
+  return {
+    ...actual,
+    getManagedSkills: () => mockSkills,
+    SkillManager: {
+      hasInstance: () => mockSkillManagerReady,
+      getInstance: () => {
+        if (!mockSkillManagerReady) {
+          throw new Error("SkillManager.getInstance called before initialize");
+        }
+        return { getAgentDirsProjectRel: () => ({}) } as unknown;
+      },
+    },
+  };
+});
+
+function makeSkill(name: string, enabledAgents: Skill["enabledAgents"]): Skill {
+  return {
+    name,
+    description: `${name} skill`,
+    filePath: `/x/${name}/SKILL.md`,
+    dirPath: `/x/${name}`,
+    body: "",
+    enabledAgents,
+  };
+}
+
+function seedSkills(skills: Skill[]): void {
+  mockSkills = skills;
+  mockSkillManagerReady = skills.length > 0;
+}
 
 /**
  * Most tests below disable the built-in `activeModels` so injection is a
@@ -22,6 +61,7 @@ describe("buildOpencodeConfig", () => {
   beforeEach(() => {
     resetSettings();
     clearActiveModels();
+    seedSkills([]);
   });
 
   it("emits provider entries only for non-empty keys", async () => {
@@ -169,6 +209,7 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
             binaryPath: "/x",
@@ -190,6 +231,7 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
             binaryPath: "/x",
@@ -262,6 +304,7 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
             binaryPath: "/x",
@@ -282,6 +325,7 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        skills: { folder: "copilot/skills" },
         backends: {
           opencode: {
             selectedMode: "default",
@@ -299,6 +343,7 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        skills: { folder: "copilot/skills" },
         backends: { opencode: { selectedMode: "auto" } },
       },
     });
@@ -315,13 +360,94 @@ describe("buildOpencodeConfig", () => {
     const cfg = (await buildOpencodeConfig()) as {
       agent: Record<string, { prompt?: string; permission?: unknown; mode?: string }>;
     };
-    expect(cfg.agent["copilot-build"].prompt).toBe(COPILOT_PROMPT_BASE);
-    expect(cfg.agent.build.prompt).toBe(COPILOT_PROMPT_BASE);
+    // Prompt now starts with the COPILOT_PROMPT_BASE and ends with the
+    // spawn-time skill-creation directive (see the Skills Management
+    // spec). Assert the base is the prefix so future directive changes
+    // don't break this test.
+    expect(cfg.agent["copilot-build"].prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
+    expect(cfg.agent.build.prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
+    expect(cfg.agent["copilot-build"].prompt).toContain(
+      'metadata.copilot-enabled-agents: "opencode"'
+    );
+    expect(cfg.agent.build.prompt).toContain('metadata.copilot-enabled-agents: "opencode"');
     // Regression guard: the copilot-build permission block must survive
     // alongside the new prompt field — opencode's field-wise merge depends
     // on us not stomping native fields.
     expect(cfg.agent["copilot-build"].permission).toEqual({ bash: "ask", edit: "ask" });
     expect(cfg.agent["copilot-build"].mode).toBe("primary");
+  });
+
+  it("templates a custom skills folder into the opencode directive", async () => {
+    setSettings({
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "opencode",
+        debugFullFrames: false,
+        skills: { folder: "team-skills" },
+        backends: {},
+      },
+    });
+    const cfg = (await buildOpencodeConfig()) as {
+      agent: Record<string, { prompt?: string }>;
+    };
+    expect(cfg.agent["copilot-build"].prompt).toContain("<vault>/team-skills/<name>/SKILL.md");
+    expect(cfg.agent.build.prompt).toContain("<vault>/team-skills/<name>/SKILL.md");
+  });
+
+  it("denies a skill enabled for Claude only (cross-discovered, not enabled for opencode)", async () => {
+    seedSkills([makeSkill("foo", ["claude"])]);
+    const cfg = (await buildOpencodeConfig()) as {
+      permission?: { skill?: Record<string, string> };
+    };
+    expect(cfg.permission?.skill?.foo).toBe("deny");
+  });
+
+  it("does not deny a skill enabled for both Claude and OpenCode", async () => {
+    seedSkills([makeSkill("foo", ["claude", "opencode"])]);
+    const cfg = (await buildOpencodeConfig()) as {
+      permission?: { skill?: Record<string, string> };
+    };
+    expect(cfg.permission?.skill?.foo).toBeUndefined();
+  });
+
+  it("does not emit a permission.skill block when no skills need denying", async () => {
+    seedSkills([makeSkill("foo", ["opencode"])]);
+    const cfg = (await buildOpencodeConfig()) as {
+      permission?: { skill?: Record<string, string> };
+    };
+    expect(cfg.permission).toBeUndefined();
+  });
+
+  it("does not emit a permission.skill block when there are no skills at all", async () => {
+    seedSkills([]);
+    const cfg = (await buildOpencodeConfig()) as { permission?: unknown };
+    expect(cfg.permission).toBeUndefined();
+  });
+
+  it("synthesises deny rules for a mix of skills (only cross-discovered + not-enabled wins)", async () => {
+    seedSkills([
+      makeSkill("a", ["claude"]),
+      makeSkill("b", ["claude", "opencode"]),
+      makeSkill("c", []),
+      makeSkill("d", ["opencode"]),
+      makeSkill("e", ["codex"]),
+    ]);
+    const cfg = (await buildOpencodeConfig()) as {
+      permission?: { skill?: Record<string, string> };
+    };
+    // a is claude-only → denied. e is codex-only → denied (codex also
+    // populates the cross-discovered `.agents/skills/` path). b/c/d not denied.
+    expect(cfg.permission?.skill).toEqual({ a: "deny", e: "deny" });
+  });
+
+  it("skips deny synthesis when SkillManager has not initialised yet", async () => {
+    // Place a skill in the snapshot, but mark the singleton as not ready.
+    mockSkills = [makeSkill("foo", ["claude"])];
+    mockSkillManagerReady = false;
+    const cfg = (await buildOpencodeConfig()) as { permission?: unknown };
+    expect(cfg.permission).toBeUndefined();
   });
 
   it("omits cfg.model when no defaultModel is set", async () => {
@@ -334,6 +460,7 @@ describe("buildOpencodeConfig", () => {
         mcpServers: [],
         activeBackend: "opencode",
         debugFullFrames: false,
+        skills: { folder: "copilot/skills" },
         backends: {
           opencode: { binaryPath: "/x" },
         },
@@ -364,6 +491,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
       mcpServers: [],
       activeBackend: "opencode",
       debugFullFrames: false,
+      skills: { folder: "copilot/skills" },
       backends: {
         opencode: {
           binaryPath: "/path/to/opencode",

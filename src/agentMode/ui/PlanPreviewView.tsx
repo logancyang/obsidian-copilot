@@ -2,10 +2,11 @@ import { Button } from "@/components/ui/button";
 import { logWarn } from "@/logger";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { CurrentPlan, PlanDecisionAction } from "@/agentMode/session/types";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Check, FileText, X as XIcon } from "lucide-react";
 import { App, Component, ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 
 export const PLAN_PREVIEW_VIEW_TYPE = "copilot-plan-preview-view";
 
@@ -103,7 +104,7 @@ export class PlanPreviewView extends ItemView {
     if (!this.root) {
       contentEl.empty();
       const rootEl = contentEl.createDiv();
-      this.root = createRoot(rootEl);
+      this.root = createPluginRoot(rootEl, this.app);
     }
     this.root.render(<PlanPreviewRoot app={this.app} state={this.state} />);
   }

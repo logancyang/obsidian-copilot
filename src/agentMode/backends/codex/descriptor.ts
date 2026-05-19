@@ -75,6 +75,9 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   id: "codex",
   displayName: "Codex",
   Icon: CodexLogo,
+  skillsProjectDir: ".agents/skills",
+  crossDiscoveredAgents: [],
+  restartOnManagedSkillsChange: false,
   wire: codexWire,
 
   getInstallState(settings: CopilotSettings): InstallState {
@@ -100,6 +103,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   createBackendProcess(args): BackendProcess {
+    // Codex sees managed skills only via the `.agents/skills/<name>`
+    // symlink. The per-agent toggle drives whether the symlink exists; no
+    // deny synthesis is needed because Codex does not cross-discover from
+    // `.claude/skills/` or `.opencode/skills/`.
     return simpleBinaryBackendProcess(args, new CodexBackend());
   },
 

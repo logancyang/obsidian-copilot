@@ -18,6 +18,7 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
+  DEFAULT_SKILLS_FOLDER,
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
@@ -256,6 +257,28 @@ export interface CopilotSettings {
      * 400-char summary log unchanged.
      */
     debugFullFrames: boolean;
+    /**
+     * Skills management — canonical-store discovery, symlink lifecycle,
+     * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md`.
+     */
+    skills: {
+      /**
+       * Vault-root-relative POSIX path of the canonical skills folder.
+       * Default `"copilot/skills"`. Validated by `validateSkillsFolder`.
+       */
+      folder: string;
+      /**
+       * Absolute paths of import sources that previously failed to move
+       * into the canonical folder. The detector filters these out so the
+       * consent dialog doesn't re-prompt on every settings open. Cleared
+       * by the "Find existing skills" rescan button.
+       *
+       * Optional in the type so legacy settings and ad-hoc test fixtures
+       * don't have to spell it out — `sanitizeSettings` always normalises
+       * to a defined array.
+       */
+      importSkipList?: string[];
+    };
   };
 }
 
@@ -833,6 +856,24 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     claudeCliRaw && typeof claudeCliRaw.path === "string" ? claudeCliRaw.path : undefined;
   const claudeCli = claudeCliPath ? { path: claudeCliPath } : undefined;
 
+  const skillsRaw =
+    r.skills && typeof r.skills === "object" ? (r.skills as Record<string, unknown>) : null;
+  const skillsFolderRaw = skillsRaw && typeof skillsRaw.folder === "string" ? skillsRaw.folder : "";
+  const skillsValidation = validateSkillsFolder(skillsFolderRaw);
+  const skipListRaw =
+    skillsRaw && Array.isArray(skillsRaw.importSkipList)
+      ? (skillsRaw.importSkipList as unknown[])
+      : [];
+  const importSkipList = Array.from(
+    new Set(skipListRaw.filter((p): p is string => typeof p === "string" && p.length > 0))
+  );
+  const skills = {
+    folder: skillsValidation.ok
+      ? skillsValidation.folder
+      : DEFAULT_SETTINGS.agentMode.skills.folder,
+    importSkipList,
+  };
+
   return {
     enabled,
     byok,
@@ -840,8 +881,86 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     activeBackend,
     backends,
     debugFullFrames,
+    skills,
     ...(claudeCli ? { claudeCli } : {}),
   };
+}
+
+/**
+ * Match NUL, the C0 control range (0x01–0x1F), and DEL (0x7F). Uses explicit
+ * `\uXXXX` escapes so the source stays plain ASCII — an earlier form
+ * embedded literal control bytes, which made the source file binary and
+ * missed DEL.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
+
+/**
+ * Validate a user-entered "Skills folder" value against the rules in
+ * `designdocs/SKILLS_MANAGEMENT.md` §Skills folder setting.
+ *
+ * Rules:
+ *   - Empty / whitespace-only → falls back to default `copilot/skills`.
+ *   - Leading `/` and `./` are stripped before use (still considered ok).
+ *   - `..` segments are rejected.
+ *   - OS-illegal characters (NUL, C0 controls, DEL, `<>:"|?*` on Windows)
+ *     rejected.
+ *   - Stored as a vault-root-relative POSIX path with forward slashes only.
+ *
+ * @param value Raw user input.
+ * @returns Discriminated union: `{ ok: true, folder }` with the cleaned
+ *   value, or `{ ok: false, reason }` for inline UI validation errors.
+ */
+export function validateSkillsFolder(
+  value: string
+): { ok: true; folder: string } | { ok: false; reason: string } {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: true, folder: DEFAULT_SKILLS_FOLDER };
+  }
+
+  // Normalize path separators to POSIX so backslash-only inputs are caught
+  // as illegal on non-Windows and stay validated uniformly elsewhere.
+  let cleaned = value.trim().replace(/\\/g, "/");
+
+  // Strip leading `./`
+  while (cleaned.startsWith("./")) {
+    cleaned = cleaned.slice(2);
+  }
+  // Strip a single leading `/` — vault-root-relative interpretation.
+  if (cleaned.startsWith("/")) {
+    cleaned = cleaned.replace(/^\/+/, "");
+  }
+  // Strip trailing slashes.
+  cleaned = cleaned.replace(/\/+$/, "");
+
+  if (cleaned.length === 0) {
+    return { ok: true, folder: DEFAULT_SKILLS_FOLDER };
+  }
+
+  const segments = cleaned.split("/");
+  for (const segment of segments) {
+    if (segment.length === 0) {
+      return { ok: false, reason: "Folder path cannot contain empty segments (//)." };
+    }
+    if (segment === "..") {
+      return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
+    }
+    if (segment === ".") {
+      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+    }
+    if (CONTROL_CHAR_RE.test(segment)) {
+      return { ok: false, reason: "Folder path contains illegal control characters." };
+    }
+    // Windows-illegal characters (rejected everywhere for portability).
+    if (/[<>:"|?*]/.test(segment)) {
+      return {
+        ok: false,
+        reason: 'Folder path contains characters not allowed in folder names (< > : " | ? *).',
+      };
+    }
+  }
+
+  return { ok: true, folder: cleaned };
 }
 
 /** Truthy-string coerce: keep only non-empty string values. */

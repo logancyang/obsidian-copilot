@@ -86,6 +86,14 @@ interface SessionState {
   effort?: EffortLevel;
   mcpServers: Record<string, McpServerConfig>;
   active?: Query;
+  /**
+   * Snapshot of the skill-creation system-prompt directive captured at
+   * `newSession()` time so the setting change takes effect on the next
+   * session rather than mid-conversation. Empty string = no directive.
+   * Appended to Claude's default `claude_code` preset via
+   * `options.systemPrompt.append`.
+   */
+  systemPromptAppend: string;
 }
 
 export interface ClaudeSdkBackendProcessOptions {
@@ -112,6 +120,13 @@ export interface ClaudeSdkBackendProcessOptions {
    * the picker shows, instead of falling back to its own internal default).
    */
   getDefaultModelId?: () => string | undefined;
+  /**
+   * Returns the spawn-time skill-creation directive to append to Claude's
+   * default `claude_code` system prompt. Read once per `newSession()` so
+   * a settings change applies to the next session rather than mid-turn.
+   * Empty string / undefined disables the append.
+   */
+  getSkillCreationDirective?: () => string | undefined;
 }
 
 /**
@@ -210,6 +225,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       firstPromptStarted: false,
       mcpServers: mcp,
       model: seedModelId,
+      systemPromptAppend: this.opts.getSkillCreationDirective?.() ?? "",
     });
 
     const state = this.computeState(sessionId);
@@ -243,6 +259,16 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
       canUseTool: this.bridge.canUseTool,
     };
+    // Append the skill-creation directive (captured at newSession time) to
+    // Claude's default `claude_code` preset. The SDK's preset+append form
+    // preserves the full default system prompt; we only add the directive.
+    if (session.systemPromptAppend) {
+      options.systemPrompt = {
+        type: "preset",
+        preset: "claude_code",
+        append: session.systemPromptAppend,
+      };
+    }
     if (session.firstPromptStarted) {
       options.resume = params.sessionId;
     } else {

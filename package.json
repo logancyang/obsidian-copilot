@@ -55,6 +55,8 @@
     "esbuild": "^0.25.0",
     "esbuild-plugin-svg": "^0.1.0",
     "eslint": "^9.18.0",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-boundaries": "^6.0.2",
     "eslint-plugin-obsidianmd": "^0.3.0",
     "eslint-plugin-react-hooks": "^5.1.0",
     "eslint-plugin-tailwindcss": "^3.18.0",

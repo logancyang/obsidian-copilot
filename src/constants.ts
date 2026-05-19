@@ -18,6 +18,7 @@ const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-pro
 const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
 const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
+export const DEFAULT_SKILLS_FOLDER = `${COPILOT_FOLDER_ROOT}/skills`;
 const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
@@ -1026,6 +1027,10 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     activeBackend: "opencode",
     backends: {},
     debugFullFrames: false,
+    skills: {
+      folder: DEFAULT_SKILLS_FOLDER,
+      importSkipList: [],
+    },
   },
 };
 

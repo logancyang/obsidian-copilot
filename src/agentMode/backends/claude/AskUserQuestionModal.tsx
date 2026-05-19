@@ -1,7 +1,8 @@
 import { Button } from "@/components/ui/button";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { App, Modal } from "obsidian";
 import React from "react";
-import { createRoot, Root } from "react-dom/client";
+import { Root } from "react-dom/client";
 import type { AskUserQuestionInput } from "@/agentMode/sdk/permissionBridge";
 
 type Questions = AskUserQuestionInput["questions"];
@@ -133,7 +134,7 @@ class AskUserQuestionModal extends Modal {
   onOpen(): void {
     const { contentEl } = this;
     contentEl.empty();
-    this.root = createRoot(contentEl);
+    this.root = createPluginRoot(contentEl, this.app);
     this.root.render(
       <AskUserQuestionContent
         questions={this.questions}
