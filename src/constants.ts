@@ -1021,7 +1021,7 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   autoCompactThreshold: 128000,
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
   agentMode: {
-    enabled: false,
+    enabled: true,
     byok: {},
     mcpServers: [],
     activeBackend: "opencode",
