@@ -1,27 +1,33 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TFile, App } from "obsidian";
-import { TypeaheadMenuPortal } from "../TypeaheadMenuPortal";
-import { useTypeaheadPlugin } from "../hooks/useTypeaheadPlugin";
-import { $replaceTriggeredTextWithPill, PillData } from "../utils/lexicalTextUtils";
+import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
+import { useTypeaheadPlugin } from "@/components/chat-components/hooks/useTypeaheadPlugin";
+import {
+  $replaceTriggeredTextWithPill,
+  PillData,
+} from "@/components/chat-components/utils/lexicalTextUtils";
 import {
   useAtMentionCategories,
   AtMentionCategory,
   AtMentionOption,
   CategoryOption,
-} from "../hooks/useAtMentionCategories";
-import { useAtMentionSearch } from "../hooks/useAtMentionSearch";
+} from "@/components/chat-components/hooks/useAtMentionCategories";
+import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
 
 // Get app instance
 declare const app: App;
 
 interface AtMentionCommandPluginProps {
   isCopilotPlus?: boolean;
+  /** Whether to surface Copilot built-in `@` tools (category + search hits). */
+  showTools?: boolean;
   currentActiveFile?: TFile | null;
 }
 
 export function AtMentionCommandPlugin({
   isCopilotPlus = false,
+  showTools = false,
   currentActiveFile = null,
 }: AtMentionCommandPluginProps): JSX.Element {
   const [editor] = useLexicalComposerContext();
@@ -35,8 +41,14 @@ export function AtMentionCommandPlugin({
   // State to track preview content for the currently highlighted note
   const [currentPreviewContent, setCurrentPreviewContent] = useState<string>("");
 
-  // Use the shared at-mention categories hook
-  const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
+  // Use the shared at-mention categories hook. Action categories (e.g. Images,
+  // which opens a file picker) are not supported inline because the editor has
+  // no pill representation for them — they only appear in the `+` popover.
+  const allCategoryOptions = useAtMentionCategories(showTools);
+  const availableCategoryOptions = useMemo(
+    () => allCategoryOptions.filter((c) => !c.isAction),
+    [allCategoryOptions]
+  );
 
   // Load note content for preview using shared utilities
   const loadNoteContentForPreview = useCallback(async (file: TFile | null) => {
@@ -73,6 +85,7 @@ export function AtMentionCommandPlugin({
     extendedState.mode,
     extendedState.selectedCategory,
     isCopilotPlus,
+    showTools,
     availableCategoryOptions,
     currentActiveFile
   );
@@ -113,10 +126,10 @@ export function AtMentionCommandPlugin({
           editor.update(() => {
             $replaceTriggeredTextWithPill("@", { type: "active-note" });
           });
-        } else {
-          // Regular pill
+        } else if (!option.isAction) {
+          // isAction excludes action-only categories like "images"
           const pillData: PillData = {
-            type: option.category,
+            type: option.category as PillData["type"],
             title: option.title,
             data: option.data,
           };

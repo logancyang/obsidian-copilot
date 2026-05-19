@@ -3,7 +3,7 @@ import { Platform, TFolder, TFile } from "obsidian";
 import { FileText, Wrench, Folder, FileClock, Globe, CircleDashed } from "lucide-react";
 import fuzzysort from "fuzzysort";
 import { getToolDescription } from "@/tools/toolManager";
-import { AVAILABLE_TOOLS } from "../constants/tools";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 import { useAllNotes } from "./useAllNotes";
 import { useAllFolders } from "./useAllFolders";
 import { useOpenWebTabs } from "./useOpenWebTabs";
@@ -22,6 +22,7 @@ export function useAtMentionSearch(
   mode: "category" | "search",
   selectedCategory: AtMentionCategory | undefined,
   isCopilotPlus: boolean,
+  showTools: boolean,
   availableCategoryOptions: CategoryOption[],
   currentActiveFile: TFile | null = null
 ): (CategoryOption | AtMentionOption)[] {
@@ -59,7 +60,7 @@ export function useAtMentionSearch(
 
   const toolItems: AtMentionOption[] = useMemo(
     () =>
-      isCopilotPlus
+      showTools
         ? AVAILABLE_TOOLS.map((tool) => ({
             key: `tool-${tool}`,
             title: tool,
@@ -70,7 +71,7 @@ export function useAtMentionSearch(
             icon: React.createElement(Wrench, { className: "tw-size-4" }),
           }))
         : [],
-    [isCopilotPlus]
+    [showTools]
   );
 
   const folderItems: AtMentionOption[] = useMemo(

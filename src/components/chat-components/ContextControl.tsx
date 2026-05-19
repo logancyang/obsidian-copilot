@@ -19,8 +19,10 @@ interface ChatControlsProps {
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
 
   // Unified handlers
-  onAddToContext: (category: string, data: TFile | string | TFolder | WebTabContext) => void;
+  onAddToContext: (category: string, data: TFile | string | TFolder | WebTabContext | null) => void;
   onRemoveFromContext: (category: string, data: string) => void;
+
+  hideAddContextButton?: boolean;
 }
 
 export const ContextControl: React.FC<ChatControlsProps> = ({
@@ -38,6 +40,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
   lexicalEditorRef,
   onAddToContext,
   onRemoveFromContext,
+  hideAddContextButton,
 }) => {
   const handleRemoveContext = (category: string, data: string) => {
     // Delegate to unified handler
@@ -46,7 +49,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
 
   const handleTypeaheadSelect = (
     category: string,
-    data: TFile | string | TFolder | WebTabContext
+    data: TFile | string | TFolder | WebTabContext | null
   ) => {
     // Delegate to unified handler
     onAddToContext(category, data);
@@ -70,6 +73,7 @@ export const ContextControl: React.FC<ChatControlsProps> = ({
       showIndexingCard={showIndexingCard}
       onTypeaheadSelect={handleTypeaheadSelect}
       lexicalEditorRef={lexicalEditorRef}
+      hideAddContextButton={hideAddContextButton}
     />
   );
 };

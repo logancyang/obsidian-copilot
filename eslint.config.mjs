@@ -2,18 +2,12 @@ import obsidianmd from "eslint-plugin-obsidianmd";
 import eslintReact from "@eslint-react/eslint-plugin";
 import reactHooks from "eslint-plugin-react-hooks";
 import tailwind from "eslint-plugin-tailwindcss";
+import boundaries from "eslint-plugin-boundaries";
 import globals from "globals";
 
 export default [
   {
-    ignores: [
-      "node_modules/**",
-      "main.js",
-      "styles.css",
-      "data.json",
-      "designdocs/**",
-      "docs/**",
-    ],
+    ignores: ["node_modules/**", "main.js", "styles.css", "data.json", "designdocs/**", "docs/**"],
   },
 
   // obsidianmd recommended brings:
@@ -119,16 +113,35 @@ export default [
     },
   },
 
-  // Guardrail: every standalone React root in the plugin must go through
-  // `createPluginRoot` so descendants can rely on `useApp()` unconditionally
-  // (the bug class fixed in PR #2466). Forbid importing `createRoot` from
-  // `react-dom/client` anywhere except the helper itself.
+  // Two AST-level import bans, combined in one block:
+  //
+  // 1. Parent-relative imports (`../foo`, `..`) — use the `@/` path alias
+  //    instead. Survives file moves, keeps grep unambiguous, avoids long
+  //    `../../../` chains. Same-directory `./foo` remains allowed.
+  //
+  // 2. `createRoot` from `react-dom/client` outside `createPluginRoot` —
+  //    every standalone React root must go through that helper so descendants
+  //    can rely on `useApp()` unconditionally (bug class fixed in PR #2466).
+  //
+  // Both selectors must live in the same block: flat config replaces (does
+  // not merge) rule values when the same rule key appears in multiple
+  // matching blocks, so splitting them would silently disable the earlier
+  // ban on every file the later block also matches.
+  //
+  // `createPluginRoot.tsx` is exempted via `ignores` — it owns `createRoot`,
+  // and has no parent imports today.
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/utils/react/createPluginRoot.tsx"],
     rules: {
       "no-restricted-syntax": [
         "error",
+        {
+          selector:
+            "ImportDeclaration[source.value=/^\\.\\.($|\\u002f)/], ImportExpression[source.value=/^\\.\\.($|\\u002f)/]",
+          message:
+            "Parent-relative imports (`../foo`) are banned. Use the `@/` path alias (e.g. `@/components/Foo`) instead.",
+        },
         {
           selector:
             "ImportDeclaration[source.value='react-dom/client'] ImportSpecifier[imported.name='createRoot']",
@@ -153,6 +166,10 @@ export default [
       // Tests use intentional `any` mocks; disable type-safety rules that flood
       // the test suite without adding signal.
       "@typescript-eslint/no-unsafe-member-access": "off",
+      // Tests freely reach across layers and import ACP wire types directly to
+      // build fixtures; the layer enforcement only applies to production code.
+      "boundaries/dependencies": "off",
+      "no-restricted-imports": "off",
     },
   },
 
@@ -196,6 +213,130 @@ export default [
     },
   },
 
+  // Agent Mode: backends spawn subprocesses (ACP) and the in-process Claude
+  // SDK uses node:async_hooks. The plugin runs in Electron renderer where
+  // these modules are available; the desktop-only Agent Mode is also gated by
+  // `Platform.isMobile` at runtime in main.ts.
+  // detectBinary / rendererEventsShim are sibling utilities pulled in by
+  // agent-mode wiring and share the same Electron-renderer assumptions.
+  {
+    files: ["src/agentMode/**", "src/utils/detectBinary.ts", "src/utils/rendererEventsShim.ts"],
+    rules: {
+      "import/no-nodejs-modules": "off",
+    },
+  },
+
+  // Element types (order matters — first match wins; files before folders):
+  //   registry     src/agentMode/backends/registry.ts (file)
+  //   barrel       src/agentMode/index.ts (file)
+  //   session      src/agentMode/session
+  //   acp          src/agentMode/acp
+  //   sdk          src/agentMode/sdk
+  //   backend      src/agentMode/backends/<name>
+  //   ui           src/agentMode/ui
+  //   skills       src/agentMode/skills
+  //   host         src/** (everything else under src/)
+  {
+    files: ["src/**/*.{ts,tsx,js,jsx}"],
+    plugins: { boundaries },
+    settings: {
+      // Required so `eslint-plugin-boundaries` can resolve `@/*` path aliases
+      // to their `src/*` targets.
+      "import/resolver": {
+        typescript: { project: "./tsconfig.json" },
+        node: true,
+      },
+      "boundaries/include": ["src/**/*"],
+      "boundaries/elements": [
+        { type: "registry", pattern: "src/agentMode/backends/registry.ts", mode: "file" },
+        { type: "barrel", pattern: "src/agentMode/index.ts", mode: "file" },
+        { type: "session", pattern: "src/agentMode/session" },
+        { type: "acp", pattern: "src/agentMode/acp" },
+        { type: "sdk", pattern: "src/agentMode/sdk" },
+        { type: "backend", pattern: "src/agentMode/backends/*", capture: ["name"] },
+        { type: "ui", pattern: "src/agentMode/ui" },
+        { type: "skills", pattern: "src/agentMode/skills" },
+        { type: "host", pattern: "src/**" },
+      ],
+    },
+    rules: {
+      "boundaries/dependencies": [
+        "error",
+        {
+          default: "disallow",
+          rules: [
+            { from: { type: "session" }, allow: { to: { type: ["session", "host"] } } },
+            { from: { type: "acp" }, allow: { to: { type: ["acp", "session", "host"] } } },
+            { from: { type: "sdk" }, allow: { to: { type: ["sdk", "session", "host"] } } },
+            {
+              from: { type: "backend" },
+              allow: [
+                { to: { type: ["acp", "sdk", "session", "skills", "host"] } },
+                { to: { type: "backend", captured: { name: "{{from.captured.name}}" } } },
+                { to: { type: "backend", captured: { name: "shared" } } },
+              ],
+            },
+            { from: { type: "registry" }, allow: { to: { type: ["backend", "session", "host"] } } },
+            {
+              from: { type: "ui" },
+              allow: {
+                to: { type: ["ui", "session", "registry", "skills", "host"] },
+              },
+            },
+            {
+              from: { type: "skills" },
+              allow: { to: { type: ["skills", "session", "host", "registry"] } },
+            },
+            {
+              from: { type: "barrel" },
+              allow: {
+                to: {
+                  type: ["acp", "session", "sdk", "backend", "registry", "ui", "skills", "host"],
+                },
+              },
+            },
+            { from: { type: "host" }, allow: { to: { type: ["host", "barrel"] } } },
+          ],
+        },
+      ],
+    },
+  },
+
+  // Re-disable boundaries/dependencies for tests — the block above otherwise
+  // re-enables the rule for test files via the broader `src/**` pattern.
+  {
+    files: ["**/*.test.{js,jsx,ts,tsx}", "jest.setup.js", "__mocks__/**"],
+    rules: {
+      "boundaries/dependencies": "off",
+    },
+  },
+
+  // Only acp/ may import `@agentclientprotocol/sdk`. Tests are exempted via
+  // the test block; acp/ itself is exempted below.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "@agentclientprotocol/sdk",
+              message:
+                "ACP wire types are confined to src/agentMode/acp/. session/, sdk/, ui/, backends/, and skills/ should depend on the session-domain types in @/agentMode/session/types instead. See src/agentMode/AGENTS.md.",
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ["src/agentMode/acp/**/*.{ts,tsx}"],
+    rules: {
+      "no-restricted-imports": "off",
+    },
+  },
+
   // TypeScript-specific overrides (the @typescript-eslint plugin is registered
   // by obsidianmd's recommended config only for .ts/.tsx files).
   {
@@ -227,6 +368,20 @@ export default [
     },
   },
 
+  // Agent Mode tests use heavy `any` mocking for backend / SDK / ACP wire
+  // types whose real shapes are vendor-controlled and inconvenient to model
+  // in test scaffolding. Loosen the test-only unsafe rules for the
+  // agent-mode subtree only; production code stays enforced. Placed after the
+  // general TS block so it actually overrides.
+  {
+    files: ["src/agentMode/**/*.test.{ts,tsx}"],
+    rules: {
+      "@typescript-eslint/no-unsafe-assignment": "off",
+      "@typescript-eslint/no-unsafe-argument": "off",
+      "@typescript-eslint/no-unsafe-return": "off",
+    },
+  },
+
   // Non-TS files aren't in tsconfig.json — disable type-aware rules that
   // obsidianmd's recommended config enables globally. Most typed obsidianmd
   // rules are already gated to **/*.ts(x); only no-plugin-as-component leaks
@@ -249,7 +404,9 @@ export default [
         "error",
         {
           presets: ["native", "microutilities", "preferred"],
-          allowed: [],
+          // dotenv is used only by integration tests to load .env.test;
+          // the native --env-file flag doesn't work in jest.
+          allowed: ["dotenv"],
         },
       ],
     },

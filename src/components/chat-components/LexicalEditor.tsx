@@ -63,8 +63,12 @@ interface LexicalEditorProps {
   onImagePaste?: (files: File[]) => void;
   onTagSelected?: () => void;
   isCopilotPlus?: boolean;
+  /** Whether to surface Copilot built-in `@` tools in the typeahead. */
+  showTools?: boolean;
   currentActiveFile?: TFile | null;
   currentChain?: ChainType;
+  onEscape?: () => void;
+  onShiftTab?: () => void;
 }
 
 const LexicalEditor: React.FC<LexicalEditorProps> = ({
@@ -92,8 +96,11 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
   onImagePaste,
   onTagSelected,
   isCopilotPlus = false,
+  showTools = false,
   currentActiveFile = null,
   currentChain,
+  onEscape,
+  onShiftTab,
 }) => {
   const [focusFn, setFocusFn] = React.useState<(() => void) | null>(null);
   const [editorInstance, setEditorInstance] = React.useState<LexicalEditorType | null>(null);
@@ -168,7 +175,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           <PlainTextPlugin
             contentEditable={
               <ContentEditable
-                className="tw-max-h-40 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
+                className="tw-max-h-60 tw-min-h-[60px] tw-w-full tw-resize-none tw-overflow-y-auto tw-rounded-md tw-border-none tw-bg-transparent tw-px-2 tw-text-sm tw-text-normal tw-outline-none focus-visible:tw-ring-0"
                 aria-label="Chat input"
               />
             }
@@ -181,7 +188,12 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           />
           <OnChangePlugin onChange={handleEditorChange} />
           <HistoryPlugin />
-          <KeyboardPlugin onSubmit={onSubmit} sendShortcut={settings.defaultSendShortcut} />
+          <KeyboardPlugin
+            onSubmit={onSubmit}
+            sendShortcut={settings.defaultSendShortcut}
+            onEscape={onEscape}
+            onShiftTab={onShiftTab}
+          />
           <ValueSyncPlugin value={value} />
           <FocusPlugin onFocus={handleFocusRegistration} onEditorReady={handleEditorReady} />
           <NotePillSyncPlugin onNotesChange={onNotesChange} onNotesRemoved={onNotesRemoved} />
@@ -212,6 +224,7 @@ const LexicalEditor: React.FC<LexicalEditorProps> = ({
           )}
           <AtMentionCommandPlugin
             isCopilotPlus={isCopilotPlus}
+            showTools={showTools}
             currentActiveFile={currentActiveFile}
           />
           <TextInsertionPlugin />

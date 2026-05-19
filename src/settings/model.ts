@@ -2,6 +2,12 @@ import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
+// Type-only import: `CopilotMode` and `ModelSelection` are owned by
+// Agent Mode (canonical vocabulary in `@/agentMode/session/types`). We
+// persist values here and validate them locally — going through the
+// barrel at runtime would create an init-time cycle (settings →
+// agentMode → backends → constants → settings).
+import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { type ChainType } from "@/chainType";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
@@ -12,6 +18,7 @@ import {
   DEFAULT_OPEN_AREA,
   DEFAULT_QA_EXCLUSIONS_SETTING,
   DEFAULT_SETTINGS,
+  DEFAULT_SKILLS_FOLDER,
   EmbeddingModelProviders,
   SEND_SHORTCUT,
 } from "@/constants";
@@ -218,6 +225,127 @@ export interface CopilotSettings {
    * renaming or moving the vault folder does not orphan keychain entries.
    */
   _keychainVaultId?: string;
+  /** Agent Mode (ACP-backed BYOK agent harness). Desktop only. */
+  agentMode: {
+    enabled: boolean;
+    byok: { anthropic?: string; openai?: string; google?: string };
+    /**
+     * User-configured MCP servers passed to the agent on session start.
+     * Stored as `unknown[]` here to keep settings independent of the
+     * agentMode module. The agentMode layer owns the typed shape
+     * (`StoredMcpServer`) and sanitizes on read via `sanitizeStoredMcpServers`.
+     */
+    mcpServers: unknown[];
+    /** Which registered backend to use. Defaults to "opencode". */
+    activeBackend: string;
+    /** Per-backend config slice, keyed by BackendId. Each backend owns its slice. */
+    backends: {
+      opencode?: OpencodeBackendSettings;
+      claude?: ClaudeBackendSettings;
+      codex?: CodexBackendSettings;
+    };
+    /**
+     * Override path to the user-installed `claude` CLI used by the Claude
+     * Agent SDK adapter. When unset, the resolver auto-detects across
+     * Volta/asdf/NVM/Homebrew/npm-global. Surfaced in Advanced Settings
+     * with a "Re-detect" button.
+     */
+    claudeCli?: { path?: string };
+    /**
+     * Opt-in: write the full untruncated ACP JSON-RPC frames as NDJSON to
+     * `<vault>/copilot/acp-frames.ndjson`. Heavyweight — leaves the existing
+     * 400-char summary log unchanged.
+     */
+    debugFullFrames: boolean;
+    /**
+     * Skills management — canonical-store discovery, symlink lifecycle,
+     * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md`.
+     */
+    skills: {
+      /**
+       * Vault-root-relative POSIX path of the canonical skills folder.
+       * Default `"copilot/skills"`. Validated by `validateSkillsFolder`.
+       */
+      folder: string;
+      /**
+       * Absolute paths of import sources that previously failed to move
+       * into the canonical folder. The detector filters these out so the
+       * consent dialog doesn't re-prompt on every settings open. Cleared
+       * by the "Find existing skills" rescan button.
+       *
+       * Optional in the type so legacy settings and ad-hoc test fixtures
+       * don't have to spell it out — `sanitizeSettings` always normalises
+       * to a defined array.
+       */
+      importSkipList?: string[];
+    };
+  };
+}
+
+/**
+ * Settings slice owned by the Claude (Agent SDK) backend. The user-
+ * installed `claude` CLI path lives at top-level `agentMode.claudeCli.path`
+ * so the resolver can be reused independently of which Anthropic
+ * descriptor is active.
+ */
+export interface ClaudeBackendSettings {
+  /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
+  defaultModel?: ModelSelection | null;
+  /** Sticky operational mode. Unset = fall back to canonical `default`. */
+  selectedMode?: CopilotMode;
+  /**
+   * Sparse user overrides for which agent-reported models should appear in
+   * the model picker. Keyed by SDK model id. Absent → fall back to the
+   * descriptor's `isModelEnabledByDefault` policy.
+   */
+  modelEnabledOverrides?: Record<string, boolean>;
+  /**
+   * Opt-in: pass `thinking: { type: "enabled" }` to the SDK so the agent
+   * surfaces reasoning chunks. Off by default (matches SDK default).
+   */
+  enableThinking?: boolean;
+}
+
+/** Settings slice owned by the Codex backend. */
+export interface CodexBackendSettings {
+  /** Path to the user-provided `codex-acp` binary. */
+  binaryPath?: string;
+  /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
+  defaultModel?: ModelSelection | null;
+  /** Sticky operational mode. Unset = fall back to canonical `default`. */
+  selectedMode?: CopilotMode;
+  /** Sparse user overrides; see `ClaudeBackendSettings.modelEnabledOverrides`. */
+  modelEnabledOverrides?: Record<string, boolean>;
+}
+
+/** Settings slice owned by the OpenCode backend. */
+export interface OpencodeBackendSettings {
+  binaryVersion?: string;
+  binaryPath?: string;
+  /**
+   * Whether the binary at `binaryPath` was installed by the plugin
+   * (`"managed"`) or pointed at by the user (`"custom"`). Undefined for
+   * legacy installs predating this field; sanitizer defaults to `"managed"`
+   * when a `binaryPath` exists.
+   */
+  binarySource?: "managed" | "custom";
+  /**
+   * Sticky model preference — `{ baseModelId, effort }`. For opencode,
+   * `baseModelId` is the `<provider>/<model>` form (no effort suffix).
+   */
+  defaultModel?: ModelSelection | null;
+  /**
+   * ACP sessionId of the dedicated "probe session" used by AgentModelPreloader
+   * to enumerate live models without disturbing user chats. Persisted across
+   * plugin reloads so subsequent loads can `session/resume` (or `session/load`)
+   * the same record instead of accumulating one new session per startup. Never
+   * surfaced in the Copilot tab strip or chat history.
+   */
+  probeSessionId?: string;
+  /** Sticky operational mode. Unset = fall back to canonical `default`. */
+  selectedMode?: CopilotMode;
+  /** Sparse user overrides; see `ClaudeBackendSettings.modelEnabledOverrides`. */
+  modelEnabledOverrides?: Record<string, boolean>;
 }
 
 export const settingsStore = createStore();
@@ -242,12 +370,21 @@ function resolveEmbeddingModelKey(settings: CopilotSettings): string {
 }
 
 /**
- * Sets the settings in the atom.
+ * Sets the settings in the atom. Accepts either a partial object or an
+ * updater function `(prev) => partial`. Prefer the updater form for any
+ * read-modify-write — it routes through jotai's atom-setter callback so the
+ * read and write are atomic at the store level (no stale-snapshot races
+ * between concurrent writers, even across `await` boundaries in the caller).
  */
-export function setSettings(settings: Partial<CopilotSettings>) {
-  const newSettings = mergeAllActiveModelsWithCoreModels({ ...getSettings(), ...settings });
-  newSettings.embeddingModelKey = resolveEmbeddingModelKey(newSettings);
-  settingsStore.set(settingsAtom, newSettings);
+export function setSettings(
+  settings: Partial<CopilotSettings> | ((current: CopilotSettings) => Partial<CopilotSettings>)
+) {
+  settingsStore.set(settingsAtom, (prev) => {
+    const partial = typeof settings === "function" ? settings(prev) : settings;
+    const merged = mergeAllActiveModelsWithCoreModels({ ...prev, ...partial });
+    merged.embeddingModelKey = resolveEmbeddingModelKey(merged);
+    return merged;
+  });
 }
 
 /**
@@ -290,8 +427,25 @@ export function sanitizeQaExclusions(rawValue: unknown): string {
  * Sets a single setting in the atom.
  */
 export function updateSetting<K extends keyof CopilotSettings>(key: K, value: CopilotSettings[K]) {
-  const settings = getSettings();
-  setSettings({ ...settings, [key]: value });
+  setSettings((cur) => ({ ...cur, [key]: value }));
+}
+
+/**
+ * Patch one slice of `agentMode.backends` without forcing every caller to
+ * spread four levels of nested objects.
+ */
+export function updateAgentModeBackendFields<
+  K extends keyof CopilotSettings["agentMode"]["backends"],
+>(key: K, partial: Partial<NonNullable<CopilotSettings["agentMode"]["backends"][K]>>): void {
+  setSettings((cur) => ({
+    agentMode: {
+      ...cur.agentMode,
+      backends: {
+        ...cur.agentMode.backends,
+        [key]: { ...(cur.agentMode.backends?.[key] ?? {}), ...partial },
+      },
+    },
+  }));
 }
 
 /**
@@ -650,7 +804,240 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 
   sanitizedSettings.qaExclusions = sanitizeQaExclusions(settingsToSanitize.qaExclusions);
 
+  sanitizedSettings.agentMode = sanitizeAgentMode(sanitizedSettings.agentMode);
+
   return sanitizedSettings;
+}
+
+/** Validate the agentMode slice. */
+function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
+  if (!raw || typeof raw !== "object") {
+    return { ...DEFAULT_SETTINGS.agentMode };
+  }
+  const r = raw as Record<string, unknown>;
+  const enabled = typeof r.enabled === "boolean" ? r.enabled : DEFAULT_SETTINGS.agentMode.enabled;
+  const byok =
+    r.byok && typeof r.byok === "object"
+      ? (r.byok as { anthropic?: string; openai?: string; google?: string })
+      : {};
+  const mcpServers = Array.isArray(r.mcpServers) ? r.mcpServers : [];
+  const activeBackend =
+    typeof r.activeBackend === "string"
+      ? r.activeBackend
+      : DEFAULT_SETTINGS.agentMode.activeBackend;
+
+  const backendsRaw =
+    r.backends && typeof r.backends === "object" ? (r.backends as Record<string, unknown>) : {};
+  const existingOpencode = backendsRaw.opencode as Record<string, unknown> | undefined;
+  const existingClaude = backendsRaw.claude as Record<string, unknown> | undefined;
+  const existingCodex = backendsRaw.codex as Record<string, unknown> | undefined;
+
+  const opencodeSlice = existingOpencode
+    ? sanitizeOpencodeBackendSettings(existingOpencode)
+    : undefined;
+  const claudeSlice = existingClaude ? sanitizeClaudeBackendSettings(existingClaude) : undefined;
+  const codexSlice = existingCodex ? sanitizeCodexBackendSettings(existingCodex) : undefined;
+
+  const backends: CopilotSettings["agentMode"]["backends"] = {};
+  if (opencodeSlice) backends.opencode = opencodeSlice;
+  if (claudeSlice) backends.claude = claudeSlice;
+  if (codexSlice) backends.codex = codexSlice;
+
+  const debugFullFrames =
+    typeof r.debugFullFrames === "boolean"
+      ? r.debugFullFrames
+      : DEFAULT_SETTINGS.agentMode.debugFullFrames;
+
+  const claudeCliRaw =
+    r.claudeCli && typeof r.claudeCli === "object"
+      ? (r.claudeCli as Record<string, unknown>)
+      : null;
+  const claudeCliPath =
+    claudeCliRaw && typeof claudeCliRaw.path === "string" ? claudeCliRaw.path : undefined;
+  const claudeCli = claudeCliPath ? { path: claudeCliPath } : undefined;
+
+  const skillsRaw =
+    r.skills && typeof r.skills === "object" ? (r.skills as Record<string, unknown>) : null;
+  const skillsFolderRaw = skillsRaw && typeof skillsRaw.folder === "string" ? skillsRaw.folder : "";
+  const skillsValidation = validateSkillsFolder(skillsFolderRaw);
+  const skipListRaw =
+    skillsRaw && Array.isArray(skillsRaw.importSkipList)
+      ? (skillsRaw.importSkipList as unknown[])
+      : [];
+  const importSkipList = Array.from(
+    new Set(skipListRaw.filter((p): p is string => typeof p === "string" && p.length > 0))
+  );
+  const skills = {
+    folder: skillsValidation.ok
+      ? skillsValidation.folder
+      : DEFAULT_SETTINGS.agentMode.skills.folder,
+    importSkipList,
+  };
+
+  return {
+    enabled,
+    byok,
+    mcpServers,
+    activeBackend,
+    backends,
+    debugFullFrames,
+    skills,
+    ...(claudeCli ? { claudeCli } : {}),
+  };
+}
+
+/**
+ * Match NUL, the C0 control range (0x01–0x1F), and DEL (0x7F). Uses explicit
+ * `\uXXXX` escapes so the source stays plain ASCII — an earlier form
+ * embedded literal control bytes, which made the source file binary and
+ * missed DEL.
+ */
+// eslint-disable-next-line no-control-regex
+const CONTROL_CHAR_RE = /[\u0000-\u001f\u007f]/;
+
+/**
+ * Validate a user-entered "Skills folder" value against the rules in
+ * `designdocs/SKILLS_MANAGEMENT.md` §Skills folder setting.
+ *
+ * Rules:
+ *   - Empty / whitespace-only → falls back to default `copilot/skills`.
+ *   - Leading `/` and `./` are stripped before use (still considered ok).
+ *   - `..` segments are rejected.
+ *   - OS-illegal characters (NUL, C0 controls, DEL, `<>:"|?*` on Windows)
+ *     rejected.
+ *   - Stored as a vault-root-relative POSIX path with forward slashes only.
+ *
+ * @param value Raw user input.
+ * @returns Discriminated union: `{ ok: true, folder }` with the cleaned
+ *   value, or `{ ok: false, reason }` for inline UI validation errors.
+ */
+export function validateSkillsFolder(
+  value: string
+): { ok: true; folder: string } | { ok: false; reason: string } {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return { ok: true, folder: DEFAULT_SKILLS_FOLDER };
+  }
+
+  // Normalize path separators to POSIX so backslash-only inputs are caught
+  // as illegal on non-Windows and stay validated uniformly elsewhere.
+  let cleaned = value.trim().replace(/\\/g, "/");
+
+  // Strip leading `./`
+  while (cleaned.startsWith("./")) {
+    cleaned = cleaned.slice(2);
+  }
+  // Strip a single leading `/` — vault-root-relative interpretation.
+  if (cleaned.startsWith("/")) {
+    cleaned = cleaned.replace(/^\/+/, "");
+  }
+  // Strip trailing slashes.
+  cleaned = cleaned.replace(/\/+$/, "");
+
+  if (cleaned.length === 0) {
+    return { ok: true, folder: DEFAULT_SKILLS_FOLDER };
+  }
+
+  const segments = cleaned.split("/");
+  for (const segment of segments) {
+    if (segment.length === 0) {
+      return { ok: false, reason: "Folder path cannot contain empty segments (//)." };
+    }
+    if (segment === "..") {
+      return { ok: false, reason: 'Folder path cannot contain ".." segments.' };
+    }
+    if (segment === ".") {
+      return { ok: false, reason: 'Folder path cannot contain "." segments.' };
+    }
+    if (CONTROL_CHAR_RE.test(segment)) {
+      return { ok: false, reason: "Folder path contains illegal control characters." };
+    }
+    // Windows-illegal characters (rejected everywhere for portability).
+    if (/[<>:"|?*]/.test(segment)) {
+      return {
+        ok: false,
+        reason: 'Folder path contains characters not allowed in folder names (< > : " | ? *).',
+      };
+    }
+  }
+
+  return { ok: true, folder: cleaned };
+}
+
+/** Truthy-string coerce: keep only non-empty string values. */
+function nonEmptyString(v: unknown): string | undefined {
+  return typeof v === "string" && v ? v : undefined;
+}
+
+/** Validate a persisted `CopilotMode`, migrating legacy `build`/`auto-build`. */
+function sanitizeCopilotMode(v: unknown): CopilotMode | undefined {
+  if (v === "build") return "default";
+  if (v === "auto-build") return "auto";
+  return v === "default" || v === "plan" || v === "auto" ? v : undefined;
+}
+
+function sanitizeModelEnabledOverrides(raw: unknown): Record<string, boolean> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof k === "string" && k.length > 0 && k.length <= 256 && typeof v === "boolean") {
+      out[k] = v;
+    }
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+function sanitizeDefaultModel(raw: unknown): ModelSelection | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const baseModelId = typeof r.baseModelId === "string" && r.baseModelId ? r.baseModelId : null;
+  if (!baseModelId) return undefined;
+  const effort = typeof r.effort === "string" && r.effort ? r.effort : null;
+  return { baseModelId, effort };
+}
+
+function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    defaultModel: sanitizeDefaultModel(r.defaultModel),
+    selectedMode: sanitizeCopilotMode(r.selectedMode),
+    modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+    enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
+  };
+}
+
+function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  return {
+    binaryPath: nonEmptyString(r.binaryPath),
+    defaultModel: sanitizeDefaultModel(r.defaultModel),
+    selectedMode: sanitizeCopilotMode(r.selectedMode),
+    modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+  };
+}
+
+function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings {
+  if (!raw || typeof raw !== "object") return {};
+  const r = raw as Record<string, unknown>;
+  const binaryPath = nonEmptyString(r.binaryPath);
+  const binaryVersion = nonEmptyString(r.binaryVersion);
+  const rawSource = r.binarySource;
+  let binarySource: "managed" | "custom" | undefined;
+  if (rawSource === "managed" || rawSource === "custom") {
+    binarySource = binaryPath ? rawSource : undefined;
+  } else {
+    binarySource = binaryPath ? "managed" : undefined;
+  }
+  return {
+    binaryPath,
+    binaryVersion,
+    binarySource,
+    defaultModel: sanitizeDefaultModel(r.defaultModel),
+    probeSessionId: nonEmptyString(r.probeSessionId),
+    selectedMode: sanitizeCopilotMode(r.selectedMode),
+    modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+  };
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
@@ -662,11 +1049,17 @@ function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotS
 }
 
 /**
- * Get a unique model key from a CustomModel instance
+ * Get a unique model key from a CustomModel instance.
  * Format: modelName|provider
+ *
+ * Agent Mode picker entries optionally carry `_backendId` (set by the picker
+ * for synthesized agent models). When present, the key is prefixed with
+ * the backend id so two backends reporting the same agent-native model id
+ * (e.g. both surfacing a `sonnet` alias) get distinct keys / React ids.
  */
-export function getModelKeyFromModel(model: CustomModel): string {
-  return `${model.name}|${model.provider}`;
+export function getModelKeyFromModel(model: CustomModel & { _backendId?: string }): string {
+  const base = `${model.name}|${model.provider}`;
+  return model._backendId ? `${model._backendId}:${base}` : base;
 }
 
 function mergeActiveModels(

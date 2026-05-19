@@ -1,4 +1,4 @@
-import { NoteIdRank } from "../interfaces";
+import { NoteIdRank } from "@/search/v3/interfaces";
 import { ScoreNormalizer } from "./ScoreNormalizer";
 
 describe("ScoreNormalizer", () => {

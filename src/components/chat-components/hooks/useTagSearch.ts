@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import fuzzysort from "fuzzysort";
 import { useAllTags } from "./useAllTags";
-import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 
 export interface TagSearchOption extends TypeaheadOption {
   tag: string;

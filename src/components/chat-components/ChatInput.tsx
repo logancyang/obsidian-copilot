@@ -7,9 +7,8 @@ import {
 } from "@/aiParams";
 import { ChainType } from "@/chainType";
 import { Button } from "@/components/ui/button";
-import { ModelSelector } from "@/components/ui/ModelSelector";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ChatToolControls } from "./ChatToolControls";
+import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
+import type { CopilotMode } from "@/agentMode";
 import { isPlusChain } from "@/utils";
 import {
   mergeWebTabContexts,
@@ -17,15 +16,15 @@ import {
   normalizeWebTabContext,
 } from "@/utils/urlNormalization";
 
-import { useSettingsValue } from "@/settings/model";
 import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { isAllowedFileForNoteContext } from "@/utils";
 import { getFileIdentityKey } from "@/utils/fileListUtils";
-import { CornerDownLeft, Image, Loader2, StopCircle, X } from "lucide-react";
-import { App, Notice, TFile, TFolder } from "obsidian";
+import { ArrowUp, CornerDownLeft, Loader2, Square, X } from "lucide-react";
+import { App, TFile, TFolder } from "obsidian";
 import React, {
   useCallback,
   useEffect,
+  useImperativeHandle,
   useMemo,
   useRef,
   useState,
@@ -33,6 +32,10 @@ import React, {
 } from "react";
 import { $getSelection, $isRangeSelection, LexicalEditor as LexicalEditorType } from "lexical";
 import { ContextControl } from "./ContextControl";
+import { AddContextButton } from "./AddContextButton";
+import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
+import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
+import { ModePicker } from "@/components/ui/ModePicker";
 import { $removePillsByPath } from "./pills/NotePillNode";
 import { $removeActiveNotePills } from "./pills/ActiveNotePillNode";
 import { $removePillsByURL } from "./pills/URLPillNode";
@@ -41,8 +44,12 @@ import { $removePillsByToolName, $createToolPillNode } from "./pills/ToolPillNod
 import { $removeActiveWebTabPills } from "./pills/ActiveWebTabPillNode";
 import { $findWebTabPills, $removeWebTabPillsByUrl } from "./pills/WebTabPillNode";
 import LexicalEditor from "./LexicalEditor";
+import { cn } from "@/lib/utils";
 
-interface ChatInputProps {
+const ACCENT_CIRCLE_BUTTON_CLASS =
+  "tw-rounded-full tw-bg-interactive-accent tw-text-on-accent hover:tw-bg-interactive-accent-hover";
+
+export interface ChatInputProps {
   inputMessage: string;
   setInputMessage: (message: string) => void;
   handleSendMessage: (metadata?: {
@@ -66,10 +73,80 @@ interface ChatInputProps {
   onAddImage: (files: File[]) => void;
   setSelectedImages: React.Dispatch<React.SetStateAction<File[]>>;
   disableModelSwitch?: boolean;
+  /**
+   * Optional override that swaps the default model picker plumbing
+   * (`useModelKey()` + `settings.activeModels`) for a caller-supplied model
+   * list, value, and change handler. Used by Agent Mode to surface the
+   * agent's reported `availableModels` alongside Copilot-configured ones
+   * without `ChatInput` needing to know anything about Agent Mode.
+   */
+  modelPickerOverride?: {
+    models: ModelSelectorEntry[];
+    value: string;
+    onChange: (modelKey: string) => void;
+    disabled?: boolean;
+    /**
+     * Optional sibling effort picker. Surface only when the active model
+     * supports effort (modelId-suffix variants or a SessionConfigOption).
+     * `value: null` represents the bare/"Default" variant.
+     */
+    effort?: {
+      options: { label: string; value: string | null }[];
+      value: string | null;
+      onChange: (value: string | null) => void;
+      disabled?: boolean;
+    };
+    /**
+     * Per-entry effort catalog used by the merged model+effort picker. When
+     * present, `ChatInput` renders a unified popover; when absent, it falls
+     * back to the legacy `ModelSelector`.
+     */
+    effortOptionsByModelKey?: Record<string, { label: string; value: string | null }[]>;
+    /**
+     * Atomic `(model, effort)` commit. Same-backend picks push both through
+     * `applySelection`; cross-backend picks seed a fresh session on the
+     * target with the drafted selection.
+     */
+    commitSelection?: (modelKey: string, effort: string | null) => void;
+  };
+  /**
+   * Optional operational-mode picker (Agent Mode). Surfaces Copilot-canonical
+   * modes (build/plan/auto-build) when the active backend exposes them. The
+   * picker hook owns the mapping to native ACP ids; ChatInput just renders.
+   * Independent of `modelPickerOverride` because mode and model+effort have
+   * no functional overlap.
+   */
+  modePickerOverride?: {
+    options: { label: string; value: CopilotMode }[];
+    value: CopilotMode | null;
+    onChange: (value: CopilotMode) => void;
+    disabled?: boolean;
+  };
   selectedTextContexts?: SelectedTextContext[];
   onRemoveSelectedText?: (id: string) => void;
   showProgressCard: () => void;
   showIndexingCard?: () => void;
+
+  /**
+   * Render slot for the toggle row that sits next to the send button.
+   * Chat mode plugs in `<ChatToolControls />`; agent mode omits it so the
+   * autonomous-agent and vault/web/composer toggles never appear.
+   */
+  toolControls?: React.ReactNode;
+
+  /**
+   * Fires whenever the set of tool pills (`@vault`, `@websearch`, `@composer`)
+   * inside the editor changes. Lets a wrapper mirror toggle state from pills.
+   */
+  onToolPillsChange?: (toolNames: string[]) => void;
+
+  /** Fires when the user picks a `#tag` from typeahead. */
+  onTagSelected?: () => void;
+
+  /** Optional ESC handler invoked when the editor has focus. */
+  onEscape?: () => void;
+  /** Optional Shift+Tab handler invoked when the editor has focus. */
+  onShiftTab?: () => void;
 
   // Edit mode props
   editMode?: boolean;
@@ -87,35 +164,63 @@ interface ChatInputProps {
     urls?: string[];
     folders?: string[];
   };
+
+  /**
+   * Set by AgentChat to suppress Copilot built-in `@`-tool surfaces
+   * (Tools category in typeahead + `+` popover, tool hits in cross-category
+   * search). Agent Mode runs its own backend and doesn't use the Copilot
+   * tool runner.
+   */
+  isAgentMode?: boolean;
 }
 
-const ChatInput: React.FC<ChatInputProps> = ({
-  inputMessage,
-  setInputMessage,
-  handleSendMessage,
-  isGenerating,
-  onStopGenerating,
-  app,
-  contextNotes,
-  setContextNotes,
-  includeActiveNote,
-  setIncludeActiveNote,
-  includeActiveWebTab,
-  setIncludeActiveWebTab,
-  activeWebTab,
-  selectedImages,
-  onAddImage,
-  setSelectedImages,
-  disableModelSwitch,
-  selectedTextContexts,
-  onRemoveSelectedText,
-  showProgressCard,
-  showIndexingCard,
-  editMode = false,
-  onEditSave,
-  onEditCancel,
-  initialContext,
-}) => {
+/**
+ * Imperative handle exposed via `ref`. Lets a wrapper component (e.g.
+ * `ChatModeInput`) clear tool pills from the editor without needing
+ * direct access to the Lexical instance.
+ */
+export interface ChatInputHandle {
+  removeToolPills(toolNames: string[]): void;
+}
+
+const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function ChatInput(
+  {
+    inputMessage,
+    setInputMessage,
+    handleSendMessage,
+    isGenerating,
+    onStopGenerating,
+    app,
+    contextNotes,
+    setContextNotes,
+    includeActiveNote,
+    setIncludeActiveNote,
+    includeActiveWebTab,
+    setIncludeActiveWebTab,
+    activeWebTab,
+    selectedImages,
+    onAddImage,
+    setSelectedImages,
+    disableModelSwitch,
+    modelPickerOverride,
+    modePickerOverride,
+    selectedTextContexts,
+    onRemoveSelectedText,
+    showProgressCard,
+    showIndexingCard,
+    toolControls,
+    onToolPillsChange,
+    onTagSelected,
+    onEscape,
+    onShiftTab,
+    editMode = false,
+    onEditSave,
+    onEditCancel,
+    initialContext,
+    isAgentMode = false,
+  },
+  ref
+) {
   const [contextUrls, setContextUrls] = useState<string[]>(initialContext?.urls || []);
   const [contextFolders, setContextFolders] = useState<string[]>(initialContext?.folders || []);
   const [contextWebTabs, setContextWebTabs] = useState<WebTabContext[]>([]);
@@ -124,7 +229,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
   const [isProjectLoading] = useProjectLoading();
-  const settings = useSettingsValue();
   const [currentActiveNote, setCurrentActiveNote] = useState<TFile | null>(() => {
     const activeFile = app.workspace.getActiveFile();
     return isAllowedFileForNoteContext(activeFile) ? activeFile : null;
@@ -132,9 +236,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
   const [notesFromPills, setNotesFromPills] = useState<{ path: string; basename: string }[]>([]);
   const [urlsFromPills, setUrlsFromPills] = useState<string[]>([]);
   const [foldersFromPills, setFoldersFromPills] = useState<string[]>([]);
-  const [toolsFromPills, setToolsFromPills] = useState<string[]>([]);
   const [webTabsFromPills, setWebTabsFromPills] = useState<WebTabContext[]>([]);
   const isCopilotPlus = isPlusChain(currentChain);
+  const showAtMentionTools = shouldShowAtMentionTools({ isCopilotPlus, isAgentMode });
 
   // Merge badge-only contextWebTabs with pills-derived webTabsFromPills for display
   // Uses shared normalization policy from urlNormalization.ts
@@ -162,37 +266,12 @@ const ChatInput: React.FC<ChatInputProps> = ({
     });
   };
 
-  // Toggle states for vault, web search, composer, and autonomous agent
-  const [vaultToggle, setVaultToggle] = useState(false);
-  const [webToggle, setWebToggle] = useState(false);
-  const [composerToggle, setComposerToggle] = useState(false);
-  const [autonomousAgentToggle, setAutonomousAgentToggle] = useState(
-    settings.enableAutonomousAgent
-  );
   const [loadingMessageIndex, setLoadingMessageIndex] = useState(0);
   const loadingMessages = [
     "Loading the project context...",
     "Processing context files...",
     "If you have many files in context, this can take a while...",
   ];
-
-  // Render-phase reset: re-derive autonomous agent toggle whenever chain or setting changes
-  const autonomousAgentSourceRef = useRef<{
-    chain: ChainType;
-    enabled: boolean;
-  }>({ chain: currentChain, enabled: settings.enableAutonomousAgent });
-  if (
-    autonomousAgentSourceRef.current.chain !== currentChain ||
-    autonomousAgentSourceRef.current.enabled !== settings.enableAutonomousAgent
-  ) {
-    autonomousAgentSourceRef.current = {
-      chain: currentChain,
-      enabled: settings.enableAutonomousAgent,
-    };
-    setAutonomousAgentToggle(
-      currentChain === ChainType.PROJECT_CHAIN ? false : settings.enableAutonomousAgent
-    );
-  }
 
   const subscribedProject = useSyncExternalStore(subscribeToProjectChange, getCurrentProject);
   const selectedProject = currentChain === ChainType.PROJECT_CHAIN ? subscribedProject : null;
@@ -246,27 +325,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
       return;
     }
 
-    // Build tool calls based on toggle states
-    const toolCalls: string[] = [];
-    // Only add tool calls when autonomous agent is off
-    // When autonomous agent is on, it handles all tools internally
-    if (!autonomousAgentToggle) {
-      const messageLower = inputMessage.toLowerCase();
-
-      // Only add tools from buttons if they're not already in the message
-      if (vaultToggle && !messageLower.includes("@vault")) {
-        toolCalls.push("@vault");
-      }
-      if (webToggle && !messageLower.includes("@websearch") && !messageLower.includes("@web")) {
-        toolCalls.push("@websearch");
-      }
-      if (composerToggle && !messageLower.includes("@composer")) {
-        toolCalls.push("@composer");
-      }
-    }
-
     handleSendMessage({
-      toolCalls,
       contextNotes,
       urls: contextUrls,
       contextFolders,
@@ -299,47 +358,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
       });
     });
   };
-
-  // Handle when tools are removed from pills (when pills are deleted in editor)
-  const handleToolPillsRemoved = (removedTools: string[]) => {
-    if (!isCopilotPlus || autonomousAgentToggle) return;
-
-    // Update tool button states based on removed pills
-    removedTools.forEach((tool) => {
-      switch (tool) {
-        case "@vault":
-          setVaultToggle(false);
-          break;
-        case "@websearch":
-        case "@web":
-          setWebToggle(false);
-          break;
-        case "@composer":
-          setComposerToggle(false);
-          break;
-      }
-    });
-  };
-
-  // Render-phase reset: mirror tool pill presence into toggle state when inputs change.
-  // Users can still flip toggles independently via ChatToolControls.
-  const toolPillSourceRef = useRef<{
-    tools: string[];
-    isCopilotPlus: boolean;
-    autonomousAgentToggle: boolean;
-  }>({ tools: toolsFromPills, isCopilotPlus, autonomousAgentToggle });
-  if (
-    toolPillSourceRef.current.tools !== toolsFromPills ||
-    toolPillSourceRef.current.isCopilotPlus !== isCopilotPlus ||
-    toolPillSourceRef.current.autonomousAgentToggle !== autonomousAgentToggle
-  ) {
-    toolPillSourceRef.current = { tools: toolsFromPills, isCopilotPlus, autonomousAgentToggle };
-    if (isCopilotPlus && !autonomousAgentToggle) {
-      setVaultToggle(toolsFromPills.includes("@vault"));
-      setWebToggle(toolsFromPills.includes("@websearch") || toolsFromPills.includes("@web"));
-      setComposerToggle(toolsFromPills.includes("@composer"));
-    }
-  }
 
   // Handle when context notes are removed from the context menu
   // This should remove all corresponding pills from the editor
@@ -381,7 +399,10 @@ const ChatInput: React.FC<ChatInputProps> = ({
   };
 
   // Unified handler for adding to context (from popover @ mention)
-  const handleAddToContext = (category: string, data: TFile | string | TFolder | WebTabContext) => {
+  const handleAddToContext = (
+    category: string,
+    data: TFile | string | TFolder | WebTabContext | null
+  ) => {
     switch (category) {
       case "activeNote":
         // Set active note context flag (no pill needed - context badge shows it)
@@ -469,6 +490,17 @@ const ChatInput: React.FC<ChatInputProps> = ({
           }
         }
         break;
+      case "images": {
+        const input = document.createElement("input");
+        input.type = "file";
+        input.accept = "image/*";
+        input.multiple = true;
+        input.addEventListener("change", () => onAddImage(Array.from(input.files || [])), {
+          once: true,
+        });
+        input.click();
+        break;
+      }
     }
   };
 
@@ -661,31 +693,18 @@ const ChatInput: React.FC<ChatInputProps> = ({
     return () => doc.removeEventListener("keydown", handleKeyDown);
   }, [editMode, onEditCancel]);
 
-  // Handle tool button toggle-off events - remove corresponding pills
-  const handleVaultToggleOff = useCallback(() => {
-    if (lexicalEditorRef.current && isCopilotPlus) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByToolName("@vault");
-      });
-    }
-  }, [isCopilotPlus]);
-
-  const handleWebToggleOff = useCallback(() => {
-    if (lexicalEditorRef.current && isCopilotPlus) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByToolName("@websearch");
-        $removePillsByToolName("@web");
-      });
-    }
-  }, [isCopilotPlus]);
-
-  const handleComposerToggleOff = useCallback(() => {
-    if (lexicalEditorRef.current && isCopilotPlus) {
-      lexicalEditorRef.current.update(() => {
-        $removePillsByToolName("@composer");
-      });
-    }
-  }, [isCopilotPlus]);
+  useImperativeHandle(
+    ref,
+    () => ({
+      removeToolPills(toolNames: string[]) {
+        if (!lexicalEditorRef.current) return;
+        lexicalEditorRef.current.update(() => {
+          toolNames.forEach((name) => $removePillsByToolName(name));
+        });
+      },
+    }),
+    []
+  );
 
   // Active note pill sync callbacks
   const handleActiveNoteAdded = useCallback(() => {
@@ -706,14 +725,6 @@ const ChatInput: React.FC<ChatInputProps> = ({
     setIncludeActiveWebTab(false);
   }, [setIncludeActiveWebTab]);
 
-  // Handle tag selection from typeahead - auto-enable vault search
-  const handleTagSelected = useCallback(() => {
-    if (isCopilotPlus && !autonomousAgentToggle && !vaultToggle) {
-      setVaultToggle(true);
-      new Notice("Vault search enabled for tag query");
-    }
-  }, [isCopilotPlus, autonomousAgentToggle, vaultToggle]);
-
   return (
     <div
       className="tw-flex tw-w-full tw-flex-col tw-gap-0.5 tw-rounded-md tw-border tw-border-solid tw-border-border tw-px-1 tw-pb-1 tw-pt-2 tw-@container/chat-input"
@@ -733,9 +744,9 @@ const ChatInput: React.FC<ChatInputProps> = ({
           selectedTextContexts={selectedTextContexts}
           showProgressCard={showProgressCard}
           showIndexingCard={showIndexingCard}
-          lexicalEditorRef={lexicalEditorRef}
           onAddToContext={handleAddToContext}
           onRemoveFromContext={handleRemoveFromContext}
+          hideAddContextButton={isAgentMode}
         />
       )}
 
@@ -780,8 +791,7 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onActiveNoteRemoved={handleActiveNoteRemoved}
           onURLsChange={isCopilotPlus ? setUrlsFromPills : undefined}
           onURLsRemoved={isCopilotPlus ? handleURLPillsRemoved : undefined}
-          onToolsChange={isCopilotPlus ? setToolsFromPills : undefined}
-          onToolsRemoved={isCopilotPlus ? handleToolPillsRemoved : undefined}
+          onToolsChange={isCopilotPlus ? onToolPillsChange : undefined}
           onFoldersChange={setFoldersFromPills}
           onFoldersRemoved={handleFolderPillsRemoved}
           onWebTabsChange={setWebTabsFromPills}
@@ -789,93 +799,78 @@ const ChatInput: React.FC<ChatInputProps> = ({
           onActiveWebTabRemoved={handleActiveWebTabRemoved}
           onEditorReady={onEditorReady}
           onImagePaste={onAddImage}
-          onTagSelected={handleTagSelected}
+          onTagSelected={onTagSelected}
           placeholder={"Your AI assistant for Obsidian • @ to add context • / for custom prompts"}
           disabled={isProjectLoading}
           isCopilotPlus={isCopilotPlus}
+          showTools={showAtMentionTools}
           currentActiveFile={currentActiveNote}
           currentChain={currentChain}
+          onEscape={onEscape}
+          onShiftTab={onShiftTab}
         />
       </div>
 
-      <div className="tw-flex tw-h-6 tw-justify-between tw-gap-1 tw-px-1">
-        {isGenerating ? (
-          <div className="tw-flex tw-items-center tw-gap-1 tw-px-1 tw-text-sm tw-text-muted">
-            <Loader2 className="tw-size-3 tw-animate-spin" />
-            <span>Generating...</span>
-          </div>
-        ) : (
-          <div className="tw-min-w-0 tw-flex-1">
+      <div className="tw-flex tw-h-7 tw-justify-between tw-gap-1 tw-px-1">
+        <div className="tw-flex tw-min-w-0 tw-flex-1 tw-items-center tw-gap-1">
+          {!editMode && (
+            <AddContextButton
+              onSelect={handleAddToContext}
+              isCopilotPlus={isCopilotPlus}
+              showTools={showAtMentionTools}
+              currentActiveFile={currentActiveNote}
+              lexicalEditorRef={lexicalEditorRef}
+            />
+          )}
+          {modelPickerOverride?.effortOptionsByModelKey && modelPickerOverride.commitSelection ? (
+            // Agent Mode: always use the merged picker, even when the active
+            // model has no effort dimension — the user can still switch to
+            // one that does, and the picker surfaces the whole catalog.
+            <ModelEffortPicker
+              override={{
+                models: modelPickerOverride.models,
+                value: modelPickerOverride.value,
+                disabled: modelPickerOverride.disabled,
+                effort: modelPickerOverride.effort,
+                effortOptionsByModelKey: modelPickerOverride.effortOptionsByModelKey,
+                commitSelection: modelPickerOverride.commitSelection,
+              }}
+              className="tw-min-w-0 tw-max-w-full tw-truncate"
+            />
+          ) : (
             <ModelSelector
               variant="ghost2"
               size="fit"
-              disabled={disableModelSwitch}
-              value={getDisplayModelKey()}
-              onChange={(modelKey) => {
-                // In project mode, we don't update the global model key
-                // as the project model takes precedence
-                if (currentChain !== ChainType.PROJECT_CHAIN) {
-                  setCurrentModelKey(modelKey);
-                }
-              }}
-              className="tw-max-w-full tw-truncate"
+              disabled={modelPickerOverride?.disabled ?? disableModelSwitch}
+              value={modelPickerOverride?.value ?? getDisplayModelKey()}
+              models={modelPickerOverride?.models}
+              onChange={
+                modelPickerOverride?.onChange ??
+                ((modelKey) => {
+                  if (currentChain !== ChainType.PROJECT_CHAIN) {
+                    setCurrentModelKey(modelKey);
+                  }
+                })
+              }
+              className="tw-min-w-0 tw-max-w-full tw-truncate"
             />
-          </div>
-        )}
+          )}
+        </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">
           {isGenerating ? (
             <Button
-              variant="ghost2"
-              size="fit"
-              className="tw-text-muted"
+              size="icon"
+              className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
+              aria-label="Stop generating"
               onClick={() => onStopGenerating()}
             >
-              <StopCircle className="tw-size-4" />
-              Stop
+              <Square className="tw-size-3 tw-fill-current" />
             </Button>
           ) : (
             <>
-              <ChatToolControls
-                vaultToggle={vaultToggle}
-                setVaultToggle={setVaultToggle}
-                webToggle={webToggle}
-                setWebToggle={setWebToggle}
-                composerToggle={composerToggle}
-                setComposerToggle={setComposerToggle}
-                autonomousAgentToggle={autonomousAgentToggle}
-                setAutonomousAgentToggle={setAutonomousAgentToggle}
-                currentChain={currentChain}
-                onVaultToggleOff={handleVaultToggleOff}
-                onWebToggleOff={handleWebToggleOff}
-                onComposerToggleOff={handleComposerToggleOff}
-              />
-              <TooltipProvider delayDuration={0}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost2"
-                      size="fit"
-                      className="tw-text-muted hover:tw-text-accent"
-                      onClick={(e) => {
-                        const input = e.currentTarget.doc.createElement("input");
-                        input.type = "file";
-                        input.accept = "image/*";
-                        input.multiple = true;
-                        input.addEventListener(
-                          "change",
-                          () => onAddImage(Array.from(input.files || [])),
-                          { once: true }
-                        );
-                        input.click();
-                      }}
-                    >
-                      <Image className="tw-size-4" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent className="tw-px-1 tw-py-0.5">Add image(s)</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {toolControls}
+              {modePickerOverride && <ModePicker override={modePickerOverride} />}
               {editMode && onEditCancel && (
                 <Button
                   variant="ghost2"
@@ -886,23 +881,33 @@ const ChatInput: React.FC<ChatInputProps> = ({
                   <span>cancel</span>
                 </Button>
               )}
-              <Button
-                variant="ghost2"
-                size="fit"
-                className="tw-text-muted"
-                onClick={() => onSendMessage()}
-              >
-                <CornerDownLeft className="!tw-size-3" />
-                <span>{editMode ? "save" : "chat"}</span>
-              </Button>
+              {editMode ? (
+                <Button
+                  variant="ghost2"
+                  size="fit"
+                  className="tw-text-muted"
+                  onClick={() => onSendMessage()}
+                >
+                  <CornerDownLeft className="!tw-size-3" />
+                  <span>save</span>
+                </Button>
+              ) : (
+                <Button
+                  size="icon"
+                  className={cn(ACCENT_CIRCLE_BUTTON_CLASS)}
+                  aria-label="Send"
+                  onClick={() => onSendMessage()}
+                  disabled={!inputMessage.trim()}
+                >
+                  <ArrowUp className="tw-size-4" />
+                </Button>
+              )}
             </>
           )}
         </div>
       </div>
     </div>
   );
-};
-
-ChatInput.displayName = "ChatInput";
+});
 
 export default ChatInput;

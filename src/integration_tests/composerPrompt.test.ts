@@ -1,4 +1,4 @@
-import { DEFAULT_SYSTEM_PROMPT, COMPOSER_OUTPUT_INSTRUCTIONS } from "../constants";
+import { DEFAULT_SYSTEM_PROMPT, COMPOSER_OUTPUT_INSTRUCTIONS } from "@/constants";
 import { jest } from "@jest/globals";
 import {
   GoogleGenerativeAI,

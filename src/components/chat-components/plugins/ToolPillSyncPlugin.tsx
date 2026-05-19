@@ -1,5 +1,5 @@
 import React from "react";
-import { $isToolPillNode, ToolPillNode } from "../pills/ToolPillNode";
+import { $isToolPillNode, ToolPillNode } from "@/components/chat-components/pills/ToolPillNode";
 import { GenericPillSyncPlugin, PillSyncConfig } from "./GenericPillSyncPlugin";
 import type { LexicalNode } from "lexical";
 

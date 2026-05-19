@@ -1,7 +1,10 @@
 import React from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { $getSelection, $isRangeSelection, PASTE_COMMAND, COMMAND_PRIORITY_HIGH } from "lexical";
-import { parseTextForPills, createNodesFromSegments } from "../utils/lexicalTextUtils";
+import {
+  parseTextForPills,
+  createNodesFromSegments,
+} from "@/components/chat-components/utils/lexicalTextUtils";
 
 interface PastePluginProps {
   enableURLPills?: boolean;

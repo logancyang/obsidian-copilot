@@ -11,15 +11,15 @@ import {
 } from "lexical";
 import { TFile, TFolder, App } from "obsidian";
 import type { WebTabContext } from "@/types/message";
-import { $createNotePillNode } from "../pills/NotePillNode";
-import { $createActiveNotePillNode } from "../pills/ActiveNotePillNode";
-import { $createURLPillNode } from "../pills/URLPillNode";
-import { $createToolPillNode } from "../pills/ToolPillNode";
-import { $createFolderPillNode } from "../pills/FolderPillNode";
-import { $createWebTabPillNode } from "../pills/WebTabPillNode";
-import { $createActiveWebTabPillNode } from "../pills/ActiveWebTabPillNode";
+import { $createNotePillNode } from "@/components/chat-components/pills/NotePillNode";
+import { $createActiveNotePillNode } from "@/components/chat-components/pills/ActiveNotePillNode";
+import { $createURLPillNode } from "@/components/chat-components/pills/URLPillNode";
+import { $createToolPillNode } from "@/components/chat-components/pills/ToolPillNode";
+import { $createFolderPillNode } from "@/components/chat-components/pills/FolderPillNode";
+import { $createWebTabPillNode } from "@/components/chat-components/pills/WebTabPillNode";
+import { $createActiveWebTabPillNode } from "@/components/chat-components/pills/ActiveWebTabPillNode";
 import { logInfo } from "@/logger";
-import { AVAILABLE_TOOLS } from "../constants/tools";
+import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
 declare const app: App;
 

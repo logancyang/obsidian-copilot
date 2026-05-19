@@ -7,6 +7,7 @@ import { PromptSortStrategy } from "./types";
 export const BREVILABS_API_BASE_URL = "https://api.brevilabs.com/v1";
 export const BREVILABS_MODELS_BASE_URL = "https://models.brevilabs.com/v1";
 export const CHAT_VIEWTYPE = "copilot-chat-view";
+export const CHAT_AGENT_VIEWTYPE = "copilot-agent-chat-view";
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
 
@@ -17,6 +18,7 @@ const DEFAULT_CUSTOM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/copilot-custom-pro
 const DEFAULT_MEMORY_FOLDER = `${COPILOT_FOLDER_ROOT}/memory`;
 const DEFAULT_SYSTEM_PROMPTS_FOLDER = `${COPILOT_FOLDER_ROOT}/system-prompts`;
 const DEFAULT_PROJECTS_FOLDER = `${COPILOT_FOLDER_ROOT}/projects`;
+export const DEFAULT_SKILLS_FOLDER = `${COPILOT_FOLDER_ROOT}/skills`;
 const DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER = "";
 export const DEFAULT_QA_EXCLUSIONS_SETTING = COPILOT_FOLDER_ROOT;
 export const DEFAULT_SYSTEM_PROMPT = `You are Obsidian Copilot, a helpful assistant that integrates AI to Obsidian note-taking.
@@ -790,9 +792,12 @@ export const COMMAND_IDS = {
   LIST_INDEXED_FILES: "copilot-list-indexed-files",
   LOAD_COPILOT_CHAT_CONVERSATION: "load-copilot-chat-conversation",
   NEW_CHAT: "new-chat",
+  NEW_AGENT_CHAT: "new-agent-chat",
   OPEN_COPILOT_CHAT_WINDOW: "chat-open-window",
+  OPEN_AGENT_CHAT_WINDOW: "agent-chat-open-window",
   SEARCH_ORAMA_DB: "copilot-search-orama-db",
   TOGGLE_COPILOT_CHAT_WINDOW: "chat-toggle-window",
+  TOGGLE_AGENT_CHAT_WINDOW: "agent-chat-toggle-window",
   ADD_SELECTION_TO_CHAT_CONTEXT: "add-selection-to-chat-context",
   ADD_WEB_SELECTION_TO_CHAT_CONTEXT: "add-web-selection-to-chat-context",
   ADD_CUSTOM_COMMAND: "add-custom-command",
@@ -818,9 +823,12 @@ export const COMMAND_NAMES: Record<CommandId, string> = {
   [COMMAND_IDS.LIST_INDEXED_FILES]: "List all indexed files (debug)",
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "Load Copilot chat conversation",
   [COMMAND_IDS.NEW_CHAT]: "New Copilot Chat",
+  [COMMAND_IDS.NEW_AGENT_CHAT]: "New Copilot Agent Chat",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "Open Copilot Chat Window",
+  [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: "Open Copilot Agent Chat Window",
   [COMMAND_IDS.SEARCH_ORAMA_DB]: "Search semantic index (debug)",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "Toggle Copilot Chat Window",
+  [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: "Toggle Copilot Agent Chat Window",
   [COMMAND_IDS.ADD_SELECTION_TO_CHAT_CONTEXT]: "Add selection to chat context",
   [COMMAND_IDS.ADD_WEB_SELECTION_TO_CHAT_CONTEXT]: "Add web selection to chat context",
   [COMMAND_IDS.ADD_CUSTOM_COMMAND]: "Add new custom command",
@@ -839,8 +847,11 @@ export type CommandId = (typeof COMMAND_IDS)[keyof typeof COMMAND_IDS];
  */
 export const COMMAND_ICONS: Partial<Record<CommandId, string>> = {
   [COMMAND_IDS.NEW_CHAT]: "message-square-plus",
+  [COMMAND_IDS.NEW_AGENT_CHAT]: "bot",
   [COMMAND_IDS.OPEN_COPILOT_CHAT_WINDOW]: "message-square",
+  [COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW]: "bot",
   [COMMAND_IDS.TOGGLE_COPILOT_CHAT_WINDOW]: "message-square",
+  [COMMAND_IDS.TOGGLE_AGENT_CHAT_WINDOW]: "bot",
   [COMMAND_IDS.LOAD_COPILOT_CHAT_CONVERSATION]: "history",
   [COMMAND_IDS.TRIGGER_QUICK_COMMAND]: "terminal-square",
   [COMMAND_IDS.TRIGGER_QUICK_ASK]: "sparkles",
@@ -882,6 +893,13 @@ export const RESTRICTION_MESSAGES = {
   UNSUPPORTED_FILE_TYPE: (extension: string) =>
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
+
+export const OPENCODE_PINNED_VERSION = "1.14.24";
+export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
+export const OPENCODE_RELEASE_URL_TEMPLATE =
+  "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
+export const OPENCODE_RELEASE_API_URL_TEMPLATE =
+  "https://api.github.com/repos/sst/opencode/releases/tags/v{version}";
 
 export const DEFAULT_SETTINGS: CopilotSettings = {
   userId: uuidv4(),
@@ -1002,6 +1020,18 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
   defaultSystemPromptTitle: "",
   autoCompactThreshold: 128000,
   convertedDocOutputFolder: DEFAULT_CONVERTED_DOC_OUTPUT_FOLDER,
+  agentMode: {
+    enabled: false,
+    byok: {},
+    mcpServers: [],
+    activeBackend: "opencode",
+    backends: {},
+    debugFullFrames: false,
+    skills: {
+      folder: DEFAULT_SKILLS_FOLDER,
+      importSkipList: [],
+    },
+  },
 };
 
 export const EVENT_NAMES = {

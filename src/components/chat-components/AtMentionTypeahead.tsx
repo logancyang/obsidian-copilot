@@ -13,8 +13,13 @@ import type { WebTabContext } from "@/types/message";
 interface AtMentionTypeaheadProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelect: (category: AtMentionCategory, data: TFile | string | TFolder | WebTabContext) => void;
+  onSelect: (
+    category: AtMentionCategory,
+    data: TFile | string | TFolder | WebTabContext | null
+  ) => void;
   isCopilotPlus?: boolean;
+  /** Whether to surface Copilot built-in `@` tools (category + search hits). */
+  showTools?: boolean;
   currentActiveFile?: TFile | null;
 }
 
@@ -32,6 +37,7 @@ export function AtMentionTypeahead({
   onClose,
   onSelect,
   isCopilotPlus = false,
+  showTools = false,
   currentActiveFile = null,
 }: AtMentionTypeaheadProps) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -45,7 +51,7 @@ export function AtMentionTypeahead({
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
   const [prevResultsLength, setPrevResultsLength] = useState(0);
 
-  const availableCategoryOptions = useAtMentionCategories(isCopilotPlus);
+  const availableCategoryOptions = useAtMentionCategories(showTools);
 
   // Get search results based on current state using unified search
   const searchResults = useAtMentionSearch(
@@ -53,6 +59,7 @@ export function AtMentionTypeahead({
     extendedState.mode,
     extendedState.selectedCategory,
     isCopilotPlus,
+    showTools,
     availableCategoryOptions,
     currentActiveFile
   );
@@ -64,6 +71,13 @@ export function AtMentionTypeahead({
       if ((option as { disabled?: boolean })?.disabled) return;
 
       if (extendedState.mode === "category" && isCategoryOption(option) && !searchQuery) {
+        // Action categories invoke the dispatcher directly instead of drilling
+        // into a search list (e.g. "Images" opens a file picker).
+        if (option.isAction) {
+          onSelect(option.category, null);
+          onClose();
+          return;
+        }
         // Category was selected - switch to search mode for that category
         setExtendedState((prev) => ({
           ...prev,

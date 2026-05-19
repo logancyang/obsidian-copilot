@@ -195,7 +195,9 @@ module.exports = {
         sm: "var(--radius-s)", // 4px
       },
       spacing: {
+        0.5: "calc(var(--size-4-1) / 2)", // 2px
         1: "var(--size-4-1)", // 4px
+        1.5: "calc(var(--size-4-1) * 1.5)", // 6px
         2: "var(--size-4-2)",
         3: "var(--size-4-3)",
         4: "var(--size-4-4)",

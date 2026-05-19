@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Platform, TFile, TFolder } from "obsidian";
-import { FileText, Wrench, Folder, Globe } from "lucide-react";
-import { TypeaheadOption } from "../TypeaheadMenuContent";
+import { FileText, Wrench, Folder, Globe, Image } from "lucide-react";
+import { TypeaheadOption } from "@/components/chat-components/TypeaheadMenuContent";
 import type { WebTabContext } from "@/types/message";
 
 export type AtMentionCategory =
@@ -10,16 +10,19 @@ export type AtMentionCategory =
   | "folders"
   | "activeNote"
   | "webTabs"
-  | "activeWebTab";
+  | "activeWebTab"
+  | "images";
 
 export interface AtMentionOption extends TypeaheadOption {
   category: AtMentionCategory;
   data: TFile | string | TFolder | WebTabContext;
+  isAction?: boolean;
 }
 
 export interface CategoryOption extends TypeaheadOption {
   category: AtMentionCategory;
   icon: React.ReactNode;
+  isAction?: boolean;
 }
 
 const CATEGORY_OPTIONS: CategoryOption[] = [
@@ -51,28 +54,48 @@ const CATEGORY_OPTIONS: CategoryOption[] = [
     category: "folders",
     icon: <Folder className="tw-size-4" />,
   },
+  {
+    key: "images",
+    title: "Images",
+    subtitle: "Attach image files",
+    category: "images",
+    icon: <Image className="tw-size-4" />,
+    isAction: true,
+  },
 ];
 
 /**
- * Hook that provides available @ mention categories based on Copilot Plus status.
- * Returns the array of available category options directly.
- * Web Tabs category is only available on desktop (Web Viewer not supported on mobile).
+ * Pure helper that decides whether the Copilot built-in `@`-tool surfaces
+ * (Tools category and tool hits in search) should be visible. Tools require
+ * Copilot Plus AND are suppressed entirely in Agent Mode, which routes
+ * through its own backend instead of the Copilot tool runner.
+ */
+export function shouldShowAtMentionTools(args: {
+  isCopilotPlus: boolean;
+  isAgentMode: boolean;
+}): boolean {
+  return args.isCopilotPlus && !args.isAgentMode;
+}
+
+/**
+ * Hook that provides available @ mention categories. Web Tabs is desktop-only
+ * (Web Viewer is not supported on mobile).
  *
- * @param isCopilotPlus - Whether Copilot Plus features are enabled
+ * @param showTools - Whether to include the Copilot Tools category. Compute
+ *   via {@link shouldShowAtMentionTools} from the caller's higher-level
+ *   signals (e.g. Copilot Plus on, Agent Mode off).
  * @returns Array of CategoryOption objects
  */
-export function useAtMentionCategories(isCopilotPlus: boolean = false): CategoryOption[] {
+export function useAtMentionCategories(showTools: boolean = false): CategoryOption[] {
   return useMemo(() => {
     return CATEGORY_OPTIONS.filter((cat) => {
-      // Tools require Copilot Plus
       if (cat.category === "tools") {
-        return isCopilotPlus;
+        return showTools;
       }
-      // Web Tabs only available on desktop (Web Viewer not supported on mobile)
       if (cat.category === "webTabs") {
         return Platform.isDesktopApp;
       }
       return true;
     });
-  }, [isCopilotPlus]);
+  }, [showTools]);
 }
