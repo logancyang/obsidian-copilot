@@ -1,10 +1,4 @@
-import {
-  getChainType,
-  getCurrentProject,
-  getModelKey,
-  SetChainOptions,
-  setChainType,
-} from "@/aiParams";
+import { getChainType, getCurrentProject, getModelKey, SetChainOptions } from "@/aiParams";
 import { ChainType } from "@/chainType";
 import { BUILTIN_CHAT_MODELS, USER_SENDER } from "@/constants";
 import {
@@ -149,28 +143,29 @@ export default class ChainManager {
         this.pendingModelError = null;
       }
 
-      await this.setChain(chainType, options);
+      // Chain-type housekeeping. Do NOT write `chainType` back to the atom —
+      // the atom is owned by the UI dropdowns and `applyPlusSettings`. The
+      // captured local `chainType` may already be stale by the time we reach
+      // here (we just awaited `setChatModel(...)`), and writing it back used
+      // to create a self-sustaining `setChainType` → ProjectManager
+      // subscriber → `createChainWithNewModel` loop that froze Obsidian on
+      // apply-Plus-key.
+      if (this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
+        this.validateChainType(chainType);
+        if (options.refreshIndex) {
+          await this.refreshVaultIndex();
+        }
+      } else {
+        console.error(
+          "createChainWithNewModel: skipping chain-type housekeeping — no chat model set."
+        );
+      }
       logInfo(`Setting model to ${newModelKey}`);
     } catch (error) {
       this.pendingModelError = error instanceof Error ? error : new Error(String(error));
       logError(`createChainWithNewModel failed: ${error}`);
       logInfo(`modelKey: ${newModelKey || getModelKey()}`);
     }
-  }
-
-  async setChain(chainType: ChainType, options: SetChainOptions = {}): Promise<void> {
-    if (!this.chatModelManager.validateChatModel(this.chatModelManager.getChatModel())) {
-      console.error("setChain failed: No chat model set.");
-      return;
-    }
-
-    this.validateChainType(chainType);
-
-    if (options.refreshIndex) {
-      await this.refreshVaultIndex();
-    }
-
-    setChainType(chainType);
   }
 
   private getChainRunner(): ChainRunner {
