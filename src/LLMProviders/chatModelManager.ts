@@ -55,7 +55,7 @@ const GOOGLE_SAFETY_SETTINGS_BLOCK_NONE: SafetySetting[] = [
 // vocabulary from tiktoken.pages.dev, which blocks all LLM calls when the CDN is
 // unreachable. This char/4 estimation is the same fallback LangChain uses internally
 // before tiktoken loads. Actual token usage comes from API response metadata.
- 
+
 (
   BaseLanguageModel.prototype as { getNumTokens: (...args: unknown[]) => Promise<number> }
 ).getNumTokens = async (content: string | Array<{ type: string; text?: string }>) => {

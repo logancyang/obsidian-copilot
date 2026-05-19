@@ -136,6 +136,44 @@ describe("lookupToolSummary", () => {
   });
 });
 
+describe("BASH_SUMMARY.expandedDetails", () => {
+  it("returns the full untruncated command", () => {
+    const longCmd =
+      "cd ~/Developer/obsidian-copilot && rg --multiline 'foo bar baz' src/**/*.ts | head -50";
+    const t = tool({ vendorToolName: "Bash", input: { command: longCmd } });
+    const s = lookupToolSummary(t);
+    expect(s.collapsedLine(t).length).toBeLessThan(longCmd.length); // collapsed truncates
+    expect(s.expandedDetails?.(t)).toBe(longCmd);
+  });
+
+  it("prefixes description as a comment when both are present", () => {
+    const t = tool({
+      vendorToolName: "Bash",
+      input: { command: "git status", description: "Check working tree" },
+    });
+    expect(lookupToolSummary(t).expandedDetails?.(t)).toBe("# Check working tree\ngit status");
+  });
+
+  it("returns null when command is missing", () => {
+    const t = tool({ vendorToolName: "Bash", input: { description: "Run something" } });
+    expect(lookupToolSummary(t).expandedDetails?.(t)).toBeNull();
+  });
+
+  it("returns null when input is missing entirely", () => {
+    const t = tool({ vendorToolName: "Bash" });
+    expect(lookupToolSummary(t).expandedDetails?.(t)).toBeNull();
+  });
+});
+
+describe("expandedDetails scoping", () => {
+  it("is not defined for non-Bash summaries", () => {
+    const read = tool({ vendorToolName: "Read", title: "read" });
+    expect(lookupToolSummary(read).expandedDetails).toBeUndefined();
+    const edit = tool({ vendorToolName: "Edit", title: "edit" });
+    expect(lookupToolSummary(edit).expandedDetails).toBeUndefined();
+  });
+});
+
 describe("extractSubAgentReturnText", () => {
   it("strips opencode <task_result> wrapper", () => {
     const t = tool({

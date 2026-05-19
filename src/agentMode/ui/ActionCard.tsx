@@ -4,6 +4,7 @@ import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
+import { cn } from "@/lib/utils";
 
 interface ActionCardProps {
   part: ToolCallPart;
@@ -19,15 +20,15 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
   const line = summary.collapsedLine(part);
   const outcome = summary.outcome(part);
   const outputs = part.output ?? [];
-  const expandable = !inline && outputs.length > 0;
+  const details = summary.expandedDetails?.(part) ?? null;
+  const expandable = outputs.length > 0 || details !== null;
 
-  const headerClasses = inline
-    ? "tw-flex tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted"
-    : "tw-flex tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted hover:tw-text-normal tw-cursor-pointer";
+  const headerClasses = cn(
+    "tw-flex tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted",
+    expandable && "tw-cursor-pointer hover:tw-text-normal"
+  );
 
-  const wrapperClasses = inline
-    ? "tw-flex tw-flex-col tw-gap-0.5 tw-py-1"
-    : "tw-my-1 tw-flex tw-flex-col tw-gap-0.5";
+  const wrapperClasses = cn("tw-flex tw-flex-col tw-gap-0.5", inline ? "tw-py-1" : "tw-my-1");
 
   return (
     <div className={wrapperClasses}>
@@ -48,6 +49,11 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
       </div>
       {expandable && open ? (
         <div className="tw-mt-1 tw-flex tw-flex-col tw-gap-1">
+          {details ? (
+            <pre className="tw-max-h-40 tw-overflow-auto tw-whitespace-pre-wrap tw-rounded tw-bg-secondary-alt tw-p-1 tw-text-xs">
+              {details}
+            </pre>
+          ) : null}
           {outcome ? <div className="tw-text-xs tw-text-muted">{outcome}</div> : null}
           {outputs.map((o, i) =>
             o.type === "text" ? (
