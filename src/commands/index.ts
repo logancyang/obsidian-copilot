@@ -28,7 +28,8 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
-import { Editor, MarkdownView, Notice, Platform, TFile } from "obsidian";
+import { Editor, MarkdownView, Notice, TFile } from "obsidian";
+import { isAgentModeEnabled } from "@/agentMode";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
 import { setSelectedTextContexts } from "@/aiParams";
@@ -127,11 +128,9 @@ export function registerCommands(
     await plugin.newChat();
   });
 
-  // Agent Chat commands. Gated by `agentMode.enabled` and desktop because the
-  // ACP backend needs subprocess support. The settings-change subscription in
-  // main.ts re-runs `registerCommands` so toggling the setting reflects in the
-  // command palette.
-  if (Platform.isDesktopApp && next.agentMode?.enabled) {
+  // Re-runs from the settings subscription in main.ts so toggling the
+  // master switch refreshes the command palette.
+  if (isAgentModeEnabled(next)) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
     });

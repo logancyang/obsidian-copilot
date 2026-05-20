@@ -3,7 +3,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { $getSelection, $isRangeSelection, TextNode } from "lexical";
 import fuzzysort from "fuzzysort";
 
-import { listBackendDescriptors, useManagedSkills } from "@/agentMode";
+import { listBackendDescriptors, useIsAgentModeEnabled, useManagedSkills } from "@/agentMode";
 import type { BackendId } from "@/agentMode";
 import { useCustomCommands } from "@/commands/state";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -31,7 +31,8 @@ interface SlashCommandOption extends TypeaheadOption {
  */
 function useActiveSlashBackend(): BackendId | null {
   const settings = useSettingsValue();
-  if (!settings.agentMode?.enabled) return null;
+  const agentModeEnabled = useIsAgentModeEnabled();
+  if (!agentModeEnabled) return null;
   const activeBackend = settings.agentMode?.activeBackend;
   if (typeof activeBackend !== "string" || activeBackend.length === 0) return null;
   const known = listBackendDescriptors().some((d) => d.id === activeBackend);
