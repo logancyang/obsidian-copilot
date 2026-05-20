@@ -3,11 +3,6 @@ import { atom, createStore, useAtomValue } from "jotai";
 import { Platform } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
-// Type-only import: `ModelSelection` is owned by Agent Mode (canonical
-// vocabulary in `@/agentMode/session/types`). We persist values here and
-// validate them locally — going through the barrel at runtime would create
-// an init-time cycle (settings → agentMode → backends → constants →
-// settings).
 import type { ModelSelection } from "@/agentMode";
 import { type ChainType } from "@/chainType";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
