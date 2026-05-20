@@ -29,9 +29,14 @@ function useAgentModeSignal(manager: AgentSessionManager | null): string {
     if (!manager) return "";
     const session = manager.getActiveSession();
     const state = session?.getState() ?? manager.getCachedBackendState(session?.backendId ?? "");
-    return [session?.internalId ?? "", session?.backendId ?? "", modeStateSignature(state)].join(
-      "|"
-    );
+    return [
+      session?.internalId ?? "",
+      session?.backendId ?? "",
+      // Include status so the picker's `disabled` flips when the session
+      // transitions out of "starting" (canSwitchMode gates on status).
+      session?.getStatus() ?? "",
+      modeStateSignature(state),
+    ].join("|");
   }, [manager]);
 
   return useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
