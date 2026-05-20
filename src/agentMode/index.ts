@@ -1,7 +1,11 @@
-import type { App } from "obsidian";
+import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
-import { getSettings } from "@/settings/model";
+import {
+  type CopilotSettings,
+  getSettings,
+  useSettingsValue,
+} from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
@@ -43,6 +47,20 @@ export { getActiveBackendDescriptor, listBackendDescriptors } from "./backends/r
 export { frameSink as acpFrameSink } from "./session/debugSink";
 export { SkillManager, SkillsSettings, useManagedSkills } from "./skills";
 export type { Skill } from "./skills";
+
+/**
+ * True when Agent Mode is enabled and the platform supports it. Agent Mode
+ * requires subprocess support, so this is always false on mobile regardless
+ * of the persisted `enabled` flag (which may have been synced from desktop).
+ */
+export function isAgentModeEnabled(settings: CopilotSettings = getSettings()): boolean {
+  return !Platform.isMobile && !!settings.agentMode?.enabled;
+}
+
+/** React hook variant — re-renders when the setting or platform-derived value changes. */
+export function useIsAgentModeEnabled(): boolean {
+  return isAgentModeEnabled(useSettingsValue());
+}
 
 /**
  * Collect each registered backend's project-relative skills directory into
@@ -118,7 +136,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   }
 
   const settings = getSettings();
-  if (!settings.agentMode?.enabled) return manager;
+  if (!isAgentModeEnabled(settings)) return manager;
   const preloads: Promise<void>[] = [];
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.getInstallState(settings).kind !== "ready") continue;

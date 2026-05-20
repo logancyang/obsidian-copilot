@@ -1,6 +1,5 @@
 import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
-import { Platform } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 
 // Type-only import: `CopilotMode` and `ModelSelection` are owned by
@@ -813,19 +812,11 @@ export function sanitizeSettings(settings: CopilotSettings): CopilotSettings {
 /** Validate the agentMode slice. */
 function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   if (!raw || typeof raw !== "object") {
-    return {
-      ...DEFAULT_SETTINGS.agentMode,
-      enabled: Platform.isMobile ? false : DEFAULT_SETTINGS.agentMode.enabled,
-    };
+    return { ...DEFAULT_SETTINGS.agentMode };
   }
   const r = raw as Record<string, unknown>;
-  // Agent Mode requires subprocess support — force off on mobile regardless
-  // of what a synced desktop settings file says.
-  const enabled = Platform.isMobile
-    ? false
-    : typeof r.enabled === "boolean"
-      ? r.enabled
-      : DEFAULT_SETTINGS.agentMode.enabled;
+  const enabled =
+    typeof r.enabled === "boolean" ? r.enabled : DEFAULT_SETTINGS.agentMode.enabled;
   const byok =
     r.byok && typeof r.byok === "object"
       ? (r.byok as { anthropic?: string; openai?: string; google?: string })

@@ -7,6 +7,7 @@ import {
   AGENT_CHAT_MODE,
   CopilotAgentView,
   createAgentSessionManager,
+  isAgentModeEnabled,
   PlanPreviewView,
   PLAN_PREVIEW_VIEW_TYPE,
   SkillManager,
@@ -730,7 +731,7 @@ export default class CopilotPlugin extends Plugin {
       new Notice("Agent Chat is not available on mobile.");
       return null;
     }
-    if (!getSettings().agentMode?.enabled) {
+    if (!isAgentModeEnabled()) {
       new Notice("Enable Agent Mode in Copilot settings first.");
       return null;
     }
@@ -742,7 +743,7 @@ export default class CopilotPlugin extends Plugin {
   }
 
   private canUseAgentView(): boolean {
-    return !Platform.isMobile && !!this.agentSessionManager && !!getSettings().agentMode?.enabled;
+    return !!this.agentSessionManager && isAgentModeEnabled();
   }
 
   private refreshRibbonIcon() {
