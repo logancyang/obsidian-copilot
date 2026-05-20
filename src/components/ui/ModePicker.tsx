@@ -53,8 +53,10 @@ export function ModePicker({ override, className }: ModePickerProps) {
           disabled={disabled}
           className={cn(
             "tw-shrink-0 tw-text-muted",
-            value === "plan" && "tw-text-blue/70 hover:tw-text-blue/100 focus:tw-text-blue/100",
-            value === "auto" && "tw-text-red/70 hover:tw-text-red/100 focus:tw-text-red/100",
+            value === "plan" &&
+              "tw-text-blue/70 hover:tw-text-blue/100 focus-visible:tw-text-blue/100",
+            value === "auto" &&
+              "tw-text-red/70 hover:tw-text-red/100 focus-visible:tw-text-red/100",
             className
           )}
           title="Operational mode"
