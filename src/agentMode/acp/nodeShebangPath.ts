@@ -1,5 +1,7 @@
 import * as path from "node:path";
 
+import { WELL_KNOWN_BIN_DIRS, mergePath } from "@/utils/binaryPath";
+
 /**
  * macOS GUI apps (Obsidian) inherit a minimal PATH that omits Homebrew and
  * common Node installer locations. Adapters that ship as `#!/usr/bin/env
@@ -14,22 +16,5 @@ export function augmentPathForNodeShebang(
   binaryPath: string,
   inherited: string | undefined
 ): string {
-  const sep = process.platform === "win32" ? ";" : ":";
-  const candidates = [
-    path.dirname(binaryPath),
-    "/opt/homebrew/bin",
-    "/usr/local/bin",
-    "/usr/bin",
-    "/bin",
-  ];
-  const inheritedParts = (inherited ?? "").split(sep).filter(Boolean);
-  const seen = new Set<string>();
-  const merged: string[] = [];
-  for (const p of [...candidates, ...inheritedParts]) {
-    if (!seen.has(p)) {
-      seen.add(p);
-      merged.push(p);
-    }
-  }
-  return merged.join(sep);
+  return mergePath([path.dirname(binaryPath), ...WELL_KNOWN_BIN_DIRS], inherited);
 }

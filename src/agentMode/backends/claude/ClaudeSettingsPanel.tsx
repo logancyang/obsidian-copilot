@@ -7,7 +7,12 @@ import { validateExecutableFile } from "@/utils/detectBinary";
 import type { App } from "obsidian";
 import { Notice } from "obsidian";
 import React from "react";
-import { CLAUDE_INSTALL_COMMAND, resolveClaudeCliPath, updateClaudeFields } from "./descriptor";
+import {
+  CLAUDE_INSTALL_COMMAND,
+  detectClaudeCliPath,
+  resolveClaudeCliPath,
+  updateClaudeFields,
+} from "./descriptor";
 
 interface Props {
   plugin: CopilotPlugin;
@@ -122,9 +127,10 @@ export const ClaudeSettingsPanel: React.FC<Props> = () => {
           binaryName="claude"
           placeholder="/absolute/path/to/claude"
           initialPath={overridePath}
-          notFoundHint={`claude not found on PATH. Install with \`${CLAUDE_INSTALL_COMMAND}\` and try again.`}
+          notFoundHint={`claude not found on disk. Install with \`${CLAUDE_INSTALL_COMMAND}\` and try again, or paste a custom path manually.`}
           onSave={onSaveCustomPath}
           persistOnAutoDetect
+          detect={() => Promise.resolve(detectClaudeCliPath())}
         />
       </SettingItem>
 

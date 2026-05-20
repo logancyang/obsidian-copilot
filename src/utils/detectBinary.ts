@@ -2,6 +2,8 @@ import { execFile } from "node:child_process";
 import * as fs from "node:fs";
 import { promisify } from "node:util";
 
+import { augmentPathForDetection } from "@/utils/binaryPath";
+
 const execFileAsync = promisify(execFile);
 
 /**
@@ -25,14 +27,25 @@ const BINARY_NAME_PATTERN = /^[A-Za-z0-9._+-]+$/;
  * Implementation deliberately uses `which` (POSIX) / `where` (Windows) rather
  * than parsing `PATH` ourselves so we honor the user's shell-equivalent
  * resolution rules (PATHEXT on Windows, symlink chasing, etc.).
+ *
+ * On POSIX we augment PATH with well-known install prefixes before invoking
+ * `which`. macOS GUI apps (Obsidian launched from Finder/Dock) inherit a
+ * sparse `launchd` PATH that omits `/opt/homebrew/bin` and `/usr/local/bin`,
+ * so user-installed binaries (Homebrew, `npm install -g`) would otherwise
+ * fail to detect. Windows GUI apps inherit the system PATH and don't need
+ * this.
  */
 export async function detectBinary(name: string): Promise<string | null> {
   if (!BINARY_NAME_PATTERN.test(name)) {
     throw new Error(`Invalid binary name: ${JSON.stringify(name)}`);
   }
-  const cmd = process.platform === "win32" ? "where" : "which";
+  const isWindows = process.platform === "win32";
+  const cmd = isWindows ? "where" : "which";
+  const env = isWindows
+    ? process.env
+    : { ...process.env, PATH: augmentPathForDetection(process.env.PATH) };
   try {
-    const { stdout } = await execFileAsync(cmd, [name], { timeout: 5000 });
+    const { stdout } = await execFileAsync(cmd, [name], { timeout: 5000, env });
     const first = stdout
       .split(/\r?\n/)
       .map((s) => s.trim())

@@ -61,14 +61,12 @@ const claudeWire: ModelWireCodec = {
 };
 
 /**
- * Resolve the `claude` CLI path from settings + auto-detection. Mirrors the
- * `getInstallState` logic: explicit override wins, otherwise the resolver
- * walks Volta/asdf/NVM/Homebrew/npm-global.
+ * Build the environment input shared by both override-aware resolution and
+ * fresh auto-detection. Pulls `os.homedir()`, `process.platform`, and a
+ * minimal env subset that the resolver consults for Volta/NVM/npm-global.
  */
-export function resolveClaudeCliPath(settings: CopilotSettings): string | null {
-  const override = settings.agentMode?.claudeCli?.path;
-  return resolveClaudeBinary({
-    override,
+function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "override"> {
+  return {
     homeDir: os.homedir(),
     platform: process.platform,
     env: {
@@ -80,7 +78,29 @@ export function resolveClaudeCliPath(settings: CopilotSettings): string | null {
       existsSync: (p) => fs.existsSync(p),
       readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
     },
+  };
+}
+
+/**
+ * Resolve the `claude` CLI path from settings + auto-detection. Mirrors the
+ * `getInstallState` logic: explicit override wins, otherwise the resolver
+ * walks Volta/asdf/NVM/Homebrew/npm-global.
+ */
+export function resolveClaudeCliPath(settings: CopilotSettings): string | null {
+  return resolveClaudeBinary({
+    override: settings.agentMode?.claudeCli?.path,
+    ...claudeResolverEnv(),
   });
+}
+
+/**
+ * Run a fresh auto-detect, ignoring any previously saved override. Used by
+ * the settings panel's "Auto-detect" button so users get the resolver's full
+ * candidate list (Volta/asdf/NVM/Homebrew/npm-global/`~/.local/bin`) instead
+ * of the generic `which`-based fallback that only sees `PATH`.
+ */
+export function detectClaudeCliPath(): string | null {
+  return resolveClaudeBinary({ override: undefined, ...claudeResolverEnv() });
 }
 
 /**
