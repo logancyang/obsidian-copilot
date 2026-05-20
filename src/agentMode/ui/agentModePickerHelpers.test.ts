@@ -126,7 +126,7 @@ describe("buildAgentModePicker", () => {
       }),
     });
     picker?.onChange("plan");
-    expect(applyMode).toHaveBeenCalledWith("codex", "plan", spec);
+    expect(applyMode).toHaveBeenCalledWith("codex", spec);
   });
 
   it("onChange ignores selections without an apply spec", () => {

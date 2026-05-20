@@ -2,12 +2,7 @@ import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
-// Type-only import: `CopilotMode` and `ModelSelection` are owned by
-// Agent Mode (canonical vocabulary in `@/agentMode/session/types`). We
-// persist values here and validate them locally — going through the
-// barrel at runtime would create an init-time cycle (settings →
-// agentMode → backends → constants → settings).
-import type { CopilotMode, ModelSelection } from "@/agentMode";
+import type { ModelSelection } from "@/agentMode";
 import { type ChainType } from "@/chainType";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
 import {
@@ -291,8 +286,6 @@ export interface CopilotSettings {
 export interface ClaudeBackendSettings {
   /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
   defaultModel?: ModelSelection | null;
-  /** Sticky operational mode. Unset = fall back to canonical `default`. */
-  selectedMode?: CopilotMode;
   /**
    * Sparse user overrides for which agent-reported models should appear in
    * the model picker. Keyed by SDK model id. Absent → fall back to the
@@ -312,8 +305,6 @@ export interface CodexBackendSettings {
   binaryPath?: string;
   /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
   defaultModel?: ModelSelection | null;
-  /** Sticky operational mode. Unset = fall back to canonical `default`. */
-  selectedMode?: CopilotMode;
   /** Sparse user overrides; see `ClaudeBackendSettings.modelEnabledOverrides`. */
   modelEnabledOverrides?: Record<string, boolean>;
 }
@@ -342,8 +333,6 @@ export interface OpencodeBackendSettings {
    * surfaced in the Copilot tab strip or chat history.
    */
   probeSessionId?: string;
-  /** Sticky operational mode. Unset = fall back to canonical `default`. */
-  selectedMode?: CopilotMode;
   /** Sparse user overrides; see `ClaudeBackendSettings.modelEnabledOverrides`. */
   modelEnabledOverrides?: Record<string, boolean>;
 }
@@ -969,13 +958,6 @@ function nonEmptyString(v: unknown): string | undefined {
   return typeof v === "string" && v ? v : undefined;
 }
 
-/** Validate a persisted `CopilotMode`, migrating legacy `build`/`auto-build`. */
-function sanitizeCopilotMode(v: unknown): CopilotMode | undefined {
-  if (v === "build") return "default";
-  if (v === "auto-build") return "auto";
-  return v === "default" || v === "plan" || v === "auto" ? v : undefined;
-}
-
 function sanitizeModelEnabledOverrides(raw: unknown): Record<string, boolean> | undefined {
   if (!raw || typeof raw !== "object") return undefined;
   const out: Record<string, boolean> = {};
@@ -1001,7 +983,6 @@ function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
   const r = raw as Record<string, unknown>;
   return {
     defaultModel: sanitizeDefaultModel(r.defaultModel),
-    selectedMode: sanitizeCopilotMode(r.selectedMode),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
     enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
   };
@@ -1013,7 +994,6 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
   return {
     binaryPath: nonEmptyString(r.binaryPath),
     defaultModel: sanitizeDefaultModel(r.defaultModel),
-    selectedMode: sanitizeCopilotMode(r.selectedMode),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
   };
 }
@@ -1036,7 +1016,6 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
     binarySource,
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     probeSessionId: nonEmptyString(r.probeSessionId),
-    selectedMode: sanitizeCopilotMode(r.selectedMode),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
   };
 }

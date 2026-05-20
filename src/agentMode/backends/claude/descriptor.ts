@@ -11,7 +11,6 @@ import {
   type CopilotSettings,
 } from "@/settings/model";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { applyPersistedMode } from "@/agentMode/session/applyPersistedMode";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
@@ -23,7 +22,6 @@ import {
 } from "@/agentMode/skills";
 import type {
   BackendConfigOption,
-  CopilotMode,
   ModeMapping,
   ModelSelection,
   ModelWireCodec,
@@ -231,25 +229,18 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     };
   },
 
-  async persistModeSelection(value: CopilotMode, _plugin: CopilotPlugin): Promise<void> {
-    updateClaudeFields({ selectedMode: value });
-  },
-
   /**
-   * Replay persisted mode + effort on a freshly created session. The
-   * Claude SDK adapter probes the model catalog asynchronously, so the
-   * effort `SessionConfigOption` may not be present yet when this runs;
+   * Replay the persisted effort on a freshly created session. The Claude
+   * SDK adapter probes the model catalog asynchronously, so the effort
+   * `SessionConfigOption` may not be present yet when this runs;
    * `replayPersistedEffort` subscribes to the session and applies once the
    * option arrives (with a timeout guard to avoid leaking listeners on
-   * agents that never report effort).
+   * agents that never report effort). Mode is never persisted — the
+   * Claude SDK's natural starting mode is already canonical `default`.
    */
   async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
-    const claudeSettings = settings.agentMode?.backends?.claude;
-    const persistedEffort = claudeSettings?.defaultModel?.effort ?? null;
-    await Promise.all([
-      applyPersistedMode(session, claudeSettings?.selectedMode ?? "default"),
-      replayPersistedEffort(session, persistedEffort ?? undefined),
-    ]);
+    const persistedEffort = settings.agentMode?.backends?.claude?.defaultModel?.effort ?? null;
+    await replayPersistedEffort(session, persistedEffort ?? undefined);
   },
 };
 

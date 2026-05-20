@@ -112,6 +112,24 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(toTomlBasicString("über — café")).toBe('"über — café"');
   });
 
+  it("pins spawn-time approval_policy + sandbox_mode to canonical 'auto' preset", async () => {
+    // Without these overrides codex-acp derives the initial mode from
+    // ~/.codex/config.toml, which can land on read-only and surface as
+    // "Plan" in our picker for a brief moment before the post-spawn
+    // coerce kicks in. The TOML strings need outer quotes — codex parses
+    // the value portion of `-c key=value` as TOML.
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    expect(desc.args).toEqual(
+      expect.arrayContaining([
+        "-c",
+        'approval_policy="on-request"',
+        "-c",
+        'sandbox_mode="workspace-write"',
+      ])
+    );
+  });
+
   it("throws when the codex binary path is unset", async () => {
     setSettings({
       agentMode: {

@@ -17,7 +17,6 @@ import type {
   BackendId,
   BackendProcess,
   BackendState,
-  CopilotMode,
   ModeApplySpec,
   ModelSelection,
   PermissionDecision,
@@ -314,13 +313,6 @@ export class AgentSessionManager {
     });
   }
 
-  /** Persist a sticky mode preference for `backendId`. No-op if the descriptor doesn't opt in. */
-  async persistModeFor(backendId: BackendId, value: CopilotMode): Promise<void> {
-    const descriptor = this.resolveDescriptor(backendId);
-    if (!descriptor.persistModeSelection) return;
-    await descriptor.persistModeSelection(value, this.plugin);
-  }
-
   /**
    * Apply a (baseModelId, effort) selection to the active session. Both
    * fields are optional patches against the current selection:
@@ -357,11 +349,11 @@ export class AgentSessionManager {
   }
 
   /**
-   * Apply a canonical mode change against the active session. `value` is
-   * the canonical id (used for persistence); `spec` carries the native
-   * dispatch info (which ACP RPC + payload).
+   * Apply a canonical mode change against the active session. `spec` carries
+   * the native dispatch info (which ACP RPC + payload). The selection is not
+   * persisted — every fresh session starts in canonical `default`.
    */
-  async applyMode(backendId: BackendId, value: CopilotMode, spec: ModeApplySpec): Promise<void> {
+  async applyMode(backendId: BackendId, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
     if (spec.kind === "setMode") {
@@ -369,7 +361,6 @@ export class AgentSessionManager {
     } else {
       await session.setConfigOption(spec.configId, spec.value);
     }
-    await this.persistModeFor(backendId, value);
   }
 
   getBackendProcess(backendId: BackendId): BackendProcess | null {
