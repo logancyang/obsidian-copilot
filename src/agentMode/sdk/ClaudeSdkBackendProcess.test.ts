@@ -51,7 +51,7 @@ jest.mock("./effortOption", () => ({
   getCachedSdkCatalog: jest.fn(),
 }));
 
-import { ClaudeSdkBackendProcess } from "./ClaudeSdkBackendProcess";
+import { ClaudeSdkBackendProcess, promptInputToAnthropicContent } from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
 
 beforeEach(() => {
@@ -133,6 +133,86 @@ function getPromptQueryCalls(): unknown[][] {
     return opts?.cwd !== undefined;
   });
 }
+
+describe("promptInputToAnthropicContent", () => {
+  it("returns a plain string when the prompt is text-only", () => {
+    const result = promptInputToAnthropicContent({
+      sessionId: "s1",
+      prompt: [
+        { type: "text", text: "hello" },
+        { type: "text", text: "world" },
+      ],
+    });
+    expect(result).toBe("hello\nworld");
+  });
+
+  it("returns content blocks when an image is attached", () => {
+    const result = promptInputToAnthropicContent({
+      sessionId: "s1",
+      prompt: [
+        { type: "text", text: "describe" },
+        { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+      ],
+    });
+    expect(result).toEqual([
+      { type: "text", text: "describe" },
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/png", data: "aGVsbG8=" },
+      },
+    ]);
+  });
+
+  it("normalizes jpg media types before sending image blocks", () => {
+    const result = promptInputToAnthropicContent({
+      sessionId: "s1",
+      prompt: [
+        { type: "text", text: "describe" },
+        { type: "image", mimeType: "image/jpg", data: "aGVsbG8=" },
+      ],
+    });
+    expect(result).toEqual([
+      { type: "text", text: "describe" },
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: "aGVsbG8=" },
+      },
+    ]);
+  });
+
+  it("omits image media types Anthropic does not accept", () => {
+    const result = promptInputToAnthropicContent({
+      sessionId: "s1",
+      prompt: [
+        { type: "text", text: "describe" },
+        { type: "image", mimeType: "image/heic", data: "aGVsbG8=" },
+      ],
+    });
+    expect(result).toEqual([
+      { type: "text", text: "describe" },
+      { type: "text", text: "[Unsupported image attachment omitted: image/heic]" },
+    ]);
+  });
+
+  it("represents resource_link as a defensive text reference", () => {
+    const result = promptInputToAnthropicContent({
+      sessionId: "s1",
+      prompt: [
+        { type: "text", text: "see the doc" },
+        { type: "resource_link", uri: "vault://README.md", name: "README" },
+        { type: "image", mimeType: "image/jpeg", data: "ZmFrZQ==" },
+      ],
+    });
+    expect(result).toEqual([
+      { type: "text", text: "see the doc" },
+      { type: "text", text: "[Attached resource: README]" },
+      {
+        type: "image",
+        source: { type: "base64", media_type: "image/jpeg", data: "ZmFrZQ==" },
+      },
+    ]);
+  });
+});
 
 describe("ClaudeSdkBackendProcess.prompt happy path", () => {
   beforeEach(() => {

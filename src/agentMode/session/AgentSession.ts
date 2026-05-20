@@ -462,7 +462,7 @@ export class AgentSession {
   sendPrompt(
     displayText: string,
     context?: MessageContext,
-    content?: unknown[]
+    promptContent?: PromptContent[]
   ): { userMessageId: string; turn: Promise<StopReason> } {
     if (this.status === "starting") {
       throw new Error("Session is still starting");
@@ -480,7 +480,6 @@ export class AgentSession {
       timestamp: formatDateTime(new Date()),
       isVisible: true,
       context,
-      content,
     };
     const userMessageId = this.store.addMessage(userMessage);
 
@@ -497,20 +496,20 @@ export class AgentSession {
     this.abortController = new AbortController();
     this.setStatus("running");
 
-    const turn = this.runTurn(displayText, context, content);
+    const turn = this.runTurn(displayText, context, promptContent);
     return { userMessageId, turn };
   }
 
   private async runTurn(
     displayText: string,
     context: MessageContext | undefined,
-    content?: unknown[]
+    promptContent?: PromptContent[]
   ): Promise<StopReason> {
     const placeholderId = this.placeholderId;
     const sessionId = this.backendSessionId!;
     const turnStartedAt = Date.now();
     try {
-      const promptBlocks = buildPromptBlocks(displayText, context, content);
+      const promptBlocks = buildPromptBlocks(displayText, context, promptContent);
       const req: PromptInput = {
         sessionId,
         prompt: promptBlocks,
@@ -1014,15 +1013,15 @@ function findProviderErrorPayload(
 export function buildPromptBlocks(
   displayText: string,
   context?: MessageContext,
-  content?: unknown[]
+  content?: PromptContent[]
 ): PromptContent[] {
-  // TODO(agent-mode): map `content` (image_url / etc.) to PromptContent
-  // image/resource entries so attachments aren't silently dropped. Today
-  // `AgentChat` strips images before calling sendMessage and surfaces a Notice.
-  void content;
   const envelope = buildContextEnvelope(context);
-  if (!envelope) return [{ type: "text", text: displayText }];
-  return [{ type: "text", text: `${envelope}\n\n<user-message>\n${displayText}\n</user-message>` }];
+  const headText = envelope
+    ? `${envelope}\n\n<user-message>\n${displayText}\n</user-message>`
+    : displayText;
+  const extras = content ?? [];
+  if (extras.length === 0) return [{ type: "text", text: headText }];
+  return [{ type: "text", text: headText }, ...extras];
 }
 
 /**

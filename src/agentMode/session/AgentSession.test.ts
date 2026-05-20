@@ -136,6 +136,41 @@ describe("buildPromptBlocks", () => {
     expect(text).toContain("  line two");
   });
 
+  it("appends image content blocks after the text envelope", () => {
+    const blocks = buildPromptBlocks("here", undefined, [
+      { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+    ]);
+    expect(blocks).toEqual([
+      { type: "text", text: "here" },
+      { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+    ]);
+  });
+
+  it("combines envelope, text, and content blocks in order", () => {
+    const blocks = buildPromptBlocks(
+      "look at this",
+      {
+        notes: [makeFile("a.md")],
+        urls: [],
+      },
+      [
+        { type: "text", text: "<attached-pdf path='b.pdf'>parsed body</attached-pdf>" },
+        { type: "image", mimeType: "image/jpeg", data: "ZmFrZQ==" },
+      ]
+    );
+    expect(blocks).toHaveLength(3);
+    expect(blocks[0].type).toBe("text");
+    const head = (blocks[0] as { type: "text"; text: string }).text;
+    expect(head).toContain("<copilot-context>");
+    expect(head).toContain("- a.md");
+    expect(head).toContain("<user-message>\nlook at this\n</user-message>");
+    expect(blocks[1]).toEqual({
+      type: "text",
+      text: "<attached-pdf path='b.pdf'>parsed body</attached-pdf>",
+    });
+    expect(blocks[2]).toEqual({ type: "image", mimeType: "image/jpeg", data: "ZmFrZQ==" });
+  });
+
   it("ignores web-source selected text excerpts", () => {
     const blocks = buildPromptBlocks("explain", {
       notes: [],
@@ -181,6 +216,29 @@ describe("AgentSession.sendPrompt", () => {
     expect(mock.prompt).toHaveBeenCalledWith({
       sessionId: "acp-1",
       prompt: [{ type: "text", text: "Hi there" }],
+    });
+  });
+
+  it("forwards image content blocks to the backend prompt", async () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    await session.sendPrompt("describe", undefined, [
+      { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+    ]).turn;
+    const messages = session.store.getDisplayMessages();
+    expect(messages[0].message).toBe("describe");
+    expect(messages[0].content).toBeUndefined();
+    expect(mock.prompt).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      prompt: [
+        { type: "text", text: "describe" },
+        { type: "image", mimeType: "image/png", data: "aGVsbG8=" },
+      ],
     });
   });
 

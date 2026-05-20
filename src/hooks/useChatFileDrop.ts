@@ -80,6 +80,15 @@ function parseObsidianUris(app: App, uriString: string): TFile[] {
 }
 
 /**
+ * Return a browser/Anthropic-compatible MIME type for vault image files.
+ */
+function getImageMimeType(extension: string): string {
+  const normalized = extension.toLowerCase();
+  if (normalized === "jpg") return "image/jpeg";
+  return `image/${normalized}`;
+}
+
+/**
  * Custom hook to handle drag-and-drop of files into the chat.
  * Supports:
  * - Dropping files from Obsidian nav bar (md, pdf, canvas, images)
@@ -203,7 +212,7 @@ export function useChatFileDrop(props: UseChatFileDropProps): UseChatFileDropRet
             const arrayBuffer = await app.vault.readBinary(file);
             const blob = new Blob([arrayBuffer]);
             const imageFile = new File([blob], file.name, {
-              type: `image/${file.extension}`,
+              type: getImageMimeType(file.extension),
             });
             onAddImage([imageFile]);
           } else if (isAllowedFileForNoteContext(file)) {

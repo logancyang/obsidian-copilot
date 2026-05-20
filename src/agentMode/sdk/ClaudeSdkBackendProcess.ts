@@ -246,8 +246,8 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     // Streaming-input mode (AsyncIterable) is required to expose
     // interrupt/setModel/setPermissionMode on the returned Query — without it
     // those control calls reject with "only available in streaming input mode".
-    const promptText = extractPromptText(params);
-    const promptStream = makePromptStream(promptText, params.sessionId);
+    const messageContent = promptInputToAnthropicContent(params);
+    const promptStream = makePromptStream(messageContent, params.sessionId);
 
     this.bridge.setSessionContext(params.sessionId);
 
@@ -286,7 +286,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     logSdkOutbound(
       "prompt",
       {
-        prompt: promptText,
+        prompt: summarizePromptContent(messageContent),
         resume: options.resume ?? null,
         sessionIdSeed: options.sessionId ?? null,
         model: options.model ?? null,
@@ -605,21 +605,98 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   }
 }
 
-function extractPromptText(req: PromptInput): string {
-  const parts: string[] = [];
-  for (const block of req.prompt) {
-    if (block.type === "text" && block.text.length > 0) parts.push(block.text);
+type AnthropicContentBlock =
+  | { type: "text"; text: string }
+  | {
+      type: "image";
+      source: { type: "base64"; media_type: AnthropicImageMediaType; data: string };
+    };
+
+type AnthropicImageMediaType = "image/jpeg" | "image/png" | "image/gif" | "image/webp";
+
+/**
+ * Normalize image media types to the exact set Anthropic accepts for base64
+ * image sources. Returns null for image types the SDK request cannot carry.
+ */
+function normalizeAnthropicImageMediaType(mimeType: string): AnthropicImageMediaType | null {
+  const normalized = mimeType.toLowerCase();
+  if (normalized === "image/jpg") return "image/jpeg";
+  if (
+    normalized === "image/jpeg" ||
+    normalized === "image/png" ||
+    normalized === "image/gif" ||
+    normalized === "image/webp"
+  ) {
+    return normalized;
   }
-  return parts.join("\n");
+  return null;
+}
+
+/**
+ * Map a `PromptInput` to the `MessageParam.content` shape the Claude Agent
+ * SDK forwards to Anthropic. Returns a plain string when the prompt is pure
+ * text (the SDK accepts either, and the string form keeps the prior wire
+ * shape for text-only turns) and a content-block array otherwise.
+ */
+export function promptInputToAnthropicContent(req: PromptInput): string | AnthropicContentBlock[] {
+  const hasNonText = req.prompt.some((b) => b.type !== "text");
+  if (!hasNonText) {
+    const parts: string[] = [];
+    for (const block of req.prompt) {
+      if (block.type === "text" && block.text.length > 0) parts.push(block.text);
+    }
+    return parts.join("\n");
+  }
+
+  const blocks: AnthropicContentBlock[] = [];
+  for (const block of req.prompt) {
+    if (block.type === "text") {
+      if (block.text.length > 0) blocks.push({ type: "text", text: block.text });
+    } else if (block.type === "image") {
+      const mediaType = normalizeAnthropicImageMediaType(block.mimeType);
+      if (!mediaType) {
+        logWarn(`[AgentMode] unsupported image media type for Claude SDK: ${block.mimeType}`);
+        blocks.push({
+          type: "text",
+          text: `[Unsupported image attachment omitted: ${block.mimeType}]`,
+        });
+        continue;
+      }
+      blocks.push({
+        type: "image",
+        source: { type: "base64", media_type: mediaType, data: block.data },
+      });
+    } else {
+      // resource_link — we don't currently emit these from buildPromptBlocks,
+      // but render a defensive textual reference so anything that slips
+      // through is at least visible to the model.
+      blocks.push({
+        type: "text",
+        text: `[Attached resource: ${block.name ?? block.uri}]`,
+      });
+    }
+  }
+  return blocks;
+}
+
+/** Short log summary that elides base64 image payloads. */
+function summarizePromptContent(content: string | AnthropicContentBlock[]): unknown {
+  if (typeof content === "string") return content;
+  return content.map((b) =>
+    b.type === "image"
+      ? { type: "image", media_type: b.source.media_type, dataLength: b.source.data.length }
+      : b
+  );
 }
 
 async function* makePromptStream(
-  text: string,
+  content: string | AnthropicContentBlock[],
   sessionId: SessionId
 ): AsyncIterable<SDKUserMessage> {
   yield {
     type: "user",
-    message: { role: "user", content: text },
+    // SDK's MessageParam accepts `string | Array<ContentBlockParam>`.
+    message: { role: "user", content },
     parent_tool_use_id: null,
     session_id: sessionId,
   };
