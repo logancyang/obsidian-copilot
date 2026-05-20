@@ -176,7 +176,7 @@ export enum ChatModels {
   GPT_41 = "gpt-4.1",
   GPT_41_mini = "gpt-4.1-mini",
   GEMINI_3_PRO_PREVIEW = "gemini-3.1-pro-preview",
-  GEMINI_3_FLASH_PREVIEW = "gemini-3-flash-preview",
+  GEMINI_3_5_FLASH = "gemini-3.5-flash",
   GEMINI_3_FLASH_LITE = "gemini-3.1-flash-lite",
   GEMINI_PRO = "gemini-2.5-pro",
   GEMINI_FLASH = "gemini-2.5-flash",
@@ -189,7 +189,7 @@ export enum ChatModels {
   MISTRAL_TINY = "mistral-tiny-latest",
   DEEPSEEK_REASONER = "deepseek-reasoner",
   DEEPSEEK_CHAT = "deepseek-chat",
-  OPENROUTER_GEMINI_3_FLASH_PREVIEW = "google/gemini-3-flash-preview",
+  OPENROUTER_GEMINI_3_5_FLASH = "google/gemini-3.5-flash",
   OPENROUTER_GEMINI_3_PRO_PREVIEW = "google/gemini-3.1-pro-preview",
   OPENROUTER_GEMINI_2_5_FLASH = "google/gemini-2.5-flash",
   OPENROUTER_GEMINI_2_5_PRO = "google/gemini-2.5-pro",
@@ -255,6 +255,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   {
+    name: ChatModels.OPENROUTER_GEMINI_3_5_FLASH,
+    provider: ChatModelProviders.OPENROUTERAI,
+    enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+  },
+  {
     name: ChatModels.GPT_5_5,
     provider: ChatModelProviders.OPENAI,
     enabled: true,
@@ -278,6 +286,14 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
   },
   {
+    name: ChatModels.GEMINI_3_5_FLASH,
+    provider: ChatModelProviders.GOOGLE,
+    enabled: true,
+    isBuiltIn: true,
+    projectEnabled: true,
+    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
+  },
+  {
     name: ChatModels.GEMINI_3_FLASH_LITE,
     provider: ChatModelProviders.GOOGLE,
     enabled: true,
@@ -294,13 +310,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
     capabilities: [ModelCapability.VISION],
   },
   // Disabled models
-  {
-    name: ChatModels.OPENROUTER_GEMINI_3_FLASH_PREVIEW,
-    provider: ChatModelProviders.OPENROUTERAI,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
   {
     name: ChatModels.OPENROUTER_GEMINI_3_PRO_PREVIEW,
     provider: ChatModelProviders.OPENROUTERAI,
@@ -381,13 +390,6 @@ export const BUILTIN_CHAT_MODELS: CustomModel[] = [
   {
     name: ChatModels.CLAUDE_HAIKU_4_5,
     provider: ChatModelProviders.ANTHROPIC,
-    enabled: false,
-    isBuiltIn: true,
-    capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
-  },
-  {
-    name: ChatModels.GEMINI_3_FLASH_PREVIEW,
-    provider: ChatModelProviders.GOOGLE,
     enabled: false,
     isBuiltIn: true,
     capabilities: [ModelCapability.VISION, ModelCapability.REASONING],
