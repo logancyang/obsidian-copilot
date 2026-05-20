@@ -345,12 +345,6 @@ export class AgentSessionManager {
     const session = this.getActiveSession();
     if (!session) return;
     if (opts?.expectBackendId && session.backendId !== opts.expectBackendId) return;
-    // Queue the switch until the backend session has finished initializing.
-    // Without this, clicks during the brief "starting" window throw
-    // "Session is still starting" from setModel/setConfigOption.
-    await session.ready;
-    // Session may have been swapped or disposed while we awaited.
-    if (this.getActiveSession() !== session) return;
     const current = session.getState()?.model?.current;
     if (!current) return;
     const descriptor = this.resolveDescriptor(session.backendId);
@@ -370,12 +364,6 @@ export class AgentSessionManager {
   async applyMode(backendId: BackendId, value: CopilotMode, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
-    // Queue the switch until the backend session has finished initializing.
-    // Without this, clicks during the brief "starting" window throw
-    // "Session is still starting" from setMode/setConfigOption.
-    await session.ready;
-    // Session may have been swapped or disposed while we awaited.
-    if (this.getActiveSession() !== session) return;
     if (spec.kind === "setMode") {
       await session.setMode(spec.nativeId);
     } else {
