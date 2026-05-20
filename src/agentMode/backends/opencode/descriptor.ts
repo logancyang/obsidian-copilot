@@ -15,7 +15,6 @@ import { computeInstallState, OpencodeBinaryManager } from "./OpencodeBinaryMana
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { applyPersistedMode } from "@/agentMode/session/applyPersistedMode";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type { ModeMapping, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
@@ -164,18 +163,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       configId: OPENCODE_MODE_CONFIG_OPTION_ID,
       canonical: { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
     };
-  },
-
-  /**
-   * Defense-in-depth: force canonical `default` (ask mode) on every fresh
-   * session. The primary path is the spawn-time `default_agent` baked into
-   * `OPENCODE_CONFIG_CONTENT` (see `OpencodeBackend.buildOpencodeConfig`),
-   * which already pins the agent to `copilot-build`. This runtime call only
-   * fires if the spawn-time default didn't take and the `mode` configOption
-   * is already registered.
-   */
-  async applyInitialSessionConfig(session: AgentSession): Promise<void> {
-    await applyPersistedMode(session, "default");
   },
 };
 
