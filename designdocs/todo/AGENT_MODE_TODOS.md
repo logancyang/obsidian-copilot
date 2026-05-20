@@ -24,6 +24,7 @@
 - [ ] P0: Auto-save chat history controls
 - [ ] P0: Support image context
 - [ ] P1: [BUG] Check active note path. Sometimes the agent will start from a path that does not exist
+- [ ] P1: Make askuserquestion tool show questions inline in the chat.
 - [ ] P1: MCP
   - Basic functionality is ready
   - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)

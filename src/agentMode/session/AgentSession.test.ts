@@ -1363,6 +1363,98 @@ describe("AgentSession plan proposal lifecycle", () => {
     await decisionPromise;
   });
 
+  it("marks an active turn as awaiting permission while an inline tool card is pending", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+    const statusChanges: string[] = [];
+    session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: (status) => statusChanges.push(status),
+    });
+    const { turn } = session.sendPrompt("edit a file");
+    expect(session.getStatus()).toBe("running");
+
+    const decisionPromise = session.handleToolPermission({
+      sessionId: "acp-1",
+      toolCall: {
+        toolCallId: "tc-write",
+        kind: "edit",
+        status: "pending",
+        title: "Write",
+        rawInput: { file_path: "note.md", content: "updated" },
+      },
+      options: [
+        { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
+        { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
+      ],
+    });
+
+    expect(session.getStatus()).toBe("awaiting_permission");
+    expect(session.getPendingToolPermissions()).toHaveLength(1);
+    expect(statusChanges).toContain("awaiting_permission");
+
+    session.resolveToolPermission("tc-write", "allow_once");
+    await expect(decisionPromise).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "allow_once" },
+    });
+    expect(session.getPendingToolPermissions()).toHaveLength(0);
+    expect(session.getStatus()).toBe("running");
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+  });
+
+  it("rejects a pending inline tool permission before awaiting backend cancel", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "cancelled" }) => void) | null = null;
+    let decisionPromise: Promise<unknown> = Promise.resolve();
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    mock.cancel.mockImplementation(() => decisionPromise.then(() => undefined));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+    const { turn } = session.sendPrompt("edit a file");
+
+    decisionPromise = session.handleToolPermission({
+      sessionId: "acp-1",
+      toolCall: {
+        toolCallId: "tc-write",
+        kind: "edit",
+        status: "pending",
+        title: "Write",
+        rawInput: { file_path: "note.md", content: "updated" },
+      },
+      options: [
+        { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
+        { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
+      ],
+    });
+
+    const cancelPromise = session.cancel();
+    await expect(decisionPromise).resolves.toEqual({
+      outcome: { outcome: "selected", optionId: "reject_once" },
+    });
+    expect(session.getPendingToolPermissions()).toHaveLength(0);
+    await cancelPromise;
+
+    resolvePrompt!({ stopReason: "cancelled" });
+    await turn;
+  });
+
   it("forwards the optional denyMessage on resolvePlanProposalPermission to the resolved decision", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
@@ -1443,6 +1535,70 @@ describe("AgentSession plan proposal lifecycle", () => {
 
     resolvePrompt!({ stopReason: "end_turn" });
     await turn;
+  });
+});
+
+describe("AgentSession status derivation", () => {
+  it("reports 'error' after a failed turn and resets to 'running' on the next sendPrompt", async () => {
+    const mock = makeMockBackend();
+    mock.prompt.mockRejectedValueOnce(new Error("boom"));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+
+    await expect(session.sendPrompt("hi").turn).rejects.toThrow("boom");
+    expect(session.getStatus()).toBe("error");
+
+    // A fresh prompt should clear the prior turn error and report running.
+    const { turn } = session.sendPrompt("retry");
+    expect(session.getStatus()).toBe("running");
+    await turn;
+    expect(session.getStatus()).toBe("idle");
+  });
+
+  it("fires onStatusChanged exactly once per distinct transition through the permission lifecycle", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude-code",
+    });
+    const statusChanges: string[] = [];
+    session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: (status) => statusChanges.push(status),
+    });
+
+    const { turn } = session.sendPrompt("edit a file");
+    const decisionPromise = session.handleToolPermission({
+      sessionId: "acp-1",
+      toolCall: {
+        toolCallId: "tc-write",
+        kind: "edit",
+        status: "pending",
+        title: "Write",
+        rawInput: { file_path: "note.md", content: "updated" },
+      },
+      options: [
+        { optionId: "allow_once", name: "Allow once", kind: "allow_once" },
+        { optionId: "reject_once", name: "Deny once", kind: "reject_once" },
+      ],
+    });
+    session.resolveToolPermission("tc-write", "allow_once");
+    await decisionPromise;
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+
+    // running → awaiting_permission → running → idle, each fired once.
+    expect(statusChanges).toEqual(["running", "awaiting_permission", "running", "idle"]);
   });
 });
 

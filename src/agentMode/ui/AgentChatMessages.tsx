@@ -1,11 +1,12 @@
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
+import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
 import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { AgentChatMessage, CurrentPlan } from "@/agentMode/session/types";
+import type { AgentChatMessage, CurrentPlan, PermissionPrompt } from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
@@ -15,6 +16,7 @@ interface AgentChatMessagesProps {
   app: App;
   onDelete: (messageId: string) => void;
   currentPlan: CurrentPlan | null;
+  pendingToolPermissions: PermissionPrompt[];
   chatBackend: AgentChatBackend;
   /** True while a turn is in flight. The last assistant message in the
    *  visible list is treated as the streaming placeholder. */
@@ -40,7 +42,15 @@ function toChatMessageView(m: AgentChatMessage): ChatMessage {
 }
 
 const AgentChatMessages = memo(
-  ({ messages, app, onDelete, currentPlan, chatBackend, isLoading }: AgentChatMessagesProps) => {
+  ({
+    messages,
+    app,
+    onDelete,
+    currentPlan,
+    pendingToolPermissions,
+    chatBackend,
+    isLoading,
+  }: AgentChatMessagesProps) => {
     const visible = useMemo(() => messages.filter((m) => m.isVisible), [messages]);
     const adapted = useMemo(() => visible.map(toChatMessageView), [visible]);
     const { containerMinHeight, scrollContainerCallbackRef, getMessageKey } = useChatScrolling({
@@ -51,6 +61,14 @@ const AgentChatMessages = memo(
     const inlinePlanCard = showPlanCard ? (
       <PlanProposalCard plan={currentPlan} app={app} chatBackend={chatBackend} />
     ) : null;
+    const inlineToolPermissionCards = pendingToolPermissions.map((req) => (
+      <ToolPermissionCard
+        key={req.toolCall.toolCallId}
+        request={req}
+        onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
+      />
+    ));
+    const hasTailCards = showPlanCard || pendingToolPermissions.length > 0;
 
     // The last visible assistant message is the streaming placeholder while
     // a turn is in flight — drives the reasoning-block timer/spinner and the
@@ -81,6 +99,7 @@ const AgentChatMessages = memo(
         <div className="tw-flex tw-size-full tw-flex-col tw-gap-2 tw-overflow-y-auto tw-px-3 tw-pt-2">
           {isLoading && <BottomLoadingIndicator />}
           {inlinePlanCard}
+          {inlineToolPermissionCards}
         </div>
       );
     }
@@ -95,10 +114,11 @@ const AgentChatMessages = memo(
           {visible.map((message, index) => {
             const isLastMessage = index === visible.length - 1;
             // Reserve scroll headroom only when the last message is the
-            // assistant AND there's no inline plan card below it — the card
-            // already provides visible content at the tail of the stream.
+            // assistant AND there's nothing pinned at the tail (plan card or
+            // tool-permission card) — those already provide visible content
+            // at the bottom of the stream.
             const shouldApplyMinHeight =
-              isLastMessage && message.sender !== USER_SENDER && !showPlanCard;
+              isLastMessage && message.sender !== USER_SENDER && !hasTailCards;
             const adaptedMessage = adapted[index];
             // When an assistant message has structured parts, the trail owns
             // its entire body — `text` parts already cover streamed prose, so
@@ -148,6 +168,7 @@ const AgentChatMessages = memo(
             );
           })}
           {inlinePlanCard}
+          {inlineToolPermissionCards}
         </div>
       </div>
     );

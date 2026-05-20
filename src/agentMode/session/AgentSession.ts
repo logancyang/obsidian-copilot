@@ -38,6 +38,10 @@ import { getSettings } from "@/settings/model";
  */
 const DEFAULT_TITLE_PREFIX = "New session";
 const MAX_TOOL_OUTPUT_TEXT_CHARS = 12_000;
+// Shared sentinel so `getPendingToolPermissions()` returns a stable reference
+// when nothing is pending — preserves React `useState` setter bail-out
+// behavior on idle subscription ticks.
+const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 
 export type AgentSessionStatus =
   | "starting"
@@ -134,7 +138,20 @@ export class AgentSession {
   private readonly backend: BackendProcess;
   private readonly cwd: string | null;
   private readonly getDescriptor: (() => BackendDescriptor | undefined) | null;
-  private status: AgentSessionStatus = "starting";
+  // `status` is derived from the primitives below — see `getStatus()`.
+  // `cachedStatus` is a memo of the last value we fired through
+  // `onStatusChanged`, used purely for change detection. It is not the
+  // source of truth; never read it from anywhere except
+  // `recomputeStatusIfChanged()`.
+  private cachedStatus: AgentSessionStatus = "starting";
+  // Set in `initialize`'s catch when the backend's `newSession` rejects.
+  // Combined with `backendSessionId === null` this yields the startup
+  // `"error"` status.
+  private startupFailed = false;
+  // Set in `runTurn`'s catch; cleared at the top of `sendPrompt` once
+  // preconditions pass. Yields the per-turn `"error"` status while the
+  // session sits idle between a failed turn and the next prompt.
+  private lastTurnError = false;
   private placeholderId: string | null = null;
   private abortController: AbortController | null = null;
   private listeners = new Set<AgentSessionListener>();
@@ -154,6 +171,17 @@ export class AgentSession {
   // ExitPlanMode permission request arrives (via the wrapped prompter); the
   // chat card resolves them through `resolvePlanProposalPermission`.
   private pendingPlanResolvers = new Map<
+    string,
+    {
+      request: PermissionPrompt;
+      resolve: (resp: PermissionDecision) => void;
+    }
+  >();
+  // Pending permission resolvers for general (non-plan) tool calls. Populated
+  // by `handleToolPermission` when the wrapped prompter routes a request to
+  // this session; the inline `ToolPermissionCard` resolves them through
+  // `resolveToolPermission`.
+  private pendingToolResolvers = new Map<
     string,
     {
       request: PermissionPrompt;
@@ -196,10 +224,14 @@ export class AgentSession {
         opts.backendSessionId,
         (event) => this.handleSessionEvent(event)
       );
-      this.status = "idle";
+      // backendSessionId is non-null → getStatus() yields "idle" without
+      // any further bookkeeping. Sync the cache so the first
+      // `recomputeStatusIfChanged` call doesn't fire a spurious
+      // "starting → idle" transition that no one observed.
+      this.cachedStatus = this.getStatus();
       this.ready = Promise.resolve();
     } else {
-      this.status = "starting";
+      // Default cachedStatus ("starting") already matches getStatus().
       this.ready = this.initialize(opts);
     }
   }
@@ -244,7 +276,7 @@ export class AgentSession {
         this.unregisterSessionHandler = null;
         return;
       }
-      this.setStatus("idle");
+      this.recomputeStatusIfChanged();
       this.notifyModelChanged();
 
       // Apply sticky preference. Best-effort — failures leave the session
@@ -259,7 +291,8 @@ export class AgentSession {
     } catch (err) {
       if (this.disposed) return;
       logWarn(`[AgentMode] session/new failed for ${this.internalId}`, err);
-      this.setStatus("error");
+      this.startupFailed = true;
+      this.recomputeStatusIfChanged();
       throw err instanceof Error ? err : new Error(err2String(err));
     }
   }
@@ -283,7 +316,7 @@ export class AgentSession {
    * available" and degrade the UI accordingly.
    */
   async setModel(modelId: string): Promise<void> {
-    if (this.status === "closed") throw new Error("Session is closed");
+    if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
     const next = await this.backend.setSessionModel({
       sessionId: this.backendSessionId,
@@ -299,7 +332,7 @@ export class AgentSession {
    * changes as one channel.
    */
   async setConfigOption(configId: string, value: string): Promise<void> {
-    if (this.status === "closed") throw new Error("Session is closed");
+    if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
     const next = await this.backend.setSessionConfigOption({
       sessionId: this.backendSessionId,
@@ -320,7 +353,7 @@ export class AgentSession {
    * switching.
    */
   async setMode(modeId: string): Promise<void> {
-    if (this.status === "closed") throw new Error("Session is closed");
+    if (this.getStatus() === "closed") throw new Error("Session is closed");
     if (!this.backendSessionId) throw new Error("Session is still starting");
     const next = await this.backend.setSessionMode({
       sessionId: this.backendSessionId,
@@ -333,7 +366,7 @@ export class AgentSession {
 
   /** Whether the user can swap the active model on this session. */
   canSwitchModel(): boolean | null {
-    if (this.status === "starting") return false;
+    if (this.getStatus() === "starting") return false;
     return this.backend.isSetSessionModelSupported();
   }
 
@@ -343,7 +376,7 @@ export class AgentSession {
    * routing is encapsulated here — UI consumers ask intent only.
    */
   canSwitchEffort(): boolean | null {
-    if (this.status === "starting") return false;
+    if (this.getStatus() === "starting") return false;
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return null;
     return descriptor.wire.effortConfigFor
@@ -357,7 +390,7 @@ export class AgentSession {
    * the dispatch path is consistent, so we sample the first option.
    */
   canSwitchMode(): boolean | null {
-    if (this.status === "starting") return false;
+    if (this.getStatus() === "starting") return false;
     const mode = this.currentState?.mode;
     if (!mode) return null;
     const sample = mode.options[0];
@@ -369,8 +402,25 @@ export class AgentSession {
       : this.backend.isSetSessionModeSupported();
   }
 
+  /**
+   * The status is derived from underlying primitives so it cannot drift
+   * from reality: any combination of `disposed`, `backendSessionId`,
+   * resolver-map sizes, `abortController`, `startupFailed`, and
+   * `lastTurnError` maps to exactly one status. Mutating any of those
+   * primitives implicitly transitions the status; consumers observe the
+   * change via `onStatusChanged` after `recomputeStatusIfChanged()` runs.
+   */
   getStatus(): AgentSessionStatus {
-    return this.status;
+    if (this.disposed) return "closed";
+    if (this.backendSessionId === null) {
+      return this.startupFailed ? "error" : "starting";
+    }
+    if (this.pendingPlanResolvers.size + this.pendingToolResolvers.size > 0) {
+      return "awaiting_permission";
+    }
+    if (this.abortController !== null) return "running";
+    if (this.lastTurnError) return "error";
+    return "idle";
   }
 
   getNeedsAttention(): boolean {
@@ -467,13 +517,14 @@ export class AgentSession {
     context?: MessageContext,
     promptContent?: PromptContent[]
   ): { userMessageId: string; turn: Promise<StopReason> } {
-    if (this.status === "starting") {
+    const status = this.getStatus();
+    if (status === "starting") {
       throw new Error("Session is still starting");
     }
-    if (this.status === "running" || this.status === "awaiting_permission") {
+    if (status === "running" || status === "awaiting_permission") {
       throw new Error("Session already has a turn in flight");
     }
-    if (this.status === "closed") {
+    if (status === "closed") {
       throw new Error("Session is closed");
     }
 
@@ -497,7 +548,11 @@ export class AgentSession {
     this.notifyMessages();
 
     this.abortController = new AbortController();
-    this.setStatus("running");
+    // Clear any prior terminal error before the new turn starts so the
+    // derived status reflects the fresh `"running"` state. Both flips
+    // are recomputed together so listeners see one transition.
+    this.lastTurnError = false;
+    this.recomputeStatusIfChanged();
 
     const turn = this.runTurn(displayText, context, promptContent);
     return { userMessageId, turn };
@@ -535,7 +590,6 @@ export class AgentSession {
       ) {
         this.notifyMessages();
       }
-      this.setStatus("idle");
       if (this.placeholderId === placeholderId) this.placeholderId = null;
       if (resp.stopReason === "end_turn") void this.pollSessionTitle();
       return resp.stopReason;
@@ -545,11 +599,16 @@ export class AgentSession {
         this.store.markMessageError(placeholderId, formatPromptFailure(err));
         this.notifyMessages();
       }
-      this.setStatus("error");
+      this.lastTurnError = true;
       if (this.placeholderId === placeholderId) this.placeholderId = null;
       throw err;
     } finally {
+      // Clearing `abortController` flips the derived status off `"running"`
+      // (to `"error"` if `lastTurnError`, else `"idle"`). Recompute after
+      // both the success path (no error) and the catch path (error set) so
+      // listeners see the single transition out of the in-flight state.
       this.abortController = null;
+      this.recomputeStatusIfChanged();
     }
   }
 
@@ -557,10 +616,19 @@ export class AgentSession {
    * Cancel any in-flight turn. The backend may still emit a few trailing
    * session events before the prompt promise resolves with
    * `stopReason: "cancelled"` — that's expected.
+   *
+   * Flushes any pending tool-permission resolvers as rejects so the inline
+   * cards disappear immediately (and the SDK sees a deny rather than a
+   * dangling promise) instead of waiting for the user to click them.
    */
   async cancel(): Promise<void> {
-    if (this.status !== "running" && this.status !== "awaiting_permission") return;
+    const status = this.getStatus();
+    if (status !== "running" && status !== "awaiting_permission") return;
     if (!this.backendSessionId) return;
+    if (this.pendingToolResolvers.size > 0) {
+      this.flushResolvers(this.pendingToolResolvers);
+      this.notifyMessages();
+    }
     try {
       await this.backend.cancel({ sessionId: this.backendSessionId });
     } catch (e) {
@@ -574,13 +642,14 @@ export class AgentSession {
     this.disposed = true;
     this.unregisterSessionHandler?.();
     this.unregisterSessionHandler = null;
-    for (const { request, resolve } of this.pendingPlanResolvers.values()) {
-      resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
-    }
-    this.pendingPlanResolvers.clear();
+    this.flushResolvers(this.pendingPlanResolvers);
+    this.flushResolvers(this.pendingToolResolvers);
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
-    this.setStatus("closed");
+    // Fire the `"closed"` transition before clearing listeners so
+    // subscribers still observe it. `disposed = true` above guarantees
+    // `getStatus()` returns `"closed"` regardless of the other primitives.
+    this.recomputeStatusIfChanged();
     this.cancelScheduledNotify();
     this.listeners.clear();
   }
@@ -602,6 +671,7 @@ export class AgentSession {
     }
     return new Promise<PermissionDecision>((resolve) => {
       this.pendingPlanResolvers.set(toolCallId, { request, resolve });
+      this.recomputeStatusIfChanged();
       this.notifyMessages();
     });
   }
@@ -625,6 +695,7 @@ export class AgentSession {
     );
     const decision: PermissionDecision = !allow && denyMessage ? { ...base, denyMessage } : base;
     entry.resolve(decision);
+    this.recomputeStatusIfChanged();
     this.notifyMessages();
   }
 
@@ -709,7 +780,7 @@ export class AgentSession {
    */
   waitForIdle(): Promise<void> {
     const terminal = (s: AgentSessionStatus) => s === "idle" || s === "error" || s === "closed";
-    if (this.disposed || terminal(this.status)) return Promise.resolve();
+    if (this.disposed || terminal(this.getStatus())) return Promise.resolve();
     return new Promise((resolve) => {
       const unsub = this.subscribe({
         onMessagesChanged: () => {},
@@ -730,6 +801,60 @@ export class AgentSession {
    */
   hasPendingPlanPermission(): boolean {
     return this.pendingPlanResolvers.size > 0;
+  }
+
+  /**
+   * Called by the wrapped permission prompter for any non-plan tool call. The
+   * returned promise is resolved when the inline `ToolPermissionCard` calls
+   * `resolveToolPermission` with the user's chosen option.
+   */
+  handleToolPermission(request: PermissionPrompt): Promise<PermissionDecision> {
+    const toolCallId = request.toolCall.toolCallId;
+    return new Promise<PermissionDecision>((resolve) => {
+      this.pendingToolResolvers.set(toolCallId, { request, resolve });
+      this.recomputeStatusIfChanged();
+      this.notifyMessages();
+    });
+  }
+
+  /**
+   * Resolve a pending tool permission with the option the user selected.
+   * No-op when no permission is pending for the given id (stale clicks).
+   */
+  resolveToolPermission(toolCallId: string, optionId: string): void {
+    const entry = this.pendingToolResolvers.get(toolCallId);
+    if (!entry) return;
+    this.pendingToolResolvers.delete(toolCallId);
+    entry.resolve({ outcome: { outcome: "selected", optionId } });
+    this.recomputeStatusIfChanged();
+    this.notifyMessages();
+  }
+
+  /**
+   * Snapshot of every pending tool-permission request, in arrival order so
+   * the UI renders cards stably (oldest at the top). Returns a shared empty
+   * array when nothing is pending so React subscribers don't re-render on
+   * unrelated ticks (a fresh `Array.from` would always change identity).
+   */
+  getPendingToolPermissions(): PermissionPrompt[] {
+    if (this.pendingToolResolvers.size === 0) return EMPTY_PERMISSIONS;
+    return Array.from(this.pendingToolResolvers.values(), (e) => e.request);
+  }
+
+  /**
+   * Reject every pending resolver in `map` with the canonical deny decision
+   * derived from the request's offered options, then clear the map. Used by
+   * `cancel()` and `dispose()` so the inline cards disappear and the SDK
+   * turn unblocks instead of leaving a dangling promise.
+   */
+  private flushResolvers(
+    map: Map<string, { request: PermissionPrompt; resolve: (resp: PermissionDecision) => void }>
+  ): void {
+    for (const { request, resolve } of map.values()) {
+      resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
+    }
+    map.clear();
+    this.recomputeStatusIfChanged();
   }
 
   private handleSessionEvent(event: SessionEvent): void {
@@ -861,9 +986,20 @@ export class AgentSession {
     return this.currentState?.mode?.current === "plan";
   }
 
-  private setStatus(next: AgentSessionStatus): void {
-    if (this.status === next) return;
-    this.status = next;
+  /**
+   * Recompute the derived status and fire `onStatusChanged` if it changed
+   * since the last time we fired. The cache (`cachedStatus`) exists purely
+   * for change detection — never read it as truth; always call
+   * `getStatus()`.
+   *
+   * Call this after mutating any primitive that participates in the
+   * derivation: `disposed`, `backendSessionId`, `startupFailed`,
+   * `abortController`, `lastTurnError`, or the resolver maps.
+   */
+  private recomputeStatusIfChanged(): void {
+    const next = this.getStatus();
+    if (next === this.cachedStatus) return;
+    this.cachedStatus = next;
     for (const l of this.listeners) {
       try {
         l.onStatusChanged(next);

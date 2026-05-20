@@ -13,7 +13,12 @@ import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
-import type { AgentChatMessage, CurrentPlan, PromptContent } from "@/agentMode/session/types";
+import type {
+  AgentChatMessage,
+  CurrentPlan,
+  PermissionPrompt,
+  PromptContent,
+} from "@/agentMode/session/types";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import { logError, logWarn } from "@/logger";
@@ -146,6 +151,9 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [currentPlan, setCurrentPlan] = useState<CurrentPlan | null>(() =>
     backend.getCurrentPlan()
   );
+  const [pendingToolPermissions, setPendingToolPermissions] = useState<PermissionPrompt[]>(() =>
+    backend.getPendingToolPermissions()
+  );
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAgentMessage[]>([]);
   const [selectedTextContexts] = useSelectedTextContexts();
@@ -174,6 +182,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
       setIsStarting(backend.isStarting());
       setHasPendingPlanPermission(backend.hasPendingPlanPermission());
       setCurrentPlan(backend.getCurrentPlan());
+      setPendingToolPermissions(backend.getPendingToolPermissions());
     };
     sync();
     return backend.subscribe(() => {
@@ -491,6 +500,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               app={app}
               onDelete={handleDelete}
               currentPlan={currentPlan}
+              pendingToolPermissions={pendingToolPermissions}
               chatBackend={backend}
               isLoading={loading}
             />

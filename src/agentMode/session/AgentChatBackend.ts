@@ -3,6 +3,7 @@ import type {
   AgentChatMessage,
   BackendState,
   CurrentPlan,
+  PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
 } from "./types";
@@ -79,4 +80,18 @@ export interface AgentChatBackend {
    * proposal card's actions.
    */
   hasPendingPlanPermission(): boolean;
+
+  /**
+   * Snapshot of every non-plan tool-permission request currently waiting on
+   * the user. Rendered as inline `ToolPermissionCard`s at the tail of the
+   * chat scroll container. Empty list when nothing is pending.
+   */
+  getPendingToolPermissions(): PermissionPrompt[];
+
+  /**
+   * Resolve a pending tool permission with the option the user picked. The
+   * card is removed from `getPendingToolPermissions()` synchronously and the
+   * SDK turn unblocks. No-op when no permission is pending for the given id.
+   */
+  resolveToolPermission(toolCallId: string, optionId: string): void;
 }

@@ -354,7 +354,7 @@ UI side:
 
 - `ui/permissionPrompter.ts` — routing layer; special-cases
   `ExitPlanMode` switch_mode
-- `ui/AcpPermissionModal.tsx` — generic permission modal
+- `ui/ToolPermissionCard.tsx` — generic inline permission card
 - `ui/PlanProposalCard.tsx` — inline plan card
 - `ui/PlanPreviewView.tsx` — full-screen plan preview (custom Obsidian
   view registered in `main.ts`)

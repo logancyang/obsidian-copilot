@@ -804,8 +804,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     return { ...DEFAULT_SETTINGS.agentMode };
   }
   const r = raw as Record<string, unknown>;
-  const enabled =
-    typeof r.enabled === "boolean" ? r.enabled : DEFAULT_SETTINGS.agentMode.enabled;
+  const enabled = typeof r.enabled === "boolean" ? r.enabled : DEFAULT_SETTINGS.agentMode.enabled;
   const byok =
     r.byok && typeof r.byok === "object"
       ? (r.byok as { anthropic?: string; openai?: string; google?: string })

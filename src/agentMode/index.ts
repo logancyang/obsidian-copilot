@@ -1,11 +1,7 @@
 import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
-import {
-  type CopilotSettings,
-  getSettings,
-  useSettingsValue,
-} from "@/settings/model";
+import { type CopilotSettings, getSettings, useSettingsValue } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
@@ -103,7 +99,6 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // happen before assignment below.
   let managerRef: AgentSessionManager | null = null;
   const prompter = createDefaultPermissionPrompter(
-    app,
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
   const manager = new AgentSessionManager(app, plugin, {

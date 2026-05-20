@@ -5,6 +5,7 @@ import type {
   AgentChatMessage,
   BackendState,
   CurrentPlan,
+  PermissionPrompt,
   PlanDecisionAction,
   PromptContent,
 } from "@/agentMode/session/types";
@@ -118,6 +119,15 @@ export class AgentChatUIState implements AgentChatBackend {
 
   hasPendingPlanPermission(): boolean {
     return this.session.hasPendingPlanPermission();
+  }
+
+  getPendingToolPermissions(): PermissionPrompt[] {
+    return this.session.getPendingToolPermissions();
+  }
+
+  resolveToolPermission(toolCallId: string, optionId: string): void {
+    this.session.resolveToolPermission(toolCallId, optionId);
+    this.notifyListeners();
   }
 
   getCurrentPlan(): CurrentPlan | null {
