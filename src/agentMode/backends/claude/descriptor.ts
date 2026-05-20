@@ -11,6 +11,7 @@ import {
   type CopilotSettings,
 } from "@/settings/model";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { applyPersistedMode } from "@/agentMode/session/applyPersistedMode";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
@@ -230,18 +231,22 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   },
 
   /**
-   * Replay persisted effort on a freshly created session. The Claude SDK
-   * adapter probes the model catalog asynchronously, so the effort
-   * `SessionConfigOption` may not be present yet when this runs;
+   * Force canonical `default` (ask mode) on every fresh session, and replay
+   * the persisted effort. Mode is never persisted across sessions — every
+   * fresh chat opens in ask mode regardless of the user's last pick. The
+   * Claude SDK adapter probes the model catalog asynchronously, so the
+   * effort `SessionConfigOption` may not be present yet when this runs;
    * `replayPersistedEffort` subscribes to the session and applies once the
    * option arrives (with a timeout guard to avoid leaking listeners on
-   * agents that never report effort). Mode is never replayed — every
-   * fresh session starts in canonical `default`.
+   * agents that never report effort).
    */
   async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
     const claudeSettings = settings.agentMode?.backends?.claude;
     const persistedEffort = claudeSettings?.defaultModel?.effort ?? null;
-    await replayPersistedEffort(session, persistedEffort ?? undefined);
+    await Promise.all([
+      applyPersistedMode(session, "default"),
+      replayPersistedEffort(session, persistedEffort ?? undefined),
+    ]);
   },
 };
 

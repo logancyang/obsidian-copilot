@@ -10,6 +10,7 @@ import { CodexInstallModal } from "./CodexInstallModal";
 import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
+import { applyPersistedMode } from "@/agentMode/session/applyPersistedMode";
 import {
   binaryPathInstallState,
   simpleBinaryBackendProcess,
@@ -133,5 +134,15 @@ export const CodexBackendDescriptor: BackendDescriptor = {
       kind: "setMode",
       canonical: { default: "auto", plan: "read-only", auto: "full-access" },
     };
+  },
+
+  /**
+   * Force canonical `default` (ask mode) on every fresh session. The codex-acp
+   * server's natural starting mode is `read-only`, which maps to canonical
+   * `plan` — without this coerce step the picker would land on Plan on every
+   * new chat. Modes are never persisted across sessions.
+   */
+  async applyInitialSessionConfig(session: AgentSession): Promise<void> {
+    await applyPersistedMode(session, "default");
   },
 };

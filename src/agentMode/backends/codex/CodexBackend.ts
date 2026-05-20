@@ -41,6 +41,19 @@ export class CodexBackend implements AcpBackend {
       ...descriptor.args,
       "-c",
       `developer_instructions=${toTomlBasicString(directive)}`,
+      // Pin spawn-time approval/sandbox so codex-acp's first
+      // `currentModeId` report matches the canonical `auto` preset
+      // (workspace-write + on-request), which Agent Mode surfaces as
+      // canonical `default` (ask mode). Without this, codex-acp derives
+      // the initial mode from the user's `~/.codex/config.toml` defaults
+      // (often `read-only` for untrusted projects), causing the picker
+      // to briefly show "Plan" before our post-spawn coerce switches it
+      // — see the matching `auto` preset in codex-utils-approval-presets
+      // and `Thread::modes()` in codex-acp/src/thread.rs.
+      "-c",
+      'approval_policy="on-request"',
+      "-c",
+      'sandbox_mode="workspace-write"',
     ];
     return descriptor;
   }
