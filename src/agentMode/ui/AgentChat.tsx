@@ -162,13 +162,29 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   }, [backend]);
   /* eslint-enable @eslint-react/hooks-extra/no-direct-set-state-in-use-effect */
 
-  // Register a no-op save handler so CopilotView.saveChat() doesn't break.
-  // Agent Mode persistence is not yet implemented.
+  // External callers (CopilotPlugin.autosaveCurrentChat → CopilotAgentView.saveChat)
+  // already gate on `settings.autosaveChat`, so this handler is the autosave-on
+  // path — silent on success. The manual Save button uses `handleSaveAsNote`
+  // below, which surfaces a Notice on completion.
   useEffect(() => {
     onSaveChat(async () => {
-      // Intentionally a no-op: agent chat persistence is out of scope for Phase 2.
+      await manager.saveActiveSession();
     });
-  }, [onSaveChat]);
+  }, [onSaveChat, manager]);
+
+  const handleSaveAsNote = useCallback(async () => {
+    try {
+      const result = await manager.saveActiveSession();
+      if (result) {
+        new Notice("Chat saved as note.");
+      } else {
+        new Notice("Nothing to save yet.");
+      }
+    } catch (error) {
+      logError("[AgentMode] manual save failed", error);
+      new Notice("Failed to save chat as note. Check console for details.");
+    }
+  }, [manager]);
 
   const handleAddImage = useCallback(
     (files: File[]) => setSelectedImages((prev) => [...prev, ...files]),
@@ -453,6 +469,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
             )}
             <AgentChatControls
               onNewChat={handleNewChat}
+              onSaveAsNote={handleSaveAsNote}
               chatHistoryItems={chatHistoryItems}
               onLoadHistory={handleLoadChatHistory}
               onLoadChat={handleLoadChat}
