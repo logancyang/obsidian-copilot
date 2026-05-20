@@ -34,12 +34,20 @@ export interface LoadedAgentChat {
   backendId: BackendId;
   topic?: string;
   label?: string;
+  /**
+   * Backend-side session id captured at save time. When present, the loader
+   * can ask the backend to resume/load that session so the agent regains
+   * conversation context on the next turn. Absent for chats saved before
+   * resume was wired up — those fall back to a fresh session.
+   */
+  sessionId?: string;
 }
 
 interface ExistingMeta {
   topic?: string;
   label?: string;
   lastAccessedAt?: number;
+  sessionId?: string;
 }
 
 /**
@@ -107,7 +115,12 @@ export class AgentChatPersistenceManager {
   async saveSession(
     messages: AgentChatMessage[],
     backendId: BackendId,
-    options?: { label?: string | null; modelKey?: string; existingPath?: string }
+    options?: {
+      label?: string | null;
+      modelKey?: string;
+      existingPath?: string;
+      sessionId?: string | null;
+    }
   ): Promise<{ path: string } | null> {
     if (messages.length === 0) return null;
 
@@ -135,6 +148,7 @@ export class AgentChatPersistenceManager {
         label: options?.label ?? existingMeta.label,
         modelKey: options?.modelKey,
         lastAccessedAt: existingMeta.lastAccessedAt,
+        sessionId: options?.sessionId ?? existingMeta.sessionId,
       });
 
       if (existingFile && isInVaultCache(this.app, existingFile.path)) {
@@ -200,12 +214,13 @@ export class AgentChatPersistenceManager {
     }
     const topic = frontmatter.topic?.trim() || undefined;
     const label = frontmatter.agentLabel?.trim() || undefined;
+    const sessionId = frontmatter.sessionId?.trim() || undefined;
     const messages = this.parseChatBody(body);
 
     logInfo(
-      `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId})`
+      `[AgentChatPersistenceManager] Loaded ${messages.length} messages from ${file.path} (backend=${backendId}, sessionId=${sessionId ?? "none"})`
     );
-    return { messages, backendId, topic, label };
+    return { messages, backendId, topic, label, sessionId };
   }
 
   /**
@@ -252,6 +267,7 @@ export class AgentChatPersistenceManager {
         label: cached.agentLabel,
         lastAccessedAt:
           typeof cached.lastAccessedAt === "number" ? cached.lastAccessedAt : undefined,
+        sessionId: typeof cached.sessionId === "string" ? cached.sessionId : undefined,
       };
     }
     try {
@@ -262,6 +278,7 @@ export class AgentChatPersistenceManager {
         topic: fm.topic,
         label: fm.agentLabel,
         lastAccessedAt: lastAccessed && Number.isFinite(lastAccessed) ? lastAccessed : undefined,
+        sessionId: typeof fm.sessionId === "string" ? fm.sessionId : undefined,
       };
     } catch {
       return {};
@@ -431,6 +448,7 @@ export class AgentChatPersistenceManager {
     label?: string | null;
     modelKey?: string;
     lastAccessedAt?: number;
+    sessionId?: string | null;
   }): string {
     const settings = getSettings();
     const lines: string[] = [
@@ -439,6 +457,7 @@ export class AgentChatPersistenceManager {
       `mode: ${AGENT_CHAT_MODE}`,
       `backendId: ${args.backendId}`,
     ];
+    if (args.sessionId) lines.push(`sessionId: "${escapeYamlString(args.sessionId)}"`);
     if (args.topic) lines.push(`topic: "${escapeYamlString(args.topic)}"`);
     if (args.label) lines.push(`agentLabel: "${escapeYamlString(args.label)}"`);
     if (args.modelKey) lines.push(`modelKey: "${escapeYamlString(args.modelKey)}"`);

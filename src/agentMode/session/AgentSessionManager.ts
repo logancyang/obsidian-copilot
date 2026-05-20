@@ -10,6 +10,8 @@ import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
 import type { AgentModelPreloader } from "./AgentModelPreloader";
+import { MethodUnsupportedError } from "./errors";
+import { resolveMcpServers } from "./mcpResolver";
 import type {
   BackendDescriptor,
   BackendId,
@@ -20,6 +22,7 @@ import type {
   ModelSelection,
   PermissionDecision,
   PermissionPrompt,
+  SessionId,
 } from "./types";
 
 const AUTOSAVE_DEBOUNCE_MS = 500;
@@ -671,10 +674,11 @@ export class AgentSessionManager {
   /**
    * Open a previously-saved Agent Mode chat. If a live session is already
    * bound to that file (because the user opened it earlier this run), focus
-   * its tab instead of spawning a duplicate. Otherwise, spin up a fresh
-   * session on the saved backend, seed its store with the persisted display
-   * messages, and pin the persisted-path map so subsequent turns update the
-   * same file.
+   * its tab instead of spawning a duplicate. Otherwise, if the saved file
+   * carries a backend `sessionId` and the backend supports resume, rehydrate
+   * the prior backend session so the agent retains conversation context on
+   * the next turn. Falls back to a fresh session (UI-only history) when no
+   * sessionId was saved or the backend can't resume.
    */
   async loadSessionFromHistory(file: TFile): Promise<AgentSession> {
     if (!this.opts.persistenceManager) {
@@ -695,11 +699,114 @@ export class AgentSessionManager {
     }
 
     const loaded = await this.opts.persistenceManager.loadFile(file);
-    const session = await this.createSession(loaded.backendId);
+
+    let session: AgentSession | null = null;
+    if (loaded.sessionId) {
+      session = await this.tryResumeSessionFromHistory(loaded.backendId, loaded.sessionId);
+    }
+    if (!session) {
+      session = await this.createSession(loaded.backendId);
+    }
+
     session.store.loadMessages(loaded.messages);
     if (loaded.label) session.setLabel(loaded.label);
     this.getSessionState(session.internalId).path = file.path;
     this.notify();
+    return session;
+  }
+
+  /**
+   * Spin up an `AgentSession` bound to an existing backend session id. Prefers
+   * `loadSession` (ACP replays the transcript through the backend) over
+   * `resumeSession` (Claude SDK reads its own on-disk transcript). Returns
+   * `null` when the backend supports neither — the caller falls back to a
+   * fresh session.
+   */
+  private async tryResumeSessionFromHistory(
+    backendId: BackendId,
+    sessionId: SessionId
+  ): Promise<AgentSession | null> {
+    const adapter = this.app.vault.adapter;
+    if (!(adapter instanceof FileSystemAdapter)) return null;
+    const vaultBasePath = adapter.getBasePath();
+    const descriptor = this.resolveDescriptor(backendId);
+
+    this.pendingCreates++;
+    this.startingBackendId = backendId;
+    this.notify();
+
+    let backend: BackendProcess;
+    try {
+      backend = await this.ensureBackend(backendId, descriptor);
+    } catch (err) {
+      this.lastError = err2String(err);
+      this.finishPendingCreate();
+      return null;
+    }
+
+    if (this.disposed) {
+      this.finishPendingCreate();
+      return null;
+    }
+
+    const mcpServers = resolveMcpServers(backend, getSettings().agentMode?.mcpServers);
+
+    let resumeResult: { sessionId: SessionId; state: BackendState } | null = null;
+    try {
+      resumeResult = await backend.loadSession({ sessionId, cwd: vaultBasePath, mcpServers });
+    } catch (err) {
+      if (!(err instanceof MethodUnsupportedError)) {
+        logWarn(`[AgentMode] loadSession failed for ${sessionId}`, err);
+        this.finishPendingCreate();
+        return null;
+      }
+    }
+
+    if (!resumeResult) {
+      try {
+        resumeResult = await backend.resumeSession({
+          sessionId,
+          cwd: vaultBasePath,
+          mcpServers,
+        });
+      } catch (err) {
+        if (err instanceof MethodUnsupportedError) {
+          logInfo(
+            `[AgentMode] backend ${backendId} does not support session resume; falling back to fresh session`
+          );
+        } else {
+          logWarn(`[AgentMode] resumeSession failed for ${sessionId}`, err);
+        }
+        this.finishPendingCreate();
+        return null;
+      }
+    }
+
+    if (this.disposed) {
+      this.finishPendingCreate();
+      return null;
+    }
+
+    const session = new AgentSession({
+      backend,
+      backendSessionId: resumeResult.sessionId,
+      internalId: uuidv4(),
+      backendId,
+      initialState: resumeResult.state,
+      cwd: vaultBasePath,
+      getDescriptor: () => this.opts.resolveDescriptor(backendId),
+    });
+    this.sessions.set(session.internalId, session);
+    this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
+    this.activeSessionId = session.internalId;
+    this.attachAutoSave(session);
+    this.attachModelCacheSync(session);
+    this.attachAttentionTracking(session);
+    this.lastError = null;
+    this.finishPendingCreate();
+    logInfo(
+      `[AgentMode] resumed session (internal=${session.internalId} backend-id=${sessionId} backend=${backendId})`
+    );
     return session;
   }
 
@@ -717,6 +824,7 @@ export class AgentSessionManager {
   }
 
   private scheduleAutoSave(session: AgentSession): void {
+    if (!getSettings().autosaveChat) return;
     const state = this.getSessionState(session.internalId);
     if (state.timer) window.clearTimeout(state.timer);
     state.timer = window.setTimeout(() => {
@@ -727,32 +835,58 @@ export class AgentSessionManager {
     }, AUTOSAVE_DEBOUNCE_MS);
   }
 
-  private async flushAutoSave(session: AgentSession): Promise<void> {
+  /**
+   * Manual save entry point. Writes the active session via the same code path
+   * auto-save uses, but ignores `settings.autosaveChat`. Returns the on-disk
+   * path on success, or `null` when there was nothing to save (no active
+   * session, no messages, persistence not configured, or signature unchanged).
+   */
+  async saveActiveSession(): Promise<{ path: string } | null> {
+    const session = this.getActiveSession();
+    if (!session) return null;
+    // Drain any pending debounced write first so it doesn't race with us.
+    const state = this.sessionState.get(session.internalId);
+    if (state?.timer) {
+      window.clearTimeout(state.timer);
+      state.timer = undefined;
+    }
+    return this.flushAutoSave(session);
+  }
+
+  private async flushAutoSave(session: AgentSession): Promise<{ path: string } | null> {
     const persistence = this.opts.persistenceManager;
-    if (!persistence) return;
-    if (!this.sessions.has(session.internalId)) return;
+    if (!persistence) return null;
+    if (!this.sessions.has(session.internalId)) return null;
 
     const messages = session.store.getDisplayMessages();
-    if (messages.length === 0) return;
+    if (messages.length === 0) return null;
 
     const label = session.getLabel();
+    const sessionId = session.getBackendSessionId();
     // Skip the write when nothing user-visible has changed since the last
     // save. Streaming token updates and idempotent label notifications
-    // otherwise rewrite the entire file on every debounce tick.
-    const signature = `${label ?? ""}-${messages.length}-${
+    // otherwise rewrite the entire file on every debounce tick. Include
+    // the backend session id in the signature so the first save after the
+    // session finishes starting (when sessionId flips from null → real)
+    // always writes through, even if the message list hasn't changed yet.
+    const signature = `${label ?? ""}-${sessionId ?? ""}-${messages.length}-${
       messages[messages.length - 1]?.message ?? ""
     }`;
     const state = this.getSessionState(session.internalId);
-    if (state.signature === signature) return;
+    if (state.signature === signature) {
+      return state.path ? { path: state.path } : null;
+    }
 
     const result = await persistence.saveSession(messages, session.backendId, {
       label,
       existingPath: state.path,
+      sessionId,
     });
     if (result) {
       state.path = result.path;
       state.signature = signature;
     }
+    return result;
   }
 
   /**

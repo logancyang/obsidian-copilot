@@ -446,11 +446,54 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     throw new MethodUnsupportedError("session/list");
   }
 
-  async resumeSession(_params: ResumeSessionInput): Promise<ResumeSessionOutput> {
-    throw new MethodUnsupportedError("session/resume");
+  /**
+   * Rehydrate a previously-persisted SDK session. Registers a `SessionState`
+   * entry keyed by `params.sessionId` with `firstPromptStarted: true` so the
+   * next `prompt()` passes `resume: <sessionId>` to the SDK, which loads the
+   * prior conversation from `~/.claude/projects/.../<sessionId>.jsonl`.
+   *
+   * No SDK roundtrip happens here — the SDK only reads the on-disk transcript
+   * lazily on the next `query()`. If the file is missing (Claude wiped state,
+   * different machine), the next prompt fails; we let that surface as a normal
+   * turn error rather than blocking the load.
+   */
+  async resumeSession(params: ResumeSessionInput): Promise<ResumeSessionOutput> {
+    logSdkOutbound(
+      "resumeSession",
+      { cwd: params.cwd, mcpServers: params.mcpServers },
+      params.sessionId
+    );
+    const cwd = params.cwd ?? null;
+    const mcp: Record<string, McpServerConfig> = {};
+    for (const server of params.mcpServers ?? []) {
+      const cfg = mcpServerSpecToSdkConfig(server);
+      if (cfg) mcp[server.name] = cfg;
+    }
+    const catalog = await this.ensureModelCatalog();
+    const defaultId = this.opts.getDefaultModelId?.();
+    const seedModelId = resolveSeedModelId(catalog, defaultId);
+
+    this.sessions.set(params.sessionId, {
+      cwd,
+      firstPromptStarted: true,
+      mcpServers: mcp,
+      model: seedModelId,
+      systemPromptAppend: this.opts.getSkillCreationDirective?.() ?? "",
+    });
+
+    const state = this.computeState(params.sessionId);
+    logSdkOutboundResult(
+      "resumeSession",
+      { currentModelId: seedModelId ?? null, hasEffort: state.model !== null },
+      params.sessionId
+    );
+    return { sessionId: params.sessionId, state };
   }
 
   async loadSession(_params: LoadSessionInput): Promise<LoadSessionOutput> {
+    // The Claude SDK has no equivalent of ACP's `session/load` (which replays
+    // a transcript provided by the caller). The loader falls back to
+    // `resumeSession`, which reads the SDK's own on-disk transcript.
     throw new MethodUnsupportedError("session/load");
   }
 
