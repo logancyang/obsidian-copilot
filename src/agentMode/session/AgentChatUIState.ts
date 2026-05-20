@@ -6,6 +6,7 @@ import type {
   BackendState,
   CurrentPlan,
   PlanDecisionAction,
+  PromptContent,
 } from "@/agentMode/session/types";
 import type { MessageContext } from "@/types/message";
 
@@ -55,9 +56,9 @@ export class AgentChatUIState implements AgentChatBackend {
   sendMessage(
     text: string,
     context?: MessageContext,
-    content?: unknown[]
+    promptContent?: PromptContent[]
   ): { id: string; turn: Promise<void> } {
-    const { userMessageId, turn } = this.session.sendPrompt(text, context, content);
+    const { userMessageId, turn } = this.session.sendPrompt(text, context, promptContent);
     this.notifyListeners();
     const wrapped = turn.then(
       () => undefined,

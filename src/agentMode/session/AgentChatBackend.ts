@@ -1,5 +1,11 @@
 import type { MessageContext } from "@/types/message";
-import type { AgentChatMessage, BackendState, CurrentPlan, PlanDecisionAction } from "./types";
+import type {
+  AgentChatMessage,
+  BackendState,
+  CurrentPlan,
+  PlanDecisionAction,
+  PromptContent,
+} from "./types";
 
 /**
  * Narrow interface the Agent Mode UI tree consumes. Implemented by
@@ -16,7 +22,7 @@ export interface AgentChatBackend {
   sendMessage(
     text: string,
     context?: MessageContext,
-    content?: unknown[]
+    promptContent?: PromptContent[]
   ): { id: string; turn: Promise<void> };
   cancel(): Promise<void>;
   deleteMessage(id: string): Promise<boolean>;

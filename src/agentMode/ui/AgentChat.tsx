@@ -13,10 +13,12 @@ import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
-import type { AgentChatMessage, CurrentPlan } from "@/agentMode/session/types";
+import type { AgentChatMessage, CurrentPlan, PromptContent } from "@/agentMode/session/types";
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
-import { logError } from "@/logger";
+import { logError, logWarn } from "@/logger";
+import { isPlusEnabled } from "@/plusUtils";
+import { arrayBufferToBase64 } from "@/utils/base64";
 import type CopilotPlugin from "@/main";
 import {
   clearSelectedTextContexts,
@@ -55,6 +57,8 @@ interface QueuedAgentMessage {
   text: string;
   rawInput: string;
   context?: MessageContext;
+  /** Image blocks + inlined PDF text blocks for the backend prompt. */
+  promptContent?: PromptContent[];
   hadUnsupportedAttachments: boolean;
 }
 
@@ -87,6 +91,7 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
 
   const allNotes = items.flatMap((i) => i.context?.notes ?? []);
   const allSelected = items.flatMap((i) => i.context?.selectedTextContexts ?? []);
+  const allPromptContent = items.flatMap((i) => i.promptContent ?? []);
 
   return {
     id: `queued-combined-${uuidv4()}`,
@@ -96,9 +101,26 @@ const combineQueuedMessages = (items: QueuedAgentMessage[]): QueuedAgentMessage 
       dedupeBy(allNotes, (n) => n.path),
       dedupeBy(allSelected, (s) => s.id)
     ),
+    promptContent: allPromptContent.length > 0 ? allPromptContent : undefined,
     hadUnsupportedAttachments: items.some((i) => i.hadUnsupportedAttachments),
   };
 };
+
+/**
+ * Convert a `File` (from `<input type="file">` or paste/drop) into a base64
+ * image `PromptContent` block. Returns `null` when the file is empty or
+ * fails to read so the caller can skip it instead of breaking the turn.
+ */
+async function fileToImageBlock(file: File): Promise<PromptContent | null> {
+  try {
+    const buf = await file.arrayBuffer();
+    if (buf.byteLength === 0) return null;
+    return { type: "image", mimeType: file.type || "image/png", data: arrayBufferToBase64(buf) };
+  } catch (e) {
+    logWarn("[AgentMode] failed to read attached image", e);
+    return null;
+  }
+}
 
 const AgentChatInternal: React.FC<AgentChatProps> = ({
   backend,
@@ -199,11 +221,11 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const runSend = useCallback(
     async (item: QueuedAgentMessage) => {
       if (item.hadUnsupportedAttachments) {
-        new Notice("Image and web attachments aren't supported in Agent Mode yet.");
+        new Notice("Web tab attachments aren't supported in Agent Mode yet.");
       }
       setLoading(true);
       try {
-        const { turn } = backend.sendMessage(item.text, item.context);
+        const { turn } = backend.sendMessage(item.text, item.context, item.promptContent);
         if (item.rawInput) updateUserMessageHistory(item.rawInput);
         await turn;
       } catch (error) {
@@ -221,11 +243,10 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     if (!text) return;
     const rawInput = inputMessage;
 
-    // Image and web attachments aren't wired through ACP content blocks yet
-    // (see buildPromptBlocks TODO in AgentSession.ts).
+    // Web tab / web-excerpt attachments still aren't wired through.
+    // Images and PDFs are handled below.
     const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
-    const hadUnsupportedAttachments =
-      selectedImages.length > 0 || includeActiveWebTab || hasWebExcerpt;
+    const hadUnsupportedAttachments = includeActiveWebTab || hasWebExcerpt;
 
     const candidateNotes: TFile[] = [];
     if (includeActiveNote) {
@@ -252,11 +273,41 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
       void CustomCommandManager.getInstance().recordUsage(expanded.matched);
     }
 
+    const content: PromptContent[] = [];
+
+    // Inline PDFs as text when the parser is available (Plus or self-host).
+    // Free users fall through: the PDF stays in `notes` so the agent sees
+    // the path in the envelope and can try its own Read tool.
+    const remainingNotes: TFile[] = [];
+    const canParsePdfs = isPlusEnabled();
+    for (const note of notes) {
+      if (note.extension.toLowerCase() === "pdf" && canParsePdfs) {
+        try {
+          const parsed = await plugin.fileParserManager.parseFile(note, app.vault);
+          content.push({
+            type: "text",
+            text: `<attached-pdf path="${note.path}">\n${parsed}\n</attached-pdf>`,
+          });
+          continue;
+        } catch (e) {
+          logWarn(`[AgentMode] PDF parse failed for ${note.path}; falling back to path`, e);
+        }
+      }
+      remainingNotes.push(note);
+    }
+
+    // Convert attached images to base64 image content blocks.
+    for (const image of selectedImages) {
+      const block = await fileToImageBlock(image);
+      if (block) content.push(block);
+    }
+
     const item: QueuedAgentMessage = {
       id: `queued-${uuidv4()}`,
       text: expanded.text,
       rawInput,
-      context: buildMessageContext(notes, selectedTextContexts),
+      context: buildMessageContext(remainingNotes, selectedTextContexts),
+      promptContent: content.length > 0 ? content : undefined,
       hadUnsupportedAttachments,
     };
 
@@ -275,6 +326,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     await runSend(item);
   }, [
     app,
+    plugin,
     inputMessage,
     selectedImages,
     contextNotes,
