@@ -28,7 +28,7 @@ import { getAllQAMarkdownContent } from "@/search/searchUtils";
 import { CopilotSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
-import { Editor, MarkdownView, Notice, Platform, TFile } from "obsidian";
+import { Editor, MarkdownView, Notice, TFile } from "obsidian";
 import { isAgentModeEnabled } from "@/agentMode";
 import { v4 as uuidv4 } from "uuid";
 import { COMMAND_IDS, COMMAND_ICONS, COMMAND_NAMES, CommandId } from "@/constants";
