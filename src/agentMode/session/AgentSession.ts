@@ -333,6 +333,7 @@ export class AgentSession {
 
   /** Whether the user can swap the active model on this session. */
   canSwitchModel(): boolean | null {
+    if (this.status === "starting") return false;
     return this.backend.isSetSessionModelSupported();
   }
 
@@ -342,6 +343,7 @@ export class AgentSession {
    * routing is encapsulated here — UI consumers ask intent only.
    */
   canSwitchEffort(): boolean | null {
+    if (this.status === "starting") return false;
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return null;
     return descriptor.wire.effortConfigFor
@@ -355,6 +357,7 @@ export class AgentSession {
    * the dispatch path is consistent, so we sample the first option.
    */
   canSwitchMode(): boolean | null {
+    if (this.status === "starting") return false;
     const mode = this.currentState?.mode;
     if (!mode) return null;
     const sample = mode.options[0];

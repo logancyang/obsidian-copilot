@@ -61,6 +61,9 @@ function useAgentModelSignal(
     const parts: string[] = [
       session?.internalId ?? "",
       session?.backendId ?? "",
+      // Include status so the picker's `disabled` flips when the session
+      // transitions out of "starting" (canSwitchModel/Effort gate on status).
+      session?.getStatus() ?? "",
       session?.hasUserVisibleMessages() ? "1" : "0",
     ];
     for (const d of descriptors) {

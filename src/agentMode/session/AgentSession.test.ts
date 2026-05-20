@@ -848,6 +848,47 @@ describe("AgentSession intent capabilities", () => {
       }).canSwitchMode()
     ).toBe(true);
   });
+
+  it("canSwitch* return false while the session status is starting", async () => {
+    const mock = makeMockBackend();
+    // Keep newSession pending so status stays "starting".
+    let resolveNew: ((value: { sessionId: string; state: BackendState }) => void) | null = null;
+    mock.newSession.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveNew = resolve;
+      })
+    );
+    mock.asBackend.isSetSessionModelSupported = () => true;
+    mock.asBackend.isSetSessionConfigOptionSupported = () => true;
+    mock.asBackend.isSetSessionModeSupported = () => true;
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "test-backend",
+      getDescriptor: () => undefined,
+    });
+    expect(session.getStatus()).toBe("starting");
+    expect(session.canSwitchModel()).toBe(false);
+    expect(session.canSwitchEffort()).toBe(false);
+    expect(session.canSwitchMode()).toBe(false);
+
+    // After ready, the gate lifts and the underlying probes drive the answer.
+    resolveNew!({
+      sessionId: "acp-1",
+      state: {
+        model: null,
+        mode: {
+          current: "plan",
+          options: [{ value: "plan", label: "Plan" }],
+          apply: { plan: { kind: "setMode", nativeId: "plan" } },
+        },
+      },
+    });
+    await session.ready;
+    expect(session.canSwitchModel()).toBe(true);
+    expect(session.canSwitchMode()).toBe(true);
+  });
 });
 
 describe("AgentSession.setLabel", () => {
