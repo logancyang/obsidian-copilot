@@ -134,6 +134,61 @@ describe("lookupToolSummary", () => {
     const s = lookupToolSummary(t);
     expect(s.collapsedLine(t)).toBe("weirdtool");
   });
+
+  it("hides the duplicated vendor name while Read input is still streaming", () => {
+    // SDK seeds title to the vendor name before any input-JSON has been
+    // parsed. Should render "Reading …" rather than "Reading Read".
+    const t = tool({ vendorToolName: "Read", title: "Read", status: "in_progress" });
+    expect(lookupToolSummary(t).collapsedLine(t)).toBe("Reading …");
+  });
+
+  it("flips Read to past tense once the call completes", () => {
+    const t = tool({
+      vendorToolName: "Read",
+      title: "Read",
+      status: "completed",
+      locations: [{ path: "/Users/me/vault/notes/foo.md" }],
+    });
+    expect(lookupToolSummary(t).collapsedLine(t)).toBe("Read notes/foo.md");
+  });
+
+  it("uses Editing while Edit is in flight and Edited when it completes", () => {
+    const inflight = tool({
+      vendorToolName: "Edit",
+      title: "Edit",
+      status: "in_progress",
+      input: { file_path: "/Users/me/vault/draft.md" },
+    });
+    expect(lookupToolSummary(inflight).collapsedLine(inflight)).toBe("Editing draft.md");
+    const done = tool({ ...inflight, status: "completed" });
+    expect(lookupToolSummary(done).collapsedLine(done)).toBe("Edited draft.md");
+  });
+
+  it("uses Fetching while WebFetch is in flight and Fetched when it completes", () => {
+    const inflight = tool({
+      vendorToolName: "WebFetch",
+      title: "WebFetch",
+      status: "in_progress",
+      input: { url: "https://example.com" },
+    });
+    expect(lookupToolSummary(inflight).collapsedLine(inflight)).toBe(
+      "Fetching https://example.com"
+    );
+    const done = tool({ ...inflight, status: "completed" });
+    expect(lookupToolSummary(done).collapsedLine(done)).toBe("Fetched https://example.com");
+  });
+
+  it("uses Running while Bash is in flight and Ran when it completes", () => {
+    const inflight = tool({
+      vendorToolName: "Bash",
+      title: "Bash",
+      status: "in_progress",
+      input: { description: "Check working tree" },
+    });
+    expect(lookupToolSummary(inflight).collapsedLine(inflight)).toBe("Running Check working tree");
+    const done = tool({ ...inflight, status: "completed" });
+    expect(lookupToolSummary(done).collapsedLine(done)).toBe("Ran Check working tree");
+  });
 });
 
 describe("BASH_SUMMARY.expandedDetails", () => {

@@ -82,7 +82,24 @@ function pluralize(n: number, singular: string, plural?: string): string {
 }
 
 function targetFromTitle(part: ToolCallPart): string {
-  return part.title || "(no title)";
+  const t = part.title;
+  if (!t) return "…";
+  // SDK seeds title to the vendor tool name (e.g. "Read", "Edit") in the brief
+  // window between content_block_start and the first complete input-JSON parse.
+  // Treat that as a placeholder so verb-prefixed summaries don't render
+  // "Read Read" / "Edited Edit".
+  if (part.vendorToolName && t.toLowerCase() === part.vendorToolName.toLowerCase()) return "…";
+  return t;
+}
+
+/**
+ * Pick the verb form that matches the tool call's current status. Tool calls
+ * still pending / in_progress render with the present participle so the trail
+ * reflects what the agent is doing right now; completed and failed calls flip
+ * to the past tense.
+ */
+function verb(part: ToolCallPart, progressive: string, past: string): string {
+  return part.status === "completed" || part.status === "failed" ? past : progressive;
 }
 
 function targetFromPath(part: ToolCallPart): string | null {
@@ -136,7 +153,7 @@ function approxTokens(part: ToolCallPart): number {
 
 const READ_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Read" }),
-  collapsedLine: (p) => `Read ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p) => `${verb(p, "Reading", "Read")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const t = approxTokens(p);
     return t > 0 ? `~${formatTokens(t)} tokens` : null;
@@ -153,8 +170,9 @@ const READ_SUMMARY: ToolSummary = {
 const LIST_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "LS" }),
   collapsedLine: (p) => {
+    const v = verb(p, "Listing", "Listed");
     const path = targetFromPath(p);
-    return path ? `Listed ${path}` : "Listed vault root";
+    return path ? `${v} ${path}` : `${v} vault root`;
   },
   outcome: () => null,
   aggregate: (parts) => ({
@@ -165,7 +183,8 @@ const LIST_SUMMARY: ToolSummary = {
 
 const EDIT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Edit" }),
-  collapsedLine: (p) => `Edited ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p) =>
+    `${verb(p, "Editing", "Edited")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const { added, removed } = diffStats(p);
     if (added === 0 && removed === 0) return null;
@@ -189,15 +208,16 @@ const EDIT_SUMMARY: ToolSummary = {
 const BASH_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Bash" }),
   collapsedLine: (p) => {
+    const v = verb(p, "Running", "Ran");
     const input = p.input as { command?: unknown; description?: unknown } | null | undefined;
     if (typeof input?.description === "string" && input.description.length > 0) {
-      return `Ran ${input.description}`;
+      return `${v} ${input.description}`;
     }
     if (typeof input?.command === "string") {
       const cmd = input.command.length > 60 ? input.command.slice(0, 60) + "…" : input.command;
-      return `Ran \`${cmd}\``;
+      return `${v} \`${cmd}\``;
     }
-    return `Ran ${targetFromTitle(p)}`;
+    return `${v} ${targetFromTitle(p)}`;
   },
   outcome: () => null,
   aggregate: (parts) => ({
@@ -217,8 +237,9 @@ const BASH_SUMMARY: ToolSummary = {
 const SEARCH_VAULT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Grep" }),
   collapsedLine: (p) => {
+    const v = verb(p, "Searching vault", "Searched vault");
     const q = queryFromInput(p);
-    return q ? `Searched vault · "${q}"` : `Searched vault · ${targetFromTitle(p)}`;
+    return q ? `${v} · "${q}"` : `${v} · ${targetFromTitle(p)}`;
   },
   outcome: () => null,
   aggregate: (parts) => ({
@@ -230,8 +251,9 @@ const SEARCH_VAULT_SUMMARY: ToolSummary = {
 const WEB_SEARCH_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "WebSearch" }),
   collapsedLine: (p) => {
+    const v = verb(p, "Searching web", "Searched web");
     const q = queryFromInput(p);
-    return q ? `Searched web · "${q}"` : `Searched web · ${targetFromTitle(p)}`;
+    return q ? `${v} · "${q}"` : `${v} · ${targetFromTitle(p)}`;
   },
   outcome: () => null,
   aggregate: (parts) => ({
@@ -243,9 +265,10 @@ const WEB_SEARCH_SUMMARY: ToolSummary = {
 const WEB_FETCH_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "WebFetch" }),
   collapsedLine: (p) => {
+    const v = verb(p, "Fetching", "Fetched");
     const input = p.input as { url?: unknown } | null | undefined;
-    if (typeof input?.url === "string") return `Fetched ${input.url}`;
-    return `Fetched ${targetFromTitle(p)}`;
+    if (typeof input?.url === "string") return `${v} ${input.url}`;
+    return `${v} ${targetFromTitle(p)}`;
   },
   outcome: () => null,
   aggregate: (parts) => ({
@@ -279,7 +302,7 @@ const TASK_SUMMARY: ToolSummary = {
 
 const TODO_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "TodoWrite" }),
-  collapsedLine: () => "Updated task list",
+  collapsedLine: (p) => `${verb(p, "Updating", "Updated")} task list`,
   outcome: (p) => {
     const input = p.input as { todos?: unknown[] } | null | undefined;
     const n = Array.isArray(input?.todos) ? input.todos.length : 0;
@@ -293,7 +316,7 @@ const TODO_SUMMARY: ToolSummary = {
 
 const EXIT_PLAN_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "ExitPlanMode" }),
-  collapsedLine: () => "Proposed plan",
+  collapsedLine: (p) => `${verb(p, "Proposing", "Proposed")} plan`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Proposed ${pluralize(parts.length, "plan")}${statusSuffix(parts)}`,
@@ -326,8 +349,9 @@ const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
 const KIND_SEARCH_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "search" }),
   collapsedLine: (p) => {
+    const v = verb(p, "Searching", "Searched");
     const q = queryFromInput(p);
-    return q ? `Searched · "${q}"` : `Searched · ${targetFromTitle(p)}`;
+    return q ? `${v} · "${q}"` : `${v} · ${targetFromTitle(p)}`;
   },
   outcome: () => null,
   aggregate: (parts) => ({
@@ -345,7 +369,8 @@ const KIND_FETCH_SUMMARY: ToolSummary = {
 };
 const KIND_DELETE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "delete" }),
-  collapsedLine: (p) => `Deleted ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p) =>
+    `${verb(p, "Deleting", "Deleted")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Deleted ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
@@ -354,7 +379,7 @@ const KIND_DELETE_SUMMARY: ToolSummary = {
 };
 const KIND_MOVE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "move" }),
-  collapsedLine: (p) => `Moved ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p) => `${verb(p, "Moving", "Moved")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Moved ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
@@ -367,7 +392,7 @@ const KIND_SWITCH_MODE_SUMMARY: ToolSummary = {
 };
 const KIND_THINK_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "think" }),
-  collapsedLine: () => "Thought",
+  collapsedLine: (p) => verb(p, "Thinking", "Thought"),
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Thought · ${pluralize(parts.length, "step")}${statusSuffix(parts)}`,

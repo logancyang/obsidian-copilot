@@ -70,7 +70,10 @@
   - It makes iterating on plan a lot easier
 - [ ] P2: [UX] Make mode more obvious
   - idea: consider change the chat border color for different modes
-- [ ] P2: [UX] fix the brief moment of "Read Read" tool call message
+- [x] P2: [UX] fix the brief moment of "Read Read" tool call message
+  - Also made every tool-card verb status-aware ("Reading…" / "Read foo.md",
+    "Editing draft.md" / "Edited draft.md", "Fetching url" / "Fetched url",
+    etc.) so in-flight calls no longer render with past-tense verbs.
 - [ ] P2: Edit previous user message
 - [ ] P2: New agent command (/new, /usage)
 - [ ] P2: Claude code / Codex authentication
