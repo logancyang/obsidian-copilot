@@ -43,6 +43,11 @@
     dropped before the prompt is built. Wire them into the
     `<copilot-context>` envelope (e.g. a `Web excerpts:` section with
     `title (url): content`) so the agent can actually read them.
+- [ ] P1: Move PDF parsing into an agent tool
+  - Inline PDF parsing during send can take too long and blocks the user
+    before the agent starts. Keep PDF attachments as vault paths for the
+    built-in Read tool for now, then expose Copilot PDF parsing as an
+    explicit tool the agent can call when it needs extracted PDF text.
 - [ ] P1: Token counter
   - To know how many context is left in the current session
   - Nice-to-have: Cost estimate

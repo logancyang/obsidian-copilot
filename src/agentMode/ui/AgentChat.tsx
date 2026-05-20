@@ -17,7 +17,6 @@ import type { AgentChatMessage, CurrentPlan, PromptContent } from "@/agentMode/s
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import { logError, logWarn } from "@/logger";
-import { isPlusEnabled } from "@/plusUtils";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import type CopilotPlugin from "@/main";
 import {
@@ -57,7 +56,7 @@ interface QueuedAgentMessage {
   text: string;
   rawInput: string;
   context?: MessageContext;
-  /** Image blocks + inlined PDF text blocks for the backend prompt. */
+  /** Image blocks for the backend prompt. */
   promptContent?: PromptContent[];
   hadUnsupportedAttachments: boolean;
 }
@@ -244,7 +243,8 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     const rawInput = inputMessage;
 
     // Web tab / web-excerpt attachments still aren't wired through.
-    // Images and PDFs are handled below.
+    // Images are handled below. PDFs stay in note context so the agent can
+    // inspect them with its built-in Read tool instead of blocking send.
     const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
     const hadUnsupportedAttachments = includeActiveWebTab || hasWebExcerpt;
 
@@ -275,27 +275,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
 
     const content: PromptContent[] = [];
 
-    // Inline PDFs as text when the parser is available (Plus or self-host).
-    // Free users fall through: the PDF stays in `notes` so the agent sees
-    // the path in the envelope and can try its own Read tool.
-    const remainingNotes: TFile[] = [];
-    const canParsePdfs = isPlusEnabled();
-    for (const note of notes) {
-      if (note.extension.toLowerCase() === "pdf" && canParsePdfs) {
-        try {
-          const parsed = await plugin.fileParserManager.parseFile(note, app.vault);
-          content.push({
-            type: "text",
-            text: `<attached-pdf path="${note.path}">\n${parsed}\n</attached-pdf>`,
-          });
-          continue;
-        } catch (e) {
-          logWarn(`[AgentMode] PDF parse failed for ${note.path}; falling back to path`, e);
-        }
-      }
-      remainingNotes.push(note);
-    }
-
     // Convert attached images to base64 image content blocks.
     for (const image of selectedImages) {
       const block = await fileToImageBlock(image);
@@ -306,7 +285,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
       id: `queued-${uuidv4()}`,
       text: expanded.text,
       rawInput,
-      context: buildMessageContext(remainingNotes, selectedTextContexts),
+      context: buildMessageContext(notes, selectedTextContexts),
       promptContent: content.length > 0 ? content : undefined,
       hadUnsupportedAttachments,
     };
@@ -326,7 +305,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     await runSend(item);
   }, [
     app,
-    plugin,
     inputMessage,
     selectedImages,
     contextNotes,
