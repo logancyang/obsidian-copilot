@@ -317,41 +317,7 @@ describe("buildOpencodeConfig", () => {
     expect(cfg.model).toBe("copilot-plus/copilot-plus-flash");
   });
 
-  it("sets default_agent from persisted selectedMode (canonical → native id)", async () => {
-    setSettings({
-      agentMode: {
-        enabled: true,
-        byok: {},
-        mcpServers: [],
-        activeBackend: "opencode",
-        debugFullFrames: false,
-        skills: { folder: "copilot/skills" },
-        backends: {
-          opencode: {
-            selectedMode: "default",
-          },
-        },
-      },
-    });
-    const defaultCfg = (await buildOpencodeConfig()) as { default_agent?: string };
-    expect(defaultCfg.default_agent).toBe("copilot-build");
-
-    setSettings({
-      agentMode: {
-        enabled: true,
-        byok: {},
-        mcpServers: [],
-        activeBackend: "opencode",
-        debugFullFrames: false,
-        skills: { folder: "copilot/skills" },
-        backends: { opencode: { selectedMode: "auto" } },
-      },
-    });
-    const autoCfg = (await buildOpencodeConfig()) as { default_agent?: string };
-    expect(autoCfg.default_agent).toBe("build");
-  });
-
-  it("falls back to canonical default (copilot-build) when no mode is persisted", async () => {
+  it("always spawns with canonical default agent (copilot-build)", async () => {
     const cfg = (await buildOpencodeConfig()) as { default_agent?: string };
     expect(cfg.default_agent).toBe("copilot-build");
   });

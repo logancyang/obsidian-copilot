@@ -15,14 +15,8 @@ import { computeInstallState, OpencodeBinaryManager } from "./OpencodeBinaryMana
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { applyPersistedMode } from "@/agentMode/session/applyPersistedMode";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type {
-  CopilotMode,
-  ModeMapping,
-  ModelSelection,
-  ModelWireCodec,
-} from "@/agentMode/session/types";
+import type { ModeMapping, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
@@ -169,23 +163,6 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
       configId: OPENCODE_MODE_CONFIG_OPTION_ID,
       canonical: { ...OPENCODE_CANONICAL_MODE_AGENT_IDS },
     };
-  },
-
-  async persistModeSelection(value: CopilotMode, _plugin: CopilotPlugin): Promise<void> {
-    updateAgentModeBackendFields("opencode", { selectedMode: value });
-  },
-
-  /**
-   * Defense-in-depth replay of the persisted mode on a freshly created
-   * session. The primary path is `default_agent` baked into the spawn-time
-   * `OPENCODE_CONFIG_CONTENT` (see `OpencodeBackend.buildOpencodeConfig`),
-   * which guarantees the very first turn runs in the right agent. This
-   * runtime call only fires if the spawn-time default didn't take and the
-   * `mode` configOption is already registered.
-   */
-  async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
-    const persistedMode = settings.agentMode?.backends?.opencode?.selectedMode ?? "default";
-    await applyPersistedMode(session, persistedMode);
   },
 };
 

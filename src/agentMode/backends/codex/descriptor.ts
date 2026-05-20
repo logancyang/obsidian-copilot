@@ -10,17 +10,11 @@ import { CodexInstallModal } from "./CodexInstallModal";
 import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { applyPersistedMode } from "@/agentMode/session/applyPersistedMode";
 import {
   binaryPathInstallState,
   simpleBinaryBackendProcess,
 } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type {
-  CopilotMode,
-  ModeMapping,
-  ModelSelection,
-  ModelWireCodec,
-} from "@/agentMode/session/types";
+import type { ModeMapping, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 
 export const CODEX_BINARY_NAME = "codex-acp";
@@ -139,19 +133,5 @@ export const CodexBackendDescriptor: BackendDescriptor = {
       kind: "setMode",
       canonical: { default: "auto", plan: "read-only", auto: "full-access" },
     };
-  },
-
-  async persistModeSelection(value: CopilotMode, _plugin: CopilotPlugin): Promise<void> {
-    updateCodexFields({ selectedMode: value });
-  },
-
-  /**
-   * Replay the persisted mode on a freshly created session. Skipped when
-   * the agent doesn't advertise modes, or when the persisted mode's native
-   * id isn't currently in `availableModes` (filtered out by `getModeMapping`).
-   */
-  async applyInitialSessionConfig(session: AgentSession, settings: CopilotSettings): Promise<void> {
-    const persistedMode = settings.agentMode?.backends?.codex?.selectedMode ?? "default";
-    await applyPersistedMode(session, persistedMode);
   },
 };

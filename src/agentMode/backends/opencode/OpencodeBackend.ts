@@ -252,14 +252,11 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
       : defaultModel.baseModelId;
   }
 
-  // Apply sticky mode preference at spawn via OpenCode's `default_agent` so
-  // the first turn already runs in the user's chosen agent — closes the
-  // cold-start gap where the `mode` configOption isn't yet registered.
-  // Falls back to canonical `default` (ask-before-write `copilot-build`);
-  // otherwise OpenCode would land on its no-ask built-in `build` agent.
-  const selectedMode = s.agentMode?.backends?.opencode?.selectedMode ?? "default";
-  config.default_agent =
-    OPENCODE_CANONICAL_MODE_AGENT_IDS[selectedMode] ?? OPENCODE_COPILOT_BUILD_AGENT_ID;
+  // Always spawn in canonical `default` (ask-before-write `copilot-build`).
+  // Mode selection is never persisted — every fresh session starts in ask
+  // mode, so we pin the spawn-time `default_agent` to the canonical default
+  // here. Otherwise OpenCode would land on its no-ask built-in `build` agent.
+  config.default_agent = OPENCODE_COPILOT_BUILD_AGENT_ID;
 
   // Synthesize deny rules for managed skills that OpenCode would
   // cross-discover (via `.claude/skills/` and `.agents/skills/`) but are

@@ -8,7 +8,6 @@ import type {
   BackendId,
   BackendModelInfo,
   BackendProcess,
-  CopilotMode,
   ModelSelection,
   ModelWireCodec,
   ModeMapping,
@@ -138,12 +137,6 @@ export interface BackendDescriptor {
     modeState: RawModeState | null,
     configOptions: BackendConfigOption[] | null
   ): ModeMapping | null;
-
-  /**
-   * Optional: persist the user's chosen mode so the next session can replay
-   * it. Called by `AgentSessionManager.persistModeFor`.
-   */
-  persistModeSelection?(value: CopilotMode, plugin: CopilotPlugin): Promise<void>;
 
   /**
    * Optional: replay persisted state on a freshly created session. Runs
