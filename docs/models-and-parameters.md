@@ -13,8 +13,6 @@ Copilot comes with a set of built-in models across many providers. Some are alwa
 | Model                         | Provider     | Capabilities            |
 | ----------------------------- | ------------ | ----------------------- |
 | copilot-plus-flash            | Copilot Plus | Vision (Plus exclusive) |
-| google/gemini-2.5-flash       | OpenRouter   | Vision                  |
-| google/gemini-2.5-pro         | OpenRouter   | Vision                  |
 | google/gemini-3.5-flash       | OpenRouter   | Vision, Reasoning       |
 | google/gemini-3.1-pro-preview | OpenRouter   | Vision, Reasoning       |
 | openai/gpt-5.4                | OpenRouter   | Vision                  |
@@ -25,9 +23,8 @@ Copilot comes with a set of built-in models across many providers. Some are alwa
 | gpt-4.1-mini                  | OpenAI       | Vision                  |
 | claude-opus-4-6               | Anthropic    | Vision, Reasoning       |
 | claude-sonnet-4-5-20250929    | Anthropic    | Vision, Reasoning       |
-| gemini-2.5-pro                | Google       | Vision                  |
-| gemini-2.5-flash              | Google       | Vision                  |
 | gemini-3.5-flash              | Google       | Vision, Reasoning       |
+| gemini-3.1-flash-lite         | Google       | Vision                  |
 | grok-4-1-fast                 | XAI          | Vision                  |
 | deepseek-chat                 | DeepSeek     | —                       |
 | deepseek-reasoner             | DeepSeek     | Reasoning               |
