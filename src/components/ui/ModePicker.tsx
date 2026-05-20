@@ -51,7 +51,14 @@ export function ModePicker({ override, className }: ModePickerProps) {
           variant="ghost2"
           size="sm"
           disabled={disabled}
-          className={cn("tw-shrink-0 tw-text-muted", className)}
+          className={cn(
+            "tw-shrink-0 tw-text-muted",
+            value === "plan" &&
+              "tw-text-blue/70 hover:tw-text-blue/100 focus-visible:tw-text-blue/100",
+            value === "auto" &&
+              "tw-text-red/70 hover:tw-text-red/100 focus-visible:tw-text-red/100",
+            className
+          )}
           title="Operational mode"
         >
           <span className="tw-truncate">{triggerLabel}</span>
