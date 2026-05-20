@@ -858,6 +858,8 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         </div>
 
         <div className="tw-flex tw-items-center tw-gap-1">
+          {!isGenerating && toolControls}
+          {modePickerOverride && <ModePicker override={modePickerOverride} />}
           {isGenerating ? (
             <Button
               size="icon"
@@ -869,8 +871,6 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
             </Button>
           ) : (
             <>
-              {toolControls}
-              {modePickerOverride && <ModePicker override={modePickerOverride} />}
               {editMode && onEditCancel && (
                 <Button
                   variant="ghost2"
