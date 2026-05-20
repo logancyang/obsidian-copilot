@@ -10,15 +10,16 @@
   - [ ] Allow users to share system prompt
   - [ ] Do a quick spike on the concrete behavior
   - [ ] Investigate opencode provider specific prompt
-- [ ] P0: Skills
+- [x] P0: Skills
   - [x] Check out cc-switch to understand how to make skills compatible cross other agents https://github.com/farion1231/cc-switch
 - [ ] P0: Permission management
   - [ ] Permission UI improvement
   - [ ] Permission "always allow" doesn't seem to persist
 - [ ] P0: How to design the settings to configure the provider?
-  - [ ] Redesign the model settings - discussed on May 7 group meeting
-  - [ ] support self host model
-  - [ ] remove built-in models
+  - [x] Redesign the model settings - discussed on May 7 group meeting
+  - [x] support self host model
+  - [x] remove built-in models
+- [ ] P0: Test opencode works well with local models
 - [ ] P0: Fix broken legacy agent mode
   - [ ] Can we only support basic chat - not now but eventually yes
 - [ ] P0: Auto-save chat history controls
@@ -66,9 +67,10 @@
   - [ ] manual trigger
   - [ ] configure when to auto compact
 - [ ] P1: Project mode
+- [ ] P2: Support subscriptions that work with opencode (kimi code)
 - [ ] P2: Claude vscode plugin add comment to plan capability
   - It makes iterating on plan a lot easier
-- [ ] P2: [UX] Make mode more obvious
+- [x] P2: [UX] Make mode more obvious
   - idea: consider change the chat border color for different modes
 - [ ] P2: [UX] fix the brief moment of "Read Read" tool call message
 - [ ] P2: Edit previous user message
