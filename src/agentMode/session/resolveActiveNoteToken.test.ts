@@ -5,7 +5,8 @@ jest.mock("obsidian", () => ({
   TFile: jest.fn(),
 }));
 
-const mockFile = (basename: string) => mockTFile({ basename, path: `${basename}.md` });
+const mockFile = (basename: string, extension = "md") =>
+  mockTFile({ basename, extension, path: `${basename}.${extension}` });
 
 describe("resolveActiveNoteToken", () => {
   it("replaces {activeNote} with the active file's wikilink form", () => {
@@ -52,6 +53,15 @@ describe("resolveActiveNoteToken", () => {
   it("preserves `$` characters in the basename (no regex-replacement surprises)", () => {
     expect(resolveActiveNoteToken("ref {activeNote} here", mockFile("Q1 $revenue"))).toBe(
       "ref [[Q1 $revenue]] here"
+    );
+  });
+
+  it("keeps the extension on non-markdown active files (matches NotePillNode serialization)", () => {
+    expect(resolveActiveNoteToken("Summarize {activeNote}", mockFile("Spec", "pdf"))).toBe(
+      "Summarize [[Spec.pdf]]"
+    );
+    expect(resolveActiveNoteToken("Open {activeNote}", mockFile("Mindmap", "canvas"))).toBe(
+      "Open [[Mindmap.canvas]]"
     );
   });
 });
