@@ -1,18 +1,19 @@
 import { App, FileSystemAdapter } from "obsidian";
 
-declare const app: App;
-
 let cachedBase: string | null | undefined;
 
 /**
  * Returns the vault root absolute path on desktop, or null on mobile /
- * test environments where the global `app` or FileSystemAdapter isn't
- * available. Cached after the first successful read.
+ * test environments where the `FileSystemAdapter` isn't available. Cached
+ * after the first successful read because the vault root cannot change
+ * for the lifetime of the plugin instance.
+ *
+ * @param app The Obsidian `App` instance used to access the vault adapter.
  */
-export function getVaultBase(): string | null {
+export function getVaultBase(app: App): string | null {
   if (cachedBase !== undefined) return cachedBase;
   try {
-    const adapter = app?.vault?.adapter;
+    const adapter = app.vault?.adapter;
     cachedBase =
       adapter instanceof FileSystemAdapter ? stripTrailingSep(adapter.getBasePath()) : null;
   } catch {

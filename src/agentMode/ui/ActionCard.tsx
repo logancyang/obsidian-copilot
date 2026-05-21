@@ -1,10 +1,12 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Check, X } from "lucide-react";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import type { AgentToolStatus } from "@/agentMode/session/types";
 import { lookupToolSummary } from "@/agentMode/ui/toolSummaries";
 import { renderDiff } from "@/agentMode/ui/diffRender";
+import { getVaultBase } from "@/agentMode/ui/vaultPath";
 import { cn } from "@/lib/utils";
+import { useApp } from "@/context";
 
 interface ActionCardProps {
   part: ToolCallPart;
@@ -14,14 +16,24 @@ interface ActionCardProps {
 }
 
 export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
+  const app = useApp();
   const [open, setOpen] = useState(false);
   const summary = lookupToolSummary(part);
+  // `vaultBase` is stable for the plugin lifetime, but `getVaultBase` is
+  // cheap once cached — memoize to keep the summary inputs referentially
+  // stable across re-renders.
+  const summaryCtx = useMemo(() => ({ vaultBase: getVaultBase(app) }), [app]);
   const Icon = summary.icon;
-  const line = summary.collapsedLine(part);
+  const line = summary.collapsedLine(part, summaryCtx);
   const outcome = summary.outcome(part);
   const outputs = part.output ?? [];
   const details = summary.expandedDetails?.(part) ?? null;
   const expandable = outputs.length > 0 || details !== null;
+  // Only expose a clickable target once the call has completed — opening a
+  // half-written file mid-Edit would race with the tool, and an in-progress
+  // Read has nothing to show yet.
+  const targetPath =
+    part.status === "completed" ? (summary.targetPath?.(part, summaryCtx) ?? null) : null;
 
   const headerClasses = cn(
     "tw-flex tw-items-center tw-gap-1.5 tw-text-sm tw-text-muted",
@@ -38,7 +50,21 @@ export const ActionCard: React.FC<ActionCardProps> = ({ part, inline }) => {
         role={expandable ? "button" : undefined}
       >
         <Icon className="tw-size-3.5 tw-shrink-0 tw-text-muted" />
-        <span className="tw-flex-1 tw-truncate tw-font-medium">{line}</span>
+        {targetPath ? (
+          <a
+            href="#"
+            className="tw-flex-1 tw-truncate tw-font-medium tw-text-inherit hover:tw-text-accent hover:tw-underline"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              void app.workspace.openLinkText(targetPath, "", true);
+            }}
+          >
+            {line}
+          </a>
+        ) : (
+          <span className="tw-flex-1 tw-truncate tw-font-medium">{line}</span>
+        )}
         <StatusBadge status={part.status} />
         {expandable &&
           (open ? (

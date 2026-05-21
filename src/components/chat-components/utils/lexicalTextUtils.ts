@@ -21,8 +21,6 @@ import { $createActiveWebTabPillNode } from "@/components/chat-components/pills/
 import { logInfo } from "@/logger";
 import { AVAILABLE_TOOLS } from "@/components/chat-components/constants/tools";
 
-declare const app: App;
-
 export type PillType = "notes" | "tools" | "folders" | "active-note" | "webTabs" | "activeWebTab";
 
 // Type representing different kinds of parsed content segments
@@ -253,10 +251,11 @@ function resolveToolReference(toolName: string): string | null {
 
 /**
  * Attempts to resolve a folder reference to a TFolder
+ * @param app The Obsidian `App` instance used for vault lookups
  * @param folderName The name of the folder to resolve
  * @returns TFolder if found, null otherwise
  */
-function resolveFolderReference(folderName: string): TFolder | null {
+function resolveFolderReference(app: App, folderName: string): TFolder | null {
   if (!app?.vault) {
     return null;
   }
@@ -301,10 +300,11 @@ function resolveFolderReference(folderName: string): TFolder | null {
 
 /**
  * Attempts to resolve a note reference to a TFile
+ * @param app The Obsidian `App` instance used for vault/metadata lookups
  * @param noteName The name of the note to resolve
  * @returns TFile if found, null otherwise
  */
-function resolveNoteReference(noteName: string): TFile | null {
+function resolveNoteReference(app: App, noteName: string): TFile | null {
   if (!app?.vault || !app?.metadataCache) {
     return null;
   }
@@ -367,11 +367,13 @@ interface PatternInfo {
 
 /**
  * Parses text content to extract [[note name]], @tool, #tag patterns and optionally URLs, converting them to appropriate pills
+ * @param app The Obsidian `App` instance used to resolve note/folder references
  * @param text The text content to parse
  * @param options Options for what types of pills to process
  * @returns Array of parsed content segments with type information
  */
 export function parseTextForPills(
+  app: App,
   text: string,
   options: {
     includeNotes?: boolean;
@@ -453,11 +455,11 @@ export function parseTextForPills(
     } else if (matchedPattern.type === "notes") {
       // This is a note link [[note name]]
       const noteName = match[matchedPattern.startIndex + 1].trim();
-      const file = resolveNoteReference(noteName);
+      const file = resolveNoteReference(app, noteName);
 
       if (file && file instanceof TFile) {
         // Valid note reference - create pill
-        const activeNote = app?.workspace.getActiveFile();
+        const activeNote = app.workspace.getActiveFile();
         const isActive = activeNote?.path === file.path;
 
         segments.push({
@@ -518,7 +520,7 @@ export function parseTextForPills(
           content: "activeNote",
         });
       } else {
-        const resolvedFolder = resolveFolderReference(templateContent);
+        const resolvedFolder = resolveFolderReference(app, templateContent);
 
         if (resolvedFolder) {
           segments.push({
@@ -584,10 +586,15 @@ export function createNodesFromSegments(segments: ParsedContent[]): LexicalNode[
  * Inserts text with automatic conversion of [[note]] references and URLs to pills.
  * This is the main API function that should be used for all programmatic text insertion.
  *
+ * @param app The Obsidian `App` instance used to resolve note/folder references
  * @param text The text to insert, which may contain [[note]] references and URLs
  * @param options Configuration options for the insertion
  */
-export function $insertTextWithPills(text: string, options: InsertTextOptions = {}): void {
+export function $insertTextWithPills(
+  app: App,
+  text: string,
+  options: InsertTextOptions = {}
+): void {
   const { enableURLPills = false, insertAtSelection = true } = options;
 
   if (!text) return;
@@ -599,7 +606,7 @@ export function $insertTextWithPills(text: string, options: InsertTextOptions = 
   }
 
   // Parse the text for note links and optionally URLs
-  const segments = parseTextForPills(text, {
+  const segments = parseTextForPills(app, text, {
     includeNotes: true,
     includeURLs: enableURLPills,
   });
@@ -623,12 +630,14 @@ export function $insertTextWithPills(text: string, options: InsertTextOptions = 
  * Replaces text in a specific range with parsed content.
  * Useful for slash commands and other scenarios where you need to replace a portion of text.
  *
+ * @param app The Obsidian `App` instance used to resolve note/folder references
  * @param startOffset The start position to replace from
  * @param endOffset The end position to replace to
  * @param newText The new text content to insert with pill conversion
  * @param options Configuration options
  */
 export function $replaceTextRangeWithPills(
+  app: App,
   startOffset: number,
   endOffset: number,
   newText: string,
@@ -652,7 +661,7 @@ export function $replaceTextRangeWithPills(
   const textContent = textNode.getTextContent();
 
   // Parse the new text for pills
-  const segments = parseTextForPills(newText, {
+  const segments = parseTextForPills(app, newText, {
     includeNotes: true,
     includeURLs: enableURLPills,
     includeTools: enableToolPills,

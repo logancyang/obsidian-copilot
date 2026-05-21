@@ -2,7 +2,18 @@ import type { LucideIcon } from "lucide-react";
 import { Bot } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
-import { getVaultBase, toVaultRelative } from "@/agentMode/ui/vaultPath";
+import { toVaultRelative } from "@/agentMode/ui/vaultPath";
+
+/**
+ * Render-time context passed through to the summary callbacks that need
+ * vault-relative path resolution. Resolved once by `ActionCard` /
+ * `AggregateCard` (which can call `getVaultBase(app)`), so the summary
+ * objects themselves stay free of any reach into the global `app`.
+ */
+export interface ToolSummaryContext {
+  /** Vault root absolute path, or null when unavailable (mobile, tests). */
+  vaultBase: string | null;
+}
 
 /**
  * Tool-aware presentation for one or more tool_call parts. Each tool
@@ -14,13 +25,19 @@ export interface ToolSummary {
   /** Lucide icon component shown in the collapsed line. */
   icon: LucideIcon;
   /** Single-line "Edited practice-log.md" style verb · target. */
-  collapsedLine: (part: ToolCallPart) => string;
+  collapsedLine: (part: ToolCallPart, ctx?: ToolSummaryContext) => string;
   /** Optional muted line below the title — counts/sizes/duration. Null hides. */
   outcome: (part: ToolCallPart) => string | null;
   /** Tool-aware aggregate stat for N consecutive same-key parts. */
   aggregate: (parts: ToolCallPart[]) => { line: string; outcome: string };
   /** Full tool input shown only in the expanded card. Null hides. */
   expandedDetails?: (part: ToolCallPart) => string | null;
+  /**
+   * Vault-relative path of the note this tool call targets, or null when the
+   * tool has no single file target. When set and the call has completed,
+   * `ActionCard` renders the collapsed line as a clickable internal link.
+   */
+  targetPath?: (part: ToolCallPart, ctx?: ToolSummaryContext) => string | null;
 }
 
 /**
@@ -102,17 +119,16 @@ function verb(part: ToolCallPart, progressive: string, past: string): string {
   return part.status === "completed" || part.status === "failed" ? past : progressive;
 }
 
-function targetFromPath(part: ToolCallPart): string | null {
-  const base = getVaultBase();
+function targetFromPath(part: ToolCallPart, vaultBase: string | null): string | null {
   const loc = part.locations?.[0]?.path;
-  if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, base);
+  if (typeof loc === "string" && loc.length > 0) return toVaultRelative(loc, vaultBase);
   const input = part.input as
     | { file_path?: unknown; filePath?: unknown; path?: unknown }
     | null
     | undefined;
-  if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, base);
-  if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, base);
-  if (typeof input?.path === "string") return toVaultRelative(input.path, base);
+  if (typeof input?.file_path === "string") return toVaultRelative(input.file_path, vaultBase);
+  if (typeof input?.filePath === "string") return toVaultRelative(input.filePath, vaultBase);
+  if (typeof input?.path === "string") return toVaultRelative(input.path, vaultBase);
   return null;
 }
 
@@ -153,7 +169,8 @@ function approxTokens(part: ToolCallPart): number {
 
 const READ_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Read" }),
-  collapsedLine: (p) => `${verb(p, "Reading", "Read")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p, ctx) =>
+    `${verb(p, "Reading", "Read")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const t = approxTokens(p);
     return t > 0 ? `~${formatTokens(t)} tokens` : null;
@@ -165,13 +182,14 @@ const READ_SUMMARY: ToolSummary = {
       outcome: tokens > 0 ? `~${formatTokens(tokens)} tokens` : "",
     };
   },
+  targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
 };
 
 const LIST_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "LS" }),
-  collapsedLine: (p) => {
+  collapsedLine: (p, ctx) => {
     const v = verb(p, "Listing", "Listed");
-    const path = targetFromPath(p);
+    const path = targetFromPath(p, ctx?.vaultBase ?? null);
     return path ? `${v} ${path}` : `${v} vault root`;
   },
   outcome: () => null,
@@ -183,8 +201,8 @@ const LIST_SUMMARY: ToolSummary = {
 
 const EDIT_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ vendorToolName: "Edit" }),
-  collapsedLine: (p) =>
-    `${verb(p, "Editing", "Edited")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p, ctx) =>
+    `${verb(p, "Editing", "Edited")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: (p) => {
     const { added, removed } = diffStats(p);
     if (added === 0 && removed === 0) return null;
@@ -203,6 +221,7 @@ const EDIT_SUMMARY: ToolSummary = {
       outcome: added + removed > 0 ? `+${added} / −${removed} lines` : "",
     };
   },
+  targetPath: (p, ctx) => targetFromPath(p, ctx?.vaultBase ?? null),
 };
 
 const BASH_SUMMARY: ToolSummary = {
@@ -369,8 +388,8 @@ const KIND_FETCH_SUMMARY: ToolSummary = {
 };
 const KIND_DELETE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "delete" }),
-  collapsedLine: (p) =>
-    `${verb(p, "Deleting", "Deleted")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p, ctx) =>
+    `${verb(p, "Deleting", "Deleted")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Deleted ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,
@@ -379,7 +398,8 @@ const KIND_DELETE_SUMMARY: ToolSummary = {
 };
 const KIND_MOVE_SUMMARY: ToolSummary = {
   icon: pickToolIcon({ toolKind: "move" }),
-  collapsedLine: (p) => `${verb(p, "Moving", "Moved")} ${targetFromPath(p) ?? targetFromTitle(p)}`,
+  collapsedLine: (p, ctx) =>
+    `${verb(p, "Moving", "Moved")} ${targetFromPath(p, ctx?.vaultBase ?? null) ?? targetFromTitle(p)}`,
   outcome: () => null,
   aggregate: (parts) => ({
     line: `Moved ${pluralize(parts.length, "item")}${statusSuffix(parts)}`,

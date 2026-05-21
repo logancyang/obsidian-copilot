@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { TFile } from "obsidian";
+import { useApp } from "@/context";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
 import { useNoteSearch, NoteSearchOption } from "@/components/chat-components/hooks/useNoteSearch";
 import {
@@ -22,11 +23,12 @@ export function NoteCommandPlugin({
   isCopilotPlus = false,
   currentActiveFile = null,
 }: NoteCommandPluginProps): JSX.Element {
+  const app = useApp();
   const [editor] = useLexicalComposerContext();
   const [currentQuery, setCurrentQuery] = useState("");
 
   // Use shared preview cache
-  const [previewCache] = useState(() => new NotePreviewCache());
+  const [previewCache] = useState(() => new NotePreviewCache(app));
   const [previewContent, setPreviewContent] = useState<Map<string, string>>(() => new Map());
 
   // Function to load note content for preview using shared cache

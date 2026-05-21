@@ -1,5 +1,5 @@
 import { parseTextForPills } from "./lexicalTextUtils";
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { mockTFolder } from "@/__tests__/mockObsidian";
 
 const MockTFile = TFile as unknown as jest.Mock;
@@ -14,7 +14,7 @@ jest.mock("../constants/tools", () => ({
   AVAILABLE_TOOLS: ["@vault", "@websearch", "@composer"],
 }));
 
-// Create mock global app object
+// Create mock app object passed explicitly to each parseTextForPills call.
 const mockApp = {
   workspace: {
     getActiveFile: jest.fn(),
@@ -28,12 +28,7 @@ const mockApp = {
     getFileCache: jest.fn(),
   },
 };
-
-// Mock global app
-Object.defineProperty(window, "app", {
-  value: mockApp,
-  writable: true,
-});
+const app = mockApp as unknown as App;
 
 describe("parseTextForPills", () => {
   beforeEach(() => {
@@ -43,7 +38,7 @@ describe("parseTextForPills", () => {
   describe("with no options enabled", () => {
     it("should return text as-is when no options are enabled", () => {
       const text = "Some [[note]] text with @tool and #tag and {folder} and https://example.com";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeNotes: false,
         includeURLs: false,
         includeTools: false,
@@ -80,7 +75,7 @@ describe("parseTextForPills", () => {
 
     it("should parse valid note references", () => {
       const text = "Check out [[Valid Note]] for more info";
-      const result = parseTextForPills(text, { includeNotes: true });
+      const result = parseTextForPills(app, text, { includeNotes: true });
 
       expect(result).toEqual([
         {
@@ -102,7 +97,7 @@ describe("parseTextForPills", () => {
 
     it("should keep invalid note references as text", () => {
       const text = "Invalid [[Nonexistent Note]] reference";
-      const result = parseTextForPills(text, { includeNotes: true });
+      const result = parseTextForPills(app, text, { includeNotes: true });
 
       expect(result).toEqual([
         {
@@ -122,7 +117,7 @@ describe("parseTextForPills", () => {
 
     it("should handle multiple note references", () => {
       const text = "[[Valid Note]] and [[Nonexistent Note]]";
-      const result = parseTextForPills(text, { includeNotes: true });
+      const result = parseTextForPills(app, text, { includeNotes: true });
 
       expect(result).toHaveLength(3);
       expect(result[0].type).toBe("note-pill");
@@ -135,7 +130,7 @@ describe("parseTextForPills", () => {
   describe("with URLs only", () => {
     it("should parse valid URLs", () => {
       const text = "Visit https://example.com for details";
-      const result = parseTextForPills(text, { includeURLs: true });
+      const result = parseTextForPills(app, text, { includeURLs: true });
 
       expect(result).toEqual([
         {
@@ -156,7 +151,7 @@ describe("parseTextForPills", () => {
 
     it("should handle URLs with trailing commas", () => {
       const text = "Visit https://example.com, for details";
-      const result = parseTextForPills(text, { includeURLs: true });
+      const result = parseTextForPills(app, text, { includeURLs: true });
 
       expect(result[1].content).toBe("https://example.com");
       expect(result[1].url).toBe("https://example.com");
@@ -164,7 +159,7 @@ describe("parseTextForPills", () => {
 
     it("should parse multiple URLs", () => {
       const text = "Visit https://example.com and http://test.org";
-      const result = parseTextForPills(text, { includeURLs: true });
+      const result = parseTextForPills(app, text, { includeURLs: true });
 
       expect(result).toHaveLength(4);
       expect(result[0].content).toBe("Visit ");
@@ -177,7 +172,7 @@ describe("parseTextForPills", () => {
   describe("with tools only", () => {
     it("should parse valid tool references", () => {
       const text = "Use @vault to search files";
-      const result = parseTextForPills(text, { includeTools: true });
+      const result = parseTextForPills(app, text, { includeTools: true });
 
       expect(result).toEqual([
         {
@@ -198,7 +193,7 @@ describe("parseTextForPills", () => {
 
     it("should keep invalid tool references as text", () => {
       const text = "Use @invalid tool";
-      const result = parseTextForPills(text, { includeTools: true });
+      const result = parseTextForPills(app, text, { includeTools: true });
 
       expect(result).toEqual([
         {
@@ -231,7 +226,7 @@ describe("parseTextForPills", () => {
 
     it("should parse valid folder references", () => {
       const text = "Files in {Projects} folder";
-      const result = parseTextForPills(text, { includeCustomTemplates: true });
+      const result = parseTextForPills(app, text, { includeCustomTemplates: true });
 
       expect(result).toEqual([
         {
@@ -252,7 +247,7 @@ describe("parseTextForPills", () => {
 
     it("should keep invalid folder references as text", () => {
       const text = "Files in {Nonexistent} folder";
-      const result = parseTextForPills(text, { includeCustomTemplates: true });
+      const result = parseTextForPills(app, text, { includeCustomTemplates: true });
 
       expect(result).toEqual([
         {
@@ -298,7 +293,7 @@ describe("parseTextForPills", () => {
 
     it("should correctly parse when only notes and URLs are enabled", () => {
       const text = "Check [[Test Note]] and https://example.com";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeNotes: true,
         includeURLs: true,
       });
@@ -312,7 +307,7 @@ describe("parseTextForPills", () => {
 
     it("should correctly parse when only URLs and tools are enabled", () => {
       const text = "Visit https://example.com or use @vault";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeURLs: true,
         includeTools: true,
       });
@@ -326,7 +321,7 @@ describe("parseTextForPills", () => {
 
     it("should correctly parse when only tools are enabled (tags appear as text)", () => {
       const text = "Use @vault for #test content";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeTools: true,
         // Tags are no longer parsed as pills
       });
@@ -339,7 +334,7 @@ describe("parseTextForPills", () => {
 
     it("should correctly parse when all options are enabled (tags as text)", () => {
       const text = "[[Test Note]] https://example.com @vault #test {TestFolder}";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeNotes: true,
         includeURLs: true,
         includeTools: true,
@@ -360,7 +355,7 @@ describe("parseTextForPills", () => {
     it("should handle mixed valid and invalid references (tags as text)", () => {
       const text =
         "[[Test Note]] [[Invalid]] @vault @invalid #test #invalid {TestFolder} {Invalid}";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeNotes: true,
         includeTools: true,
         // Tags are no longer parsed as pills
@@ -384,13 +379,13 @@ describe("parseTextForPills", () => {
 
   describe("edge cases", () => {
     it("should handle empty text", () => {
-      const result = parseTextForPills("");
+      const result = parseTextForPills(app, "");
       expect(result).toEqual([]);
     });
 
     it("should handle text with no matches", () => {
       const text = "Just plain text without any special patterns";
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeNotes: true,
         includeURLs: true,
         includeTools: true,
@@ -407,7 +402,7 @@ describe("parseTextForPills", () => {
 
     it("should handle nested brackets correctly", () => {
       const text = "[[Note with [brackets]]]";
-      const result = parseTextForPills(text, { includeNotes: true });
+      const result = parseTextForPills(app, text, { includeNotes: true });
 
       // The regex matches [[Note with [brackets]] and leaves the final ]]
       expect(result).toHaveLength(2);
@@ -424,7 +419,7 @@ describe("parseTextForPills", () => {
       const mockFolder = mockTFolder({ path: "folder with spaces", name: "folder with spaces" });
       mockApp.vault.getAllLoadedFiles.mockReturnValue([mockFolder]);
 
-      const result = parseTextForPills(text, {
+      const result = parseTextForPills(app, text, {
         includeTools: true,
         // Tags are no longer parsed as pills
         includeCustomTemplates: true,

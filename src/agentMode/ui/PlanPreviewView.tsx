@@ -4,7 +4,8 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { CurrentPlan, PlanDecisionAction } from "@/agentMode/session/types";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Check, FileText, X as XIcon } from "lucide-react";
-import { App, Component, ItemView, MarkdownRenderer, WorkspaceLeaf } from "obsidian";
+import { renderMarkdown } from "@/utils/renderMarkdown";
+import { App, Component, ItemView, WorkspaceLeaf } from "obsidian";
 import React, { useEffect, useRef, useState } from "react";
 import { Root } from "react-dom/client";
 
@@ -171,7 +172,7 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
     // the effect — unloading drops every subscription it set up.
     const component = new Component();
     component.load();
-    MarkdownRenderer.renderMarkdown(planMarkdown, target, "", component).catch((e: unknown) => {
+    renderMarkdown(app, planMarkdown, target, "", component).catch((e: unknown) => {
       logWarn("[PlanPreviewView] markdown render failed", e);
     });
     return () => {

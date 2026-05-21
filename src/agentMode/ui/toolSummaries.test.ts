@@ -5,13 +5,10 @@ import {
 } from "@/agentMode/ui/toolSummaries";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 
-jest.mock("@/agentMode/ui/vaultPath", () => {
-  const actual = jest.requireActual("@/agentMode/ui/vaultPath");
-  return {
-    ...actual,
-    getVaultBase: () => "/Users/me/vault",
-  };
-});
+// Fixed ctx for every test — mirrors what `ActionCard` would resolve via
+// `getVaultBase(app)`. Lets us exercise vault-relative path rendering
+// without mocking the entire `app` object.
+const CTX = { vaultBase: "/Users/me/vault" };
 
 function tool(overrides: Partial<ToolCallPart> = {}): ToolCallPart {
   return {
@@ -31,7 +28,7 @@ describe("lookupToolSummary", () => {
       output: [{ type: "text", text: "hello world".repeat(100) }],
     });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t)).toMatch(/^Read /);
+    expect(s.collapsedLine(t, CTX)).toMatch(/^Read /);
     expect(s.outcome(t)).toMatch(/tokens$/);
   });
 
@@ -41,7 +38,7 @@ describe("lookupToolSummary", () => {
       title: "read",
       locations: [{ path: "/Users/me/vault/notes/music-theory.md" }],
     });
-    expect(lookupToolSummary(t).collapsedLine(t)).toBe("Read notes/music-theory.md");
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read notes/music-theory.md");
   });
 
   it("falls back to the original path when the file is outside the vault", () => {
@@ -50,7 +47,7 @@ describe("lookupToolSummary", () => {
       title: "read",
       locations: [{ path: "/etc/passwd" }],
     });
-    expect(lookupToolSummary(t).collapsedLine(t)).toBe("Read /etc/passwd");
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read /etc/passwd");
   });
 
   it("aggregates Edits with combined +/- line counts and counts notes", () => {
@@ -87,7 +84,7 @@ describe("lookupToolSummary", () => {
       },
     });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t)).toBe('research-agent · "find jazz voicings"');
+    expect(s.collapsedLine(t, CTX)).toBe('research-agent · "find jazz voicings"');
   });
 
   it('routes Claude Code\'s "Agent" vendor name to the sub-agent summary', () => {
@@ -107,7 +104,9 @@ describe("lookupToolSummary", () => {
       },
     });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t)).toBe('Explore · "Map user-facing features of obsidian-copilot"');
+    expect(s.collapsedLine(t, CTX)).toBe(
+      'Explore · "Map user-facing features of obsidian-copilot"'
+    );
     // Same summary as the Task vendor name — the alias just routes through.
     const taskEquiv = lookupToolSummary({ ...t, vendorToolName: "Task" });
     expect(s).toBe(taskEquiv);
@@ -120,26 +119,26 @@ describe("lookupToolSummary", () => {
       title: "LS Daily",
       input: { path: "Daily" },
     });
-    expect(lookupToolSummary(list).collapsedLine(list)).toBe("Listed Daily");
+    expect(lookupToolSummary(list).collapsedLine(list, CTX)).toBe("Listed Daily");
   });
 
   it("falls back to ACP toolKind when vendor is missing", () => {
     const t = tool({ toolKind: "edit", title: "wrote thing" });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t)).toMatch(/^Edited /);
+    expect(s.collapsedLine(t, CTX)).toMatch(/^Edited /);
   });
 
   it("falls back to generic when both vendor and toolKind are unknown", () => {
     const t = tool({ title: "weirdtool" });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t)).toBe("weirdtool");
+    expect(s.collapsedLine(t, CTX)).toBe("weirdtool");
   });
 
   it("hides the duplicated vendor name while Read input is still streaming", () => {
     // SDK seeds title to the vendor name before any input-JSON has been
     // parsed. Should render "Reading …" rather than "Reading Read".
     const t = tool({ vendorToolName: "Read", title: "Read", status: "in_progress" });
-    expect(lookupToolSummary(t).collapsedLine(t)).toBe("Reading …");
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Reading …");
   });
 
   it("flips Read to past tense once the call completes", () => {
@@ -149,7 +148,7 @@ describe("lookupToolSummary", () => {
       status: "completed",
       locations: [{ path: "/Users/me/vault/notes/foo.md" }],
     });
-    expect(lookupToolSummary(t).collapsedLine(t)).toBe("Read notes/foo.md");
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Read notes/foo.md");
   });
 
   it("uses Editing while Edit is in flight and Edited when it completes", () => {
@@ -159,9 +158,9 @@ describe("lookupToolSummary", () => {
       status: "in_progress",
       input: { file_path: "/Users/me/vault/draft.md" },
     });
-    expect(lookupToolSummary(inflight).collapsedLine(inflight)).toBe("Editing draft.md");
+    expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe("Editing draft.md");
     const done = tool({ ...inflight, status: "completed" });
-    expect(lookupToolSummary(done).collapsedLine(done)).toBe("Edited draft.md");
+    expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Edited draft.md");
   });
 
   it("uses Fetching while WebFetch is in flight and Fetched when it completes", () => {
@@ -171,11 +170,11 @@ describe("lookupToolSummary", () => {
       status: "in_progress",
       input: { url: "https://example.com" },
     });
-    expect(lookupToolSummary(inflight).collapsedLine(inflight)).toBe(
+    expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe(
       "Fetching https://example.com"
     );
     const done = tool({ ...inflight, status: "completed" });
-    expect(lookupToolSummary(done).collapsedLine(done)).toBe("Fetched https://example.com");
+    expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Fetched https://example.com");
   });
 
   it("uses Running while Bash is in flight and Ran when it completes", () => {
@@ -185,9 +184,11 @@ describe("lookupToolSummary", () => {
       status: "in_progress",
       input: { description: "Check working tree" },
     });
-    expect(lookupToolSummary(inflight).collapsedLine(inflight)).toBe("Running Check working tree");
+    expect(lookupToolSummary(inflight).collapsedLine(inflight, CTX)).toBe(
+      "Running Check working tree"
+    );
     const done = tool({ ...inflight, status: "completed" });
-    expect(lookupToolSummary(done).collapsedLine(done)).toBe("Ran Check working tree");
+    expect(lookupToolSummary(done).collapsedLine(done, CTX)).toBe("Ran Check working tree");
   });
 });
 
@@ -197,7 +198,7 @@ describe("BASH_SUMMARY.expandedDetails", () => {
       "cd ~/Developer/obsidian-copilot && rg --multiline 'foo bar baz' src/**/*.ts | head -50";
     const t = tool({ vendorToolName: "Bash", input: { command: longCmd } });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t).length).toBeLessThan(longCmd.length); // collapsed truncates
+    expect(s.collapsedLine(t, CTX).length).toBeLessThan(longCmd.length); // collapsed truncates
     expect(s.expandedDetails?.(t)).toBe(longCmd);
   });
 

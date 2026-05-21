@@ -331,7 +331,15 @@ The TODO.md should be:
 
 ### Obsidian Plugin Environment
 
-- **Global `app` variable**: In Obsidian plugins, `app` is a globally available variable that provides access to the Obsidian API. It's automatically available in all files without needing to import or declare it.
+#### Accessing the Obsidian `app`
+
+Don't use the global `app`. It's a footgun in popout windows and hides dependencies from tests.
+
+- **React components** → `useApp()` from `@/context`. Don't add `app` as a new prop just to thread it down — call `useApp()` at the leaf.
+- **Non-React modules** → take `app` (or just the slice you need, e.g. `app.vault`) as a parameter.
+- **Plugin entry points** → `this.app` on the `Plugin` instance.
+
+Never write `declare const app: App;` in new code. A few legacy files do — don't follow them.
 
 ### Picking the right `document` / `window` (popout-window safety)
 

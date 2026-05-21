@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
-import { TFile, App } from "obsidian";
+import { TFile } from "obsidian";
+import { useApp } from "@/context";
 import { TypeaheadMenuPortal } from "@/components/chat-components/TypeaheadMenuPortal";
 import { useTypeaheadPlugin } from "@/components/chat-components/hooks/useTypeaheadPlugin";
 import {
@@ -15,9 +16,6 @@ import {
 } from "@/components/chat-components/hooks/useAtMentionCategories";
 import { useAtMentionSearch } from "@/components/chat-components/hooks/useAtMentionSearch";
 
-// Get app instance
-declare const app: App;
-
 interface AtMentionCommandPluginProps {
   isCopilotPlus?: boolean;
   /** Whether to surface Copilot built-in `@` tools (category + search hits). */
@@ -30,6 +28,7 @@ export function AtMentionCommandPlugin({
   showTools = false,
   currentActiveFile = null,
 }: AtMentionCommandPluginProps): JSX.Element {
+  const app = useApp();
   const [editor] = useLexicalComposerContext();
   const [extendedState, setExtendedState] = useState<{
     mode: "category" | "search";
@@ -51,30 +50,35 @@ export function AtMentionCommandPlugin({
   );
 
   // Load note content for preview using shared utilities
-  const loadNoteContentForPreview = useCallback(async (file: TFile | null) => {
-    if (!file) {
-      setCurrentPreviewContent("");
-      return;
-    }
-    try {
-      // Handle PDF and canvas files - treat as empty content (no preview)
-      if (file.extension === "pdf" || file.extension === "canvas") {
+  const loadNoteContentForPreview = useCallback(
+    async (file: TFile | null) => {
+      if (!file) {
         setCurrentPreviewContent("");
         return;
       }
+      try {
+        // Handle PDF and canvas files - treat as empty content (no preview)
+        if (file.extension === "pdf" || file.extension === "canvas") {
+          setCurrentPreviewContent("");
+          return;
+        }
 
-      const content = await app.vault.cachedRead(file);
-      const contentWithoutFrontmatter = content.replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "").trim();
-      const truncatedContent =
-        contentWithoutFrontmatter.length > 300
-          ? contentWithoutFrontmatter.slice(0, 300) + "..."
-          : contentWithoutFrontmatter;
+        const content = await app.vault.cachedRead(file);
+        const contentWithoutFrontmatter = content
+          .replace(/^---\s*\n[\s\S]*?\n---\s*\n?/, "")
+          .trim();
+        const truncatedContent =
+          contentWithoutFrontmatter.length > 300
+            ? contentWithoutFrontmatter.slice(0, 300) + "..."
+            : contentWithoutFrontmatter;
 
-      setCurrentPreviewContent(truncatedContent);
-    } catch {
-      setCurrentPreviewContent("Failed to load content");
-    }
-  }, []);
+        setCurrentPreviewContent(truncatedContent);
+      } catch {
+        setCurrentPreviewContent("Failed to load content");
+      }
+    },
+    [app]
+  );
 
   // Temporary state for query to resolve circular dependency
   const [currentQuery, setCurrentQuery] = useState("");

@@ -1,6 +1,7 @@
 import React, { useEffect, useRef } from "react";
 import { logWarn } from "@/logger";
-import { App, Component, MarkdownRenderer } from "obsidian";
+import { renderMarkdown } from "@/utils/renderMarkdown";
+import { App, Component } from "obsidian";
 
 interface AgentMarkdownTextProps {
   text: string;
@@ -22,7 +23,7 @@ export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({ text, app 
     target.empty();
     const component = new Component();
     component.load();
-    MarkdownRenderer.renderMarkdown(text, target, "", component).catch((e: unknown) => {
+    renderMarkdown(app, text, target, "", component).catch((e: unknown) => {
       logWarn("[AgentTrail] markdown render failed", e);
     });
     return () => {
