@@ -1,5 +1,31 @@
 # Release Notes
 
+# Copilot for Obsidian - Release v3.3.3 🛠️
+
+This patch brings a fresh Gemini model, squashes a nasty Copilot Plus freeze, and makes it much easier to verify your dev build is actually loaded in Obsidian. Thanks to @logancyang and @zeroliu for the quick turnaround!
+
+- 💡 **Gemini 3.5 Flash is now a built-in model** — Google's latest generally-available Gemini model (`gemini-3.5-flash`) is now available out of the box, enabled by default with Vision and Reasoning support. It replaces the old `gemini-3-flash-preview` entry. Your existing default model (`google/gemini-2.5-flash` on OpenRouter) is unchanged — this is an additional option. (@logancyang)
+- 🛠️ **Copilot Plus no longer freezes when you apply your license key** — Applying a Plus license key was causing Obsidian to freeze indefinitely. The root cause was a chain-rebuild loop: multiple concurrent initializations were each capturing the chain type, then writing it back after awaiting the model switch, bouncing the state between `LLM_CHAIN` and `COPILOT_PLUS_CHAIN` and triggering endless rebuilds. This is now fixed — applying your key fires a single clean rebuild and the UI stays responsive. (@zeroliu)
+- 🔧 **New `npm run test:vault` command for developers** — A single command now builds the plugin and hot-reloads it directly into your test vault via the Obsidian CLI. It also stamps the loaded build's name with the current git branch and timestamp, so you can glance at Obsidian's Community plugins list to confirm you're running the build you think you are. (@zeroliu)
+
+More details in the changelog:
+
+### Improvements
+
+- #2477 Add npm run test:vault for fast worktree-to-vault plugin reload @zeroliu
+- #2492 feat(models): add GA gemini-3.5-flash builtin @logancyang
+
+### Bug Fixes
+
+- #2478 fix(chain): stop writing chainType back inside setChain (apply-Plus freeze) @zeroliu
+
+## Troubleshoot
+
+- If models are missing, navigate to Copilot settings -> Models tab and click "Refresh Built-in Models".
+- Please report any issue you see in the member channel!
+
+---
+
 # Copilot for Obsidian - Release v3.3.2 🛠️
 
 This patch is all about stability and speed. **Claude Opus 4.7+ now works correctly with adaptive thinking** on both direct Anthropic and AWS Bedrock, project-mode file ingestion is fixed, Quick Ask no longer crashes on `@`-mention, and the plugin is 75 KB lighter thanks to a clean dependency deduplication. Kudos to @logancyang and @zeroliu for the focused clean-up!
