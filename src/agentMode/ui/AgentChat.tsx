@@ -13,6 +13,7 @@ import { useChatFileDrop } from "@/hooks/useChatFileDrop";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomCommandPrefix";
+import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type {
   AgentChatMessage,
   CurrentPlan,
@@ -273,10 +274,14 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
     const hadUnsupportedAttachments = includeActiveWebTab || hasWebExcerpt;
 
+    // Resolve `app.workspace.getActiveFile()` once — it's used to build the
+    // candidate-note set, to expand slash-command active-note placeholders,
+    // and to rewrite the `{activeNote}` pill token in the message body.
+    const activeFile = app.workspace.getActiveFile();
+
     const candidateNotes: TFile[] = [];
-    if (includeActiveNote) {
-      const active = app.workspace.getActiveFile();
-      if (active) candidateNotes.push(active);
+    if (includeActiveNote && activeFile) {
+      candidateNotes.push(activeFile);
     }
     candidateNotes.push(...contextNotes);
     const notes = dedupeBy(candidateNotes, (n) => n.path);
@@ -292,11 +297,18 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
       getCachedCustomCommands(),
       app.vault,
       noteSelection?.content ?? "",
-      app.workspace.getActiveFile()
+      activeFile
     );
     if (expanded.matched) {
       void CustomCommandManager.getInstance().recordUsage(expanded.matched);
     }
+    // Replace the `{activeNote}` pill token with the actual `[[Note Title]]`
+    // wikilink form. The active file is a client-side concept the agent has
+    // no way to query; we resolve it here so the agent sees a concrete
+    // reference. `ActiveNotePillSyncPlugin` already pushes the active file
+    // onto `candidateNotes` (via `includeActiveNote`), so the resolved path
+    // is also in the `<copilot-context>` envelope for the agent to `read`.
+    const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
 
     const content: PromptContent[] = [];
 
@@ -308,7 +320,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
 
     const item: QueuedAgentMessage = {
       id: `queued-${uuidv4()}`,
-      text: expanded.text,
+      text: resolvedText,
       rawInput,
       context: buildMessageContext(notes, selectedTextContexts),
       promptContent: content.length > 0 ? content : undefined,

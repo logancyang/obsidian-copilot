@@ -49,7 +49,6 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
 - Use \`$...$\` for LaTeX equations, never \`\\[...\\]\` or \`\\(...\\)\`.
 - For markdown lists, always use \`- \` (hyphen followed by exactly one space) for bullet points. Never use \`*\` for bullets.
 - For tables, use GitHub-flavored markdown.
-- When referring to an Obsidian note in your written reply, use \`[[title]]\` format (no backticks around it). To actually read or modify a note, call the \`read\` or \`edit\` tool — don't infer note contents from a wikilink title alone.
 - For Obsidian-internal image links, use \`![[link]]\` format. For web image links, use \`![alt](url)\` format.`;
 
 /**

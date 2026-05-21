@@ -42,7 +42,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
   });
 
-  it("injects the skill-creation directive via -c developer_instructions", async () => {
+  it("injects the pill-syntax + skill-creation directives via -c developer_instructions", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
@@ -50,7 +50,13 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(cIdx).toBeGreaterThanOrEqual(0);
     const value = desc.args[cIdx + 1];
     expect(value.startsWith("developer_instructions=")).toBe(true);
-    // The TOML value carries the directive text (newlines escaped as \n).
+    // Pill-syntax directive presence — `{` is TOML-safe so the literal
+    // tokens survive escaping unchanged.
+    expect(value).toContain("{folder_name}");
+    expect(value).toContain("{activeNote}");
+    // Skill-creation directive presence. The TOML value carries the
+    // directive text with newlines escaped as `\n` and inner double quotes
+    // as `\"`.
     expect(value).toContain('metadata.copilot-enabled-agents: \\"codex\\"');
     expect(value).toContain("copilot/skills/<name>/SKILL.md");
     expect(value).toContain(".claude/skills/");

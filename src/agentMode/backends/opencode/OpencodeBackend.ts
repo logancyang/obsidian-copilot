@@ -5,6 +5,7 @@ import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import {
+  buildPillSyntaxDirective,
   buildSkillCreationDirective,
   composeDenyList,
   DEFAULT_SKILLS_FOLDER,
@@ -229,7 +230,12 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
   const skillsDirs = skillManagerReady
     ? Object.values(SkillManager.getInstance().getAgentDirsProjectRel())
     : [];
-  const prompt = `${basePrompt}\n\n${buildSkillCreationDirective("opencode", skillsFolder, skillsDirs)}`;
+  // Pill-syntax directive teaches every backend how to interpret the
+  // `[[note]]` / `{folder}` / `{activeNote}` tokens the chat editor emits
+  // from @-mention pills. Composed between the base prompt and the
+  // skill-creation directive so a fresh reader encounters input-parsing
+  // rules before skill-authoring rules.
+  const prompt = `${basePrompt}\n\n${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("opencode", skillsFolder, skillsDirs)}`;
   config.agent = {
     [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
       prompt,

@@ -28,6 +28,7 @@ export { reconcile, getAgentDirs } from "./reconcile";
 export type { ReconcileFs, ReconcileOptions, ReconcileReport } from "./reconcile";
 export { agentSkillsDirAbs, DEFAULT_SKILLS_FOLDER } from "./agentPaths";
 export { buildSkillCreationDirective } from "./spawnDirective";
+export { buildPillSyntaxDirective } from "./pillSyntaxDirective";
 export { composeDenyList } from "./denyListComposer";
 export { DeleteConfirmModal } from "./ui/DeleteConfirmDialog";
 export { PropertiesModal } from "./ui/PropertiesDialog";
