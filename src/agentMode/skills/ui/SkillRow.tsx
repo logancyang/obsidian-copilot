@@ -58,10 +58,6 @@ export const SkillRow: React.FC<SkillRowProps> = ({
   const [menuOpen, setMenuOpen] = React.useState(false);
   const chips = computeChips(skill);
   const enabledAgents = new Set(skill.enabledAgents);
-  // Codex silently ignores the three Claude-only flags. We surface this by
-  // hard-disabling the Codex toggle when any of those flags are set so the
-  // user understands the row is Claude-only territory.
-  const claudeOnlySkill = isClaudeOnlySkill(skill);
 
   return (
     <div
@@ -93,12 +89,6 @@ export const SkillRow: React.FC<SkillRowProps> = ({
       <div className="tw-flex tw-items-center tw-gap-1.5">
         {agents.map((agent) => {
           const enabled = enabledAgents.has(agent.id);
-          // Codex silently ignores the Claude-only frontmatter flags
-          // (`disable-model-invocation`, explicit `model:`, `user-invocable:
-          // false`). When those flags are set we hard-disable the Codex toggle
-          // to communicate that the row is Claude-only territory. Other
-          // backends are unaffected.
-          const hardDisabled = agent.id === "codex" && claudeOnlySkill;
           return (
             <AgentIconButton
               key={agent.id}
@@ -106,15 +96,14 @@ export const SkillRow: React.FC<SkillRowProps> = ({
               agentId={agent.id}
               agentName={agent.displayName}
               enabled={enabled}
-              disabled={hardDisabled}
               onClick={
-                onToggleAgent !== undefined && !hardDisabled
+                onToggleAgent !== undefined
                   ? () => {
                       void onToggleAgent(agent.id);
                     }
                   : undefined
               }
-              title={tooltipFor(agent.displayName, enabled, hardDisabled)}
+              title={tooltipFor(agent.displayName, enabled)}
             />
           );
         })}
@@ -191,24 +180,8 @@ function truncateModel(model: string): string {
   return model.length <= 22 ? model : `${model.slice(0, 21)}…`;
 }
 
-/**
- * A skill is "Claude-only" if any of the three Claude-native flags are set
- * — Codex and (for `user-invocable`) OpenCode silently ignore them. We
- * only surface this state on the Codex toggle.
- */
-function isClaudeOnlySkill(skill: Skill): boolean {
-  return (
-    skill.model !== undefined ||
-    skill.disableModelInvocation === true ||
-    skill.userInvocable === false
-  );
-}
-
 /** Tooltip copy for a single agent icon in its current state. */
-function tooltipFor(agentName: string, enabled: boolean, disabled: boolean): string {
-  if (disabled) {
-    return `${agentName} ignores this skill's Claude-only flag`;
-  }
+function tooltipFor(agentName: string, enabled: boolean): string {
   return enabled ? `Enabled for ${agentName}` : `Disabled for ${agentName} · click to enable`;
 }
 

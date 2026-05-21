@@ -14,12 +14,6 @@ interface AgentIconButtonProps {
   agentName?: string;
   /** Toggled-on state — filled brand colour vs. dashed outline. */
   enabled: boolean;
-  /**
-   * Hard-disabled — used when a skill carries a Claude-only flag that the
-   * agent silently ignores (e.g. Codex on a `disable-model-invocation`
-   * skill). Click is suppressed and the button is dimmed.
-   */
-  disabled?: boolean;
   onClick?: () => void;
   title?: string;
   size?: "sm" | "md";
@@ -31,29 +25,24 @@ export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
   agentId,
   agentName,
   enabled,
-  disabled = false,
   onClick,
   title,
   size = "md",
 }) => {
-  const handleClick = () => {
-    if (!disabled) onClick?.();
-  };
   const label = agentName ?? agentId;
   return (
     <div
       role="button"
-      tabIndex={disabled ? -1 : 0}
-      onClick={handleClick}
+      tabIndex={0}
+      onClick={onClick}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") {
           e.preventDefault();
-          handleClick();
+          onClick?.();
         }
       }}
       title={title}
       aria-pressed={enabled}
-      aria-disabled={disabled}
       aria-label={title ?? `${enabled ? "Disable" : "Enable"} ${label}`}
       className={cn(
         "tw-flex tw-items-center tw-justify-center tw-transition-transform",
@@ -61,8 +50,7 @@ export const AgentIconButton: React.FC<AgentIconButtonProps> = ({
         size === "md" ? "tw-size-[26px] tw-rounded-[7px]" : "tw-size-5 tw-rounded-[5px]",
         enabled
           ? "tw-bg-interactive-accent tw-text-on-accent"
-          : "tw-border tw-border-dashed tw-border-[var(--text-faint)] tw-bg-primary tw-text-faint tw-opacity-60 hover:tw-opacity-100",
-        disabled && "tw-pointer-events-none tw-cursor-not-allowed tw-opacity-50"
+          : "tw-border tw-border-dashed tw-border-[var(--text-faint)] tw-bg-primary tw-text-faint tw-opacity-60 hover:tw-opacity-100"
       )}
     >
       <Icon className="tw-size-3.5" />
