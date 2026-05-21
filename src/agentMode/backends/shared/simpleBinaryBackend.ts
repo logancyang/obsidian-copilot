@@ -9,11 +9,13 @@ import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMod
  * Build a spawn descriptor for a backend whose only configuration is a
  * user-provided binary path (no managed install, no extra args). Auth is
  * inherited from the user's environment / login state — no API key
- * injection.
+ * injection. `envOverrides` is merged last so user values can override even
+ * the augmented `PATH`.
  */
 export function buildSimpleSpawnDescriptor(
   binaryPath: string | undefined,
-  configErrorMessage: string
+  configErrorMessage: string,
+  envOverrides?: Record<string, string>
 ): AcpSpawnDescriptor {
   if (!binaryPath) throw new Error(configErrorMessage);
   return {
@@ -22,6 +24,7 @@ export function buildSimpleSpawnDescriptor(
     env: {
       ...process.env,
       PATH: augmentPathForNodeShebang(binaryPath, process.env.PATH),
+      ...(envOverrides ?? {}),
     },
   };
 }

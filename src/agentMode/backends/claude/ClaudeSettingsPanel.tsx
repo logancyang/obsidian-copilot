@@ -1,4 +1,5 @@
-import { BinaryPathSetting } from "@/components/agent/BinaryPathSetting";
+import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
+import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSetting";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import type CopilotPlugin from "@/main";
@@ -148,6 +149,13 @@ export const ClaudeSettingsPanel: React.FC<Props> = () => {
         description="Stream the model's reasoning blocks during a turn. Increases token usage."
         checked={Boolean(settings.agentMode?.backends?.claude?.enableThinking)}
         onCheckedChange={(checked) => updateClaudeFields({ enableThinking: checked })}
+      />
+
+      <EnvOverridesSetting
+        backendDisplayName="Claude"
+        value={settings.agentMode?.backends?.claude?.envOverrides}
+        onChange={(next) => updateClaudeFields({ envOverrides: next })}
+        hintExamples={["CLAUDE_CONFIG_DIR", "HTTPS_PROXY"]}
       />
     </>
   );

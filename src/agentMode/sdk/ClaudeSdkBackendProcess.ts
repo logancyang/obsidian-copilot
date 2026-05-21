@@ -127,6 +127,11 @@ export interface ClaudeSdkBackendProcessOptions {
    * Empty string / undefined disables the append.
    */
   getSkillCreationDirective?: () => string | undefined;
+  /**
+   * User-defined env vars merged onto `process.env` for the spawned `claude`
+   * CLI. Read per `prompt()` so settings edits apply on the next turn.
+   */
+  getEnvOverrides?: () => Record<string, string> | undefined;
 }
 
 /**
@@ -281,6 +286,12 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     if (session.effort) options.effort = session.effort;
     if (this.opts.getEnableThinking?.()) {
       options.thinking = { type: "adaptive" };
+    }
+    const envOverrides = this.opts.getEnvOverrides?.();
+    if (envOverrides && Object.keys(envOverrides).length > 0) {
+      // Options.env replaces (not merges with) the child env, so include
+      // process.env to preserve PATH and friends.
+      options.env = { ...process.env, ...envOverrides };
     }
 
     logSdkOutbound(

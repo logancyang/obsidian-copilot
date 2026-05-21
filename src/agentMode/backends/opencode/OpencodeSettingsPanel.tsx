@@ -1,11 +1,12 @@
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
-import { BinaryPathSetting } from "@/components/agent/BinaryPathSetting";
+import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
+import { EnvOverridesSetting } from "@/agentMode/backends/shared/EnvOverridesSetting";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { logError } from "@/logger";
 import type CopilotPlugin from "@/main";
-import { useSettingsValue } from "@/settings/model";
+import { updateAgentModeBackendFields, useSettingsValue } from "@/settings/model";
 import type { App } from "obsidian";
 import { Notice } from "obsidian";
 import React from "react";
@@ -146,6 +147,13 @@ export const OpencodeSettingsPanel: React.FC<Props> = ({ plugin, app }) => {
           )}
         </div>
       )}
+
+      <EnvOverridesSetting
+        backendDisplayName="opencode"
+        value={settings.agentMode?.backends?.opencode?.envOverrides}
+        onChange={(next) => updateAgentModeBackendFields("opencode", { envOverrides: next })}
+        hintExamples={["XDG_CONFIG_HOME", "HTTPS_PROXY"]}
+      />
     </>
   );
 };

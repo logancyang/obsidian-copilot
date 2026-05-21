@@ -297,6 +297,13 @@ export interface ClaudeBackendSettings {
    * surfaces reasoning chunks. Off by default (matches SDK default).
    */
   enableThinking?: boolean;
+  /**
+   * User-defined environment variables merged on top of `process.env` when
+   * spawning the `claude` CLI. Used to redirect config dirs
+   * (`CLAUDE_CONFIG_DIR`), set proxies, or toggle vendor flags without
+   * polluting the parent shell environment.
+   */
+  envOverrides?: Record<string, string>;
 }
 
 /** Settings slice owned by the Codex backend. */
@@ -307,6 +314,8 @@ export interface CodexBackendSettings {
   defaultModel?: ModelSelection | null;
   /** Sparse user overrides; see `ClaudeBackendSettings.modelEnabledOverrides`. */
   modelEnabledOverrides?: Record<string, boolean>;
+  /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `codex-acp` subprocess. */
+  envOverrides?: Record<string, string>;
 }
 
 /** Settings slice owned by the OpenCode backend. */
@@ -335,6 +344,8 @@ export interface OpencodeBackendSettings {
   probeSessionId?: string;
   /** Sparse user overrides; see `ClaudeBackendSettings.modelEnabledOverrides`. */
   modelEnabledOverrides?: Record<string, boolean>;
+  /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `opencode` subprocess. */
+  envOverrides?: Record<string, string>;
 }
 
 export const settingsStore = createStore();
@@ -977,6 +988,34 @@ function sanitizeDefaultModel(raw: unknown): ModelSelection | undefined {
   return { baseModelId, effort };
 }
 
+/**
+ * Strict env-var key check: POSIX-style identifier. Rejects empty strings,
+ * leading digits, `=`, whitespace, dots, hyphens, and control chars. Shared
+ * with the UI editor (`EnvOverridesSetting`) so live validation matches what
+ * the sanitizer accepts.
+ */
+export const ENV_VAR_NAME_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Sanitize a user-supplied env-var override record. Drops entries whose key
+ * fails POSIX-identifier validation or whose value isn't a string. Caps the
+ * record at 64 entries to bound the persisted size. Returns `undefined`
+ * when the record is empty so the persisted settings shape stays clean.
+ */
+export function sanitizeEnvOverrides(raw: unknown): Record<string, string> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof k !== "string") continue;
+    if (!ENV_VAR_NAME_RE.test(k)) continue;
+    if (typeof v !== "string") continue;
+    if (CONTROL_CHAR_RE.test(v)) continue;
+    out[k] = v;
+    if (Object.keys(out).length >= 64) break;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
 function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
   if (!raw || typeof raw !== "object") return {};
   const r = raw as Record<string, unknown>;
@@ -984,6 +1023,7 @@ function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
     enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
+    envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };
 }
 
@@ -994,6 +1034,7 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
     binaryPath: nonEmptyString(r.binaryPath),
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+    envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };
 }
 
@@ -1016,6 +1057,7 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
     defaultModel: sanitizeDefaultModel(r.defaultModel),
     probeSessionId: nonEmptyString(r.probeSessionId),
     modelEnabledOverrides: sanitizeModelEnabledOverrides(r.modelEnabledOverrides),
+    envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };
 }
 

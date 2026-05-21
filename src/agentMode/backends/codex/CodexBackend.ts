@@ -23,7 +23,8 @@ export class CodexBackend implements AcpBackend {
   async buildSpawnDescriptor(_ctx: { vaultBasePath: string }): Promise<AcpSpawnDescriptor> {
     const descriptor = buildSimpleSpawnDescriptor(
       getSettings().agentMode?.backends?.codex?.binaryPath,
-      "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp."
+      "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
+      getSettings().agentMode?.backends?.codex?.envOverrides
     );
     // Spawn-time skill-creation directive: forwarded into codex's
     // `developer_instructions` config field via codex-acp's `-c key=value`

@@ -5,7 +5,12 @@ import {
   DEFAULT_SETTINGS,
   SEND_SHORTCUT,
 } from "@/constants";
-import { sanitizeQaExclusions, sanitizeSettings, CopilotSettings } from "@/settings/model";
+import {
+  sanitizeEnvOverrides,
+  sanitizeQaExclusions,
+  sanitizeSettings,
+  CopilotSettings,
+} from "@/settings/model";
 import { getEffectiveUserPrompt, getSystemPrompt } from "@/system-prompts/systemPromptBuilder";
 import * as systemPromptsState from "@/system-prompts/state";
 import * as settingsModel from "@/settings/model";
@@ -258,6 +263,88 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       binaryPath: undefined,
       binaryVersion: undefined,
       binarySource: undefined,
+    });
+  });
+});
+
+describe("sanitizeEnvOverrides", () => {
+  it("returns undefined for non-objects", () => {
+    expect(sanitizeEnvOverrides(undefined)).toBeUndefined();
+    expect(sanitizeEnvOverrides(null)).toBeUndefined();
+    expect(sanitizeEnvOverrides("foo")).toBeUndefined();
+    expect(sanitizeEnvOverrides(42)).toBeUndefined();
+    expect(sanitizeEnvOverrides([1, 2])).toBeUndefined();
+  });
+
+  it("returns undefined when no valid entries remain", () => {
+    expect(sanitizeEnvOverrides({})).toBeUndefined();
+    expect(sanitizeEnvOverrides({ "": "v", "1FOO": "v", "BAR=BAZ": "v" })).toBeUndefined();
+  });
+
+  it("keeps valid POSIX identifiers and string values", () => {
+    expect(
+      sanitizeEnvOverrides({
+        CLAUDE_CONFIG_DIR: "/tmp/claude",
+        _PRIVATE: "x",
+        myVar2: "y",
+      })
+    ).toEqual({
+      CLAUDE_CONFIG_DIR: "/tmp/claude",
+      _PRIVATE: "x",
+      myVar2: "y",
+    });
+  });
+
+  it("drops keys with leading digits, equals signs, whitespace, or invalid characters", () => {
+    expect(
+      sanitizeEnvOverrides({
+        "1FOO": "v",
+        "FOO BAR": "v",
+        "FOO=BAR": "v",
+        "FOO-BAR": "v",
+        VALID: "v",
+      })
+    ).toEqual({ VALID: "v" });
+  });
+
+  it("drops entries whose value isn't a string or contains control chars", () => {
+    expect(
+      sanitizeEnvOverrides({
+        OK: "fine",
+        NUM: 42,
+        NULLED: null,
+        UNDEF: undefined,
+        TABS: "ok\twith\ttabs", // tab is a control char — drop
+        NEWLINE: "ok\nnewline", // drop
+      })
+    ).toEqual({ OK: "fine" });
+  });
+
+  it("caps at 64 entries to bound persisted size", () => {
+    const big: Record<string, string> = {};
+    for (let i = 0; i < 100; i++) big[`VAR_${i}`] = String(i);
+    const sanitized = sanitizeEnvOverrides(big);
+    expect(sanitized && Object.keys(sanitized).length).toBe(64);
+  });
+
+  it("round-trips through sanitizeSettings on the Claude backend slice", () => {
+    const settings = {
+      ...DEFAULT_SETTINGS,
+      agentMode: {
+        enabled: true,
+        byok: {},
+        mcpServers: [],
+        activeBackend: "claude",
+        backends: {
+          claude: { envOverrides: { CLAUDE_CONFIG_DIR: "/x", "BAD KEY": "y" } },
+        },
+      },
+    } as unknown as CopilotSettings;
+
+    const sanitized = sanitizeSettings(settings);
+
+    expect(sanitized.agentMode.backends.claude?.envOverrides).toEqual({
+      CLAUDE_CONFIG_DIR: "/x",
     });
   });
 });

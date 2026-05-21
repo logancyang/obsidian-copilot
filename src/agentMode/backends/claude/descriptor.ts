@@ -191,6 +191,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       descriptor: args.descriptor,
       askUserQuestion: (questions) => openAskUserQuestionModal(args.app, questions),
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
+      getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
       // Spawn-time skill-creation directive: read the current

@@ -83,6 +83,7 @@ export class OpencodeBackend implements AcpBackend {
     }
 
     const config = await buildOpencodeConfig();
+    const envOverrides = getSettings().agentMode?.backends?.opencode?.envOverrides ?? {};
 
     return {
       command: binaryPath,
@@ -90,6 +91,9 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+        // User overrides last — they can replace OPENCODE_CONFIG_CONTENT
+        // intentionally if they need to point opencode at a different config.
+        ...envOverrides,
       },
     };
   }

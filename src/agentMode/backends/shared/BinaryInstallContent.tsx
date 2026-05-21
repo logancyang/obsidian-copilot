@@ -1,5 +1,5 @@
 import { ReactModal } from "@/components/modals/ReactModal";
-import { BinaryPathSetting } from "@/components/agent/BinaryPathSetting";
+import { BinaryPathSetting } from "./BinaryPathSetting";
 import { Button } from "@/components/ui/button";
 import { logError } from "@/logger";
 import { validateExecutableFile } from "@/utils/detectBinary";

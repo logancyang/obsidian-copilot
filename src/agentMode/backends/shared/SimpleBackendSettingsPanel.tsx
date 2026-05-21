@@ -1,4 +1,4 @@
-import { BinaryPathSetting } from "@/components/agent/BinaryPathSetting";
+import { BinaryPathSetting } from "./BinaryPathSetting";
 import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { useSettingsValue } from "@/settings/model";
