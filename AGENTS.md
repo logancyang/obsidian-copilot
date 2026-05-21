@@ -30,27 +30,16 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 ### Obsidian CLI (Live Testing)
 
-The Obsidian desktop app includes a CLI for plugin development. Use the full path:
+The Obsidian desktop app includes a CLI for plugin development at
+`/Applications/Obsidian.app/Contents/MacOS/obsidian`. For end-to-end testing
+workflows — multi-vault targeting, popout windows, build-and-deploy with
+`npm run test:vault`, settings round-trips, screenshots, CDP-driven UI input,
+performance metrics, and a sample smoke-test scaffold — see
+[`OBSIDIAN_CLI_TEST.md`](./OBSIDIAN_CLI_TEST.md).
 
-```bash
-/Applications/Obsidian.app/Contents/MacOS/obsidian <command>
-```
-
-**Console debugging** (requires attaching debugger first):
-
-```bash
-/Applications/Obsidian.app/Contents/MacOS/obsidian dev:debug on
-/Applications/Obsidian.app/Contents/MacOS/obsidian dev:console limit=30
-/Applications/Obsidian.app/Contents/MacOS/obsidian dev:console level=error limit=10
-/Applications/Obsidian.app/Contents/MacOS/obsidian dev:errors
-```
-
-**Other useful dev commands**:
-
-- `dev:dom selector=<css>` — Query DOM elements
-- `dev:screenshot path=<file>` — Take a screenshot
-- `eval code=<js>` — Execute JS in the app context
-- `plugin:disable id=copilot` / `plugin:enable id=copilot`
+**The biggest gotcha is multi-vault targeting**: always pass `vault=<name>`
+explicitly; the CLI's default routes to whichever window was touched last,
+which silently changes as you (or another agent) work.
 
 Run `obsidian help` for the full command list.
 
