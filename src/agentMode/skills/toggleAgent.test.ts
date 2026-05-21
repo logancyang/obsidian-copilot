@@ -1,4 +1,4 @@
-import { runDeleteSkill, runToggleAgent, type ToggleAgentFs } from "./toggleAgent";
+import { runDeleteSkill, runToggleAgent, type DeleteSkillFs } from "./toggleAgent";
 import type { Skill } from "./types";
 
 jest.mock("@/logger", () => ({
@@ -20,7 +20,7 @@ jest.mock("./renameWithRetry", () => ({
 
 type Node = { kind: "dir" } | { kind: "file"; content: string } | { kind: "link"; target: string };
 
-function mkFs(initial: Record<string, Node> = {}): ToggleAgentFs & {
+function mkFs(initial: Record<string, Node> = {}): DeleteSkillFs & {
   __dump(): Record<string, Node>;
   __setSymlinkBlocked(blocked: boolean): void;
 } {
@@ -50,6 +50,21 @@ function mkFs(initial: Record<string, Node> = {}): ToggleAgentFs & {
     },
     async isSymlink(p) {
       return map.get(p)?.kind === "link";
+    },
+    async readlinkAbs(p) {
+      const n = map.get(p);
+      return n !== undefined && n.kind === "link" ? n.target : null;
+    },
+    async list(p) {
+      const prefix = p.replace(/\/+$/, "") + "/";
+      const out = new Set<string>();
+      for (const k of map.keys()) {
+        if (!k.startsWith(prefix)) continue;
+        const rest = k.slice(prefix.length);
+        if (rest.length === 0) continue;
+        out.add(rest.split("/")[0]);
+      }
+      return Array.from(out);
     },
     async symlink(target, linkPath) {
       if (symlinkBlocked) {
@@ -253,5 +268,31 @@ describe("runDeleteSkill", () => {
 
     expect(result).toEqual({ ok: true });
     expect(fs.__dump()[`${CANON}/foo`]).toBeUndefined();
+  });
+
+  it("removes stale symlinks pointing at the deleted skill in disabled agent dirs", async () => {
+    const fs = mkFs({
+      [`${CANON}/foo/SKILL.md`]: { kind: "file", content: SKILL_MD("foo", "claude") },
+      "/vault/.claude/skills/foo": { kind: "link", target: `${CANON}/foo` },
+      "/vault/.agents/skills/foo": { kind: "link", target: `${CANON}/foo` },
+      "/vault/.opencode/skills/unrelated": { kind: "link", target: "/elsewhere/unrelated" },
+      "/vault/.opencode/skills/foo": { kind: "dir" },
+      "/vault/.opencode/skills/foo/SKILL.md": { kind: "file", content: SKILL_MD("foo") },
+    });
+
+    const result = await runDeleteSkill({
+      skill: mkSkill("foo", ["claude"]),
+      agentDirsAbs: AGENT_DIRS_ABS,
+      fs,
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(fs.__dump()["/vault/.claude/skills/foo"]).toBeUndefined();
+    expect(fs.__dump()["/vault/.agents/skills/foo"]).toBeUndefined();
+    expect(fs.__dump()["/vault/.opencode/skills/unrelated"]).toEqual({
+      kind: "link",
+      target: "/elsewhere/unrelated",
+    });
+    expect(fs.__dump()["/vault/.opencode/skills/foo"]).toEqual({ kind: "dir" });
   });
 });

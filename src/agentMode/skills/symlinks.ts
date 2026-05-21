@@ -1,6 +1,6 @@
 import { logWarn } from "@/logger";
 import { errCode } from "@/utils/errorUtils";
-import { joinPosix } from "@/utils/pathUtils";
+import { joinPosix, normalizeAbsPath } from "@/utils/pathUtils";
 import { renameWithRetry } from "./renameWithRetry";
 
 /**
@@ -28,6 +28,18 @@ export interface SymlinksFs {
   unlink(absPath: string): Promise<void>;
   /** Recursively remove a real directory at `absPath`. */
   rmRecursive(absPath: string): Promise<void>;
+}
+
+/**
+ * FS surface for targeted link sweeps. Used by single-skill delete/rename
+ * flows so they can clean stale managed links without running a full
+ * repository reconciliation pass.
+ */
+export interface LinkSweepFs extends SymlinksFs {
+  /** List immediate entries under an agent skills directory. */
+  list(absPath: string): Promise<string[]>;
+  /** Resolve a symlink or junction to an absolute target. */
+  readlinkAbs(absPath: string): Promise<string | null>;
 }
 
 /**
@@ -196,4 +208,66 @@ export async function replaceAgentLink(
   }
 
   return { ok: true };
+}
+
+/**
+ * Remove symlinks in every agent skills directory that point exactly at
+ * `targetAbs`. Real directories and symlinks to any other target are left
+ * untouched.
+ */
+export async function removeAgentLinksPointingTo(
+  fs: LinkSweepFs,
+  agentDirsAbs: Readonly<Record<string, string>>,
+  targetAbs: string
+): Promise<{ removed: string[]; errors: Array<{ path: string; reason: string }> }> {
+  const normalizedTarget = normalizeAbsPath(targetAbs);
+  const results = await Promise.all(
+    Object.values(agentDirsAbs).map((agentDir) => sweepAgentDir(fs, agentDir, normalizedTarget))
+  );
+  return {
+    removed: results.flatMap((result) => result.removed),
+    errors: results.flatMap((result) => result.errors),
+  };
+}
+
+/** Sweep one agent directory for symlinks whose target matches `normalizedTarget`. */
+async function sweepAgentDir(
+  fs: LinkSweepFs,
+  agentDir: string,
+  normalizedTarget: string
+): Promise<{ removed: string[]; errors: Array<{ path: string; reason: string }> }> {
+  let entries: string[];
+  try {
+    entries = await fs.list(agentDir);
+  } catch {
+    return { removed: [], errors: [] };
+  }
+
+  const removed: string[] = [];
+  const errors: Array<{ path: string; reason: string }> = [];
+  await Promise.all(
+    entries.map(async (name) => {
+      const linkPath = joinPosix(agentDir, name);
+      let isLink = false;
+      try {
+        isLink = await fs.isSymlink(linkPath);
+      } catch {
+        return;
+      }
+      if (!isLink) return;
+
+      const target = await fs.readlinkAbs(linkPath);
+      if (target === null || normalizeAbsPath(target) !== normalizedTarget) return;
+
+      try {
+        await fs.unlink(linkPath);
+        removed.push(linkPath);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        errors.push({ path: linkPath, reason });
+      }
+    })
+  );
+
+  return { removed, errors };
 }

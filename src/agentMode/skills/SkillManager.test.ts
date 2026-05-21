@@ -1,7 +1,14 @@
 import { FileSystemAdapter, type App, type EventRef } from "obsidian";
 import { discoverManagedSkills } from "./discoverManagedSkills";
-import { computeSkillSetSignature, SkillManager, type RefreshResult } from "./SkillManager";
-import { runRenameSkill } from "./updateProperties";
+import { reconcile } from "./reconcile";
+import {
+  computeSkillSetSignature,
+  getManagedSkills,
+  SkillManager,
+  type RefreshResult,
+} from "./SkillManager";
+import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
+import { runRenameSkill, runUpdateProperties } from "./updateProperties";
 import type { Skill } from "./types";
 
 jest.mock("@/logger", () => ({
@@ -52,12 +59,22 @@ const mockedDiscoverManagedSkills = discoverManagedSkills as jest.MockedFunction
   typeof discoverManagedSkills
 >;
 const mockedRunRenameSkill = runRenameSkill as jest.MockedFunction<typeof runRenameSkill>;
+const mockedRunUpdateProperties = runUpdateProperties as jest.MockedFunction<
+  typeof runUpdateProperties
+>;
+const mockedRunToggleAgent = runToggleAgent as jest.MockedFunction<typeof runToggleAgent>;
+const mockedRunDeleteSkill = runDeleteSkill as jest.MockedFunction<typeof runDeleteSkill>;
+const mockedReconcile = reconcile as jest.MockedFunction<typeof reconcile>;
 
 describe("SkillManager orchestration", () => {
   beforeEach(() => {
     skillsFolder = "copilot/skills";
     mockedDiscoverManagedSkills.mockReset();
+    mockedReconcile.mockClear();
     mockedRunRenameSkill.mockReset();
+    mockedRunUpdateProperties.mockReset();
+    mockedRunToggleAgent.mockReset();
+    mockedRunDeleteSkill.mockReset();
     SkillManager.resetForTesting();
     jest.useRealTimers();
   });
@@ -139,6 +156,296 @@ describe("SkillManager orchestration", () => {
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("toggleAgent publishes an incremental update without full discovery or reconcile", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill({ enabledAgents: [] });
+    await seedSkills(manager, [skill]);
+    mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
+    mockedDiscoverManagedSkills.mockClear();
+    mockedReconcile.mockClear();
+
+    const result = await manager.toggleAgent(skill, "claude", true);
+
+    expect(result).toEqual({ ok: true });
+    expect(mockedDiscoverManagedSkills).not.toHaveBeenCalled();
+    expect(mockedReconcile).not.toHaveBeenCalled();
+    expect(getManagedSkills()[0].enabledAgents).toEqual(["claude"]);
+  });
+
+  it("updateProperties publishes an incremental update without full discovery or reconcile", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunUpdateProperties.mockResolvedValueOnce({ ok: true });
+    mockedDiscoverManagedSkills.mockClear();
+    mockedReconcile.mockClear();
+
+    const result = await manager.updateProperties(skill, {
+      description: "Updated description.",
+      model: "claude-sonnet",
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(mockedDiscoverManagedSkills).not.toHaveBeenCalled();
+    expect(mockedReconcile).not.toHaveBeenCalled();
+    expect(getManagedSkills()[0]).toMatchObject({
+      description: "Updated description.",
+      model: "claude-sonnet",
+    });
+  });
+
+  it("deleteSkill removes one row without full discovery or reconcile", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    const other = makeSkill({ name: "bar", dirPath: "/vault/copilot/skills/bar" });
+    await seedSkills(manager, [skill, other]);
+    mockedRunDeleteSkill.mockResolvedValueOnce({ ok: true });
+    mockedDiscoverManagedSkills.mockClear();
+    mockedReconcile.mockClear();
+
+    const result = await manager.deleteSkill(skill);
+
+    expect(result).toEqual({ ok: true });
+    expect(mockedDiscoverManagedSkills).not.toHaveBeenCalled();
+    expect(mockedReconcile).not.toHaveBeenCalled();
+    expect(getManagedSkills().map((s) => s.name)).toEqual(["bar"]);
+  });
+
+  it("renameSkill renames one row without full discovery or reconcile", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunRenameSkill.mockResolvedValueOnce({
+      ok: true,
+      newDirPath: "/vault/copilot/skills/bar",
+      newFilePath: "/vault/copilot/skills/bar/SKILL.md",
+    });
+    mockedDiscoverManagedSkills.mockClear();
+    mockedReconcile.mockClear();
+
+    const result = await manager.renameSkill(skill, "bar");
+
+    expect(result).toEqual({ ok: true });
+    expect(mockedDiscoverManagedSkills).not.toHaveBeenCalled();
+    expect(mockedReconcile).not.toHaveBeenCalled();
+    expect(getManagedSkills()[0]).toMatchObject({
+      name: "bar",
+      dirPath: "/vault/copilot/skills/bar",
+      filePath: "/vault/copilot/skills/bar/SKILL.md",
+    });
+  });
+
+  it("saveProperties emits one skill-set notification for rename plus patch", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { opencode: ".opencode/skills" });
+    const listener = jest.fn();
+    const skill = makeSkill({ enabledAgents: ["opencode"] });
+    manager.subscribeToSkillSetChange(listener);
+    await seedSkills(manager, [skill]);
+    listener.mockClear();
+    mockedRunRenameSkill.mockResolvedValueOnce({
+      ok: true,
+      newDirPath: "/vault/copilot/skills/bar",
+      newFilePath: "/vault/copilot/skills/bar/SKILL.md",
+    });
+    mockedRunUpdateProperties.mockResolvedValueOnce({ ok: true });
+
+    const result = await manager.saveProperties(skill, {
+      newName: "bar",
+      patch: { description: "Updated description." },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(getManagedSkills()[0]).toMatchObject({
+      name: "bar",
+      description: "Updated description.",
+    });
+  });
+
+  it("saveProperties handles a description-only patch", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunUpdateProperties.mockResolvedValueOnce({ ok: true });
+
+    const result = await manager.saveProperties(skill, {
+      patch: { description: "Updated description." },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(mockedRunRenameSkill).not.toHaveBeenCalled();
+    expect(getManagedSkills()[0]).toMatchObject({
+      name: "foo",
+      description: "Updated description.",
+    });
+  });
+
+  it("saveProperties handles a rename-only update", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunRenameSkill.mockResolvedValueOnce({
+      ok: true,
+      newDirPath: "/vault/copilot/skills/bar",
+      newFilePath: "/vault/copilot/skills/bar/SKILL.md",
+    });
+    mockedRunUpdateProperties.mockResolvedValueOnce({ ok: true });
+
+    const result = await manager.saveProperties(skill, {
+      newName: "bar",
+      patch: {},
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(getManagedSkills()[0]).toMatchObject({
+      name: "bar",
+      description: "A skill.",
+    });
+  });
+
+  it("saveProperties returns collision without patching when rename collides", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunRenameSkill.mockResolvedValueOnce({ ok: false, reason: "collision" });
+
+    const result = await manager.saveProperties(skill, {
+      newName: "bar",
+      patch: { description: "Updated description." },
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      code: "collision",
+      message: "A skill with that name already exists.",
+    });
+    expect(mockedRunUpdateProperties).not.toHaveBeenCalled();
+  });
+
+  it("saveProperties closes successfully when rename reports EPERM but patch succeeds", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunRenameSkill.mockResolvedValueOnce({ ok: false, reason: "eperm", mutated: true });
+    mockedRunUpdateProperties.mockResolvedValueOnce({ ok: true });
+
+    const result = await manager.saveProperties(skill, {
+      newName: "bar",
+      patch: { description: "Updated description." },
+    });
+
+    expect(result).toEqual({ ok: true });
+    expect(getManagedSkills()[0]).toMatchObject({
+      name: "bar",
+      description: "Updated description.",
+    });
+  });
+
+  it("saveProperties publishes the rename when the follow-up patch fails", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill();
+    await seedSkills(manager, [skill]);
+    mockedRunRenameSkill.mockResolvedValueOnce({
+      ok: true,
+      newDirPath: "/vault/copilot/skills/bar",
+      newFilePath: "/vault/copilot/skills/bar/SKILL.md",
+    });
+    mockedRunUpdateProperties.mockResolvedValueOnce({ ok: false, reason: "write failed" });
+
+    const result = await manager.saveProperties(skill, {
+      newName: "bar",
+      patch: { description: "Updated description." },
+    });
+
+    expect(result).toEqual({ ok: false, code: "fs-error", message: "write failed" });
+    expect(getManagedSkills()[0]).toMatchObject({
+      name: "bar",
+      description: "A skill.",
+    });
+  });
+
+  it("suppresses a vault event that matches a pending expectation", async () => {
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill({ enabledAgents: [] });
+    await seedSkills(manager, [skill]);
+    mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
+    const refreshResult: RefreshResult = {
+      ok: true,
+      folder: "copilot/skills",
+      skillCount: 0,
+      reconcileErrorCount: 0,
+    };
+    const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
+
+    await manager.toggleAgent(skill, "claude", true);
+    refreshSpy.mockClear();
+
+    fireVaultEvent(app, "create", { path: ".claude/skills/foo" });
+    await flushMicrotasks();
+    jest.useFakeTimers();
+    jest.advanceTimersByTime(250);
+    expect(refreshSpy).not.toHaveBeenCalled();
+    jest.useRealTimers();
+  });
+
+  it("passes through a vault event that does not match any expectation", async () => {
+    jest.useFakeTimers();
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill({ enabledAgents: [] });
+    mockedDiscoverManagedSkills.mockResolvedValueOnce([skill]);
+    await manager.refresh();
+    mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
+    await manager.toggleAgent(skill, "claude", true);
+
+    const refreshResult: RefreshResult = {
+      ok: true,
+      folder: "copilot/skills",
+      skillCount: 1,
+      reconcileErrorCount: 0,
+    };
+    const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
+
+    fireVaultEvent(app, "create", { path: "copilot/skills/unrelated/SKILL.md" });
+    jest.advanceTimersByTime(250);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("safety timer clears stale expectations after the timeout", async () => {
+    jest.useFakeTimers();
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill({ enabledAgents: [] });
+    mockedDiscoverManagedSkills.mockResolvedValueOnce([skill]);
+    await manager.refresh();
+    mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
+    await manager.toggleAgent(skill, "claude", true);
+
+    const refreshResult: RefreshResult = {
+      ok: true,
+      folder: "copilot/skills",
+      skillCount: 1,
+      reconcileErrorCount: 0,
+    };
+    const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
+
+    jest.advanceTimersByTime(10_000);
+    fireVaultEvent(app, "create", { path: ".claude/skills/foo" });
+    jest.advanceTimersByTime(250);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("notifies when a backend-visible skill signature changes", async () => {
     const app = makeApp();
     const manager = SkillManager.initialize(app, { opencode: ".opencode/skills" });
@@ -196,12 +503,39 @@ function makeApp(): App & {
   };
 }
 
+async function seedSkills(manager: SkillManager, skills: Skill[]): Promise<void> {
+  mockedDiscoverManagedSkills.mockResolvedValueOnce(skills);
+  await manager.refresh();
+}
+
+function fireVaultEvent(
+  app: ReturnType<typeof makeApp>,
+  event: string,
+  file: { path: string },
+  oldPath?: string
+): void {
+  const call = app.vault.on.mock.calls.find(([e]) => e === event);
+  if (call === undefined) throw new Error(`No handler registered for "${event}"`);
+  if (oldPath !== undefined) {
+    call[1](file, oldPath);
+  } else {
+    call[1](file);
+  }
+}
+
+async function flushMicrotasks(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
+
 function makeSkill(overrides: Partial<Skill> = {}): Skill {
+  const name = overrides.name ?? "foo";
+  const dirPath = overrides.dirPath ?? `/vault/copilot/skills/${name}`;
   return {
     name: "foo",
     description: "A skill.",
-    filePath: "/vault/copilot/skills/foo/SKILL.md",
-    dirPath: "/vault/copilot/skills/foo",
+    filePath: `${dirPath}/SKILL.md`,
+    dirPath,
     body: "body",
     enabledAgents: ["claude"],
     ...overrides,

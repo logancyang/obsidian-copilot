@@ -1,7 +1,11 @@
 import { logWarn } from "@/logger";
 import { basename, joinPosix, normalizeAbsPath, resolvesInto } from "@/utils/pathUtils";
+import { mapWithConcurrency } from "./concurrency";
 import { createAgentLink, removeAgentLink, replaceAgentLink, type SymlinksFs } from "./symlinks";
 import type { BackendId, Skill } from "./types";
+
+/** Maximum concurrent filesystem checks during reconciliation. */
+const RECONCILE_CONCURRENCY = 32;
 
 /**
  * FS surface for reconciliation. Extends {@link SymlinksFs} with the bare
@@ -82,20 +86,19 @@ export async function reconcile(options: ReconcileOptions): Promise<ReconcileRep
   };
 
   // Pre-index managed skills by name for the orphan-removal phase.
-  const managedNames = new Set(skills.map((s) => s.name));
+  const skillByName = new Map(skills.map((skill) => [skill.name, skill]));
 
   // -- Phase 1: forward sync ----------------------------------------------
-  // Each (skill, agent) pair is independent: launch in parallel and merge
-  // results so a vault with N skills × M agents costs ~max(per-pair latency)
-  // rather than the sum.
+  // Each (skill, agent) pair is independent; keep concurrency bounded so a
+  // large skill set does not flood the filesystem with hundreds of lstat calls.
   const forwardOps = skills.flatMap((skill) =>
     skill.enabledAgents.flatMap((agent) => {
       const agentDir = agentDirsAbs[agent];
       if (agentDir === undefined) return [];
-      return [syncOneLink(fs, agentDir, skill)];
+      return [() => syncOneLink(fs, agentDir, skill)];
     })
   );
-  for (const entry of await Promise.all(forwardOps)) {
+  for (const entry of await mapWithConcurrency(forwardOps, RECONCILE_CONCURRENCY, (op) => op())) {
     if (entry.created !== undefined) report.created.push(entry.created);
     if (entry.error !== undefined) report.errors.push(entry.error);
   }
@@ -112,48 +115,23 @@ export async function reconcile(options: ReconcileOptions): Promise<ReconcileRep
     })
   );
 
-  for (const { agent, agentDir, entries } of agentEntries) {
-    for (const name of entries) {
-      // Skip aside-during-rename markers used by replaceAgentLink.
-      if (name.endsWith(".replacing")) continue;
-      const linkPath = joinPosix(agentDir, name);
+  const reverseOps = agentEntries.flatMap(({ agent, agentDir, entries }) =>
+    entries.map(
+      (name) => () =>
+        sweepOneReverseEntry({
+          fs,
+          canonicalAbsRoot,
+          skillByName,
+          agent,
+          agentDir,
+          name,
+        })
+    )
+  );
 
-      let isLink = false;
-      try {
-        isLink = await fs.isSymlink(linkPath);
-      } catch {
-        // Treat unreadable lstat as non-link — never delete real dirs.
-        continue;
-      }
-      if (!isLink) continue;
-
-      const target = await fs.readlinkAbs(linkPath);
-      if (target === null) continue;
-
-      // Only touch links pointing into the canonical store. Anything else
-      // is user-owned per the design spec.
-      if (!resolvesInto(target, canonicalAbsRoot)) continue;
-
-      // Determine the expected managed name from the link's basename. Orphan
-      // = (a) basename has no matching managed skill, or (b) the link's
-      // basename doesn't match its target's parent dir basename.
-      const targetBase = basename(target);
-      const basenameMatches = targetBase === name;
-      const managed = managedNames.has(name);
-      // Also ensure the matched managed skill actually enables this agent.
-      const skill = skills.find((s) => s.name === name);
-      const agentEnabled = skill !== undefined && skill.enabledAgents.includes(agent);
-
-      if (managed && basenameMatches && agentEnabled) continue;
-
-      try {
-        await removeAgentLink(fs, agentDir, name);
-        report.removedOrphans.push(linkPath);
-      } catch (err) {
-        const reason = err instanceof Error ? err.message : String(err);
-        report.errors.push({ path: linkPath, reason });
-      }
-    }
+  for (const entry of await mapWithConcurrency(reverseOps, RECONCILE_CONCURRENCY, (op) => op())) {
+    if (entry?.removed !== undefined) report.removedOrphans.push(entry.removed);
+    if (entry?.error !== undefined) report.errors.push(entry.error);
   }
 
   return report;
@@ -169,6 +147,20 @@ export function getAgentDirs(
 interface ForwardSyncEntry {
   created?: string;
   error?: { path: string; reason: string };
+}
+
+interface ReverseSweepEntry {
+  removed?: string;
+  error?: { path: string; reason: string };
+}
+
+interface ReverseSweepOptions {
+  fs: ReconcileFs;
+  canonicalAbsRoot: string;
+  skillByName: ReadonlyMap<string, Skill>;
+  agent: BackendId;
+  agentDir: string;
+  name: string;
 }
 
 /** Reconcile a single (skill, agent) slot. Returns the report deltas. */
@@ -200,6 +192,41 @@ async function syncOneLink(
 
     const result = await replaceAgentLink(fs, agentDir, skill.name, skill.dirPath);
     return result.ok ? { created: linkPath } : { error: { path: linkPath, reason: result.reason } };
+  } catch (err) {
+    const reason = err instanceof Error ? err.message : String(err);
+    return { error: { path: linkPath, reason } };
+  }
+}
+
+/** Inspect and possibly remove one reverse-sweep entry. */
+async function sweepOneReverseEntry(options: ReverseSweepOptions): Promise<ReverseSweepEntry> {
+  const { fs, canonicalAbsRoot, skillByName, agent, agentDir, name } = options;
+  if (name.endsWith(".replacing")) return {};
+  const linkPath = joinPosix(agentDir, name);
+
+  let isLink = false;
+  try {
+    isLink = await fs.isSymlink(linkPath);
+  } catch {
+    // Treat unreadable lstat as non-link — never delete real dirs.
+    return {};
+  }
+  if (!isLink) return {};
+
+  const target = await fs.readlinkAbs(linkPath);
+  if (target === null) return {};
+
+  // Only touch links pointing into the canonical store. Anything else is
+  // user-owned per the design spec.
+  if (!resolvesInto(target, canonicalAbsRoot)) return {};
+
+  const basenameMatches = basename(target) === name;
+  const skill = skillByName.get(name);
+  if (skill !== undefined && basenameMatches && skill.enabledAgents.includes(agent)) return {};
+
+  try {
+    await removeAgentLink(fs, agentDir, name);
+    return { removed: linkPath };
   } catch (err) {
     const reason = err instanceof Error ? err.message : String(err);
     return { error: { path: linkPath, reason } };

@@ -1,7 +1,11 @@
 import { logWarn } from "@/logger";
 import { basename, joinPosix } from "@/utils/pathUtils";
+import { mapWithConcurrency } from "./concurrency";
 import { parseSkillFile, SkillFormatError } from "./skillFormat";
 import type { Skill } from "./types";
+
+/** Maximum concurrent SKILL.md reads during discovery. */
+const DISCOVERY_CONCURRENCY = 16;
 
 /**
  * Minimal adapter the discovery walker depends on. Modelled after
@@ -55,59 +59,62 @@ export async function discoverManagedSkills(
   }
 
   const listing = await adapter.list(skillsFolderRelPath);
-  const skills: Skill[] = [];
 
   // Subdirectory paths come back as full vault-relative paths from
   // `adapter.list` (e.g. `copilot/skills/foo`). Sort for stable ordering
   // so the UI doesn't reshuffle on every reload.
-  for (const folderPath of [...listing.folders].sort()) {
-    const dirName = basename(folderPath);
-    const skillMdRelPath = joinPosix(folderPath, "SKILL.md");
+  const results = await mapWithConcurrency(
+    [...listing.folders].sort(),
+    DISCOVERY_CONCURRENCY,
+    async (folderPath): Promise<Skill | null> => {
+      const dirName = basename(folderPath);
+      const skillMdRelPath = joinPosix(folderPath, "SKILL.md");
 
-    let content: string;
-    try {
-      content = await adapter.read(skillMdRelPath);
-    } catch {
-      // Missing SKILL.md is expected — many subdirs are staging or asset
-      // folders. Read failure on an existing file is the same surface from
-      // Obsidian's adapter, so we can't distinguish; either way, skip.
-      continue;
-    }
+      let content: string;
+      try {
+        content = await adapter.read(skillMdRelPath);
+      } catch {
+        // Missing SKILL.md is expected — many subdirs are staging or asset
+        // folders. Read failure on an existing file is the same surface from
+        // Obsidian's adapter, so we can't distinguish; either way, skip.
+        return null;
+      }
 
-    let parsed;
-    try {
-      parsed = parseSkillFile(content, dirName);
-    } catch (err) {
-      const reason =
-        err instanceof SkillFormatError
-          ? err.message
-          : err instanceof Error
+      let parsed;
+      try {
+        parsed = parseSkillFile(content, dirName);
+      } catch (err) {
+        const reason =
+          err instanceof SkillFormatError
             ? err.message
-            : String(err);
-      logWarn(`[skills] Skipping ${skillMdRelPath}: ${reason}`);
-      continue;
+            : err instanceof Error
+              ? err.message
+              : String(err);
+        logWarn(`[skills] Skipping ${skillMdRelPath}: ${reason}`);
+        return null;
+      }
+
+      const fm = parsed.frontmatter;
+      const absDir =
+        skillsFolderAbsPath !== null ? joinPosix(skillsFolderAbsPath, dirName) : folderPath;
+      const absFile = joinPosix(absDir, "SKILL.md");
+
+      return {
+        name: fm.name,
+        description: fm.description,
+        filePath: absFile,
+        dirPath: absDir,
+        body: parsed.body,
+        license: fm.license,
+        compatibility: fm.compatibility,
+        allowedTools: fm.allowedTools,
+        model: fm.model,
+        disableModelInvocation: fm.disableModelInvocation,
+        userInvocable: fm.userInvocable,
+        enabledAgents: fm.enabledAgents,
+      };
     }
+  );
 
-    const fm = parsed.frontmatter;
-    const absDir =
-      skillsFolderAbsPath !== null ? joinPosix(skillsFolderAbsPath, dirName) : folderPath;
-    const absFile = joinPosix(absDir, "SKILL.md");
-
-    skills.push({
-      name: fm.name,
-      description: fm.description,
-      filePath: absFile,
-      dirPath: absDir,
-      body: parsed.body,
-      license: fm.license,
-      compatibility: fm.compatibility,
-      allowedTools: fm.allowedTools,
-      model: fm.model,
-      disableModelInvocation: fm.disableModelInvocation,
-      userInvocable: fm.userInvocable,
-      enabledAgents: fm.enabledAgents,
-    });
-  }
-
-  return skills;
+  return results.filter((skill): skill is Skill => skill !== null);
 }

@@ -142,6 +142,29 @@ describe("discoverManagedSkills", () => {
     expect(mockedLogWarn).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps sorted output order when reads resolve out of order", async () => {
+    const adapter = makeAdapter({
+      [`${SKILLS_ROOT}/alpha/SKILL.md`]: validSkillMd({ name: "alpha" }),
+      [`${SKILLS_ROOT}/beta/SKILL.md`]: validSkillMd({ name: "beta" }),
+      [`${SKILLS_ROOT}/gamma/SKILL.md`]: validSkillMd({ name: "gamma" }),
+    });
+    const read = adapter.read.bind(adapter);
+    adapter.read = jest.fn(async (rel) => {
+      if (rel.includes("alpha")) {
+        await new Promise((resolve) => window.setTimeout(resolve, 5));
+      }
+      return read(rel);
+    });
+
+    const skills = await discoverManagedSkills({
+      skillsFolderRelPath: SKILLS_ROOT,
+      skillsFolderAbsPath: null,
+      adapter,
+    });
+
+    expect(skills.map((s) => s.name)).toEqual(["alpha", "beta", "gamma"]);
+  });
+
   it("parses metadata.copilot-enabled-agents into BackendId[]", async () => {
     const content = [
       "---",

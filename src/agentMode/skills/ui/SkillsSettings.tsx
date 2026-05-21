@@ -16,7 +16,6 @@ import {
 } from "./PropertiesDialog";
 import {
   dismissEpermBanner,
-  getManagedSkills,
   SkillManager,
   totalCandidates,
   useEpermSeen,
@@ -29,7 +28,6 @@ import { Input } from "@/components/ui/input";
 import { SettingItem } from "@/components/ui/setting-item";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
-import { parentDir } from "@/utils/pathUtils";
 import { updateSetting, useSettingsValue, validateSkillsFolder } from "@/settings/model";
 import { AlertTriangle, Folder, RotateCcw, Search } from "lucide-react";
 import { FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
@@ -305,47 +303,19 @@ export const SkillsSettings: React.FC = () => {
         displayFolder,
         async (req: PropertiesSaveRequest): Promise<PropertiesSaveOutcome> => {
           const manager = SkillManager.getInstance();
-
-          let activeDirPath = skill.dirPath;
-          let renamedSkillName = skill.name;
-
-          if (req.nameChanged) {
-            const renameResult = await manager.renameSkill(skill, req.newName);
-            if (!renameResult.ok) {
-              if (renameResult.code === "collision") return "collision";
-              if (renameResult.code === "invalid") {
-                // Shouldn't happen — the modal gates Save on inline validation.
-                return "stay";
-              }
-              if (renameResult.code === "eperm") {
-                // Canonical rename succeeded; one or more symlinks failed.
-                // The EPERM banner has already been raised by SkillManager.
-                renamedSkillName = req.newName;
-                activeDirPath = computeNewDirPath(skill.dirPath, req.newName);
-              } else {
-                new Notice(`Could not rename ${skill.name}: ${renameResult.message}`);
-                return "stay";
-              }
-            } else {
-              renamedSkillName = req.newName;
-              activeDirPath = computeNewDirPath(skill.dirPath, req.newName);
+          const result = await manager.saveProperties(skill, {
+            newName: req.nameChanged ? req.newName : undefined,
+            patch: req.patch,
+          });
+          if (!result.ok) {
+            if (result.code === "collision") return "collision";
+            if (result.code === "invalid") {
+              // Shouldn't happen — the modal gates Save on inline validation.
+              return "stay";
             }
-          }
-
-          // Look up the (possibly renamed) canonical from the live store.
-          // `manager.renameSkill` triggers a refresh, so the new state should
-          // be in `getManagedSkills()`; fall back to a synthesized reference
-          // if not.
-          const liveSkills = getManagedSkills();
-          const target =
-            liveSkills.find((s) => s.dirPath === activeDirPath) ??
-            (req.nameChanged
-              ? { ...skill, name: renamedSkillName, dirPath: activeDirPath }
-              : skill);
-
-          const patchResult = await manager.updateProperties(target, req.patch);
-          if (!patchResult.ok) {
-            new Notice(`Could not update ${renamedSkillName}: ${patchResult.message}`);
+            new Notice(
+              `Could not update ${req.nameChanged ? req.newName : skill.name}: ${result.message}`
+            );
             return "stay";
           }
           return "close";
@@ -615,15 +585,6 @@ function filterSkills(skills: Skill[], query: string): Skill[] {
 /** Pluralise the skill count for the toolbar. */
 function formatSkillCount(n: number): string {
   return `${n} skill${n === 1 ? "" : "s"}`;
-}
-
-/**
- * Replace the trailing basename of an absolute canonical skill directory
- * with `newName`. Used to look up the renamed skill in the live grid after
- * `SkillManager.renameSkill` refreshes state.
- */
-function computeNewDirPath(oldDirPath: string, newName: string): string {
-  return `${parentDir(oldDirPath)}/${newName}`;
 }
 
 /**

@@ -1,6 +1,12 @@
 import { logError, logWarn } from "@/logger";
 import { parseSkillFile, serializeSkillFile } from "./skillFormat";
-import { removeAgentLink, replaceAgentLink, type SymlinkResult } from "./symlinks";
+import {
+  removeAgentLink,
+  removeAgentLinksPointingTo,
+  replaceAgentLink,
+  type LinkSweepFs,
+  type SymlinkResult,
+} from "./symlinks";
 import type { BackendId, Skill } from "./types";
 
 /**
@@ -27,6 +33,9 @@ export interface ToggleAgentFs {
   /** Write a UTF-8 file (overwriting). */
   writeFile(absPath: string, content: string): Promise<void>;
 }
+
+/** FS surface for delete, including targeted stale-link sweeps. */
+export type DeleteSkillFs = ToggleAgentFs & LinkSweepFs;
 
 /** Discriminated result identical to {@link SymlinkResult}, re-exported for callers. */
 export type ToggleAgentResult = { ok: true } | { ok: false; reason: string };
@@ -90,7 +99,7 @@ export interface DeleteSkillOptions {
   skill: Skill;
   /** Absolute path of each registered agent's project skills directory. */
   agentDirsAbs: Readonly<Record<BackendId, string>>;
-  fs: ToggleAgentFs;
+  fs: DeleteSkillFs;
 }
 
 /**
@@ -117,6 +126,11 @@ export async function runDeleteSkill(
       }
     })
   );
+
+  const sweep = await removeAgentLinksPointingTo(fs, agentDirsAbs, skill.dirPath);
+  for (const error of sweep.errors) {
+    logWarn(`[skills] deleteSkill: failed to remove stale link ${error.path}: ${error.reason}`);
+  }
 
   try {
     await fs.rmRecursive(skill.dirPath);

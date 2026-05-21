@@ -2,6 +2,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { atom, createStore, useAtomValue } from "jotai";
 import { FileSystemAdapter, type App, type EventRef, type TAbstractFile } from "obsidian";
+import { normalizeAbsPath } from "@/utils/pathUtils";
 import { agentSkillsDirAbs, DEFAULT_SKILLS_FOLDER } from "./agentPaths";
 import { runBulkMove, type BulkMoveResult } from "./bulkMove";
 import { discoverManagedSkills, type SkillsFsAdapter } from "./discoverManagedSkills";
@@ -18,12 +19,29 @@ import {
 } from "./nodeFsAdapters";
 import { reconcile, type ReconcileReport } from "./reconcile";
 import type { SkillFrontmatterPatch } from "./skillFormat";
+import { removeAgentLinksPointingTo } from "./symlinks";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
 import type { BackendId, ImportCandidate, Skill } from "./types";
 import { runRenameSkill, runUpdateProperties } from "./updateProperties";
+import {
+  buildDeleteExpectations,
+  buildReconcileExpectations,
+  buildRenameExpectations,
+  buildToggleExpectations,
+  buildUpdatePropertiesExpectations,
+  matchExpectation,
+  type Expectation,
+} from "./vaultEventExpectations";
 
 /** Debounce window for vault-watch-driven reconciliation, per spec. */
 const RECONCILE_DEBOUNCE_MS = 250;
+/**
+ * Maximum time to keep a pending vault-event expectation alive before
+ * giving up and lifting suppression. The watcher is expected to fire
+ * within milliseconds on local disks; this 10s cap is the backstop for
+ * cloud-synced vaults and watcher misfires.
+ */
+const EXPECTATION_TIMEOUT_MS = 10_000;
 
 const skillManagerStore = createStore();
 const skillsAtom = atom<Skill[]>([]);
@@ -55,6 +73,11 @@ export type UpdatePropertiesResult = SkillOperationResult<"fs-error">;
 
 /** Result of {@link SkillManager.renameSkill}. */
 export type RenameSkillResult = SkillOperationResult<
+  "no-vault-path" | "invalid" | "collision" | "eperm" | "fs-error"
+>;
+
+/** Result of {@link SkillManager.saveProperties}. */
+export type SavePropertiesResult = SkillOperationResult<
   "no-vault-path" | "invalid" | "collision" | "eperm" | "fs-error"
 >;
 
@@ -95,6 +118,16 @@ export class SkillManager {
   private readonly skillSetListeners = new Set<SkillSetChangeListener>();
   /** Pre-normalized agent dir set used by the vault-watcher hot path. */
   private readonly normalizedAgentDirs: ReadonlyArray<string>;
+  /** Nesting counter for SkillManager-owned filesystem writes. */
+  private internalMutationDepth = 0;
+  /**
+   * Vault-event predicates installed after each mutation. While any
+   * expectation is live, watcher events matching one of them are dropped
+   * (they describe FS state we just wrote). See `vaultEventExpectations.ts`.
+   */
+  private pendingExpectations: Expectation[] = [];
+  /** Backstop timer that clears stale expectations if the watcher never fires. */
+  private safetyTimer: number | null = null;
 
   /** App handle is captured at the plugin edge; inner helpers stay pure. */
   private constructor(
@@ -178,6 +211,9 @@ export class SkillManager {
     this.inFlight = null;
     this.inFlightFolder = null;
     this.queuedRefresh = false;
+    this.internalMutationDepth = 0;
+    this.pendingExpectations = [];
+    this.clearSafetyTimer();
     if (SkillManager.instance === this) {
       SkillManager.instance = null;
     }
@@ -262,12 +298,16 @@ export class SkillManager {
       let reconcileError: string | undefined;
       if (vaultRoot !== null && absRoot !== null) {
         try {
-          const report = await reconcile({
-            skills,
-            canonicalAbsRoot: absRoot,
-            agentDirsAbs: this.resolveAgentDirsAbs(vaultRoot),
-            fs: createNodeReconcileFs(),
-          });
+          const report = await this.runInternalMutation(
+            () =>
+              reconcile({
+                skills,
+                canonicalAbsRoot: absRoot,
+                agentDirsAbs: this.resolveAgentDirsAbs(vaultRoot),
+                fs: createNodeReconcileFs(),
+              }),
+            (r) => buildReconcileExpectations(r, vaultRoot)
+          );
           reconcileErrorCount = report.errors.length;
           recordReconcileReport(report);
         } catch (err) {
@@ -311,7 +351,8 @@ export class SkillManager {
    *    On Windows EPERM the frontmatter is **not** rolled back —
    *    reconciliation reattempts the link on every subsequent pass once
    *    the user enables Developer Mode.
-   * 3. Refresh the in-memory skill list so the grid reflects the new state.
+   * 3. Publish an incremental in-memory update so the grid reflects the
+   *    changed row without rereading every managed skill.
    */
   async toggleAgent(skill: Skill, agent: BackendId, enabled: boolean): Promise<ToggleAgentResult> {
     const vaultRoot = resolveVaultRootAbs(this.app);
@@ -328,27 +369,39 @@ export class SkillManager {
     if (agentDir === null) {
       return { ok: false, code: "unknown-agent", message: `Unknown agent: ${agent}` };
     }
-    const result = await runToggleAgent({
-      skill,
-      agent,
-      enabled,
-      agentDirAbs: agentDir,
-      fs,
-    });
+    const result = await this.runInternalMutation(
+      () =>
+        runToggleAgent({
+          skill,
+          agent,
+          enabled,
+          agentDirAbs: agentDir,
+          fs,
+        }),
+      (r) =>
+        r.ok || (!r.ok && r.reason === "eperm")
+          ? buildToggleExpectations(skill, enabled, agentDir, vaultRoot)
+          : []
+    );
 
     if (!result.ok && result.reason === "eperm") {
       skillManagerStore.set(epermSeenAtom, true);
     }
 
-    await this.refresh();
+    if (result.ok || (!result.ok && result.reason === "eperm")) {
+      this.replaceManagedSkill(skill, {
+        ...skill,
+        enabledAgents: computeNextAgents(skill.enabledAgents, agent, enabled),
+      });
+    }
     return result.ok ? { ok: true } : failureFromReason(result.reason);
   }
 
   /**
    * Delete a managed skill end-to-end: remove every enabled agent's
-   * symlink, then remove the canonical directory recursively, then
-   * refresh the in-memory list. The action is irreversible — the UI
-   * gates this behind a confirmation modal.
+   * symlink, then remove the canonical directory recursively, then publish
+   * an incremental removal. The action is irreversible — the UI gates this
+   * behind a confirmation modal.
    */
   async deleteSkill(skill: Skill): Promise<DeleteSkillResult> {
     const vaultRoot = resolveVaultRootAbs(this.app);
@@ -356,12 +409,19 @@ export class SkillManager {
       return noVaultPathFailure();
     }
     const fs = createNodeReconcileFs();
-    const result = await runDeleteSkill({
-      skill,
-      agentDirsAbs: this.resolveAgentDirsAbs(vaultRoot),
-      fs,
-    });
-    await this.refresh();
+    const agentDirsAbs = this.resolveAgentDirsAbs(vaultRoot);
+    const result = await this.runInternalMutation(
+      () =>
+        runDeleteSkill({
+          skill,
+          agentDirsAbs,
+          fs,
+        }),
+      (r) => (r.ok ? buildDeleteExpectations(skill, agentDirsAbs, vaultRoot) : [])
+    );
+    if (result.ok) {
+      this.removeManagedSkill(skill);
+    }
     return result.ok ? { ok: true } : fsFailure(result.reason ?? "Unknown filesystem error.");
   }
 
@@ -371,19 +431,114 @@ export class SkillManager {
    * {@link renameSkill} first.
    *
    * Preserves every unknown top-level key and unknown `metadata.*` key
-   * byte-for-byte (delegated to `serializeSkillFile`). On success, runs a
-   * refresh so the in-memory grid reflects the new state.
+   * byte-for-byte (delegated to `serializeSkillFile`). On success, publishes
+   * an incremental row update.
    */
   async updateProperties(
     skill: Skill,
     patch: Omit<SkillFrontmatterPatch, "name" | "enabledAgents">
   ): Promise<UpdatePropertiesResult> {
     const fs = createNodeReconcileFs();
-    const result = await runUpdateProperties({ skill, patch, fs });
+    const vaultRoot = resolveVaultRootAbs(this.app);
+    const result = await this.runInternalMutation(
+      () => runUpdateProperties({ skill, patch, fs }),
+      (r) => (r.ok && vaultRoot !== null ? buildUpdatePropertiesExpectations(skill, vaultRoot) : [])
+    );
     if (result.ok) {
-      await this.refresh();
+      this.replaceManagedSkill(skill, applyPropertiesPatch(skill, patch));
     }
     return result.ok ? { ok: true } : fsFailure(result.reason);
+  }
+
+  /**
+   * Save the Properties modal in one manager operation. A rename and a
+   * frontmatter patch publish one in-memory change and therefore emit one
+   * backend-visible skill-set notification.
+   */
+  async saveProperties(
+    skill: Skill,
+    req: {
+      newName?: string;
+      patch: Omit<SkillFrontmatterPatch, "name" | "enabledAgents">;
+    }
+  ): Promise<SavePropertiesResult> {
+    const fs = createNodeReconcileFs();
+    const newName =
+      req.newName !== undefined && req.newName !== skill.name ? req.newName : undefined;
+    const vaultRoot = resolveVaultRootAbs(this.app);
+    let activeSkill = skill;
+
+    if (newName !== undefined) {
+      if (vaultRoot === null) {
+        return noVaultPathFailure();
+      }
+      const folder = resolveSkillsFolder();
+      const canonical = resolveAbsolutePath(this.app, folder);
+      if (canonical === null) {
+        return noVaultPathFailure();
+      }
+
+      const agentDirsAbs = this.resolveAgentDirsAbs(vaultRoot);
+      const renameResult = await this.runInternalMutation(
+        async () => {
+          const result = await runRenameSkill({
+            skill,
+            newName,
+            canonicalAbsRoot: canonical,
+            agentDirsAbs,
+            fs,
+          });
+          if (result.ok || (!result.ok && result.reason === "eperm")) {
+            await this.cleanupLinksToSkill(fs, vaultRoot, skill.dirPath);
+          }
+          return result;
+        },
+        (r) =>
+          r.ok || (!r.ok && r.reason === "eperm")
+            ? buildRenameExpectations(skill, newName, canonical, agentDirsAbs, vaultRoot)
+            : []
+      );
+
+      if (!renameResult.ok && renameResult.reason === "eperm") {
+        skillManagerStore.set(epermSeenAtom, true);
+      }
+
+      if (!renameResult.ok && renameResult.reason !== "eperm") {
+        if (renameResult.reason === "invalid") {
+          return { ok: false, code: "invalid", message: "Skill name is invalid." };
+        }
+        if (renameResult.reason === "collision") {
+          return {
+            ok: false,
+            code: "collision",
+            message: "A skill with that name already exists.",
+          };
+        }
+        if (renameResult.mutated === true) {
+          void this.refresh();
+        }
+        return fsFailure(renameResult.reason);
+      }
+
+      activeSkill = buildRenamedSkill(skill, newName, canonical);
+    }
+
+    const patchResult = await this.runInternalMutation(
+      () => runUpdateProperties({ skill: activeSkill, patch: req.patch, fs }),
+      (r) =>
+        r.ok && vaultRoot !== null
+          ? buildUpdatePropertiesExpectations(activeSkill, vaultRoot)
+          : []
+    );
+    if (!patchResult.ok) {
+      if (newName !== undefined) {
+        this.replaceManagedSkill(skill, activeSkill);
+      }
+      return fsFailure(patchResult.reason);
+    }
+
+    this.replaceManagedSkill(skill, applyPropertiesPatch(activeSkill, req.patch));
+    return { ok: true };
   }
 
   /**
@@ -406,22 +561,35 @@ export class SkillManager {
     }
 
     const fs = createNodeReconcileFs();
-    const result = await runRenameSkill({
-      skill,
-      newName,
-      canonicalAbsRoot: canonical,
-      agentDirsAbs: this.resolveAgentDirsAbs(vaultRoot),
-      fs,
-    });
+    const agentDirsAbs = this.resolveAgentDirsAbs(vaultRoot);
+    const result = await this.runInternalMutation(
+      async () => {
+        const renameResult = await runRenameSkill({
+          skill,
+          newName,
+          canonicalAbsRoot: canonical,
+          agentDirsAbs,
+          fs,
+        });
+        if (renameResult.ok || (!renameResult.ok && renameResult.reason === "eperm")) {
+          await this.cleanupLinksToSkill(fs, vaultRoot, skill.dirPath);
+        }
+        return renameResult;
+      },
+      (r) =>
+        r.ok || (!r.ok && r.reason === "eperm")
+          ? buildRenameExpectations(skill, newName, canonical, agentDirsAbs, vaultRoot)
+          : []
+    );
 
     if (!result.ok && result.reason === "eperm") {
       skillManagerStore.set(epermSeenAtom, true);
     }
 
-    // Refresh after any mutation beyond validation/collision, so the grid
-    // reflects the canonical filesystem even when a late step failed.
-    if (result.ok || (!result.ok && result.mutated === true)) {
-      await this.refresh();
+    if (result.ok || (!result.ok && result.reason === "eperm")) {
+      this.replaceManagedSkill(skill, buildRenamedSkill(skill, newName, canonical));
+    } else if (result.mutated === true) {
+      void this.refresh();
     }
     if (result.ok) return { ok: true };
     if (result.reason === "invalid") {
@@ -541,6 +709,154 @@ export class SkillManager {
   }
 
   /**
+   * Run a SkillManager-owned filesystem write under vault-watcher
+   * suppression. While `task` is in flight every vault event is dropped
+   * (depth-based). On success, the optional `buildExpectations` callback
+   * receives the task result and returns the set of watcher events that
+   * the FS write should produce — those are installed as path-scoped
+   * predicates so the matching events are suppressed without affecting
+   * unrelated changes.
+   */
+  private async runInternalMutation<T>(
+    task: () => Promise<T>,
+    buildExpectations?: (result: T) => Expectation[]
+  ): Promise<T> {
+    this.internalMutationDepth += 1;
+    try {
+      const result = await task();
+      if (buildExpectations !== undefined) {
+        this.installExpectations(buildExpectations(result));
+      }
+      return result;
+    } finally {
+      this.internalMutationDepth -= 1;
+      this.clearScheduledReconcile();
+    }
+  }
+
+  /** Cancel any pending watcher-driven reconciliation pass. */
+  private clearScheduledReconcile(): void {
+    if (this.reconcileDebounceTimer === null) return;
+    window.clearTimeout(this.reconcileDebounceTimer);
+    this.reconcileDebounceTimer = null;
+  }
+
+  /** Append new expectations and (re)arm the safety timer. */
+  private installExpectations(expectations: Expectation[]): void {
+    if (expectations.length === 0) return;
+    this.pendingExpectations.push(...expectations);
+    this.armSafetyTimer();
+  }
+
+  /** Restart the safety timer that backstops any never-arriving vault events. */
+  private armSafetyTimer(): void {
+    this.clearSafetyTimer();
+    this.safetyTimer = window.setTimeout(() => {
+      this.safetyTimer = null;
+      if (this.pendingExpectations.length === 0) return;
+      const paths = this.pendingExpectations.map((e) => e.vaultRelPath).join(", ");
+      logWarn(`[skills] Gave up waiting for vault events on: ${paths}`);
+      this.pendingExpectations = [];
+    }, EXPECTATION_TIMEOUT_MS);
+  }
+
+  /** Clear the safety timer without touching the pending expectation list. */
+  private clearSafetyTimer(): void {
+    if (this.safetyTimer === null) return;
+    window.clearTimeout(this.safetyTimer);
+    this.safetyTimer = null;
+  }
+
+  /**
+   * If the path matches any pending expectation, drop the event and
+   * asynchronously verify the predicate so satisfied expectations are
+   * removed from the pending list.
+   */
+  private tryMatchAndSuppress(eventPath: string): boolean {
+    const matches = this.pendingExpectations.filter((exp) => matchExpectation(exp, eventPath));
+    if (matches.length === 0) return false;
+    for (const exp of matches) {
+      void this.verifyAndMaybeConsume(exp);
+    }
+    return true;
+  }
+
+  /** Re-check the predicate now that an event arrived; consume if satisfied. */
+  private async verifyAndMaybeConsume(expectation: Expectation): Promise<void> {
+    let satisfied: boolean;
+    try {
+      satisfied = await this.evaluateExpectation(expectation);
+    } catch {
+      satisfied = false;
+    }
+    if (!satisfied) return;
+    this.consumeExpectation(expectation);
+  }
+
+  /** Evaluate the predicate behind one expectation against the live vault. */
+  private async evaluateExpectation(expectation: Expectation): Promise<boolean> {
+    switch (expectation.kind) {
+      case "exists":
+      case "subtree-exists":
+        return this.app.vault.adapter.exists(expectation.vaultRelPath);
+      case "missing":
+      case "subtree-missing":
+        return !(await this.app.vault.adapter.exists(expectation.vaultRelPath));
+      case "modified":
+        return true;
+    }
+  }
+
+  /** Remove a satisfied expectation from the pending list. */
+  private consumeExpectation(expectation: Expectation): void {
+    const idx = this.pendingExpectations.indexOf(expectation);
+    if (idx === -1) return;
+    this.pendingExpectations.splice(idx, 1);
+    if (this.pendingExpectations.length === 0) {
+      this.clearSafetyTimer();
+    }
+  }
+
+  /** Publish a single changed skill without running discovery. */
+  private replaceManagedSkill(previous: Skill, next: Skill): void {
+    const skills = skillManagerStore.get(skillsAtom);
+    const index = skills.findIndex((s) => sameSkillIdentity(s, previous));
+    const nextSkills =
+      index === -1
+        ? [...skills, next]
+        : [...skills.slice(0, index), next, ...skills.slice(index + 1)];
+    this.publishManagedSkills(sortSkills(nextSkills));
+  }
+
+  /** Publish removal of one managed skill without running discovery. */
+  private removeManagedSkill(skill: Skill): void {
+    const skills = skillManagerStore.get(skillsAtom);
+    this.publishManagedSkills(skills.filter((s) => !sameSkillIdentity(s, skill)));
+  }
+
+  /** Store and notify a managed-skill list snapshot. */
+  private publishManagedSkills(skills: Skill[]): void {
+    skillManagerStore.set(skillsAtom, skills);
+    this.publishSkillSetChanges(skills);
+  }
+
+  /** Remove stale symlinks that still point at one canonical skill dir. */
+  private async cleanupLinksToSkill(
+    fs: ReturnType<typeof createNodeReconcileFs>,
+    vaultRootAbs: string,
+    skillDirPath: string
+  ): Promise<void> {
+    const report = await removeAgentLinksPointingTo(
+      fs,
+      this.resolveAgentDirsAbs(vaultRootAbs),
+      skillDirPath
+    );
+    for (const error of report.errors) {
+      logWarn(`[skills] Failed to remove stale skill link ${error.path}: ${error.reason}`);
+    }
+  }
+
+  /**
    * Subscribe to vault file events that touch the canonical skills folder
    * or any registered agent skill directory. Mutations there can
    * desync the symlink fanout — we debounce by 250ms so a bulk rename
@@ -548,8 +864,7 @@ export class SkillManager {
    */
   private subscribeToVaultEvents(): void {
     const handler = (file: TAbstractFile): void => {
-      if (!this.isWatchedPath(file.path)) return;
-      this.scheduleReconcile();
+      this.handleVaultEvent(file.path);
     };
 
     // Rename includes the previous path; schedule if either side of the move
@@ -559,11 +874,26 @@ export class SkillManager {
     this.vaultEventRefs.push(this.app.vault.on("modify", handler));
     this.vaultEventRefs.push(
       this.app.vault.on("rename", (file: TAbstractFile, oldPath: string) => {
-        if (this.isWatchedPath(file.path) || this.isWatchedPath(oldPath)) {
-          this.scheduleReconcile();
-        }
+        this.handleVaultEvent(file.path, oldPath);
       })
     );
+  }
+
+  /**
+   * Decide what to do with one vault event:
+   *   - while a mutation is in flight, drop every event;
+   *   - if the path (or rename source) matches a pending expectation, drop
+   *     and verify the predicate;
+   *   - otherwise, debounce a reconcile pass when the path is watched.
+   */
+  private handleVaultEvent(newPath: string, oldPath?: string): void {
+    if (this.internalMutationDepth > 0) return;
+    const matchedNew = this.tryMatchAndSuppress(newPath);
+    const matchedOld = oldPath !== undefined && this.tryMatchAndSuppress(oldPath);
+    if (matchedNew || matchedOld) return;
+    if (this.isWatchedPath(newPath) || (oldPath !== undefined && this.isWatchedPath(oldPath))) {
+      this.scheduleReconcile();
+    }
   }
 
   /** Is this vault-relative path inside one of the watched roots? */
@@ -592,9 +922,7 @@ export class SkillManager {
 
   /** Trailing-edge debounce wrapper around {@link refresh}. */
   private scheduleReconcile(): void {
-    if (this.reconcileDebounceTimer !== null) {
-      window.clearTimeout(this.reconcileDebounceTimer);
-    }
+    this.clearScheduledReconcile();
     this.reconcileDebounceTimer = window.setTimeout(() => {
       this.reconcileDebounceTimer = null;
       void this.refresh();
@@ -631,7 +959,7 @@ export { totalCandidates };
 function resolveVaultRootAbs(app: App): string | null {
   const adapter = app.vault.adapter;
   if (!(adapter instanceof FileSystemAdapter)) return null;
-  return adapter.getBasePath().replace(/[/\\]+$/, "");
+  return normalizeAbsPath(adapter.getBasePath());
 }
 
 /**
@@ -659,6 +987,55 @@ export function dismissEpermBanner(): void {
 /** Synchronous getter — useful from non-React code (e.g. spawn descriptors). */
 export function getManagedSkills(): Skill[] {
   return skillManagerStore.get(skillsAtom);
+}
+
+/** Compute the next enabled-agent list for an incremental toggle update. */
+function computeNextAgents(current: BackendId[], agent: BackendId, enabled: boolean): BackendId[] {
+  const has = current.includes(agent);
+  if (enabled && !has) return [...current, agent];
+  if (!enabled && has) return current.filter((a) => a !== agent);
+  return current;
+}
+
+/** Apply a non-name frontmatter patch to an in-memory Skill snapshot. */
+function applyPropertiesPatch(
+  skill: Skill,
+  patch: Omit<SkillFrontmatterPatch, "name" | "enabledAgents">
+): Skill {
+  const next: Skill = { ...skill };
+  if ("description" in patch && typeof patch.description === "string") {
+    next.description = patch.description;
+  }
+  if ("license" in patch) next.license = patch.license;
+  if ("compatibility" in patch) next.compatibility = patch.compatibility;
+  if ("allowedTools" in patch) next.allowedTools = patch.allowedTools;
+  if ("model" in patch) next.model = patch.model;
+  if ("disableModelInvocation" in patch) {
+    next.disableModelInvocation = patch.disableModelInvocation;
+  }
+  if ("userInvocable" in patch) next.userInvocable = patch.userInvocable;
+  return next;
+}
+
+/** Build the in-memory Skill shape after a successful canonical rename. */
+function buildRenamedSkill(skill: Skill, newName: string, canonicalAbsRoot: string): Skill {
+  const dirPath = `${normalizeAbsPath(canonicalAbsRoot)}/${newName}`;
+  return {
+    ...skill,
+    name: newName,
+    dirPath,
+    filePath: `${dirPath}/SKILL.md`,
+  };
+}
+
+/** Compare stable skill identities before and after an incremental edit. */
+function sameSkillIdentity(a: Skill, b: Skill): boolean {
+  return a.dirPath === b.dirPath;
+}
+
+/** Keep incremental publishes in the same order as full discovery. */
+function sortSkills(skills: Skill[]): Skill[] {
+  return [...skills].sort((a, b) => a.dirPath.localeCompare(b.dirPath));
 }
 
 const EMPTY_SKILL_SET_SIGNATURE = "skills:v1:0";
