@@ -9,7 +9,7 @@ import { App, FileSystemAdapter, Notice, Platform, TFile } from "obsidian";
 import { v4 as uuidv4 } from "uuid";
 import { AgentSession, ATTENTION_TRIGGER_STATUSES } from "./AgentSession";
 import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager";
-import type { AgentModelPreloader } from "./AgentModelPreloader";
+import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
 import { MethodUnsupportedError } from "./errors";
 import { resolveMcpServers } from "./mcpResolver";
 import type {
@@ -74,12 +74,13 @@ export class AgentSessionManager {
   private readonly restartingBackends = new Set<BackendId>();
   private readonly preloader: AgentModelPreloader;
   /**
-   * Resolves once the plugin-load preload phase has settled (regardless of
-   * per-backend success). Lets the chat UI gate its first render so the
-   * picker never flashes empty before the cache populates.
+   * Per-backend preload status. The chat UI gates its first render on the
+   * *active* backend's status; the model picker shows a "Loading…" or
+   * "Failed to load" placeholder for any backend that hasn't reached
+   * `"ready"` yet. A missing entry is treated as `"absent"` (backend not
+   * installed / never queued) which is render-safe.
    */
-  private preloadPromise: Promise<void> = Promise.resolve();
-  private preloadReady = true;
+  private readonly preloadStatus = new Map<BackendId, "pending" | "ready" | "error">();
   // Per-session bookkeeping, all keyed by `internalId`. Mixes persistence
   // bookkeeping with subscription teardowns — the unifying property is
   // "must be cleaned up when the session is detached":
@@ -201,8 +202,12 @@ export class AgentSessionManager {
     this.notify();
 
     let backend: BackendProcess;
+    let warm: WarmBackend | null = null;
     try {
-      backend = await this.ensureBackend(resolvedId, descriptor);
+      // ensureBackend tries the preloader's warm probe before paying a
+      // fresh spawn. When `warm` is non-null the probe session is
+      // available for adoption below — skips a second `newSession`.
+      ({ proc: backend, warm } = await this.ensureBackend(resolvedId, descriptor));
     } catch (err) {
       this.lastError = err2String(err);
       this.finishPendingCreate();
@@ -214,16 +219,39 @@ export class AgentSessionManager {
       throw new Error("AgentSessionManager was shut down during session creation");
     }
 
-    const seedSelection = this.getDefaultSelection(resolvedId);
-    const defaultModelId = seedSelection ? descriptor.wire.encode(seedSelection) : undefined;
-    const session = AgentSession.start({
-      backend,
-      cwd: vaultBasePath,
-      internalId: uuidv4(),
-      backendId: resolvedId,
-      defaultModelId,
-      getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
-    });
+    const seedSelection = this.getDefaultSelection(resolvedId) ?? undefined;
+
+    let session: AgentSession;
+    if (warm) {
+      // The probe session that preload created is reused as the user's
+      // session: skips an extra `newSession` round-trip on the warm proc.
+      // The probe ran with no user preferences, so `defaultModelSelection`
+      // is what makes the session apply the persisted preference (with the
+      // optimistic seed so the picker never flashes the probe's default).
+      session = new AgentSession({
+        backend,
+        backendSessionId: warm.probeSessionId,
+        internalId: uuidv4(),
+        backendId: resolvedId,
+        initialState: warm.state,
+        defaultModelSelection: seedSelection,
+        cwd: vaultBasePath,
+        getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
+      });
+      logInfo(
+        `[AgentMode] session adopted warm probe (internal=${session.internalId} backend-id=${warm.probeSessionId} backend=${resolvedId})`
+      );
+    } else {
+      session = AgentSession.start({
+        backend,
+        cwd: vaultBasePath,
+        internalId: uuidv4(),
+        backendId: resolvedId,
+        defaultModelSelection: seedSelection,
+        initialCachedState: this.preloader.getCachedBackendState(resolvedId),
+        getDescriptor: () => this.opts.resolveDescriptor(resolvedId),
+      });
+    }
     this.sessions.set(session.internalId, session);
     this.chatUIStates.set(session.internalId, new AgentChatUIState(session));
     this.activeSessionId = session.internalId;
@@ -236,7 +264,8 @@ export class AgentSessionManager {
     // (claude-code's effort, future config-option preferences) and clear the
     // "starting" pill. On failure, capture into `lastError` so the status
     // surface and retry handler can react. The session itself transitions to
-    // status "error" inside its own `initialize`.
+    // status "error" inside its own `initialize`. For warm-adopted sessions
+    // `ready` is already resolved, so the chain runs on the next microtask.
     void session.ready
       .then(async () => {
         if (descriptor.applyInitialSessionConfig) {
@@ -419,29 +448,52 @@ export class AgentSessionManager {
   }
 
   /**
-   * Register the aggregate preload promise — typically the `Promise.allSettled`
-   * of every backend's `preloadModels` call from plugin bring-up. While it
-   * pends, `isPreloadReady()` returns `false`; the chat UI uses that flag to
-   * render a "Loading…" placeholder instead of an empty picker.
+   * Register a backend's plugin-load preload promise. While the promise is
+   * pending, `getPreloadStatus(backendId)` returns `"pending"`; on settle it
+   * transitions to `"ready"` (the preload itself is best-effort, so even
+   * rejected promises flip to `"ready"` here — the picker reads the cached
+   * state alongside this status and renders empty-but-error vs loading).
+   * On programmatic error (rejected promise) the entry becomes `"error"` so
+   * the picker can offer a retry affordance.
    */
-  setPreloadPromise(promise: Promise<void>): void {
-    this.preloadReady = false;
-    this.preloadPromise = promise;
-    void promise.then(() => {
-      this.preloadReady = true;
-      this.notify();
-    });
+  registerPreload(backendId: BackendId, promise: Promise<void>): void {
+    this.preloadStatus.set(backendId, "pending");
     this.notify();
+    promise.then(
+      () => {
+        if (this.disposed) return;
+        this.preloadStatus.set(backendId, "ready");
+        this.notify();
+      },
+      () => {
+        if (this.disposed) return;
+        this.preloadStatus.set(backendId, "error");
+        this.notify();
+      }
+    );
   }
 
-  /** Resolves once `setPreloadPromise`'s promise settles. */
-  whenPreloadReady(): Promise<void> {
-    return this.preloadPromise;
+  /**
+   * Synchronous check, suitable for React render gates. Defaults to the
+   * active backend; pass `backendId` to query a specific backend (the
+   * picker reads each backend's status). Backends that were never queued
+   * (not installed / disabled) are treated as ready so the chat UI doesn't
+   * stall waiting on a preload that will never run.
+   */
+  isPreloadReady(backendId?: BackendId): boolean {
+    const id = backendId ?? getSettings().agentMode?.activeBackend;
+    if (!id) return true;
+    const status = this.preloadStatus.get(id);
+    return status === undefined || status === "ready" || status === "error";
   }
 
-  /** Synchronous check, suitable for React render gates. */
-  isPreloadReady(): boolean {
-    return this.preloadReady;
+  /**
+   * Read a backend's preload status for the picker. `"absent"` indicates
+   * the backend was never queued (uninstalled or disabled) — the picker
+   * uses today's behavior in that case (omit the section silently).
+   */
+  getPreloadStatus(backendId: BackendId): "pending" | "ready" | "error" | "absent" {
+    return this.preloadStatus.get(backendId) ?? "absent";
   }
 
   /**
@@ -659,6 +711,7 @@ export class AgentSessionManager {
     this.starting.clear();
     this.startingBackendId = null;
     this.listeners.clear();
+    this.preloadStatus.clear();
     this.preloader.shutdown();
   }
 
@@ -728,7 +781,10 @@ export class AgentSessionManager {
 
     let backend: BackendProcess;
     try {
-      backend = await this.ensureBackend(backendId, descriptor);
+      // Discard the optional warm probe-session info: we're rehydrating a
+      // specific saved session, not opening a fresh chat. The probe
+      // session sits unused on the proc until shutdown — harmless.
+      ({ proc: backend } = await this.ensureBackend(backendId, descriptor));
     } catch (err) {
       this.lastError = err2String(err);
       this.finishPendingCreate();
@@ -954,14 +1010,40 @@ export class AgentSessionManager {
     this.getSessionState(session.internalId).attentionUnsub = unsubscribe;
   }
 
+  /**
+   * Obtain a running backend process for `backendId`. Tries three sources
+   * in order:
+   *  1. An already-running proc owned by the manager (second-and-later
+   *     sessions on the same backend).
+   *  2. An in-flight spawn — concurrent callers join the first one.
+   *  3. The preloader's warm probe (skips spawn + `initialize` handshake).
+   *  4. A fresh `descriptor.createBackendProcess()` + `start()`.
+   *
+   * The returned `warm` slot is non-null only on path 3 and carries the
+   * probe session id + state snapshot so callers that open a fresh chat
+   * can adopt the probe session as the user's session (avoids a second
+   * `newSession` round-trip). Callers that need a specific saved session
+   * (e.g. `tryResumeSessionFromHistory`) can ignore `warm` — the probe
+   * session simply sits unused on the proc.
+   */
   private async ensureBackend(
     backendId: BackendId,
     descriptor: BackendDescriptor
-  ): Promise<BackendProcess> {
+  ): Promise<{ proc: BackendProcess; warm: WarmBackend | null }> {
     const existing = this.backends.get(backendId);
-    if (existing && existing.isRunning()) return existing;
+    if (existing && existing.isRunning()) return { proc: existing, warm: null };
     const inflight = this.starting.get(backendId);
-    if (inflight) return inflight;
+    if (inflight) return { proc: await inflight, warm: null };
+
+    const warm = this.preloader.takeWarm(backendId);
+    if (warm) {
+      // Probe subprocess is already started + initialize-handshaken —
+      // wire it into the manager without paying either cost again.
+      warm.proc.setPermissionPrompter(this.opts.permissionPrompter);
+      this.installBackendExitHandler(backendId, warm.proc, descriptor);
+      this.backends.set(backendId, warm.proc);
+      return { proc: warm.proc, warm };
+    }
 
     const proc = descriptor.createBackendProcess({
       plugin: this.plugin,
@@ -974,41 +1056,54 @@ export class AgentSessionManager {
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
       proc.setPermissionPrompter(this.opts.permissionPrompter);
-      proc.onExit(() => {
-        // Backend died unexpectedly. Sessions belonging to *this* backend
-        // are now unusable (their backend session ids are dead) — but other
-        // backends keep running. Preserving message history across crashes
-        // is M5.
-        if (this.backends.get(backendId) === proc) this.backends.delete(backendId);
-        const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
-        if (dead.length === 0) return;
-        for (const s of dead) {
-          this.detachAutoSave(s.internalId);
-          this.sessions.delete(s.internalId);
-          this.chatUIStates.delete(s.internalId);
-          s.cancel().catch(() => {});
-          s.dispose().catch(() => {});
-        }
-        if (this.activeSessionId && !this.sessions.has(this.activeSessionId)) {
-          const remaining = Array.from(this.sessions.keys());
-          this.activeSessionId = remaining[0] ?? null;
-        }
-        // Surface the crash so the empty-state pill shows it and the
-        // router's auto-spawn effect (which bails on lastError) doesn't
-        // immediately respawn behind the user's back. The next explicit
-        // create call clears it.
-        this.lastError = `${descriptor.displayName} backend exited unexpectedly.`;
-        this.notify();
-      });
+      this.installBackendExitHandler(backendId, proc, descriptor);
       this.backends.set(backendId, proc);
       return proc;
     })();
     this.starting.set(backendId, startPromise);
     try {
-      return await startPromise;
+      return { proc: await startPromise, warm: null };
     } finally {
       this.starting.delete(backendId);
     }
+  }
+
+  /**
+   * Wire the "backend died unexpectedly" cleanup for `proc`: drop every
+   * session bound to `backendId`, surface a `lastError`, and notify. Same
+   * shape for both warm-adopted and freshly-spawned procs.
+   */
+  private installBackendExitHandler(
+    backendId: BackendId,
+    proc: BackendProcess,
+    descriptor: BackendDescriptor
+  ): void {
+    proc.onExit(() => {
+      // Backend died unexpectedly. Sessions belonging to *this* backend
+      // are now unusable (their backend session ids are dead) — but other
+      // backends keep running. Preserving message history across crashes
+      // is M5.
+      if (this.backends.get(backendId) === proc) this.backends.delete(backendId);
+      const dead = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
+      if (dead.length === 0) return;
+      for (const s of dead) {
+        this.detachAutoSave(s.internalId);
+        this.sessions.delete(s.internalId);
+        this.chatUIStates.delete(s.internalId);
+        s.cancel().catch(() => {});
+        s.dispose().catch(() => {});
+      }
+      if (this.activeSessionId && !this.sessions.has(this.activeSessionId)) {
+        const remaining = Array.from(this.sessions.keys());
+        this.activeSessionId = remaining[0] ?? null;
+      }
+      // Surface the crash so the empty-state pill shows it and the
+      // router's auto-spawn effect (which bails on lastError) doesn't
+      // immediately respawn behind the user's back. The next explicit
+      // create call clears it.
+      this.lastError = `${descriptor.displayName} backend exited unexpectedly.`;
+      this.notify();
+    });
   }
 
   /** Whether any session for `backendId` is not safe to dispose yet. */

@@ -39,14 +39,18 @@ export const AgentModeChat: React.FC<Props> = ({
 
   // Manager fires `notify()` on preload settle, which bumps `tick` above and
   // re-renders this component — so we can read the flag directly each render.
-  const preloadReady = manager?.isPreloadReady() ?? true;
+  // Gate only on the *active* backend so a slow non-active backend never
+  // holds the chat hostage; the picker shows per-backend loading rows for
+  // the others.
+  const preloadReady = manager?.isPreloadReady(descriptor.id) ?? true;
 
   // Auto-spawn the first session on mount. The manager de-dupes concurrent
   // creators via creatingSession, so this is safe to fire whenever the
   // dependencies change. Skip if the backend isn't installed (the install
   // pill takes over), there's a prior boot error (Retry handles it), or
-  // preload hasn't settled (the SDK catalog isn't in cache yet — kicking
-  // off `newSession` would trigger a redundant on-demand probe).
+  // the active backend's preload hasn't settled (its catalog isn't in
+  // cache yet — kicking off `newSession` would trigger a redundant
+  // on-demand probe).
   React.useEffect(() => {
     if (!manager) return;
     if (!preloadReady) return;

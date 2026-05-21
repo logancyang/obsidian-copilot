@@ -132,18 +132,19 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
 
   const settings = getSettings();
   if (!isAgentModeEnabled(settings)) return manager;
-  const preloads: Promise<void>[] = [];
+  // Per-backend preload registration: each backend's status flips
+  // independently. The chat UI gates on the active backend's status; the
+  // picker reads every backend's status to render per-backend loading rows.
   for (const descriptor of listBackendDescriptors()) {
     if (descriptor.getInstallState(settings).kind !== "ready") continue;
-    preloads.push(
-      manager
-        .preloadModels(descriptor.id)
-        .catch((e) => logError(`[AgentMode] preload ${descriptor.id} failed`, e))
+    const promise = manager.preloadModels(descriptor.id);
+    manager.registerPreload(
+      descriptor.id,
+      promise.catch((e) => {
+        logError(`[AgentMode] preload ${descriptor.id} failed`, e);
+        throw e;
+      })
     );
   }
-  // Aggregate so the chat UI can gate its first render until every
-  // backend's catalog has settled — the model picker should never flash
-  // empty before the cache populates.
-  manager.setPreloadPromise(Promise.allSettled(preloads).then(() => undefined));
   return manager;
 }

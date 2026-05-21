@@ -38,6 +38,9 @@ function makeMockBackendProcess() {
     },
     isRunning: () => mockBackendIsRunning,
     shutdown: mockBackendShutdown,
+    // Stub the session-event surface so warm-adoption tests can construct
+    // a real `AgentSession` via the state-options branch without throwing.
+    registerSessionHandler: jest.fn(() => () => {}),
   };
 }
 
@@ -150,6 +153,7 @@ function buildManager(): AgentSessionManager {
     shutdown: jest.fn(),
     setCached: jest.fn(),
     clearCached: jest.fn(),
+    takeWarm: jest.fn(() => null),
   };
   return new AgentSessionManager(
     buildApp(),
@@ -223,6 +227,7 @@ describe("AgentSessionManager.createSession", () => {
       clearCached: jest.fn((id: string) => {
         cache.delete(id);
       }),
+      takeWarm: jest.fn(() => null),
     };
     const descriptor = buildDescriptor();
     const mgr = new AgentSessionManager(
@@ -304,6 +309,121 @@ describe("AgentSessionManager.createSession", () => {
     await Promise.resolve();
 
     expect(mgr.getLastError()).toMatch(/boom/);
+  });
+});
+
+describe("AgentSessionManager warm-backend adoption", () => {
+  it("reuses the preloader's warm proc instead of spawning a fresh one", async () => {
+    // A warm proc is just another mock backend — the manager doesn't care
+    // it came from the preloader, only that it skips start() / newSession.
+    const warmProc = makeMockBackendProcess();
+    const descriptor = buildDescriptor();
+    const probeState = {
+      model: {
+        current: { baseModelId: "anthropic/sonnet", effort: null },
+        availableModels: [
+          { baseModelId: "anthropic/sonnet", name: "Sonnet", provider: null, effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    const takeWarmMock = jest
+      .fn()
+      .mockReturnValueOnce({
+        proc: warmProc,
+        probeSessionId: "probe-1",
+        state: probeState,
+      })
+      .mockReturnValue(null);
+    const modelPreloader = {
+      getCachedBackendState: jest.fn(() => probeState),
+      preload: jest.fn(async () => undefined),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: takeWarmMock,
+    };
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    await mgr.createSession();
+
+    // start() on the warm proc must not be re-invoked — preload already did it.
+    expect(mockBackendStart).not.toHaveBeenCalled();
+    // The session should NOT have gone through AgentSession.start (that path
+    // is for newSession-driven creates). Warm adoption uses the constructor
+    // directly.
+    expect(sessionCreateSpy).not.toHaveBeenCalled();
+    // No fresh backend was created either — descriptor.createBackendProcess
+    // is the spawn primitive.
+    expect(descriptor.createBackendProcess).not.toHaveBeenCalled();
+    // Active session is the warm one.
+    expect(mgr.getActiveSession()).not.toBeNull();
+    expect(mgr.getActiveSession()?.backendId).toBe("opencode");
+  });
+
+  it("falls back to a fresh spawn when no warm entry is available", async () => {
+    // takeWarm returning null is the second-and-later session path.
+    const mgr = buildManager();
+    await mgr.createSession();
+
+    // No warm entry → start() runs on the freshly-created backend.
+    expect(mockBackendStart).toHaveBeenCalledTimes(1);
+    // AgentSession.start was used, not the construct-with-state branch.
+    expect(sessionCreateSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("AgentSessionManager preload status", () => {
+  it("isPreloadReady reports per-backend; a missing entry is treated as ready", () => {
+    const mgr = buildManager();
+    // Unregistered backend → ready (so the chat doesn't stall waiting on a
+    // preload that will never run).
+    expect(mgr.isPreloadReady("opencode")).toBe(true);
+    expect(mgr.getPreloadStatus("opencode")).toBe("absent");
+  });
+
+  it("transitions pending → ready on promise resolution and ready → ready stays ready", async () => {
+    const mgr = buildManager();
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => {
+      resolve = res;
+    });
+    mgr.registerPreload("opencode", promise);
+    expect(mgr.getPreloadStatus("opencode")).toBe("pending");
+    expect(mgr.isPreloadReady("opencode")).toBe(false);
+    resolve();
+    await promise;
+    await Promise.resolve();
+    expect(mgr.getPreloadStatus("opencode")).toBe("ready");
+    expect(mgr.isPreloadReady("opencode")).toBe(true);
+  });
+
+  it("transitions pending → error on promise rejection but still reports ready (chat unblocks)", async () => {
+    const mgr = buildManager();
+    const rejection = new Error("preload failed");
+    mgr.registerPreload(
+      "opencode",
+      Promise.reject(rejection).catch((e) => {
+        throw e;
+      })
+    );
+    // Microtask flush.
+    await new Promise((r) => window.setTimeout(r, 0));
+    expect(mgr.getPreloadStatus("opencode")).toBe("error");
+    // The chat treats error as "ready enough" so the user isn't stuck on
+    // a perpetual spinner; the picker shows the failure row.
+    expect(mgr.isPreloadReady("opencode")).toBe(true);
   });
 });
 
@@ -668,6 +788,7 @@ describe("AgentSessionManager.applySelection", () => {
       shutdown: jest.fn(),
       setCached: jest.fn(),
       clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
     };
     const mgr = new AgentSessionManager(
       buildApp(),
@@ -758,6 +879,7 @@ describe("AgentSessionManager.applySelection", () => {
       shutdown: jest.fn(),
       setCached: jest.fn(),
       clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
     };
     const mgr = new AgentSessionManager(
       buildApp(),

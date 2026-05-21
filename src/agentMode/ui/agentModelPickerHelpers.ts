@@ -102,6 +102,27 @@ export function synthesizeAgentEntry(
 }
 
 /**
+ * Synthesize a non-selectable placeholder row for a backend whose preload
+ * hasn't settled yet (status `"pending"`) or failed (status `"error"`).
+ * `_disabledReason` is the contract `ModelSelector` / `ModelEffortPicker`
+ * use to disable the row and display the right-side label.
+ */
+export function synthesizePreloadPlaceholder(
+  descriptor: BackendDescriptor,
+  status: "pending" | "error"
+): ModelSelectorEntry {
+  const pending = status === "pending";
+  return {
+    ...synthesizeAgentEntry(
+      `__preload_${status}__`,
+      pending ? "Loading models…" : "Failed to load",
+      descriptor
+    ),
+    _disabledReason: pending ? "Loading…" : "Unavailable",
+  };
+}
+
+/**
  * Resolve a picker entry to its baseModelId. All picker entries from agent
  * backends are synthesized — the baseModelId lives in `name`.
  */
@@ -167,11 +188,23 @@ export function buildPickerEntries(
     const keepBaseModelId = isActiveBackend
       ? (ctx.activeModelState?.current.baseModelId ?? null)
       : (manager.getDefaultSelection(descriptor.id)?.baseModelId ?? null);
+    const backendModels = cached?.model?.availableModels ?? null;
     appendBackendSection(entries, descriptor, {
-      backendModels: cached?.model?.availableModels ?? null,
+      backendModels,
       overrides: getBackendModelOverrides(settings, descriptor.id),
       keepBaseModelId,
     });
+    // No catalog cached yet (and not because the agent intentionally
+    // omitted a model state). Show a per-backend loading / failure row so
+    // the user can see every installed backend immediately — important
+    // because the chat now unblocks on just the *active* backend's
+    // preload, not the global preload.
+    if (!backendModels) {
+      const status = manager.getPreloadStatus(descriptor.id);
+      if (status === "pending" || status === "error") {
+        entries.push(synthesizePreloadPlaceholder(descriptor, status));
+      }
+    }
   }
 
   let valueKey = "";

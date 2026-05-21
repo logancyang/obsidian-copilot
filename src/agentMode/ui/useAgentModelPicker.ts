@@ -67,7 +67,14 @@ function useAgentModelSignal(
       session?.hasUserVisibleMessages() ? "1" : "0",
     ];
     for (const d of descriptors) {
-      parts.push(`${d.id}:${modelStateSignature(manager.getCachedBackendState(d.id))}`);
+      // Include preload status so the picker re-renders when a backend
+      // flips pending → ready (the placeholder row swaps out for real
+      // models) without waiting on an unrelated cache write.
+      parts.push(
+        `${d.id}:${manager.getPreloadStatus(d.id)}:${modelStateSignature(
+          manager.getCachedBackendState(d.id)
+        )}`
+      );
     }
     return parts.join("|");
   }, [manager, descriptors]);

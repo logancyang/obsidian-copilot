@@ -4,23 +4,58 @@ import { getSettings } from "@/settings/model";
 import { App, FileSystemAdapter, Platform } from "obsidian";
 import { MethodUnsupportedError } from "./errors";
 import { backendStateSignature } from "./translateBackendState";
-import type { BackendDescriptor, BackendId, BackendProcess, BackendState } from "./types";
+import type {
+  BackendDescriptor,
+  BackendId,
+  BackendProcess,
+  BackendState,
+  SessionId,
+} from "./types";
 
 /**
- * Plugin-lifetime cache of per-backend session state. Backends expose
- * `BackendState` only as a side-effect of session creation / resume / load,
- * so without this preload the picker would show no entries for non-active
- * backends and would blink empty during the round-trip on a fresh session.
+ * Warm result of a successful preload — the still-running backend process,
+ * the probe session id it owns, and the state snapshot it reported. Handed
+ * off via `takeWarm()` so the manager can skip a fresh subprocess spawn +
+ * `initialize` handshake on the first chat open, and (when the user opens
+ * a fresh chat on that backend) adopt the probe session as the user's
+ * session instead of paying another `newSession` round-trip.
+ */
+export interface WarmBackend {
+  proc: BackendProcess;
+  probeSessionId: SessionId;
+  state: BackendState;
+}
+
+/**
+ * Plugin-lifetime cache of per-backend session state and the running probe
+ * subprocess that produced it. Backends expose `BackendState` only as a
+ * side-effect of session creation / resume / load, so without this preload
+ * the picker would show no entries for non-active backends and would blink
+ * empty during the round-trip on a fresh session.
  *
  * Probes once per backend at startup: prefer resume of a persisted probe
  * sessionId, fall back to load, then to new (and persist the new id so the
  * next reload can reuse it — keeps the agent-side session store at one stale
  * entry per machine instead of growing with each reload).
+ *
+ * The probe subprocess is **kept warm** until the manager consumes it via
+ * `takeWarm(backendId)`. That removes the warm subprocess spawn from the
+ * critical path of the first chat-open: instead of preload booting a
+ * subprocess just to read its catalog and immediately shutting it down,
+ * the same subprocess becomes the manager's backend process on first use.
  */
 export class AgentModelPreloader {
+  private readonly warm = new Map<BackendId, WarmBackend>();
+  // State-only cache for backends whose warm entry has already been
+  // consumed (or that pushed updates after consumption via `setCached`).
+  // The active session's `attachModelCacheSync` writes here.
   private readonly cache = new Map<BackendId, BackendState>();
   private readonly inflight = new Map<BackendId, Promise<void>>();
   private readonly listeners = new Set<() => void>();
+  // Per-warm-entry exit-listener teardowns. Wired when the warm entry is
+  // recorded so we can clear it if the probe subprocess dies before the
+  // manager takes ownership.
+  private readonly warmExitUnsubs = new Map<BackendId, () => void>();
   private disposed = false;
 
   constructor(
@@ -30,26 +65,61 @@ export class AgentModelPreloader {
   ) {}
 
   getCachedBackendState(backendId: BackendId): BackendState | null {
-    return this.cache.get(backendId) ?? null;
+    return this.warm.get(backendId)?.state ?? this.cache.get(backendId) ?? null;
   }
 
   /**
    * Replace the cached entry for `backendId`. No-op when the signature
-   * is unchanged, to avoid spurious picker rebuilds.
+   * is unchanged, to avoid spurious picker rebuilds. Live sessions push
+   * here via `attachModelCacheSync` after the warm entry is consumed.
    */
   setCached(backendId: BackendId, state: BackendState): void {
     if (this.disposed) return;
-    const prev = this.cache.get(backendId) ?? null;
+    const prev = this.getCachedBackendState(backendId);
     if (backendStateSignature(prev) === backendStateSignature(state)) return;
     this.cache.set(backendId, state);
     this.notify();
   }
 
-  /** Remove the cached entry for `backendId` after its backend is restarted. */
+  /**
+   * Remove all cached state for `backendId` after its backend is restarted.
+   * Drops the warm subprocess if it hasn't been taken yet so a fresh probe
+   * runs on the next `preload(backendId)` call.
+   */
   clearCached(backendId: BackendId): void {
     if (this.disposed) return;
-    if (!this.cache.delete(backendId)) return;
-    this.notify();
+    let changed = this.cache.delete(backendId);
+    const warm = this.warm.get(backendId);
+    if (warm) {
+      this.warm.delete(backendId);
+      this.warmExitUnsubs.get(backendId)?.();
+      this.warmExitUnsubs.delete(backendId);
+      // Best-effort shutdown of the abandoned warm proc.
+      warm.proc.shutdown().catch((e) => {
+        logWarn(`[AgentMode] preload clearCached: shutdown of warm ${backendId} failed`, e);
+      });
+      changed = true;
+    }
+    if (changed) this.notify();
+  }
+
+  /**
+   * Hand the warm backend (process + probe session id + state snapshot) to
+   * the manager. Single-shot: removes the entry so subsequent callers see
+   * `null` and the manager owns lifetime of the process from here on.
+   */
+  takeWarm(backendId: BackendId): WarmBackend | null {
+    const entry = this.warm.get(backendId);
+    if (!entry) return null;
+    this.warm.delete(backendId);
+    this.warmExitUnsubs.get(backendId)?.();
+    this.warmExitUnsubs.delete(backendId);
+    // Keep the last-known state in `cache` so the picker still reads it
+    // until the live session syncs its own state back in. Without this the
+    // picker would briefly see `null` between `takeWarm` and the first
+    // `attachModelCacheSync` write.
+    this.cache.set(backendId, entry.state);
+    return entry;
   }
 
   /** Best-effort probe; failures are logged and swallowed. Dedupes per backend. */
@@ -74,6 +144,14 @@ export class AgentModelPreloader {
     this.cache.clear();
     this.inflight.clear();
     this.listeners.clear();
+    for (const [backendId, warm] of this.warm) {
+      this.warmExitUnsubs.get(backendId)?.();
+      warm.proc.shutdown().catch((e) => {
+        logWarn(`[AgentMode] preload shutdown: warm ${backendId} shutdown failed`, e);
+      });
+    }
+    this.warm.clear();
+    this.warmExitUnsubs.clear();
   }
 
   private notify(): void {
@@ -106,26 +184,50 @@ export class AgentModelPreloader {
       descriptor,
     });
 
+    let probe: { sessionId: SessionId; state: BackendState } | null = null;
     try {
       await proc.start?.();
       const storedId = descriptor.getProbeSessionId?.(getSettings());
-      const state = await this.fetchInitialState(proc, descriptor, backendId, storedId, cwd);
-      if (this.disposed) return;
-      if (state.model || state.mode) {
-        this.setCached(backendId, state);
-        logProbeResult(backendId, "session probe", state);
-      } else {
-        logInfo(`[AgentMode] preload ${backendId}: agent did not report any initial state`);
-      }
+      probe = await this.fetchInitialState(proc, descriptor, backendId, storedId, cwd);
     } catch (err) {
       logError(`[AgentMode] preload ${backendId} failed`, err);
-    } finally {
+    }
+
+    if (this.disposed || !probe || (!probe.state.model && !probe.state.mode)) {
+      if (probe) {
+        logInfo(`[AgentMode] preload ${backendId}: agent did not report any initial state`);
+      }
       try {
         await proc.shutdown();
       } catch (e) {
         logWarn(`[AgentMode] preload ${backendId}: shutdown failed`, e);
       }
+      return;
     }
+
+    // Probe succeeded — retain the running subprocess as a warm entry so
+    // the first chat-open can adopt it instead of paying another spawn +
+    // initialize round-trip.
+    const warm: WarmBackend = {
+      proc,
+      probeSessionId: probe.sessionId,
+      state: probe.state,
+    };
+    const exitUnsub = proc.onExit(() => {
+      if (this.disposed) return;
+      // Subprocess died before the manager claimed it. Drop the warm
+      // entry; next createSession will spawn a fresh one through the
+      // descriptor.
+      if (this.warm.get(backendId) === warm) {
+        this.warm.delete(backendId);
+        this.warmExitUnsubs.delete(backendId);
+        this.notify();
+      }
+    });
+    this.warm.set(backendId, warm);
+    this.warmExitUnsubs.set(backendId, exitUnsub);
+    logProbeResult(backendId, "session probe", probe.state);
+    this.notify();
   }
 
   private async fetchInitialState(
@@ -134,7 +236,7 @@ export class AgentModelPreloader {
     backendId: BackendId,
     storedId: string | undefined,
     cwd: string
-  ): Promise<BackendState> {
+  ): Promise<{ sessionId: SessionId; state: BackendState }> {
     type Strategy = {
       label: string;
       sessionId: string;
@@ -156,10 +258,14 @@ export class AgentModelPreloader {
 
     for (const { label, sessionId, run } of strategies) {
       try {
+        // Register a no-op handler before the call so updates emitted
+        // during the call are demuxed against this sessionId rather than
+        // buffered indefinitely. The manager overrides this with the real
+        // handler when it adopts the session.
         proc.registerSessionHandler(sessionId, () => {});
         const resp = await run();
         logInfo(`[AgentMode] preload ${backendId}: ${label}`);
-        return resp.state;
+        return { sessionId: resp.sessionId, state: resp.state };
       } catch (err) {
         if (!(err instanceof MethodUnsupportedError)) {
           logWarn(`[AgentMode] preload ${backendId}: ${label} failed (will fall back)`, err);
@@ -177,7 +283,7 @@ export class AgentModelPreloader {
         logWarn(`[AgentMode] preload ${backendId}: persistProbeSessionId failed`, e);
       }
     }
-    return resp.state;
+    return { sessionId: resp.sessionId, state: resp.state };
   }
 }
 
