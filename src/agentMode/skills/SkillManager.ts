@@ -716,6 +716,12 @@ export class SkillManager {
    * the FS write should produce — those are installed as path-scoped
    * predicates so the matching events are suppressed without affecting
    * unrelated changes.
+   *
+   * Any reconcile debounce timer left armed when this mutation finishes was
+   * scheduled by an external event *before* the mutation started — the
+   * depth gate in {@link handleVaultEvent} ensures in-mutation events can't
+   * schedule one. We deliberately do not cancel it: the external work
+   * still needs reconciliation.
    */
   private async runInternalMutation<T>(
     task: () => Promise<T>,
@@ -730,7 +736,6 @@ export class SkillManager {
       return result;
     } finally {
       this.internalMutationDepth -= 1;
-      this.clearScheduledReconcile();
     }
   }
 
@@ -748,7 +753,13 @@ export class SkillManager {
     this.armSafetyTimer();
   }
 
-  /** Restart the safety timer that backstops any never-arriving vault events. */
+  /**
+   * Restart the safety timer that backstops any never-arriving vault events.
+   * If the timer fires with expectations still pending, the predicates were
+   * never observed as satisfied — that's drift (external process undid our
+   * change, or the watcher missed events). Schedule a debounced reconcile
+   * before clearing so we re-discover instead of silently dropping the state.
+   */
   private armSafetyTimer(): void {
     this.clearSafetyTimer();
     this.safetyTimer = window.setTimeout(() => {
@@ -757,6 +768,7 @@ export class SkillManager {
       const paths = this.pendingExpectations.map((e) => e.vaultRelPath).join(", ");
       logWarn(`[skills] Gave up waiting for vault events on: ${paths}`);
       this.pendingExpectations = [];
+      this.scheduleReconcile();
     }, EXPECTATION_TIMEOUT_MS);
   }
 

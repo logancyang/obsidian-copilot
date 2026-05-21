@@ -422,7 +422,7 @@ describe("SkillManager orchestration", () => {
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("safety timer clears stale expectations after the timeout", async () => {
+  it("safety timer schedules a reconcile when expectations were never satisfied", async () => {
     jest.useFakeTimers();
     const app = makeApp();
     const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
@@ -440,8 +440,43 @@ describe("SkillManager orchestration", () => {
     };
     const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
 
+    // No vault event arrives to satisfy the expectations. The safety timer
+    // fires, clears the stale predicates, and queues a healing reconcile.
     jest.advanceTimersByTime(10_000);
-    fireVaultEvent(app, "create", { path: ".claude/skills/foo" });
+    jest.advanceTimersByTime(250);
+    expect(refreshSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("preserves a pre-existing scheduled reconcile across an internal mutation", async () => {
+    jest.useFakeTimers();
+    const app = makeApp();
+    const manager = SkillManager.initialize(app, { claude: ".claude/skills" });
+    const skill = makeSkill({ enabledAgents: [] });
+    mockedDiscoverManagedSkills.mockResolvedValueOnce([skill]);
+    await manager.refresh();
+
+    const refreshResult: RefreshResult = {
+      ok: true,
+      folder: "copilot/skills",
+      skillCount: 1,
+      reconcileErrorCount: 0,
+    };
+    const refreshSpy = jest.spyOn(manager, "refresh").mockResolvedValue(refreshResult);
+
+    // External vault rename schedules a reconcile (250ms debounce).
+    fireVaultEvent(
+      app,
+      "rename",
+      { path: "elsewhere/foo/SKILL.md" },
+      "copilot/skills/foo/SKILL.md"
+    );
+
+    // Before the debounce expires, the user toggles an agent.
+    mockedRunToggleAgent.mockResolvedValueOnce({ ok: true });
+    await manager.toggleAgent(skill, "claude", true);
+
+    // The pre-existing reconcile timer must still fire — the external work
+    // hasn't been serviced yet.
     jest.advanceTimersByTime(250);
     expect(refreshSpy).toHaveBeenCalledTimes(1);
   });
