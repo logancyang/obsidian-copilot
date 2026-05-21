@@ -19,6 +19,7 @@ jest.mock("@/settings/model", () => ({
       },
     ],
   })),
+  getSettings: jest.fn(() => ({ debug: false })),
 }));
 
 jest.mock("@/aiParams", () => ({
@@ -46,6 +47,7 @@ jest.mock("obsidian", () => {
     Component: class {
       load() {}
       unload() {}
+      register(_cb: () => void) {}
     },
     MarkdownView: class {},
     TFile: class {},
