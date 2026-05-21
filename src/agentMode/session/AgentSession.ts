@@ -45,15 +45,18 @@ const MAX_TOOL_OUTPUT_TEXT_CHARS = 12_000;
 const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
 
 /**
- * Optimistically swap `state.model.current` for the persisted user
- * selection so the picker's first paint matches what the user picked.
- * Returns the original `state` reference when no seed is possible — the
- * caller uses identity comparison to detect a seed and decide whether to
- * run the backend round-trip + revert path.
+ * Optimistically swap `state.model.current.baseModelId` for the persisted
+ * user selection so the picker's first paint matches what the user picked.
  *
- * Skips the seed (returns input unchanged) when: no selection supplied,
- * the backend hasn't reported a model catalog, the persisted baseModelId
- * is not in the catalog, or the persisted selection already matches.
+ * Only `baseModelId` is seeded — `effort` is left as the backend reported.
+ * For descriptor-style backends (Claude) effort lives out-of-band and is
+ * applied via `applyInitialSessionConfig` → `setConfigOption`; seeding it
+ * here would make that step see a matching value and silently skip the
+ * real config write. For wire-effort backends (opencode-style) the
+ * subsequent `setModel` call carries the user's effort through the
+ * encoded id, and the backend's response replaces this seed entirely.
+ *
+ * Returns the input reference unchanged when no seed is possible.
  */
 function seedSelectionIntoState(
   state: BackendState | null,
@@ -62,17 +65,12 @@ function seedSelectionIntoState(
   if (!state || !state.model || !selection) return state;
   const entry = state.model.availableModels.find((m) => m.baseModelId === selection.baseModelId);
   if (!entry) return state;
-  if (
-    state.model.current.baseModelId === selection.baseModelId &&
-    state.model.current.effort === selection.effort
-  ) {
-    return state;
-  }
+  if (state.model.current.baseModelId === selection.baseModelId) return state;
   return {
     ...state,
     model: {
       ...state.model,
-      current: { baseModelId: selection.baseModelId, effort: selection.effort },
+      current: { ...state.model.current, baseModelId: selection.baseModelId },
     },
   };
 }
@@ -283,10 +281,13 @@ export class AgentSession {
       // Sync the status cache so the first recomputeStatusIfChanged doesn't
       // fire a spurious "starting → idle" transition that no one observed.
       this.cachedStatus = this.getStatus();
-      this.ready = Promise.resolve();
-      if (opts.defaultModelSelection && originalState && this.currentState !== originalState) {
-        void this.confirmSeededSelection(opts.defaultModelSelection, originalState);
-      }
+      // Gate `ready` on the model confirmation round-trip so `sendPrompt`
+      // can't fire on the probe's model before the user's persisted
+      // selection is applied to the backend.
+      this.ready =
+        opts.defaultModelSelection && originalState
+          ? this.confirmSeededSelection(opts.defaultModelSelection, originalState)
+          : Promise.resolve();
     } else {
       // Eagerly seed from the preloader cache so the picker doesn't fall
       // back to the prior session's `current` while `backend.newSession` is
@@ -342,7 +343,7 @@ export class AgentSession {
       this.recomputeStatusIfChanged();
       this.notifyModelChanged();
 
-      if (defaultModelSelection && this.currentState !== resp.state) {
+      if (defaultModelSelection) {
         await this.confirmSeededSelection(defaultModelSelection, resp.state);
       }
     } catch (err) {
@@ -384,18 +385,20 @@ export class AgentSession {
   }
 
   /**
-   * Confirm an optimistically-seeded selection with the backend. On
-   * success the backend's response replaces `currentState` via the
-   * inner `setModel` write. On failure the seed is reverted to
-   * `originalState` and listeners are re-notified so the picker drops
-   * back to whatever the backend actually has. Used by both the cold
-   * `initialize` path and the warm constructor branch.
+   * Apply the persisted user selection to the backend via `setModel`.
+   * Runs whenever `defaultModelSelection` is supplied — `setModel` is
+   * idempotent, and the wire-encoding short-circuit below makes it a
+   * pure no-op when the selection already matches the backend's report.
    *
-   * Skips the round-trip when the encoded form already matches what the
-   * backend reported. For descriptor-style backends (Claude SDK) where
-   * effort lives outside the wire id, an effort-only seed encodes to the
-   * same wire id and the no-op `setModel` is avoided — effort is then
-   * dispatched via the manager's `applyInitialSessionConfig`.
+   * On success the backend's response replaces `currentState`. On
+   * failure any optimistic baseModelId seed is reverted to `originalState`
+   * so the picker drops back to whatever the backend actually has.
+   *
+   * Skips the round-trip when the encoded form matches. For descriptor-
+   * style backends (Claude SDK) where effort lives outside the wire id,
+   * an effort-only change encodes the same and `setModel` is correctly
+   * skipped here — `applyInitialSessionConfig` dispatches the effort
+   * via `setConfigOption` instead.
    */
   private async confirmSeededSelection(
     selection: ModelSelection,
