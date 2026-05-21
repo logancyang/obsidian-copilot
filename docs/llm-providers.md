@@ -47,7 +47,7 @@ Access to Claude models (Opus, Sonnet, etc.).
 Access to Google's Gemini family of models.
 
 - **Get a key**: https://makersuite.google.com/app/apikey
-- **Models include**: gemini-3.5-flash, gemini-3.1-flash-lite, gemini-3.1-pro-preview, gemini-2.5-pro
+- **Models include**: gemini-2.5-pro, gemini-2.5-flash, gemini-3.5-flash, gemini-3.1-pro-preview
 - **Setting key**: `googleApiKey`
 
 ### XAI / Grok
