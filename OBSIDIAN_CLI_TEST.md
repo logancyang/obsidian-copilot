@@ -102,7 +102,7 @@ a no-op, but if Obsidian was restarted you need to run it again before
 ### Run a command
 
 ```bash
-$OBS vault=$VAULT command id=copilot:open-copilot-chat
+$OBS vault=$VAULT command id=copilot:agent-chat-open-window
 ```
 
 The full set of registered command IDs is available via:
@@ -344,7 +344,7 @@ $OBS vault=$VAULT dev:screenshot path=/tmp/test-before.png
 $OBS vault=$VAULT dev:cdp method=Memory.getDOMCounters > /tmp/dom-before.json
 
 # 4. Run the scenario
-$OBS vault=$VAULT command id=copilot:open-copilot-chat
+$OBS vault=$VAULT command id=copilot:agent-chat-open-window
 sleep 1
 $OBS vault=$VAULT eval code='document.querySelector(".copilot-chat-input")?.focus()'
 $OBS vault=$VAULT dev:cdp method=Input.insertText params='{"text":"test prompt"}'
