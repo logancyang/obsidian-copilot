@@ -1,27 +1,4 @@
-/**
- * Build the spawn-time directive that teaches every backend how to interpret
- * the @-mention pill tokens that appear in user messages. Copilot's chat
- * editor lets the user @-mention vault items inline; when the editor
- * extracts text for the LLM, each pill serializes to a literal token
- * (`[[title]]`, `{folder}`, `{activeNote}`). Without this directive the
- * agent has no way to know these are concrete vault references rather than
- * template placeholders to substitute.
- *
- * Composed into whatever existing system-prompt / instructions surface
- * each backend supports at spawn time, alongside `buildSkillCreationDirective`.
- * Pure leaf module — no Obsidian imports, no singletons, no arguments —
- * suitable for unit testing.
- *
- * The token shapes mirror the pill serializers:
- *   - `NotePillNode.getTextContent()` → `[[title]]`
- *   - `FolderPillNode.getTextContent()` → `{folderPath}`
- *   - Reserved `{activeNote}` template (handled in `parseTextForPills`)
- *
- * Folder mentions are framed as a natural-language hint rather than a
- * tool-level filter because today's search tools (`localSearch`,
- * `semanticSearch`, etc.) do not accept a `folder`/`path` parameter — the
- * agent must apply the scope itself via `glob`/`grep`/`read` path prefixes.
- */
+/** Teaches backends how to interpret the literal @-mention pill tokens (`[[title]]`, `{folder}`, `{activeNote}`) the chat editor emits. */
 export function buildPillSyntaxDirective(): string {
   return (
     `The user composes messages in a rich editor that supports @-mentions of vault items.\n` +

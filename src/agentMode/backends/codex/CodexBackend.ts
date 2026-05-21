@@ -37,8 +37,6 @@ export class CodexBackend implements AcpBackend {
     // session. See the Skills Management spec.
     const skillsFolder = getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
     const dirs = Object.values(SkillManager.getInstance().getAgentDirsProjectRel());
-    // Pill-syntax directive precedes the skill-creation directive so
-    // input-parsing rules come before skill-authoring rules.
     const directive = `${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("codex", skillsFolder, dirs)}`;
     descriptor.args = [
       ...descriptor.args,

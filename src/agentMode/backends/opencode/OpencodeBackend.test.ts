@@ -326,17 +326,11 @@ describe("buildOpencodeConfig", () => {
     const cfg = (await buildOpencodeConfig()) as {
       agent: Record<string, { prompt?: string; permission?: unknown; mode?: string }>;
     };
-    // Prompt is composed as: COPILOT_PROMPT_BASE + pill-syntax directive +
-    // skill-creation directive. Assert the base is the prefix and both
-    // directives are present so future directive changes don't break this test.
     expect(cfg.agent["copilot-build"].prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
     expect(cfg.agent.build.prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
-    // Pill-syntax directive presence (signature substrings — see
-    // `buildPillSyntaxDirective`).
     expect(cfg.agent["copilot-build"].prompt).toContain("{folder_name}");
     expect(cfg.agent["copilot-build"].prompt).toContain("{activeNote}");
     expect(cfg.agent.build.prompt).toContain("{folder_name}");
-    // Skill-creation directive presence.
     expect(cfg.agent["copilot-build"].prompt).toContain(
       'metadata.copilot-enabled-agents: "opencode"'
     );

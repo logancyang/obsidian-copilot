@@ -42,19 +42,14 @@ describe("resolveActiveNoteToken", () => {
   });
 
   it("treats `{ActiveNote}` (wrong case) as a non-match — only the reserved literal is replaced", () => {
-    // `parseTextForPills` matches the reserved token case-sensitively against
-    // the literal `activeNote`, so this helper does the same.
     const text = "Mention {ActiveNote} and {activeNote}.";
     expect(resolveActiveNoteToken(text, mockFile("Daily"))).toBe(
       "Mention {ActiveNote} and [[Daily]]."
     );
   });
 
+  // split/join (not String.prototype.replace) avoids `$&`/`$1` interpretation in the basename.
   it("preserves `$` characters in the basename (no regex-replacement surprises)", () => {
-    // Using split/join (not String.prototype.replace with a string pattern,
-    // which has no $-interpretation either but is easier to misread). This
-    // test pins the safe behavior so future refactors don't reach for
-    // replace() and accidentally interpret $1/$& in the basename.
     expect(resolveActiveNoteToken("ref {activeNote} here", mockFile("Q1 $revenue"))).toBe(
       "ref [[Q1 $revenue]] here"
     );

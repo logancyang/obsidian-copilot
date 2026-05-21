@@ -230,11 +230,6 @@ export async function buildOpencodeConfig(): Promise<Record<string, unknown>> {
   const skillsDirs = skillManagerReady
     ? Object.values(SkillManager.getInstance().getAgentDirsProjectRel())
     : [];
-  // Pill-syntax directive teaches every backend how to interpret the
-  // `[[note]]` / `{folder}` / `{activeNote}` tokens the chat editor emits
-  // from @-mention pills. Composed between the base prompt and the
-  // skill-creation directive so a fresh reader encounters input-parsing
-  // rules before skill-authoring rules.
   const prompt = `${basePrompt}\n\n${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("opencode", skillsFolder, skillsDirs)}`;
   config.agent = {
     [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {

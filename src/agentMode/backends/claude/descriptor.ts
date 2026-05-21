@@ -206,11 +206,6 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getSkillCreationDirective: () => {
         const folder = getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
         const dirs = Object.values(SkillManager.getInstance().getAgentDirsProjectRel());
-        // Pill-syntax directive precedes the skill-creation directive —
-        // input-parsing rules come before skill-authoring rules. The
-        // closure name is unchanged to keep the `BackendProcess` surface
-        // stable; semantically it's now "system prompt append," carrying
-        // both directives.
         return `${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("claude", folder, dirs)}`;
       },
     });

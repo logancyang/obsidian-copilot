@@ -50,13 +50,8 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(cIdx).toBeGreaterThanOrEqual(0);
     const value = desc.args[cIdx + 1];
     expect(value.startsWith("developer_instructions=")).toBe(true);
-    // Pill-syntax directive presence — `{` is TOML-safe so the literal
-    // tokens survive escaping unchanged.
     expect(value).toContain("{folder_name}");
     expect(value).toContain("{activeNote}");
-    // Skill-creation directive presence. The TOML value carries the
-    // directive text with newlines escaped as `\n` and inner double quotes
-    // as `\"`.
     expect(value).toContain('metadata.copilot-enabled-agents: \\"codex\\"');
     expect(value).toContain("copilot/skills/<name>/SKILL.md");
     expect(value).toContain(".claude/skills/");

@@ -274,9 +274,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     const hasWebExcerpt = selectedTextContexts.some(isWebSelectedTextContext);
     const hadUnsupportedAttachments = includeActiveWebTab || hasWebExcerpt;
 
-    // Resolve `app.workspace.getActiveFile()` once — it's used to build the
-    // candidate-note set, to expand slash-command active-note placeholders,
-    // and to rewrite the `{activeNote}` pill token in the message body.
     const activeFile = app.workspace.getActiveFile();
 
     const candidateNotes: TFile[] = [];
@@ -302,12 +299,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     if (expanded.matched) {
       void CustomCommandManager.getInstance().recordUsage(expanded.matched);
     }
-    // Replace the `{activeNote}` pill token with the actual `[[Note Title]]`
-    // wikilink form. The active file is a client-side concept the agent has
-    // no way to query; we resolve it here so the agent sees a concrete
-    // reference. `ActiveNotePillSyncPlugin` already pushes the active file
-    // onto `candidateNotes` (via `includeActiveNote`), so the resolved path
-    // is also in the `<copilot-context>` envelope for the agent to `read`.
     const resolvedText = resolveActiveNoteToken(expanded.text, activeFile);
 
     const content: PromptContent[] = [];
