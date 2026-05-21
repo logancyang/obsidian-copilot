@@ -12,9 +12,8 @@
   - [ ] Investigate opencode provider specific prompt
 - [x] P0: Skills
   - [x] Check out cc-switch to understand how to make skills compatible cross other agents https://github.com/farion1231/cc-switch
-- [ ] P0: Permission management
-  - [ ] Permission UI improvement
-  - [ ] Permission "always allow" doesn't seem to persist
+- [x] P0: Permission management
+  - [x] Permission UI improvement
 - [ ] P0: How to design the settings to configure the provider?
   - [x] Redesign the model settings - discussed on May 7 group meeting
   - [x] support self host model
@@ -22,10 +21,13 @@
 - [ ] P0: Test opencode works well with local models
 - [ ] P0: Fix broken legacy agent mode
   - [ ] Can we only support basic chat - not now but eventually yes
-- [ ] P0: Auto-save chat history controls
-- [ ] P0: Support image context
-- [ ] P1: [BUG] Check active note path. Sometimes the agent will start from a path that does not exist
+- [ ] P0: 非migrate的skill最好能直接引用,同名的skill如果内容一样migrate可以做得更好
+- [x] P0: Auto-save chat history controls
+- [x] P0: Support image context
+- [x] P1: [BUG] Check active note path. Sometimes the agent will start from a path that does not exist
+- [x] P1: [Performance] Updating skills settings is laggy
 - [ ] P1: Make askuserquestion tool show questions inline in the chat.
+- [ ] P1: Improve binary detection
 - [ ] P1: MCP
   - Basic functionality is ready
   - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
@@ -68,6 +70,8 @@
   - [ ] manual trigger
   - [ ] configure when to auto compact
 - [ ] P1: Project mode
+- [ ] P2: Inherit model effort from previous model when selecting a new model in the picker
+  - It's quite tedious today that sometimes the effort will drop to low.
 - [ ] P2: Support subscriptions that work with opencode (kimi code)
 - [ ] P2: Claude vscode plugin add comment to plan capability
   - It makes iterating on plan a lot easier
@@ -78,6 +82,7 @@
     "Editing draft.md" / "Edited draft.md", "Fetching url" / "Fetched url",
     etc.) so in-flight calls no longer render with past-tense verbs.
 - [ ] P2: Edit previous user message
+- [ ] P2: Support batch editing skills
 - [ ] P2: New agent command (/new, /usage)
 - [ ] P2: Claude code / Codex authentication
 - [ ] P2: Steering conversation (instead of queue)
