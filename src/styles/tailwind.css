@@ -858,7 +858,8 @@ If your plugin does not need CSS, delete this file.
 /* use 'important' to prevent ob default css style from being third-party theme overridden */
 /* --copilot-status-bar-clearance is set dynamically by ChatViewLayout */
 
-.workspace-leaf-content[data-type="copilot-chat-view"] .view-content {
+.workspace-leaf-content[data-type="copilot-chat-view"] .view-content,
+.workspace-leaf-content[data-type="copilot-agent-chat-view"] .view-content {
   padding-bottom: calc(
     var(--safe-area-inset-bottom, 0px) + var(--copilot-status-bar-clearance, 0px) + var(--size-4-1)
   ) !important;
@@ -867,7 +868,10 @@ If your plugin does not need CSS, delete this file.
 /* Editor mode for mobile - legacy (no bottom navbar): minimal padding */
 body.is-mobile
   .workspace-tab-container
-  .workspace-leaf-content[data-type="copilot-chat-view"]
+  :is(
+    .workspace-leaf-content[data-type="copilot-chat-view"],
+    .workspace-leaf-content[data-type="copilot-agent-chat-view"]
+  )
   .view-content {
   padding-bottom: var(--size-4-1) !important;
 }
@@ -876,7 +880,10 @@ body.is-mobile
 @supports selector(body:has(*)) {
   body.is-mobile:has(.mobile-navbar):not(.is-hidden-nav)
     .workspace-tab-container
-    .workspace-leaf-content[data-type="copilot-chat-view"]
+    :is(
+      .workspace-leaf-content[data-type="copilot-chat-view"],
+      .workspace-leaf-content[data-type="copilot-agent-chat-view"]
+    )
     .view-content {
     padding-bottom: calc(
       var(--navbar-height, 50px) + max(var(--safe-area-inset-bottom, 0px), var(--size-4-3)) +
