@@ -43,6 +43,10 @@ function rowsToRecord(rows: Row[]): Record<string, string> | undefined {
   for (const row of rows) {
     const name = row.name.trim();
     if (!name) continue;
+    // Skip names that fail validation so malformed keys never reach
+    // backend spawn paths, which read `envOverrides` from settings
+    // directly without re-sanitizing.
+    if (!ENV_VAR_NAME_RE.test(name)) continue;
     out[name] = row.value;
   }
   return Object.keys(out).length > 0 ? out : undefined;
@@ -60,9 +64,10 @@ const COMMIT_DEBOUNCE_MS = 400;
  * the last edit always lands. The parent's `value` is consulted only at
  * mount — external reloads while the editor is open are uncommon.
  *
- * Validation is permissive: invalid names surface an inline warning but
- * don't block typing. `sanitizeEnvOverrides` drops anything malformed at
- * save time, so the persisted shape is always safe.
+ * Validation is permissive in the input: invalid names surface an inline
+ * warning but don't block typing. `rowsToRecord` then drops malformed
+ * rows before commit, so the persisted record (and the env passed to
+ * backend subprocesses) only ever contains valid POSIX identifiers.
  */
 export const EnvOverridesSetting: React.FC<Props> = ({
   value,
