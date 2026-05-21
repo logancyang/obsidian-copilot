@@ -675,6 +675,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
         // Bind DOM ops to the document that owns the message container so
         // popout-window chats don't pick up the wrong document if focus shifts.
         const doc = contentRef.current.doc;
+        // Resolve internal links against the active note so vaults with
+        // duplicate basenames or heading-only links open the right file.
+        const sourcePath = app.workspace.getActiveFile()?.path ?? "";
         // Track existing tool call and error block IDs
         const existingToolCallIds = new Set<string>();
         const existingErrorIds = new Set<string>();
@@ -711,7 +714,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               contentRef.current!.appendChild(textDiv);
             }
 
-            void renderMarkdown(app, segment.content, textDiv, "", componentRef.current!)
+            void renderMarkdown(app, segment.content, textDiv, sourcePath, componentRef.current!)
               .then(() => normalizeFootnoteRendering(textDiv))
               .catch((err: unknown) => logError("renderMarkdown failed", err));
             currentIndex++;

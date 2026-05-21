@@ -172,7 +172,10 @@ const PlanPreviewRoot: React.FC<PlanPreviewRootProps> = ({ app, state }) => {
     // the effect — unloading drops every subscription it set up.
     const component = new Component();
     component.load();
-    renderMarkdown(app, planMarkdown, target, "", component).catch((e: unknown) => {
+    // Resolve internal links against the active note so vaults with
+    // duplicate basenames or heading-only links open the right file.
+    const sourcePath = app.workspace.getActiveFile()?.path ?? "";
+    renderMarkdown(app, planMarkdown, target, sourcePath, component).catch((e: unknown) => {
       logWarn("[PlanPreviewView] markdown render failed", e);
     });
     return () => {

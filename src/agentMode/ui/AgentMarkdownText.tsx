@@ -23,7 +23,10 @@ export const AgentMarkdownText: React.FC<AgentMarkdownTextProps> = ({ text, app 
     target.empty();
     const component = new Component();
     component.load();
-    renderMarkdown(app, text, target, "", component).catch((e: unknown) => {
+    // Resolve internal links against the active note so vaults with
+    // duplicate basenames or heading-only links open the right file.
+    const sourcePath = app.workspace.getActiveFile()?.path ?? "";
+    renderMarkdown(app, text, target, sourcePath, component).catch((e: unknown) => {
       logWarn("[AgentTrail] markdown render failed", e);
     });
     return () => {
