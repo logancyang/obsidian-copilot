@@ -91,7 +91,7 @@ export async function run(args: string[]): Promise<void> {
   const userInput = args.join(" ").trim();
 
   if (!userInput) {
-    console.error('Usage: npm run prompt:debug -- "your message here"');
+    console.error('Usage: pnpm run prompt:debug -- "your message here"');
     process.exitCode = 1;
     return;
   }

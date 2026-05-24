@@ -359,5 +359,5 @@ React invariant #409 surfaced when tool-call banners attempted to render into Re
 Run the focused test to cover the streaming behaviour and tool-call integration:
 
 ```
-npm test -- src/components/chat-components/ChatSingleMessage.test.tsx
+pnpm test -- src/components/chat-components/ChatSingleMessage.test.tsx
 ```

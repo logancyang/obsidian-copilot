@@ -44,18 +44,18 @@ In the case of Copilot for Obsidian, you will need to:
 1. Fork the repo.
 2. Create a vault just for development.
 3. Clone the forked repo into your vault's `plugins` folder.
-4. Run `npm install` to install all dependencies.
+4. Run `pnpm install` to install all dependencies.
 5. Install the recommended VS Code extensions (Prettier and ESLint).
 6. Ensure your editor respects the `.editorconfig` and Prettier settings.
-7. Run `npm run dev` in your repo to see the effect of your changes.
-8. Before committing, run `npm run format` to ensure all files are properly formatted.
+7. Run `pnpm run dev` in your repo to see the effect of your changes.
+8. Before committing, run `pnpm run format` to ensure all files are properly formatted.
 9. When you are ready to make a pull request, ensure to make your changes in **a branch on your fork**, and then submit a pull request to the **main repo**.
 
 Try to be descriptive in your branch names and pull requests. Happy coding!
 
-#### Fast Iteration with `npm run test:vault` (macOS)
+#### Fast Iteration with `pnpm run test:vault` (macOS)
 
-If you work across multiple worktrees or just want one command to build and load the plugin into a test vault, use `npm run test:vault`. It runs `npm install`, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the worktree into the vault's `.obsidian/plugins/copilot/` folder, and reloads the plugin in Obsidian via its CLI.
+If you work across multiple worktrees or just want one command to build and load the plugin into a test vault, use `pnpm run test:vault`. It runs `pnpm install`, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the worktree into the vault's `.obsidian/plugins/copilot/` folder, and reloads the plugin in Obsidian via its CLI.
 
 **One-time setup:**
 
@@ -72,7 +72,7 @@ If you work across multiple worktrees or just want one command to build and load
 From any worktree, run:
 
 ```bash
-npm run test:vault
+pnpm run test:vault
 ```
 
 The script installs deps, builds the plugin, symlinks the build artifacts into the vault, then calls `plugin:enable` and `plugin:reload` on the Obsidian CLI. If Obsidian isn't running, the symlinks are still in place — start Obsidian and the new build will load.
@@ -123,7 +123,7 @@ GEMINI_API_KEY=your_api_key_here
 Then run the integration tests:
 
 ```
-npm run test:integration
+pnpm run test:integration
 ```
 
 ## Manual Testing Checklist

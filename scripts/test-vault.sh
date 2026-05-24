@@ -12,7 +12,7 @@ to the absolute path of an Obsidian vault you've opened at least once:
 
   export COPILOT_TEST_VAULT_PATH="$HOME/Obsidian/CopilotTestVault"
 
-Then re-run: npm run test:vault
+Then re-run: pnpm run test:vault
 EOF
   exit 1
 fi
@@ -34,10 +34,10 @@ WORKTREE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKTREE_ROOT"
 
 echo "==> Installing dependencies"
-npm install --prefer-offline --no-audit --no-fund
+pnpm install --prefer-offline --frozen-lockfile
 
 echo "==> Building plugin"
-npm run build
+pnpm run build
 
 PLUGIN_ID="$(node -p "require('./manifest.json').id")"
 if [[ -z "$PLUGIN_ID" ]]; then

@@ -10,23 +10,23 @@ Copilot for Obsidian is an AI-powered assistant plugin that integrates various L
 
 ### Build & Development
 
-- **NEVER RUN `npm run dev`** - The user will handle all builds manually
-- `npm run build` - Production build (TypeScript check + minified output)
-- `npm run test:vault` - macOS only. Installs deps, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the current worktree into `$COPILOT_TEST_VAULT_PATH/.obsidian/plugins/copilot/`, then reloads the plugin via the Obsidian CLI. Requires the user-level env var `COPILOT_TEST_VAULT_PATH` to be set to a vault that has been opened in Obsidian at least once. Use this when the user asks you to load the plugin into their test vault — it replaces manual build + copy + reload.
+- **NEVER RUN `pnpm run dev`** - The user will handle all builds manually
+- `pnpm run build` - Production build (TypeScript check + minified output)
+- `pnpm run test:vault` - macOS only. Installs deps, builds, symlinks `main.js` / `manifest.json` / `styles.css` from the current worktree into `$COPILOT_TEST_VAULT_PATH/.obsidian/plugins/copilot/`, then reloads the plugin via the Obsidian CLI. Requires the user-level env var `COPILOT_TEST_VAULT_PATH` to be set to a vault that has been opened in Obsidian at least once. Use this when the user asks you to load the plugin into their test vault — it replaces manual build + copy + reload.
 
 ### Code Quality
 
-- `npm run lint` - Run ESLint checks
-- `npm run lint:fix` - Auto-fix ESLint issues
-- `npm run format` - Format code with Prettier
-- `npm run format:check` - Check formatting without changing files
-- **Before PR:** Always run `npm run format && npm run lint`
+- `pnpm run lint` - Run ESLint checks
+- `pnpm run lint:fix` - Auto-fix ESLint issues
+- `pnpm run format` - Format code with Prettier
+- `pnpm run format:check` - Check formatting without changing files
+- **Before PR:** Always run `pnpm run format && pnpm run lint`
 
 ### Testing
 
-- `npm run test` - Run unit tests (excludes integration tests)
-- `npm run test:integration` - Run integration tests (requires API keys)
-- Run single test: `npm test -- -t "test name"`
+- `pnpm run test` - Run unit tests (excludes integration tests)
+- `pnpm run test:integration` - Run integration tests (requires API keys)
+- Run single test: `pnpm test -- -t "test name"`
 
 ### Obsidian CLI (Live Testing)
 
@@ -36,7 +36,7 @@ The Obsidian desktop app includes a CLI for plugin development. Use the full pat
 /Applications/Obsidian.app/Contents/MacOS/obsidian <command>
 ```
 
-**Plugin reload** (after `npm run build`):
+**Plugin reload** (after `pnpm run build`):
 
 ```bash
 /Applications/Obsidian.app/Contents/MacOS/obsidian plugin:reload id=copilot
@@ -229,10 +229,10 @@ For detailed architecture diagrams and documentation, see [`MESSAGE_ARCHITECTURE
 
 - **NEVER edit `styles.css` directly** - This is a generated file
 - **Source file**: `src/styles/tailwind.css` - Edit this file for custom CSS
-- **Build process**: `npm run build:tailwind` compiles `src/styles/tailwind.css` → `styles.css`
+- **Build process**: `pnpm run build:tailwind` compiles `src/styles/tailwind.css` → `styles.css`
 - **Tailwind classes**: Use Tailwind utility classes in components (see `tailwind.config.js` for available classes)
 - **Custom CSS**: Add custom styles to `src/styles/tailwind.css` after the `@import` statements
-- After editing CSS, always run `npm run build` to regenerate `styles.css`
+- After editing CSS, always run `pnpm run build` to regenerate `styles.css`
 
 ## Testing Guidelines
 

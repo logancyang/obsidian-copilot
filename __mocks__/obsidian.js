@@ -1,4 +1,6 @@
 // __mocks__/obsidian.js
+import path from "path";
+
 import { parse as parseYamlString } from "yaml";
 
 // Per-test overrides set via the exported `__setRequestUrlImpl` helper.
@@ -12,10 +14,19 @@ let requestUrlImpl = jest.fn().mockResolvedValue({
   headers: {},
 });
 
+const obsidianMoment = (() => {
+  try {
+    const obsidianPackagePath = require.resolve("obsidian/package.json");
+    return jest.requireActual(path.join(path.dirname(obsidianPackagePath), "..", "moment"));
+  } catch {
+    return jest.requireActual("moment");
+  }
+})();
+
 module.exports = {
   // Reason: normalizePath is used by projectPaths.ts; identity function is sufficient for tests
   normalizePath: jest.fn().mockImplementation((p) => p),
-  moment: jest.requireActual("moment"),
+  moment: obsidianMoment,
   requestUrl: (...args) => requestUrlImpl(...args),
   __setRequestUrlImpl: (impl) => {
     requestUrlImpl = impl;

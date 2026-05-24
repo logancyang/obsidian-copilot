@@ -116,22 +116,28 @@ jobs:
           echo "Version check passed: $VERSION (verified against $MANIFEST_FILE)"
 
       # ── Step 4: Set up Node.js ───────────────────────────────────────────────
+      - name: Setup pnpm
+        if: steps.semver.outputs.is_release == 'true'
+        uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
       - name: Setup Node.js 22.x
         if: steps.semver.outputs.is_release == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 22.x
-          cache: npm
+          cache: pnpm
 
       # ── Step 5: Install dependencies ────────────────────────────────────────
       - name: Install dependencies
         if: steps.semver.outputs.is_release == 'true'
-        run: npm ci
+        run: pnpm install --frozen-lockfile
 
       # ── Step 6: Build the plugin ─────────────────────────────────────────────
       - name: Build
         if: steps.semver.outputs.is_release == 'true'
-        run: npm run build
+        run: pnpm run build
 
       # ── Step 7: Write PR body to a file (avoids shell injection) ─────────────
       # Using an environment variable to pass the PR body prevents special

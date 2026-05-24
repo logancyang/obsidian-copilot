@@ -28,8 +28,8 @@ const versions = JSON.parse(readFileSync("versions.json", "utf8"));
 versions[targetVersion] = minAppVersion;
 writeFileSync("versions.json", JSON.stringify(versions, null, "\t") + "\n");
 
-// Stage the files we modified. npm version's auto-commit (or the agent's
-// later explicit commit) picks them up.
+// Stage the files we modified. The package manager's version auto-commit (or
+// the agent's later explicit commit) picks them up.
 execSync(`git add ${manifestPath} versions.json`);
 
 // When a stable release ships, an existing manifest-beta.json is now
