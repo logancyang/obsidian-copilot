@@ -1,5 +1,6 @@
 import obsidianmd from "eslint-plugin-obsidianmd";
 import eslintReact from "@eslint-react/eslint-plugin";
+import depend from "eslint-plugin-depend";
 import reactHooks from "eslint-plugin-react-hooks";
 import tailwind from "eslint-plugin-tailwindcss";
 import globals from "globals";
@@ -11,6 +12,7 @@ export default [
       "main.js",
       "styles.css",
       "data.json",
+      ".kilo/**",
       "designdocs/**",
       "docs/**",
     ],
@@ -244,6 +246,7 @@ export default [
   // recommended) but allow the deps we deliberately keep.
   {
     files: ["**/package.json"],
+    plugins: { depend },
     rules: {
       "depend/ban-dependencies": [
         "error",

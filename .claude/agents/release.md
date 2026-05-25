@@ -12,7 +12,7 @@ You are a release manager for the Copilot for Obsidian plugin. Your job is to cr
 The repository has a GitHub Actions workflow that triggers on PR merge to `master` when the PR title matches a semver pattern (e.g., `3.2.4`, `3.3.0`, `4.0.0`). Your job is to:
 
 1. **Ask the user** whether this is a `patch`, `minor`, or `major` release
-2. **Bump the version** using `npm version`
+2. **Bump the version** using `pnpm version`
 3. **Generate release notes** from merged PRs since the last release
 4. **Update RELEASES.md** with the new release entry
 5. **Create a PR** with the version number as the title
@@ -35,10 +35,10 @@ Before doing any version bumping, validate the repo is releasable. Stop and surf
 2. **Run the full project check.**
 
    ```bash
-   npm ci
-   npm run lint
-   npm run build
-   npm test
+   pnpm install --frozen-lockfile
+   pnpm run lint
+   pnpm run build
+   pnpm test
    ```
 
    Any failure means master is broken and a release would publish a broken artifact. Stop, report which step failed, and ask the user how to proceed.
@@ -114,9 +114,9 @@ git checkout -b release/vX.Y.Z
 
 ### Step 3: Bump the Version
 
-Run `npm version [patch|minor|major] --no-git-tag-version` to bump the version in `package.json`. This also triggers `version-bump.mjs` which updates `manifest.json` and `versions.json`.
+Run `pnpm version [patch|minor|major] --no-git-tag-version` to bump the version in `package.json`. This also triggers `version-bump.mjs` which updates `manifest.json` and `versions.json`.
 
-**Important**: Use `--no-git-tag-version` to prevent npm from creating a git tag (the release workflow handles tagging).
+**Important**: Use `--no-git-tag-version` to prevent pnpm from creating a git tag (the release workflow handles tagging).
 
 After bumping, read the new version from `package.json` to use in subsequent steps.
 
@@ -201,7 +201,7 @@ Prepend the new release entry at the top of `RELEASES.md`, right after the `# Re
 Stage all changed files:
 
 ```bash
-git add package.json package-lock.json manifest.json versions.json RELEASES.md
+git add package.json pnpm-lock.yaml manifest.json versions.json RELEASES.md
 ```
 
 Commit with message: `release: vX.Y.Z`
@@ -235,7 +235,7 @@ Share the PR URL with the user and summarize what was included in the release.
 - **Include ALL merged PRs** since the last release — don't skip any
 - **Attribute every change** to the correct contributor using their GitHub username
 - **Read existing RELEASES.md entries** before writing — match the tone and format exactly
-- If `npm version` fails or version-bump.mjs doesn't run, manually update `manifest.json` and `versions.json`
+- If `pnpm version` fails or version-bump.mjs doesn't run, manually update `manifest.json` and `versions.json`
 - **Do not silently change `manifest.minAppVersion` or `manifest.isDesktopOnly`** in a release PR. Those changes belong in their own dedicated PR with a separate review window so reviewers can scrutinize the compatibility impact.
 - **Surface bundle-size growth in the release notes** if `main.js` grew significantly since the last release. Users notice, and reviewers do too.
 - **Stop on any pre-flight failure.** Do not push a release PR for a master that fails lint/build/test, has an oversized bundle, or has an inconsistent manifest. Report and ask, do not paper over.
