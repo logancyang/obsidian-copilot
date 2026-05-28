@@ -5,41 +5,58 @@
   - [x] Save chat history to notes
 - [x] P0: Thoroughly assess whether migrating to Anthropic agent SDK is worth it.
 - [ ] P0: Test Windows devices
-- [ ] P0: Make sure bash command shows what command it runs (visibility)
-- [ ] P0: Provide copilot specific system prompt
-  - [ ] Allow users to share system prompt
-  - [ ] Do a quick spike on the concrete behavior
-  - [ ] Investigate opencode provider specific prompt
+  - Anything path or subprocess related should be checked (skills management, opencode installation)
+- [x] P0: Make sure bash command shows what command it runs (visibility)
+- [ ] P0: Upgrade pinned opencode to latest version
+- [ ] P0: Pass copilot built-in system prompt / user provided system prompt to agents
+  - making sure opencode, claude code, and codex all work well.
+- [ ] P0: Test sandbox mode
+  - we need to make sure the agents won't accidentally edit files outside of user vault folders. Investigate sandbox mode in each agent integration and make those edit programmatically blocked.
 - [x] P0: Skills
   - [x] Check out cc-switch to understand how to make skills compatible cross other agents https://github.com/farion1231/cc-switch
 - [x] P0: Permission management
   - [x] Permission UI improvement
-- [ ] P0: How to design the settings to configure the provider?
+- [x] P0: How to design the settings to configure the provider?
   - [x] Redesign the model settings - discussed on May 7 group meeting
   - [x] support self host model
   - [x] remove built-in models
+  - [x] migrate existing models to the new format
 - [ ] P0: Test opencode works well with local models
-- [ ] P0: Fix broken legacy agent mode
-  - [ ] Can we only support basic chat - not now but eventually yes
+  - configure local models in ollama and lm studio to make sure they can be enrolled in BYOK and enabled on opencode, and can work well in opencode.
+- [ ] P0: Test migration (skill, model) to make sure no unrecoverable migration is introduced in pre-release
+  - the new agent mode introduces schema changes to data.json. We need to introduce migration scripts and versioning. Making sure before pre-release launch, all the schema changes are settled to avoid adding new migrations, as they can be fragile.
 - [ ] P0: 非migrate的skill最好能直接引用,同名的skill如果内容一样migrate可以做得更好
+  - Check designdocs/SKILLS_DISCOVERY_REDESIGN.md
 - [x] P0: Auto-save chat history controls
 - [x] P0: Support image context
+- [ ] P1: Support claude code authentication
+  - when user hasn't signed into claude code, the chat will respond with no message and no error.
+  - we need to prompt user to sign in. Best to pop claude oauth page and let them finish sign in directly within copilot.
+- [ ] P1: Better binary detection
+  - In discord team channel, a few folks shared that the system failed to auto detect their binaries. It's due to lacking environment variable PATH in the runtime (e.g. nvm). We need to do researches to figure out whether we have to expand the PATH or there is a better way to import user system PATH.
+- [ ] P1: MCP management
+  - We need to manage MCP in the same way as SKILLs. They should be portable agent to agent. This work involves introducing a new settings view and create a central way to manage MCP configs across all agents.
+  - design needed
+- [ ] P1: Support oauth for MCP servers (the one example that I tested in ACP agents didn't work)
+- [ ] P1: Support setting MCP by copy pasting JSON blobs (quality of life changes)
+- [ ] P1: Fix broken legacy agent mode
+  - legacy agent mode currently failed to work. we need to keep them working to support existing user workflows
 - [x] P1: [BUG] Check active note path. Sometimes the agent will start from a path that does not exist
 - [x] P1: [Performance] Updating skills settings is laggy
-- [ ] P1: Make askuserquestion tool show questions inline in the chat.
-- [ ] P1: Improve binary detection
-- [ ] P1: MCP
-  - Basic functionality is ready
-  - [ ] P1: Surface externally-managed MCP servers (claude.ai remote, plugin-provided) — see [MCP_EXTERNALLY_MANAGED_SERVERS.md](./MCP_EXTERNALLY_MANAGED_SERVERS.md)
-  - [ ] P1: Support oauth for MCP servers (the one example that I tested didn't work)
-  - [ ] P1: Support setting MCP by copy pasting JSON blobs
-- [ ] P1: Content type support (image, audio) - https://agentclientprotocol.com/protocol/content
+- [ ] P1: Make AskUserQuestion tool show questions inline in the chat like permission instead of in a dialog.
+  - design needed
+- [ ] P1: Citation
+  - Introduce a tool to let agent call to generate citation on the researched sources
+  - design needed for citation
 - [ ] P1: Edit diff UI - https://agentclientprotocol.com/protocol/tool-calls#diffs
+  - Generate clear diffs and let user approve before an edit can be make. This can be part of the edit permission check.
+  - Onces the agent makes the edit, we should still allow user to click on the edit tool message and check what was changed.
   - The edit diff should be based on well rendered markdown, not raw markdown file. For example, table is impossible to understand the diff with the raw format
-- [ ] P1: Thoroughly test opencode, codex, and claude code with different test cases
-  - [ ] Create sample vaults for test cases.
+  - design needed
 - [ ] P1: Fix session title for claude code agent
+  - It currently doesn't generate session title like other ACP based agents.
 - [ ] P1: Agent upgrade detection and helper UI in settings
+  - The installed ACP and opencode binary can upgrade. We need to provide users hint to upgrade them to ensure proper functionalities.
 - [ ] P1: Forward web-source context to the agent
   - The agent should be able to access the content of the rendered tab
   - Right-click "Add to Copilot context" excerpts from web tabs and the
@@ -48,10 +65,9 @@
     `<copilot-context>` envelope (e.g. a `Web excerpts:` section with
     `title (url): content`) so the agent can actually read them.
 - [ ] P1: Move PDF parsing into an agent tool
-  - Inline PDF parsing during send can take too long and blocks the user
-    before the agent starts. Keep PDF attachments as vault paths for the
-    built-in Read tool for now, then expose Copilot PDF parsing as an
-    explicit tool the agent can call when it needs extracted PDF text.
+  - Copilot provide a premium PDF parsing service. For paid user, we should expose Copilot PDF parsing as an
+    explicit skill or mcp when it needs extracted PDF text.
+  - design needed
 - [ ] P1: Token counter
   - To know how many context is left in the current session
   - Nice-to-have: Cost estimate
@@ -62,17 +78,21 @@
     - challenge - agentic search often is better than RAG, how does the agent know when to trigger it
     - we don't need index-free search
   - [ ] web search (paid feature only)
-  - [ ] ~~edit~~
+  - [ ] deprecate "edit" and "composer"
   - [ ] youtube transcription (paid feature only)
   - [ ] obsidian CLI
-- [ ] P1: Opencode plan mode fine-tuning
-- [ ] P1: compaction
-  - [ ] manual trigger
+- [ ] P1: support compaction
+  - [ ] design how to manual trigger a compaction
   - [ ] configure when to auto compact
+- [ ] P1: Allow comment in plan mode
+  - inspired by claude code vscode extension interaction
 - [ ] P1: Project mode
-- [ ] P2: Inherit model effort from previous model when selecting a new model in the picker
-  - It's quite tedious today that sometimes the effort will drop to low.
+  - create a new project mode that work with the agent mode.
+- [ ] P1: Move relevant notes to its own view
+- [ ] P1: Settings page revamp
+  - deprecate unused settings
 - [ ] P2: Support subscriptions that work with opencode (kimi code)
+  - today we ask user to configure their subscriptions directly in opencode. This will allow them to configure subscription directly in obsidian copilot.
 - [ ] P2: Claude vscode plugin add comment to plan capability
   - It makes iterating on plan a lot easier
 - [x] P2: [UX] Make mode more obvious
@@ -82,14 +102,18 @@
     "Editing draft.md" / "Edited draft.md", "Fetching url" / "Fetched url",
     etc.) so in-flight calls no longer render with past-tense verbs.
 - [ ] P2: Edit previous user message
-- [ ] P2: Support batch editing skills
-- [ ] P2: New agent command (/new, /usage)
-- [ ] P2: Claude code / Codex authentication
+- [ ] P2: Agent command (/new)
+  - /new to create a new chat session
+  - /usage to show how much quota is left
 - [ ] P2: Steering conversation (instead of queue)
 - [ ] P2: Rollback everything to the state of previous message
+  - If a user wants to go back to a previous conversation (like claude code double ESC), we should allow users to and revert the state to when that message is triggered.
+- [ ] P2: In-product QA agent to debug for users
+  - Users may have questions about copilot features and we can create a skill to answer user questions directly in copilot. 
 - [ ] P3: Rerun agent response
-- [ ] P3: Agent todo list
-  - [ ] make sure in case it renders, it won't be buggy
+  - click "rerun" button to regenerate agent response
+- [ ] P3: Copy agent message
+  - copy the agent generated message with a button under the message like what the chat mode allows today
 - [x] P1: Queue messages
 - [x] P1: Only include the provided models
   - hide openrouter models behind a modal selector
