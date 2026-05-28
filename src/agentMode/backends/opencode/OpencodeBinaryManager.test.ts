@@ -42,6 +42,7 @@ jest.mock("@/settings/model", () => {
   };
 });
 
+import { OPENCODE_PINNED_VERSION } from "@/constants";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -66,7 +67,7 @@ const fakePlugin = {
 
 describe("pickMatchingAsset", () => {
   const release = {
-    tag_name: "v1.14.24",
+    tag_name: `v${OPENCODE_PINNED_VERSION}`,
     assets: [
       {
         name: "opencode-darwin-arm64.zip",
@@ -166,13 +167,14 @@ describe("computeInstallState", () => {
 });
 
 describe("parseVersionFromStdout", () => {
+  const V = OPENCODE_PINNED_VERSION;
   it.each([
-    ["1.14.24", "1.14.24"],
-    ["v1.14.24", "1.14.24"],
-    ["opencode 1.14.24", "1.14.24"],
-    ["opencode\nversion: 1.14.24\n", "1.14.24"],
-    ["1.14.24-rc.1", "1.14.24-rc.1"],
-    ["1.14.24+build.5", "1.14.24+build.5"],
+    [V, V],
+    [`v${V}`, V],
+    [`opencode ${V}`, V],
+    [`opencode\nversion: ${V}\n`, V],
+    [`${V}-rc.1`, `${V}-rc.1`],
+    [`${V}+build.5`, `${V}+build.5`],
   ])("parses %j → %s", (input, expected) => {
     expect(parseVersionFromStdout(input)).toBe(expected);
   });
@@ -208,14 +210,14 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
     const ghost = path.join(tmpDir, "does-not-exist", "opencode");
     settingsMock.__reset({
       binaryPath: ghost,
-      binaryVersion: "1.14.24",
+      binaryVersion: OPENCODE_PINNED_VERSION,
       binarySource: "custom",
     });
     const mgr = new OpencodeBinaryManager(fakePlugin);
     await mgr.refreshInstallState();
     expect(settingsMock.__get()).toEqual({
       binaryPath: ghost,
-      binaryVersion: "1.14.24",
+      binaryVersion: OPENCODE_PINNED_VERSION,
       binarySource: "custom",
     });
   });
@@ -224,7 +226,7 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
     const ghost = path.join(tmpDir, "does-not-exist", "opencode");
     settingsMock.__reset({
       binaryPath: ghost,
-      binaryVersion: "1.14.24",
+      binaryVersion: OPENCODE_PINNED_VERSION,
       binarySource: "managed",
     });
     const mgr = new OpencodeBinaryManager(fakePlugin);
@@ -241,14 +243,14 @@ describe("OpencodeBinaryManager.refreshInstallState", () => {
     await fs.promises.writeFile(realFile, "");
     settingsMock.__reset({
       binaryPath: realFile,
-      binaryVersion: "1.14.24",
+      binaryVersion: OPENCODE_PINNED_VERSION,
       binarySource: "managed",
     });
     const mgr = new OpencodeBinaryManager(fakePlugin);
     await mgr.refreshInstallState();
     expect(settingsMock.__get()).toEqual({
       binaryPath: realFile,
-      binaryVersion: "1.14.24",
+      binaryVersion: OPENCODE_PINNED_VERSION,
       binarySource: "managed",
     });
   });

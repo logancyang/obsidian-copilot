@@ -896,7 +896,7 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export const OPENCODE_PINNED_VERSION = "1.14.24";
+export const OPENCODE_PINNED_VERSION = "1.15.11";
 export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
