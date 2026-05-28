@@ -91,7 +91,6 @@ import {
   Notice,
   Platform,
   Plugin,
-  setIcon,
   TFile,
   WorkspaceLeaf,
 } from "obsidian";
@@ -183,9 +182,12 @@ export default class CopilotPlugin extends Plugin {
           logError("Failed to persist settings.", error);
           new Notice("Copilot failed to save settings. Check logs and try again.");
         }
-        registerCommands(this, prev, next);
-        if (prev && prev.agentMode?.enabled !== next.agentMode?.enabled) {
-          this.refreshRibbonIcon();
+        // Sign-in / sign-out (isPlusUser flip) or key rotation while signed in.
+        if (
+          prev?.isPlusUser !== next.isPlusUser ||
+          (next.isPlusUser && prev?.plusLicenseKey !== next.plusLicenseKey)
+        ) {
+          syncPlus(next.isPlusUser, next.plusLicenseKey);
         }
         // Sign-in / sign-out (isPlusUser flip) or key rotation while signed in.
         if (
@@ -289,7 +291,7 @@ export default class CopilotPlugin extends Plugin {
       () => (this.canUseAgentView() ? this.activateAgentView() : this.activateView())
     );
 
-    registerCommands(this, undefined, getSettings());
+    registerCommands(this);
 
     // Tool initialization is now handled automatically in CopilotPlusChainRunner and AutonomousAgentChainRunner
 
@@ -781,10 +783,6 @@ export default class CopilotPlugin extends Plugin {
       new Notice("Agent Chat is not available on mobile.");
       return null;
     }
-    if (!isAgentModeEnabled()) {
-      new Notice("Enable Agent Mode in Copilot settings first.");
-      return null;
-    }
     if (!this.agentSessionManager) {
       new Notice("Agent Chat is not initialized.");
       return null;
@@ -794,16 +792,6 @@ export default class CopilotPlugin extends Plugin {
 
   private canUseAgentView(): boolean {
     return !!this.agentSessionManager && isAgentModeEnabled();
-  }
-
-  private refreshRibbonIcon() {
-    if (!this.ribbonIconEl) return;
-    const agentReady = this.canUseAgentView();
-    const icon = agentReady ? "bot" : "message-square";
-    const tooltip = agentReady ? "Open Copilot Agent Chat" : "Open Copilot Chat";
-    setIcon(this.ribbonIconEl, icon);
-    this.ribbonIconEl.setAttribute("aria-label", tooltip);
-    this.ribbonIconEl.setAttribute("title", tooltip);
   }
 
   async loadSettings() {

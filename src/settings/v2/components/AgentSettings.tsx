@@ -50,34 +50,21 @@ export const AgentSettings: React.FC = () => {
       <div className="tw-mb-3 tw-text-xl tw-font-bold">Agents (alpha)</div>
       <div className="tw-space-y-4">
         <SettingItem
-          type="switch"
-          title="Enable Agent Mode"
-          description="BYOK agent harness backed by a local ACP subprocess. Desktop only."
-          checked={settings.agentMode.enabled}
-          onCheckedChange={(checked) =>
-            setSettings((cur) => ({ agentMode: { ...cur.agentMode, enabled: checked } }))
+          type="select"
+          title="Default backend"
+          description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
+          value={settings.agentMode.activeBackend}
+          onChange={(value) =>
+            setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
           }
+          options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
         />
 
-        {settings.agentMode.enabled && (
-          <SettingItem
-            type="select"
-            title="Default backend"
-            description="Used when you click + to start a new session and for auto-spawn on mount. Selecting a model from the model picker also updates this."
-            value={settings.agentMode.activeBackend}
-            onChange={(value) =>
-              setSettings((cur) => ({ agentMode: { ...cur.agentMode, activeBackend: value } }))
-            }
-            options={orderedDescriptors.map((d) => ({ label: d.displayName, value: d.id }))}
-          />
-        )}
+        <McpServersPanel />
 
-        {settings.agentMode.enabled && <McpServersPanel />}
-
-        {settings.agentMode.enabled &&
-          orderedDescriptors.map((descriptor) => (
-            <BackendSection key={descriptor.id} descriptor={descriptor} plugin={plugin} />
-          ))}
+        {orderedDescriptors.map((descriptor) => (
+          <BackendSection key={descriptor.id} descriptor={descriptor} plugin={plugin} />
+        ))}
       </div>
     </section>
   );

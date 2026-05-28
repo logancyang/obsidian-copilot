@@ -25,7 +25,6 @@ import { checkIsPlusUser } from "@/plusUtils";
 import CopilotPlugin from "@/main";
 import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { getAllQAMarkdownContent } from "@/search/searchUtils";
-import { CopilotSettings } from "@/settings/model";
 import { NoteSelectedTextContext, WebSelectedTextContext } from "@/types/message";
 import { ensureFolderExists, isSourceModeOn } from "@/utils";
 import { Editor, MarkdownView, Notice, TFile } from "obsidian";
@@ -88,11 +87,7 @@ function addCheckCommand(
   });
 }
 
-export function registerCommands(
-  plugin: CopilotPlugin,
-  prev: CopilotSettings | undefined,
-  next: CopilotSettings
-) {
+export function registerCommands(plugin: CopilotPlugin) {
   addEditorCommand(plugin, COMMAND_IDS.COUNT_WORD_AND_TOKENS_SELECTION, async (editor: Editor) => {
     const selectedText = editor.getSelection();
     const wordCount = selectedText.split(" ").length;
@@ -128,9 +123,9 @@ export function registerCommands(
     await plugin.newChat();
   });
 
-  // Re-runs from the settings subscription in main.ts so toggling the
-  // master switch refreshes the command palette.
-  if (isAgentModeEnabled(next)) {
+  // Agent Mode is always on, but requires subprocess support — register the
+  // agent commands on desktop only.
+  if (isAgentModeEnabled()) {
     addCommand(plugin, COMMAND_IDS.OPEN_AGENT_CHAT_WINDOW, () => {
       void plugin.activateAgentView();
     });

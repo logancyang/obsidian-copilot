@@ -187,7 +187,6 @@ describe("sanitizeSettings - agentMode shape migration", () => {
       agentMode: undefined as unknown as never,
     });
     expect(sanitized.agentMode).toEqual({
-      enabled: true,
       byok: {},
       mcpServers: [],
       activeBackend: "opencode",

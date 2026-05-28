@@ -432,7 +432,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("sets top-level model from the persisted defaultModel.baseModelId", async () => {
     setSettings({
       agentMode: {
-        enabled: true,
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
@@ -453,7 +452,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("appends effort suffix when defaultModel.effort is set", async () => {
     setSettings({
       agentMode: {
-        enabled: true,
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
@@ -474,7 +472,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("omits cfg.model when no defaultModel is set", async () => {
     setSettings({
       agentMode: {
-        enabled: true,
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
@@ -520,7 +517,6 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   it("does not template a skills folder into the opencode prompts", async () => {
     setSettings({
       agentMode: {
-        enabled: true,
         byok: {},
         mcpServers: [],
         activeBackend: "opencode",
@@ -610,7 +606,6 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
 
   it("uses agentMode.backends.opencode.binaryPath as command and passes cwd in args, injecting enabled models", async () => {
     updateSetting("agentMode", {
-      enabled: true,
       byok: {},
       mcpServers: [],
       activeBackend: "opencode",

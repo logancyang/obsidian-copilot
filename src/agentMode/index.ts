@@ -1,7 +1,7 @@
 import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
-import { type CopilotSettings, getSettings, useSettingsValue } from "@/settings/model";
+import { getSettings } from "@/settings/model";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
@@ -51,17 +51,16 @@ export { SkillManager, SkillsSettings, useManagedSkills } from "./skills";
 export type { Skill } from "./skills";
 
 /**
- * True when Agent Mode is enabled and the platform supports it. Agent Mode
- * requires subprocess support, so this is always false on mobile regardless
- * of the persisted `enabled` flag (which may have been synced from desktop).
+ * True when the platform supports Agent Mode. Agent Mode is always on, but
+ * requires subprocess support, so this is always false on mobile.
  */
-export function isAgentModeEnabled(settings: CopilotSettings = getSettings()): boolean {
-  return !Platform.isMobile && !!settings.agentMode?.enabled;
+export function isAgentModeEnabled(): boolean {
+  return !Platform.isMobile;
 }
 
-/** React hook variant — re-renders when the setting or platform-derived value changes. */
+/** Hook variant for symmetry with other settings-derived hooks. */
 export function useIsAgentModeEnabled(): boolean {
-  return isAgentModeEnabled(useSettingsValue());
+  return isAgentModeEnabled();
 }
 
 /**
@@ -158,7 +157,7 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   }
 
   const settings = getSettings();
-  if (!isAgentModeEnabled(settings)) return manager;
+  if (!isAgentModeEnabled()) return manager;
   // Per-backend preload registration: each backend's status flips
   // independently. The chat UI gates on the active backend's status; the
   // picker reads every backend's status to render per-backend loading rows.
