@@ -93,24 +93,23 @@ export const BinaryPathSetting: React.FC<Props> = ({
   }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect, detect]);
 
   return (
-    <div className="tw-flex tw-w-full tw-flex-col tw-gap-2 sm:tw-w-[360px]">
+    <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
       <div className="tw-flex tw-items-center tw-gap-2">
         <Input
           type="text"
           placeholder={placeholder}
           value={pathInput}
           onChange={(e) => setPathInput(e.target.value)}
+          className="tw-flex-1"
         />
-        <Button variant="secondary" size="sm" onClick={autoDetect} disabled={busy}>
+        <Button variant="secondary" size="default" onClick={autoDetect} disabled={busy}>
           Auto-detect
         </Button>
-      </div>
-      <div className="tw-flex tw-justify-end">
-        <Button variant="default" onClick={apply} disabled={busy}>
+        <Button variant="default" size="default" onClick={apply} disabled={busy}>
           Apply
         </Button>
       </div>
-      {error && <div className="tw-text-xs tw-text-error">{error}</div>}
+      {error && <div className="tw-text-sm tw-text-error">{error}</div>}
     </div>
   );
 };

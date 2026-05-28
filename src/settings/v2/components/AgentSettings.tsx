@@ -1,5 +1,6 @@
 import {
   getBackendModelOverrides,
+  InstallBadge,
   isAgentModelEnabled,
   listBackendDescriptors,
   McpServersPanel,
@@ -9,6 +10,7 @@ import {
   type BackendState,
   type ModelEntry,
 } from "@/agentMode";
+import { Button } from "@/components/ui/button";
 import { SettingItem } from "@/components/ui/setting-item";
 import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
@@ -125,12 +127,24 @@ const BackendSection: React.FC<{
   }, [manager, descriptor.id, installState.kind, cachedModel]);
 
   const overrides = getBackendModelOverrides(settings, descriptor.id);
+  const Icon = descriptor.Icon;
 
   return (
     <div className="tw-space-y-3 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-3">
-      <div className="tw-text-base tw-font-semibold">{descriptor.displayName}</div>
-
-      {Panel && <Panel plugin={plugin} app={plugin.app} />}
+      <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
+        <div className="tw-flex tw-items-center tw-gap-2">
+          <Icon className="tw-size-4" />
+          <span className="tw-text-base tw-font-semibold">{descriptor.displayName}</span>
+          <InstallBadge state={installState} />
+        </div>
+        <Button
+          size="default"
+          variant={installState.kind === "ready" ? "secondary" : "default"}
+          onClick={() => descriptor.openInstallUI(plugin)}
+        >
+          Configure
+        </Button>
+      </div>
 
       {installState.kind === "ready" && (
         <ModelCurationBlock
@@ -139,6 +153,8 @@ const BackendSection: React.FC<{
           overrides={overrides}
         />
       )}
+
+      {Panel && <Panel plugin={plugin} app={plugin.app} />}
     </div>
   );
 };

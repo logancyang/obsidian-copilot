@@ -526,9 +526,7 @@ export class SkillManager {
     const patchResult = await this.runInternalMutation(
       () => runUpdateProperties({ skill: activeSkill, patch: req.patch, fs }),
       (r) =>
-        r.ok && vaultRoot !== null
-          ? buildUpdatePropertiesExpectations(activeSkill, vaultRoot)
-          : []
+        r.ok && vaultRoot !== null ? buildUpdatePropertiesExpectations(activeSkill, vaultRoot) : []
     );
     if (!patchResult.ok) {
       if (newName !== undefined) {

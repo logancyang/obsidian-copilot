@@ -23,6 +23,7 @@ export { useAgentModePicker } from "./ui/useAgentModePicker";
 export type { AgentModePickerOverride } from "./ui/useAgentModePicker";
 export type { AgentSessionManager } from "./session/AgentSessionManager";
 export type { AgentBrand, BackendDescriptor, BackendId, InstallState } from "./session/types";
+export { installBadge, InstallBadge, InstallStatusLine } from "./backends/shared/installStatus";
 export { isAgentModelEnabled, writeAgentModelOverride } from "./session/modelEnable";
 export { getBackendModelOverrides } from "./session/backendSettingsAccess";
 export type {

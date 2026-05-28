@@ -1,46 +1,92 @@
-import { App, Modal, Setting } from "obsidian";
-import { CLAUDE_INSTALL_COMMAND } from "./descriptor";
+import { BinaryPathSetting } from "@/agentMode/backends/shared/BinaryPathSetting";
+import { ConfigDialogShell, ConfigSection } from "@/agentMode/backends/shared/ConfigDialogShell";
+import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow";
+import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
+import type { InstallState } from "@/agentMode/session/types";
+import { ReactModal } from "@/components/modals/ReactModal";
+import { Button } from "@/components/ui/button";
+import { setSettings, useSettingsValue } from "@/settings/model";
+import { validateExecutableFile } from "@/utils/detectBinary";
+import { App, Notice } from "obsidian";
+import React from "react";
+import { CLAUDE_INSTALL_COMMAND, detectClaudeCliPath, resolveClaudeCliPath } from "./descriptor";
 
 /**
- * Onboarding modal shown when the `claude` CLI cannot be located. Tells
- * the user the exact install command and offers a "Re-detect" button (the
- * resolver runs each time the descriptor's `getInstallState` is queried).
+ * Configure dialog for the Claude (Agent SDK) backend. The SDK auto-detects the
+ * `claude` CLI; this dialog surfaces the resolved path, the install command, an
+ * optional custom path override, and auth guidance. There is no managed
+ * install — the user installs the `claude` CLI themselves.
  */
-export class ClaudeInstallModal extends Modal {
+const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
+  const settings = useSettingsValue();
+
+  const overridePath = settings.agentMode?.claudeCli?.path ?? "";
+  const resolvedPath = resolveClaudeCliPath(settings);
+  const isCustom = Boolean(overridePath);
+
+  const sessionState: InstallState = resolvedPath
+    ? { kind: "ready", source: isCustom ? "custom" : "managed" }
+    : { kind: "absent" };
+
+  const onSaveCustomPath = React.useCallback(async (path: string): Promise<string | null> => {
+    const err = await validateExecutableFile(path);
+    if (err) return err;
+    setSettings((cur) => ({ agentMode: { ...cur.agentMode, claudeCli: { path } } }));
+    new Notice("Claude CLI path saved.");
+    return null;
+  }, []);
+
+  const clearCustomPath = React.useCallback((): void => {
+    setSettings((cur) => ({ agentMode: { ...cur.agentMode, claudeCli: undefined } }));
+    new Notice("Claude CLI override cleared. Auto-detection will be used.");
+  }, []);
+
+  return (
+    <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
+      <ConfigSection title="Install Claude Code">
+        <InstallCommandRow command={CLAUDE_INSTALL_COMMAND} />
+      </ConfigSection>
+
+      <ConfigSection title="Use a custom claude path">
+        <p className="tw-my-0 tw-text-sm tw-text-muted">
+          Use an existing <code>claude</code> binary you have on disk.
+        </p>
+        <BinaryPathSetting
+          binaryName="claude"
+          placeholder="/absolute/path/to/claude"
+          initialPath={overridePath}
+          notFoundHint={`claude not found on disk. Install with \`${CLAUDE_INSTALL_COMMAND}\` and try again, or paste a custom path manually.`}
+          onSave={onSaveCustomPath}
+          persistOnAutoDetect
+          detect={() => Promise.resolve(detectClaudeCliPath())}
+        />
+        {isCustom && (
+          <div className="tw-flex tw-justify-end">
+            <Button variant="destructive" size="default" onClick={clearCustomPath}>
+              Clear path
+            </Button>
+          </div>
+        )}
+      </ConfigSection>
+
+      <ConfigSection title="Authentication">
+        <p className="tw-my-0 tw-text-sm tw-text-muted">
+          Credentials inherit from the <code>claude</code> CLI login state — run <code>claude</code>{" "}
+          once to sign in — or set <code>ANTHROPIC_API_KEY</code> (or Bedrock / Vertex env) in your
+          shell.
+        </p>
+      </ConfigSection>
+    </ConfigDialogShell>
+  );
+};
+
+/** Configure dialog for the Claude backend. Opened via `descriptor.openInstallUI`. */
+export class ClaudeInstallModal extends ReactModal {
   constructor(app: App) {
-    super(app);
+    super(app, "Configure Claude");
   }
 
-  onOpen(): void {
-    const { contentEl } = this;
-    contentEl.createEl("h2", { text: "Install Claude CLI" });
-    contentEl.createEl("p", {
-      text:
-        "The Claude (SDK) backend requires the official `claude` CLI installed on your system. " +
-        "Run this command in a terminal:",
-    });
-    const code = contentEl.createEl("pre");
-    code.createEl("code", { text: CLAUDE_INSTALL_COMMAND });
-    contentEl.createEl("p", {
-      text:
-        "The Claude Agent SDK is bundled with this plugin; the `claude` CLI provides " +
-        "authentication and runs the model — that's why you install `@anthropic-ai/claude-code`.",
-    });
-    contentEl.createEl("p", {
-      text:
-        "Then return to Obsidian and click 'Re-detect' in Agent Mode advanced settings. " +
-        "Authentication is inherited from the CLI's login state — run `claude` once to sign in if " +
-        "you haven't already, or set ANTHROPIC_API_KEY in your shell environment.",
-    });
-    new Setting(contentEl).addButton((btn) =>
-      btn
-        .setButtonText("Close")
-        .setCta()
-        .onClick(() => this.close())
-    );
-  }
-
-  onClose(): void {
-    this.contentEl.empty();
+  protected renderContent(close: () => void): React.ReactElement {
+    return <ClaudeConfigBody onClose={close} />;
   }
 }
