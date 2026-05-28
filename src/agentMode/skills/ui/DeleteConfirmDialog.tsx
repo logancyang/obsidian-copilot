@@ -23,6 +23,7 @@ const DeleteConfirmBody: React.FC<{
 }> = ({ skill, skillsFolderRel, agentDirsProjectRel, onCancel, onConfirm }) => {
   const folder = skillsFolderRel.replace(/\/+$/, "");
   const paths = collectDeletePaths(skill, folder, agentDirsProjectRel);
+  const isProject = skill.location.kind === "project";
 
   return (
     <div className="tw-flex tw-flex-col tw-gap-3">
@@ -37,8 +38,9 @@ const DeleteConfirmBody: React.FC<{
           aria-hidden="true"
         />
         <p className="tw-m-0 tw-text-ui-smaller tw-leading-relaxed tw-text-normal">
-          This removes the canonical copy and every agent symlink. Vault sync / git is the only
-          rollback path.
+          {isProject
+            ? `This removes the skill ${paths.length > 1 ? "folders" : "folder"} from your project. Vault sync / git is the only rollback path.`
+            : "This removes the canonical copy and every agent symlink. Vault sync / git is the only rollback path."}
         </p>
       </div>
 
@@ -121,9 +123,16 @@ export class DeleteConfirmModal extends Modal {
 }
 
 /**
- * Build the bullet list shown in the body — canonical dir first, then
- * one line per enabled agent's symlink. Lines are intentionally limited
- * to the paths that will actually be removed by `SkillManager.deleteSkill`.
+ * Build the bullet list shown in the body, scoped to exactly what
+ * `SkillManager.deleteSkill` → `runDeleteSkill` removes:
+ *
+ *   - Canonical skills: the canonical dir, then one symlink line per
+ *     enabled agent.
+ *   - Project skills: the real `SKILL.md` directory inside each owning
+ *     agent's project folder. There is no canonical copy and no symlink
+ *     to remove — `removeAgentLink` explicitly refuses to touch real
+ *     directories, so listing those here would misrepresent the blast
+ *     radius.
  */
 function collectDeletePaths(
   skill: Skill,
@@ -131,6 +140,19 @@ function collectDeletePaths(
   agentDirsProjectRel: Readonly<Record<BackendId, string>>
 ): Array<{ path: string; note: string | null }> {
   const out: Array<{ path: string; note: string | null }> = [];
+
+  if (skill.location.kind === "project") {
+    for (const agent of skill.location.agentDirs) {
+      const dir = agentDirsProjectRel[agent];
+      if (dir === undefined) continue;
+      out.push({
+        path: `${dir.replace(/\/+$/, "")}/${skill.name}/`,
+        note: "project SKILL.md and supporting files",
+      });
+    }
+    return out;
+  }
+
   out.push({
     path: `${folder}/${skill.name}/`,
     note: "canonical SKILL.md and supporting files",

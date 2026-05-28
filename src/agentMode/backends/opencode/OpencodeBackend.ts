@@ -8,9 +8,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import {
   buildPillSyntaxDirective,
-  buildSkillCreationDirective,
   composeDenyList,
-  DEFAULT_SKILLS_FOLDER,
   getManagedSkills,
   SkillManager,
 } from "@/agentMode/skills";
@@ -219,16 +217,11 @@ export async function buildOpencodeConfig(
   const basePrompt = selectCopilotPrompt(
     s.agentMode?.backends?.opencode?.defaultModel?.baseModelId
   );
-  // Append the spawn-time skill-creation directive so agent-authored skills
-  // land in the canonical managed folder instead of `.opencode/skills/`.
-  // Folder is read live from settings on each spawn — see the Skills
-  // Management spec.
-  const skillsFolder = s.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+  // opencode writes new skills into its native `.opencode/skills/` directory
+  // and discovery picks them up as project-managed automatically, so the
+  // prompt only appends the pill-syntax directive.
   const skillManagerReady = SkillManager.hasInstance();
-  const skillsDirs = skillManagerReady
-    ? Object.values(SkillManager.getInstance().getAgentDirsProjectRel())
-    : [];
-  const prompt = `${basePrompt}\n\n${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("opencode", skillsFolder, skillsDirs)}`;
+  const prompt = `${basePrompt}\n\n${buildPillSyntaxDirective()}`;
   config.agent = {
     [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
       prompt,
@@ -260,10 +253,9 @@ export async function buildOpencodeConfig(
   // Synthesize deny rules for managed skills that OpenCode would
   // cross-discover (via `.claude/skills/` and `.agents/skills/`) but are
   // not enabled for OpenCode in their `metadata.copilot-enabled-agents`.
-  // Read SkillManager live at spawn time — same pattern as the
-  // skill-creation directive. If SkillManager isn't initialised yet (plugin
-  // still booting; OpenCode session spawned before the Skills tab has
-  // hydrated), fall back to an empty deny list — the next reconciliation
+  // Read SkillManager live at spawn time. If SkillManager isn't initialized
+  // yet (plugin still booting; OpenCode session spawned before the Skills tab
+  // has hydrated), fall back to an empty deny list — the next reconciliation
   // pass + session restart closes the eventual-consistency window.
   //
   // Note: we intentionally do NOT set `OPENCODE_DISABLE_EXTERNAL_SKILLS` or

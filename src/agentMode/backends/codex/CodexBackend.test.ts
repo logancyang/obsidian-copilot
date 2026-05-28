@@ -42,7 +42,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
   });
 
-  it("injects the pill-syntax + skill-creation directives via -c developer_instructions", async () => {
+  it("injects the pill-syntax directive via -c developer_instructions", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
@@ -52,14 +52,14 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(value.startsWith("developer_instructions=")).toBe(true);
     expect(value).toContain("{folder_name}");
     expect(value).toContain("{activeNote}");
-    expect(value).toContain('metadata.copilot-enabled-agents: \\"codex\\"');
-    expect(value).toContain("copilot/skills/<name>/SKILL.md");
-    expect(value).toContain(".claude/skills/");
-    expect(value).toContain(".agents/skills/");
-    expect(value).toContain(".opencode/skills/");
+    // The directive carries only the pill-syntax template. Skill discovery
+    // is automatic from `.agents/skills/`, so the directive never templates
+    // in SKILL.md authoring instructions.
+    expect(value).not.toContain("metadata.copilot-enabled-agents");
+    expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
   });
 
-  it("templates a custom skills folder at spawn time", async () => {
+  it("does not template a skills folder into developer_instructions", async () => {
     setSettings({
       agentMode: {
         enabled: true,
@@ -75,7 +75,8 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     const cIdx = desc.args.indexOf("-c");
     const value = desc.args[cIdx + 1];
-    expect(value).toContain("team-skills/<name>/SKILL.md");
+    // The pill directive doesn't reference the skills folder at all.
+    expect(value).not.toContain("team-skills");
     expect(value).not.toContain("copilot/skills");
   });
 

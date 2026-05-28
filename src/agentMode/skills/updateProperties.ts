@@ -1,4 +1,5 @@
 import { logError, logWarn } from "@/logger";
+import { parentDir } from "@/utils/pathUtils";
 import { renameWithRetry } from "./renameWithRetry";
 import {
   NAME_MAX,
@@ -111,11 +112,15 @@ export interface RenameSkillFailure {
  *
  * 1. Validate the new name (spec regex + 1–64 chars).
  * 2. Reject collisions (no auto-suffix in interactive edits).
- * 3. Rename `<canonical>/<old>` → `<canonical>/<new>` via {@link renameWithRetry}.
- * 4. For each enabled agent: remove the old symlink, create a new one at
- *    `<vault>/.<agent>/skills/<new>` pointing at the renamed canonical
- *    absolute path. Continues on EPERM so the user gets a coherent state
- *    even when one agent's link cannot be repointed.
+ * 3. Rename the skill directory via {@link renameWithRetry}. Canonical
+ *    skills rename within the canonical root (`<canonical>/<old>` →
+ *    `<canonical>/<new>`); project skills rename in place within their
+ *    agent project folder (`.<agent>/skills/<old>` → `.<agent>/skills/<new>`).
+ * 4. Canonical skills only — for each enabled agent: remove the old symlink,
+ *    create a new one at `<vault>/.<agent>/skills/<new>` pointing at the
+ *    renamed canonical absolute path. Continues on EPERM so the user gets a
+ *    coherent state even when one agent's link cannot be repointed. Project
+ *    skills have no symlink fanout and skip this step.
  * 5. Rewrite the SKILL.md's `name:` field so the spec's parent-dir-match
  *    invariant holds.
  *
@@ -139,8 +144,22 @@ export async function runRenameSkill(
     return { ok: false, reason: "invalid" };
   }
 
-  const canonRoot = canonicalAbsRoot.replace(/[/\\]+$/, "");
-  const newDirPath = `${canonRoot}/${newName}`;
+  // Project skills rename IN PLACE inside their own agent project folder
+  // (e.g. `.claude/skills/<old>` → `.claude/skills/<new>`) with no canonical
+  // move and no symlink fanout — the agent loads the real directory directly.
+  // Only canonical skills rename inside the canonical root and retarget
+  // symlinks. See Skills Discovery Redesign §244 ("Rename in place … No
+  // migration."). Without this branch a project rename would silently relocate
+  // the skill into the canonical folder without stamping
+  // `copilot-enabled-agents`, so discovery would read `enabledAgents: []` and
+  // reconciliation would sweep the orphaned link — disabling the skill for
+  // every agent.
+  const isProjectSkill = skill.location.kind === "project";
+  const destRoot = (isProjectSkill ? parentDir(skill.dirPath) : canonicalAbsRoot).replace(
+    /[/\\]+$/,
+    ""
+  );
+  const newDirPath = `${destRoot}/${newName}`;
   const newFilePath = `${newDirPath}/SKILL.md`;
 
   // Step 2 — collision check. No auto-suffix in interactive edits.
@@ -148,7 +167,7 @@ export async function runRenameSkill(
     return { ok: false, reason: "collision" };
   }
 
-  // Step 3 — rename the canonical directory.
+  // Step 3 — rename the skill directory.
   try {
     await renameWithRetry(skill.dirPath, newDirPath);
   } catch (err) {
@@ -157,36 +176,40 @@ export async function runRenameSkill(
     return { ok: false, reason };
   }
 
-  // Step 4 — per-agent symlink retarget. Track EPERM so we can surface it
-  // at the end without rolling back the canonical rename.
+  // Step 4 — per-agent symlink retarget (canonical skills only). A project
+  // skill is a real directory with no symlink fanout, so an in-place rename
+  // has nothing to retarget. Track EPERM so we can surface it at the end
+  // without rolling back the canonical rename.
   let epermSeen = false;
-  for (const agent of skill.enabledAgents) {
-    const agentDir = agentDirsAbs[agent];
-    if (agentDir === undefined) continue;
+  if (!isProjectSkill) {
+    for (const agent of skill.enabledAgents) {
+      const agentDir = agentDirsAbs[agent];
+      if (agentDir === undefined) continue;
 
-    // Remove the stale link at the OLD basename. Real dirs at the old slot
-    // are user-owned per spec; `removeAgentLink` leaves them alone.
-    try {
-      await removeAgentLink(fs, agentDir, skill.name);
-    } catch (err) {
-      logWarn(
-        `[skills] renameSkill: could not remove stale ${agent} link for ${skill.name}: ${
-          err instanceof Error ? err.message : String(err)
-        }`
-      );
-    }
+      // Remove the stale link at the OLD basename. Real dirs at the old slot
+      // are user-owned per spec; `removeAgentLink` leaves them alone.
+      try {
+        await removeAgentLink(fs, agentDir, skill.name);
+      } catch (err) {
+        logWarn(
+          `[skills] renameSkill: could not remove stale ${agent} link for ${skill.name}: ${
+            err instanceof Error ? err.message : String(err)
+          }`
+        );
+      }
 
-    // Create the new link at the NEW basename. `replaceAgentLink` handles
-    // any aborted-rename leftover at the new slot (rare but possible) via
-    // its `.replacing` aside dance.
-    const linkResult = await replaceAgentLink(fs, agentDir, newName, newDirPath);
-    if (!linkResult.ok) {
-      // EPERM — log and keep going; metadata source-of-truth is the canonical
-      // file, so reconciliation can heal the missing link later.
-      logWarn(
-        `[skills] renameSkill: ${agent} symlink retarget failed (${linkResult.reason}): ${linkResult.message}`
-      );
-      epermSeen = true;
+      // Create the new link at the NEW basename. `replaceAgentLink` handles
+      // any aborted-rename leftover at the new slot (rare but possible) via
+      // its `.replacing` aside dance.
+      const linkResult = await replaceAgentLink(fs, agentDir, newName, newDirPath);
+      if (!linkResult.ok) {
+        // EPERM — log and keep going; metadata source-of-truth is the canonical
+        // file, so reconciliation can heal the missing link later.
+        logWarn(
+          `[skills] renameSkill: ${agent} symlink retarget failed (${linkResult.reason}): ${linkResult.message}`
+        );
+        epermSeen = true;
+      }
     }
   }
 

@@ -54,6 +54,7 @@ function makeSkill(name: string, enabledAgents: Skill["enabledAgents"]): Skill {
     dirPath: `/x/${name}`,
     body: "",
     enabledAgents,
+    location: { kind: "canonical" },
   };
 }
 
@@ -504,10 +505,11 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     expect(cfg.agent["copilot-build"].prompt).toContain("{folder_name}");
     expect(cfg.agent["copilot-build"].prompt).toContain("{activeNote}");
     expect(cfg.agent.build.prompt).toContain("{folder_name}");
-    expect(cfg.agent["copilot-build"].prompt).toContain(
-      'metadata.copilot-enabled-agents: "opencode"'
-    );
-    expect(cfg.agent.build.prompt).toContain('metadata.copilot-enabled-agents: "opencode"');
+    // The prompt carries only the pill-syntax directive. Skill discovery is
+    // automatic from `.opencode/skills/`, so the prompt never templates in
+    // SKILL.md authoring instructions.
+    expect(cfg.agent["copilot-build"].prompt).not.toContain("metadata.copilot-enabled-agents");
+    expect(cfg.agent.build.prompt).not.toContain("metadata.copilot-enabled-agents");
     // Regression guard: the copilot-build permission block must survive
     // alongside the new prompt field — opencode's field-wise merge depends
     // on us not stomping native fields.
@@ -515,7 +517,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     expect(cfg.agent["copilot-build"].mode).toBe("primary");
   });
 
-  it("templates a custom skills folder into the opencode directive", async () => {
+  it("does not template a skills folder into the opencode prompts", async () => {
     setSettings({
       agentMode: {
         enabled: true,
@@ -530,8 +532,9 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
       agent: Record<string, { prompt?: string }>;
     };
-    expect(cfg.agent["copilot-build"].prompt).toContain("<vault>/team-skills/<name>/SKILL.md");
-    expect(cfg.agent.build.prompt).toContain("<vault>/team-skills/<name>/SKILL.md");
+    // The pill directive doesn't reference the skills folder at all.
+    expect(cfg.agent["copilot-build"].prompt).not.toContain("team-skills");
+    expect(cfg.agent.build.prompt).not.toContain("team-skills");
   });
 
   it("denies a skill enabled for Claude only (cross-discovered, not enabled for opencode)", async () => {

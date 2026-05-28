@@ -2,26 +2,27 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
 import { atom, createStore, useAtomValue } from "jotai";
 import { FileSystemAdapter, type App, type EventRef, type TAbstractFile } from "obsidian";
-import { normalizeAbsPath } from "@/utils/pathUtils";
+import { normalizeAbsPath, parentDir } from "@/utils/pathUtils";
 import { agentSkillsDirAbs, DEFAULT_SKILLS_FOLDER } from "./agentPaths";
-import { runBulkMove, type BulkMoveResult } from "./bulkMove";
 import { discoverManagedSkills, type SkillsFsAdapter } from "./discoverManagedSkills";
+import { discoverProjectSkills, type ProjectSkillCandidate } from "./discoverProjectSkills";
+import { compareSkills, mergeDiscovery } from "./mergeDiscovery";
 import {
-  createEmptyImportDetectorResult,
-  detectImportCandidates,
-  totalCandidates,
-  type ImportDetectorResult,
-} from "./importDetector";
+  duplicateSourceDirsFor,
+  migrateProjectSkill,
+  type MigrateSkillResult,
+} from "./migrateProjectSkill";
+import { suffixOnCollision } from "./suffixOnCollision";
 import {
-  createNodeBulkMoveFs,
-  createNodeImportDetectorFs,
+  createNodeMigrateSkillFs,
+  createNodeProjectDiscoveryFs,
   createNodeReconcileFs,
 } from "./nodeFsAdapters";
 import { reconcile, type ReconcileReport } from "./reconcile";
 import type { SkillFrontmatterPatch } from "./skillFormat";
 import { removeAgentLinksPointingTo } from "./symlinks";
 import { runDeleteSkill, runToggleAgent } from "./toggleAgent";
-import type { BackendId, ImportCandidate, Skill } from "./types";
+import type { BackendId, Skill } from "./types";
 import { runRenameSkill, runUpdateProperties } from "./updateProperties";
 import {
   buildDeleteExpectations,
@@ -277,31 +278,59 @@ export class SkillManager {
   }
 
   /**
-   * One pass: discover canonical skills, run reconciliation (forward +
-   * reverse) against the per-agent dirs, publish the list. Errors are logged
-   * and summarized in the returned result instead of thrown.
+   * One pass: walk canonical + every agent project dir, merge, run
+   * reconciliation against the canonical-managed rows only, publish the
+   * unified list. Errors are logged and summarized in the returned
+   * result instead of thrown.
+   *
+   * Project-managed skills are NOT part of reconciliation — they have
+   * no canonical SKILL.md to disagree with, so the reconciliation pass
+   * only looks at canonical-managed skills.
    */
   private async runOnce(folder: string): Promise<RefreshResult> {
     const absRoot = resolveAbsolutePath(this.app, folder);
     const adapter = createFsAdapter(this.app);
+    const vaultRoot = resolveVaultRootAbs(this.app);
 
     try {
-      const skills = await discoverManagedSkills({
+      const canonicalSkills = await discoverManagedSkills({
         skillsFolderRelPath: folder,
         skillsFolderAbsPath: absRoot,
         adapter,
       });
 
+      // Walk the per-agent project dirs and merge. Skip the walk when
+      // there's no on-disk vault (mobile / test environments) — the
+      // canonical pass already used a vault-relative adapter.
+      let projectCandidates: ProjectSkillCandidate[] = [];
+      if (vaultRoot !== null) {
+        try {
+          projectCandidates = await discoverProjectSkills({
+            vaultRootAbsPath: vaultRoot,
+            agentDirsProjectRel: this.agentDirsProjectRel,
+            fs: createNodeProjectDiscoveryFs(),
+          });
+        } catch (err) {
+          logWarn(
+            `[skills] Project-skill walk failed: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+
+      const skills = mergeDiscovery(canonicalSkills, projectCandidates);
+
       // Reconcile against the agent dirs if we have an on-disk vault.
-      const vaultRoot = resolveVaultRootAbs(this.app);
+      // Only canonical rows are passed in — project skills are not part
+      // of reconciliation.
       let reconcileErrorCount = 0;
       let reconcileError: string | undefined;
       if (vaultRoot !== null && absRoot !== null) {
         try {
+          const canonicalForReconcile = skills.filter((s) => s.location.kind === "canonical");
           const report = await this.runInternalMutation(
             () =>
               reconcile({
-                skills,
+                skills: canonicalForReconcile,
                 canonicalAbsRoot: absRoot,
                 agentDirsAbs: this.resolveAgentDirsAbs(vaultRoot),
                 fs: createNodeReconcileFs(),
@@ -600,110 +629,198 @@ export class SkillManager {
   }
 
   /**
-   * Walk every per-agent project path under the vault and return the
-   * import candidates grouped by source agent. Returns empty buckets if
-   * the host has no `FileSystemAdapter` (mobile / test environments).
-   *
-   * Candidates whose `sourcePath` appears in
-   * `agentMode.skills.importSkipList` are filtered out — those are
-   * sources from prior bulk-import attempts that failed to move and that
-   * the user has not explicitly asked us to retry. The "Find existing
-   * skills" rescan button clears the skip-list to retry them.
+   * Compute the canonical name a migration would land on, given the
+   * source skill's name. Returns `name` if free, otherwise `name-2`,
+   * `name-3`, … via {@link suffixOnCollision} against the current
+   * canonical skill set. Used by the migration confirm dialog to show
+   * the collision preamble before the user commits.
    */
-  async detectImports(): Promise<ImportDetectorResult> {
-    const vaultRoot = resolveVaultRootAbs(this.app);
-    if (vaultRoot === null) {
-      return createEmptyImportDetectorResult(this.agentDirsProjectRel);
-    }
-    const folder = resolveSkillsFolder();
-    const canonical = resolveAbsolutePath(this.app, folder);
-    if (canonical === null) {
-      return createEmptyImportDetectorResult(this.agentDirsProjectRel);
-    }
-    try {
-      const raw = await detectImportCandidates({
-        vaultRootAbsPath: vaultRoot,
-        canonicalAbsPath: canonical,
-        agentDirsProjectRel: this.agentDirsProjectRel,
-        fs: createNodeImportDetectorFs(),
-      });
-      const skip = new Set(getSettings().agentMode?.skills?.importSkipList ?? []);
-      if (skip.size === 0) return raw;
-      const filtered = createEmptyImportDetectorResult(this.agentDirsProjectRel);
-      for (const [agent, candidates] of Object.entries(raw)) {
-        filtered[agent] = candidates.filter((c) => !skip.has(c.sourcePath));
-      }
-      return filtered;
-    } catch (err) {
-      logError("[skills] Import detection failed", err);
-      return createEmptyImportDetectorResult(this.agentDirsProjectRel);
-    }
+  resolveCanonicalNameForMigration(name: string): string {
+    const taken = new Set(
+      skillManagerStore
+        .get(skillsAtom)
+        .filter((s) => s.location.kind === "canonical")
+        .map((s) => s.name)
+    );
+    return suffixOnCollision(name, taken);
   }
 
   /**
-   * Run the bulk-move state machine over the supplied candidates. Returns
-   * one result row per candidate. After running, triggers a discovery
-   * refresh so the canonical grid reflects the newly moved skills.
-   *
-   * Names already taken in the current canonical grid are passed in so
-   * the auto-suffix logic can avoid colliding with them.
+   * Read the persisted "Don't ask again" flag for the migration
+   * confirmation dialog. Defaults to `false` — the dialog appears for
+   * every qualifying action until the user opts out via the checkbox.
    */
-  async runImport(candidates: ImportCandidate[]): Promise<BulkMoveResult> {
+  getSuppressMigrationConfirm(): boolean {
+    return Boolean(getSettings().agentMode?.skills?.suppressMigrationConfirm);
+  }
+
+  /**
+   * Persist the "Don't ask again" flag. Called by the migration confirm
+   * dialog when the user toggles the checkbox before confirming.
+   */
+  setSuppressMigrationConfirm(value: boolean): void {
+    const agentMode = getSettings().agentMode;
+    const current = Boolean(agentMode?.skills?.suppressMigrationConfirm);
+    if (current === value) return;
+    // Write the explicit boolean both ways. A conditional spread that only
+    // sets the key when `value` is true cannot clear a previously-persisted
+    // `true`, leaving the setter unable to re-enable the dialog.
+    updateSetting("agentMode", {
+      ...agentMode,
+      skills: {
+        ...agentMode.skills,
+        suppressMigrationConfirm: value,
+      },
+    });
+  }
+
+  /**
+   * Migrate a project-managed skill to canonical in response to a user
+   * action — either toggling on a new agent (`expandToNewAgent`),
+   * disabling the last enabled agent (`disableLastAgent`), or
+   * consolidating a mirrored pair via the overflow menu
+   * (`consolidate`). The caller is expected to have already shown the
+   * confirmation dialog (unless suppressed).
+   *
+   *   - `expandToNewAgent` — `targetAgent` joins the existing agents.
+   *   - `disableLastAgent` — final `enabledAgents` is empty (canonical
+   *     SKILL.md preserved with no symlinks).
+   *   - `consolidate` — no toggle, `enabledAgents` equals the current
+   *     `skill.location.agentDirs`.
+   *
+   * After the migration completes, runs a discovery refresh so the row
+   * reappears with `location: { kind: "canonical" }`.
+   */
+  async migrateProjectSkillForToggle(
+    skill: Skill,
+    targetAgent: BackendId | null,
+    action: "expandToNewAgent" | "disableLastAgent" | "consolidate"
+  ): Promise<MigrateSkillResult> {
+    if (skill.location.kind !== "project") {
+      return { ok: false, reason: "Skill is not project-managed." };
+    }
+    const vaultRoot = resolveVaultRootAbs(this.app);
+    if (vaultRoot === null) {
+      return { ok: false, reason: "Vault has no on-disk path on this platform." };
+    }
     const folder = resolveSkillsFolder();
     const canonical = resolveAbsolutePath(this.app, folder);
     if (canonical === null) {
-      // No on-disk vault — bail with all rows marked as rolled back.
-      return {
-        results: candidates.map((c) => ({
-          candidate: c,
-          targetName: c.name,
-          status: "rolledBack",
-          reason: "Vault has no on-disk path on this platform.",
-        })),
-      };
+      return { ok: false, reason: "Vault has no on-disk path on this platform." };
     }
-    const preTaken = skillManagerStore.get(skillsAtom).map((s) => s.name);
-    const result = await runBulkMove({
-      candidates,
-      canonicalAbsRoot: canonical,
-      preTaken,
-      fs: createNodeBulkMoveFs(),
-    });
-    // Persist source paths that did not land as a managed skill — the
-    // detector skips them on subsequent passes so the consent dialog
-    // doesn't re-prompt for the same failed sources. The "Find existing
-    // skills" rescan button clears this list to retry.
-    const failedPaths = result.results
-      .filter((row) => row.status !== "moved")
-      .map((row) => row.candidate.sourcePath);
-    if (failedPaths.length > 0) {
-      // Single read so we spread one consistent snapshot, not two.
-      const agentMode = getSettings().agentMode;
-      const merged = Array.from(
-        new Set([...(agentMode?.skills?.importSkipList ?? []), ...failedPaths])
-      );
-      updateSetting("agentMode", {
-        ...agentMode,
-        skills: { ...agentMode.skills, importSkipList: merged },
-      });
+
+    const existingAgents = skill.location.agentDirs;
+    let enabledAgentsAfter: BackendId[];
+    switch (action) {
+      case "expandToNewAgent":
+        if (targetAgent === null) {
+          return { ok: false, reason: "expandToNewAgent requires a targetAgent." };
+        }
+        enabledAgentsAfter = existingAgents.includes(targetAgent)
+          ? [...existingAgents]
+          : [...existingAgents, targetAgent];
+        break;
+      case "disableLastAgent":
+        enabledAgentsAfter = [];
+        break;
+      case "consolidate":
+        enabledAgentsAfter = [...existingAgents];
+        break;
     }
-    // refresh() runs reconciliation as part of its pass, so any leftover
-    // links from an aborted run get cleaned up here.
+
+    const agentDirsAbs = this.resolveAgentDirsAbs(vaultRoot);
+    const duplicates = duplicateSourceDirsFor(skill, agentDirsAbs);
+    const preTaken = skillManagerStore
+      .get(skillsAtom)
+      .filter((s) => s.location.kind === "canonical")
+      .map((s) => s.name);
+
+    const result = await this.runInternalMutation(() =>
+      migrateProjectSkill({
+        sourceName: skill.name,
+        sourceDirAbs: skill.dirPath,
+        duplicateSourceDirsAbs: duplicates,
+        canonicalAbsRoot: canonical,
+        enabledAgentsAfter,
+        targetAgentDirsAbs: agentDirsAbs,
+        preTakenNames: preTaken,
+        fs: createNodeMigrateSkillFs(),
+      })
+    );
+
+    // EPERM here means the canonical move + duplicate cleanup succeeded but
+    // the symlink fanout failed (Windows without Developer Mode). The
+    // canonical SKILL.md is now the source of truth and reconciliation heals
+    // the links on the next pass — so raise the durable banner just like the
+    // toggle/rename paths do, rather than letting it pass silently.
+    if (!result.ok && result.reason === "eperm") {
+      skillManagerStore.set(epermSeenAtom, true);
+    }
+
+    // Refresh either way — the FS state may have been partially mutated
+    // even on failure, and the UI needs the updated row.
     await this.refresh();
     return result;
   }
 
   /**
-   * Clear the import skip-list so the next `detectImports` pass returns
-   * every candidate again. Called by the "Find existing skills" button.
+   * Consolidate a project-mirrored skill into canonical without any
+   * agent being toggled on/off. Called from the overflow menu's
+   * "Migrate to shared folder" action — see §10 of the redesign doc.
+   * Optionally persists the "Don't ask again" flag.
    */
-  clearImportSkipList(): void {
-    const agentMode = getSettings().agentMode;
-    if ((agentMode?.skills?.importSkipList ?? []).length === 0) return;
-    updateSetting("agentMode", {
-      ...agentMode,
-      skills: { ...agentMode.skills, importSkipList: [] },
-    });
+  async consolidateMirroredSkill(
+    skill: Skill,
+    suppressFuture: boolean
+  ): Promise<MigrateSkillResult> {
+    if (suppressFuture) this.setSuppressMigrationConfirm(true);
+    return this.migrateProjectSkillForToggle(skill, null, "consolidate");
+  }
+
+  /**
+   * Remove one agent's copy of a project-mirrored skill (the
+   * "toggle OFF one of several" case). Does NOT trigger a migration —
+   * the skill stays project-managed under the remaining agent(s) and
+   * the surviving mirrored copies stay where they live.
+   *
+   * Returns an `fs-error` result if the rm fails; after the rm, a
+   * discovery refresh re-publishes the row with the agent removed
+   * from its mirrored set.
+   */
+  async removeProjectAgentDir(
+    skill: Skill,
+    agent: BackendId
+  ): Promise<SkillOperationResult<"no-vault-path" | "unknown-agent" | "fs-error">> {
+    if (skill.location.kind !== "project") {
+      return { ok: false, code: "fs-error", message: "Skill is not project-managed." };
+    }
+    const vaultRoot = resolveVaultRootAbs(this.app);
+    if (vaultRoot === null) {
+      return noVaultPathFailure();
+    }
+    const agentDirAbs = this.resolveAgentDirAbs(vaultRoot, agent);
+    if (agentDirAbs === null) {
+      return { ok: false, code: "unknown-agent", message: `Unknown agent: ${agent}` };
+    }
+    const fs = createNodeReconcileFs();
+    const targetDir = `${agentDirAbs.replace(/[/\\]+$/, "")}/${skill.name}`;
+    // Only remove a real project directory. If a reconcile race left a
+    // symlink here instead, recursively removing it could touch the canonical
+    // target — refuse and let the next discovery/reconcile pass settle it.
+    // Mirrors the "never blindly delete the wrong entry type" invariant in
+    // symlinks.ts / reconcile.ts.
+    const isLink = await fs.isSymlink(targetDir).catch(() => false);
+    if (isLink) {
+      await this.refresh();
+      return { ok: true };
+    }
+    try {
+      await this.runInternalMutation(() => fs.rmRecursive(targetDir));
+    } catch (err) {
+      return fsFailure(err instanceof Error ? err.message : String(err));
+    }
+    await this.refresh();
+    return { ok: true };
   }
 
   /**
@@ -959,9 +1076,6 @@ export class SkillManager {
   }
 }
 
-/** Total candidate count helper — re-exported for UI callers. */
-export { totalCandidates };
-
 /**
  * Best-effort absolute path resolution for the vault root. Returns `null`
  * on platforms where the vault has no on-disk `FileSystemAdapter`.
@@ -1027,9 +1141,19 @@ function applyPropertiesPatch(
   return next;
 }
 
-/** Build the in-memory Skill shape after a successful canonical rename. */
+/**
+ * Build the in-memory Skill shape after a successful rename. Project skills
+ * rename in place inside their agent folder; canonical skills move within the
+ * canonical root. Mirrors {@link runRenameSkill}'s destination choice so the
+ * published row matches on-disk reality (and `location` is preserved via the
+ * spread — a renamed project skill stays project-managed).
+ */
 function buildRenamedSkill(skill: Skill, newName: string, canonicalAbsRoot: string): Skill {
-  const dirPath = `${normalizeAbsPath(canonicalAbsRoot)}/${newName}`;
+  const root =
+    skill.location.kind === "project"
+      ? normalizeAbsPath(parentDir(skill.dirPath))
+      : normalizeAbsPath(canonicalAbsRoot);
+  const dirPath = `${root}/${newName}`;
   return {
     ...skill,
     name: newName,
@@ -1043,9 +1167,14 @@ function sameSkillIdentity(a: Skill, b: Skill): boolean {
   return a.dirPath === b.dirPath;
 }
 
-/** Keep incremental publishes in the same order as full discovery. */
+/**
+ * Keep incremental publishes in the same order as full discovery by reusing
+ * the merge layer's {@link compareSkills}. Sorting by anything other than
+ * discovery's name order (e.g. `dirPath`) would reshuffle every row on the
+ * first incremental update after a discovery pass.
+ */
 function sortSkills(skills: Skill[]): Skill[] {
-  return [...skills].sort((a, b) => a.dirPath.localeCompare(b.dirPath));
+  return [...skills].sort(compareSkills);
 }
 
 const EMPTY_SKILL_SET_SIGNATURE = "skills:v1:0";

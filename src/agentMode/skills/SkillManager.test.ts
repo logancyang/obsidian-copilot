@@ -24,7 +24,6 @@ jest.mock("@/settings/model", () => ({
     agentMode: {
       skills: {
         folder: skillsFolder,
-        importSkipList: [],
       },
     },
   }),
@@ -40,10 +39,22 @@ jest.mock("./reconcile", () => ({
 }));
 
 jest.mock("./nodeFsAdapters", () => ({
-  createNodeBulkMoveFs: jest.fn(() => ({})),
-  createNodeImportDetectorFs: jest.fn(() => ({})),
+  createNodeMigrateSkillFs: jest.fn(() => ({})),
+  createNodeProjectDiscoveryFs: jest.fn(() => ({})),
   createNodeReconcileFs: jest.fn(() => ({})),
 }));
+
+jest.mock("./discoverProjectSkills", () => ({
+  discoverProjectSkills: jest.fn(async () => []),
+}));
+
+jest.mock("./mergeDiscovery", () => {
+  const actual = jest.requireActual("./mergeDiscovery");
+  return {
+    ...actual,
+    mergeDiscovery: jest.fn((canonical: unknown[]) => canonical),
+  };
+});
 
 jest.mock("./toggleAgent", () => ({
   runDeleteSkill: jest.fn(),
@@ -573,6 +584,7 @@ function makeSkill(overrides: Partial<Skill> = {}): Skill {
     dirPath,
     body: "body",
     enabledAgents: ["claude"],
+    location: { kind: "canonical" },
     ...overrides,
   };
 }

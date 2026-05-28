@@ -10,6 +10,7 @@ function makeSkill(overrides: Partial<Skill> & { name: string }): Skill {
     dirPath: `/skills/${name}`,
     body: `body for ${name}`,
     enabledAgents: [],
+    location: { kind: "canonical" },
     ...overrides,
   };
 }

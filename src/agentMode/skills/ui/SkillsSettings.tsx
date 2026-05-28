@@ -1,14 +1,9 @@
 import { DEFAULT_SKILLS_FOLDER } from "@/agentMode/skills/agentPaths";
-import { type BulkMoveResult } from "@/agentMode/skills/bulkMove";
+import { formatSkillDisplayName } from "@/agentMode/skills/mergeDiscovery";
 import { listBackendDescriptors } from "@/agentMode/backends/registry";
-import type { AgentBrand, BackendId } from "@/agentMode/session/types";
+import type { AgentBrand } from "@/agentMode/session/types";
 import { DeleteConfirmModal } from "./DeleteConfirmDialog";
 import { EmptyPlaceholder } from "./EmptyPlaceholder";
-import {
-  createEmptyImportDetectorResult,
-  type ImportDetectorResult,
-} from "@/agentMode/skills/importDetector";
-import { ImportConsentDialog, type ImportPhase } from "./ImportConsentDialog";
 import {
   PropertiesModal,
   type PropertiesSaveOutcome,
@@ -17,7 +12,6 @@ import {
 import {
   dismissEpermBanner,
   SkillManager,
-  totalCandidates,
   useEpermSeen,
   useManagedSkills,
 } from "@/agentMode/skills/SkillManager";
@@ -29,7 +23,7 @@ import { SettingItem } from "@/components/ui/setting-item";
 import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { updateSetting, useSettingsValue, validateSkillsFolder } from "@/settings/model";
-import { AlertTriangle, Folder, RotateCcw, Search } from "lucide-react";
+import { AlertTriangle, Folder, Search } from "lucide-react";
 import { FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -48,9 +42,14 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
  * Skills tab.
  *
  * Renders the header copy, the Skills-folder setting row, the toolbar
- * (search + count + "Find existing skills" rescan), and either the empty
- * placeholder or the Tidy list of {@link SkillRow}s sourced from
- * {@link SkillManager}.
+ * (search + count), and either the empty placeholder or the Tidy list of
+ * {@link SkillRow}s sourced from {@link SkillManager}.
+ *
+ * Discovery is fully automatic — the unified walker (canonical folder plus
+ * every registered agent's project-skills directory) runs on every mount
+ * and on every settings-folder change. Skills sitting under
+ * `.<agent>/skills/` show up as project-managed rows automatically; the
+ * user never has to trigger discovery by hand.
  *
  * Wires per-agent toggles, overflow menu actions (Edit SKILL.md, Reveal
  * in vault, Delete), the delete confirmation modal, the EPERM banner,
@@ -79,17 +78,6 @@ export const SkillsSettings: React.FC = () => {
   const [validationError, setValidationError] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState("");
 
-  // Import flow state. Lifecycle: detecting → consent → running → results.
-  // We start "closed" so the dialog doesn't flash on mount before detection
-  // resolves. `dismissed` is a session-local sticky flag — per spec, there's
-  // no persistent skip-list; the user has to click "Find existing skills"
-  // to re-open the dialog after dismissing.
-  const [importPhase, setImportPhase] = useState<ImportPhase | null>(null);
-  const [importCandidates, setImportCandidates] = useState<ImportDetectorResult>(() =>
-    createEmptyImportDetectorResult(SkillManager.getInstance().getAgentDirsProjectRel())
-  );
-  const [importResults, setImportResults] = useState<BulkMoveResult | null>(null);
-  const dismissedRef = useRef(false);
   // Anchor for Radix portals on this tab (e.g. SkillRow's overflow menu).
   // Portaling into the tab's own DOM keeps menus inside Obsidian's Settings
   // modal focus scope so Radix focus-follows-hover works.
@@ -112,31 +100,10 @@ export const SkillsSettings: React.FC = () => {
 
   // Trigger a discovery pass on mount and on persisted-folder change so
   // the list reflects whatever lives at the currently configured path.
+  // The unified walker pulls in canonical + every agent's project-skills
+  // dir in one pass.
   useEffect(() => {
     void SkillManager.getInstance().refresh();
-  }, [persistedFolder]);
-
-  // Run import detection once on mount (and again when the folder changes,
-  // since "what counts as managed" depends on the canonical path). Skips
-  // the dialog if the user already dismissed it this session — `dismissedRef`
-  // is intentionally sticky across folder changes within the same session;
-  // the documented escape hatch is the "Find existing skills" toolbar button
-  // (`handleRescan`), which resets the flag and re-runs detection.
-  useEffect(() => {
-    if (dismissedRef.current) return;
-    const manager = SkillManager.getInstance();
-
-    let cancelled = false;
-    void (async () => {
-      const candidates = await manager.detectImports();
-      if (cancelled) return;
-      if (totalCandidates(candidates) === 0) return;
-      setImportCandidates(candidates);
-      setImportPhase("consent");
-    })();
-    return () => {
-      cancelled = true;
-    };
   }, [persistedFolder]);
 
   /** Validate the draft against `validateSkillsFolder`; updates inline error state. */
@@ -175,90 +142,12 @@ export const SkillsSettings: React.FC = () => {
   }, []);
 
   /**
-   * "Find existing skills" — clears any persisted skip-list of failed
-   * sources, re-runs detection, and re-opens the dialog. The button is
-   * the documented retry escape hatch for skills that previously failed
-   * to move.
-   */
-  const handleRescan = useCallback(() => {
-    const manager = SkillManager.getInstance();
-    manager.clearImportSkipList();
-    void (async () => {
-      const candidates = await manager.detectImports();
-      if (totalCandidates(candidates) === 0) {
-        new Notice("No skills detected outside the canonical folder.");
-        // Also refresh the grid so any external changes show up.
-        void manager.refresh();
-        return;
-      }
-      // Reset dismissal so a future programmatic re-open could fire.
-      dismissedRef.current = false;
-      setImportCandidates(candidates);
-      setImportResults(null);
-      setImportPhase("consent");
-    })();
-  }, []);
-
-  /** Primary action on the consent screen — runs the bulk move. */
-  const handleImportConfirm = useCallback(() => {
-    const manager = SkillManager.getInstance();
-    const flat = Object.values(importCandidates).flat();
-    setImportPhase("running");
-    void (async () => {
-      try {
-        const result = await manager.runImport(flat);
-        setImportResults(result);
-        setImportPhase("results");
-      } catch (err) {
-        logError("Bulk import failed", err);
-        new Notice("Bulk import failed. See console for details.");
-        setImportPhase(null);
-      }
-    })();
-  }, [importCandidates]);
-
-  /** Secondary action on the consent screen — closes without moving. */
-  const handleImportDismiss = useCallback(() => {
-    dismissedRef.current = true;
-    setImportPhase(null);
-  }, []);
-
-  /** "Done" on the results screen — closes the dialog and refreshes. */
-  const handleDone = useCallback(() => {
-    setImportPhase(null);
-    void SkillManager.getInstance().refresh();
-  }, []);
-
-  /** Radix-driven open/close — closing mid-flow counts as "dismiss". */
-  const handleOpenChange = useCallback(
-    (open: boolean) => {
-      if (open) return;
-      if (importPhase === "results") {
-        handleDone();
-      } else {
-        handleImportDismiss();
-      }
-    },
-    [importPhase, handleDone, handleImportDismiss]
-  );
-
-  /** Toggle a single agent for the given skill. Optimistic + heals on failure. */
-  const handleToggleAgent = useCallback(async (skill: Skill, agent: BackendId) => {
-    const manager = SkillManager.getInstance();
-    const enabled = !skill.enabledAgents.includes(agent);
-    const result = await manager.toggleAgent(skill, agent, enabled);
-    if (!result.ok && result.code !== "eperm") {
-      new Notice(`Could not ${enabled ? "enable" : "disable"} ${agent}: ${result.message}`);
-    }
-  }, []);
-
-  /**
    * Open a SKILL.md (absolute path) for editing. Managed skills live inside
-   * the visible vault and open in Obsidian. Failed-import sources live under
-   * agent dotfile folders (e.g. `.claude/skills/`) that Obsidian doesn't
-   * index — falling through `openLinkText` there triggers a "Folder already
-   * exists" error as it tries to create a new note, so we hand those off to
-   * the OS default editor via Electron's shell instead.
+   * the visible vault and open in Obsidian. Project-managed skills live
+   * under agent dotfile folders (e.g. `.claude/skills/`) that Obsidian
+   * doesn't index — falling through `openLinkText` there triggers a
+   * "Folder already exists" error as it tries to create a new note, so we
+   * hand those off to the OS default editor via Electron's shell instead.
    */
   const handleOpenSkillMdAbsPath = useCallback((absPath: string) => {
     const vaultRel = vaultRelativePath(absPath);
@@ -351,18 +240,16 @@ export const SkillsSettings: React.FC = () => {
   // stable across the session so the work is trivial.
   const syncBrand = useMemo(() => detectSyncBrand(), []);
 
-  const dialogPhase = importPhase ?? "consent";
-  const dialogOpen = importPhase !== null;
-
   return (
     <div ref={containerRef} className="tw-space-y-4">
       <section>
         <div className="tw-mb-4 tw-flex tw-flex-col tw-gap-2">
           <div className="tw-text-xl tw-font-bold">Skills</div>
           <div className="tw-text-sm tw-text-muted">
-            Skills are little instruction packets your agents can run — things like &ldquo;review a
-            diff&rdquo; or &ldquo;write a release note&rdquo;. Each one lives once in your vault and
-            can be turned on for any agent.
+            Skills are instruction packets your agents can run - things like &ldquo;review a
+            diff&rdquo; or &ldquo;write a release note&rdquo;. Skills you put under your shared
+            folder, or directly inside an agent&rsquo;s own skills folder, show up here
+            automatically.
           </div>
         </div>
 
@@ -372,7 +259,7 @@ export const SkillsSettings: React.FC = () => {
           description={
             <div className="tw-flex tw-flex-col tw-gap-1">
               <span>
-                Where Copilot keeps the canonical copy of every skill. Agent shortcuts point here.
+                Where Copilot keeps the shared copy of every skill. Agent shortcuts point here.
                 Changing this moves the folder and rewrites all shortcuts.
               </span>
               {validationError !== null && <span className="tw-text-error">{validationError}</span>}
@@ -422,7 +309,7 @@ export const SkillsSettings: React.FC = () => {
           </div>
         )}
 
-        {/* Toolbar — search + count + rescan */}
+        {/* Toolbar — search + count */}
         <div className="tw-mt-4 tw-flex tw-items-center tw-gap-2">
           <div className="tw-relative tw-flex-1 sm:tw-flex-initial">
             <Search
@@ -438,16 +325,6 @@ export const SkillsSettings: React.FC = () => {
             />
           </div>
           <span className="tw-text-xs tw-text-muted">{formatSkillCount(skills.length)}</span>
-          <div className="tw-flex-1" />
-          <Button
-            variant="secondary"
-            onClick={handleRescan}
-            title="Re-scan agent folders and retry previously-failed sources"
-            className="tw-gap-1.5"
-          >
-            <RotateCcw className="tw-size-4" aria-hidden="true" />
-            Find existing skills
-          </Button>
         </div>
 
         {/* Body — empty placeholder, or the Tidy list. */}
@@ -466,7 +343,7 @@ export const SkillsSettings: React.FC = () => {
                     key={skill.dirPath}
                     skill={skill}
                     agents={agents}
-                    onToggleAgent={(agent) => handleToggleAgent(skill, agent)}
+                    agentDirsProjectRel={SkillManager.getInstance().getAgentDirsProjectRel()}
                     onEditSkillMd={() => handleEditSkillMd(skill)}
                     onEditProperties={() => handleEditProperties(skill)}
                     onRevealInVault={() => handleRevealInVault(skill)}
@@ -479,21 +356,6 @@ export const SkillsSettings: React.FC = () => {
           )}
         </div>
       </section>
-
-      <ImportConsentDialog
-        open={dialogOpen}
-        onOpenChange={handleOpenChange}
-        phase={dialogPhase}
-        agents={agents}
-        candidates={importCandidates}
-        results={importResults}
-        folder={displayFolder}
-        agentDirsProjectRel={SkillManager.getInstance().getAgentDirsProjectRel()}
-        onConfirm={handleImportConfirm}
-        onDismiss={handleImportDismiss}
-        onDone={handleDone}
-        onEditSkillMd={handleOpenSkillMdAbsPath}
-      />
     </div>
   );
 };
@@ -575,12 +437,18 @@ const SyncFolderBanner: React.FC<{ brand: string; onDismiss: () => void }> = ({
   );
 };
 
-/** Case-insensitive substring filter on name + description. */
+/**
+ * Case-insensitive substring filter on the displayed name + description.
+ * Uses {@link formatSkillDisplayName} (not the bare `name`) so the visible
+ * `(claude)`/`(codex)` disambiguator suffix on split rows is searchable.
+ */
 function filterSkills(skills: Skill[], query: string): Skill[] {
   const trimmed = query.trim().toLowerCase();
   if (trimmed.length === 0) return skills;
   return skills.filter(
-    (s) => s.name.toLowerCase().includes(trimmed) || s.description.toLowerCase().includes(trimmed)
+    (s) =>
+      formatSkillDisplayName(s).toLowerCase().includes(trimmed) ||
+      s.description.toLowerCase().includes(trimmed)
   );
 }
 

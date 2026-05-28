@@ -14,8 +14,10 @@ interface EmptyPlaceholderProps {
  * The empty state for the Skills tab — shown when discovery returns zero
  * managed skills. Mirrors §A of `Skills Tab Flows.html`.
  *
- * There is no "New skill" CTA on purpose; users hand-author skills or import
- * them via the consent card.
+ * Skills show up in the tab automatically when they live inside the
+ * canonical folder or any registered agent's project skills folder
+ * (`.claude/skills/`, `.agents/skills/`, `.opencode/skills/`). Discovery
+ * runs on open, so the user never has to trigger it by hand.
  */
 export const EmptyPlaceholder: React.FC<EmptyPlaceholderProps> = ({ folder }) => {
   return (
@@ -35,11 +37,13 @@ export const EmptyPlaceholder: React.FC<EmptyPlaceholderProps> = ({ folder }) =>
         <LayoutGrid className="tw-size-6 tw-text-faint" aria-hidden="true" />
       </div>
       <div className="tw-text-smaller tw-font-medium tw-text-muted">No skills yet</div>
-      <div className="tw-max-w-[380px] tw-text-center tw-text-ui-smaller tw-text-faint">
-        Skills you create or import will show up here.
+      <div className="tw-max-w-[420px] tw-text-center tw-text-ui-smaller tw-text-faint">
+        Skills you create or save into your shared folder show up here. Skills under{" "}
+        <code>.claude/skills/</code>, <code>.agents/skills/</code>, or{" "}
+        <code>.opencode/skills/</code> show up here automatically too.
       </div>
       <div className="tw-mt-3.5 tw-font-mono tw-text-smallest tw-text-faint">
-        canonical home · <code>&lt;vault&gt;/{folder}/</code>
+        shared home · <code>&lt;vault&gt;/{folder}/</code>
       </div>
     </div>
   );

@@ -141,6 +141,7 @@ function makeSkill(overrides: Partial<Skill> = {}): Skill {
     dirPath: "/vault/copilot/skills/foo",
     body: "body",
     enabledAgents: [],
+    location: { kind: "canonical" },
     ...overrides,
   };
 }

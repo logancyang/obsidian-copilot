@@ -134,6 +134,7 @@ function mkSkill(name: string, enabledAgents: Skill["enabledAgents"] = []): Skil
     dirPath: `${CANONICAL}/${name}`,
     body: "body",
     enabledAgents,
+    location: { kind: "canonical" },
   };
 }
 

@@ -262,7 +262,8 @@ export interface CopilotSettings {
     debugFullFrames: boolean;
     /**
      * Skills management — canonical-store discovery, symlink lifecycle,
-     * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md`.
+     * reconciliation. See `designdocs/SKILLS_MANAGEMENT.md` and
+     * `designdocs/SKILLS_DISCOVERY_REDESIGN.md`.
      */
     skills: {
       /**
@@ -271,16 +272,13 @@ export interface CopilotSettings {
        */
       folder: string;
       /**
-       * Absolute paths of import sources that previously failed to move
-       * into the canonical folder. The detector filters these out so the
-       * consent dialog doesn't re-prompt on every settings open. Cleared
-       * by the "Find existing skills" rescan button.
-       *
-       * Optional in the type so legacy settings and ad-hoc test fixtures
-       * don't have to spell it out — `sanitizeSettings` always normalises
-       * to a defined array.
+       * Suppress the migration confirmation dialog when sharing a
+       * project-managed skill across agents (or consolidating mirrored
+       * duplicates). Set by the "Don't ask again" checkbox in the dialog.
+       * Unset/false by default — the dialog appears for every qualifying
+       * action until the user opts out.
        */
-      importSkipList?: string[];
+      suppressMigrationConfirm?: boolean;
     };
   };
   /**
@@ -889,18 +887,18 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     r.skills && typeof r.skills === "object" ? (r.skills as Record<string, unknown>) : null;
   const skillsFolderRaw = skillsRaw && typeof skillsRaw.folder === "string" ? skillsRaw.folder : "";
   const skillsValidation = validateSkillsFolder(skillsFolderRaw);
-  const skipListRaw =
-    skillsRaw && Array.isArray(skillsRaw.importSkipList)
-      ? (skillsRaw.importSkipList as unknown[])
-      : [];
-  const importSkipList = Array.from(
-    new Set(skipListRaw.filter((p): p is string => typeof p === "string" && p.length > 0))
-  );
-  const skills = {
+  // `importSkipList` is not part of the skills settings shape, so sanitize
+  // doesn't carry it forward. Any value left in an older data.json is read
+  // but never written back — it falls off on the next save.
+  const suppressMigrationConfirm =
+    skillsRaw && typeof skillsRaw.suppressMigrationConfirm === "boolean"
+      ? skillsRaw.suppressMigrationConfirm
+      : undefined;
+  const skills: CopilotSettings["agentMode"]["skills"] = {
     folder: skillsValidation.ok
       ? skillsValidation.folder
       : DEFAULT_SETTINGS.agentMode.skills.folder,
-    importSkipList,
+    ...(suppressMigrationConfirm !== undefined ? { suppressMigrationConfirm } : {}),
   };
 
   return {

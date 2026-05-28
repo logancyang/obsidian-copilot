@@ -159,6 +159,7 @@ function mkSkill(name: string, enabledAgents: Skill["enabledAgents"] = []): Skil
     dirPath: `${CANON}/${name}`,
     body: "body",
     enabledAgents,
+    location: { kind: "canonical" },
   };
 }
 
@@ -294,6 +295,58 @@ describe("runRenameSkill", () => {
 
     // SKILL.md `name:` rewritten.
     const skillMd = fs.__dump()[`${CANON}/bar/SKILL.md`];
+    expect(skillMd.kind).toBe("file");
+    expect((skillMd as { kind: "file"; content: string }).content).toMatch(/^name: bar$/m);
+  });
+
+  it("project-single skill renames IN PLACE inside its agent folder (no canonical move, no symlinks)", async () => {
+    // Regression: a project skill must NOT be relocated into the canonical
+    // folder on rename (that would drop its inferred enabled-agents and let
+    // reconciliation sweep the orphan link, disabling it everywhere). Per
+    // Skills Discovery Redesign §244 the rename happens in place.
+    const fs = mkFs({
+      "/vault/.claude/skills/foo/SKILL.md": {
+        kind: "file",
+        content: ["---", "name: foo", "description: A short skill.", "---", "body"].join("\n"),
+      },
+    });
+
+    const skill: Skill = {
+      name: "foo",
+      description: "A short skill.",
+      filePath: "/vault/.claude/skills/foo/SKILL.md",
+      dirPath: "/vault/.claude/skills/foo",
+      body: "body",
+      enabledAgents: ["claude"],
+      location: { kind: "project", agentDirs: ["claude"] },
+    };
+
+    const result = await runRenameSkill({
+      skill,
+      newName: "bar",
+      canonicalAbsRoot: CANON,
+      agentDirsAbs: AGENT_DIRS_ABS,
+      fs,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.newDirPath).toBe("/vault/.claude/skills/bar");
+    }
+
+    // Renamed in place; old name gone, new name is a real dir in the agent folder.
+    expect(fs.__dump()["/vault/.claude/skills/foo"]).toBeUndefined();
+    expect(fs.__dump()["/vault/.claude/skills/bar"]).toEqual({ kind: "dir" });
+
+    // Crucially: NOT moved into the canonical folder, and no symlink created.
+    expect(fs.__dump()[`${CANON}/bar`]).toBeUndefined();
+    expect(fs.__dump()["/vault/.claude/skills/bar"]).not.toEqual({
+      kind: "link",
+      target: expect.anything(),
+    });
+
+    // SKILL.md `name:` rewritten in place.
+    const skillMd = fs.__dump()["/vault/.claude/skills/bar/SKILL.md"];
     expect(skillMd.kind).toBe("file");
     expect((skillMd as { kind: "file"; content: string }).content).toMatch(/^name: bar$/m);
   });

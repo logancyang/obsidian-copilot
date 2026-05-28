@@ -86,12 +86,11 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
  * starts the model-catalog preload probes. The manager itself is
  * backend-agnostic — backends are spawned lazily on first session creation.
  *
- * SkillManager must be initialised before the preload probes fire: the
- * Claude descriptor's `getSkillCreationDirective` reads
- * `SkillManager.getInstance()` synchronously inside `newSession()`, which
- * the probe calls. Doing it in this function (rather than from `main.ts`
- * via a separate call) keeps the dependency order obvious and prevents the
- * preload race that would otherwise throw "called before initialize".
+ * SkillManager must be initialized before the preload probes fire: any
+ * spawn-time directive that reads `SkillManager.getInstance()` synchronously
+ * inside `newSession()` would otherwise throw "called before initialize"
+ * when the probe runs. Doing it in this function (rather than from
+ * `main.ts` via a separate call) keeps the dependency order obvious.
  *
  * `main.ts` calls this once on plugin load. To swap prompters, shut down
  * the existing manager and call this again.

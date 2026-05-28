@@ -1031,7 +1031,6 @@ export const DEFAULT_SETTINGS: CopilotSettings = {
     debugFullFrames: false,
     skills: {
       folder: DEFAULT_SKILLS_FOLDER,
-      importSkipList: [],
     },
   },
   providers: {},

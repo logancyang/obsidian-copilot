@@ -1,12 +1,7 @@
 import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import {
-  buildPillSyntaxDirective,
-  buildSkillCreationDirective,
-  DEFAULT_SKILLS_FOLDER,
-  SkillManager,
-} from "@/agentMode/skills";
+import { buildPillSyntaxDirective } from "@/agentMode/skills";
 
 /**
  * Spawns the user-provided `codex-acp` binary
@@ -27,18 +22,12 @@ export class CodexBackend implements AcpBackend {
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       getSettings().agentMode?.backends?.codex?.envOverrides
     );
-    // Spawn-time skill-creation directive: forwarded into codex's
-    // `developer_instructions` config field via codex-acp's `-c key=value`
-    // override (see codex's `core/src/config/mod.rs`: "Developer
-    // instructions override injected as a separate message"). The value
-    // is wrapped in a TOML 1.0 basic string — the `-c` parser runs through
-    // TOML, so we escape per the spec rules (`\`, `"`, the named escapes
-    // `\b \t \n \f \r`, and remaining controls as `\uXXXX`). Folder is
-    // read live from settings so a setting change applies on the next
-    // session. See the Skills Management spec.
-    const skillsFolder = getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-    const dirs = Object.values(SkillManager.getInstance().getAgentDirsProjectRel());
-    const directive = `${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("codex", skillsFolder, dirs)}`;
+    // Codex writes new skills into its native `.agents/skills/` directory
+    // and discovery picks them up as project-managed automatically, so the
+    // spawn directive only carries the pill-syntax template — forwarded via
+    // codex's `developer_instructions` config field as a TOML 1.0 basic
+    // string.
+    const directive = buildPillSyntaxDirective();
     descriptor.args = [
       ...descriptor.args,
       "-c",

@@ -14,6 +14,7 @@ function skill(name: string, enabledAgents: BackendId[]): Skill {
     dirPath: `/x/${name}`,
     body: "",
     enabledAgents,
+    location: { kind: "canonical" },
   };
 }
 

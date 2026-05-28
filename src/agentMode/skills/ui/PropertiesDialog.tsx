@@ -163,7 +163,7 @@ const PropertiesModalBody: React.FC<PropertiesModalBodyProps> = ({
               onChange={(e) => setValues((v) => ({ ...v, description: e.target.value }))}
               aria-invalid={descriptionError !== null}
               spellCheck={true}
-              className="tw-text-sm"
+              className="tw-border-border tw-text-sm"
             />
             <div className="tw-mt-0.5 tw-flex tw-items-center tw-justify-between">
               {descriptionError !== null ? <FieldError>{descriptionError}</FieldError> : <span />}

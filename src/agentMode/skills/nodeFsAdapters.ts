@@ -1,14 +1,14 @@
 import { logWarn } from "@/logger";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import type { BulkMoveFs } from "./bulkMove";
-import type { ImportDetectorFs } from "./importDetector";
+import type { ProjectDiscoveryFs } from "./discoverProjectSkills";
+import type { MigrateSkillFs } from "./migrateProjectSkill";
 import { errCode } from "@/utils/errorUtils";
 import type { ReconcileFs } from "./reconcile";
 import type { SymlinksFs } from "./symlinks";
 
 /**
- * Production `node:fs`-backed adapter for the bulk-move / symlinks helpers.
+ * Production `node:fs`-backed adapter for the migration / symlinks helpers.
  * Lives here so the leaf modules stay pure (no `node:fs` import) and the
  * orchestrator (`SkillManager`) wires this in at the edge.
  *
@@ -17,7 +17,7 @@ import type { SymlinksFs } from "./symlinks";
  * admin/Developer Mode privileges; junctions work for stock users and are
  * directory-only (which is exactly what skills need).
  */
-export function createNodeBulkMoveFs(): BulkMoveFs {
+export function createNodeMigrateSkillFs(): MigrateSkillFs {
   return {
     ...createNodeSymlinksFs(),
     async readFile(p) {
@@ -54,8 +54,9 @@ async function nodeReadlinkAbs(p: string): Promise<string | null> {
 }
 
 /**
- * Subset of {@link createNodeBulkMoveFs} that satisfies the `SymlinksFs`
- * surface. Reused both by bulk-move and by toggle logic.
+ * Subset of {@link createNodeMigrateSkillFs} that satisfies the
+ * {@link SymlinksFs} surface. Reused by migration, toggle, and
+ * reconcile logic.
  */
 export function createNodeSymlinksFs(): SymlinksFs {
   return {
@@ -109,22 +110,16 @@ export function createNodeSymlinksFs(): SymlinksFs {
 }
 
 /**
- * Production adapter for {@link detectImportCandidates}. Uses `lstat` to
+ * Production adapter for {@link discoverProjectSkills}. Uses `lstat` to
  * detect symlinks portably (Windows junctions still report as symbolic
  * links via lstat).
  */
-export function createNodeImportDetectorFs(): ImportDetectorFs {
+export function createNodeProjectDiscoveryFs(): ProjectDiscoveryFs {
   return {
     ...createNodeSymlinksFs(),
-    readlinkAbs: nodeReadlinkAbs,
     list: (p) => nodeList(p),
-    async statSize(p) {
-      try {
-        const st = await fs.promises.stat(p);
-        return st.size;
-      } catch {
-        return 0;
-      }
+    async readFile(p) {
+      return fs.promises.readFile(p, "utf-8");
     },
   };
 }

@@ -16,12 +16,7 @@ import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { agentOriginEnabledWireIds } from "@/agentMode/backends/shared/agentEnabledModels";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
-import {
-  buildPillSyntaxDirective,
-  buildSkillCreationDirective,
-  DEFAULT_SKILLS_FOLDER,
-  SkillManager,
-} from "@/agentMode/skills";
+import { buildPillSyntaxDirective } from "@/agentMode/skills";
 import type {
   BackendConfigOption,
   ModeMapping,
@@ -203,20 +198,16 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
-      // Spawn-time skill-creation directive: read the current
-      // `agentMode.skills.folder` so the directive templates the live value
-      // on every new session. See the Skills Management spec.
+      // Claude writes new skills into its native `.claude/skills/` directory
+      // and discovery picks them up as project-managed automatically, so the
+      // spawn directive only needs to carry the pill-syntax template.
       //
       // Claude has no cross-discovery surface — it only loads
       // `.claude/skills/`, and the symlink fanout already enforces
       // visibility (no link = not seen). If the Claude Agent SDK ever
       // grows a per-skill deny hook, wire `composeDenyList(getManagedSkills(),
       // "claude")` in here.
-      getSkillCreationDirective: () => {
-        const folder = getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
-        const dirs = Object.values(SkillManager.getInstance().getAgentDirsProjectRel());
-        return `${buildPillSyntaxDirective()}\n\n${buildSkillCreationDirective("claude", folder, dirs)}`;
-      },
+      getSkillCreationDirective: () => buildPillSyntaxDirective(),
     });
   },
 
