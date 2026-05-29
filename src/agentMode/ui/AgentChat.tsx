@@ -23,6 +23,7 @@ import type {
 import { CustomCommandManager } from "@/commands/customCommandManager";
 import { getCachedCustomCommands } from "@/commands/state";
 import { logError, logWarn } from "@/logger";
+import { useSettingsValue } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
 import type CopilotPlugin from "@/main";
 import {
@@ -137,12 +138,15 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const eventTarget = useContext(EventTargetContext);
   const appContext = useContext(AppContext);
   const app = plugin.app || appContext;
+  const settings = useSettingsValue();
 
   const [messages, setMessages] = useState<AgentChatMessage[]>(() => backend.getMessages());
   const [inputMessage, setInputMessage] = useState("");
   const [selectedImages, setSelectedImages] = useState<File[]>([]);
   const [contextNotes, setContextNotes] = useState<TFile[]>([]);
-  const [includeActiveNote, setIncludeActiveNote] = useState(false);
+  const [includeActiveNote, setIncludeActiveNote] = useState(
+    settings.autoAddActiveContentToContext === true
+  );
   const [includeActiveWebTab, setIncludeActiveWebTab] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isStarting, setIsStarting] = useState(() => backend.isStarting());
