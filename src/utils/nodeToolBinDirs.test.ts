@@ -164,6 +164,41 @@ describe("resolveNodeToolBinDirs (unix)", () => {
     expect(dirs).toEqual(expect.arrayContaining([shims, volta, nbin, npmPrefix]));
   });
 
+  test("prefers an existing ~/.asdf data dir over an ASDF_DIR install path", () => {
+    // Homebrew-style: ASDF_DIR points at the install dir, shims stay under the
+    // default ~/.asdf data dir. The install dir has no shims/bin of its own.
+    const shims = "/home/me/.asdf/shims";
+    const dirs = resolveNodeToolBinDirs(
+      unixInput({
+        env: { ASDF_DIR: "/opt/homebrew/opt/asdf/libexec" },
+        fs: makeFs({ dirs: [shims] }),
+      })
+    );
+    expect(dirs).toContain(shims);
+  });
+
+  test("honors ASDF_DATA_DIR over both ~/.asdf and ASDF_DIR", () => {
+    const shims = "/custom/asdf/shims";
+    const dirs = resolveNodeToolBinDirs(
+      unixInput({
+        env: { ASDF_DATA_DIR: "/custom/asdf", ASDF_DIR: "/opt/homebrew/opt/asdf/libexec" },
+        fs: makeFs({ dirs: [shims, "/home/me/.asdf/shims"] }),
+      })
+    );
+    expect(dirs).toContain(shims);
+  });
+
+  test("falls back to ASDF_DIR shims when no ~/.asdf data dir exists", () => {
+    const shims = "/opt/asdf/shims";
+    const dirs = resolveNodeToolBinDirs(
+      unixInput({
+        env: { ASDF_DIR: "/opt/asdf" },
+        fs: makeFs({ dirs: [shims] }),
+      })
+    );
+    expect(dirs).toContain(shims);
+  });
+
   test("drops candidate dirs that do not exist", () => {
     const dirs = resolveNodeToolBinDirs(
       unixInput({ env: { VOLTA_HOME: "/home/me/.volta" }, fs: makeFs({ dirs: [] }) })

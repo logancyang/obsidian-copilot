@@ -117,6 +117,22 @@ describe("detectBinary", () => {
     await expect(detectBinary("codex-acp")).resolves.toBeNull();
   });
 
+  test("windows: prefers the .exe over a sibling extensionless cmd-shim", async () => {
+    setPlatform("win32");
+    execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
+      cb(null, "C:\\npm\\codex-acp\r\nC:\\npm\\codex-acp.exe\r\n", "")
+    );
+    await expect(detectBinary("codex-acp")).resolves.toBe("C:\\npm\\codex-acp.exe");
+  });
+
+  test("windows: treats an extensionless cmd-shim-only result as not found", async () => {
+    setPlatform("win32");
+    execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
+      cb(null, "C:\\npm\\codex-acp\r\nC:\\npm\\codex-acp.ps1\r\n", "")
+    );
+    await expect(detectBinary("codex-acp")).resolves.toBeNull();
+  });
+
   test("returns null when the lookup tool exits non-zero", async () => {
     setPlatform("darwin");
     execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
