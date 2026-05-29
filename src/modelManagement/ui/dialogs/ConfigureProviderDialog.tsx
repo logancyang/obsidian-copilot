@@ -381,8 +381,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
             </Button>
             {state.mode === "edit" && hasSavedKey && (
               <Button
-                variant="ghost"
-                size="sm"
+                variant="secondary"
                 onClick={handleClearKey}
                 data-testid="api-key-clear"
               >
