@@ -112,7 +112,7 @@ const BackendSection: React.FC<{
               <InstallBadge state={installState} />
             </div>
             {resolvedPath && (
-              <TruncatedText className="tw-font-mono tw-text-xs tw-text-muted">
+              <TruncatedText className="tw-max-w-[80%] tw-font-mono tw-text-xs tw-text-muted">
                 {resolvedPath}
               </TruncatedText>
             )}
