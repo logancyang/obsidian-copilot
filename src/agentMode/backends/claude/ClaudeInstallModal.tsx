@@ -4,7 +4,6 @@ import { InstallCommandRow } from "@/agentMode/backends/shared/InstallCommandRow
 import { InstallStatusLine } from "@/agentMode/backends/shared/installStatus";
 import type { InstallState } from "@/agentMode/session/types";
 import { ReactModal } from "@/components/modals/ReactModal";
-import { Button } from "@/components/ui/button";
 import { setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
@@ -47,7 +46,7 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         <InstallCommandRow command={CLAUDE_INSTALL_COMMAND} />
       </ConfigSection>
 
-      <ConfigSection title="Use a custom claude path">
+      <ConfigSection title="Use your own binary">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
           Use an existing <code>claude</code> binary you have on disk.
         </p>
@@ -57,16 +56,10 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           initialPath={overridePath}
           notFoundHint={`claude not found on disk. Install with \`${CLAUDE_INSTALL_COMMAND}\` and try again, or paste a custom path manually.`}
           onSave={onSaveCustomPath}
+          onClear={clearCustomPath}
           persistOnAutoDetect
           detect={() => Promise.resolve(detectClaudeCliPath())}
         />
-        {isCustom && (
-          <div className="tw-flex tw-justify-end">
-            <Button variant="destructive" size="default" onClick={clearCustomPath}>
-              Clear path
-            </Button>
-          </div>
-        )}
       </ConfigSection>
 
       <ConfigSection title="Authentication">

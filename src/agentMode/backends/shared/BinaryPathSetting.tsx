@@ -13,6 +13,11 @@ interface Props {
   notFoundHint?: string;
   /** Validate & persist on Apply. Returns null on success, error message on failure. */
   onSave: (path: string) => Promise<string | null>;
+  /**
+   * Clear the persisted custom path. When provided, the Apply button becomes a
+   * Clear button once a usable path is applied (see `showClear` below).
+   */
+  onClear?: () => void | Promise<void>;
   /** When true, a successful auto-detect immediately invokes `onSave`. */
   persistOnAutoDetect?: boolean;
   /**
@@ -37,6 +42,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
   initialPath,
   notFoundHint,
   onSave,
+  onClear,
   persistOnAutoDetect = false,
   detect,
 }) => {
@@ -62,6 +68,17 @@ export const BinaryPathSetting: React.FC<Props> = ({
     }
     setError(null);
   }, [pathInput, onSave]);
+
+  const clear = React.useCallback(async (): Promise<void> => {
+    if (busy || !onClear) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await onClear();
+    } finally {
+      setBusy(false);
+    }
+  }, [busy, onClear]);
 
   const autoDetect = React.useCallback(async (): Promise<void> => {
     if (busy) return;
@@ -93,6 +110,12 @@ export const BinaryPathSetting: React.FC<Props> = ({
     }
   }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect, detect]);
 
+  // A usable custom path is applied (`initialPath` is the persisted value, validated
+  // on save/auto-detect) and the draft matches it — so re-applying would be a no-op.
+  // An in-flight edit flips the button back to Apply so the new value can be saved.
+  const showClear =
+    Boolean(onClear) && initialPath.trim() !== "" && pathInput.trim() === initialPath.trim();
+
   return (
     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
       <div className="tw-flex tw-items-center tw-gap-2">
@@ -106,9 +129,15 @@ export const BinaryPathSetting: React.FC<Props> = ({
         <Button variant="secondary" size="default" onClick={autoDetect} disabled={busy}>
           Auto-detect
         </Button>
-        <Button variant="default" size="default" onClick={apply} disabled={busy}>
-          Apply
-        </Button>
+        {showClear ? (
+          <Button variant="destructive" size="default" onClick={clear} disabled={busy}>
+            Clear
+          </Button>
+        ) : (
+          <Button variant="default" size="default" onClick={apply} disabled={busy}>
+            Apply
+          </Button>
+        )}
       </div>
       {error && <div className="tw-text-sm tw-text-error">{error}</div>}
     </div>

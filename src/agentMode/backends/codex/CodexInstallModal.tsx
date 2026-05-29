@@ -31,13 +31,18 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
     return null;
   }, []);
 
+  const clearCodexPath = React.useCallback((): void => {
+    updateCodexFields({ binaryPath: undefined });
+    new Notice("Codex binary path cleared.");
+  }, []);
+
   return (
     <ConfigDialogShell status={<InstallStatusLine state={sessionState} />} onClose={onClose}>
       <ConfigSection title="Install codex-acp">
         <InstallCommandRow command={CODEX_INSTALL_COMMAND} />
       </ConfigSection>
 
-      <ConfigSection title="codex-acp path">
+      <ConfigSection title="Use your own binary">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
           Use an existing <code>{CODEX_BINARY_NAME}</code> binary you have on disk.
         </p>
@@ -47,6 +52,7 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
           initialPath={binaryPath}
           notFoundHint={`${CODEX_BINARY_NAME} not found on PATH. Run the install command above, then click Auto-detect again.`}
           onSave={onSavePath}
+          onClear={clearCodexPath}
           persistOnAutoDetect
         />
       </ConfigSection>

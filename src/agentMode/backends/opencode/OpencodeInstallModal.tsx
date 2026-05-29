@@ -250,15 +250,9 @@ const OpencodeConfigBody: React.FC<{
           initialPath={customPath}
           notFoundHint="opencode not found on PATH. Install it or paste a custom path manually."
           onSave={onSaveCustomPath}
+          onClear={clearCustomPath}
           persistOnAutoDetect
         />
-        {isCustom && (
-          <div className="tw-flex tw-justify-end">
-            <Button variant="destructive" size="default" onClick={clearCustomPath}>
-              Clear custom path
-            </Button>
-          </div>
-        )}
       </ConfigSection>
     </ConfigDialogShell>
   );
