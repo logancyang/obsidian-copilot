@@ -6,13 +6,20 @@ import {
 
 function makeFs(
   paths: Iterable<string>,
-  contents: Record<string, string> = {}
+  contents: Record<string, string> = {},
+  listings: Record<string, string[]> = {}
 ): ClaudeBinaryResolverFs {
   const set = new Set(paths);
   return {
     existsSync: (p: string) => set.has(p),
     readFileSync: (p: string) => {
       if (p in contents) return contents[p];
+      const err: NodeJS.ErrnoException = new Error(`ENOENT: ${p}`);
+      err.code = "ENOENT";
+      throw err;
+    },
+    readdirSync: (p: string) => {
+      if (p in listings) return listings[p];
       const err: NodeJS.ErrnoException = new Error(`ENOENT: ${p}`);
       err.code = "ENOENT";
       throw err;
@@ -94,15 +101,41 @@ describe("resolveClaudeBinary — Unix", () => {
   it("falls back to NVM default alias when no other candidate exists", () => {
     const aliasPath = "/home/me/.nvm/alias/default";
     const claudePath = "/home/me/.nvm/versions/node/v20.11.0/bin/claude";
-    const fs = makeFs([aliasPath, claudePath], { [aliasPath]: "v20.11.0\n" });
+    const fs = makeFs(
+      [aliasPath, claudePath],
+      { [aliasPath]: "v20.11.0\n" },
+      { "/home/me/.nvm/versions/node": ["v20.11.0"] }
+    );
     expect(resolveClaudeBinary(unixInput(fs))).toBe(claudePath);
   });
 
   it("accepts NVM alias contents without the leading 'v'", () => {
     const aliasPath = "/home/me/.nvm/alias/default";
     const claudePath = "/home/me/.nvm/versions/node/v18.19.0/bin/claude";
-    const fs = makeFs([aliasPath, claudePath], { [aliasPath]: "18.19.0" });
+    const fs = makeFs(
+      [aliasPath, claudePath],
+      { [aliasPath]: "18.19.0" },
+      { "/home/me/.nvm/versions/node": ["v18.19.0"] }
+    );
     expect(resolveClaudeBinary(unixInput(fs))).toBe(claudePath);
+  });
+
+  it("finds claude under a non-default nvm version via enumeration", () => {
+    // `nvm use 20 && npm i -g @anthropic-ai/claude-code` with the default still 18.
+    const claudePath = "/home/me/.nvm/versions/node/v20.18.0/bin/claude";
+    const fs = makeFs(
+      [claudePath],
+      {},
+      { "/home/me/.nvm/versions/node": ["v18.20.0", "v20.18.0"] }
+    );
+    expect(resolveClaudeBinary(unixInput(fs))).toBe(claudePath);
+  });
+
+  it("finds claude under an fnm-managed Node", () => {
+    const base = "/home/me/Library/Application Support/fnm/node-versions";
+    const claudePath = `${base}/v20.18.0/installation/bin/claude`;
+    const fs = makeFs([claudePath], {}, { [base]: ["v20.18.0"] });
+    expect(resolveClaudeBinary(unixInput(fs, { platform: "darwin" }))).toBe(claudePath);
   });
 
   it("returns null when NVM alias is unparseable (e.g. 'lts/*')", () => {

@@ -1,3 +1,8 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
+
+import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
+
 /**
  * Well-known POSIX install prefixes that macOS GUI apps' inherited PATH
  * typically omits. Shared between spawn-time PATH augmentation (so
@@ -36,11 +41,47 @@ export function mergePath(candidates: readonly string[], inherited: string | und
 }
 
 /**
+ * Read the live Node version-manager bin dirs (nvm/fnm/Volta/asdf/n/npm-global)
+ * from the real environment + filesystem. Shared by detect-time and spawn-time
+ * PATH augmentation so a binary found under e.g. nvm also spawns with the same
+ * nvm `node` on PATH.
+ */
+function nodeToolBinDirs(): string[] {
+  return resolveNodeToolBinDirs({
+    homeDir: os.homedir(),
+    platform: process.platform,
+    env: process.env,
+    fs: {
+      existsSync: (p) => fs.existsSync(p),
+      readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      readdirSync: (p) => fs.readdirSync(p),
+    },
+  });
+}
+
+/**
+ * Directories searched during detection, in priority order: version-manager
+ * bins ahead of {@link WELL_KNOWN_BIN_DIRS}. Surfaced in the UI's "not found"
+ * hint so users can see where we actually looked. Spawn-time augmentation
+ * (`augmentPathForNodeShebang`) reuses this so detect-time and spawn-time PATH
+ * stay in lockstep.
+ *
+ * {@link WELL_KNOWN_BIN_DIRS} are POSIX prefixes that never resolve on Windows,
+ * so they're omitted there — otherwise they'd only clutter the Windows PATH and
+ * mislead the "Searched:" hint with `/usr/bin`-style paths.
+ */
+export function detectionSearchDirs(): string[] {
+  const wellKnown = process.platform === "win32" ? [] : WELL_KNOWN_BIN_DIRS;
+  return [...nodeToolBinDirs(), ...wellKnown];
+}
+
+/**
  * Augment PATH for the *detection* step, where we don't yet know the
- * binary's location. Prepends {@link WELL_KNOWN_BIN_DIRS} to the inherited
- * PATH so `which <name>` invoked from a macOS GUI app finds Homebrew /
- * `/usr/local/bin` installs that `launchd`'s sparse default PATH omits.
+ * binary's location. Prepends the live version-manager bin dirs and
+ * {@link WELL_KNOWN_BIN_DIRS} to the inherited PATH so `which`/`where` invoked
+ * from a macOS GUI app finds Homebrew, npm-global, and nvm/fnm/asdf/Volta
+ * installs that `launchd`'s sparse default PATH omits.
  */
 export function augmentPathForDetection(inherited: string | undefined): string {
-  return mergePath(WELL_KNOWN_BIN_DIRS, inherited);
+  return mergePath(detectionSearchDirs(), inherited);
 }

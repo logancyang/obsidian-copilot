@@ -1,4 +1,19 @@
-import { augmentPathForDetection, mergePath, WELL_KNOWN_BIN_DIRS } from "./binaryPath";
+import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
+
+import {
+  augmentPathForDetection,
+  detectionSearchDirs,
+  mergePath,
+  WELL_KNOWN_BIN_DIRS,
+} from "./binaryPath";
+
+// Isolate binaryPath's merging/ordering from the live version-manager probe;
+// the resolver's own behavior is covered in nodeToolBinDirs.test.ts.
+jest.mock("@/utils/nodeToolBinDirs", () => ({ resolveNodeToolBinDirs: jest.fn(() => []) }));
+
+const resolveMock = resolveNodeToolBinDirs as jest.MockedFunction<typeof resolveNodeToolBinDirs>;
+
+afterEach(() => resolveMock.mockReturnValue([]));
 
 describe("mergePath", () => {
   test("prepends candidates and dedupes against inherited PATH", () => {
@@ -17,6 +32,17 @@ describe("mergePath", () => {
   });
 });
 
+describe("detectionSearchDirs", () => {
+  test("lists version-manager bins ahead of the well-known dirs", () => {
+    const nvmBin = "/home/me/.nvm/versions/node/v20.18.0/bin";
+    resolveMock.mockReturnValue([nvmBin]);
+    const dirs = detectionSearchDirs();
+    expect(dirs[0]).toBe(nvmBin);
+    expect(dirs.indexOf(nvmBin)).toBeLessThan(dirs.indexOf("/opt/homebrew/bin"));
+    expect(dirs).toEqual([nvmBin, ...WELL_KNOWN_BIN_DIRS]);
+  });
+});
+
 describe("augmentPathForDetection", () => {
   test("prepends all well-known dirs ahead of the inherited PATH", () => {
     const result = augmentPathForDetection("/usr/bin:/bin");
@@ -26,6 +52,14 @@ describe("augmentPathForDetection", () => {
     }
     // Homebrew must come before whatever launchd already had.
     expect(parts.indexOf("/opt/homebrew/bin")).toBeLessThan(parts.indexOf("/usr/bin"));
+  });
+
+  test("prepends a discovered version-manager dir ahead of the inherited PATH", () => {
+    const nvmBin = "/home/me/.nvm/versions/node/v20.18.0/bin";
+    resolveMock.mockReturnValue([nvmBin]);
+    const parts = augmentPathForDetection("/usr/bin:/bin:/usr/sbin:/sbin").split(":");
+    expect(parts[0]).toBe(nvmBin);
+    expect(parts.indexOf(nvmBin)).toBeLessThan(parts.indexOf("/usr/bin"));
   });
 
   test("covers the sparse launchd PATH that triggers the bug", () => {

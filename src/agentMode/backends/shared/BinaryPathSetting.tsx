@@ -1,6 +1,7 @@
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { logError } from "@/logger";
+import { detectionSearchDirs } from "@/utils/binaryPath";
 import { detectBinary } from "@/utils/detectBinary";
 import { Notice } from "obsidian";
 import React from "react";
@@ -22,6 +23,12 @@ interface Props {
    * {@link detectBinary} when omitted.
    */
   detect?: () => Promise<string | null>;
+  /**
+   * Directories the detector searched, listed under the "not found" hint so
+   * users can self-diagnose. Defaults to {@link detectionSearchDirs} (what the
+   * generic `which`/`where` path actually searches) when omitted.
+   */
+  searchedDirs?: () => string[];
 }
 
 /**
@@ -39,9 +46,11 @@ export const BinaryPathSetting: React.FC<Props> = ({
   onSave,
   persistOnAutoDetect = false,
   detect,
+  searchedDirs,
 }) => {
   const [pathInput, setPathInput] = React.useState(initialPath);
   const [error, setError] = React.useState<string | null>(null);
+  const [searched, setSearched] = React.useState<string[]>([]);
   const [busy, setBusy] = React.useState(false);
 
   React.useEffect(() => {
@@ -61,12 +70,14 @@ export const BinaryPathSetting: React.FC<Props> = ({
       return;
     }
     setError(null);
+    setSearched([]);
   }, [pathInput, onSave]);
 
   const autoDetect = React.useCallback(async (): Promise<void> => {
     if (busy) return;
     setBusy(true);
     setError(null);
+    setSearched([]);
     try {
       const found = detect ? await detect() : await detectBinary(binaryName);
       if (!found) {
@@ -74,6 +85,9 @@ export const BinaryPathSetting: React.FC<Props> = ({
           notFoundHint ??
             `${binaryName} not found on PATH. Install it or paste a custom path manually.`
         );
+        // Without a custom detector we know exactly which dirs were searched.
+        const dirs = searchedDirs ?? (detect ? undefined : detectionSearchDirs);
+        setSearched(dirs?.() ?? []);
         return;
       }
       setPathInput(found);
@@ -91,7 +105,7 @@ export const BinaryPathSetting: React.FC<Props> = ({
     } finally {
       setBusy(false);
     }
-  }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect, detect]);
+  }, [binaryName, busy, notFoundHint, onSave, persistOnAutoDetect, detect, searchedDirs]);
 
   return (
     <div className="tw-flex tw-w-full tw-flex-col tw-gap-2">
@@ -110,7 +124,21 @@ export const BinaryPathSetting: React.FC<Props> = ({
           Apply
         </Button>
       </div>
-      {error && <div className="tw-text-sm tw-text-error">{error}</div>}
+      {error && (
+        <div className="tw-flex tw-flex-col tw-gap-1 tw-text-sm tw-text-error">
+          <span>{error}</span>
+          {searched.length > 0 && (
+            <div className="tw-text-muted">
+              <span>Searched:</span>
+              <ul className="tw-my-0 tw-pl-4">
+                {searched.map((dir) => (
+                  <li key={dir}>{dir}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

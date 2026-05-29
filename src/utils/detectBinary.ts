@@ -28,12 +28,16 @@ const BINARY_NAME_PATTERN = /^[A-Za-z0-9._+-]+$/;
  * than parsing `PATH` ourselves so we honor the user's shell-equivalent
  * resolution rules (PATHEXT on Windows, symlink chasing, etc.).
  *
- * On POSIX we augment PATH with well-known install prefixes before invoking
- * `which`. macOS GUI apps (Obsidian launched from Finder/Dock) inherit a
- * sparse `launchd` PATH that omits `/opt/homebrew/bin` and `/usr/local/bin`,
- * so user-installed binaries (Homebrew, `npm install -g`) would otherwise
- * fail to detect. Windows GUI apps inherit the system PATH and don't need
- * this.
+ * We augment PATH with well-known install prefixes and live version-manager
+ * bin dirs before invoking the lookup. macOS GUI apps (Obsidian launched from
+ * Finder/Dock) inherit a sparse `launchd` PATH that omits `/opt/homebrew/bin`
+ * and nvm/fnm/asdf/Volta dirs; Windows GUI apps similarly miss `%APPDATA%\npm`,
+ * so user-installed binaries (Homebrew, `npm install -g`, version managers)
+ * would otherwise fail to detect.
+ *
+ * On Windows we drop `.cmd`/`.bat`/`.ps1` matches and prefer `.exe`: ACP
+ * backends spawn over stdio without `shell: true`, where a `.cmd` shim can't
+ * launch and breaks stdio streaming (same rule as `claudeBinaryResolver.ts`).
  */
 export async function detectBinary(name: string): Promise<string | null> {
   if (!BINARY_NAME_PATTERN.test(name)) {
@@ -41,19 +45,30 @@ export async function detectBinary(name: string): Promise<string | null> {
   }
   const isWindows = process.platform === "win32";
   const cmd = isWindows ? "where" : "which";
-  const env = isWindows
-    ? process.env
-    : { ...process.env, PATH: augmentPathForDetection(process.env.PATH) };
+  const env = { ...process.env, PATH: augmentPathForDetection(process.env.PATH) };
   try {
     const { stdout } = await execFileAsync(cmd, [name], { timeout: 5000, env });
-    const first = stdout
+    const matches = stdout
       .split(/\r?\n/)
       .map((s) => s.trim())
-      .find(Boolean);
-    return first ?? null;
+      .filter(Boolean);
+    return isWindows ? pickWindowsExecutable(matches) : (matches[0] ?? null);
   } catch {
     return null;
   }
+}
+
+/**
+ * Pick the first stdio-spawnable match from `where` output. Drops `.cmd` /
+ * `.bat` / `.ps1` shims (they require `shell: true` and break stdio) and
+ * prefers a native `.exe`. Returns null — i.e. treat as not-found — when only
+ * an unspawnable shim exists, rather than handing back a path that fails to
+ * launch.
+ */
+function pickWindowsExecutable(matches: string[]): string | null {
+  const spawnable = matches.filter((m) => !/\.(cmd|bat|ps1)$/i.test(m));
+  const exe = spawnable.find((m) => /\.exe$/i.test(m));
+  return exe ?? spawnable[0] ?? null;
 }
 
 /**

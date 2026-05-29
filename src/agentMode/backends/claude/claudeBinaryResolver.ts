@@ -3,22 +3,26 @@
  * `pathToClaudeCodeExecutable`. The SDK's auto-discovery walks
  * `import.meta.url`, which fails inside Obsidian's bundled `main.js`.
  *
+ * Directory discovery is shared with the generic backend detector via
+ * {@link nodeToolBinDirCandidates} (nvm/fnm/Volta/asdf/n/npm-global); this
+ * resolver only layers on the Claude-specific filenames and package fallbacks.
+ *
  * Pure leaf: callers inject `homeDir`, `platform`, `env`, and `fs` so tests
  * don't touch real disk.
  */
 import * as path from "node:path";
 
-export interface ClaudeBinaryResolverFs {
-  existsSync: (path: string) => boolean;
-  readFileSync: (path: string, encoding: "utf8") => string;
-}
+import { WELL_KNOWN_BIN_DIRS } from "@/utils/binaryPath";
+import { nodeToolBinDirCandidates, type NodeToolFs } from "@/utils/nodeToolBinDirs";
+
+export type ClaudeBinaryResolverFs = NodeToolFs;
 
 export interface ClaudeBinaryResolverInput {
   /** User-configured override path. If set and exists, returned as-is. */
   override?: string;
   homeDir: string;
   platform: NodeJS.Platform;
-  env: { NVM_BIN?: string; npm_config_prefix?: string; APPDATA?: string };
+  env: NodeJS.ProcessEnv;
   fs: ClaudeBinaryResolverFs;
 }
 
@@ -44,19 +48,14 @@ const posix = path.posix;
 const win = path.win32;
 
 function unixCandidates(input: ClaudeBinaryResolverInput): Array<string | null> {
-  const { homeDir, env, fs } = input;
+  const { homeDir, env } = input;
+  // Every bin dir a Node version manager / npm-global install might use, plus
+  // the well-known system prefixes — then `claude` under each.
+  const dirs = [...nodeToolBinDirCandidates(input), ...WELL_KNOWN_BIN_DIRS];
   return [
     posix.join(homeDir, ".claude", "local", "claude"),
-    posix.join(homeDir, ".local", "bin", "claude"),
-    posix.join(homeDir, ".volta", "bin", "claude"),
-    posix.join(homeDir, ".asdf", "shims", "claude"),
-    posix.join(homeDir, ".asdf", "bin", "claude"),
-    "/usr/local/bin/claude",
-    "/opt/homebrew/bin/claude",
-    posix.join(homeDir, ".npm-global", "bin", "claude"),
-    env.npm_config_prefix ? posix.join(env.npm_config_prefix, "bin", "claude") : null,
-    env.NVM_BIN ? posix.join(env.NVM_BIN, "claude") : null,
-    resolveNvmDefaultClaude(homeDir, fs),
+    ...dirs.map((dir) => posix.join(dir, "claude")),
+    // `npm i -g @anthropic-ai/claude-code` package fallbacks (no `bin` shim).
     posix.join(
       homeDir,
       ".npm-global",
@@ -82,42 +81,13 @@ function unixCandidates(input: ClaudeBinaryResolverInput): Array<string | null> 
 }
 
 function windowsCandidates(input: ClaudeBinaryResolverInput): Array<string | null> {
-  const { homeDir, env } = input;
   // Per-dir, prefer `claude.exe`, then `cli.js` under that dir's
   // node_modules. Never pick `claude.cmd` — it requires `shell: true` and
   // breaks SDK stdio streaming.
-  const dirs = [
-    env.APPDATA ? win.join(env.APPDATA, "npm") : null,
-    env.npm_config_prefix ?? null,
-    win.join(homeDir, "AppData", "Roaming", "npm"),
-  ];
   const out: Array<string | null> = [];
-  for (const dir of dirs) {
-    if (!dir) continue;
+  for (const dir of nodeToolBinDirCandidates(input)) {
     out.push(win.join(dir, "claude.exe"));
     out.push(win.join(dir, "node_modules", "@anthropic-ai", "claude-code", "cli.js"));
   }
   return out;
-}
-
-/**
- * NVM doesn't export `NVM_BIN` to GUI applications on macOS, so reading
- * `~/.nvm/alias/default` is the most reliable way to find the user's default
- * Node install. The file may contain `vX.Y.Z`, `X.Y.Z`, or an unresolvable
- * alias like `lts/*` — the latter we silently skip.
- */
-function resolveNvmDefaultClaude(homeDir: string, fs: ClaudeBinaryResolverFs): string | null {
-  const aliasPath = posix.join(homeDir, ".nvm", "alias", "default");
-  let raw: string;
-  try {
-    raw = fs.readFileSync(aliasPath, "utf8");
-  } catch {
-    return null;
-  }
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  const versionPattern = /^v?\d+\.\d+\.\d+/;
-  if (!versionPattern.test(trimmed)) return null;
-  const version = trimmed.startsWith("v") ? trimmed : `v${trimmed}`;
-  return posix.join(homeDir, ".nvm", "versions", "node", version, "bin", "claude");
 }

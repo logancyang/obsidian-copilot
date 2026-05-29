@@ -2,6 +2,10 @@ import { promisify } from "node:util";
 
 import { detectBinary } from "./detectBinary";
 
+// Keep the augmented PATH deterministic across CI/dev machines; the live
+// version-manager probe is covered in nodeToolBinDirs.test.ts.
+jest.mock("@/utils/nodeToolBinDirs", () => ({ resolveNodeToolBinDirs: jest.fn(() => []) }));
+
 type ExecFileCallback = (err: Error | null, stdout: string, stderr: string) => void;
 type ExecFileArgs = [
   string,
@@ -78,7 +82,7 @@ describe("detectBinary", () => {
     expect(pathParts.indexOf("/opt/homebrew/bin")).toBeLessThan(pathParts.indexOf("/usr/bin"));
   });
 
-  test("windows: leaves PATH untouched and calls `where`", async () => {
+  test("windows: augments PATH and calls `where`", async () => {
     setPlatform("win32");
     process.env.PATH = "C:\\Windows\\System32;C:\\Windows";
 
@@ -91,8 +95,26 @@ describe("detectBinary", () => {
 
     const [cmd, , opts] = execFileMock.mock.calls[0];
     expect(cmd).toBe("where");
-    // On Windows we hand the inherited env through unchanged.
-    expect(opts.env).toBe(process.env);
+    // A fresh env object (not process.env) with an augmented PATH, so the
+    // GUI-app sparse PATH still reaches %APPDATA%\npm etc.
+    expect(opts.env).not.toBe(process.env);
+    expect(opts.env?.PATH).toContain("C:\\Windows\\System32");
+  });
+
+  test("windows: prefers the .exe over a sibling .cmd shim", async () => {
+    setPlatform("win32");
+    execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
+      cb(null, "C:\\npm\\codex-acp.cmd\r\nC:\\npm\\codex-acp.exe\r\n", "")
+    );
+    await expect(detectBinary("codex-acp")).resolves.toBe("C:\\npm\\codex-acp.exe");
+  });
+
+  test("windows: treats a .cmd-only result as not found (unspawnable over stdio)", async () => {
+    setPlatform("win32");
+    execFileMock.mockImplementation((_cmd, _args, _opts, cb) =>
+      cb(null, "C:\\npm\\codex-acp.cmd\r\nC:\\npm\\codex-acp.ps1\r\n", "")
+    );
+    await expect(detectBinary("codex-acp")).resolves.toBeNull();
   });
 
   test("returns null when the lookup tool exits non-zero", async () => {

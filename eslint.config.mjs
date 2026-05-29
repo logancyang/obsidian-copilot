@@ -217,10 +217,17 @@ export default [
   // SDK uses node:async_hooks. The plugin runs in Electron renderer where
   // these modules are available; the desktop-only Agent Mode is also gated by
   // `Platform.isMobile` at runtime in main.ts.
-  // detectBinary / rendererEventsShim are sibling utilities pulled in by
-  // agent-mode wiring and share the same Electron-renderer assumptions.
+  // detectBinary / binaryPath / nodeToolBinDirs / rendererEventsShim are
+  // sibling utilities pulled in by agent-mode wiring and share the same
+  // Electron-renderer assumptions.
   {
-    files: ["src/agentMode/**", "src/utils/detectBinary.ts", "src/utils/rendererEventsShim.ts"],
+    files: [
+      "src/agentMode/**",
+      "src/utils/detectBinary.ts",
+      "src/utils/binaryPath.ts",
+      "src/utils/nodeToolBinDirs.ts",
+      "src/utils/rendererEventsShim.ts",
+    ],
     rules: {
       "import/no-nodejs-modules": "off",
     },

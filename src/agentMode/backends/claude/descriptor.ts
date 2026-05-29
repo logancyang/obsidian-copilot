@@ -57,21 +57,19 @@ const claudeWire: ModelWireCodec = {
 
 /**
  * Build the environment input shared by both override-aware resolution and
- * fresh auto-detection. Pulls `os.homedir()`, `process.platform`, and a
- * minimal env subset that the resolver consults for Volta/NVM/npm-global.
+ * fresh auto-detection. Pulls `os.homedir()`, `process.platform`, the full
+ * `process.env` (the shared dir resolver reads NVM/FNM/asdf/Volta/n/npm vars),
+ * and real `fs` accessors.
  */
 function claudeResolverEnv(): Omit<Parameters<typeof resolveClaudeBinary>[0], "override"> {
   return {
     homeDir: os.homedir(),
     platform: process.platform,
-    env: {
-      NVM_BIN: process.env.NVM_BIN,
-      npm_config_prefix: process.env.npm_config_prefix,
-      APPDATA: process.env.APPDATA,
-    },
+    env: process.env,
     fs: {
       existsSync: (p) => fs.existsSync(p),
       readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      readdirSync: (p) => fs.readdirSync(p),
     },
   };
 }
