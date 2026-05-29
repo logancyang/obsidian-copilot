@@ -11,12 +11,31 @@ import type {
 } from "@/modelManagement";
 import type { Skill } from "@/agentMode/skills";
 import {
+  setDefaultSystemPromptTitle,
+  setDisableBuiltinSystemPrompt,
+  setSelectedPromptTitle,
+  updateCachedSystemPrompts,
+} from "@/system-prompts/state";
+import type { UserSystemPrompt } from "@/system-prompts/type";
+import {
   buildOpencodeConfig,
   OPENCODE_PROVIDER_MAP,
   OpencodeBackend,
   type OpencodeModelDeps,
 } from "./OpencodeBackend";
-import { COPILOT_PROMPT_BASE, selectCopilotPrompt } from "./prompts";
+import { COPILOT_PROMPT_BASE } from "@/agentMode/backends/shared/agentSystemPrompt";
+
+function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
+  return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
+}
+
+/** The system-prompt jotai store is module-global — reset it between tests. */
+function resetPromptState(): void {
+  setDisableBuiltinSystemPrompt(false);
+  setSelectedPromptTitle("");
+  setDefaultSystemPromptTitle("");
+  updateCachedSystemPrompts([]);
+}
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -141,6 +160,7 @@ describe("buildOpencodeConfig — provider/model injection", () => {
   beforeEach(() => {
     resetSettings();
     seedSkills([]);
+    resetPromptState();
   });
 
   it("registers a BYOK provider with its keychain key and injects the model", async () => {
@@ -427,6 +447,7 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
   beforeEach(() => {
     resetSettings();
     seedSkills([]);
+    resetPromptState();
   });
 
   it("sets top-level model from the persisted defaultModel.baseModelId", async () => {
@@ -514,6 +535,36 @@ describe("buildOpencodeConfig — agent/prompt/mode/skills blocks (preserved)", 
     expect(cfg.agent["copilot-build"].mode).toBe("primary");
   });
 
+  it("appends the user's selected custom prompt to both agent prompts", async () => {
+    updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
+    setSelectedPromptTitle("Haiku");
+    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      agent: Record<string, { prompt?: string }>;
+    };
+    for (const id of ["copilot-build", "build"]) {
+      expect(cfg.agent[id].prompt?.startsWith(COPILOT_PROMPT_BASE)).toBe(true);
+      expect(cfg.agent[id].prompt).toContain(
+        "<user_custom_instructions>\nrespond in haiku\n</user_custom_instructions>"
+      );
+    }
+  });
+
+  it("suppresses the base prompt when 'disable builtin' is on, keeping the user prompt + pill directive", async () => {
+    updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
+    setSelectedPromptTitle("Haiku");
+    setDisableBuiltinSystemPrompt(true);
+    const cfg = (await buildOpencodeConfig(getSettings(), NO_MODELS_DEPS)) as {
+      agent: Record<string, { prompt?: string }>;
+    };
+    for (const id of ["copilot-build", "build"]) {
+      expect(cfg.agent[id].prompt).not.toContain(COPILOT_PROMPT_BASE);
+      expect(cfg.agent[id].prompt).not.toContain("You are Obsidian Copilot");
+      expect(cfg.agent[id].prompt).toContain("respond in haiku");
+      // Pill directive is functional wiring, not builtin framing — always sent.
+      expect(cfg.agent[id].prompt).toContain("{folder_name}");
+    }
+  });
+
   it("does not template a skills folder into the opencode prompts", async () => {
     setSettings({
       agentMode: {
@@ -595,6 +646,7 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   beforeEach(() => {
     resetSettings();
     seedSkills([]);
+    resetPromptState();
   });
 
   it("throws if no binary is installed", async () => {
@@ -638,33 +690,9 @@ describe("OpencodeBackend.buildSpawnDescriptor", () => {
   });
 });
 
-describe("selectCopilotPrompt", () => {
-  it("returns COPILOT_PROMPT_BASE for any model id (no per-provider variants yet)", () => {
-    expect(selectCopilotPrompt(undefined)).toBe(COPILOT_PROMPT_BASE);
-    expect(selectCopilotPrompt("copilot-plus-flash")).toBe(COPILOT_PROMPT_BASE);
-    expect(selectCopilotPrompt("copilot-plus/copilot-plus-flash")).toBe(COPILOT_PROMPT_BASE);
-    expect(selectCopilotPrompt("anthropic/claude-sonnet-4-6")).toBe(COPILOT_PROMPT_BASE);
-    expect(selectCopilotPrompt("google/gemini-2.5-flash")).toBe(COPILOT_PROMPT_BASE);
-  });
-});
-
-describe("COPILOT_PROMPT_BASE", () => {
-  it("establishes Obsidian Copilot identity, not a CLI/coding agent", () => {
-    expect(COPILOT_PROMPT_BASE).toMatch(/Obsidian Copilot/);
-    expect(COPILOT_PROMPT_BASE).toMatch(/NOT a software-engineering agent or CLI coding tool/);
-  });
-
-  it("does not carry chat-mode-only baggage that misfires in tool-driven agents", () => {
-    expect(COPILOT_PROMPT_BASE).not.toMatch(/@vault/);
-    expect(COPILOT_PROMPT_BASE).not.toMatch(/getCurrentTime/);
-    expect(COPILOT_PROMPT_BASE).not.toMatch(/getTimeRangeMs/);
-    expect(COPILOT_PROMPT_BASE).not.toMatch(/YouTube/);
-  });
-
-  it("ports AGENT_LOOP_GUIDANCE behavior bullets", () => {
-    expect(COPILOT_PROMPT_BASE).toMatch(/NEVER search for the same/);
-  });
-});
+// `COPILOT_PROMPT_BASE` and the full `buildAgentSystemPrompt` composition are
+// unit-tested in `backends/shared/agentSystemPrompt.test.ts`. The opencode tests
+// above only assert that the composed prompt reaches `cfg.agent.<id>.prompt`.
 
 describe("OPENCODE_PROVIDER_MAP", () => {
   it("maps the BYOK provider ids plus Copilot Plus to opencode provider ids", () => {

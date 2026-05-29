@@ -75,6 +75,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
+  restartOnSystemPromptChange: true,
   wire: codexWire,
   showModelDescriptions: true,
 

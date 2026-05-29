@@ -16,7 +16,7 @@ import { resolveClaudeBinary } from "./claudeBinaryResolver";
 import { agentOriginEnabledWireIds } from "@/agentMode/backends/shared/agentEnabledModels";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
-import { buildPillSyntaxDirective } from "@/agentMode/skills";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import type {
   BackendConfigOption,
   ModeMapping,
@@ -128,6 +128,9 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   crossDiscoveredAgents: [],
   restartOnManagedSkillsChange: false,
   restartOnProviderConfigChange: false,
+  // The Claude SDK adapter re-reads the composed system prompt per
+  // `newSession()`, so a new chat picks up prompt changes without a restart.
+  restartOnSystemPromptChange: false,
   wire: claudeWire,
   showModelDescriptions: true,
 
@@ -198,16 +201,20 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,
       getDefaultModelId: () => getSettings().agentMode?.backends?.claude?.defaultModel?.baseModelId,
-      // Claude writes new skills into its native `.claude/skills/` directory
-      // and discovery picks them up as project-managed automatically, so the
-      // spawn directive only needs to carry the pill-syntax template.
+      // Forward the shared composed system prompt — the Copilot base framing
+      // (unless the user disabled it), the pill-syntax directive, and the
+      // user's custom prompt. The SDK appends it to its `claude_code` preset
+      // (see `ClaudeSdkBackendProcess`), so Claude keeps its tool/planning
+      // framing while gaining the Obsidian-vault identity. Re-read per
+      // `newSession()`, so a prompt change applies to the next session.
       //
-      // Claude has no cross-discovery surface — it only loads
-      // `.claude/skills/`, and the symlink fanout already enforces
-      // visibility (no link = not seen). If the Claude Agent SDK ever
-      // grows a per-skill deny hook, wire `composeDenyList(getManagedSkills(),
-      // "claude")` in here.
-      getSkillCreationDirective: () => buildPillSyntaxDirective(),
+      // Claude discovers skills natively from `.claude/skills/`, so the payload
+      // carries no SKILL.md authoring instructions. Claude has no
+      // cross-discovery surface — it only loads `.claude/skills/`, and the
+      // symlink fanout already enforces visibility (no link = not seen). If the
+      // Claude Agent SDK ever grows a per-skill deny hook, wire
+      // `composeDenyList(getManagedSkills(), "claude")` in here.
+      getSystemPromptAppend: () => buildAgentSystemPrompt(),
     });
   },
 

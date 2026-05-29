@@ -95,6 +95,7 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   crossDiscoveredAgents: ["claude", "codex"],
   restartOnManagedSkillsChange: true,
   restartOnProviderConfigChange: true,
+  restartOnSystemPromptChange: true,
   wire: opencodeWire,
 
   getEnabledBaseModelIds(settings: CopilotSettings): ReadonlySet<string> {

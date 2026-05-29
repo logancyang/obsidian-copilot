@@ -86,6 +86,22 @@ export interface BackendDescriptor {
    */
   readonly restartOnProviderConfigChange: boolean;
 
+  /**
+   * When true, the host restarts this backend whenever the effective Agent
+   * Mode system prompt changes (the user's selected/default custom prompt or
+   * the "Disable builtin system prompt" toggle). Set for backends (opencode,
+   * codex) that bake the composed system prompt into spawn-time config and
+   * share one subprocess across sessions, so a changed prompt only reaches the
+   * agent on the next spawn.
+   *
+   * The Claude SDK adapter re-reads the composed prompt per `newSession()`, so
+   * a new chat already picks up the change without a restart — it sets this to
+   * `false`.
+   *
+   * Required (not optional) so a new backend must make an explicit decision.
+   */
+  readonly restartOnSystemPromptChange: boolean;
+
   /** Sync read of install/setup state from settings + last-known disk reconcile. */
   getInstallState(settings: CopilotSettings): InstallState;
 

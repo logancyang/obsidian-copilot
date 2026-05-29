@@ -6,15 +6,10 @@ import { isSelfHostedProvider } from "@/modelManagement";
 import type { BackendConfigRegistry, ProviderRegistry } from "@/modelManagement";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
-import {
-  buildPillSyntaxDirective,
-  composeDenyList,
-  getManagedSkills,
-  SkillManager,
-} from "@/agentMode/skills";
+import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import { OpencodeBackendDescriptor } from "./descriptor";
 import { mapProviderToOpencodeId } from "./opencodeModelResolve";
-import { selectCopilotPrompt } from "./prompts";
 
 /**
  * Maps Copilot's `ChatModelProviders` to OpenCode's provider id. Used for the
@@ -214,14 +209,13 @@ export async function buildOpencodeConfig(
   // CLI-coding-agent prompt — wrong domain for an Obsidian vault assistant.
   // opencode's `cfg.agent.<id>` merge is field-wise, so adding `prompt` to
   // the built-in `build` agent leaves its native permissions intact.
-  const basePrompt = selectCopilotPrompt(
-    s.agentMode?.backends?.opencode?.defaultModel?.baseModelId
-  );
-  // opencode writes new skills into its native `.opencode/skills/` directory
-  // and discovery picks them up as project-managed automatically, so the
-  // prompt only appends the pill-syntax directive.
+  //
+  // The prompt is the shared composed payload: the Copilot base framing (unless
+  // the user disabled it), the pill-syntax directive, and the user's custom
+  // prompt. the host restarts opencode on prompt changes via
+  // `restartOnSystemPromptChange`.
   const skillManagerReady = SkillManager.hasInstance();
-  const prompt = `${basePrompt}\n\n${buildPillSyntaxDirective()}`;
+  const prompt = buildAgentSystemPrompt();
   config.agent = {
     [OPENCODE_BUILTIN_BUILD_AGENT_ID]: {
       prompt,

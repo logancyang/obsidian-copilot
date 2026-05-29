@@ -1,4 +1,11 @@
 import { resetSettings, setSettings } from "@/settings/model";
+import {
+  setDefaultSystemPromptTitle,
+  setDisableBuiltinSystemPrompt,
+  setSelectedPromptTitle,
+  updateCachedSystemPrompts,
+} from "@/system-prompts/state";
+import type { UserSystemPrompt } from "@/system-prompts/type";
 import { CodexBackend, toTomlBasicString } from "./CodexBackend";
 
 jest.mock("@/logger", () => ({
@@ -6,6 +13,18 @@ jest.mock("@/logger", () => ({
   logWarn: jest.fn(),
   logError: jest.fn(),
 }));
+
+function makeSystemPrompt(title: string, content: string): UserSystemPrompt {
+  return { title, content, createdMs: 0, modifiedMs: 0, lastUsedMs: 0 };
+}
+
+/** The system-prompt jotai store is module-global — reset it between tests. */
+function resetPromptState(): void {
+  setDisableBuiltinSystemPrompt(false);
+  setSelectedPromptTitle("");
+  setDefaultSystemPromptTitle("");
+  updateCachedSystemPrompts([]);
+}
 
 jest.mock("@/agentMode/skills", () => {
   const actual = jest.requireActual("@/agentMode/skills");
@@ -27,6 +46,7 @@ jest.mock("@/agentMode/skills", () => {
 describe("CodexBackend.buildSpawnDescriptor", () => {
   beforeEach(() => {
     resetSettings();
+    resetPromptState();
     setSettings({
       agentMode: {
         byok: {},
@@ -41,7 +61,7 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     });
   });
 
-  it("injects the pill-syntax directive via -c developer_instructions", async () => {
+  it("forwards the Copilot base prompt + pill-syntax directive via -c developer_instructions", async () => {
     const backend = new CodexBackend();
     const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
     expect(desc.command).toBe("/usr/local/bin/codex-acp");
@@ -49,13 +69,42 @@ describe("CodexBackend.buildSpawnDescriptor", () => {
     expect(cIdx).toBeGreaterThanOrEqual(0);
     const value = desc.args[cIdx + 1];
     expect(value.startsWith("developer_instructions=")).toBe(true);
+    // Base Obsidian-vault framing reaches Codex (decode the TOML basic string).
+    expect(value).toContain("Obsidian Copilot");
+    expect(value).toContain("NOT a software-engineering agent or CLI coding tool");
+    // Pill-syntax directive.
     expect(value).toContain("{folder_name}");
     expect(value).toContain("{activeNote}");
-    // The directive carries only the pill-syntax template. Skill discovery
-    // is automatic from `.agents/skills/`, so the directive never templates
-    // in SKILL.md authoring instructions.
+    // Skill discovery is automatic from `.agents/skills/`, so the directive
+    // never templates in SKILL.md authoring instructions.
     expect(value).not.toContain("metadata.copilot-enabled-agents");
     expect(value).not.toContain("copilot/skills/<name>/SKILL.md");
+  });
+
+  it("appends the user's selected custom prompt to developer_instructions", async () => {
+    updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
+    setSelectedPromptTitle("Haiku");
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const value = desc.args[desc.args.indexOf("-c") + 1];
+    expect(value).toContain("Obsidian Copilot");
+    // The TOML basic string escapes newlines as \n, so match the wrapper +
+    // content rather than the literal multi-line block.
+    expect(value).toContain("<user_custom_instructions>");
+    expect(value).toContain("respond in haiku");
+  });
+
+  it("suppresses the base prompt when 'disable builtin' is on, keeping the user prompt + pill directive", async () => {
+    updateCachedSystemPrompts([makeSystemPrompt("Haiku", "respond in haiku")]);
+    setSelectedPromptTitle("Haiku");
+    setDisableBuiltinSystemPrompt(true);
+    const backend = new CodexBackend();
+    const desc = await backend.buildSpawnDescriptor({ vaultBasePath: "/vault" });
+    const value = desc.args[desc.args.indexOf("-c") + 1];
+    expect(value).not.toContain("Obsidian Copilot");
+    expect(value).toContain("respond in haiku");
+    // Pill directive is functional wiring, not builtin framing — always sent.
+    expect(value).toContain("{folder_name}");
   });
 
   it("does not template a skills folder into developer_instructions", async () => {

@@ -87,11 +87,11 @@ interface SessionState {
   mcpServers: Record<string, McpServerConfig>;
   active?: Query;
   /**
-   * Snapshot of the skill-creation system-prompt directive captured at
-   * `newSession()` time so the setting change takes effect on the next
-   * session rather than mid-conversation. Empty string = no directive.
-   * Appended to Claude's default `claude_code` preset via
-   * `options.systemPrompt.append`.
+   * Snapshot of the composed Copilot system prompt (base framing + pill-syntax
+   * directive + user custom prompt) captured at `newSession()` time so a
+   * settings change takes effect on the next session rather than mid-
+   * conversation. Empty string = no append. Appended to Claude's default
+   * `claude_code` preset via `options.systemPrompt.append`.
    */
   systemPromptAppend: string;
 }
@@ -121,12 +121,13 @@ export interface ClaudeSdkBackendProcessOptions {
    */
   getDefaultModelId?: () => string | undefined;
   /**
-   * Returns the spawn-time skill-creation directive to append to Claude's
-   * default `claude_code` system prompt. Read once per `newSession()` so
-   * a settings change applies to the next session rather than mid-turn.
-   * Empty string / undefined disables the append.
+   * Returns the composed Copilot system prompt to append to Claude's default
+   * `claude_code` system prompt (base Obsidian framing + pill-syntax directive
+   * + user custom prompt). Read once per `newSession()` so a settings change
+   * applies to the next session rather than mid-turn. Empty string / undefined
+   * disables the append.
    */
-  getSkillCreationDirective?: () => string | undefined;
+  getSystemPromptAppend?: () => string | undefined;
   /**
    * User-defined env vars merged onto `process.env` for the spawned `claude`
    * CLI. Read per `prompt()` so settings edits apply on the next turn.
@@ -230,7 +231,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       firstPromptStarted: false,
       mcpServers: mcp,
       model: seedModelId,
-      systemPromptAppend: this.opts.getSkillCreationDirective?.() ?? "",
+      systemPromptAppend: this.opts.getSystemPromptAppend?.() ?? "",
     });
 
     const state = this.computeState(sessionId);
@@ -264,9 +265,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       allowedTools: ["Read", "Write", "Edit", "Glob", "Grep", "LS"],
       canUseTool: this.bridge.canUseTool,
     };
-    // Append the skill-creation directive (captured at newSession time) to
-    // Claude's default `claude_code` preset. The SDK's preset+append form
-    // preserves the full default system prompt; we only add the directive.
+    // Append the composed Copilot system prompt (captured at newSession time)
+    // to Claude's default `claude_code` preset. The SDK's preset+append form
+    // preserves the full default system prompt — keeping Claude's tool and
+    // planning framing — while layering on the Obsidian-vault identity, the
+    // pill-syntax directive, and the user's custom prompt.
     if (session.systemPromptAppend) {
       options.systemPrompt = {
         type: "preset",
@@ -491,7 +494,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       firstPromptStarted: true,
       mcpServers: mcp,
       model: seedModelId,
-      systemPromptAppend: this.opts.getSkillCreationDirective?.() ?? "",
+      systemPromptAppend: this.opts.getSystemPromptAppend?.() ?? "",
     });
 
     const state = this.computeState(params.sessionId);

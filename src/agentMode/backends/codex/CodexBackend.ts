@@ -1,7 +1,7 @@
 import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import { buildPillSyntaxDirective } from "@/agentMode/skills";
+import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 
 /**
  * Spawns the user-provided `codex-acp` binary
@@ -22,12 +22,14 @@ export class CodexBackend implements AcpBackend {
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
       getSettings().agentMode?.backends?.codex?.envOverrides
     );
-    // Codex writes new skills into its native `.agents/skills/` directory
-    // and discovery picks them up as project-managed automatically, so the
-    // spawn directive only carries the pill-syntax template — forwarded via
-    // codex's `developer_instructions` config field as a TOML 1.0 basic
-    // string.
-    const directive = buildPillSyntaxDirective();
+    // Forward the shared composed system prompt — the Copilot base framing
+    // (unless the user disabled it), the pill-syntax directive, and the user's
+    // custom prompt — via codex's `developer_instructions` config field as a
+    // TOML 1.0 basic string. codex appends `developer_instructions` to its own
+    // base prompt, so this adds the Obsidian-vault framing on top. Read at
+    // spawn time; the host restarts codex on prompt changes via
+    // `restartOnSystemPromptChange`.
+    const directive = buildAgentSystemPrompt();
     descriptor.args = [
       ...descriptor.args,
       "-c",

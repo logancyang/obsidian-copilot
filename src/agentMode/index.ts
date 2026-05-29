@@ -1,8 +1,11 @@
 import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
-import { getSettings } from "@/settings/model";
+import { getSettings, subscribeToSettingsChange } from "@/settings/model";
+import { subscribeToSystemPromptChange } from "@/system-prompts/state";
+import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
 import { backendRegistry, listBackendDescriptors } from "./backends/registry";
+import type { BackendId } from "./session/types";
 import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManager";
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionManager } from "./session/AgentSessionManager";
@@ -78,6 +81,24 @@ function collectAgentSkillsDirsProjectRel(): Record<string, string> {
 }
 
 /**
+ * The exact system prompt every backend bakes in — i.e. `buildAgentSystemPrompt`'s
+ * real output, not a hand-picked subset. Used as the per-backend restart dedup
+ * key so a restart fires iff the composed prompt actually changes: the "disable
+ * builtin" toggle, the user's custom prompt (including the legacy
+ * `userSystemPrompt` fallback), the base framing, and the pill directive.
+ * Keying on the builder's actual output means the key can't silently drift from
+ * what the backend sends.
+ *
+ * The prompt is provider-agnostic, so the key is the same for every `backendId`
+ * and does not vary with the sticky default model — switching models never
+ * needs a prompt-driven restart. The parameter is kept so the call site can key
+ * per-backend should that ever change.
+ */
+function backendSystemPromptKey(_backendId: BackendId): string {
+  return buildAgentSystemPrompt();
+}
+
+/**
  * Single seam between the plugin host (`main.ts`) and Agent Mode. Initialises
  * the SkillManager singleton, wires the default permission prompter into a
  * fresh `AgentSessionManager`, kicks off every registered backend
@@ -146,6 +167,46 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   plugin.modelManagement.backendConfigRegistry.subscribe(() =>
     restartProviderAffected("backend enabled models changed")
   );
+  // The composed Agent Mode system prompt (Copilot base + pill directive + the
+  // user's custom prompt) is baked into opencode/codex spawn-time config and
+  // shared across sessions, so a prompt change only reaches those agents on a
+  // fresh spawn. Restart the opted-in backends when their *effective* composed
+  // prompt changes; the Claude SDK re-reads it per `newSession()` and opts out.
+  //
+  // The effective prompt depends on several stores (the session-selection atom,
+  // the prompts list, the persisted default-prompt-title, and the legacy
+  // `userSystemPrompt` fallback), and the underlying atoms also fire on no-op
+  // list reloads — so we dedupe per backend on the builder's real output rather
+  // than a guessed subset of inputs. On initial load this is a harmless no-op:
+  // `restartBackend` returns early when no subprocess is running yet.
+  const lastSystemPromptKeys = new Map<BackendId, string>();
+  for (const descriptor of listBackendDescriptors()) {
+    if (descriptor.restartOnSystemPromptChange) {
+      lastSystemPromptKeys.set(descriptor.id, backendSystemPromptKey(descriptor.id));
+    }
+  }
+  const restartSystemPromptAffected = (): void => {
+    for (const descriptor of listBackendDescriptors()) {
+      if (!descriptor.restartOnSystemPromptChange) continue;
+      const key = backendSystemPromptKey(descriptor.id);
+      if (key === lastSystemPromptKeys.get(descriptor.id)) continue;
+      lastSystemPromptKeys.set(descriptor.id, key);
+      void manager
+        .restartBackend(descriptor.id, "system prompt changed")
+        .catch((error) =>
+          logError(`[AgentMode] restart after system prompt change failed: ${descriptor.id}`, error)
+        );
+    }
+  };
+  subscribeToSystemPromptChange(restartSystemPromptAffected);
+  subscribeToSettingsChange((prev, next) => {
+    if (
+      prev.defaultSystemPromptTitle !== next.defaultSystemPromptTitle ||
+      prev.userSystemPrompt !== next.userSystemPrompt
+    ) {
+      restartSystemPromptAffected();
+    }
+  });
   void skillManager.refresh().catch((error) => {
     logError("[Skills] Initial discovery pass failed", error);
   });

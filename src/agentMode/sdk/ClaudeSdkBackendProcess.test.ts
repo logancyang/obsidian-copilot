@@ -278,7 +278,7 @@ describe("ClaudeSdkBackendProcess.prompt happy path", () => {
     expect(call.options.systemPrompt).toBeUndefined();
   });
 
-  it("forwards the spawn-time skill-creation directive via systemPrompt append", async () => {
+  it("forwards the composed system prompt via systemPrompt append on the claude_code preset", async () => {
     queryMock.mockImplementation(() =>
       makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
     );
@@ -289,7 +289,7 @@ describe("ClaudeSdkBackendProcess.prompt happy path", () => {
       app: { vault: {} } as any,
       clientVersion: "1.2.3",
       descriptor: fakeDescriptor(),
-      getSkillCreationDirective: () => "DO THIS THING WITH SKILLS",
+      getSystemPromptAppend: () => "DO THIS THING WITH SKILLS",
     });
 
     const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
@@ -304,7 +304,7 @@ describe("ClaudeSdkBackendProcess.prompt happy path", () => {
     });
   });
 
-  it("captures the directive at newSession time and ignores later setting changes mid-session", async () => {
+  it("captures the system prompt at newSession time and ignores later setting changes mid-session", async () => {
     queryMock.mockImplementation(() =>
       makeQuery([streamEvent({ type: "message_start", message: {} }), resultMessage()])
     );
@@ -316,12 +316,12 @@ describe("ClaudeSdkBackendProcess.prompt happy path", () => {
       app: { vault: {} } as any,
       clientVersion: "1.2.3",
       descriptor: fakeDescriptor(),
-      getSkillCreationDirective: () => current,
+      getSystemPromptAppend: () => current,
     });
 
     const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
     // Mutate the "setting" after newSession → the session's first turn must
-    // still use the original directive, proving capture-at-spawn semantics.
+    // still use the original prompt, proving capture-at-newSession semantics.
     current = "SECOND DIRECTIVE";
     await proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] });
 
@@ -332,6 +332,15 @@ describe("ClaudeSdkBackendProcess.prompt happy path", () => {
       append: "FIRST DIRECTIVE",
     });
   });
+
+  // The SDK adapter's contract is "forward `getSystemPromptAppend()` verbatim
+  // into `options.systemPrompt.append`", proven above. The Claude descriptor
+  // wires that callback to `buildAgentSystemPrompt`, whose composition — the
+  // Copilot base prompt, pill directive, user custom prompt, and the
+  // disable-builtin behavior — is unit-tested in
+  // `backends/shared/agentSystemPrompt.test.ts`. (The `sdk` layer can't import
+  // a `backend` module under `boundaries/dependencies`, so that assertion
+  // lives there, not here.)
 
   it("buffers events emitted before a session handler is registered and replays them", async () => {
     queryMock.mockImplementation(() =>
