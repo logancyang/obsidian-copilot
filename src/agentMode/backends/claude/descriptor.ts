@@ -146,6 +146,10 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     };
   },
 
+  getResolvedBinaryPath(settings: CopilotSettings): string | null {
+    return resolveClaudeCliPath(settings);
+  },
+
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       if (prev.agentMode?.claudeCli?.path !== next.agentMode?.claudeCli?.path) {

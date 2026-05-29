@@ -108,6 +108,10 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     return { kind: "ready", source: raw.source };
   },
 
+  getResolvedBinaryPath(settings: CopilotSettings): string | null {
+    return settings.agentMode?.backends?.opencode?.binaryPath ?? null;
+  },
+
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       if (prev.agentMode?.backends?.opencode !== next.agentMode?.backends?.opencode) {

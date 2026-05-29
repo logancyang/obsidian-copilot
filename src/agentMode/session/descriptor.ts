@@ -105,6 +105,13 @@ export interface BackendDescriptor {
   /** Sync read of install/setup state from settings + last-known disk reconcile. */
   getInstallState(settings: CopilotSettings): InstallState;
 
+  /**
+   * Optional: the resolved filesystem path of the binary/executable this
+   * backend runs, for display in settings. `null` when not configured or not
+   * resolvable. Distinct from install state — purely informational.
+   */
+  getResolvedBinaryPath?(settings: CopilotSettings): string | null;
+
   /** Subscribe to settings/disk changes affecting install state. Returns unsubscribe. */
   subscribeInstallState(plugin: CopilotPlugin, cb: () => void): () => void;
 

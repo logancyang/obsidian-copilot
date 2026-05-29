@@ -98,6 +98,10 @@ export const CodexBackendDescriptor: BackendDescriptor = {
     return binaryPathInstallState(settings.agentMode?.backends?.codex?.binaryPath);
   },
 
+  getResolvedBinaryPath(settings: CopilotSettings): string | null {
+    return settings.agentMode?.backends?.codex?.binaryPath ?? null;
+  },
+
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
       if (

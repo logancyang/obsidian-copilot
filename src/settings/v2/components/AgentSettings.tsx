@@ -85,6 +85,7 @@ const BackendSection: React.FC<{
   const manager = plugin.agentSessionManager;
 
   const installState = descriptor.getInstallState(settings);
+  const resolvedPath = descriptor.getResolvedBinaryPath?.(settings) ?? null;
 
   // Probe when ready but uncached — the load-time preload may have skipped this
   // backend (binary installed after plugin start).
@@ -104,8 +105,17 @@ const BackendSection: React.FC<{
       <div className="tw-flex tw-items-center tw-justify-between tw-gap-2">
         <div className="tw-flex tw-items-center tw-gap-2">
           <Icon className="tw-size-4" />
-          <span className="tw-text-base tw-font-semibold">{descriptor.displayName}</span>
-          <InstallBadge state={installState} />
+          <div className="tw-flex tw-flex-col">
+            <div className="tw-flex tw-items-center tw-gap-2">
+              <span className="tw-text-base tw-font-semibold">{descriptor.displayName}</span>
+              <InstallBadge state={installState} />
+            </div>
+            {resolvedPath && (
+              <span className="tw-break-all tw-font-mono tw-text-xs tw-text-muted">
+                {resolvedPath}
+              </span>
+            )}
+          </div>
         </div>
         <Button
           size="default"
