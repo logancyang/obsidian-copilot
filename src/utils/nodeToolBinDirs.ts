@@ -98,12 +98,16 @@ function unixCandidates(input: NodeToolBinDirsInput): Array<string | null> {
   // asdf — shims wrap every managed tool; bin is the asdf CLI itself. The data
   // dir (where shims live) is NOT the install dir: Homebrew-style setups point
   // ASDF_DIR at the install path while shims stay under the default ~/.asdf
-  // data dir. So prefer ASDF_DATA_DIR, then an existing ~/.asdf, and only fall
-  // back to ASDF_DIR — otherwise a present ~/.asdf/shims would be missed.
+  // data dir. So prefer ASDF_DATA_DIR, then a default ~/.asdf with real shims,
+  // and only fall back to ASDF_DIR — otherwise a present ~/.asdf/shims would be
+  // missed. Probe the shims dir itself, not the data dir: an empty ~/.asdf with
+  // shims under ASDF_DIR must not shadow the real install.
   const defaultAsdfData = p.join(homeDir, ".asdf");
   const asdfRoot =
     env.ASDF_DATA_DIR ??
-    (dirExists(fs, defaultAsdfData) ? defaultAsdfData : (env.ASDF_DIR ?? defaultAsdfData));
+    (dirExists(fs, p.join(defaultAsdfData, "shims"))
+      ? defaultAsdfData
+      : (env.ASDF_DIR ?? defaultAsdfData));
   dirs.push(p.join(asdfRoot, "shims"));
   dirs.push(p.join(asdfRoot, "bin"));
 
