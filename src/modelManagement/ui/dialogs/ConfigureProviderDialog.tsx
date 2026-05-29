@@ -380,11 +380,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
               {testing ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Test"}
             </Button>
             {state.mode === "edit" && hasSavedKey && (
-              <Button
-                variant="secondary"
-                onClick={handleClearKey}
-                data-testid="api-key-clear"
-              >
+              <Button variant="destructive" onClick={handleClearKey} data-testid="api-key-clear">
                 Clear
               </Button>
             )}
