@@ -34,10 +34,10 @@ import { parseReasoningBlock } from "@/LLMProviders/chainRunner/utils/AgentReaso
 import { processInlineCitations } from "@/LLMProviders/chainRunner/utils/citationUtils";
 import { logError } from "@/logger";
 import { ChatMessage } from "@/types/message";
-import { cleanMessageForCopy, extractYoutubeVideoId, insertIntoEditor } from "@/utils";
+import { extractYoutubeVideoId, insertAtCursor } from "@/utils";
 import { preprocessAIResponse } from "@/utils/markdownPreprocess";
 import { renderMarkdown } from "@/utils/renderMarkdown";
-import { App, Component, MarkdownView, TFile } from "obsidian";
+import { App, Component, TFile } from "obsidian";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSettingsValue } from "@/settings/model";
 import {
@@ -302,7 +302,7 @@ interface ChatSingleMessageProps {
   isStreaming: boolean;
   onRegenerate?: () => void;
   onEdit?: (newMessage: string) => void;
-  onDelete: () => void;
+  onDelete?: () => void;
 }
 
 const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
@@ -313,7 +313,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const [isCopied, setIsCopied] = useState<boolean>(false);
   const [isEditing, setIsEditing] = useState<boolean>(false);
   const parsedReasoningBlock = useMemo(
     () => parseReasoningBlock(message.message),
@@ -363,24 +362,6 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
   // Check if current model has reasoning capability
   const settings = useSettingsValue();
-
-  const copyToClipboard = () => {
-    if (!navigator.clipboard || !navigator.clipboard.writeText) {
-      return;
-    }
-
-    const cleanedContent = cleanMessageForCopy(message.message);
-    navigator.clipboard
-      .writeText(cleanedContent)
-      .then(() => {
-        setIsCopied(true);
-
-        window.setTimeout(() => {
-          setIsCopied(false);
-        }, 2000);
-      })
-      .catch((err) => logError("Clipboard writeText failed", err));
-  };
 
   const preprocess = useCallback(
     (content: string): string => {
@@ -913,15 +894,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
   };
 
   const handleInsertIntoEditor = () => {
-    let leaf = app.workspace.getMostRecentLeaf();
-    if (!leaf || !(leaf.view instanceof MarkdownView)) {
-      leaf = app.workspace.getLeaf(false);
-      if (!leaf || !(leaf.view instanceof MarkdownView)) return;
-    }
-
-    const editor = leaf.view.editor;
-    const hasSelection = editor.getSelection().length > 0;
-    void insertIntoEditor(message.message, hasSelection);
+    void insertAtCursor(app, message.message);
   };
 
   const renderMessageContent = () => {
@@ -1029,11 +1002,9 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
               <div className="tw-text-xs tw-text-faint">{message.timestamp?.display}</div>
               <ChatButtons
                 message={message}
-                onCopy={copyToClipboard}
-                isCopied={isCopied}
                 onInsertIntoEditor={handleInsertIntoEditor}
                 onRegenerate={onRegenerate}
-                onEdit={handleEdit}
+                onEdit={onEdit ? handleEdit : undefined}
                 onDelete={onDelete}
                 onShowSources={handleShowSources}
                 hasSources={message.sources && message.sources.length > 0 ? true : false}

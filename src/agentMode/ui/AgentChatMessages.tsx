@@ -14,7 +14,6 @@ import React, { memo, useMemo } from "react";
 interface AgentChatMessagesProps {
   messages: AgentChatMessage[];
   app: App;
-  onDelete: (messageId: string) => void;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
   chatBackend: AgentChatBackend;
@@ -45,7 +44,6 @@ const AgentChatMessages = memo(
   ({
     messages,
     app,
-    onDelete,
     currentPlan,
     pendingToolPermissions,
     chatBackend,
@@ -157,12 +155,11 @@ const AgentChatMessages = memo(
                     />
                   </div>
                 ) : (
-                  <ChatSingleMessage
-                    message={adaptedMessage}
-                    app={app}
-                    isStreaming={false}
-                    onDelete={() => onDelete(message.id)}
-                  />
+                  // Agent Mode has no per-message regenerate / edit / delete flow
+                  // yet (ACP owns conversation history server-side), so no
+                  // lifecycle handlers are wired — ChatButtons renders only the
+                  // copy / insert actions it can honor.
+                  <ChatSingleMessage message={adaptedMessage} app={app} isStreaming={false} />
                 )}
               </div>
             );

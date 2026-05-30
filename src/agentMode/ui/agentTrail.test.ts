@@ -1,4 +1,9 @@
-import { buildAgentTrail, splitTrailingText, type RenderNode } from "@/agentMode/ui/agentTrail";
+import {
+  buildAgentTrail,
+  finalAnswerText,
+  splitTrailingText,
+  type RenderNode,
+} from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart } from "@/agentMode/session/types";
 
 function tool(
@@ -338,5 +343,33 @@ describe("splitTrailingText", () => {
     const { research, final } = splitTrailingText(parts);
     expect(research).toHaveLength(2);
     expect(final).toEqual([]);
+  });
+});
+
+describe("finalAnswerText", () => {
+  it("returns only the trailing run of text parts, ignoring the research half", () => {
+    const parts: AgentMessagePart[] = [
+      thought("let me search the vault"),
+      tool("a", { vendorToolName: "Grep" }),
+      text("Here is an early note that should NOT be copied."),
+      tool("b", { vendorToolName: "Read" }),
+      text("This is the final answer."),
+    ];
+    expect(finalAnswerText(parts)).toBe("This is the final answer.");
+  });
+
+  it("sanitizes the trailing text the same way legacy chat copy does", () => {
+    const parts: AgentMessagePart[] = [
+      tool("a"),
+      text("<think>internal</think>The answer.\n\n\n\nMore.   "),
+    ];
+    // removeThinkTags strips the think block, 3+ newlines collapse to 2, and
+    // trailing whitespace is trimmed — matching `cleanMessageForCopy`.
+    expect(finalAnswerText(parts)).toBe("The answer.\n\nMore.");
+  });
+
+  it("returns an empty string when the turn produced no trailing prose", () => {
+    expect(finalAnswerText([thought("..."), tool("a")])).toBe("");
+    expect(finalAnswerText([])).toBe("");
   });
 });

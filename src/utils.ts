@@ -21,7 +21,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
-import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
+import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 export { err2String } from "@/errorFormat";
@@ -876,6 +876,21 @@ export function cleanMessageForCopy(message: string): string {
   cleanedMessage = cleanedMessage.trim();
 
   return cleanedMessage;
+}
+
+/**
+ * Inserts text at the cursor of the most recent markdown editor, replacing the
+ * current selection when there is one. Resolves the target leaf via the passed
+ * `app` (no global `app`) and delegates the actual write to `insertIntoEditor`.
+ */
+export async function insertAtCursor(app: App, text: string) {
+  let leaf = app.workspace.getMostRecentLeaf();
+  if (!leaf || !(leaf.view instanceof MarkdownView)) {
+    leaf = app.workspace.getLeaf(false);
+    if (!leaf || !(leaf.view instanceof MarkdownView)) return;
+  }
+  const hasSelection = leaf.view.editor.getSelection().length > 0;
+  await insertIntoEditor(text, hasSelection);
 }
 
 /**

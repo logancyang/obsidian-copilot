@@ -1,7 +1,13 @@
 import React, { useState } from "react";
-import { buildAgentTrail, splitTrailingText, type RenderNode } from "@/agentMode/ui/agentTrail";
+import {
+  buildAgentTrail,
+  finalAnswerText,
+  splitTrailingText,
+  type RenderNode,
+} from "@/agentMode/ui/agentTrail";
 import type { AgentMessagePart, StopReason } from "@/agentMode/session/types";
 import { ActionCard } from "@/agentMode/ui/ActionCard";
+import { AgentMessageActions } from "@/agentMode/ui/AgentMessageActions";
 import { AggregateCard } from "@/agentMode/ui/AggregateCard";
 import { SubAgentCard } from "@/agentMode/ui/SubAgentCard";
 import { ReasoningBlock } from "@/agentMode/ui/ReasoningBlock";
@@ -52,6 +58,15 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
     typeof turnDurationMs === "number" &&
     parts.length > 0;
 
+  // Copy / Insert act on the turn's final answer only. Gate them off while the
+  // message is still streaming and on cancelled turns (treated as having no
+  // user-visible answer), plus whenever there is no trailing prose to act on.
+  const answer = finalAnswerText(parts);
+  const actions =
+    !isStreaming && turnStopReason !== "cancelled" && answer.length > 0 ? (
+      <AgentMessageActions text={answer} app={app} />
+    ) : null;
+
   if (canCollapse) {
     const { research, final } = splitTrailingText(parts);
     // Both halves must be non-empty for a collapse to be meaningful: research
@@ -61,24 +76,28 @@ export const AgentTrail: React.FC<AgentTrailProps> = ({
     const finalHasContent = final.some((p) => p.text.trim().length > 0);
     if (researchHasContent && finalHasContent) {
       return (
-        <div className="tw-flex tw-flex-col tw-gap-1">
+        <div className="tw-group tw-flex tw-flex-col tw-gap-1">
           <WorkedForBlock research={research} durationMs={turnDurationMs} app={app} />
           {final.map((p, i) => (
             // eslint-disable-next-line @eslint-react/no-array-index-key -- text parts are append-only and may contain duplicate text
             <AgentMarkdownText key={`final-${i}`} text={p.text} app={app} />
           ))}
+          {actions}
         </div>
       );
     }
   }
 
   return (
-    <LinearTrail
-      parts={parts}
-      isStreaming={isStreaming}
-      showThinkingTail={showThinkingTail}
-      app={app}
-    />
+    <div className="tw-group tw-flex tw-flex-col tw-gap-1">
+      <LinearTrail
+        parts={parts}
+        isStreaming={isStreaming}
+        showThinkingTail={showThinkingTail}
+        app={app}
+      />
+      {actions}
+    </div>
   );
 };
 
