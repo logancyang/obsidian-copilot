@@ -168,12 +168,12 @@ function synthesizePermissionPrompt(
       // Reuse the SDK's `tool_use_id` so prompt and `tool_call` notification
       // share an id — the trail UI and plan-card resolver pair them by id.
       toolCallId: ctx.toolUseID,
-      kind: deriveToolKind(name),
+      kind: deriveToolKind(name, mcpServer),
       status: "pending",
       title: deriveToolTitle(name, input, typeof ctx.title === "string" ? ctx.title : undefined),
       rawInput: input,
       mcpServer,
-      ...vendorMetaFields(name),
+      ...vendorMetaFields(name, undefined, mcpServer),
     },
     options: STANDARD_OPTIONS,
   };

@@ -163,6 +163,16 @@ describe("lookupToolSummary", () => {
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read notes/x.md");
   });
 
+  it("keeps the 'server ·' prefix on the compacted aggregate line", () => {
+    // Two consecutive MCP reads fold into an AggregateCard, which renders
+    // `summary.aggregate(parts).line` rather than `collapsedLine`. The server
+    // prefix must survive compaction so the aggregate doesn't masquerade as a
+    // native "Read 2 notes".
+    const r1 = tool({ vendorToolName: "Read", mcpServer: "srv" });
+    const r2 = tool({ vendorToolName: "Read", mcpServer: "srv" });
+    expect(lookupToolSummary(r1).aggregate([r1, r2]).line).toBe("srv · Read 2 notes");
+  });
+
   it("shows an ACP backend's friendly multi-word title verbatim", () => {
     const t = tool({ title: "Querying the database" });
     expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Querying the database");

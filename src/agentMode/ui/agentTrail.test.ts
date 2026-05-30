@@ -67,6 +67,37 @@ describe("buildAgentTrail", () => {
     }
   });
 
+  it("compacts same-server MCP calls under a server-namespaced toolKey", () => {
+    const parts = [
+      tool("m0", { vendorToolName: "Read", mcpServer: "srv" }),
+      tool("m1", { vendorToolName: "Read", mcpServer: "srv" }),
+    ];
+    const tree = buildAgentTrail(parts);
+    expect(tree).toHaveLength(1);
+    expect(tree[0].type).toBe("aggregate");
+    if (tree[0].type === "aggregate") {
+      expect(tree[0].toolKey).toBe("mcp:srv:Read");
+    }
+  });
+
+  it("does not fold an MCP call into a same-bare-named native tool's aggregate", () => {
+    const parts = [
+      tool("n", { vendorToolName: "Read" }),
+      tool("m", { vendorToolName: "Read", mcpServer: "srv" }),
+    ];
+    const tree = buildAgentTrail(parts);
+    expect(tree.map((n) => n.type)).toEqual(["action", "action"]);
+  });
+
+  it("does not merge MCP calls across servers", () => {
+    const parts = [
+      tool("a", { vendorToolName: "Read", mcpServer: "srvA" }),
+      tool("b", { vendorToolName: "Read", mcpServer: "srvB" }),
+    ];
+    const tree = buildAgentTrail(parts);
+    expect(tree.map((n) => n.type)).toEqual(["action", "action"]);
+  });
+
   it("compacts five consecutive Edits inside a sub-agent into one aggregate", () => {
     const edits = Array.from({ length: 5 }, (_, i) => tool(`e${i}`, { vendorToolName: "Edit" }));
     const tree = buildAgentTrail(withSubagent("task1", edits));

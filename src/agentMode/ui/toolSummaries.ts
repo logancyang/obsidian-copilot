@@ -49,12 +49,19 @@ export function lookupToolSummary(part: ToolCallPart): ToolSummary {
   if (!part.mcpServer) return base;
   // An MCP tool whose bare name collides with a native tool (e.g.
   // `mcp__srv__read` → bare `read` → the Read/kind summary) would otherwise
-  // masquerade as that native tool. Prepend the server to the collapsed line
-  // for every MCP call so it always reads as `server · …`.
+  // masquerade as that native tool. Prepend the server to both the collapsed
+  // line and the compacted aggregate line so it always reads as `server · …`,
+  // even when two consecutive MCP calls fold into an `AggregateCard`.
+  // `toolKeyFor` namespaces MCP calls per-server, so every part in an
+  // aggregate shares this server — prefixing the aggregate line is safe.
   const server = part.mcpServer;
   return {
     ...base,
     collapsedLine: (p, ctx) => `${server} · ${base.collapsedLine(p, ctx)}`,
+    aggregate: (parts) => {
+      const agg = base.aggregate(parts);
+      return { ...agg, line: `${server} · ${agg.line}` };
+    },
   };
 }
 

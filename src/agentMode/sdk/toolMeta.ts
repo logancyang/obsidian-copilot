@@ -8,21 +8,32 @@ export interface VendorMetaFields {
 
 /**
  * Caller passes the normalized tool name (any `mcp__server__` prefix
- * already stripped). `isPlanProposal` is omitted unless true so the flag
- * doesn't leak onto unrelated tool calls.
+ * already stripped) plus its `mcpServer` when the name came from an MCP tool.
+ * `isPlanProposal` is omitted unless true so the flag doesn't leak onto
+ * unrelated tool calls. `ExitPlanMode` is a *native* Claude tool; an MCP tool
+ * sharing the bare name (`mcp__srv__ExitPlanMode`) must not be routed through
+ * the plan-approval flow, so the flag is gated on `mcpServer` being absent.
  */
 export function vendorMetaFields(
   normalizedName: string,
-  parentToolCallId?: string
+  parentToolCallId?: string,
+  mcpServer?: string
 ): VendorMetaFields {
   const fields: VendorMetaFields = { vendorToolName: normalizedName };
   if (parentToolCallId) fields.parentToolCallId = parentToolCallId;
-  if (normalizedName === "ExitPlanMode") fields.isPlanProposal = true;
+  if (!mcpServer && normalizedName === "ExitPlanMode") fields.isPlanProposal = true;
   return fields;
 }
 
-export function deriveToolKind(toolName: string): AgentToolKind {
-  if (toolName === "ExitPlanMode" || toolName === "EnterPlanMode") return "switch_mode";
+/**
+ * `mcpServer` is passed when the name came from an MCP tool. `switch_mode` is
+ * reserved for the native plan tools; an MCP tool sharing the bare name must
+ * not map to it, since `switch_mode` feeds plan-card publishing.
+ */
+export function deriveToolKind(toolName: string, mcpServer?: string): AgentToolKind {
+  if (!mcpServer && (toolName === "ExitPlanMode" || toolName === "EnterPlanMode")) {
+    return "switch_mode";
+  }
   const lower = toolName.toLowerCase();
   if (lower === "read" || lower === "glob" || lower === "grep" || lower === "ls") {
     return "read";

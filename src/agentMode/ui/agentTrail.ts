@@ -60,7 +60,12 @@ export function splitTrailingText(parts: AgentMessagePart[]): {
  * fallback.
  */
 export function toolKeyFor(part: ToolCallPart): string {
-  return part.vendorToolName ?? part.toolKind ?? "other";
+  const base = part.vendorToolName ?? part.toolKind ?? "other";
+  // MCP calls key per-server so they neither fold into a same-bare-named
+  // native tool's aggregate nor merge across servers. That keeps the
+  // `server ·` prefix on the aggregate line (see `lookupToolSummary`) accurate
+  // for the whole group.
+  return part.mcpServer ? `mcp:${part.mcpServer}:${base}` : base;
 }
 
 /**

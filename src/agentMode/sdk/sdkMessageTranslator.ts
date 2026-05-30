@@ -26,6 +26,7 @@ export interface TranslatorState {
     {
       id: string;
       name: string;
+      mcpServer?: string;
       inputJsonAcc: string;
       lastParsedInput: unknown;
       emittedToolCall: boolean;
@@ -110,10 +111,11 @@ function translateStreamEvent(
     case "content_block_start": {
       const block = sdkEvent.content_block;
       if (block.type === "tool_use") {
-        const { tool: name } = resolveToolName(block.name);
+        const { tool: name, mcpServer } = resolveToolName(block.name);
         state.toolUseBlocks.set(sdkEvent.index, {
           id: block.id,
           name,
+          mcpServer,
           inputJsonAcc: "",
           lastParsedInput: block.input ?? {},
           emittedToolCall: true,
@@ -125,7 +127,9 @@ function translateStreamEvent(
             makeToolCallUpdate(block.id, block.name, block.input ?? {}, parentToolUseId)
           ),
         ];
-        if (name === "EnterPlanMode") {
+        // Native plan tool only — an MCP tool sharing the bare name must not
+        // flip the UI into plan mode.
+        if (!mcpServer && name === "EnterPlanMode") {
           out.push(
             event(sessionId, {
               sessionUpdate: "current_mode_update",
@@ -173,7 +177,7 @@ function translateStreamEvent(
             sessionUpdate: "tool_call_update",
             toolCallId: block.id,
             rawInput: parsed.value,
-            ...vendorMetaFields(block.name, parentToolUseId),
+            ...vendorMetaFields(block.name, parentToolUseId, block.mcpServer),
           }),
         ];
       }
@@ -191,7 +195,7 @@ function translateStreamEvent(
           toolCallId: block.id,
           rawInput: finalInput,
           status: "in_progress" as AgentToolStatus,
-          ...vendorMetaFields(block.name, parentToolUseId),
+          ...vendorMetaFields(block.name, parentToolUseId, block.mcpServer),
         }),
       ];
     }
@@ -262,11 +266,11 @@ function makeToolCallUpdate(
     sessionUpdate: "tool_call",
     toolCallId,
     title: deriveToolTitle(name, rawInput),
-    kind: deriveToolKind(name),
+    kind: deriveToolKind(name, mcpServer),
     status: "in_progress" as AgentToolStatus,
     rawInput,
     mcpServer,
-    ...vendorMetaFields(name, parentToolUseId),
+    ...vendorMetaFields(name, parentToolUseId, mcpServer),
   };
 }
 

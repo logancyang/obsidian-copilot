@@ -390,6 +390,54 @@ describe("translateSdkMessage", () => {
     });
   });
 
+  it("does not treat an MCP tool whose bare name is ExitPlanMode as a plan proposal", () => {
+    const state = createTranslatorState();
+    const out = translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "tu-mcp-exit",
+          name: "mcp__srv__ExitPlanMode",
+          input: { plan: "not Copilot's plan flow" },
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    expect(out).toHaveLength(1);
+    expect(out[0].update).toMatchObject({
+      sessionUpdate: "tool_call",
+      toolCallId: "tu-mcp-exit",
+      vendorToolName: "ExitPlanMode",
+      mcpServer: "srv",
+    });
+    expect(out[0].update).not.toMatchObject({ isPlanProposal: true });
+    expect(out[0].update).not.toMatchObject({ kind: "switch_mode" });
+  });
+
+  it("does not flip into plan mode for an MCP tool whose bare name is EnterPlanMode", () => {
+    const state = createTranslatorState();
+    const out = translateSdkMessage(
+      streamEvent({
+        type: "content_block_start",
+        index: 0,
+        content_block: {
+          type: "tool_use",
+          id: "tu-mcp-enter",
+          name: "mcp__srv__EnterPlanMode",
+          input: {},
+        },
+      }),
+      SESSION_ID,
+      state
+    );
+    // Only the tool_call — no current_mode_update.
+    expect(out).toHaveLength(1);
+    expect(out[0].update).toMatchObject({ sessionUpdate: "tool_call", mcpServer: "srv" });
+  });
+
   it("threads parent_tool_use_id into parentToolCallId on streamed tool_use", () => {
     const state = createTranslatorState();
     const out = translateSdkMessage(

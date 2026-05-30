@@ -275,5 +275,17 @@ describe("PermissionBridge.canUseTool", () => {
       await bridge.canUseTool("Bash", { command: "ls" }, ctx);
       expect(captured!.toolCall.isPlanProposal).toBeUndefined();
     });
+
+    it("keeps an MCP tool whose bare name is ExitPlanMode out of the plan flow", async () => {
+      let captured: PermissionPrompt | null = null;
+      const bridge = makeBridge(async (req) => {
+        captured = req;
+        return { outcome: { outcome: "selected", optionId: "allow_once" } };
+      });
+      await bridge.canUseTool("mcp__srv__ExitPlanMode", { plan: "unrelated" }, ctx);
+      expect(captured!.toolCall.mcpServer).toBe("srv");
+      expect(captured!.toolCall.isPlanProposal).toBeUndefined();
+      expect(captured!.toolCall.kind).not.toBe("switch_mode");
+    });
   });
 });
