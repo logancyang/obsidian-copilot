@@ -392,19 +392,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     clearSelectedTextContexts();
   }, [manager]);
 
-  const handleDelete = useCallback(
-    async (messageId: string) => {
-      try {
-        const ok = await backend.deleteMessage(messageId);
-        if (!ok) new Notice("Failed to delete message. Please try again.");
-      } catch (error) {
-        logError("Error deleting agent message:", error);
-        new Notice("Failed to delete message. Please try again.");
-      }
-    },
-    [backend]
-  );
-
   const descriptor = useSessionBackendDescriptor(manager);
   const handleInstall = useCallback(() => {
     descriptor.openInstallUI(plugin);
@@ -510,7 +497,6 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
             <AgentChatMessages
               messages={messages}
               app={app}
-              onDelete={handleDelete}
               currentPlan={currentPlan}
               pendingToolPermissions={pendingToolPermissions}
               pendingAskUserQuestions={pendingAskUserQuestions}

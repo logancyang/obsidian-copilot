@@ -8,6 +8,7 @@ import {
   getNotesFromPath,
   getNotesFromTags,
   getUtf8ByteLength,
+  insertAtCursor,
   isFolderMatch,
   shouldUseGitHubCopilotResponsesApi,
   processVariableNameForNotePath,
@@ -68,6 +69,8 @@ jest.mock("obsidian", () => {
   return {
     TFile: MockTFile,
     Vault: MockVault,
+    MarkdownView: class MockMarkdownView {},
+    Notice: class MockNotice {},
   };
 });
 
@@ -977,5 +980,72 @@ describe("getModelInfo", () => {
     expect(getModelInfo("claude-opus-4-1-20250805").usesAdaptiveThinking).toBe(false);
     // Dated 4.7 still matches because the minor is delimited by "-".
     expect(getModelInfo("claude-opus-4-7-20260115").usesAdaptiveThinking).toBe(true);
+  });
+});
+
+describe("insertAtCursor", () => {
+  const from = { line: 0, ch: 0 };
+  const to = { line: 0, ch: 5 };
+
+  // Builds an app whose most-recent leaf is a markdown view with the given
+  // selection. `editor.cm` is undefined so `insertIntoEditor` takes its Editor
+  // API fallback path, letting us assert on `replaceRange`.
+  function makeApp(selection: string) {
+    const editor = {
+      getSelection: jest.fn(() => selection),
+      getCursor: jest.fn((which: string) => (which === "from" ? from : to)),
+      replaceRange: jest.fn(),
+      setSelection: jest.fn(),
+      focus: jest.fn(),
+      cm: undefined,
+    };
+    const view = new (Obsidian.MarkdownView as unknown as new () => { editor: unknown })();
+    view.editor = editor;
+    const leaf = { view };
+    const app = {
+      workspace: {
+        getMostRecentLeaf: jest.fn(() => leaf),
+        getLeaf: jest.fn(() => leaf),
+      },
+    };
+    return { app, editor };
+  }
+
+  it("inserts at the cursor when there is no selection", async () => {
+    const { app, editor } = makeApp("");
+
+    await insertAtCursor(app as never, "hello");
+
+    expect(editor.replaceRange).toHaveBeenCalledWith("hello", to, to);
+  });
+
+  it("replaces from the selection start when text is selected", async () => {
+    const { app, editor } = makeApp("selected");
+
+    await insertAtCursor(app as never, "hello");
+
+    expect(editor.replaceRange).toHaveBeenCalledWith("hello", from, to);
+  });
+
+  it("threads the passed app into the insertion (no global app)", async () => {
+    const { app, editor } = makeApp("");
+
+    await insertAtCursor(app as never, "hello");
+
+    // The write resolves its leaf through the passed app, not a global one.
+    expect(app.workspace.getMostRecentLeaf).toHaveBeenCalled();
+    expect(editor.replaceRange).toHaveBeenCalled();
+  });
+
+  it("does nothing when there is no markdown view to insert into", async () => {
+    const leaf = { view: {} };
+    const app = {
+      workspace: {
+        getMostRecentLeaf: jest.fn(() => leaf),
+        getLeaf: jest.fn(() => leaf),
+      },
+    };
+
+    await expect(insertAtCursor(app as never, "hello")).resolves.toBeUndefined();
   });
 });

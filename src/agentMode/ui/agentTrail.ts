@@ -1,4 +1,5 @@
 import type { AgentMessagePart } from "@/agentMode/session/types";
+import { cleanMessageForCopy } from "@/utils";
 
 export type ToolCallPart = Extract<AgentMessagePart, { kind: "tool_call" }>;
 export type ThoughtPart = Extract<AgentMessagePart, { kind: "thought" }>;
@@ -51,6 +52,20 @@ export function splitTrailingText(parts: AgentMessagePart[]): {
     break;
   }
   return { research: parts.slice(0, boundary), final };
+}
+
+/**
+ * The turn's user-visible final answer, ready for the clipboard or the editor:
+ * the trailing run of `text` parts (per `splitTrailingText`) joined and run
+ * through the same sanitization legacy chat applies (`cleanMessageForCopy`),
+ * so tool-call cards, reasoning, plans, and chat-only artifacts never leak in.
+ * Returns `""` when the turn produced no trailing prose (a tool-only turn, or
+ * one cancelled mid-tool) — the trail UI uses that to gate the Copy / Insert
+ * affordances off so they never sit under an empty bubble.
+ */
+export function finalAnswerText(parts: AgentMessagePart[]): string {
+  const { final } = splitTrailingText(parts);
+  return cleanMessageForCopy(final.map((p) => p.text).join("\n\n"));
 }
 
 /**

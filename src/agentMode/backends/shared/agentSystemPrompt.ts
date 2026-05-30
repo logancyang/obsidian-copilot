@@ -62,7 +62,7 @@ export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant th
 - When showing note titles, use the \`[[title]]\` wikilink format and never wrap them in backticks or quotes.
 - For Obsidian-internal image links, use the \`![[link]]\` format and never wrap them in backticks.
 - For web image links, use the \`![alt](url)\` format and never wrap them in backticks.
-- For tables, use GitHub-flavored markdown. For table headings, immediately add \` |\` after the table heading.`;
+- For tables, use valid GitHub-flavored markdown: a header row, then a delimiter row of dashes (e.g. \`| --- | --- |\`), then one row per record — every row wrapped in leading and trailing \`|\`. Put a blank line before the table. If you label the table, put the label on its own line above that blank line; never append a trailing \`|\` to a caption, heading, or any line that is not itself a table row.`;
 
 /**
  * Compose the full system prompt every Agent Mode backend forwards. See the
