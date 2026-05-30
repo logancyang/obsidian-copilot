@@ -97,6 +97,7 @@ import {
   Platform,
   Plugin,
   TFile,
+  ViewCreator,
   WorkspaceLeaf,
 } from "obsidian";
 import { ChatHistoryItem } from "@/components/chat-components/ChatHistoryPopover";
@@ -290,14 +291,17 @@ export default class CopilotPlugin extends Plugin {
       this.registerEvent(layoutRef);
     }
 
-    this.registerView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
-    this.registerView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
+    this.safeRegisterView(CHAT_VIEWTYPE, (leaf: WorkspaceLeaf) => new CopilotView(leaf, this));
+    this.safeRegisterView(APPLY_VIEW_TYPE, (leaf: WorkspaceLeaf) => new ApplyView(leaf));
     if (!Platform.isMobile) {
-      this.registerView(
+      this.safeRegisterView(
         CHAT_AGENT_VIEWTYPE,
         (leaf: WorkspaceLeaf) => new CopilotAgentView(leaf, this)
       );
-      this.registerView(PLAN_PREVIEW_VIEW_TYPE, (leaf: WorkspaceLeaf) => new PlanPreviewView(leaf));
+      this.safeRegisterView(
+        PLAN_PREVIEW_VIEW_TYPE,
+        (leaf: WorkspaceLeaf) => new PlanPreviewView(leaf)
+      );
     }
 
     this.initActiveLeafChangeHandler();
@@ -375,6 +379,23 @@ export default class CopilotPlugin extends Plugin {
     this.initWebSelectionWatcher();
   }
 
+  /**
+   * Register a view, tolerating a type that is already registered. Obsidian
+   * throws "Attempting to register an existing view type" when a prior plugin
+   * lifecycle left a stale registration behind (e.g. an `onunload` that threw
+   * before its teardown completed). Swallowing here keeps one stale view type
+   * from aborting the rest of `onload` and leaving a half-initialized plugin
+   * that then crashes on `onunload`. The null-safe `onunload` below is the
+   * primary fix that prevents the stale state; this is defense-in-depth.
+   */
+  private safeRegisterView(type: string, viewCreator: ViewCreator): void {
+    try {
+      this.registerView(type, viewCreator);
+    } catch (error) {
+      logWarn(`Copilot: view type "${type}" already registered; skipping re-registration.`, error);
+    }
+  }
+
   async onunload() {
     // Best-effort flush of pending keychain/data.json writes.
     // Reason: onunload() is void in Obsidian's type system, but awaiting here
@@ -402,9 +423,13 @@ export default class CopilotPlugin extends Plugin {
     const vaultDataManager = VaultDataManager.getInstance();
     vaultDataManager.cleanup();
 
-    this.customCommandRegister.cleanup();
-    this.systemPromptRegister.cleanup();
-    this.projectRegister.cleanup();
+    // Optional-chained because `onload` assigns these late: if it threw before
+    // reaching their construction, the fields are undefined at unload time and
+    // an unguarded `.cleanup()` would throw `Cannot read properties of
+    // undefined`, aborting the rest of teardown.
+    this.customCommandRegister?.cleanup();
+    this.systemPromptRegister?.cleanup();
+    this.projectRegister?.cleanup();
     this.settingsUnsubscriber?.();
 
     // Tear down skills vault watchers + debounce timers.
