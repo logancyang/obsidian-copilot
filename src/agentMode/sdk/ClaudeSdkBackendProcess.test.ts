@@ -53,6 +53,7 @@ jest.mock("./effortOption", () => ({
 
 import { ClaudeSdkBackendProcess, promptInputToAnthropicContent } from "./ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog } from "./effortOption";
+import { AuthRequiredError } from "@/agentMode/session/errors";
 
 beforeEach(() => {
   (getCachedSdkCatalog as jest.Mock).mockReturnValue(FAKE_CATALOG);
@@ -506,5 +507,90 @@ describe("ClaudeSdkBackendProcess.newSession dynamic catalog", () => {
     expect(promptCalls).toHaveLength(1);
     const call = promptCalls[0][0] as { options: { effort?: string } };
     expect(call.options.effort).toBe("high");
+  });
+});
+
+function errorResultMessage(errors: string[]): SDKMessage {
+  return {
+    type: "result",
+    subtype: "error_during_execution",
+    duration_ms: 1,
+    duration_api_ms: 1,
+    is_error: true,
+    num_turns: 1,
+    stop_reason: null,
+    total_cost_usd: 0,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    usage: {} as any,
+    modelUsage: {},
+    permission_denials: [],
+    errors,
+    uuid: "uuid-e" as `${string}-${string}-${string}-${string}-${string}`,
+    session_id: "irrelevant",
+  };
+}
+
+describe("ClaudeSdkBackendProcess.prompt auth gate", () => {
+  beforeEach(() => {
+    queryMock.mockReset();
+    createSdkMcpServerMock.mockClear();
+  });
+
+  function makeProc(checkAuth: jest.Mock) {
+    return new ClaudeSdkBackendProcess({
+      pathToClaudeCodeExecutable: "/usr/local/bin/claude",
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      app: { vault: {} } as any,
+      clientVersion: "1.2.3",
+      descriptor: fakeDescriptor(),
+      checkAuth,
+    });
+  }
+
+  it("rejects with AuthRequiredError and never spawns query when not signed in", async () => {
+    queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+    const checkAuth = jest.fn().mockResolvedValue(false);
+    const proc = makeProc(checkAuth);
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+
+    await expect(
+      proc.prompt({ sessionId, prompt: [{ type: "text", text: "hi" }] })
+    ).rejects.toBeInstanceOf(AuthRequiredError);
+    expect(getPromptQueryCalls()).toHaveLength(0);
+  });
+
+  it("checks auth only once across turns once signed in (cached)", async () => {
+    queryMock.mockImplementation(() => makeQuery([resultMessage()]));
+    const checkAuth = jest.fn().mockResolvedValue(true);
+    const proc = makeProc(checkAuth);
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+
+    expect(checkAuth).toHaveBeenCalledTimes(1);
+    expect(getPromptQueryCalls()).toHaveLength(2);
+  });
+
+  it("re-checks auth on the next turn when a turn ends non-success with no errors", async () => {
+    const checkAuth = jest.fn().mockResolvedValue(true);
+    const proc = makeProc(checkAuth);
+
+    const { sessionId } = await proc.newSession({ cwd: "/vault", mcpServers: [] });
+    proc.registerSessionHandler(sessionId, () => {});
+
+    // First turn ends with a non-success result carrying no error detail
+    // (the "saved login expired" shape) → cache is invalidated.
+    queryMock.mockImplementationOnce(() => makeQuery([errorResultMessage([])]));
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "1" }] });
+    expect(checkAuth).toHaveBeenCalledTimes(1);
+
+    queryMock.mockImplementationOnce(() => makeQuery([resultMessage()]));
+    await proc.prompt({ sessionId, prompt: [{ type: "text", text: "2" }] });
+    expect(checkAuth).toHaveBeenCalledTimes(2);
   });
 });

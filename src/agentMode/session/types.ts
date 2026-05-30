@@ -1,7 +1,13 @@
 import type React from "react";
 import type { FormattedDateTime, MessageContext } from "@/types/message";
 
-export type { BackendDescriptor, InstallState } from "./descriptor";
+export type {
+  BackendAuth,
+  BackendAuthStatus,
+  BackendDescriptor,
+  BackendSignInHandlers,
+  InstallState,
+} from "./descriptor";
 export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./plan";
 
 /** Stable identifier for a registered backend. New backends extend the registry; the type stays open. */

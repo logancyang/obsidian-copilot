@@ -50,7 +50,7 @@ import type {
   SessionUpdateHandler,
   StopReason,
 } from "@/agentMode/session/types";
-import { MethodUnsupportedError } from "@/agentMode/session/errors";
+import { AuthRequiredError, MethodUnsupportedError } from "@/agentMode/session/errors";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
 import { PermissionBridge, type AskUserQuestionHandler } from "./permissionBridge";
 import {
@@ -133,6 +133,14 @@ export interface ClaudeSdkBackendProcessOptions {
    * CLI. Read per `prompt()` so settings edits apply on the next turn.
    */
   getEnvOverrides?: () => Record<string, string> | undefined;
+  /**
+   * Resolve whether the `claude` CLI is signed in (OAuth login or env-based
+   * credentials). Consulted once before the first prompt; an unauthenticated
+   * result makes `prompt()` reject with `AuthRequiredError` instead of
+   * silently resolving with an empty turn. The result is cached until a turn
+   * ends without output, which forces a re-check (covers mid-session expiry).
+   */
+  checkAuth?: () => Promise<boolean>;
 }
 
 /**
@@ -165,6 +173,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
    */
   private cachedModels: ModelInfo[] | null = null;
   private cachedModelsProbe: Promise<ModelInfo[]> | null = null;
+  /**
+   * Cleared whenever a turn ends without output so the next prompt re-checks
+   * sign-in state; set true once `checkAuth` confirms the CLI is signed in.
+   */
+  private authConfirmed = false;
 
   constructor(private readonly opts: ClaudeSdkBackendProcessOptions) {
     this.bridge = new PermissionBridge({
@@ -247,6 +260,21 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
     const session = this.sessions.get(params.sessionId);
     if (!session) {
       throw new Error(`Unknown session ${params.sessionId}`);
+    }
+
+    // Deterministic sign-in gate. Without it, an unauthenticated CLI yields a
+    // non-success result with an empty `errors` array, which maps to
+    // `stopReason: "cancelled"` and slips past `runTurn`'s empty-turn net —
+    // leaving an empty assistant bubble and no error. Checked once per backend
+    // lifetime (cached) so signed-in turns pay nothing.
+    if (this.opts.checkAuth && !this.authConfirmed) {
+      if (await this.opts.checkAuth()) {
+        this.authConfirmed = true;
+      } else {
+        throw new AuthRequiredError(
+          "You're not signed in to Claude. Use the Sign in button above the chat box to continue."
+        );
+      }
     }
 
     // Streaming-input mode (AsyncIterable) is required to expose
@@ -333,6 +361,11 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
             const errs = "errors" in sdkMsg ? sdkMsg.errors : undefined;
             if (errs && errs.length > 0) {
               resultErrorMessage = errs.join("; ");
+            } else {
+              // Non-success with no error detail can mean the saved login
+              // expired mid-session. Force the next prompt to re-verify auth
+              // rather than trusting the cached "signed in" flag.
+              this.authConfirmed = false;
             }
           }
           break;

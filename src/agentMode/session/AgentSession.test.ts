@@ -1,7 +1,7 @@
 import { AI_SENDER, USER_SENDER } from "@/constants";
 import type { TFile } from "obsidian";
 import { AgentSession, buildPromptBlocks, tryReadExitPlanModeCall } from "./AgentSession";
-import { MethodUnsupportedError } from "./errors";
+import { AuthRequiredError, MethodUnsupportedError } from "./errors";
 import type {
   BackendDescriptor,
   BackendProcess,
@@ -295,6 +295,24 @@ describe("AgentSession.sendPrompt", () => {
     expect(placeholder?.isErrorMessage).toBe(true);
     expect(placeholder?.message).toContain("FreeUsageLimitError");
     expect(placeholder?.message).toContain("Rate limit exceeded");
+  });
+
+  it("renders a visible error (not an empty bubble) when the backend reports auth required", async () => {
+    const mock = makeMockBackend();
+    mock.prompt.mockRejectedValueOnce(new AuthRequiredError("You're not signed in to Claude."));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude",
+    });
+
+    await expect(session.sendPrompt("hi").turn).rejects.toBeInstanceOf(AuthRequiredError);
+
+    const placeholder = session.store.getDisplayMessages().find((m) => m.sender === AI_SENDER);
+    expect(placeholder?.isErrorMessage).toBe(true);
+    expect(placeholder?.message).toContain("not signed in to Claude");
+    expect(session.getStatus()).toBe("error");
   });
 
   it("agent_message_chunk is appended to placeholder displayText", async () => {

@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button";
 import {
+  useBackendAuthState,
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "@/agentMode/ui/useBackendDescriptor";
@@ -23,6 +24,7 @@ interface Props {
 export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) => {
   const descriptor = useSessionBackendDescriptor(manager);
   const installState = useBackendInstallState(descriptor);
+  const auth = useBackendAuthState(descriptor);
 
   // Re-render on manager notify so `lastError` flips are picked up.
   const [, setTick] = React.useState(0);
@@ -38,6 +40,33 @@ export const AgentModeStatus: React.FC<Props> = ({ manager, onInstallClick }) =>
         <Button variant="default" size="sm" onClick={onInstallClick}>
           Install {descriptor.displayName}
         </Button>
+      </div>
+    );
+  }
+
+  // Installed but the CLI isn't signed in: surface a recoverable Sign-in CTA
+  // instead of letting a sent chat fail silently. While signing in, the CLI
+  // opens the browser itself; we show its printed URL as a clickable fallback.
+  if (descriptor.auth && auth.status && !auth.status.signedIn) {
+    return (
+      <div className="tw-flex tw-items-center tw-justify-between tw-rounded tw-bg-secondary tw-px-3 tw-py-2 tw-text-xs">
+        {auth.signingIn ? (
+          <>
+            <span className="tw-text-muted">Signing in to {descriptor.displayName}…</span>
+            {auth.url && (
+              <a href={auth.url} target="_blank" rel="noopener noreferrer">
+                Open sign-in page
+              </a>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="tw-text-muted">{descriptor.displayName} not signed in</span>
+            <Button variant="default" size="sm" onClick={auth.signIn}>
+              Sign in to {descriptor.displayName}
+            </Button>
+          </>
+        )}
       </div>
     );
   }

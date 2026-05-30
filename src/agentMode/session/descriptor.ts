@@ -20,6 +20,33 @@ export type InstallState =
   | { kind: "ready"; source: "managed" | "custom" }
   | { kind: "error"; message: string };
 
+/** Sign-in state for backends that authenticate via a CLI / external account. */
+export interface BackendAuthStatus {
+  signedIn: boolean;
+  /** Display string for a signed-in account, e.g. `"zero@x.com (max)"`. */
+  label?: string;
+}
+
+/** Progress callbacks for an interactive sign-in flow. */
+export interface BackendSignInHandlers {
+  /** The OAuth URL to surface as a clickable browser-open fallback. */
+  onUrl?: (url: string) => void;
+  /** Per-line progress from the sign-in subprocess. */
+  onLine?: (line: string) => void;
+}
+
+/**
+ * Optional auth capability. Backends whose readiness depends on an external
+ * sign-in (the Claude CLI's login state) implement this so generic `ui/` can
+ * surface a "Sign in" CTA without knowing the backend's auth mechanism.
+ */
+export interface BackendAuth {
+  /** Probe current sign-in state (may spawn the CLI). */
+  getStatus(settings: CopilotSettings): Promise<BackendAuthStatus>;
+  /** Run the interactive sign-in flow; resolves with the post-login state. */
+  signIn(settings: CopilotSettings, handlers?: BackendSignInHandlers): Promise<BackendAuthStatus>;
+}
+
 /**
  * Backend-agnostic descriptor consumed by `session/` and `ui/`. Each backend
  * exports one of these from its own folder; the registry maps `BackendId →
@@ -118,6 +145,14 @@ export interface BackendDescriptor {
 
   /** Open backend-specific install/setup modal. */
   openInstallUI(plugin: CopilotPlugin): void;
+
+  /**
+   * Optional: sign-in capability for backends gated on an external account
+   * (e.g. the Claude CLI's login state). When present, generic UI surfaces a
+   * "Sign in" CTA while signed-out. Absent backends are assumed always-ready
+   * once installed.
+   */
+  auth?: BackendAuth;
 
   /**
    * Construct the backend process the session manager will drive. ACP-style
