@@ -33,6 +33,7 @@ export type { CatalogDownloadDeps, CatalogRefreshResult } from "./catalog/Catalo
 
 export { ProviderRegistry } from "./providers/ProviderRegistry";
 export { isSelfHostedProvider, isSelfHostedUrl } from "./providers/isSelfHostedProvider";
+export { providerRequiresApiKey } from "./providers/providerRequiresApiKey";
 export { ConfiguredModelRegistry } from "./models/ConfiguredModelRegistry";
 export { BackendConfigRegistry } from "./backends/BackendConfigRegistry";
 export { ChatModelFactory } from "./chatModel/ChatModelFactory";

@@ -24,8 +24,8 @@ export interface CandidatePartition {
  *
  * For opencode, a BYOK/Plus provider it can't route (`isOpencodeRoutable`
  * false — azure / bedrock / self-hosted) is dropped to avoid a dead toggle:
- * `opencodeEnabledWireIds` skips unroutable providers at injection and
- * picker-filter time, so enabling one would never reach the agent or picker.
+ * `opencodeEnabledModelEntries` skips unroutable providers, so enabling one
+ * would never reach the agent or picker.
  */
 export function partitionCandidates(
   configuredModels: readonly ConfiguredModel[],

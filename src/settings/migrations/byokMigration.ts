@@ -256,6 +256,10 @@ export function planByokMigration(settings: CopilotSettings): SetupProviderInput
         displayName: displayNameFor(model.provider),
         models: [],
         autoEnrollIn: mapping.opencodeRoutable ? ENROLL_CHAT_AND_OPENCODE : ENROLL_CHAT_ONLY,
+        // Local runners (`requiresBaseUrl`) migrate key-less; every other
+        // legacy mapping is key-based. Persist it explicitly so the runtime
+        // never re-infers from the endpoint.
+        requiresApiKey: !mapping.requiresBaseUrl,
       };
       if (mapping.catalogProviderId) input.catalogProviderId = mapping.catalogProviderId;
       if (baseUrl) input.baseUrl = baseUrl;

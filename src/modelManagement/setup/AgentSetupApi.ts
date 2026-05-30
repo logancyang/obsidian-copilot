@@ -119,6 +119,9 @@ export class AgentSetupApi {
         baseUrl: input.baseUrl,
         origin: { kind: "agent", agentType: input.agentType },
         extras: input.extras,
+        // Agent-owned providers route through the agent's own auth (native /
+        // CLI-managed); the user never supplies a BYOK key for them.
+        requiresApiKey: false,
       });
     }
 

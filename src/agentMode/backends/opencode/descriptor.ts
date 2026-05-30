@@ -12,12 +12,17 @@ import {
   OPENCODE_PROVIDER_MAP,
 } from "./OpencodeBackend";
 import { computeInstallState, OpencodeBinaryManager } from "./OpencodeBinaryManager";
-import { opencodeEnabledWireIds } from "./opencodeModelResolve";
+import { opencodeEnabledModelEntries } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type { ModeMapping, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
+import type {
+  EnabledModelEntry,
+  ModeMapping,
+  ModelSelection,
+  ModelWireCodec,
+} from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
@@ -98,8 +103,8 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   restartOnSystemPromptChange: true,
   wire: opencodeWire,
 
-  getEnabledBaseModelIds(settings: CopilotSettings): ReadonlySet<string> {
-    return opencodeEnabledWireIds(settings);
+  getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
+    return [...opencodeEnabledModelEntries(settings)];
   },
 
   getInstallState(settings: CopilotSettings): InstallState {

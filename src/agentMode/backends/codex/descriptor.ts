@@ -10,12 +10,17 @@ import { CodexInstallModal } from "./CodexInstallModal";
 import CodexLogo from "./logo.svg";
 import { CodexSettingsPanel } from "./CodexSettingsPanel";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import { agentOriginEnabledWireIds } from "@/agentMode/backends/shared/agentEnabledModels";
+import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import {
   binaryPathInstallState,
   simpleBinaryBackendProcess,
 } from "@/agentMode/backends/shared/simpleBinaryBackend";
-import type { ModeMapping, ModelSelection, ModelWireCodec } from "@/agentMode/session/types";
+import type {
+  EnabledModelEntry,
+  ModeMapping,
+  ModelSelection,
+  ModelWireCodec,
+} from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
 
 export const CODEX_BINARY_NAME = "codex-acp";
@@ -61,7 +66,7 @@ const codexWire: ModelWireCodec = {
  * from the local `codex` CLI login. Auth is CLI-owned (no Copilot-side keys),
  * so the candidate models come entirely from the CLI's live `availableModels`
  * (active session or preloader cache); curation is the model-management
- * `backends.codex.enabledModels` set surfaced via `getEnabledBaseModelIds`.
+ * `backends.codex.enabledModels` set surfaced via `getEnabledModelEntries`.
  *
  * Effort is surfaced via opencode-style model-id parsing — codex-acp
  * advertises one model per (base × effort) combination, and we collapse
@@ -79,9 +84,11 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   wire: codexWire,
   showModelDescriptions: true,
 
-  getEnabledBaseModelIds(settings: CopilotSettings): ReadonlySet<string> {
+  getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     // All Codex models are agent-origin.
-    return agentOriginEnabledWireIds(settings, "codex", (wireId) => codexWire.decode(wireId));
+    return [
+      ...agentOriginEnabledModelEntries(settings, "codex", (wireId) => codexWire.decode(wireId)),
+    ];
   },
 
   /**

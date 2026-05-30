@@ -1,5 +1,7 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider } from "@/modelManagement";
+import { providerRequiresApiKey } from "@/modelManagement";
+import type { EnabledModelCredentialState, EnabledModelEntry } from "@/agentMode/session/types";
 
 export interface OpencodeProviderMapping {
   /** The opencode provider id — leading segment of `<provider>/<model>`. */
@@ -16,7 +18,7 @@ export interface OpencodeProviderMapping {
 export const COPILOT_PLUS_OPENCODE_PROVIDER_ID = "copilot-plus";
 
 /** See AGENTS.md → "Referential stability". */
-const EMPTY_WIRE_IDS: ReadonlySet<string> = Object.freeze(new Set<string>());
+const EMPTY_ENABLED_ENTRIES: readonly EnabledModelEntry[] = Object.freeze([]);
 
 /**
  * Map a Copilot `Provider` onto its opencode provider id, or `null` when
@@ -52,25 +54,48 @@ export function mapProviderToOpencodeId(provider: Provider): OpencodeProviderMap
 }
 
 /**
- * The opencode wire ids for the backend's enabled models, joining
- * `backends.opencode.enabledModels` to the configured-model + provider state.
- * BYOK / Plus models become `${opencodeProviderId}/${info.id}`; agent-origin
- * models use `info.id` verbatim (already the full wire form). Unroutable or
- * missing entries are skipped.
- *
- * Shared by `buildOpencodeConfig` (injection) and the descriptor's picker
- * filter so the injected / enabled / shown sets agree.
+ * The opencode wire base id for one routable configured model
+ * (`<providerId>/<model>` for non-native, `info.id` verbatim for agent-hosted
+ * native). Returns `null` when the provider isn't opencode-routable.
  */
-export function opencodeEnabledWireIds(settings: CopilotSettings): ReadonlySet<string> {
+function opencodeWireBaseId(provider: Provider, configuredModel: ConfiguredModel): string | null {
+  const mapping = mapProviderToOpencodeId(provider);
+  if (!mapping) return null;
+  return mapping.native ? configuredModel.info.id : `${mapping.id}/${configuredModel.info.id}`;
+}
+
+/**
+ * Credential health for an enabled opencode model, derived purely from the
+ * persisted provider row (sync — no keychain read). Native (agent-hosted)
+ * providers carry their own auth, so they're always `ok`. Otherwise a
+ * required-key provider with no key reads `missing_key`.
+ */
+function credentialStateFor(provider: Provider, native: boolean): EnabledModelCredentialState {
+  if (native) return "ok";
+  if (providerRequiresApiKey(provider) && !provider.apiKeyKeychainId) return "missing_key";
+  return "ok";
+}
+
+/**
+ * Enabled opencode models enriched for the chat picker: wire base id, display
+ * name/description, and per-model credential health. Lets the picker iterate
+ * the enabled set (not the reported∩enabled intersection) so a model opencode
+ * dropped for a missing/expired key still appears, flagged. Joins
+ * `backends.opencode.enabledModels` to the configured-model + provider state
+ * via `opencodeWireBaseId`; unroutable / missing entries are skipped.
+ */
+export function opencodeEnabledModelEntries(
+  settings: CopilotSettings
+): readonly EnabledModelEntry[] {
   const enabledIds = settings.backends.opencode?.enabledModels ?? [];
-  if (enabledIds.length === 0) return EMPTY_WIRE_IDS;
+  if (enabledIds.length === 0) return EMPTY_ENABLED_ENTRIES;
 
   const modelsById = new Map<string, ConfiguredModel>();
   for (const model of settings.configuredModels) {
     modelsById.set(model.configuredModelId, model);
   }
 
-  const wireIds = new Set<string>();
+  const out: EnabledModelEntry[] = [];
   for (const configuredModelId of enabledIds) {
     const configuredModel = modelsById.get(configuredModelId);
     if (!configuredModel) continue;
@@ -78,15 +103,14 @@ export function opencodeEnabledWireIds(settings: CopilotSettings): ReadonlySet<s
     if (!provider) continue;
     const mapping = mapProviderToOpencodeId(provider);
     if (!mapping) continue;
-
-    if (mapping.native) {
-      // Agent-origin: `info.id` is already the full opencode wire form.
-      wireIds.add(configuredModel.info.id);
-    } else {
-      wireIds.add(`${mapping.id}/${configuredModel.info.id}`);
-    }
+    const baseModelId = opencodeWireBaseId(provider, configuredModel);
+    if (!baseModelId) continue;
+    out.push({
+      baseModelId,
+      name: configuredModel.info.displayName || configuredModel.info.id,
+      description: configuredModel.info.description,
+      credentialState: credentialStateFor(provider, mapping.native),
+    });
   }
-
-  if (wireIds.size === 0) return EMPTY_WIRE_IDS;
-  return wireIds;
+  return out.length === 0 ? EMPTY_ENABLED_ENTRIES : out;
 }

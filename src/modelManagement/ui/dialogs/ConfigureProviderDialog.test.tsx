@@ -214,10 +214,13 @@ describe("ConfigureProviderForm (new mode)", () => {
 
   it("calls setupProvider with the catalog id + enriched model metadata", async () => {
     mockGetProvider.mockReturnValue(anthropicCatalogMetadata);
+    mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
     const onClose = jest.fn();
     render(
       <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={onClose} />
     );
+    // A required-key provider can't save without a key, so supply one.
+    fireEvent.change(screen.getByTestId("api-key"), { target: { value: "sk-ant" } });
     manualAddId("claude-sonnet");
     fireEvent.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockSetupProvider).toHaveBeenCalledTimes(1));
@@ -345,7 +348,8 @@ describe("ConfigureProviderForm (edit mode)", () => {
     render(
       <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
     );
-    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    // The body mounts once the gate resolves the saved key.
+    fireEvent.click(await screen.findByRole("button", { name: "Test" }));
     await waitFor(() => expect(mockVerifyCredentials).toHaveBeenCalled());
     expect(mockGetApiKey).toHaveBeenCalledWith("p1");
     expect(mockSetApiKey).not.toHaveBeenCalled();
@@ -356,7 +360,7 @@ describe("ConfigureProviderForm (edit mode)", () => {
     render(
       <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
     );
-    const baseUrlInput = screen.getByPlaceholderText("https://api.anthropic.com");
+    const baseUrlInput = await screen.findByPlaceholderText("https://api.anthropic.com");
     fireEvent.change(baseUrlInput, { target: { value: "https://proxy.example.com" } });
     fireEvent.click(screen.getByRole("button", { name: "Test" }));
     await waitFor(() => expect(mockVerifyCredentials).toHaveBeenCalled());
@@ -462,14 +466,32 @@ describe("ConfigureProviderForm (edit mode)", () => {
     await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 
-  it("Clear button wipes the saved API key and closes the dialog", async () => {
+  it("Clear empties the field, keeps the dialog open, and persists nothing immediately", async () => {
     mockGetApiKey.mockResolvedValue("saved-secret");
     const onClose = jest.fn();
     render(<ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={onClose} />);
     const clear = await screen.findByTestId("api-key-clear");
     fireEvent.click(clear);
-    await waitFor(() => expect(mockClearApiKey).toHaveBeenCalledWith("p1"));
-    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // Field is wiped, but the keychain isn't touched and the dialog stays open —
+    // the removal is staged for Save, like every other field.
+    await waitFor(() => expect(screen.getByTestId<HTMLInputElement>("api-key").value).toBe(""));
+    expect(mockClearApiKey).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+    // Nothing left to clear → the button is gone.
+    expect(screen.queryByTestId("api-key-clear")).toBeNull();
+  });
+
+  it("disables Save after clearing a required-key provider's key", async () => {
+    mockGetApiKey.mockResolvedValue("saved-secret");
+    render(
+      <ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={jest.fn()} />
+    );
+    // p1 (anthropic, byok + catalogProviderId) requires a key and seeds two
+    // selected models, so the empty field is the only thing blocking Save.
+    fireEvent.click(await screen.findByTestId("api-key-clear"));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true)
+    );
   });
 });
 
@@ -524,5 +546,101 @@ describe("ConfigureProviderForm (custom-openai source)", () => {
       <ConfigureProviderForm state={{ mode: "new", source: customSource }} onClose={jest.fn()} />
     );
     expect(screen.getByPlaceholderText("e.g. gpt-5.5")).toBeTruthy();
+  });
+});
+
+describe("ConfigureProviderForm (credential verification + save gating)", () => {
+  it("A1: a required-key provider with an empty field fails Test without probing", async () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    // No network probe — the guard short-circuits so a public /models 200
+    // can't read as "Verified".
+    expect(mockVerifyCredentials).not.toHaveBeenCalled();
+    expect(await screen.findByText("Enter an API key to verify this provider.")).toBeTruthy();
+  });
+
+  it("B2: Save is disabled for a required-key provider with no key", () => {
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
+    );
+    manualAddId("claude-sonnet");
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("B2: an untested invalid key auto-verifies on Save, aborts, and blocks further Save", async () => {
+    mockVerifyCredentials.mockResolvedValue({
+      ok: false,
+      code: "invalid_api_key",
+      message: "Authentication failed",
+      checkedAt: 1,
+    });
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={jest.fn()} />
+    );
+    fireEvent.change(screen.getByTestId("api-key"), { target: { value: "sk-bad" } });
+    manualAddId("claude-sonnet");
+    // Untested key → Save is enabled, but Save auto-verifies first.
+    expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockVerifyCredentials).toHaveBeenCalled());
+    expect(mockSetupProvider).not.toHaveBeenCalled();
+    // The conclusive failure now disables Save.
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Save" }).hasAttribute("disabled")).toBe(true)
+    );
+  });
+
+  it("B2: an inconclusive verification (network) does not block Save", async () => {
+    mockVerifyCredentials.mockResolvedValue({
+      ok: false,
+      code: "network",
+      message: "connection refused",
+      checkedAt: 1,
+    });
+    const onClose = jest.fn();
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: anthropicSource }} onClose={onClose} />
+    );
+    fireEvent.change(screen.getByTestId("api-key"), { target: { value: "sk-maybe" } });
+    manualAddId("claude-sonnet");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    // Offline users aren't stranded — the provider still saves.
+    await waitFor(() => expect(mockSetupProvider).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("B1/B2: edit mode pre-fills the saved key and saves without re-typing or re-writing it", async () => {
+    mockGetApiKey.mockResolvedValue("saved-secret");
+    mockBulkSet.mockResolvedValue(["cm1", "cm2"]);
+    const onClose = jest.fn();
+    render(<ConfigureProviderForm state={{ mode: "edit", providerId: "p1" }} onClose={onClose} />);
+    // The field is seeded with the stored key (visible, masked by PasswordInput).
+    const input = await screen.findByTestId<HTMLInputElement>("api-key");
+    expect(input.value).toBe("saved-secret");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+    // Unchanged key → no keychain churn and no re-verification.
+    expect(mockSetApiKey).not.toHaveBeenCalled();
+    expect(mockVerifyCredentials).not.toHaveBeenCalled();
+  });
+
+  it("B2: a keyless provider (requiresApiKey:false) Tests and Saves with an empty field", async () => {
+    mockVerifyCredentials.mockResolvedValue({ ok: true, checkedAt: 1 });
+    const onClose = jest.fn();
+    render(
+      <ConfigureProviderForm state={{ mode: "new", source: ollamaSource }} onClose={onClose} />
+    );
+    // Test with an empty field probes the endpoint (no required-key guard).
+    fireEvent.click(screen.getByRole("button", { name: "Test" }));
+    await waitFor(() => expect(mockVerifyCredentials).toHaveBeenCalled());
+    manualAddId("llama3.2");
+    fireEvent.click(screen.getByRole("button", { name: "Save" }));
+    await waitFor(() => expect(mockSetupProvider).toHaveBeenCalledTimes(1));
+    expect(mockSetupProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ requiresApiKey: false })
+    );
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });

@@ -103,6 +103,31 @@ export interface ModelEntry {
 }
 
 /**
+ * Credential health of an enabled model, derived from its provider row.
+ * Drives the agent picker's non-selectable flags so an enabled model is
+ * never silently hidden:
+ *   - `ok`          — usable (or agent-hosted / native).
+ *   - `missing_key` — a required-key provider with no key → "Add API key".
+ */
+export type EnabledModelCredentialState = "ok" | "missing_key";
+
+/**
+ * One entry in a backend's enabled set, enriched for the picker. Lets the
+ * picker iterate the *enabled* models (rather than the reported∩enabled
+ * intersection) so a model the agent dropped for a missing/expired key still
+ * appears, flagged. `baseModelId` is the backend's wire base id (matched
+ * against the reported catalog's `ModelEntry.baseModelId`). The signature
+ * stays limited to `CopilotSettings` on the descriptor so `session/` needn't
+ * import `@/modelManagement` — the backend computes `credentialState`.
+ */
+export interface EnabledModelEntry {
+  baseModelId: string;
+  name: string;
+  description?: string;
+  credentialState: EnabledModelCredentialState;
+}
+
+/**
  * Normalized model selection — the single shape used by both runtime
  * state (`BackendState.model.current`) and persisted preferences
  * (`agentMode.backends.<id>.defaultModel`). `baseModelId` is what

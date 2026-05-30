@@ -85,6 +85,35 @@ it("bumps the version even when there is nothing to migrate", async () => {
   expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
 });
 
+it("runs only the v5 backfill for a v4 vault (legacy BYOK migration does not re-run)", async () => {
+  mockGetSettings.mockReturnValue(
+    settings({
+      settingsVersion: 4,
+      providers: {
+        p1: {
+          providerId: "p1",
+          providerType: "openai-compatible",
+          displayName: "OpenRouter",
+          origin: { kind: "byok", catalogProviderId: "openrouter" },
+          addedAt: 0,
+          apiKeyKeychainId: null,
+        },
+      },
+    })
+  );
+  const { api, setupProvider } = makeApi();
+
+  await runSettingsMigrations(api);
+
+  expect(setupProvider).not.toHaveBeenCalled();
+  // Backfill writes the flag, then the version bump lands.
+  const providerWrite = mockSetSettings.mock.calls.find((call) => "providers" in call[0])?.[0] as
+    | { providers: Record<string, { requiresApiKey?: boolean }> }
+    | undefined;
+  expect(providerWrite?.providers.p1.requiresApiKey).toBe(true);
+  expect(mockSetSettings).toHaveBeenCalledWith({ settingsVersion: CURRENT_SETTINGS_VERSION });
+});
+
 it("skips when already at the current version", async () => {
   mockGetSettings.mockReturnValue(settings({ settingsVersion: CURRENT_SETTINGS_VERSION }));
   const { api, setupProvider } = makeApi();

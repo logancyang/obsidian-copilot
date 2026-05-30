@@ -401,8 +401,12 @@ export class AgentSessionManager {
    * skill discovery and deny rules, is rebuilt from current settings. If a
    * session on that backend is busy, the restart is deferred until it is idle.
    *
-   * Returns `true` when a running backend was restarted or a restart was
-   * scheduled; `false` when no backend process exists yet.
+   * When the manager owns no process yet, a warm probe held by the preloader
+   * may still carry the pre-change spawn config; we refresh it instead (see
+   * `refreshWarmProbe`) so the first chat-open doesn't adopt a stale proc.
+   *
+   * Returns `true` when a running backend was restarted, a restart was
+   * scheduled, or a warm probe was refreshed; `false` when nothing exists yet.
    */
   async restartBackend(backendId: BackendId, reason: string): Promise<boolean> {
     if (this.disposed) return false;
@@ -411,7 +415,7 @@ export class AgentSessionManager {
       await inflight.catch(() => undefined);
     }
     const backend = this.backends.get(backendId);
-    if (!backend) return false;
+    if (!backend) return this.refreshWarmProbe(backendId, reason);
     if (this.hasBusySession(backendId)) {
       const prev = this.pendingBackendRestarts.get(backendId);
       this.pendingBackendRestarts.set(backendId, prev ? `${prev}; ${reason}` : reason);
@@ -420,6 +424,35 @@ export class AgentSessionManager {
     }
     await this.restartBackendNow(backendId, reason);
     return true;
+  }
+
+  /**
+   * Refresh a preloader warm probe when the manager owns no process yet.
+   * Spawn-time config (provider keys, enabled models, native skills, system
+   * prompt) is baked into the warm probe when it spawns, so a config change
+   * made before the first chat-open would otherwise never reach it — the
+   * first `createSession` adopts the stale warm proc and the picker flags
+   * freshly-enabled models as "not offered by agent" until a full reload.
+   *
+   * Delegates the re-probe to `preloader.refresh`, which coalesces the burst of
+   * writes a single BYOK save produces (provider row → key → enabled models)
+   * into one re-probe against the settled settings. No-op (returns `false`)
+   * when nothing is warm/in-flight for this backend, or it isn't installed.
+   */
+  private refreshWarmProbe(backendId: BackendId, reason: string): boolean {
+    if (this.disposed) return false;
+    if (!this.isBackendInstalled(backendId)) return false;
+    const probe = this.preloader.refresh(backendId);
+    if (!probe) return false;
+    logInfo(`[AgentMode] refreshing warm ${backendId} probe: ${reason}`);
+    this.registerPreload(backendId, probe);
+    return true;
+  }
+
+  /** Whether `backendId`'s descriptor reports its binary/runtime as installed. */
+  private isBackendInstalled(backendId: BackendId): boolean {
+    const descriptor = this.opts.resolveDescriptor(backendId);
+    return descriptor?.getInstallState(getSettings())?.kind === "ready";
   }
 
   /** Cached unified backend state for `backendId`, populated by the model preloader. */
@@ -1161,6 +1194,12 @@ export class AgentSessionManager {
       new Notice(`${this.resolveDescriptor(backendId).displayName} refreshed.`);
       if (shouldCreateReplacement && !this.disposed) {
         await this.createSession(backendId);
+      } else if (!this.disposed && this.isBackendInstalled(backendId)) {
+        // No live session will repopulate the cache we just cleared (the
+        // active tab is on a different backend, or there are no tabs). Re-probe
+        // so the picker reflects the new spawn config instead of flagging
+        // freshly-enabled models as "not offered by agent" until a reload.
+        this.registerPreload(backendId, this.preloader.preload(backendId));
       }
       this.notify();
     } finally {

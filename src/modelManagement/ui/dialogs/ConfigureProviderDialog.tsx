@@ -32,6 +32,7 @@ import { useApp } from "@/context";
 import { logError } from "@/logger";
 import type { ModelManagementApi } from "@/modelManagement/createModelManagement";
 import { BYOK_DEFAULT_AUTO_ENROLL } from "@/modelManagement/setup/ByokSetupApi";
+import { providerRequiresApiKey } from "@/modelManagement/providers/providerRequiresApiKey";
 import { byokProvidersAtom, configuredModelsAtom } from "@/modelManagement/state/atoms";
 import type { ModelInfo, ProviderType } from "@/modelManagement/types/catalog";
 import type { ConfiguredModel, Provider } from "@/modelManagement/types/persisted";
@@ -72,12 +73,16 @@ interface ConfigureProviderFormProps {
 }
 
 /**
- * Gate: resolve the persisted provider row and only mount the stateful body
- * once it has hydrated. Without this, the body's `useState` initializers
- * could read an empty `provider` during the atom-load race and lock in blank
- * values the user would then unwittingly Save.
+ * Gate: resolve the persisted provider row AND its saved API key, and only
+ * mount the stateful body once both have hydrated. Without this, the body's
+ * `useState` initializers could read an empty `provider` / blank key during
+ * the atom-load race and lock in values the user would then unwittingly Save.
+ * Resolving the key here (rather than probing inside the body) lets edit mode
+ * seed the key field with the real value — so a genuinely keyless provider is
+ * visibly empty — without an empty→filled flash.
  */
 export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ state, onClose }) => {
+  const api = useModelManagement();
   const byokProviders = useAtomValue(byokProvidersAtom, { store: settingsStore });
   const configuredModels = useAtomValue(configuredModelsAtom, { store: settingsStore });
 
@@ -97,7 +102,37 @@ export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ st
     [state, configuredModels]
   );
 
-  if (state.mode === "edit" && !provider) {
+  // Edit mode: read the stored key once so the body can seed its field with
+  // it. New mode resolves immediately with no key. A probe failure resolves
+  // to `null` (treated as keyless) rather than wedging the spinner.
+  //
+  // Two primitive states (not one object) so a re-run that resolves the same
+  // value bails out via React's `Object.is` short-circuit — the
+  // `useModelManagement()` hook returns a fresh object each render, so an
+  // object state here would re-render forever. Keyed on the primitive
+  // `providerId` so new mode never schedules a probe.
+  const keyProviderId = state.mode === "edit" ? state.providerId : null;
+  const [initialApiKey, setInitialApiKey] = useState<string | null>(null);
+  const [keyResolved, setKeyResolved] = useState(keyProviderId === null);
+  useEffect(() => {
+    if (keyProviderId === null) return;
+    let cancelled = false;
+    void api.providerRegistry
+      .getApiKey(keyProviderId)
+      .then((key) => {
+        if (cancelled) return;
+        setInitialApiKey(key);
+        setKeyResolved(true);
+      })
+      .catch(() => {
+        if (!cancelled) setKeyResolved(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [keyProviderId, api]);
+
+  if (state.mode === "edit" && (!provider || !keyResolved)) {
     return (
       <div className="tw-flex tw-h-full tw-items-center tw-justify-center">
         <Loader2 className="tw-size-5 tw-animate-spin tw-text-muted" />
@@ -111,6 +146,7 @@ export const ConfigureProviderForm: React.FC<ConfigureProviderFormProps> = ({ st
       onClose={onClose}
       provider={provider}
       existingModels={existingModels}
+      initialApiKey={initialApiKey}
     />
   );
 };
@@ -121,6 +157,9 @@ interface ConfigureProviderBodyProps {
   /** Guaranteed defined in edit mode (the gate waits for it); undefined in new mode. */
   provider: Provider | undefined;
   existingModels: readonly ConfiguredModel[];
+  /** Edit mode: the stored API key, resolved by the gate. `null` for a
+   *  keyless provider (or a probe failure). Always `null` in new mode. */
+  initialApiKey: string | null;
 }
 
 const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
@@ -128,6 +167,7 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   onClose,
   provider,
   existingModels,
+  initialApiKey,
 }) => {
   const api = useModelManagement();
   const app = useApp();
@@ -153,7 +193,9 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const [displayName, setDisplayName] = useState(() =>
     state.mode === "new" ? state.source.displayName : (provider?.displayName ?? "")
   );
-  const [apiKey, setApiKey] = useState("");
+  // Edit mode seeds with the resolved stored key (plaintext — it's what
+  // opencode injects; the field masks it via PasswordInput's reveal toggle).
+  const [apiKey, setApiKey] = useState(() => initialApiKey ?? "");
   const [baseUrl, setBaseUrl] = useState(() =>
     state.mode === "edit" ? (provider?.baseUrl ?? "") : ""
   );
@@ -165,11 +207,11 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const [saving, setSaving] = useState(false);
   const [modelQuery, setModelQuery] = useState("");
 
-  const hasSavedKey = useSavedKeyProbe(
-    state.mode,
-    state.mode === "edit" ? state.providerId : undefined,
-    api
-  );
+  // Whether this provider needs a key. New mode reads the picked definition;
+  // edit mode reads the explicit persisted flag — never inferred from the
+  // endpoint. Drives the Test guard, the save gate, and the inline hint.
+  const requiresApiKey =
+    state.mode === "new" ? state.source.requiresApiKey : providerRequiresApiKey(provider!);
 
   const defaultBaseUrl =
     state.mode === "new"
@@ -188,41 +230,61 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     catalogMetadata,
     apiKey,
     extras,
-    requiresApiKey: state.mode === "new" ? state.source.requiresApiKey : false,
+    requiresApiKey,
     providerHydrated: state.mode === "edit" ? !!provider : true,
     api,
   });
 
+  // Single verification path shared by Test and save-time auto-verify. In new
+  // mode the synthetic provider carries `catalogProviderId` so the adapter's
+  // per-provider verify path (e.g. OpenRouter's auth-gated `/key`) resolves —
+  // without it OpenRouter's public `/models` would 200 on a blank key.
+  const runVerification = async (): Promise<VerificationResult> => {
+    if (state.mode === "new") {
+      const synthetic: Provider = {
+        providerId: "test",
+        providerType: providerType!,
+        displayName,
+        baseUrl: effectiveBaseUrl || undefined,
+        requiresApiKey: state.source.requiresApiKey,
+        extras,
+        origin: {
+          kind: "byok",
+          ...(state.source.catalogProviderId
+            ? { catalogProviderId: state.source.catalogProviderId }
+            : {}),
+        },
+        addedAt: Date.now(),
+      };
+      return api.adapters.verifyCredentials(providerType!, {
+        provider: synthetic,
+        apiKey: apiKey || null,
+        extras: extras ?? {},
+      });
+    }
+    return api.adapters.verifyCredentials(providerType!, {
+      provider: { ...provider!, displayName, baseUrl: effectiveBaseUrl || undefined, extras },
+      apiKey: apiKey || null,
+      extras: extras ?? {},
+    });
+  };
+
   const handleTest = async (): Promise<void> => {
     if (!providerType) return;
+    // A1: a required-key provider with an empty field cannot read as
+    // "Verified" — a public `/models` 200 would lie. Fail fast, no probe.
+    if (requiresApiKey && apiKey.trim().length === 0) {
+      setVerification({
+        ok: false,
+        code: "missing_api_key",
+        message: "Enter an API key to verify this provider.",
+        checkedAt: Date.now(),
+      });
+      return;
+    }
     setTesting(true);
     try {
-      let result: VerificationResult;
-      if (state.mode === "new") {
-        const synthetic: Provider = {
-          providerId: "test",
-          providerType,
-          displayName,
-          baseUrl: effectiveBaseUrl || undefined,
-          extras,
-          origin: { kind: "byok" },
-          addedAt: Date.now(),
-        };
-        result = await api.adapters.verifyCredentials(providerType, {
-          provider: synthetic,
-          apiKey: apiKey || null,
-          extras: extras ?? {},
-        });
-      } else if (provider) {
-        const key = apiKey || (await api.providerRegistry.getApiKey(state.providerId));
-        result = await api.adapters.verifyCredentials(providerType, {
-          provider: { ...provider, displayName, baseUrl: effectiveBaseUrl || undefined, extras },
-          apiKey: key || null,
-          extras: extras ?? {},
-        });
-      } else {
-        return;
-      }
+      const result = await runVerification();
       setVerification(result);
       if (result.ok) {
         // Successful auth — refetch the model list, since the previous
@@ -244,12 +306,24 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     if (state.mode !== "new" || !providerType) return;
     setSaving(true);
     try {
+      // B2: auto-verify a present key before persisting so an untested-but-
+      // invalid key is caught even if the user never clicked Test. Abort on a
+      // conclusive failure; proceed on `ok` or an inconclusive result (offline
+      // users aren't stranded). A keyless field skips the probe.
+      if (apiKey.trim().length > 0) {
+        const result = await runVerification();
+        if (!result.ok && isConclusiveVerificationFailure(result.code)) {
+          setVerification(result);
+          return;
+        }
+      }
       await api.setup.byok.setupProvider({
         catalogProviderId: state.source.catalogProviderId,
         providerType,
         displayName,
         baseUrl: effectiveBaseUrl || undefined,
         apiKey: apiKey || undefined,
+        requiresApiKey: state.source.requiresApiKey,
         extras,
         models: pool.buildSelectedModelInfos(),
       });
@@ -266,9 +340,20 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     if (state.mode !== "edit" || !provider) return;
     setSaving(true);
     try {
+      // B2: re-verify only a *changed* key (unchanged keys skip the probe and
+      // the keychain re-write). Abort on a conclusive failure.
+      const keyChanged = apiKey !== (initialApiKey ?? "");
+      if (keyChanged && apiKey.trim().length > 0) {
+        const result = await runVerification();
+        if (!result.ok && isConclusiveVerificationFailure(result.code)) {
+          setVerification(result);
+          return;
+        }
+      }
       await saveProviderEdit({
         providerId: state.providerId,
         apiKey,
+        initialApiKey,
         displayName,
         effectiveBaseUrl,
         extras,
@@ -286,15 +371,12 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
     }
   };
 
-  const handleClearKey = async (): Promise<void> => {
-    if (state.mode !== "edit") return;
-    try {
-      await api.providerRegistry.clearApiKey(state.providerId);
-      onClose();
-    } catch (err) {
-      logError("[ConfigureProviderDialog] clearApiKey failed", err);
-      new Notice("Failed to clear API key. See console for details.");
-    }
+  // Stage the clear locally (like every other field); the keychain write is
+  // deferred to Save via saveProviderEdit. Empties the field so a required-key
+  // provider lands in the same un-saveable "no key" state as a fresh setup.
+  const handleClearKey = (): void => {
+    setApiKey("");
+    setVerification(null);
   };
 
   const handleRemove = (): void => {
@@ -321,11 +403,19 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   const headerName =
     state.mode === "new" ? state.source.displayName : (provider?.displayName ?? displayName);
 
+  // B2: a required-key provider with an empty field can't be saved.
+  const missingRequiredKey = requiresApiKey && apiKey.trim().length === 0;
+  // B2: a conclusively-failed verification blocks Save. Inconclusive results
+  // (network / timeout / rate_limited / http_error) do NOT block — offline
+  // users can still save. A key edit resets `verification` to `null`, so an
+  // untested key falls through to the save-time auto-verify in the handlers.
+  const verificationBlocksSave = isConclusiveVerificationFailure(verification?.code);
+
   // The candidate pool only fills with models the endpoint listed (which
   // requires working credentials) or ones the user explicitly typed, so a
-  // non-empty selection already implies a usable setup. No need to
-  // re-gate on base URL or test status.
-  const canSave = pool.selectedWireIds.size > 0;
+  // non-empty selection already implies a usable setup. On top of that, gate
+  // on a present + non-conclusively-invalid key.
+  const canSave = pool.selectedWireIds.size > 0 && !missingRequiredKey && !verificationBlocksSave;
 
   const testFailed = verification?.ok === false;
 
@@ -351,7 +441,9 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
           label={
             <span className="tw-inline-flex tw-items-center tw-gap-2">
               API key
-              <span className="tw-text-ui-smaller tw-font-normal tw-text-muted">optional</span>
+              <span className="tw-text-ui-smaller tw-font-normal tw-text-muted">
+                {requiresApiKey ? "required" : "optional"}
+              </span>
               {verification?.ok === true && (
                 <Badge className="tw-gap-1 tw-bg-success tw-text-success">
                   <CheckCircle2 className="tw-size-3" />
@@ -370,26 +462,28 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
                 setVerification(null);
               }}
               autoDecrypt={false}
-              placeholder={
-                state.mode === "edit"
-                  ? "Enter a new key to replace the saved one"
-                  : "Paste your API key"
-              }
+              placeholder={state.mode === "edit" ? "No API key set" : "Paste your API key"}
             />
             <Button variant="secondary" onClick={handleTest} disabled={testing}>
               {testing ? <Loader2 className="tw-size-4 tw-animate-spin" /> : "Test"}
             </Button>
-            {state.mode === "edit" && hasSavedKey && (
+            {state.mode === "edit" && apiKey.length > 0 && (
               <Button variant="destructive" onClick={handleClearKey} data-testid="api-key-clear">
                 Clear
               </Button>
             )}
           </div>
-          {testFailed && (
+          {testFailed ? (
             <div className="tw-flex tw-items-center tw-gap-1.5 tw-text-xs tw-text-error">
               <XCircle className="tw-size-3.5 tw-shrink-0" />
               <span>{verification?.message || "Verification failed"}</span>
             </div>
+          ) : (
+            missingRequiredKey && (
+              <div className="tw-text-xs tw-text-muted">
+                An API key is required for this provider.
+              </div>
+            )
           )}
         </FormField>
 
@@ -450,38 +544,26 @@ const ConfigureProviderBody: React.FC<ConfigureProviderBodyProps> = ({
   );
 };
 
-/**
- * Probe the keychain once in edit mode so the "Clear" button can show only
- * when there's something to clear. Probe failures are non-fatal — the button
- * just won't appear.
- */
-function useSavedKeyProbe(
-  mode: ConfigureState["mode"],
-  providerId: string | undefined,
-  api: ModelManagementApi
-): boolean {
-  const [hasSavedKey, setHasSavedKey] = useState(false);
-  useEffect(() => {
-    if (mode !== "edit" || !providerId) return;
-    let cancelled = false;
-    void api.providerRegistry
-      .getApiKey(providerId)
-      .then((key) => {
-        if (!cancelled) setHasSavedKey(!!key);
-      })
-      .catch(() => {
-        // non-fatal
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, providerId, api]);
-  return hasSavedKey;
+/** Verification codes that conclusively mean "don't save" — as opposed to
+ *  inconclusive results (network / timeout / rate_limited / http_error) that
+ *  shouldn't strand an offline user. */
+const CONCLUSIVE_VERIFICATION_FAILURE_CODES: readonly string[] = [
+  "invalid_api_key",
+  "missing_api_key",
+  "missing_base_url",
+];
+
+function isConclusiveVerificationFailure(code: string | undefined): boolean {
+  return code !== undefined && CONCLUSIVE_VERIFICATION_FAILURE_CODES.includes(code);
 }
 
 interface SaveEditArgs {
   providerId: string;
   apiKey: string;
+  /** The key the field was seeded with — used to detect a real change so an
+   *  unchanged key doesn't churn the keychain (which would emit and trigger a
+   *  spurious opencode restart). */
+  initialApiKey: string | null;
   displayName: string;
   effectiveBaseUrl: string;
   extras: Record<string, unknown>;
@@ -504,6 +586,7 @@ interface SaveEditArgs {
 async function saveProviderEdit({
   providerId,
   apiKey,
+  initialApiKey,
   displayName,
   effectiveBaseUrl,
   extras,
@@ -512,7 +595,14 @@ async function saveProviderEdit({
   selectedInfos,
   api,
 }: SaveEditArgs): Promise<void> {
-  if (apiKey) await api.providerRegistry.setApiKey(providerId, apiKey);
+  // Touch the keychain only when the key actually changed — re-writing an
+  // unchanged key would emit and trigger a spurious opencode restart. A key
+  // cleared to empty drops the keychain entry (only reachable for keyless
+  // providers, since a required-key provider with an empty field can't Save).
+  if (apiKey !== (initialApiKey ?? "")) {
+    if (apiKey.trim().length > 0) await api.providerRegistry.setApiKey(providerId, apiKey);
+    else await api.providerRegistry.clearApiKey(providerId);
+  }
   await api.providerRegistry.update(providerId, {
     displayName,
     baseUrl: effectiveBaseUrl || undefined,

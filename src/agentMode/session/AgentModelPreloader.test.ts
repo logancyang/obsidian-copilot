@@ -196,6 +196,50 @@ describe("AgentModelPreloader.takeWarm", () => {
     expect(preloader.takeWarm("claude-sdk")).toBeNull();
   });
 
+  it("refresh re-probes a warm backend against current settings", async () => {
+    const { descriptor } = buildDescriptor(() => makeMockProc());
+    const create = descriptor.createBackendProcess as jest.Mock;
+    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+    await preloader.preload("claude-sdk");
+    expect(create).toHaveBeenCalledTimes(1);
+
+    // A config change after the warm probe settled: refresh drops the warm
+    // entry and runs a fresh probe.
+    await preloader.refresh("claude-sdk");
+    expect(create).toHaveBeenCalledTimes(2);
+  });
+
+  it("refresh returns null when nothing is warm or in flight", async () => {
+    const { descriptor } = buildDescriptor(() => makeMockProc());
+    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+    // Never preloaded → a config change must not spin a probe up from nothing.
+    expect(preloader.refresh("claude-sdk")).toBeNull();
+  });
+
+  it("coalesces a burst of refreshes into a single trailing re-probe", async () => {
+    // Models a BYOK save: several config writes call refresh in one synchronous
+    // burst. The 2nd/3rd land while the 1st's probe is still in flight (runProbe
+    // awaits proc.start before reading the catalog), so they fold into exactly
+    // one trailing re-probe against the settled settings — not one per write.
+    const { descriptor } = buildDescriptor(() => makeMockProc());
+    const create = descriptor.createBackendProcess as jest.Mock;
+    const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);
+
+    await preloader.preload("claude-sdk"); // probe #1 → something warm
+    expect(create).toHaveBeenCalledTimes(1);
+
+    const chain = preloader.refresh("claude-sdk"); // drops warm, starts probe #2
+    expect(chain).not.toBeNull();
+    void preloader.refresh("claude-sdk"); // in-flight → trailing-rerun flag
+    void preloader.refresh("claude-sdk"); // in-flight → already flagged
+    await chain;
+
+    // probe #2 (in-flight) + exactly one trailing probe #3 = 3 total.
+    expect(create).toHaveBeenCalledTimes(3);
+  });
+
   it("clearCached shuts down and drops a still-warm proc", async () => {
     const { descriptor, procHandle } = buildDescriptor(() => makeMockProc());
     const preloader = new AgentModelPreloader(buildApp(), buildPlugin(), () => descriptor);

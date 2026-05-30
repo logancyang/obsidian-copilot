@@ -149,6 +149,7 @@ function buildManager(): AgentSessionManager {
   const modelPreloader = {
     getCachedBackendState: jest.fn(() => null),
     preload: jest.fn(async () => undefined),
+    refresh: jest.fn(() => null),
     subscribe: jest.fn(() => () => {}),
     shutdown: jest.fn(),
     setCached: jest.fn(),
@@ -219,6 +220,7 @@ describe("AgentSessionManager.createSession", () => {
     const modelPreloader = {
       getCachedBackendState: jest.fn((id: string) => cache.get(id) ?? null),
       preload: jest.fn(async () => undefined),
+      refresh: jest.fn(() => null),
       subscribe: jest.fn(() => () => {}),
       shutdown: jest.fn(),
       setCached: jest.fn((id: string, state: unknown) => {
@@ -521,6 +523,123 @@ describe("AgentSessionManager.restartBackend", () => {
 
     await expect(mgr.restartBackend("opencode", "skills changed")).resolves.toBe(false);
     expect(mockBackendShutdown).not.toHaveBeenCalled();
+  });
+
+  it("refreshes a warm preload probe when the manager owns no process yet", async () => {
+    // Repro for the BYOK key-add bug: opencode was only preloaded (warm proc
+    // held by the preloader, never adopted into a session), so the provider
+    // restart no-oped and the stale probe's catalog made the picker flag the
+    // freshly-keyed model "not offered by agent" until a full reload.
+    const refresh = jest.fn(() => Promise.resolve());
+    const modelPreloader = {
+      getCachedBackendState: jest.fn(() => ({ model: null, mode: null })),
+      preload: jest.fn(async () => undefined),
+      refresh,
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+    };
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+    } as unknown as BackendDescriptor;
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    // The preloader owns the clear+re-probe (and its coalescing); the manager
+    // just delegates to `refresh` and registers the returned probe.
+    await expect(mgr.restartBackend("opencode", "byok key added")).resolves.toBe(true);
+    expect(refresh).toHaveBeenCalledWith("opencode");
+    // No session was ever created, so no proc to shut down.
+    expect(mockBackendShutdown).not.toHaveBeenCalled();
+  });
+
+  it("does not refresh a warm probe when nothing was preloaded", async () => {
+    // Backend is installed, but the preloader has nothing warm/in-flight, so
+    // `refresh` returns null and the manager must not spin a probe up.
+    const refresh = jest.fn(() => null);
+    const modelPreloader = {
+      getCachedBackendState: jest.fn(() => null),
+      preload: jest.fn(async () => undefined),
+      refresh,
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+    };
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+    } as unknown as BackendDescriptor;
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    await expect(mgr.restartBackend("opencode", "byok key added")).resolves.toBe(false);
+    expect(refresh).toHaveBeenCalledWith("opencode");
+  });
+
+  it("re-probes after restart when no replacement session is created", async () => {
+    // Proc exists but no active session is on this backend (e.g. the active
+    // tab is on a different agent). The torn-down proc leaves nothing to
+    // repopulate the cache, so the manager must re-probe — otherwise the
+    // picker flags freshly-enabled models "not offered by agent" until reload.
+    const preload = jest.fn(async () => undefined);
+    const modelPreloader = {
+      getCachedBackendState: jest.fn(() => null),
+      preload,
+      refresh: jest.fn(() => null),
+      subscribe: jest.fn(() => () => {}),
+      shutdown: jest.fn(),
+      setCached: jest.fn(),
+      clearCached: jest.fn(),
+      takeWarm: jest.fn(() => null),
+    };
+    const descriptor = {
+      ...buildDescriptor(),
+      getInstallState: jest.fn(() => ({ kind: "ready" })),
+    } as unknown as BackendDescriptor;
+    const mgr = new AgentSessionManager(
+      buildApp(),
+      buildPlugin() as unknown as ConstructorParameters<typeof AgentSessionManager>[1],
+      {
+        permissionPrompter: jest.fn(),
+        resolveDescriptor: (id) => (id === descriptor.id ? descriptor : undefined),
+        modelPreloader: modelPreloader as unknown as ConstructorParameters<
+          typeof AgentSessionManager
+        >[2]["modelPreloader"],
+      }
+    );
+
+    // Create then close a session so the proc stays up with no active session.
+    const session = await mgr.createSession();
+    await mgr.closeSession(session.internalId);
+    preload.mockClear();
+
+    await expect(mgr.restartBackend("opencode", "byok save")).resolves.toBe(true);
+
+    expect(mockBackendShutdown).toHaveBeenCalled();
+    expect(preload).toHaveBeenCalledWith("opencode");
   });
 
   it("restarts an idle backend and replaces the active affected session", async () => {

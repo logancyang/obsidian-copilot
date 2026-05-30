@@ -59,6 +59,11 @@ export interface SetupProviderInput {
   /** Per-providerType payload (Azure deployment, Bedrock region,
    *  OpenAI org id, …). */
   extras?: Record<string, unknown>;
+  /** Whether this provider needs an API key. Flows through from the
+   *  `ProviderDefinition` (`state.source.requiresApiKey`); persisted on the
+   *  `Provider` row so the requires-key question never re-infers from the
+   *  endpoint. Defaults to `true` when omitted (a hosted provider). */
+  requiresApiKey?: boolean;
   /** Full `ModelInfo` snapshots for every model the user selected.
    *  The caller is responsible for catalog enrichment so the API can
    *  stay catalog-agnostic. */
@@ -103,6 +108,9 @@ export class ByokSetupApi {
       providerType: input.providerType,
       displayName: input.displayName,
       baseUrl: input.baseUrl,
+      // Persist the explicit requires-key flag (default hosted = needs a key)
+      // so the runtime never re-infers it from the endpoint.
+      requiresApiKey: input.requiresApiKey ?? true,
       origin: {
         kind: "byok",
         ...(input.catalogProviderId ? { catalogProviderId: input.catalogProviderId } : {}),

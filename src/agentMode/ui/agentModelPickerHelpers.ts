@@ -12,6 +12,8 @@ import type {
   BackendDescriptor,
   BackendId,
   BackendState,
+  EnabledModelCredentialState,
+  EnabledModelEntry,
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
@@ -53,10 +55,22 @@ export function handlePickerSwitchError(err: unknown, action: "model" | "effort"
 export const AGENT_PROVIDER = "agent";
 
 /**
- * Append one backend's section to the picker: its reported catalog filtered to
- * the backend's enabled set (`getEnabledBaseModelIds`). The active session's
- * selection is always kept via `keepBaseModelId` so curation never strands it.
- * A descriptor returning `null` is treated as an empty enabled set.
+ * Append one backend's section to the picker.
+ *
+ * One policy for every backend, via `getEnabledModelEntries`: iterate the
+ * backend's *enabled* models, enriched by the reported catalog when present.
+ * Every enabled model appears — one the agent dropped for a missing key, or
+ * no longer reports at all, is shown non-selectable with a flag
+ * (`"Add API key"`, `"Not offered by agent"`, …) rather than silently hidden.
+ * Agent-native backends (claude, codex) report `credentialState: "ok"`, so
+ * their only flag is `"Not offered by agent"` for a stale enabled id.
+ *
+ * The active session's selection (and an inactive backend's persisted default)
+ * is always kept via `keepBaseModelId`. A descriptor that implements no
+ * `getEnabledModelEntries` opts out entirely; `buildPickerEntries` still re-adds
+ * the active selection if curation stranded it. During preload (no reported
+ * catalog yet) we defer to the "Loading…" placeholder `buildPickerEntries`
+ * adds, so we don't flag "Not offered by agent" before the catalog loads.
  */
 export function appendBackendSection(
   entries: ModelSelectorEntry[],
@@ -66,19 +80,76 @@ export function appendBackendSection(
     backendModels: ReadonlyArray<ModelEntry> | null;
     /** baseModelId of the active session — never filtered out. */
     keepBaseModelId: string | null;
-    /** Current settings — read by `getEnabledBaseModelIds`. */
+    /** Current settings — read by `getEnabledModelEntries`. */
     settings: CopilotSettings;
   }
 ): void {
+  const enabledEntries = descriptor.getEnabledModelEntries?.(ctx.settings) ?? null;
+  if (!enabledEntries) return;
+  // Preload still pending → no reported catalog yet; let buildPickerEntries
+  // render the Loading placeholder instead of flagging prematurely.
   if (!ctx.backendModels) return;
-  const enabledSet = descriptor.getEnabledBaseModelIds?.(ctx.settings) ?? null;
-  const filtered = ctx.backendModels.filter(
-    (entry) =>
-      enabledSet?.has(entry.baseModelId) === true || entry.baseModelId === ctx.keepBaseModelId
+  appendFromEnabledEntries(
+    entries,
+    descriptor,
+    enabledEntries,
+    ctx.backendModels,
+    ctx.keepBaseModelId
   );
-  for (const m of filtered) {
-    entries.push(synthesizeAgentEntry(m.baseModelId, m.name, descriptor, m.description));
+}
+
+/**
+ * Enabled-set-driven section build. Each enabled model becomes a row; the
+ * reported catalog enriches its name/description when present. A credential
+ * issue (missing key) or "agent didn't offer it" sets
+ * `_disabledReason`, which `ModelSelector` renders as a right-side label on a
+ * non-selectable row. `keepBaseModelId` (the active/default selection) is
+ * appended as a selectable row when it's reported but not already in the
+ * enabled set, so curation never strands the running selection.
+ */
+function appendFromEnabledEntries(
+  entries: ModelSelectorEntry[],
+  descriptor: BackendDescriptor,
+  enabledEntries: ReadonlyArray<EnabledModelEntry>,
+  backendModels: ReadonlyArray<ModelEntry>,
+  keepBaseModelId: string | null
+): void {
+  const reportedById = new Map(backendModels.map((m) => [m.baseModelId, m]));
+  const emitted = new Set<string>();
+  for (const enabled of enabledEntries) {
+    const reported = reportedById.get(enabled.baseModelId);
+    const name = reported?.name || enabled.name || enabled.baseModelId;
+    const subtitle = reported?.description ?? enabled.description;
+    const entry = synthesizeAgentEntry(enabled.baseModelId, name, descriptor, subtitle);
+    const reason = credentialDisabledReason(enabled.credentialState, !!reported);
+    if (reason) entry._disabledReason = reason;
+    entries.push(entry);
+    emitted.add(enabled.baseModelId);
   }
+
+  if (keepBaseModelId && !emitted.has(keepBaseModelId)) {
+    const reported = reportedById.get(keepBaseModelId);
+    if (reported) {
+      entries.push(
+        synthesizeAgentEntry(reported.baseModelId, reported.name, descriptor, reported.description)
+      );
+    }
+  }
+}
+
+/**
+ * Map an enabled model's credential state (+ whether the agent reported it) to
+ * a `_disabledReason`, or `undefined` when the row is selectable. Credential
+ * problems take precedence over "not offered" — they're the root cause of the
+ * agent dropping the model.
+ */
+function credentialDisabledReason(
+  state: EnabledModelCredentialState,
+  reported: boolean
+): string | undefined {
+  if (state === "missing_key") return "Add API key";
+  if (!reported) return "Not offered by agent";
+  return undefined;
 }
 
 export function synthesizeAgentEntry(

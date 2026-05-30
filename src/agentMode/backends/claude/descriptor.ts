@@ -13,12 +13,13 @@ import {
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { resolveClaudeBinary } from "./claudeBinaryResolver";
-import { agentOriginEnabledWireIds } from "@/agentMode/backends/shared/agentEnabledModels";
+import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
 import { getCachedSdkCatalog, synthesizeEffortConfigOption } from "@/agentMode/sdk/effortOption";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
 import type {
   BackendConfigOption,
+  EnabledModelEntry,
   ModeMapping,
   ModelSelection,
   ModelWireCodec,
@@ -132,9 +133,11 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
   wire: claudeWire,
   showModelDescriptions: true,
 
-  getEnabledBaseModelIds(settings: CopilotSettings): ReadonlySet<string> {
+  getEnabledModelEntries(settings: CopilotSettings): EnabledModelEntry[] {
     // All Claude Code models are agent-origin.
-    return agentOriginEnabledWireIds(settings, "claude", (wireId) => claudeWire.decode(wireId));
+    return [
+      ...agentOriginEnabledModelEntries(settings, "claude", (wireId) => claudeWire.decode(wireId)),
+    ];
   },
 
   getInstallState(settings: CopilotSettings): InstallState {

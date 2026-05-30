@@ -1,12 +1,15 @@
 import {
+  appendBackendSection,
   buildEffortSibling,
   buildModelOnChange,
   buildPickerEntries,
   resolveActiveDisplayState,
 } from "./agentModelPickerHelpers";
+import type { ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import type {
   BackendDescriptor,
   BackendState,
+  EnabledModelEntry,
   ModelEntry,
   ModelState,
 } from "@/agentMode/session/types";
@@ -228,14 +231,20 @@ describe("buildPickerEntries", () => {
     expect(entries[0].name).toBe("gpt-5");
   });
 
-  it("filters by getEnabledBaseModelIds when the descriptor implements it (new path)", () => {
+  it("filters to the enabled set via getEnabledModelEntries", () => {
     const enabled = makeModelEntry("anthropic/claude-sonnet-4-6");
     const disabled = makeModelEntry("anthropic/claude-haiku");
-    // Opencode-style descriptor exposing the new enabled-set hook. Only the
-    // first model is enabled; the second must be dropped from the picker.
+    // Only the first model is enabled; the second must be dropped from the
+    // picker even though the agent reports it.
     const opencode = {
       ...makeDescriptor("opencode"),
-      getEnabledBaseModelIds: () => new Set(["anthropic/claude-sonnet-4-6"]),
+      getEnabledModelEntries: () => [
+        {
+          baseModelId: "anthropic/claude-sonnet-4-6",
+          name: "Sonnet",
+          credentialState: "ok" as const,
+        },
+      ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
       cachedStateById: {
@@ -258,13 +267,15 @@ describe("buildPickerEntries", () => {
     expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-sonnet-4-6"]);
   });
 
-  it("drops every model when the descriptor has no getEnabledBaseModelIds (no legacy branch) except the kept one", () => {
-    // With the legacy override branch removed, a descriptor that doesn't
-    // implement getEnabledBaseModelIds yields an empty enabled set, so only
-    // keepBaseModelId survives. `dropped` is neither enabled nor kept.
+  it("drops every model not in the enabled set except the kept one", () => {
+    // An empty enabled set curates nothing in, so only keepBaseModelId
+    // survives. `dropped` is neither enabled nor kept.
     const kept = makeModelEntry("kept-model");
     const dropped = makeModelEntry("dropped-model");
-    const opencode = makeDescriptor("opencode");
+    const opencode = {
+      ...makeDescriptor("opencode"),
+      getEnabledModelEntries: () => [],
+    } as unknown as BackendDescriptor;
     const manager = makeManager({
       cachedStateById: {
         opencode: { model: makeModelState("kept-model", [kept, dropped]), mode: null },
@@ -293,7 +304,9 @@ describe("buildPickerEntries", () => {
     };
     const codex = {
       ...makeDescriptor("codex"),
-      getEnabledBaseModelIds: () => new Set(["gpt-5"]),
+      getEnabledModelEntries: () => [
+        { baseModelId: "gpt-5", name: "GPT-5", credentialState: "ok" as const },
+      ],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
       cachedStateById: {
@@ -341,7 +354,7 @@ describe("buildPickerEntries", () => {
     expect(entries[0]._subtitle).toBe("Opus 4.7 with 1M context");
   });
 
-  it("keeps the sticky active model even when getEnabledBaseModelIds excludes it", () => {
+  it("keeps the sticky active model even when the enabled set excludes it", () => {
     // The active (sticky) model is no longer in the enabled set, but
     // keepBaseModelId must preserve it so curation never strands the
     // running selection.
@@ -349,7 +362,7 @@ describe("buildPickerEntries", () => {
     const opencode = {
       ...makeDescriptor("opencode"),
       // Empty enabled set — nothing curated in.
-      getEnabledBaseModelIds: () => new Set<string>(),
+      getEnabledModelEntries: () => [],
     } as unknown as BackendDescriptor;
     const manager = makeManager({
       cachedStateById: {
@@ -367,6 +380,86 @@ describe("buildPickerEntries", () => {
     };
     const { entries } = buildPickerEntries(manager, [opencode], ctx, emptySettings);
     expect(entries.map((e) => e.name)).toEqual(["anthropic/claude-haiku"]);
+  });
+});
+
+// ---- appendBackendSection (enabled-driven credential flags) ----
+
+describe("appendBackendSection — getEnabledModelEntries path", () => {
+  function opencodeWithEntries(enabled: EnabledModelEntry[]): BackendDescriptor {
+    return {
+      ...makeDescriptor("opencode"),
+      getEnabledModelEntries: () => enabled,
+    };
+  }
+
+  it("flags each enabled model by credential state and 'not offered by agent'", () => {
+    const enabled: EnabledModelEntry[] = [
+      { baseModelId: "openrouter/a", name: "A", credentialState: "missing_key" },
+      { baseModelId: "openrouter/c", name: "C", credentialState: "ok" },
+      { baseModelId: "openrouter/d", name: "D", credentialState: "ok" },
+    ];
+    const entries: ModelSelectorEntry[] = [];
+    appendBackendSection(entries, opencodeWithEntries(enabled), {
+      // Only `c` is reported by the agent; `d` is keyed+ok but unreported.
+      backendModels: [makeModelEntry("openrouter/c", "Reported C")],
+      keepBaseModelId: null,
+      settings: emptySettings,
+    });
+    const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
+    expect(byId["openrouter/a"]._disabledReason).toBe("Add API key");
+    expect(byId["openrouter/c"]._disabledReason).toBeUndefined();
+    expect(byId["openrouter/d"]._disabledReason).toBe("Not offered by agent");
+    // Reported metadata enriches the row name when present.
+    expect(byId["openrouter/c"].displayName).toBe("Reported C");
+  });
+
+  it("flags a stale, unreported agent-native model as 'not offered by agent'", () => {
+    // claude/codex entries are always credentialState "ok"; an enabled id the
+    // agent no longer reports renders flagged rather than silently hidden.
+    const claude = {
+      ...makeDescriptor("claude"),
+      getEnabledModelEntries: () => [
+        { baseModelId: "opus-4-5", name: "Opus 4.5", credentialState: "ok" as const },
+        { baseModelId: "retired-model", name: "Retired", credentialState: "ok" as const },
+      ],
+    } as unknown as BackendDescriptor;
+    const entries: ModelSelectorEntry[] = [];
+    appendBackendSection(entries, claude, {
+      backendModels: [makeModelEntry("opus-4-5", "Opus 4.5")],
+      keepBaseModelId: null,
+      settings: emptySettings,
+    });
+    const byId = Object.fromEntries(entries.map((e) => [e.name, e]));
+    expect(byId["opus-4-5"]._disabledReason).toBeUndefined();
+    expect(byId["retired-model"]._disabledReason).toBe("Not offered by agent");
+  });
+
+  it("appends a reported keepBaseModelId not already in the enabled set", () => {
+    const entries: ModelSelectorEntry[] = [];
+    appendBackendSection(
+      entries,
+      opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
+      {
+        backendModels: [makeModelEntry("openrouter/a"), makeModelEntry("sticky")],
+        keepBaseModelId: "sticky",
+        settings: emptySettings,
+      }
+    );
+    const names = entries.map((e) => e.name);
+    expect(names).toContain("sticky");
+    expect(entries.find((e) => e.name === "sticky")?._disabledReason).toBeUndefined();
+  });
+
+  it("defers to the loading placeholder during preload (no reported catalog yet)", () => {
+    const entries: ModelSelectorEntry[] = [];
+    appendBackendSection(
+      entries,
+      opencodeWithEntries([{ baseModelId: "openrouter/a", name: "A", credentialState: "ok" }]),
+      { backendModels: null, keepBaseModelId: null, settings: emptySettings }
+    );
+    // No flags before the catalog loads — buildPickerEntries shows "Loading…".
+    expect(entries).toHaveLength(0);
   });
 });
 

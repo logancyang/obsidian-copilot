@@ -13,7 +13,9 @@
  *
  * Verification hits the standard `GET /models` endpoint — implemented
  * by every public OpenAI-compatible provider and by both local
- * runners (Ollama / LMStudio).
+ * runners (Ollama / LMStudio) — except for providers whose `/models`
+ * is public (OpenRouter), which verify against an auth-gated path via
+ * `openaiCompatibleVerifyPath`.
  */
 
 import { z } from "zod";
@@ -22,6 +24,7 @@ import type { BaseChatModel } from "@langchain/core/language_models/chat_models"
 
 import type { VerificationResult } from "@/modelManagement/types/runtime";
 import type { AdapterBuildContext, AdapterVerifyContext, ProviderAdapter } from "./ProviderAdapter";
+import { verifyPathForCatalogProviderId } from "./openaiCompatibleVerifyPath";
 import { verifyViaListModels } from "./verifyViaListModels";
 
 const extrasSchema = z
@@ -69,6 +72,14 @@ export const openaiCompatibleAdapter: ProviderAdapter<Extras> = {
       headers["OpenAI-Organization"] = ctx.extras.openAIOrgId;
     }
 
-    return verifyViaListModels(`${base}/models`, headers);
+    // Most providers gate `/models` behind the key; the few whose `/models`
+    // is public (OpenRouter) verify against an auth-gated path instead, keyed
+    // by catalog id. `verifyViaListModels` already maps 401/403 →
+    // `invalid_api_key`, so the `/key` probe needs no special handling.
+    const catalogProviderId =
+      ctx.provider.origin.kind === "byok" ? ctx.provider.origin.catalogProviderId : undefined;
+    const verifyPath = verifyPathForCatalogProviderId(catalogProviderId);
+
+    return verifyViaListModels(`${base}/${verifyPath}`, headers);
   },
 };

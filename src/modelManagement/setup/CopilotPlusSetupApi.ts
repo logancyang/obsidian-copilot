@@ -103,6 +103,8 @@ export class CopilotPlusSetupApi {
         displayName: input.displayName,
         baseUrl: input.baseUrl,
         origin: { kind: "copilot-plus" },
+        // Provisioned by Plus sign-in, not a user-entered BYOK key.
+        requiresApiKey: false,
       });
     }
 

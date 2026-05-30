@@ -51,6 +51,10 @@ export class AgentModelPreloader {
   // The active session's `attachModelCacheSync` writes here.
   private readonly cache = new Map<BackendId, BackendState>();
   private readonly inflight = new Map<BackendId, Promise<void>>();
+  // Backends whose in-flight probe baked stale spawn config and must re-probe
+  // once it settles. Set by `refresh`, drained by the probe chain. Coalesces
+  // the burst of config writes one BYOK save produces into a single re-probe.
+  private readonly pendingRefresh = new Set<BackendId>();
   private readonly listeners = new Set<() => void>();
   // Per-warm-entry exit-listener teardowns. Wired when the warm entry is
   // recorded so we can clear it if the probe subprocess dies before the
@@ -127,11 +131,64 @@ export class AgentModelPreloader {
     if (this.disposed) return Promise.resolve();
     const existing = this.inflight.get(backendId);
     if (existing) return existing;
-    const promise = this.runProbe(backendId).finally(() => {
+    return this.startProbeChain(backendId);
+  }
+
+  /**
+   * Re-probe `backendId` against current settings after a spawn-config change
+   * (a new API key, an enabled-models edit, …). Unlike {@link preload} — whose
+   * dedupe is right for "ensure a warm proc exists" — a config change may land
+   * *after* an in-flight probe baked its spawn config, so that probe would
+   * cache a stale catalog and the picker would flag the freshly-enabled model
+   * "not offered by agent" until a reload.
+   *
+   * A single BYOK save lands several writes (provider row → key → enabled
+   * models) in a burst, each calling here. The first drops the warm entry and
+   * starts a fresh probe; the rest just flag a trailing re-run, so exactly one
+   * more probe runs once the in-flight one finishes — observing the settled
+   * settings. This coalesces the burst into a single final re-probe without a
+   * debounce timer.
+   *
+   * Returns the probe-chain promise (for preload-status wiring), or `null` when
+   * nothing is warm or in flight — a config change for a never-probed backend
+   * must not spin one up.
+   */
+  refresh(backendId: BackendId): Promise<void> | null {
+    if (this.disposed) return null;
+    const existing = this.inflight.get(backendId);
+    if (existing) {
+      this.pendingRefresh.add(backendId);
+      return existing;
+    }
+    if (this.getCachedBackendState(backendId) === null) return null;
+    this.clearCached(backendId);
+    return this.startProbeChain(backendId);
+  }
+
+  /**
+   * Track a probe as one in-flight promise so concurrent callers dedupe against
+   * the whole chain, including any trailing re-runs requested via
+   * {@link refresh}.
+   */
+  private startProbeChain(backendId: BackendId): Promise<void> {
+    const promise = this.runProbeChain(backendId).finally(() => {
       this.inflight.delete(backendId);
+      this.pendingRefresh.delete(backendId);
     });
     this.inflight.set(backendId, promise);
     return promise;
+  }
+
+  private async runProbeChain(backendId: BackendId): Promise<void> {
+    let round = 0;
+    do {
+      this.pendingRefresh.delete(backendId);
+      // Later rounds replace a warm entry the prior probe set; drop it first so
+      // the abandoned subprocess is shut down rather than leaked.
+      if (round > 0) this.clearCached(backendId);
+      round += 1;
+      await this.runProbe(backendId);
+    } while (this.pendingRefresh.has(backendId) && !this.disposed);
   }
 
   subscribe(listener: () => void): () => void {
@@ -143,6 +200,7 @@ export class AgentModelPreloader {
     this.disposed = true;
     this.cache.clear();
     this.inflight.clear();
+    this.pendingRefresh.clear();
     this.listeners.clear();
     for (const [backendId, warm] of this.warm) {
       this.warmExitUnsubs.get(backendId)?.();

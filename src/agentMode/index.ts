@@ -151,6 +151,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   // new spawn picks them up. Without this, a key entered after the
   // subprocess started never reaches it — opencode keeps making un-
   // authenticated requests and surfaces them as silent zero-token turns.
+  //
+  // A single BYOK save fires several emits in quick succession (provider row →
+  // API key → enabled models). Coalescing them into one re-probe lives a layer
+  // down: a running backend folds rapid restarts via the manager's restart
+  // queue, and a warm preload probe folds them via `preloader.refresh` — both
+  // re-read the *final* config once the burst settles, so no debounce here.
   const restartProviderAffected = (reason: string): void => {
     for (const descriptor of listBackendDescriptors()) {
       if (!descriptor.restartOnProviderConfigChange) continue;

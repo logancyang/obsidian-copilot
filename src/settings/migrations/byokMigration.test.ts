@@ -312,12 +312,30 @@ describe("planByokMigration — local providers (custom URL required)", () => {
       providerType: "openai-compatible",
       baseUrl: "http://192.168.1.5:11434/v1",
       autoEnrollIn: ["chat", "opencode"],
+      // Local runner → keyless.
+      requiresApiKey: false,
     });
 
     const withoutUrl = planByokMigration(
       settingsWith([model({ name: "llama3.2", provider: ChatModelProviders.LM_STUDIO })])
     );
     expect(withoutUrl).toEqual([]);
+  });
+
+  it("sets requiresApiKey:true for key-based providers, false for local runners", () => {
+    const plan = planByokMigration(
+      settingsWith([
+        model({ name: "claude-x", provider: ChatModelProviders.ANTHROPIC, apiKey: "sk-ant" }),
+        model({
+          name: "llama3.2",
+          provider: ChatModelProviders.OLLAMA,
+          baseUrl: "http://localhost:11434/v1",
+        }),
+      ])
+    );
+    expect(byCatalog(plan, "anthropic")?.requiresApiKey).toBe(true);
+    const ollama = plan.find((p) => p.baseUrl?.includes("11434"));
+    expect(ollama?.requiresApiKey).toBe(false);
   });
 });
 

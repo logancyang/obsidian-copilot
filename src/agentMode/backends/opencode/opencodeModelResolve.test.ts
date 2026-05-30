@@ -1,6 +1,6 @@
 import type { CopilotSettings } from "@/settings/model";
 import type { ConfiguredModel, Provider, ProviderOrigin, ProviderType } from "@/modelManagement";
-import { mapProviderToOpencodeId, opencodeEnabledWireIds } from "./opencodeModelResolve";
+import { mapProviderToOpencodeId, opencodeEnabledModelEntries } from "./opencodeModelResolve";
 
 /** Build a minimal `Provider` row for a given origin + type. */
 function makeProvider(
@@ -29,7 +29,7 @@ function makeModel(configuredModelId: string, providerId: string, wireId: string
 
 /**
  * Assemble a `CopilotSettings`-shaped object with only the slices
- * `opencodeEnabledWireIds` reads. Cast through `unknown` since the resolver
+ * `opencodeEnabledModelEntries` reads. Cast through `unknown` since the resolver
  * touches just `backends` / `configuredModels` / `providers`.
  */
 function makeSettings(args: {
@@ -85,48 +85,71 @@ describe("mapProviderToOpencodeId", () => {
   });
 });
 
-describe("opencodeEnabledWireIds", () => {
-  it("returns the shared frozen empty set when no models are enabled", () => {
-    const first = opencodeEnabledWireIds(makeSettings({ enabledModels: [] }));
-    const second = opencodeEnabledWireIds(makeSettings({ enabledModels: [] }));
-    expect(first.size).toBe(0);
-    // Referential stability: the same frozen constant on every empty call.
-    expect(first).toBe(second);
+describe("opencodeEnabledModelEntries", () => {
+  const byokProvider = (overrides: Partial<Provider> = {}): Provider => ({
+    ...makeProvider("p1", { kind: "byok", catalogProviderId: "openrouter" }, "openai-compatible"),
+    requiresApiKey: true,
+    apiKeyKeychainId: "kc-1",
+    ...overrides,
   });
 
-  it("returns the shared frozen empty set when the opencode backend is absent", () => {
-    const result = opencodeEnabledWireIds(makeSettings({}));
-    expect(result.size).toBe(0);
-  });
-
-  it("builds `<provider>/<model>` wire ids for BYOK models", () => {
+  it("flags a required-key provider with no key as missing_key", () => {
     const settings = makeSettings({
       enabledModels: ["cm1"],
-      providers: { p1: makeProvider("p1", { kind: "byok", catalogProviderId: "anthropic" }) },
-      configuredModels: [makeModel("cm1", "p1", "claude-sonnet-4-6")],
+      providers: { p1: byokProvider({ apiKeyKeychainId: null }) },
+      configuredModels: [makeModel("cm1", "p1", "qwen/qwen3-max")],
     });
-    const result = opencodeEnabledWireIds(settings);
-    expect([...result]).toEqual(["anthropic/claude-sonnet-4-6"]);
+    const [entry] = opencodeEnabledModelEntries(settings);
+    expect(entry.baseModelId).toBe("openrouter/qwen/qwen3-max");
+    expect(entry.credentialState).toBe("missing_key");
   });
 
-  it("builds `<provider>/<model>` wire ids for copilot-plus models", () => {
+  it("reports a keyed, never-failed provider as ok with its display name", () => {
     const settings = makeSettings({
       enabledModels: ["cm1"],
-      providers: { p1: makeProvider("p1", { kind: "copilot-plus" }) },
-      configuredModels: [makeModel("cm1", "p1", "copilot-plus-flash")],
+      providers: { p1: byokProvider() },
+      configuredModels: [
+        {
+          configuredModelId: "cm1",
+          providerId: "p1",
+          info: { id: "x", displayName: "Big X" },
+          configuredAt: 0,
+        },
+      ],
     });
-    const result = opencodeEnabledWireIds(settings);
-    expect([...result]).toEqual(["copilot-plus/copilot-plus-flash"]);
+    const [entry] = opencodeEnabledModelEntries(settings);
+    expect(entry.credentialState).toBe("ok");
+    expect(entry.name).toBe("Big X");
   });
 
-  it("uses the verbatim info.id for agent-origin models (already full wire form)", () => {
+  it("treats agent-origin (native) models as ok regardless of key", () => {
     const settings = makeSettings({
       enabledModels: ["cm1"],
       providers: { p1: makeProvider("p1", { kind: "agent", agentType: "opencode" }) },
       configuredModels: [makeModel("cm1", "p1", "opencode/big-pickle")],
     });
-    const result = opencodeEnabledWireIds(settings);
-    expect([...result]).toEqual(["opencode/big-pickle"]);
+    const [entry] = opencodeEnabledModelEntries(settings);
+    expect(entry.baseModelId).toBe("opencode/big-pickle");
+    expect(entry.credentialState).toBe("ok");
+  });
+
+  it("returns the shared frozen empty array when nothing is enabled", () => {
+    const first = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
+    const second = opencodeEnabledModelEntries(makeSettings({ enabledModels: [] }));
+    expect(first).toHaveLength(0);
+    // Referential stability: the same frozen constant on every empty call.
+    expect(first).toBe(second);
+  });
+
+  it("builds the `<provider>/<model>` wire base id for copilot-plus models", () => {
+    const settings = makeSettings({
+      enabledModels: ["cm1"],
+      providers: { p1: makeProvider("p1", { kind: "copilot-plus" }) },
+      configuredModels: [makeModel("cm1", "p1", "copilot-plus-flash")],
+    });
+    expect(opencodeEnabledModelEntries(settings)[0].baseModelId).toBe(
+      "copilot-plus/copilot-plus-flash"
+    );
   });
 
   it("skips models whose provider row is missing", () => {
@@ -135,7 +158,7 @@ describe("opencodeEnabledWireIds", () => {
       providers: {},
       configuredModels: [makeModel("cm1", "p1", "claude-sonnet-4-6")],
     });
-    expect(opencodeEnabledWireIds(settings).size).toBe(0);
+    expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
   });
 
   it("skips models whose configured-model row is missing", () => {
@@ -144,7 +167,7 @@ describe("opencodeEnabledWireIds", () => {
       providers: { p1: makeProvider("p1", { kind: "byok", catalogProviderId: "anthropic" }) },
       configuredModels: [],
     });
-    expect(opencodeEnabledWireIds(settings).size).toBe(0);
+    expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
   });
 
   it("skips models on unroutable providers (BYOK without catalog id)", () => {
@@ -153,31 +176,6 @@ describe("opencodeEnabledWireIds", () => {
       providers: { p1: makeProvider("p1", { kind: "byok" }, "azure") },
       configuredModels: [makeModel("cm1", "p1", "some-azure-model")],
     });
-    expect(opencodeEnabledWireIds(settings).size).toBe(0);
-  });
-
-  it("builds `<providerId>/<model>` wire ids for OpenAI-compatible BYOK models", () => {
-    const settings = makeSettings({
-      enabledModels: ["cm1"],
-      providers: { p1: makeProvider("p1", { kind: "byok" }, "openai-compatible") },
-      configuredModels: [makeModel("cm1", "p1", "llama3.2")],
-    });
-    expect([...opencodeEnabledWireIds(settings)]).toEqual(["p1/llama3.2"]);
-  });
-
-  it("mixes BYOK and agent-origin models with the correct wire shapes", () => {
-    const settings = makeSettings({
-      enabledModels: ["cm-byok", "cm-agent"],
-      providers: {
-        byok: makeProvider("byok", { kind: "byok", catalogProviderId: "openai" }),
-        agent: makeProvider("agent", { kind: "agent", agentType: "opencode" }),
-      },
-      configuredModels: [
-        makeModel("cm-byok", "byok", "gpt-5"),
-        makeModel("cm-agent", "agent", "opencode/big-pickle"),
-      ],
-    });
-    const result = opencodeEnabledWireIds(settings);
-    expect([...result].sort()).toEqual(["openai/gpt-5", "opencode/big-pickle"].sort());
+    expect(opencodeEnabledModelEntries(settings)).toHaveLength(0);
   });
 });

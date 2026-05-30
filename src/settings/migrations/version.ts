@@ -5,8 +5,13 @@
  * settings-persistence layer can stamp fresh installs without pulling in the
  * model-management barrel that `runSettingsMigrations` depends on.
  *
- * `= 4` matches the v4 launch. Gate is `(settingsVersion ?? 0) < CURRENT`, so
- * pre-versioned installs (real users → `0`) and the orphaned prototype `2`
- * both run; migrated vaults (`4`) and freshly-stamped installs skip.
+ * Gate is `(settingsVersion ?? 0) < CURRENT`, so pre-versioned installs (real
+ * users → `0`) and the orphaned prototype `2` run every pending migration;
+ * freshly-stamped installs skip. Each migration is individually version-gated
+ * in `runSettingsMigrations`, so a vault already at an intermediate version
+ * only runs the migrations newer than it.
+ *
+ *   ≤ 4 → legacy BYOK → model-management migration.
+ *   5   → backfill `Provider.requiresApiKey` on flagless rows.
  */
-export const CURRENT_SETTINGS_VERSION = 4;
+export const CURRENT_SETTINGS_VERSION = 5;

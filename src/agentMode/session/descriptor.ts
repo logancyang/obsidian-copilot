@@ -7,6 +7,7 @@ import type {
   BackendConfigOption,
   BackendId,
   BackendProcess,
+  EnabledModelEntry,
   ModelSelection,
   ModelWireCodec,
   ModeMapping,
@@ -221,13 +222,19 @@ export interface BackendDescriptor {
   getProbeSessionId?(settings: CopilotSettings): string | undefined;
 
   /**
-   * Optional: the backend's enabled set as wire baseModelIds, which the chat
-   * picker matches against the reported catalog. The signature is limited to
-   * `CopilotSettings` so `session/` stays free of `@/modelManagement` — the
-   * backend implements the join. `null` opts out: the picker then keeps only
-   * the active session's selection.
+   * Optional: the backend's enabled models with display metadata and per-model
+   * credential health — the single accessor the chat picker drives its section
+   * from. The picker iterates this set (showing every enabled model, flagging
+   * those the agent can't serve) rather than a reported∩enabled intersection,
+   * so a model the agent dropped for a missing/expired key — or one it no
+   * longer reports at all — is never silently hidden. The signature is limited
+   * to `CopilotSettings` so `session/` stays free of `@/modelManagement` — the
+   * backend implements the join. Agent-native backends (claude, codex) report
+   * `credentialState: "ok"` for every entry; key-bearing BYOK backends
+   * (opencode) compute real per-model health. `null` opts out: the picker then
+   * keeps only the active session's selection.
    */
-  getEnabledBaseModelIds?(settings: CopilotSettings): ReadonlySet<string> | null;
+  getEnabledModelEntries?(settings: CopilotSettings): EnabledModelEntry[] | null;
 
   /**
    * Optional: persist the probe sessionId returned by a successful

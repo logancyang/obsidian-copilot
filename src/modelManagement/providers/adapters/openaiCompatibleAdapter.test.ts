@@ -98,4 +98,43 @@ describe("openaiCompatibleAdapter.verifyCredentials", () => {
     });
     expect(mockVerify).toHaveBeenCalledWith("https://example.test/v1/models", expect.any(Object));
   });
+
+  it("verifies OpenRouter against the auth-gated /key path (public /models would 200)", async () => {
+    await openaiCompatibleAdapter.verifyCredentials({
+      provider: provider({
+        baseUrl: "https://openrouter.ai/api/v1",
+        origin: { kind: "byok", catalogProviderId: "openrouter" },
+      }),
+      apiKey: "sk-or",
+      extras: {},
+    });
+    expect(mockVerify).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", {
+      Authorization: "Bearer sk-or",
+    });
+  });
+
+  it("uses /models for non-OpenRouter catalog providers", async () => {
+    await openaiCompatibleAdapter.verifyCredentials({
+      provider: provider({ origin: { kind: "byok", catalogProviderId: "groq" } }),
+      apiKey: "k",
+      extras: {},
+    });
+    expect(mockVerify).toHaveBeenCalledWith("https://api.openai.com/v1/models", expect.any(Object));
+  });
+
+  it("maps a 401 from OpenRouter's /key to invalid_api_key", async () => {
+    // verifyViaListModels already maps 401/403 → invalid_api_key regardless of
+    // the path, so the /key probe inherits the right classification.
+    mockVerify.mockResolvedValue({ ok: false, code: "invalid_api_key", checkedAt: 1 });
+    const result = await openaiCompatibleAdapter.verifyCredentials({
+      provider: provider({
+        baseUrl: "https://openrouter.ai/api/v1",
+        origin: { kind: "byok", catalogProviderId: "openrouter" },
+      }),
+      apiKey: "sk-wrong",
+      extras: {},
+    });
+    expect(result.code).toBe("invalid_api_key");
+    expect(mockVerify).toHaveBeenCalledWith("https://openrouter.ai/api/v1/key", expect.any(Object));
+  });
 });

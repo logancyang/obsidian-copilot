@@ -82,6 +82,15 @@ export interface Provider {
    */
   apiKeyKeychainId?: string | null;
   /**
+   * Whether this provider needs an API key to function. Authoritative and
+   * explicit — never inferred from self-hosting at runtime (self-hosted ≠
+   * keyless; see `providerRequiresApiKey`). Written at every creation path
+   * (BYOK setup, agent setup, Plus sign-in). Optional only for rows that
+   * predate the flag; the settings-v5 migration backfills those by identity, so
+   * at runtime `providerRequiresApiKey` reads the flag directly.
+   */
+  requiresApiKey?: boolean;
+  /**
    * Opaque per-`providerType` payload.
    *   azure:   { azureDeploymentName, azureApiVersion, azureInstanceName }
    *   bedrock: { bedrockRegion }
