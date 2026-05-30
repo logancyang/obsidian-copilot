@@ -1,6 +1,7 @@
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useApp } from "@/context";
 import { logError } from "@/logger";
 import { formatYoutubeUrl, insertIntoEditor, validateYoutubeUrl } from "@/utils";
 import { createPluginRoot } from "@/utils/react/createPluginRoot";
@@ -15,6 +16,7 @@ interface TranscriptData {
 }
 
 function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
+  const app = useApp();
   const [currentView, setCurrentView] = React.useState<"input" | "display">("input");
   const [url, setUrl] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -109,7 +111,7 @@ function YoutubeTranscriptModalContent({ onClose }: { onClose: () => void }) {
 
     try {
       const textToInsert = `# YouTube Video Transcript\n\nSource: ${transcriptData.url}\n\n${transcriptData.transcript}`;
-      await insertIntoEditor(textToInsert, false);
+      await insertIntoEditor(app, textToInsert, false);
       onClose();
     } catch (error) {
       logError("Failed to insert to note:", error);

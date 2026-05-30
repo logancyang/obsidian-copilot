@@ -1017,15 +1017,8 @@ describe("insertAtCursor", () => {
     return { app, editor };
   }
 
-  afterEach(() => {
-    // @ts-ignore
-    delete window.app;
-  });
-
   it("inserts at the cursor when there is no selection", async () => {
     const { app, editor } = makeApp("");
-    // @ts-ignore — `insertIntoEditor` resolves the editor via the global app.
-    window.app = app;
 
     await insertAtCursor(app as never, "hello");
 
@@ -1034,12 +1027,20 @@ describe("insertAtCursor", () => {
 
   it("replaces from the selection start when text is selected", async () => {
     const { app, editor } = makeApp("selected");
-    // @ts-ignore
-    window.app = app;
 
     await insertAtCursor(app as never, "hello");
 
     expect(editor.replaceRange).toHaveBeenCalledWith("hello", from, to);
+  });
+
+  it("threads the passed app into the insertion (no global app)", async () => {
+    const { app, editor } = makeApp("");
+
+    await insertAtCursor(app as never, "hello");
+
+    // The write resolves its leaf through the passed app, not a global one.
+    expect(app.workspace.getMostRecentLeaf).toHaveBeenCalled();
+    expect(editor.replaceRange).toHaveBeenCalled();
   });
 
   it("does nothing when there is no markdown view to insert into", async () => {
@@ -1050,8 +1051,6 @@ describe("insertAtCursor", () => {
         getLeaf: jest.fn(() => leaf),
       },
     };
-    // @ts-ignore
-    window.app = app;
 
     await expect(insertAtCursor(app as never, "hello")).resolves.toBeUndefined();
   });

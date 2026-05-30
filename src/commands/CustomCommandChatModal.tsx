@@ -685,7 +685,7 @@ export class CustomCommandChatModal {
     const { anchorBottom, ...initialPosition } = this.getInitialPosition(activeView);
 
     const handleInsert = (message: string) => {
-      void insertIntoEditor(message);
+      void insertIntoEditor(this.app, message);
       this.close();
     };
 
