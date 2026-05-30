@@ -339,6 +339,7 @@ describe("translateSdkMessage", () => {
       sessionUpdate: "tool_call",
       toolCallId: "tu-mcp-underscored",
       vendorToolName: "do_thing",
+      mcpServer: "my_server",
     });
   });
 
@@ -364,6 +365,7 @@ describe("translateSdkMessage", () => {
       toolCallId: "tu-mcp",
       title: "do_thing Daily/2026-05-01.md",
       vendorToolName: "do_thing",
+      mcpServer: "custom-server",
     });
   });
 

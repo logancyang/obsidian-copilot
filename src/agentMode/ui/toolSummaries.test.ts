@@ -131,7 +131,73 @@ describe("lookupToolSummary", () => {
   it("falls back to generic when both vendor and toolKind are unknown", () => {
     const t = tool({ title: "weirdtool" });
     const s = lookupToolSummary(t);
-    expect(s.collapsedLine(t, CTX)).toBe("weirdtool");
+    expect(s.collapsedLine(t, CTX)).toBe("Weirdtool");
+  });
+
+  it("humanizes a generic tool name instead of rendering '…'", () => {
+    // SDK seeds title to the (bare) tool name, so title === vendorToolName.
+    // Without the generic label this collapsed to "…".
+    const t = tool({ vendorToolName: "do_thing", title: "do_thing" });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Do thing");
+  });
+
+  it("renders an MCP tool as 'server · Tool name'", () => {
+    const t = tool({
+      vendorToolName: "query-docs",
+      title: "query-docs",
+      mcpServer: "context7",
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("context7 · Query docs");
+  });
+
+  it("keeps the 'server ·' prefix when an MCP tool's bare name collides with a native tool", () => {
+    // `mcp__srv__read` strips to bare `read`, which resolves to the Read/kind
+    // summary; the server prefix must still surface so it doesn't masquerade
+    // as the native Read tool.
+    const t = tool({
+      vendorToolName: "Read",
+      title: "read notes/x.md",
+      mcpServer: "srv",
+      locations: [{ path: "/Users/me/vault/notes/x.md" }],
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("srv · Read notes/x.md");
+  });
+
+  it("shows an ACP backend's friendly multi-word title verbatim", () => {
+    const t = tool({ title: "Querying the database" });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Querying the database");
+  });
+
+  it("falls back to 'Tool call' when there is no tool identity", () => {
+    const t = tool({ title: "" });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Tool call");
+  });
+
+  it("summarizes AskUserQuestion with the question header", () => {
+    const t = tool({
+      vendorToolName: "AskUserQuestion",
+      title: "AskUserQuestion",
+      status: "completed",
+      input: {
+        questions: [{ header: "Pick a backend", question: "Which backend?", options: [] }],
+      },
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe('Asked: "Pick a backend"');
+  });
+
+  it("falls back to the question text (present tense while in flight) when there is no header", () => {
+    const t = tool({
+      vendorToolName: "AskUserQuestion",
+      title: "AskUserQuestion",
+      status: "in_progress",
+      input: { questions: [{ question: "Which backend?", options: [] }] },
+    });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe('Asking: "Which backend?"');
+  });
+
+  it("uses a generic AskUserQuestion line before input has streamed in", () => {
+    const t = tool({ vendorToolName: "AskUserQuestion", title: "AskUserQuestion" });
+    expect(lookupToolSummary(t).collapsedLine(t, CTX)).toBe("Asked a question");
   });
 
   it("hides the duplicated vendor name while Read input is still streaming", () => {

@@ -1304,6 +1304,7 @@ function toolCallToPart(
     output: extractToolCallOutputs(call.content),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
     vendorToolName: call.vendorToolName,
+    mcpServer: call.mcpServer,
     parentToolCallId: call.parentToolCallId,
   };
 }
@@ -1364,6 +1365,7 @@ function mergeToolCallUpdate(
         ? upd.locations.map((l) => ({ path: l.path, line: l.line ?? undefined }))
         : base.locations,
     vendorToolName: upd.vendorToolName ?? base.vendorToolName,
+    mcpServer: upd.mcpServer ?? base.mcpServer,
     parentToolCallId: upd.parentToolCallId ?? base.parentToolCallId,
   };
 }

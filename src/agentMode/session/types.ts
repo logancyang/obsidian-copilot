@@ -345,6 +345,12 @@ export interface ToolCallSnapshot {
   locations?: Array<{ path: string; line?: number | null }>;
   /** Vendor-original tool identity (e.g. "Read", "Edit", "ExitPlanMode"). */
   vendorToolName?: string;
+  /**
+   * MCP server name parsed from a `mcp__<server>__<tool>` qualified name. The
+   * UI renders it as a `server · tool` prefix; `vendorToolName` holds the bare
+   * tool name. Absent for non-MCP tools.
+   */
+  mcpServer?: string;
   /** Parent tool-call id, for nested tools (e.g. Claude's Task subagents). */
   parentToolCallId?: string;
   /** True iff this tool call is the agent's plan-finalization signal. */
@@ -363,6 +369,8 @@ export interface ToolCallDelta {
   content?: ToolCallContent[] | null;
   locations?: Array<{ path: string; line?: number | null }> | null;
   vendorToolName?: string;
+  /** MCP server name; see `ToolCallSnapshot.mcpServer`. */
+  mcpServer?: string;
   parentToolCallId?: string;
   isPlanProposal?: boolean;
 }
@@ -609,6 +617,12 @@ export type AgentMessagePart =
        * Absent for backends that surface no vendor identity (opencode, codex).
        */
       vendorToolName?: string;
+      /**
+       * MCP server name parsed from a `mcp__<server>__<tool>` qualified name.
+       * Rendered as a `server · tool` prefix in the trail; `vendorToolName`
+       * holds the bare tool name. Absent for non-MCP tools.
+       */
+      mcpServer?: string;
       /**
        * Parent tool-call id for sub-agent children. Today only Claude
        * Code emits this (Task → child tool calls). Absent → the part is

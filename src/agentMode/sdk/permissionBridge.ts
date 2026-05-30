@@ -18,6 +18,7 @@ import type {
   SessionId,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
+import { resolveToolName } from "@/agentMode/session/toolName";
 import { err2String } from "@/utils";
 import { logSdkInbound, logSdkOutbound } from "./sdkDebugTap";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
@@ -160,21 +161,19 @@ function synthesizePermissionPrompt(
   sessionId: SessionId,
   ctx: Parameters<CanUseTool>[2]
 ): PermissionPrompt {
+  const { tool: name, mcpServer } = resolveToolName(toolName);
   return {
     sessionId,
     toolCall: {
       // Reuse the SDK's `tool_use_id` so prompt and `tool_call` notification
       // share an id — the trail UI and plan-card resolver pair them by id.
       toolCallId: ctx.toolUseID,
-      kind: deriveToolKind(toolName),
+      kind: deriveToolKind(name),
       status: "pending",
-      title: deriveToolTitle(
-        toolName,
-        input,
-        typeof ctx.title === "string" ? ctx.title : undefined
-      ),
+      title: deriveToolTitle(name, input, typeof ctx.title === "string" ? ctx.title : undefined),
       rawInput: input,
-      ...vendorMetaFields(toolName),
+      mcpServer,
+      ...vendorMetaFields(name),
     },
     options: STANDARD_OPTIONS,
   };

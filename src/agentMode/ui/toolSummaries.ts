@@ -1,5 +1,5 @@
 import type { LucideIcon } from "lucide-react";
-import { Bot } from "lucide-react";
+import { Bot, MessageCircleQuestion } from "lucide-react";
 import { pickToolIcon } from "@/agentMode/ui/toolIcons";
 import type { ToolCallPart } from "@/agentMode/ui/agentTrail";
 import { toVaultRelative } from "@/agentMode/ui/vaultPath";
@@ -45,6 +45,20 @@ export interface ToolSummary {
  * `lookupToolSummaryForAggregate` when they have a homogenous group.
  */
 export function lookupToolSummary(part: ToolCallPart): ToolSummary {
+  const base = selectToolSummary(part);
+  if (!part.mcpServer) return base;
+  // An MCP tool whose bare name collides with a native tool (e.g.
+  // `mcp__srv__read` → bare `read` → the Read/kind summary) would otherwise
+  // masquerade as that native tool. Prepend the server to the collapsed line
+  // for every MCP call so it always reads as `server · …`.
+  const server = part.mcpServer;
+  return {
+    ...base,
+    collapsedLine: (p, ctx) => `${server} · ${base.collapsedLine(p, ctx)}`,
+  };
+}
+
+function selectToolSummary(part: ToolCallPart): ToolSummary {
   // Heuristic: opencode's `task` tool is a sub-agent invocation but
   // surfaces no `vendorToolName` and maps to `kind: "other"`. Recognize
   // it by data shape so the registry stays backend-id-free.
@@ -107,6 +121,55 @@ function targetFromTitle(part: ToolCallPart): string {
   // "Read Read" / "Edited Edit".
   if (part.vendorToolName && t.toLowerCase() === part.vendorToolName.toLowerCase()) return "…";
   return t;
+}
+
+/**
+ * Turn a tool identifier into a readable label: split camelCase / PascalCase /
+ * snake_case / kebab-case into words, lowercase, then capitalize the first
+ * letter. "AskUserQuestion" → "Ask user question"; "query-docs" → "Query docs".
+ */
+function humanizeToolName(name: string): string {
+  const words = name
+    .replace(/([A-Z]+)([A-Z][a-z])/g, "$1 $2")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim()
+    .toLowerCase();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : "";
+}
+
+/**
+ * Readable label for a tool with no dedicated summary (MCP tools,
+ * AskUserQuestion before its summary matches, unknown vendor tools). Never
+ * returns the "…" placeholder: a humanized identifier, or the verbatim
+ * friendly title for ACP tools that supply one, falling back to "Tool call".
+ * The `server ·` prefix for MCP tools is applied uniformly in
+ * `lookupToolSummary` so it survives even when an MCP tool routes to a
+ * native summary — see that function.
+ */
+function genericToolLabel(part: ToolCallPart): string {
+  // ACP backends with no vendor identity may supply a friendly multi-word
+  // title — show it verbatim rather than mangling it.
+  if (!part.vendorToolName && /\s/.test(part.title)) return part.title;
+  const bare = part.vendorToolName ?? part.title;
+  return humanizeToolName(bare) || "Tool call";
+}
+
+/**
+ * The first question's short header (preferred) or full text from an
+ * AskUserQuestion tool input. Null until the input has streamed in.
+ */
+function firstQuestionText(part: ToolCallPart): string | null {
+  const input = part.input as
+    | { questions?: Array<{ question?: unknown; header?: unknown }> }
+    | null
+    | undefined;
+  const first = input?.questions?.[0];
+  if (!first) return null;
+  const header = typeof first.header === "string" ? first.header.trim() : "";
+  if (header) return header;
+  const question = typeof first.question === "string" ? first.question.trim() : "";
+  return question || null;
 }
 
 /**
@@ -343,6 +406,20 @@ const EXIT_PLAN_SUMMARY: ToolSummary = {
   }),
 };
 
+const ASK_USER_QUESTION_SUMMARY: ToolSummary = {
+  icon: MessageCircleQuestion,
+  collapsedLine: (p) => {
+    const v = verb(p, "Asking", "Asked");
+    const q = firstQuestionText(p);
+    return q ? `${v}: "${q}"` : `${v} a question`;
+  },
+  outcome: () => null,
+  aggregate: (parts) => ({
+    line: `Asked ${pluralize(parts.length, "question")}${statusSuffix(parts)}`,
+    outcome: "",
+  }),
+};
+
 const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   Read: READ_SUMMARY,
   Edit: EDIT_SUMMARY,
@@ -360,6 +437,7 @@ const VENDOR_SUMMARIES: Record<string, ToolSummary> = {
   Agent: TASK_SUMMARY,
   TodoWrite: TODO_SUMMARY,
   ExitPlanMode: EXIT_PLAN_SUMMARY,
+  AskUserQuestion: ASK_USER_QUESTION_SUMMARY,
   LS: LIST_SUMMARY,
 };
 
@@ -434,7 +512,7 @@ const KIND_SUMMARIES: Record<string, ToolSummary> = {
 
 const GENERIC_SUMMARY: ToolSummary = {
   icon: pickToolIcon({}),
-  collapsedLine: (p) => targetFromTitle(p),
+  collapsedLine: (p) => genericToolLabel(p),
   outcome: () => null,
   aggregate: (parts) => ({
     line: `${pluralize(parts.length, "tool call")}${statusSuffix(parts)}`,

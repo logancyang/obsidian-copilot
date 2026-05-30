@@ -50,6 +50,7 @@ import type {
   ToolCallSnapshot,
 } from "@/agentMode/session/types";
 import { PERMISSION_OPTION_KINDS } from "@/agentMode/session/types";
+import { resolveToolName } from "@/agentMode/session/toolName";
 import { translateBackendState } from "@/agentMode/session/translateBackendState";
 
 // ---- Catalog wire → neutral (pass-through, structural alias) -----------
@@ -226,14 +227,16 @@ function toolCallContentFromAcp(
 function toolCallSnapshotFromAcp(
   call: ToolCall & { sessionUpdate?: "tool_call" }
 ): ToolCallSnapshot {
+  const { tool: title, mcpServer } = resolveToolName(call.title);
   return {
     toolCallId: call.toolCallId,
-    title: call.title,
+    title,
     kind: toolKindFromAcp(call.kind),
     status: toolStatusFromAcp(call.status),
     rawInput: call.rawInput,
     content: toolCallContentFromAcp(call.content),
     locations: call.locations?.map((l) => ({ path: l.path, line: l.line ?? undefined })),
+    mcpServer,
   };
 }
 
@@ -246,9 +249,10 @@ function mapNullable<T, R>(value: T | null | undefined, fn: (value: T) => R): R 
 function toolCallDeltaFromAcp(
   upd: ToolCallUpdate & { sessionUpdate?: "tool_call_update" }
 ): ToolCallDelta {
+  const resolved = upd.title != null ? resolveToolName(upd.title) : null;
   return {
     toolCallId: upd.toolCallId,
-    title: upd.title ?? undefined,
+    title: resolved?.tool,
     kind: toolKindFromAcp(upd.kind ?? undefined),
     status: toolStatusFromAcp(upd.status as string | undefined),
     rawInput: upd.rawInput,
@@ -256,6 +260,7 @@ function toolCallDeltaFromAcp(
     locations: mapNullable(upd.locations, (locs) =>
       locs.map((l) => ({ path: l.path, line: l.line ?? undefined }))
     ),
+    mcpServer: resolved?.mcpServer,
   };
 }
 

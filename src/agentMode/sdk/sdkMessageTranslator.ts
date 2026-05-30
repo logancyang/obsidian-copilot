@@ -13,6 +13,7 @@ import type {
   SessionUpdate,
   ToolCallContent,
 } from "@/agentMode/session/types";
+import { resolveToolName } from "@/agentMode/session/toolName";
 import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
 
 /**
@@ -109,7 +110,7 @@ function translateStreamEvent(
     case "content_block_start": {
       const block = sdkEvent.content_block;
       if (block.type === "tool_use") {
-        const name = normalizeToolName(block.name);
+        const { tool: name } = resolveToolName(block.name);
         state.toolUseBlocks.set(sdkEvent.index, {
           id: block.id,
           name,
@@ -119,7 +120,10 @@ function translateStreamEvent(
         });
         state.emittedToolUseIds.add(block.id);
         const out: SessionEvent[] = [
-          event(sessionId, makeToolCallUpdate(block.id, name, block.input ?? {}, parentToolUseId)),
+          event(
+            sessionId,
+            makeToolCallUpdate(block.id, block.name, block.input ?? {}, parentToolUseId)
+          ),
         ];
         if (name === "EnterPlanMode") {
           out.push(
@@ -249,29 +253,21 @@ function translateUserMessage(
 
 function makeToolCallUpdate(
   toolCallId: string,
-  normalizedName: string,
+  rawName: string,
   rawInput: unknown,
   parentToolUseId?: string
 ): SessionUpdate {
+  const { tool: name, mcpServer } = resolveToolName(rawName);
   return {
     sessionUpdate: "tool_call",
     toolCallId,
-    title: deriveToolTitle(normalizedName, rawInput),
-    kind: deriveToolKind(normalizedName),
+    title: deriveToolTitle(name, rawInput),
+    kind: deriveToolKind(name),
     status: "in_progress" as AgentToolStatus,
     rawInput,
-    ...vendorMetaFields(normalizedName, parentToolUseId),
+    mcpServer,
+    ...vendorMetaFields(name, parentToolUseId),
   };
-}
-
-/**
- * Strip the SDK's `mcp__<server>__` prefix on MCP tool names so downstream UI
- * mapping (kind / title / vendorToolName) sees the bare tool name. The
- * non-greedy middle segment tolerates server names containing underscores.
- */
-function normalizeToolName(name: string): string {
-  const m = /^mcp__.+?__(.+)$/.exec(name);
-  return m ? m[1] : name;
 }
 
 function toolResultContent(content: unknown): ToolCallContent[] | undefined {
