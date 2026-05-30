@@ -107,8 +107,14 @@ describe("COPILOT_PROMPT_BASE", () => {
     expect(COPILOT_PROMPT_BASE).toMatch(/!\[alt\]\(url\)[^\n]*never wrap them in backticks/i);
   });
 
-  it("ports the v3 GitHub-table heading convention (rule 10)", () => {
-    expect(COPILOT_PROMPT_BASE).toContain("immediately add ` |` after the table heading");
+  it("specifies valid GitHub-flavored tables and forbids stray trailing pipes on caption lines", () => {
+    expect(COPILOT_PROMPT_BASE).toContain("a delimiter row of dashes");
+    expect(COPILOT_PROMPT_BASE).toMatch(
+      /never append a trailing `\|` to a caption, heading, or any line that is not itself a table row/
+    );
+    // The old ambiguous wording made the agent append ` |` to a table's caption
+    // line, producing an orphan pipe row that breaks GFM rendering.
+    expect(COPILOT_PROMPT_BASE).not.toContain("immediately add ` |` after the table heading");
   });
 
   it("retains the LaTeX and bullet-list formatting rules", () => {
