@@ -20,10 +20,14 @@ If your plugin does not need CSS, delete this file.
   z-index: 9999 !important;
 }
 
-/* Bottom-only divider. Preflight is off, so `tw-border-b tw-border-solid`
+/* Single-side dividers. Preflight is off, so `tw-border-b tw-border-solid`
    leaks `border-style: solid` to all sides and renders all four borders. */
 .copilot-divider-b {
   border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.copilot-divider-t {
+  border-top: 1px solid var(--background-modifier-border);
 }
 
 .button-container {

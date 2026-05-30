@@ -3,7 +3,9 @@ import { logInfo, logWarn } from "@/logger";
 import { AgentMessageStore } from "@/agentMode/session/AgentMessageStore";
 import {
   AgentMessagePart,
+  AgentQuestionAnswers,
   AgentToolCallOutput,
+  AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
   BackendProcess,
@@ -43,6 +45,11 @@ const MAX_TOOL_OUTPUT_TEXT_CHARS = 12_000;
 // when nothing is pending — preserves React `useState` setter bail-out
 // behavior on idle subscription ticks.
 const EMPTY_PERMISSIONS: PermissionPrompt[] = [];
+// Same idea for `getPendingAskUserQuestions()`.
+const EMPTY_QUESTIONS: AskUserQuestionPrompt[] = [];
+// Canonical "no answers" map. Resolving an in-flight question with this on
+// cancel/dispose makes the bridge treat it as a user cancellation.
+const EMPTY_ANSWERS: AgentQuestionAnswers = Object.freeze({});
 
 /**
  * Optimistically swap `state.model.current.baseModelId` for the persisted
@@ -239,6 +246,17 @@ export class AgentSession {
     {
       request: PermissionPrompt;
       resolve: (resp: PermissionDecision) => void;
+    }
+  >();
+  // Pending AskUserQuestion resolvers keyed by requestId. Populated by
+  // `handleAskUserQuestion` when the wrapped ask-question prompter routes a
+  // request to this session; the inline `AskUserQuestionCard` resolves them
+  // through `resolveAskUserQuestion`.
+  private pendingQuestionResolvers = new Map<
+    string,
+    {
+      request: AskUserQuestionPrompt;
+      resolve: (answers: AgentQuestionAnswers) => void;
     }
   >();
   // Singleton "current plan" for the floating card. At most one per session
@@ -509,7 +527,12 @@ export class AgentSession {
     if (this.backendSessionId === null) {
       return this.startupFailed ? "error" : "starting";
     }
-    if (this.pendingPlanResolvers.size + this.pendingToolResolvers.size > 0) {
+    if (
+      this.pendingPlanResolvers.size +
+        this.pendingToolResolvers.size +
+        this.pendingQuestionResolvers.size >
+      0
+    ) {
       return "awaiting_permission";
     }
     if (this.abortController !== null) return "running";
@@ -711,9 +734,10 @@ export class AgentSession {
    * session events before the prompt promise resolves with
    * `stopReason: "cancelled"` — that's expected.
    *
-   * Flushes any pending tool-permission resolvers as rejects so the inline
-   * cards disappear immediately (and the SDK sees a deny rather than a
-   * dangling promise) instead of waiting for the user to click them.
+   * Flushes any pending tool-permission and AskUserQuestion resolvers (rejects
+   * / empty answers respectively) so the inline cards disappear immediately
+   * (and the SDK sees a deny rather than a dangling promise) instead of waiting
+   * for the user to click them.
    */
   async cancel(): Promise<void> {
     const status = this.getStatus();
@@ -721,6 +745,10 @@ export class AgentSession {
     if (!this.backendSessionId) return;
     if (this.pendingToolResolvers.size > 0) {
       this.flushResolvers(this.pendingToolResolvers);
+      this.notifyMessages();
+    }
+    if (this.pendingQuestionResolvers.size > 0) {
+      this.flushQuestionResolvers();
       this.notifyMessages();
     }
     try {
@@ -738,6 +766,7 @@ export class AgentSession {
     this.unregisterSessionHandler = null;
     this.flushResolvers(this.pendingPlanResolvers);
     this.flushResolvers(this.pendingToolResolvers);
+    this.flushQuestionResolvers();
     this.decidedPlanToolCallIds.clear();
     this.currentPlan = null;
     // Fire the `"closed"` transition before clearing listeners so
@@ -936,6 +965,46 @@ export class AgentSession {
   }
 
   /**
+   * Called by the wrapped ask-question prompter when the backend invokes its
+   * inline-question surface (Claude SDK's `AskUserQuestion`). The returned
+   * promise resolves when the inline `AskUserQuestionCard` calls
+   * `resolveAskUserQuestion` with the user's answers — or with `EMPTY_ANSWERS`
+   * if the turn is cancelled/disposed, which the bridge maps to a deny.
+   */
+  handleAskUserQuestion(request: AskUserQuestionPrompt): Promise<AgentQuestionAnswers> {
+    const requestId = request.requestId;
+    return new Promise<AgentQuestionAnswers>((resolve) => {
+      this.pendingQuestionResolvers.set(requestId, { request, resolve });
+      this.recomputeStatusIfChanged();
+      this.notifyMessages();
+    });
+  }
+
+  /**
+   * Resolve a pending AskUserQuestion with the user's answers. An empty map
+   * signals cancellation (the bridge turns it into the "User cancelled the
+   * question" deny). No-op when no question is pending for the given id.
+   */
+  resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void {
+    const entry = this.pendingQuestionResolvers.get(requestId);
+    if (!entry) return;
+    this.pendingQuestionResolvers.delete(requestId);
+    entry.resolve(answers);
+    this.recomputeStatusIfChanged();
+    this.notifyMessages();
+  }
+
+  /**
+   * Snapshot of every pending AskUserQuestion request, in arrival order so the
+   * UI renders cards stably. Returns a shared empty array when nothing is
+   * pending so React subscribers don't re-render on unrelated ticks.
+   */
+  getPendingAskUserQuestions(): AskUserQuestionPrompt[] {
+    if (this.pendingQuestionResolvers.size === 0) return EMPTY_QUESTIONS;
+    return Array.from(this.pendingQuestionResolvers.values(), (e) => e.request);
+  }
+
+  /**
    * Reject every pending resolver in `map` with the canonical deny decision
    * derived from the request's offered options, then clear the map. Used by
    * `cancel()` and `dispose()` so the inline cards disappear and the SDK
@@ -948,6 +1017,19 @@ export class AgentSession {
       resolve(decisionFor(request, PERMISSION_REJECT_KINDS));
     }
     map.clear();
+    this.recomputeStatusIfChanged();
+  }
+
+  /**
+   * Resolve every pending AskUserQuestion with `EMPTY_ANSWERS` (the
+   * cancellation signal) and clear the map. The answer-shaped resolvers can't
+   * reuse `flushResolvers`, which deals in `PermissionDecision`.
+   */
+  private flushQuestionResolvers(): void {
+    for (const { resolve } of this.pendingQuestionResolvers.values()) {
+      resolve(EMPTY_ANSWERS);
+    }
+    this.pendingQuestionResolvers.clear();
     this.recomputeStatusIfChanged();
   }
 

@@ -489,6 +489,42 @@ export interface PermissionDecision {
   denyMessage?: string;
 }
 
+// ---- Ask-user-question (inline multiple-choice prompt) -----------------
+
+/**
+ * One question in an `AskUserQuestionPrompt` — a `header`/`question` pair plus
+ * a single- or multi-select option list. Mirrors the Claude SDK's
+ * `AskUserQuestion` tool input; backends translate to this shape at the
+ * boundary so the inline card stays backend-agnostic.
+ */
+export interface AgentQuestion {
+  question: string;
+  header?: string;
+  options: Array<{ label: string; description?: string }>;
+  multiSelect?: boolean;
+}
+
+/**
+ * Answer map keyed by question text. Single-select values are the chosen
+ * option label; multi-select values are the chosen labels joined with `, `.
+ * An empty map signals cancellation (the bridge maps it to a deny).
+ */
+export type AgentQuestionAnswers = { [questionText: string]: string };
+
+/**
+ * A request from the backend asking the user to answer one or more inline
+ * multiple-choice questions (Claude SDK's `AskUserQuestion` tool). Routed
+ * through the session-domain ask-question prompter and rendered as an inline
+ * card at the tail of the chat — the sibling of `PermissionPrompt`.
+ * `requestId` reuses the backend's tool-call id so the resolver can pair the
+ * answer with the originating call.
+ */
+export interface AskUserQuestionPrompt {
+  sessionId: SessionId;
+  requestId: string;
+  questions: AgentQuestion[];
+}
+
 // ---- MCP server spec (neutral) -----------------------------------------
 
 /**
@@ -595,6 +631,17 @@ export interface BackendProcess {
   isRunning(): boolean;
   onExit(listener: () => void): () => void;
   setPermissionPrompter(fn: (req: PermissionPrompt) => Promise<PermissionDecision>): void;
+  /**
+   * Optional: register the session-domain handler the backend calls when it
+   * needs the user to answer inline multiple-choice questions (Claude SDK's
+   * `AskUserQuestion`). Mirrors `setPermissionPrompter`; the prompter routes
+   * each request to its owning session, which surfaces an inline card and
+   * resolves the returned promise with the answers (or `{}` on cancel).
+   * Backends with no equivalent surface (ACP today) omit it.
+   */
+  setAskUserQuestionPrompter?(
+    fn: (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>
+  ): void;
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void;
   newSession(params: OpenSessionInput): Promise<OpenSessionOutput>;
   prompt(params: PromptInput): Promise<PromptOutput>;

@@ -1,20 +1,43 @@
-import type { PermissionDecision, PermissionPrompt } from "@/agentMode/session/types";
-import { PermissionBridge } from "./permissionBridge";
+import type {
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
+  PermissionDecision,
+  PermissionPrompt,
+} from "@/agentMode/session/types";
+import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 
 describe("PermissionBridge.canUseTool", () => {
   function makeBridge(
     prompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null,
-    askUserQuestion?: (
-      questions: Array<{ question: string; options: Array<{ label: string }> }>
-    ) => Promise<{ [q: string]: string }>
+    askUserQuestionPrompter?: AskUserQuestionPrompter
   ) {
     const bridge = new PermissionBridge({
       getPrompter: () => prompter,
-
-      askUserQuestion: askUserQuestion,
+      getAskUserQuestionPrompter: askUserQuestionPrompter
+        ? () => askUserQuestionPrompter
+        : undefined,
     });
     bridge.setSessionContext("session-1");
     return bridge;
+  }
+
+  /**
+   * Minimal stand-in for an `AgentSession`'s ask-question resolver path: holds
+   * the in-flight request and a `resolve` handle so a test can drive the
+   * inline-card "submit" / "cancel" transitions the bridge awaits.
+   */
+  class FakeQuestionSession {
+    pending: AskUserQuestionPrompt | null = null;
+    private resolver: ((answers: AgentQuestionAnswers) => void) | null = null;
+    readonly handle: AskUserQuestionPrompter = (req) => {
+      this.pending = req;
+      return new Promise<AgentQuestionAnswers>((resolve) => {
+        this.resolver = resolve;
+      });
+    };
+    resolve(answers: AgentQuestionAnswers): void {
+      this.resolver?.(answers);
+    }
   }
 
   const ctx = {
@@ -133,8 +156,10 @@ describe("PermissionBridge.canUseTool", () => {
     expect(result.behavior).toBe("deny");
   });
 
-  it("routes AskUserQuestion to the dedicated handler with answers", async () => {
-    const handler = jest.fn(async () => ({ "What's your favorite color?": "Blue" }));
+  it("routes AskUserQuestion to the ask-question prompter with a session-domain request", async () => {
+    const handler = jest.fn<Promise<AgentQuestionAnswers>, [AskUserQuestionPrompt]>(async () => ({
+      "What's your favorite color?": "Blue",
+    }));
     const bridge = makeBridge(null, handler);
     const result = await bridge.canUseTool(
       "AskUserQuestion",
@@ -143,7 +168,11 @@ describe("PermissionBridge.canUseTool", () => {
       },
       ctx
     );
-    expect(handler).toHaveBeenCalled();
+    expect(handler).toHaveBeenCalledWith({
+      sessionId: "session-1",
+      requestId: "toolu_test_id",
+      questions: [{ question: "What's your favorite color?", options: [{ label: "Blue" }] }],
+    });
     expect(result.behavior).toBe("allow");
     if (result.behavior === "allow") {
       expect(result.updatedInput).toMatchObject({
@@ -152,7 +181,7 @@ describe("PermissionBridge.canUseTool", () => {
     }
   });
 
-  it("denies AskUserQuestion when no handler is configured", async () => {
+  it("denies AskUserQuestion when no ask-question prompter is configured", async () => {
     const bridge = makeBridge(async () => ({ outcome: { outcome: "cancelled" } }));
     const result = await bridge.canUseTool(
       "AskUserQuestion",
@@ -162,15 +191,48 @@ describe("PermissionBridge.canUseTool", () => {
     expect(result.behavior).toBe("deny");
   });
 
-  it("treats empty AskUserQuestion answers as cancelled", async () => {
-    const handler = jest.fn(async () => ({}));
-    const bridge = makeBridge(null, handler);
-    const result = await bridge.canUseTool(
+  it("submitting answers resolves AskUserQuestion with allow + the { questions, answers } payload", async () => {
+    // End-to-end inline-card resolver path: the bridge awaits the session's
+    // pending question, then maps the submitted answers back to a SDK allow —
+    // the same payload the old modal produced.
+    const fake = new FakeQuestionSession();
+    const bridge = makeBridge(null, fake.handle);
+    const questions = [
+      { question: "Pick a fruit", options: [{ label: "Apple" }, { label: "Pear" }] },
+    ];
+    const resultPromise = bridge.canUseTool("AskUserQuestion", { questions }, ctx);
+    // The card is pending until the user submits — the prompter saw the
+    // session-domain request keyed by the SDK tool_use_id.
+    expect(fake.pending).toEqual({
+      sessionId: "session-1",
+      requestId: "toolu_test_id",
+      questions,
+    });
+
+    fake.resolve({ "Pick a fruit": "Pear" });
+    const result = await resultPromise;
+    expect(result).toEqual({
+      behavior: "allow",
+      updatedInput: { questions, answers: { "Pick a fruit": "Pear" } },
+    });
+  });
+
+  it("cancelling AskUserQuestion (empty answers) resolves with deny + the cancellation message", async () => {
+    const fake = new FakeQuestionSession();
+    const bridge = makeBridge(null, fake.handle);
+    const resultPromise = bridge.canUseTool(
       "AskUserQuestion",
       { questions: [{ question: "Q", options: [{ label: "A" }] }] },
       ctx
     );
+
+    // Dismissing the card resolves the resolver with `{}`.
+    fake.resolve({});
+    const result = await resultPromise;
     expect(result.behavior).toBe("deny");
+    if (result.behavior === "deny") {
+      expect(result.message).toBe("User cancelled the question");
+    }
   });
 
   describe("Write tool gating", () => {

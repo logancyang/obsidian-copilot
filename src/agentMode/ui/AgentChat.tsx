@@ -16,6 +16,7 @@ import { expandCustomCommandPrefix } from "@/agentMode/session/expandCustomComma
 import { resolveActiveNoteToken } from "@/agentMode/session/resolveActiveNoteToken";
 import type {
   AgentChatMessage,
+  AskUserQuestionPrompt,
   CurrentPlan,
   PermissionPrompt,
   PromptContent,
@@ -159,6 +160,9 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
   const [pendingToolPermissions, setPendingToolPermissions] = useState<PermissionPrompt[]>(() =>
     backend.getPendingToolPermissions()
   );
+  const [pendingAskUserQuestions, setPendingAskUserQuestions] = useState<AskUserQuestionPrompt[]>(
+    () => backend.getPendingAskUserQuestions()
+  );
   const [chatHistoryItems, setChatHistoryItems] = useState<ChatHistoryItem[]>([]);
   const [queuedMessages, setQueuedMessages] = useState<QueuedAgentMessage[]>([]);
   const [selectedTextContexts] = useSelectedTextContexts();
@@ -188,6 +192,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
       setHasPendingPlanPermission(backend.hasPendingPlanPermission());
       setCurrentPlan(backend.getCurrentPlan());
       setPendingToolPermissions(backend.getPendingToolPermissions());
+      setPendingAskUserQuestions(backend.getPendingAskUserQuestions());
     };
     sync();
     return backend.subscribe(() => {
@@ -508,6 +513,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
               onDelete={handleDelete}
               currentPlan={currentPlan}
               pendingToolPermissions={pendingToolPermissions}
+              pendingAskUserQuestions={pendingAskUserQuestions}
               chatBackend={backend}
               isLoading={loading}
             />

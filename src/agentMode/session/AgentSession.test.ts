@@ -1725,6 +1725,92 @@ describe("AgentSession plan proposal lifecycle", () => {
     await turn;
   });
 
+  it("surfaces a pending AskUserQuestion and resolves it with the submitted answers", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude",
+    });
+    const statusChanges: string[] = [];
+    session.subscribe({
+      onMessagesChanged: () => {},
+      onStatusChanged: (status) => statusChanges.push(status),
+    });
+    const { turn } = session.sendPrompt("ask me something");
+    expect(session.getStatus()).toBe("running");
+
+    const answersPromise = session.handleAskUserQuestion({
+      sessionId: "acp-1",
+      requestId: "tc-ask",
+      questions: [{ question: "Pick a fruit", options: [{ label: "Apple" }, { label: "Pear" }] }],
+    });
+
+    expect(session.getStatus()).toBe("awaiting_permission");
+    expect(session.getPendingAskUserQuestions()).toHaveLength(1);
+    expect(statusChanges).toContain("awaiting_permission");
+
+    session.resolveAskUserQuestion("tc-ask", { "Pick a fruit": "Pear" });
+    await expect(answersPromise).resolves.toEqual({ "Pick a fruit": "Pear" });
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
+    expect(session.getStatus()).toBe("running");
+
+    resolvePrompt!({ stopReason: "end_turn" });
+    await turn;
+  });
+
+  it("returns the shared empty array when no AskUserQuestion is pending", () => {
+    const mock = makeMockBackend();
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude",
+    });
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
+    // Stable reference across idle ticks so React subscribers don't re-render.
+    expect(session.getPendingAskUserQuestions()).toBe(session.getPendingAskUserQuestions());
+  });
+
+  it("flushes a pending AskUserQuestion with empty answers when the turn is cancelled", async () => {
+    const mock = makeMockBackend();
+    let resolvePrompt: ((v: { stopReason: "cancelled" }) => void) | null = null;
+    let answersPromise: Promise<unknown> = Promise.resolve();
+    mock.prompt.mockImplementation(
+      () => new Promise((resolve) => (resolvePrompt = resolve as typeof resolvePrompt))
+    );
+    mock.cancel.mockImplementation(() => answersPromise.then(() => undefined));
+    const session = new AgentSession({
+      backend: mock.asBackend,
+      backendSessionId: "acp-1",
+      internalId: "internal-1",
+      backendId: "claude",
+    });
+    const { turn } = session.sendPrompt("ask me something");
+
+    answersPromise = session.handleAskUserQuestion({
+      sessionId: "acp-1",
+      requestId: "tc-ask",
+      questions: [{ question: "Pick a fruit", options: [{ label: "Apple" }] }],
+    });
+    expect(session.getStatus()).toBe("awaiting_permission");
+
+    const cancelPromise = session.cancel();
+    // Cancellation resolves the card's resolver with `{}` (the cancel signal)
+    // so the SDK turn unblocks instead of dangling.
+    await expect(answersPromise).resolves.toEqual({});
+    expect(session.getPendingAskUserQuestions()).toHaveLength(0);
+    await cancelPromise;
+
+    resolvePrompt!({ stopReason: "cancelled" });
+    await turn;
+  });
+
   it("forwards the optional denyMessage on resolvePlanProposalPermission to the resolved decision", async () => {
     const mock = makeMockBackend();
     let resolvePrompt: ((v: { stopReason: "end_turn" }) => void) | null = null;

@@ -10,7 +10,10 @@ import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManag
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { SkillManager } from "./skills";
-import { createDefaultPermissionPrompter } from "./ui/permissionPrompter";
+import {
+  createDefaultAskUserQuestionPrompter,
+  createDefaultPermissionPrompter,
+} from "./ui/permissionPrompter";
 
 export { AGENT_CHAT_MODE } from "./session/AgentChatPersistenceManager";
 export { AgentModeChat } from "./ui/AgentModeChat";
@@ -126,8 +129,12 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
   const prompter = createDefaultPermissionPrompter(
     (id) => managerRef?.getSessionByBackendId(id) ?? null
   );
+  const askUserQuestionPrompter = createDefaultAskUserQuestionPrompter(
+    (id) => managerRef?.getSessionByBackendId(id) ?? null
+  );
   const manager = new AgentSessionManager(app, plugin, {
     permissionPrompter: prompter,
+    askUserQuestionPrompter,
     resolveDescriptor: (id) => backendRegistry[id],
     modelPreloader: preloader,
     persistenceManager,

@@ -1,9 +1,10 @@
 /**
  * Bridge between the Claude SDK's `canUseTool` callback and Agent Mode's
- * session-domain permission prompter. Each `canUseTool` invocation is
- * translated to a `PermissionPrompt`, dispatched through the prompter, then
- * translated back to a SDK `PermissionResult`. AskUserQuestion gets a
- * separate branch that opens a dedicated multi-choice modal.
+ * session-domain prompters. Each `canUseTool` invocation is translated to a
+ * `PermissionPrompt`, dispatched through the permission prompter, then
+ * translated back to a SDK `PermissionResult`. AskUserQuestion gets a separate
+ * branch that dispatches through the ask-question prompter — the session
+ * surfaces an inline card and returns the answers map.
  */
 import type {
   CanUseTool,
@@ -11,6 +12,9 @@ import type {
   PermissionUpdate,
 } from "@anthropic-ai/claude-agent-sdk";
 import type {
+  AgentQuestion,
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
   PermissionDecision,
   PermissionOption,
   PermissionOptionKind,
@@ -25,22 +29,26 @@ import { deriveToolKind, deriveToolTitle, vendorMetaFields } from "./toolMeta";
 
 export type Prompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
 
-export type AskUserQuestionHandler = (
-  questions: AskUserQuestionInput["questions"]
-) => Promise<{ [questionText: string]: string }>;
+/**
+ * Session-domain handler for the SDK's `AskUserQuestion` tool. Mirrors the
+ * permission `Prompter`: the bridge fetches it lazily via
+ * `getAskUserQuestionPrompter` so it can be registered after construction.
+ */
+export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>;
 
+/** SDK-side shape of the `AskUserQuestion` tool input. */
 export interface AskUserQuestionInput {
-  questions: Array<{
-    question: string;
-    header?: string;
-    options: Array<{ label: string; description?: string }>;
-    multiSelect?: boolean;
-  }>;
+  questions: AgentQuestion[];
 }
 
 export interface PermissionBridgeOptions {
   getPrompter: () => Prompter | null;
-  askUserQuestion?: AskUserQuestionHandler;
+  /**
+   * Lazily fetch the session-domain ask-question prompter. Absent / returning
+   * `null` makes AskUserQuestion deny with "not yet supported", matching the
+   * pre-inline behavior when no handler was wired.
+   */
+  getAskUserQuestionPrompter?: () => AskUserQuestionPrompter | null;
   /**
    * Predicate identifying plan-mode plan files. When provided, the bridge
    * auto-allows `Write` calls whose `file_path` satisfies the predicate so
@@ -71,7 +79,7 @@ export class PermissionBridge {
 
   canUseTool: CanUseTool = async (toolName, input, ctx) => {
     if (toolName === "AskUserQuestion") {
-      return this.handleAskUserQuestion(input as unknown as AskUserQuestionInput);
+      return this.handleAskUserQuestion(input as unknown as AskUserQuestionInput, ctx);
     }
 
     const sessionId = this.currentSessionId;
@@ -105,10 +113,14 @@ export class PermissionBridge {
     return result;
   };
 
-  private async handleAskUserQuestion(input: AskUserQuestionInput): Promise<PermissionResult> {
+  private async handleAskUserQuestion(
+    input: AskUserQuestionInput,
+    ctx: Parameters<CanUseTool>[2]
+  ): Promise<PermissionResult> {
     const sessionId = this.currentSessionId;
     logSdkInbound("askUserQuestion:request", input, sessionId);
-    if (!this.opts.askUserQuestion) {
+    const prompter = this.opts.getAskUserQuestionPrompter?.() ?? null;
+    if (!prompter || !sessionId) {
       return this.deny(
         "askUserQuestion:response",
         "AskUserQuestion is not yet supported",
@@ -116,7 +128,14 @@ export class PermissionBridge {
       );
     }
     try {
-      const answers = await this.opts.askUserQuestion(input.questions);
+      // Reuse the SDK's `tool_use_id` as the requestId so the inline card's
+      // resolver pairs the answer with this call, mirroring the permission
+      // prompt's `toolCallId`.
+      const answers = await prompter({
+        sessionId,
+        requestId: ctx.toolUseID,
+        questions: input.questions,
+      });
       if (Object.keys(answers).length === 0) {
         return this.deny("askUserQuestion:response", "User cancelled the question", sessionId);
       }

@@ -1,5 +1,8 @@
 import type { AgentSession } from "@/agentMode/session/AgentSession";
-import type { PermissionPrompter } from "@/agentMode/session/AgentSessionManager";
+import type {
+  AskUserQuestionPrompter,
+  PermissionPrompter,
+} from "@/agentMode/session/AgentSessionManager";
 import type { SessionId } from "@/agentMode/session/types";
 
 /**
@@ -19,5 +22,22 @@ export function createDefaultPermissionPrompter(
       return session.handlePlanProposalPermission(req);
     }
     return session.handleToolPermission(req);
+  };
+}
+
+/**
+ * AskUserQuestion requests route into the owning session so the user answers
+ * via an inline card in the chat instead of a modal — the sibling of
+ * `createDefaultPermissionPrompter`. Returns `{}` (the cancellation signal)
+ * when no session owns the request, so the SDK turn unblocks with the standard
+ * cancellation deny instead of hanging on a dangling promise.
+ */
+export function createDefaultAskUserQuestionPrompter(
+  resolveSession: (backendSessionId: SessionId) => AgentSession | null
+): AskUserQuestionPrompter {
+  return (req) => {
+    const session = resolveSession(req.sessionId);
+    if (!session) return Promise.resolve({});
+    return session.handleAskUserQuestion(req);
   };
 }

@@ -3,6 +3,8 @@ import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import type {
   AgentChatMessage,
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
@@ -127,6 +129,15 @@ export class AgentChatUIState implements AgentChatBackend {
 
   resolveToolPermission(toolCallId: string, optionId: string): void {
     this.session.resolveToolPermission(toolCallId, optionId);
+    this.notifyListeners();
+  }
+
+  getPendingAskUserQuestions(): AskUserQuestionPrompt[] {
+    return this.session.getPendingAskUserQuestions();
+  }
+
+  resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void {
+    this.session.resolveAskUserQuestion(requestId, answers);
     this.notifyListeners();
   }
 

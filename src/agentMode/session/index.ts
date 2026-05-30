@@ -1,6 +1,7 @@
 export {
   AgentSessionManager,
   type AgentSessionManagerOptions,
+  type AskUserQuestionPrompter,
   type PermissionPrompter,
 } from "./AgentSessionManager";
 export { AgentSession, type AgentSessionStatus, type AgentSessionListener } from "./AgentSession";
@@ -16,6 +17,9 @@ export type {
   AgentToolKind,
   AgentToolStatus,
   AgentPlanEntry,
+  AgentQuestion,
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
   NewAgentChatMessage,
   PermissionDecision,
   PermissionPrompt,

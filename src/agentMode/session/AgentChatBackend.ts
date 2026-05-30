@@ -1,6 +1,8 @@
 import type { MessageContext } from "@/types/message";
 import type {
   AgentChatMessage,
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
   BackendState,
   CurrentPlan,
   PermissionPrompt,
@@ -94,4 +96,20 @@ export interface AgentChatBackend {
    * SDK turn unblocks. No-op when no permission is pending for the given id.
    */
   resolveToolPermission(toolCallId: string, optionId: string): void;
+
+  /**
+   * Snapshot of every pending AskUserQuestion request waiting on the user.
+   * Rendered as inline `AskUserQuestionCard`s at the tail of the chat scroll
+   * container, alongside any `ToolPermissionCard`s. Empty list when none.
+   */
+  getPendingAskUserQuestions(): AskUserQuestionPrompt[];
+
+  /**
+   * Resolve a pending AskUserQuestion with the user's answers. The card is
+   * removed from `getPendingAskUserQuestions()` synchronously and the SDK turn
+   * unblocks. An empty map signals cancellation (the backend produces the
+   * "User cancelled the question" deny). No-op when no question is pending for
+   * the given id.
+   */
+  resolveAskUserQuestion(requestId: string, answers: AgentQuestionAnswers): void;
 }

@@ -7,4 +7,7 @@ export {
   useBackendInstallState,
   useSessionBackendDescriptor,
 } from "./useBackendDescriptor";
-export { createDefaultPermissionPrompter } from "./permissionPrompter";
+export {
+  createDefaultAskUserQuestionPrompter,
+  createDefaultPermissionPrompter,
+} from "./permissionPrompter";

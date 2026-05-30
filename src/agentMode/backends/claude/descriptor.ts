@@ -28,7 +28,6 @@ import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMod
 import { ClaudeInstallModal } from "./ClaudeInstallModal";
 import ClaudeLogo from "./logo.svg";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
-import { openAskUserQuestionModal } from "./AskUserQuestionModal";
 
 export const CLAUDE_INSTALL_COMMAND = "npm install -g @anthropic-ai/claude-code";
 
@@ -201,7 +200,6 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
       app: args.app,
       clientVersion: args.clientVersion,
       descriptor: args.descriptor,
-      askUserQuestion: (questions) => openAskUserQuestionModal(args.app, questions),
       getEnableThinking: () => Boolean(getSettings().agentMode?.backends?.claude?.enableThinking),
       getEnvOverrides: () => getSettings().agentMode?.backends?.claude?.envOverrides,
       isPlanModePlanFilePath: isClaudePlanModePlanFilePath,

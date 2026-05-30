@@ -48,7 +48,14 @@ carry the **why** — the things a reader cannot recover by reading the code.
 - **No arbitrary font-size values**: Never use Tailwind's arbitrary-value syntax for typography (e.g. `tw-text-[10.5px]`, `tw-text-[13px]`). Stick to the configured `fontSize` tokens (`tw-text-ui-smaller`, `tw-text-ui-small`, `tw-text-xs`, `tw-text-smallest`, etc.) so type stays consistent with Obsidian's CSS variables. If none of the existing tokens fit, extend the `fontSize` scale in `tailwind.config.js` rather than hard-coding a pixel value at the call site.
 - **No inline `style={{ ... }}`**: Reserve the `style` prop for values that must change dynamically at runtime (computed positions, animated transforms). Static visual changes belong in Tailwind classes or the shared component (e.g. `Button` variants/sizes).
 - **Always wrap Tailwind class strings with `cn()`** (from `@/lib/utils`) whenever the classes live anywhere other than a literal `className=` attribute on a JSX element — variable assignments, ternaries, function returns, props passed to other components, etc. `eslint-plugin-tailwindcss` only lints classes it can statically see inside JSX `className` literals or inside calls to its registered callees (`cn`, `clsx`, `classnames`, `ctl`, `cva`). Use `cn()` for composition too — instead of a ternary between two whole class strings, merge a shared base with conditional fragments: `cn("tw-flex tw-text-sm", expandable && "tw-cursor-pointer")`.
-- **Never use a raw `<button>`** — use the `Button` design-system component (`@/components/ui/button`) with the matching `variant`; if no variant fits, fall back to a `<div role="button">`, never a bare `<button>`.
+- **Raw `<button>` elements must be explicitly reset/styled**: Prefer the
+  design-system `Button` component (`@/components/ui/button`) for ordinary
+  command buttons. When the native element is a better semantic fit (for
+  example tabs, segmented controls, icon-only controls, or compact custom
+  widgets), a raw `<button>` is fine, but account for Preflight being off:
+  explicitly set the visual reset/interaction styles you rely on (background,
+  border, radius, padding, text color, hover/focus/disabled states, etc.) so
+  Obsidian/browser defaults do not leak into the UI.
 
 ## Writing testable code (dependency injection)
 

@@ -13,6 +13,8 @@ import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
 import { MethodUnsupportedError } from "./errors";
 import { resolveMcpServers } from "./mcpResolver";
 import type {
+  AgentQuestionAnswers,
+  AskUserQuestionPrompt,
   BackendDescriptor,
   BackendId,
   BackendProcess,
@@ -28,12 +30,27 @@ const AUTOSAVE_DEBOUNCE_MS = 500;
 
 export type PermissionPrompter = (req: PermissionPrompt) => Promise<PermissionDecision>;
 
+/**
+ * Session-domain handler for inline multiple-choice questions, the sibling of
+ * `PermissionPrompter`. Routes a backend's `AskUserQuestion` request to its
+ * owning session, which surfaces an inline card and resolves with the answers
+ * (or `{}` when the user cancels / no session owns the request).
+ */
+export type AskUserQuestionPrompter = (req: AskUserQuestionPrompt) => Promise<AgentQuestionAnswers>;
+
 // Injected by the barrel so `session/` doesn't have to import
 // `backends/registry` directly (would breach the layer boundary).
 export type DescriptorResolver = (id: BackendId) => BackendDescriptor | undefined;
 
 export interface AgentSessionManagerOptions {
   permissionPrompter: PermissionPrompter;
+  /**
+   * Handler the Claude SDK backend calls for its inline `AskUserQuestion`
+   * surface. Optional only so legacy callers (tests) can omit it; production
+   * wiring always supplies one via the barrel in `agentMode/index.ts`. Wired
+   * onto each backend that advertises `setAskUserQuestionPrompter`.
+   */
+  askUserQuestionPrompter?: AskUserQuestionPrompter;
   resolveDescriptor: DescriptorResolver;
   modelPreloader: AgentModelPreloader;
   /**
@@ -1059,6 +1076,19 @@ export class AgentSessionManager {
    * (e.g. `tryResumeSessionFromHistory`) can ignore `warm` — the probe
    * session simply sits unused on the proc.
    */
+  /**
+   * Register the session-domain prompters on a freshly-adopted backend. The
+   * permission prompter is required; the ask-question prompter is wired only
+   * when both the manager was configured with one and the backend advertises
+   * the optional `setAskUserQuestionPrompter` surface (Claude SDK today).
+   */
+  private wirePrompters(proc: BackendProcess): void {
+    proc.setPermissionPrompter(this.opts.permissionPrompter);
+    if (this.opts.askUserQuestionPrompter) {
+      proc.setAskUserQuestionPrompter?.(this.opts.askUserQuestionPrompter);
+    }
+  }
+
   private async ensureBackend(
     backendId: BackendId,
     descriptor: BackendDescriptor
@@ -1072,7 +1102,7 @@ export class AgentSessionManager {
     if (warm) {
       // Probe subprocess is already started + initialize-handshaken —
       // wire it into the manager without paying either cost again.
-      warm.proc.setPermissionPrompter(this.opts.permissionPrompter);
+      this.wirePrompters(warm.proc);
       this.installBackendExitHandler(backendId, warm.proc, descriptor);
       this.backends.set(backendId, warm.proc);
       return { proc: warm.proc, warm };
@@ -1088,7 +1118,7 @@ export class AgentSessionManager {
       // ACP backends declare `start()` to spawn the subprocess and run the
       // initialize handshake. In-process adapters (Claude SDK) omit it.
       if (proc.start) await proc.start();
-      proc.setPermissionPrompter(this.opts.permissionPrompter);
+      this.wirePrompters(proc);
       this.installBackendExitHandler(backendId, proc, descriptor);
       this.backends.set(backendId, proc);
       return proc;

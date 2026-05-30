@@ -1,4 +1,5 @@
 import { AgentTrail } from "@/agentMode/ui/AgentTrailView";
+import { AskUserQuestionCard } from "@/agentMode/ui/AskUserQuestionCard";
 import { PlanProposalCard } from "@/agentMode/ui/PlanProposalCard";
 import { ToolPermissionCard } from "@/agentMode/ui/ToolPermissionCard";
 import { BottomLoadingIndicator } from "@/components/chat-components/BottomLoadingIndicator";
@@ -6,7 +7,12 @@ import ChatSingleMessage from "@/components/chat-components/ChatSingleMessage";
 import { USER_SENDER } from "@/constants";
 import { useChatScrolling } from "@/hooks/useChatScrolling";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
-import type { AgentChatMessage, CurrentPlan, PermissionPrompt } from "@/agentMode/session/types";
+import type {
+  AgentChatMessage,
+  AskUserQuestionPrompt,
+  CurrentPlan,
+  PermissionPrompt,
+} from "@/agentMode/session/types";
 import type { ChatMessage } from "@/types/message";
 import { App } from "obsidian";
 import React, { memo, useMemo } from "react";
@@ -17,6 +23,7 @@ interface AgentChatMessagesProps {
   onDelete: (messageId: string) => void;
   currentPlan: CurrentPlan | null;
   pendingToolPermissions: PermissionPrompt[];
+  pendingAskUserQuestions: AskUserQuestionPrompt[];
   chatBackend: AgentChatBackend;
   /** True while a turn is in flight. The last assistant message in the
    *  visible list is treated as the streaming placeholder. */
@@ -48,6 +55,7 @@ const AgentChatMessages = memo(
     onDelete,
     currentPlan,
     pendingToolPermissions,
+    pendingAskUserQuestions,
     chatBackend,
     isLoading,
   }: AgentChatMessagesProps) => {
@@ -68,7 +76,15 @@ const AgentChatMessages = memo(
         onResolve={chatBackend.resolveToolPermission.bind(chatBackend)}
       />
     ));
-    const hasTailCards = showPlanCard || pendingToolPermissions.length > 0;
+    const inlineAskUserQuestionCards = pendingAskUserQuestions.map((req) => (
+      <AskUserQuestionCard
+        key={req.requestId}
+        request={req}
+        onResolve={chatBackend.resolveAskUserQuestion.bind(chatBackend)}
+      />
+    ));
+    const hasTailCards =
+      showPlanCard || pendingToolPermissions.length > 0 || pendingAskUserQuestions.length > 0;
 
     // The last visible assistant message is the streaming placeholder while
     // a turn is in flight — drives the reasoning-block timer/spinner and the
@@ -100,6 +116,7 @@ const AgentChatMessages = memo(
           {isLoading && <BottomLoadingIndicator />}
           {inlinePlanCard}
           {inlineToolPermissionCards}
+          {inlineAskUserQuestionCards}
         </div>
       );
     }
@@ -169,6 +186,7 @@ const AgentChatMessages = memo(
           })}
           {inlinePlanCard}
           {inlineToolPermissionCards}
+          {inlineAskUserQuestionCards}
         </div>
       </div>
     );

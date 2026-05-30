@@ -52,7 +52,7 @@ import type {
 } from "@/agentMode/session/types";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
 import { createTranslatorState, mapStopReason, translateSdkMessage } from "./sdkMessageTranslator";
-import { PermissionBridge, type AskUserQuestionHandler } from "./permissionBridge";
+import { PermissionBridge, type AskUserQuestionPrompter } from "./permissionBridge";
 import {
   getCachedSdkCatalog,
   probeClaudeSdkCatalog,
@@ -101,7 +101,6 @@ export interface ClaudeSdkBackendProcessOptions {
   app: App;
   clientVersion: string;
   descriptor: BackendDescriptor;
-  askUserQuestion?: AskUserQuestionHandler;
   /**
    * Read at the start of every `prompt()` so a settings change live-applies on
    * the next turn.
@@ -155,6 +154,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   private readonly sessions = new Map<SessionId, SessionState>();
   private permissionPrompter: ((req: PermissionPrompt) => Promise<PermissionDecision>) | null =
     null;
+  private askUserQuestionPrompter: AskUserQuestionPrompter | null = null;
   private exitListeners = new Set<() => void>();
   private shuttingDown = false;
   private readonly bridge: PermissionBridge;
@@ -169,7 +169,7 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
   constructor(private readonly opts: ClaudeSdkBackendProcessOptions) {
     this.bridge = new PermissionBridge({
       getPrompter: () => this.permissionPrompter,
-      askUserQuestion: opts.askUserQuestion,
+      getAskUserQuestionPrompter: () => this.askUserQuestionPrompter,
       isPlanModePlanFilePath: opts.isPlanModePlanFilePath,
     });
     logInfo(
@@ -188,6 +188,10 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
 
   setPermissionPrompter(fn: (req: PermissionPrompt) => Promise<PermissionDecision>): void {
     this.permissionPrompter = fn;
+  }
+
+  setAskUserQuestionPrompter(fn: AskUserQuestionPrompter): void {
+    this.askUserQuestionPrompter = fn;
   }
 
   registerSessionHandler(sessionId: SessionId, handler: SessionUpdateHandler): () => void {
