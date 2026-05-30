@@ -576,7 +576,7 @@ export class DBOperations {
       const { inclusions, exclusions } = getMatchingPatterns();
       const allowedPaths = new Set(
         files
-          .filter((file) => shouldIndexFile(file, inclusions, exclusions))
+          .filter((file) => shouldIndexFile(this.app, file, inclusions, exclusions))
           .map((file) => file.path)
       );
       // Get all documents in the database

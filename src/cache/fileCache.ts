@@ -1,6 +1,6 @@
 import { logError, logInfo } from "@/logger";
 import { md5 } from "@/utils/hash";
-import { TFile } from "obsidian";
+import { TFile, Vault } from "obsidian";
 
 export interface FileCacheEntry<T> {
   content: T;
@@ -23,10 +23,10 @@ export class FileCache<T> {
     return FileCache.instance as FileCache<T>;
   }
 
-  private async ensureCacheDir() {
-    if (!(await app.vault.adapter.exists(this.cacheDir))) {
+  private async ensureCacheDir(vault: Vault) {
+    if (!(await vault.adapter.exists(this.cacheDir))) {
       logInfo("Creating file cache directory:", this.cacheDir);
-      await app.vault.adapter.mkdir(this.cacheDir);
+      await vault.adapter.mkdir(this.cacheDir);
     }
   }
 
@@ -40,7 +40,7 @@ export class FileCache<T> {
     return `${this.cacheDir}/${cacheKey}.md`;
   }
 
-  async get(cacheKey: string): Promise<T | null> {
+  async get(vault: Vault, cacheKey: string): Promise<T | null> {
     try {
       // Check memory cache first
       const memoryResult = this.memoryCache.get(cacheKey);
@@ -50,9 +50,9 @@ export class FileCache<T> {
       }
 
       const cachePath = this.getCachePath(cacheKey);
-      if (await app.vault.adapter.exists(cachePath)) {
+      if (await vault.adapter.exists(cachePath)) {
         logInfo("File cache hit:", cacheKey);
-        const cacheContent = await app.vault.adapter.read(cachePath);
+        const cacheContent = await vault.adapter.read(cachePath);
 
         // .md files contain either plain string content or JSON-serialized content
         // The safest approach is to go back to a simpler method that doesn't try to embed metadata in the content itself.
@@ -96,9 +96,9 @@ export class FileCache<T> {
     }
   }
 
-  async set(cacheKey: string, content: T): Promise<void> {
+  async set(vault: Vault, cacheKey: string, content: T): Promise<void> {
     try {
-      await this.ensureCacheDir();
+      await this.ensureCacheDir(vault);
       const cachePath = this.getCachePath(cacheKey);
 
       const timestamp = Date.now();
@@ -120,22 +120,22 @@ export class FileCache<T> {
         serializedContent = JSON.stringify(content, null, 2);
       }
 
-      await app.vault.adapter.write(cachePath, serializedContent);
+      await vault.adapter.write(cachePath, serializedContent);
       logInfo("Cached file content:", cacheKey);
     } catch (error) {
       logError("Error writing to file cache:", error);
     }
   }
 
-  async remove(cacheKey: string): Promise<void> {
+  async remove(vault: Vault, cacheKey: string): Promise<void> {
     try {
       // Remove from memory cache
       this.memoryCache.delete(cacheKey);
 
       // Remove from file cache (markdown format)
       const cachePath = this.getCachePath(cacheKey);
-      if (await app.vault.adapter.exists(cachePath)) {
-        await app.vault.adapter.remove(cachePath);
+      if (await vault.adapter.exists(cachePath)) {
+        await vault.adapter.remove(cachePath);
         logInfo("Removed file from cache:", cacheKey);
       }
     } catch (error) {
@@ -143,18 +143,18 @@ export class FileCache<T> {
     }
   }
 
-  async clear(): Promise<void> {
+  async clear(vault: Vault): Promise<void> {
     try {
       // Clear memory cache
       this.memoryCache.clear();
 
       // Clear file cache
-      if (await app.vault.adapter.exists(this.cacheDir)) {
-        const files = await app.vault.adapter.list(this.cacheDir);
+      if (await vault.adapter.exists(this.cacheDir)) {
+        const files = await vault.adapter.list(this.cacheDir);
         logInfo("Clearing file cache, removing files:", files.files.length);
 
         for (const file of files.files) {
-          await app.vault.adapter.remove(file);
+          await vault.adapter.remove(file);
         }
       }
     } catch (error) {

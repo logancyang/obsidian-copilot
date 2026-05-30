@@ -34,6 +34,7 @@ import { App, Notice, TAbstractFile, Vault } from "obsidian";
  * - Avoid event loops from pending file writes
  */
 export class ProjectRegister {
+  private app: App;
   private vault: Vault;
   private manager: ProjectFileManager;
   private settingsUnsubscriber?: () => void;
@@ -43,6 +44,7 @@ export class ProjectRegister {
   private fileModifyDebouncers = new Map<string, ReturnType<typeof debounce>>();
 
   constructor(app: App) {
+    this.app = app;
     this.vault = app.vault;
     this.manager = ProjectFileManager.getInstance(app);
   }
@@ -210,7 +212,7 @@ export class ProjectRegister {
     if (!isProjectConfigFile(file) || isPendingFileWrite(file.path)) return;
 
     try {
-      const record = await parseProjectConfigFile(file);
+      const record = await parseProjectConfigFile(this.app, file);
       if (!record) return;
 
       // Duplicate id: keep first in cache, ignore incoming
@@ -223,8 +225,8 @@ export class ProjectRegister {
         return;
       }
 
-      await ensureProjectFrontmatter(file, record);
-      const updated = await parseProjectConfigFile(file);
+      await ensureProjectFrontmatter(this.app, file, record);
+      const updated = await parseProjectConfigFile(this.app, file);
       if (updated) upsertCachedProjectRecord(updated);
     } catch (error) {
       logError(`[Projects] Error on file creation: ${file.path}`, error);
@@ -266,7 +268,7 @@ export class ProjectRegister {
         // Reason: rescan to re-admit any previously-ignored duplicate-id files
         // that were hidden while the deleted file was the "kept" entry.
         // Re-merge legacy projects after rescan so unmigrated fallback entries stay visible.
-        void loadAllProjects().catch((err) =>
+        void loadAllProjects(this.app).catch((err) =>
           logError("[Projects] Rescan after delete failed", err)
         );
       }
@@ -295,7 +297,7 @@ export class ProjectRegister {
       // Reason: validate the new file before deleting the old cache entry,
       // so a duplicate-ID rename doesn't leave a cache gap.
       if (isValidNow) {
-        const record = await parseProjectConfigFile(file);
+        const record = await parseProjectConfigFile(this.app, file);
         if (!record) {
           if (wasValid) deleteCachedProjectRecordByFilePath(oldPath);
           return;
@@ -316,8 +318,8 @@ export class ProjectRegister {
           return;
         }
 
-        await ensureProjectFrontmatter(file, record);
-        const updated = await parseProjectConfigFile(file);
+        await ensureProjectFrontmatter(this.app, file, record);
+        const updated = await parseProjectConfigFile(this.app, file);
         if (updated) {
           // Reason: use atomic replace to avoid transient disappearance gap.
           // delete+upsert causes the subscriber to see the active project as missing
@@ -351,7 +353,7 @@ export class ProjectRegister {
 
         // Reason: rescan to re-admit any previously-ignored duplicate-id files
         // that were hidden while the moved file was the "kept" entry.
-        void loadAllProjects().catch((err) =>
+        void loadAllProjects(this.app).catch((err) =>
           logError("[Projects] Rescan after rename-out failed", err)
         );
       }
@@ -377,7 +379,7 @@ export class ProjectRegister {
     if (!isProjectConfigFile(file) || isPendingFileWrite(file.path)) return;
 
     try {
-      const record = await parseProjectConfigFile(file);
+      const record = await parseProjectConfigFile(this.app, file);
       if (!record) {
         // Reason: file became invalid YAML — remove stale cache entry and clear selection
         // if this was the active project, so UI and chain don't use stale config.
@@ -390,7 +392,7 @@ export class ProjectRegister {
               logError("[Projects] Failed to clear context cache on invalid edit", err)
             );
           // Reason: rescan to re-admit previously-ignored duplicate-id files
-          void loadAllProjects().catch((err) =>
+          void loadAllProjects(this.app).catch((err) =>
             logError("[Projects] Rescan after invalid edit failed", err)
           );
         }
@@ -409,7 +411,7 @@ export class ProjectRegister {
               logError("[Projects] Failed to clear context cache on duplicate edit", err)
             );
           // Reason: rescan to re-admit previously-ignored duplicate-id files
-          void loadAllProjects().catch((err) =>
+          void loadAllProjects(this.app).catch((err) =>
             logError("[Projects] Rescan after duplicate edit failed", err)
           );
         }

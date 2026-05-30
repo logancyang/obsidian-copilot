@@ -105,7 +105,9 @@ export function useProjectProcessingData(
       isProject: true,
     });
     setProjectFiles(
-      app.vault.getFiles().filter((file) => shouldIndexFile(file, inclusions, exclusions, true))
+      app.vault
+        .getFiles()
+        .filter((file) => shouldIndexFile(app, file, inclusions, exclusions, true))
     );
   }, [app, cacheProject, effectiveInclusions, effectiveExclusions]);
 

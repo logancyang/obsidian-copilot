@@ -31,12 +31,12 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
   getItems(): TFile[] {
     const sortStrategy = getSettings().chatHistorySortStrategy;
     return sortByStrategy(this.chatFiles, sortStrategy, {
-      getName: (file) => extractChatTitle(file),
-      getCreatedAtMs: (file) => extractChatDate(file).getTime(),
+      getName: (file) => extractChatTitle(this.app, file),
+      getCreatedAtMs: (file) => extractChatDate(this.app, file).getTime(),
       getLastUsedAtMs: (file) => {
         // Reason: Use getEffectiveLastUsedAt to prefer in-memory value over persisted frontmatter.
         // This ensures the modal reflects recent access immediately, even within the throttle window.
-        const persistedMs = extractChatLastAccessedAtMs(file);
+        const persistedMs = extractChatLastAccessedAtMs(this.app, file);
         return this.chatHistoryLastAccessedAtManager.getEffectiveLastUsedAt(file.path, persistedMs);
       },
     });
@@ -46,7 +46,7 @@ export class LoadChatHistoryModal extends FuzzySuggestModal<TFile> {
    * Render the display label for a chat history file.
    */
   getItemText(file: TFile): string {
-    return getChatDisplayText(file);
+    return getChatDisplayText(this.app, file);
   }
 
   /**

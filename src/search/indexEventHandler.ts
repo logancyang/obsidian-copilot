@@ -111,7 +111,7 @@ export class IndexEventHandler {
     // Only process markdown files that match inclusion/exclusion patterns
     if (fileToCheck.extension === "md") {
       const { inclusions, exclusions } = getMatchingPatterns();
-      const shouldProcess = shouldIndexFile(fileToCheck, inclusions, exclusions);
+      const shouldProcess = shouldIndexFile(this.app, fileToCheck, inclusions, exclusions);
 
       // Check if file was modified while it was active
       const wasModified = previousMtime !== null && fileToCheck.stat.mtime > previousMtime;

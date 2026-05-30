@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { APPLY_VIEW_TYPE } from "@/components/composer/ApplyView";
 import { diffTrimmedLines } from "diff";
 import { ApplyViewResult } from "@/types";
@@ -8,7 +8,7 @@ import { ensureFolderExists, sanitizeFilePath } from "@/utils";
 import { getSettings } from "@/settings/model";
 import { logWarn } from "@/logger";
 
-async function getFile(file_path: string): Promise<TFile> {
+async function getFile(app: App, file_path: string): Promise<TFile> {
   let file = app.vault.getAbstractFileByPath(file_path);
   if (file && file instanceof TFile) {
     return file;
@@ -22,7 +22,7 @@ async function getFile(file_path: string): Promise<TFile> {
   try {
     const folder = file_path.includes("/") ? file_path.split("/").slice(0, -1).join("/") : "";
     if (folder) {
-      await ensureFolderExists(folder);
+      await ensureFolderExists(app.vault, folder);
     }
 
     // Double-check if file was created by another process
@@ -49,11 +49,12 @@ async function getFile(file_path: string): Promise<TFile> {
  * @param content - Target content to compare against current file content
  */
 async function show_preview(
+  app: App,
   file_path: string,
   content: string,
   simple = false
 ): Promise<ApplyViewResult> {
-  const file = await getFile(file_path);
+  const file = await getFile(app, file_path);
   const activeFile = app.workspace.getActiveFile();
 
   if (file && (!activeFile || activeFile.path !== file_path)) {
@@ -140,62 +141,64 @@ const writeFileSchema = z.object({
     ),
 });
 
-const writeFileTool = createLangChainTool({
-  name: "writeFile",
-  description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI.
+const createWriteFileTool = (app: App) =>
+  createLangChainTool({
+    name: "writeFile",
+    description: `Request to write content to a file at the specified path and show the changes in a Change Preview UI.
 
       # Steps to find the the target path
       1. Extract the target file information from user message and find out the file path from the context.
       2. If target file is not specified, use the active note as the target file.
       3. If still failed to find the target file or the file path, ask the user to specify the target file.
       `,
-  schema: writeFileSchema,
-  func: async ({ path, content, confirmation = true }) => {
-    // Sanitize path to prevent ENAMETOOLONG errors on filesystems with 255-byte limits.
-    // Must happen here (not just in getFile) so show_preview also receives the sanitized path,
-    // since ApplyView uses state.path with its own getFile that doesn't sanitize.
-    const sanitizedPath = sanitizeFilePath(path);
-    if (sanitizedPath !== path) {
-      logWarn(
-        `Filename too long, truncated for filesystem compatibility: "${path}" → "${sanitizedPath}"`
-      );
-      path = sanitizedPath;
-    }
-
-    // Convert object content to JSON string if needed
-    const contentString = typeof content === "string" ? content : JSON.stringify(content, null, 2);
-
-    // Only bypass confirmation when the user has explicitly enabled auto-accept in settings.
-    // The LLM may pass confirmation=false, but that alone should not skip preview.
-    const settings = getSettings();
-    const shouldBypassConfirmation = settings.autoAcceptEdits;
-
-    if (shouldBypassConfirmation) {
-      try {
-        const file = await getFile(path);
-        await app.vault.modify(file, contentString);
-        return {
-          result: "accepted" as ApplyViewResult,
-          message:
-            "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
-        };
-      } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : String(error);
-        return {
-          result: "failed" as ApplyViewResult,
-          message: `Error writing to file without preview: ${message}`,
-        };
+    schema: writeFileSchema,
+    func: async ({ path, content, confirmation = true }) => {
+      // Sanitize path to prevent ENAMETOOLONG errors on filesystems with 255-byte limits.
+      // Must happen here (not just in getFile) so show_preview also receives the sanitized path,
+      // since ApplyView uses state.path with its own getFile that doesn't sanitize.
+      const sanitizedPath = sanitizeFilePath(path);
+      if (sanitizedPath !== path) {
+        logWarn(
+          `Filename too long, truncated for filesystem compatibility: "${path}" → "${sanitizedPath}"`
+        );
+        path = sanitizedPath;
       }
-    }
 
-    const result = await show_preview(path, contentString);
-    // Simple JSON wrapper for consistent parsing
-    return {
-      result: result,
-      message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
-    };
-  },
-});
+      // Convert object content to JSON string if needed
+      const contentString =
+        typeof content === "string" ? content : JSON.stringify(content, null, 2);
+
+      // Only bypass confirmation when the user has explicitly enabled auto-accept in settings.
+      // The LLM may pass confirmation=false, but that alone should not skip preview.
+      const settings = getSettings();
+      const shouldBypassConfirmation = settings.autoAcceptEdits;
+
+      if (shouldBypassConfirmation) {
+        try {
+          const file = await getFile(app, path);
+          await app.vault.modify(file, contentString);
+          return {
+            result: "accepted" as ApplyViewResult,
+            message:
+              "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
+          };
+        } catch (error: unknown) {
+          const message = error instanceof Error ? error.message : String(error);
+          return {
+            result: "failed" as ApplyViewResult,
+            message: `Error writing to file without preview: ${message}`,
+          };
+        }
+      }
+
+      const result = await show_preview(app, path, contentString);
+      // Simple JSON wrapper for consistent parsing
+      return {
+        result: result,
+        message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
+      };
+    },
+  });
 
 const editFileSchema = z.object({
   path: z
@@ -521,70 +524,79 @@ export function applyEditToContent(
   return { ok: true, content: modifiedContent };
 }
 
-const editFileTool = createLangChainTool({
-  name: "editFile",
-  description: `Request to make a targeted change to an existing file by specifying the exact text to find and its replacement. Use this tool for precise, surgical edits to specific parts of a file.`,
-  schema: editFileSchema,
-  func: async ({ path, oldText, newText }: { path: string; oldText: string; newText: string }) => {
-    const sanitizedPath = sanitizeFilePath(path);
-    const file = app.vault.getAbstractFileByPath(sanitizedPath);
+const createEditFileTool = (app: App) =>
+  createLangChainTool({
+    name: "editFile",
+    description: `Request to make a targeted change to an existing file by specifying the exact text to find and its replacement. Use this tool for precise, surgical edits to specific parts of a file.`,
+    schema: editFileSchema,
+    func: async ({
+      path,
+      oldText,
+      newText,
+    }: {
+      path: string;
+      oldText: string;
+      newText: string;
+    }) => {
+      const sanitizedPath = sanitizeFilePath(path);
+      const file = app.vault.getAbstractFileByPath(sanitizedPath);
 
-    if (!file || !(file instanceof TFile)) {
-      return {
-        result: "failed" as ApplyViewResult,
-        message: `File not found at path: ${sanitizedPath}. Please check the file path and try again.`,
-      };
-    }
-
-    try {
-      const rawContent = await app.vault.read(file);
-      const editResult = applyEditToContent(rawContent, oldText, newText);
-
-      if (!editResult.ok) {
-        if (editResult.reason === "NOT_FOUND") {
-          return {
-            result: "failed" as ApplyViewResult,
-            message: `Could not find the specified text in ${sanitizedPath}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`,
-          };
-        }
+      if (!file || !(file instanceof TFile)) {
         return {
           result: "failed" as ApplyViewResult,
-          message: `Found ${editResult.occurrences} occurrences of the search text in ${sanitizedPath}. The text must be unique — add more surrounding context to make it unambiguous.`,
+          message: `File not found at path: ${sanitizedPath}. Please check the file path and try again.`,
         };
       }
 
-      const modifiedContent = editResult.content;
+      try {
+        const rawContent = await app.vault.read(file);
+        const editResult = applyEditToContent(rawContent, oldText, newText);
 
-      // No-op detection: content is unchanged after replacement
-      if (rawContent === modifiedContent) {
+        if (!editResult.ok) {
+          if (editResult.reason === "NOT_FOUND") {
+            return {
+              result: "failed" as ApplyViewResult,
+              message: `Could not find the specified text in ${sanitizedPath}. The oldText must match the file content — try including more surrounding context lines to locate the right spot.`,
+            };
+          }
+          return {
+            result: "failed" as ApplyViewResult,
+            message: `Found ${editResult.occurrences} occurrences of the search text in ${sanitizedPath}. The text must be unique — add more surrounding context to make it unambiguous.`,
+          };
+        }
+
+        const modifiedContent = editResult.content;
+
+        // No-op detection: content is unchanged after replacement
+        if (rawContent === modifiedContent) {
+          return {
+            result: "accepted" as ApplyViewResult,
+            message: `No changes made to ${sanitizedPath}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`,
+          };
+        }
+
+        const settings = getSettings();
+        if (settings.autoAcceptEdits) {
+          await app.vault.modify(file, modifiedContent);
+          return {
+            result: "accepted" as ApplyViewResult,
+            message:
+              "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
+          };
+        }
+
+        const result = await show_preview(app, sanitizedPath, modifiedContent, true);
         return {
-          result: "accepted" as ApplyViewResult,
-          message: `No changes made to ${sanitizedPath}. The replacement produced identical content. Use writeFile if the file needs a broader rewrite.`,
+          result: result,
+          message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
         };
-      }
-
-      const settings = getSettings();
-      if (settings.autoAcceptEdits) {
-        await app.vault.modify(file, modifiedContent);
+      } catch (error) {
         return {
-          result: "accepted" as ApplyViewResult,
-          message:
-            "File changes applied without preview. Do not retry or attempt alternative approaches to modify this file in response to the current user request.",
+          result: "failed" as ApplyViewResult,
+          message: `Error modifying ${sanitizedPath}: ${error}. Please check the file path and try again.`,
         };
       }
+    },
+  });
 
-      const result = await show_preview(sanitizedPath, modifiedContent, true);
-      return {
-        result: result,
-        message: `File change result: ${result}. Do not retry or attempt alternative approaches to modify this file in response to the current user request.`,
-      };
-    } catch (error) {
-      return {
-        result: "failed" as ApplyViewResult,
-        message: `Error modifying ${sanitizedPath}: ${error}. Please check the file path and try again.`,
-      };
-    }
-  },
-});
-
-export { writeFileTool, editFileTool, normalizeLineEndings, normalizeForFuzzyMatch };
+export { createWriteFileTool, createEditFileTool, normalizeLineEndings, normalizeForFuzzyMatch };

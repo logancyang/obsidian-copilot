@@ -24,7 +24,8 @@ import { cn } from "@/lib/utils";
 import { logError, logWarn } from "@/logger";
 import { updateSetting, useSettingsValue, validateSkillsFolder } from "@/settings/model";
 import { AlertTriangle, Folder, Search } from "lucide-react";
-import { FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
+import { App, FileSystemAdapter, Notice, TFile, TFolder } from "obsidian";
+import { useApp } from "@/context";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 /**
@@ -56,6 +57,7 @@ const SYNC_BRANDS: ReadonlyArray<{ substr: string; brand: string }> = [
  * and the sync-folder banner.
  */
 export const SkillsSettings: React.FC = () => {
+  const app = useApp();
   const settings = useSettingsValue();
   // Brand projection of every registered backend. Sourced from the public
   // registry — descriptors are module-level constants so the list is stable
@@ -149,14 +151,17 @@ export const SkillsSettings: React.FC = () => {
    * "Folder already exists" error as it tries to create a new note, so we
    * hand those off to the OS default editor via Electron's shell instead.
    */
-  const handleOpenSkillMdAbsPath = useCallback((absPath: string) => {
-    const vaultRel = vaultRelativePath(absPath);
-    if (vaultRel !== null && app.vault.getAbstractFileByPath(vaultRel) instanceof TFile) {
-      void app.workspace.openLinkText(vaultRel, "", true);
-      return;
-    }
-    void openWithSystemDefault(absPath);
-  }, []);
+  const handleOpenSkillMdAbsPath = useCallback(
+    (absPath: string) => {
+      const vaultRel = vaultRelativePath(app, absPath);
+      if (vaultRel !== null && app.vault.getAbstractFileByPath(vaultRel) instanceof TFile) {
+        void app.workspace.openLinkText(vaultRel, "", true);
+        return;
+      }
+      void openWithSystemDefault(absPath);
+    },
+    [app]
+  );
 
   /** Open the canonical SKILL.md of a managed skill in Obsidian's editor. */
   const handleEditSkillMd = useCallback(
@@ -167,14 +172,17 @@ export const SkillsSettings: React.FC = () => {
   );
 
   /** Reveal the canonical skill folder in Obsidian's file explorer. */
-  const handleRevealInVault = useCallback((skill: Skill) => {
-    const folderRel = vaultRelativePath(skill.dirPath);
-    if (folderRel === null) {
-      new Notice("Could not resolve the skill folder inside this vault.");
-      return;
-    }
-    revealInFileExplorer(folderRel);
-  }, []);
+  const handleRevealInVault = useCallback(
+    (skill: Skill) => {
+      const folderRel = vaultRelativePath(app, skill.dirPath);
+      if (folderRel === null) {
+        new Notice("Could not resolve the skill folder inside this vault.");
+        return;
+      }
+      revealInFileExplorer(app, folderRel);
+    },
+    [app]
+  );
 
   const filteredSkills = useMemo(() => filterSkills(skills, searchValue), [skills, searchValue]);
 
@@ -213,7 +221,7 @@ export const SkillsSettings: React.FC = () => {
         }
       ).open();
     },
-    [displayFolder]
+    [app, displayFolder]
   );
 
   /** Open the native delete confirmation modal. */
@@ -233,12 +241,12 @@ export const SkillsSettings: React.FC = () => {
         }
       ).open();
     },
-    [displayFolder]
+    [app, displayFolder]
   );
 
   // Detect a sync-folder vault on every render — the absolute path is
   // stable across the session so the work is trivial.
-  const syncBrand = useMemo(() => detectSyncBrand(), []);
+  const syncBrand = useMemo(() => detectSyncBrand(app), [app]);
 
   return (
     <div ref={containerRef} className="tw-space-y-4">
@@ -492,7 +500,7 @@ async function openWithSystemDefault(absPath: string): Promise<void> {
  * if the vault has no `FileSystemAdapter` or the absolute path lies outside
  * the vault.
  */
-function vaultRelativePath(absPath: string): string | null {
+function vaultRelativePath(app: App, absPath: string): string | null {
   const adapter = app.vault.adapter;
   if (!(adapter instanceof FileSystemAdapter)) return null;
   const base = adapter.getBasePath().replace(/[/\\]+$/, "");
@@ -509,7 +517,7 @@ function vaultRelativePath(absPath: string): string | null {
  * plugin. Falls back to a Notice if the explorer isn't installed or the
  * folder isn't in the vault cache (hidden dotfile folder, etc.).
  */
-function revealInFileExplorer(relPath: string): void {
+function revealInFileExplorer(app: App, relPath: string): void {
   const folder = app.vault.getAbstractFileByPath(relPath);
   if (folder instanceof TFolder) {
     const fileExplorer = (
@@ -544,7 +552,7 @@ function revealInFileExplorer(relPath: string): void {
  * fragment. Returns the brand name to display, or `null` when the vault
  * doesn't appear to be under a known sync root.
  */
-function detectSyncBrand(): string | null {
+function detectSyncBrand(app: App): string | null {
   const adapter = app.vault.adapter;
   if (!(adapter instanceof FileSystemAdapter)) return null;
   const base = adapter.getBasePath().toLowerCase();

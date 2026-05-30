@@ -7,7 +7,7 @@ import {
   ensureCommandFrontmatter,
   hasOrderFrontmatter,
 } from "@/commands/customCommandUtils";
-import { Editor, Plugin, TFile, Vault } from "obsidian";
+import { App, Editor, Plugin, TFile, Vault } from "obsidian";
 import { CustomCommandChatModal } from "@/commands/CustomCommandChatModal";
 import { debounce } from "@/utils/debounce";
 import { CustomCommand } from "@/commands/type";
@@ -23,16 +23,18 @@ import { logError } from "@/logger";
 /** This manager is used to register custom commands as obsidian commands */
 export class CustomCommandRegister {
   private plugin: Plugin;
+  private app: App;
   private vault: Vault;
 
-  constructor(plugin: Plugin, vault: Vault) {
+  constructor(plugin: Plugin, app: App) {
     this.plugin = plugin;
-    this.vault = vault;
+    this.app = app;
+    this.vault = app.vault;
     this.initializeEventListeners();
   }
 
   async initialize() {
-    await loadAllCustomCommands();
+    await loadAllCustomCommands(this.app);
     this.registerCommands();
   }
 
@@ -69,7 +71,7 @@ export class CustomCommandRegister {
       if (!isCustomCommandFile(file) || isFileWritePending(file.path)) {
         return;
       }
-      const customCommand = await parseCustomCommandFile(file);
+      const customCommand = await parseCustomCommandFile(this.app, file);
       this.registerCommand(customCommand);
       updateCachedCommand(customCommand, customCommand.title);
     },
@@ -88,13 +90,13 @@ export class CustomCommandRegister {
       return;
     }
     try {
-      let customCommand = await parseCustomCommandFile(file);
-      if (!hasOrderFrontmatter(file)) {
+      let customCommand = await parseCustomCommandFile(this.app, file);
+      if (!hasOrderFrontmatter(this.app, file)) {
         // Compute the correct order for the new command
         const newOrder = getNextCustomCommandOrder();
         customCommand = { ...customCommand, order: newOrder };
       }
-      await ensureCommandFrontmatter(file, customCommand);
+      await ensureCommandFrontmatter(this.app, file, customCommand);
       updateCachedCommand(customCommand, customCommand.title);
       this.registerCommand(customCommand);
     } catch (error) {
@@ -126,10 +128,10 @@ export class CustomCommandRegister {
     }
     // Register the new command if it's still a custom command file
     if (isCustomCommandFile(file)) {
-      const parsedCommand = await parseCustomCommandFile(file);
+      const parsedCommand = await parseCustomCommandFile(this.app, file);
       this.registerCommand(parsedCommand);
       updateCachedCommand(parsedCommand, parsedCommand.title);
-      await ensureCommandFrontmatter(file, parsedCommand);
+      await ensureCommandFrontmatter(this.app, file, parsedCommand);
     }
   };
 

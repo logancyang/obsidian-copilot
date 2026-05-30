@@ -16,6 +16,7 @@ import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/
 import { ChainType } from "@/chainType";
 import { Separator } from "@/components/ui/separator";
 import { useChainType, useIndexingProgress } from "@/aiParams";
+import { useApp } from "@/context";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
 import { getDomainFromUrl, isPlusChain, openFileInWorkspace } from "@/utils";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
@@ -118,6 +119,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
   lexicalEditorRef,
   hideAddContextButton = false,
 }) => {
+  const app = useApp();
   const [currentChain] = useChainType();
   const contextStatus = useProjectContextStatus();
   const [indexingState] = useIndexingProgress();
@@ -149,7 +151,7 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
    * Handles clicking on a badge to open the file in a new tab (or focus existing tab)
    */
   const handleBadgeClick = (file: TFile) => {
-    void openFileInWorkspace(file);
+    void openFileInWorkspace(app, file);
   };
 
   const uniqueNotes = React.useMemo(() => {

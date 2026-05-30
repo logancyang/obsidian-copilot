@@ -423,7 +423,7 @@ export const CommandSettings: React.FC = () => {
           value={settings.customPromptsFolder}
           onChange={(value) => {
             updateSetting("customPromptsFolder", value);
-            void loadAllCustomCommands().catch((err) =>
+            void loadAllCustomCommands(app).catch((err) =>
               logError("loadAllCustomCommands failed", err)
             );
           }}

@@ -1,10 +1,13 @@
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import {
   createPatternSettingsValue,
   getFilePattern,
   shouldIndexFile,
   PatternCategory,
 } from "@/search/searchUtils";
+
+// shouldIndexFile is mocked, so the app is only threaded through and never inspected.
+const mockApp = {} as unknown as App;
 
 // Mock dependencies
 jest.mock("obsidian", () => ({
@@ -76,7 +79,7 @@ const createAndPopulateGroupList = (
   exclusionPatterns: PatternCategory | null
 ): GroupListItem => {
   const projectAllFiles = appFiles.filter((file) =>
-    shouldIndexFile(file, inclusionPatterns, exclusionPatterns, true)
+    shouldIndexFile(mockApp, file, inclusionPatterns, exclusionPatterns, true)
   );
 
   // Initialize groups

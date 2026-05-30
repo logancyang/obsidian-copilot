@@ -77,7 +77,7 @@ describe("SystemPromptManager", () => {
     } as unknown as typeof window.app;
 
     // Initialize manager
-    manager = SystemPromptManager.getInstance(mockVault);
+    manager = SystemPromptManager.getInstance(window.app);
   });
 
   afterEach(() => {
@@ -91,15 +91,15 @@ describe("SystemPromptManager", () => {
       expect(instance1).toBe(instance2);
     });
 
-    it("throws error if vault not provided on first call", () => {
+    it("throws error if app not provided on first call", () => {
       (SystemPromptManager as unknown as Record<string, unknown>).instance = undefined;
       expect(() => SystemPromptManager.getInstance()).toThrow(
-        "Vault is required for first initialization"
+        "App is required for first initialization"
       );
     });
 
-    it("does not require vault on subsequent calls", () => {
-      const instance1 = SystemPromptManager.getInstance(mockVault);
+    it("does not require app on subsequent calls", () => {
+      const instance1 = SystemPromptManager.getInstance(window.app);
       const instance2 = SystemPromptManager.getInstance();
       expect(instance1).toBe(instance2);
     });
@@ -136,9 +136,13 @@ describe("SystemPromptManager", () => {
 
       await manager.createPrompt(newPrompt);
 
-      expect(utils.ensureFolderExists).toHaveBeenCalledWith("SystemPrompts");
+      expect(utils.ensureFolderExists).toHaveBeenCalledWith(mockVault, "SystemPrompts");
       expect(mockVault.create).toHaveBeenCalledWith("SystemPrompts/New Prompt.md", "Test content");
-      expect(systemPromptUtils.ensurePromptFrontmatter).toHaveBeenCalledWith(mockFile, newPrompt);
+      expect(systemPromptUtils.ensurePromptFrontmatter).toHaveBeenCalledWith(
+        window.app,
+        mockFile,
+        newPrompt
+      );
     });
 
     it("updates cache after creation", async () => {

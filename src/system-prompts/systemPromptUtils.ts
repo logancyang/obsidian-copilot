@@ -6,7 +6,7 @@ import {
   EMPTY_SYSTEM_PROMPT,
 } from "@/system-prompts/constants";
 import { UserSystemPrompt } from "@/system-prompts/type";
-import { normalizePath, TAbstractFile, TFile } from "obsidian";
+import { App, normalizePath, TAbstractFile, TFile } from "obsidian";
 import { getSettings } from "@/settings/model";
 import { stripFrontmatter } from "@/utils";
 import {
@@ -117,7 +117,7 @@ function coerceFrontmatterNumber(value: unknown, fallback: number): number {
 /**
  * Parse a TFile as a UserSystemPrompt by reading its content and extracting frontmatter
  */
-export async function parseSystemPromptFile(file: TFile): Promise<UserSystemPrompt> {
+export async function parseSystemPromptFile(app: App, file: TFile): Promise<UserSystemPrompt> {
   const rawContent = await app.vault.read(file);
   const content = stripFrontmatter(rawContent);
   const metadata = app.metadataCache.getFileCache(file);
@@ -149,16 +149,16 @@ export async function parseSystemPromptFile(file: TFile): Promise<UserSystemProm
  * Fetch all system prompts from the vault without updating cache
  * Use this when you need to control cache updates yourself (e.g., for latest-wins semantics)
  */
-export async function fetchAllSystemPrompts(): Promise<UserSystemPrompt[]> {
+export async function fetchAllSystemPrompts(app: App): Promise<UserSystemPrompt[]> {
   const files = app.vault.getFiles().filter((file) => isSystemPromptFile(file));
-  return await Promise.all(files.map(parseSystemPromptFile));
+  return await Promise.all(files.map((file) => parseSystemPromptFile(app, file)));
 }
 
 /**
  * Load all system prompts from the vault and update cache
  */
-export async function loadAllSystemPrompts(): Promise<UserSystemPrompt[]> {
-  const prompts = await fetchAllSystemPrompts();
+export async function loadAllSystemPrompts(app: App): Promise<UserSystemPrompt[]> {
+  const prompts = await fetchAllSystemPrompts(app);
   updateCachedSystemPrompts(prompts);
   return prompts;
 }
@@ -168,7 +168,7 @@ export async function loadAllSystemPrompts(): Promise<UserSystemPrompt[]> {
  * Only adds missing fields, does not overwrite existing values.
  * This is idempotent and does not touch the file content.
  */
-export async function ensurePromptFrontmatter(file: TFile, prompt: UserSystemPrompt) {
+export async function ensurePromptFrontmatter(app: App, file: TFile, prompt: UserSystemPrompt) {
   // Check if already pending to avoid nested add/remove issues
   const alreadyPending = isPendingFileWrite(file.path);
   const now = Date.now();
@@ -230,6 +230,7 @@ export function generateCopyPromptName(
  * @param folder - Optional folder path (defaults to current settings folder)
  */
 export async function updatePromptDefaultFlag(
+  app: App,
   title: string,
   isDefault: boolean,
   folder?: string

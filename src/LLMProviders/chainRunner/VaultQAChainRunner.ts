@@ -99,7 +99,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
 
       // Step 5a: Run FilterRetriever for guaranteed title/tag matches
       const hasTagTerms = tags.length > 0;
-      const filterRetriever = new FilterRetriever(app, {
+      const filterRetriever = new FilterRetriever(this.chainManager.app, {
         salientTerms: hasTagTerms ? [...tags] : [],
         maxK: settings.maxSourceChunks,
         returnAll: hasTagTerms,
@@ -111,7 +111,7 @@ export class VaultQAChainRunner extends BaseChainRunner {
       // When Miyo is active, Orama isn't initialized either, so also skip semantic → use lexical.
       const miyoActive = RetrieverFactory.isMiyoActive();
       const retrieverResult = await RetrieverFactory.createRetriever(
-        app,
+        this.chainManager.app,
         {
           minSimilarityScore: 0.01,
           maxK: settings.maxSourceChunks,

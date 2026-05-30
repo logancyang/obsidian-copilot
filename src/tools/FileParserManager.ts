@@ -101,7 +101,7 @@ class PDFParser implements FileParser {
       logInfo("Parsing PDF file:", file.path);
 
       // Try to get from cache first
-      const cachedResponse = await this.pdfCache.get(file);
+      const cachedResponse = await this.pdfCache.get(vault, file);
       if (cachedResponse) {
         logInfo("Using cached PDF content for:", file.path);
         // Ensure output file exists even on cache hit (user may have just enabled the setting)
@@ -113,7 +113,7 @@ class PDFParser implements FileParser {
       if (isSelfHostModeValid() && settings.enableMiyo && file.extension.toLowerCase() === "pdf") {
         const miyoResult = await this.selfHostPdfParser.parsePdf(file, vault);
         if (miyoResult && "content" in miyoResult) {
-          await this.pdfCache.set(file, {
+          await this.pdfCache.set(vault, file, {
             response: miyoResult.content,
             elapsed_time_ms: 0,
           });
@@ -132,7 +132,7 @@ class PDFParser implements FileParser {
       const binaryContent = await vault.readBinary(file);
       logInfo("Calling pdf4llm API for:", file.path);
       const pdf4llmResponse = await this.brevilabsClient.pdf4llm(binaryContent);
-      await this.pdfCache.set(file, pdf4llmResponse);
+      await this.pdfCache.set(vault, file, pdf4llmResponse);
       await saveConvertedDocOutput(file, pdf4llmResponse.response, vault);
       return pdf4llmResponse.response;
     } catch (error) {
@@ -141,9 +141,9 @@ class PDFParser implements FileParser {
     }
   }
 
-  async clearCache(): Promise<void> {
+  async clearCache(vault: Vault): Promise<void> {
     logInfo("Clearing PDF cache");
-    await this.pdfCache.clear();
+    await this.pdfCache.clear(vault);
   }
 }
 
@@ -527,10 +527,10 @@ export class FileParserManager {
     return this.parsers.has(extension);
   }
 
-  async clearPDFCache(): Promise<void> {
+  async clearPDFCache(vault: Vault): Promise<void> {
     const pdfParser = this.parsers.get("pdf");
     if (pdfParser instanceof PDFParser) {
-      await pdfParser.clearCache();
+      await pdfParser.clearCache(vault);
     }
   }
 }

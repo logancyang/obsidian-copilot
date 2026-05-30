@@ -452,7 +452,7 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
     // Create the folder if it doesn't exist (supports nested paths)
     if (file_path.includes("/")) {
       const folderPath = file_path.split("/").slice(0, -1).join("/");
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(app.vault, folderPath);
     }
     return await app.vault.create(file_path, "");
   };

@@ -7,6 +7,7 @@ import { shouldUseMiyo } from "@/miyo/miyoUtils";
 import { isSelfHostModeValid } from "@/plusUtils";
 import { RetrieverFactory } from "@/search/RetrieverFactory";
 import { getSettings } from "@/settings/model";
+import { App } from "obsidian";
 import { z } from "zod";
 import { deduplicateSources } from "@/LLMProviders/chainRunner/utils/toolExecution";
 import { createLangChainTool } from "./createLangChainTool";
@@ -90,12 +91,14 @@ const localSearchSchema = z.object({
 
 // Core lexical search function (shared by lexicalSearchTool and localSearchTool)
 async function performLexicalSearch({
+  app,
   timeRange,
   query,
   salientTerms,
   forceLexical = false,
   preExpandedQuery,
 }: {
+  app: App;
   timeRange?: { startTime: number; endTime: number };
   query: string;
   salientTerms: string[];
@@ -255,95 +258,101 @@ async function performLexicalSearch({
 }
 
 // Local search tool using RetrieverFactory (handles Self-hosted > Semantic > Lexical priority)
-const lexicalSearchTool = createLangChainTool({
-  name: "lexicalSearch",
-  description: "Search for notes using lexical/keyword-based search",
-  schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
-    const timeRange = validateTimeRange(rawTimeRange);
-    return await performLexicalSearch({
-      timeRange,
-      query,
-      salientTerms,
-    });
-  },
-});
+const createLexicalSearchTool = (app: App) =>
+  createLangChainTool({
+    name: "lexicalSearch",
+    description: "Search for notes using lexical/keyword-based search",
+    schema: localSearchSchema,
+    func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
+      const timeRange = validateTimeRange(rawTimeRange);
+      return await performLexicalSearch({
+        app,
+        timeRange,
+        query,
+        salientTerms,
+      });
+    },
+  });
 
 // Semantic search tool using Orama-based HybridRetriever
-const semanticSearchTool = createLangChainTool({
-  name: "semanticSearch",
-  description: "Search for notes using semantic/meaning-based search with embeddings",
-  schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
-    const timeRange = validateTimeRange(rawTimeRange);
-    const settings = getSettings();
+const createSemanticSearchTool = (app: App) =>
+  createLangChainTool({
+    name: "semanticSearch",
+    description: "Search for notes using semantic/meaning-based search with embeddings",
+    schema: localSearchSchema,
+    func: async ({ timeRange: rawTimeRange, query, salientTerms }) => {
+      const timeRange = validateTimeRange(rawTimeRange);
+      const settings = getSettings();
 
-    const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-    const needsExpandedLimits = timeRange !== undefined || tagTerms.length > 0;
-    const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
+      const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+      const needsExpandedLimits = timeRange !== undefined || tagTerms.length > 0;
+      const effectiveMaxK = needsExpandedLimits ? RETURN_ALL_LIMIT : settings.maxSourceChunks;
 
-    logInfo(`semanticSearch effectiveMaxK: ${effectiveMaxK} (expanded: ${needsExpandedLimits})`);
+      logInfo(`semanticSearch effectiveMaxK: ${effectiveMaxK} (expanded: ${needsExpandedLimits})`);
 
-    // Always use HybridRetriever for semantic search
-    const retriever = new (await import("@/search/hybridRetriever")).HybridRetriever({
-      minSimilarityScore: needsExpandedLimits ? 0.0 : 0.1,
-      maxK: effectiveMaxK,
-      salientTerms,
-      timeRange,
-      textWeight: TEXT_WEIGHT,
-      returnAll: needsExpandedLimits,
-      useRerankerThreshold: 0.5,
-    });
-
-    const documents = await retriever.getRelevantDocuments(query);
-
-    logInfo(`semanticSearch found ${documents.length} documents for query: "${query}"`);
-    if (timeRange) {
-      logInfo(
-        `Time range search from ${new Date(timeRange.startTime).toISOString()} to ${new Date(timeRange.endTime).toISOString()}`
+      // Always use HybridRetriever for semantic search
+      const retriever = new (await import("@/search/hybridRetriever")).HybridRetriever(
+        {
+          minSimilarityScore: needsExpandedLimits ? 0.0 : 0.1,
+          maxK: effectiveMaxK,
+          salientTerms,
+          timeRange,
+          textWeight: TEXT_WEIGHT,
+          returnAll: needsExpandedLimits,
+          useRerankerThreshold: 0.5,
+        },
+        app.vault
       );
-    }
 
-    const formattedResults = documents.map((doc) => {
-      const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
-      return {
-        title: doc.metadata.title || "Untitled",
-        content: doc.pageContent,
-        path: doc.metadata.path || "",
-        score: scored,
-        rerank_score: scored,
-        includeInContext: doc.metadata.includeInContext ?? true,
-        source: doc.metadata.source,
-        mtime: doc.metadata.mtime ?? null,
-        ctime: doc.metadata.ctime ?? null,
-        chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
-        isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
-        explanation: doc.metadata.explanation ?? null,
-      };
-    });
-    // Reuse the same dedupe logic used by Show Sources
-    const sourcesLike = formattedResults.map((d) => ({
-      title: d.title || d.path || "Untitled",
-      path: d.path || d.title || "",
-      score: d.rerank_score || d.score || 0,
-    }));
-    const dedupedSources = deduplicateSources(sourcesLike);
+      const documents = await retriever.getRelevantDocuments(query);
 
-    const bestByKey = new Map<string, { rerank_score?: number }>();
-    for (const d of formattedResults) {
-      const key = ((d.path as string) || (d.title as string)).toLowerCase();
-      const existing = bestByKey.get(key);
-      if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
-        bestByKey.set(key, d);
+      logInfo(`semanticSearch found ${documents.length} documents for query: "${query}"`);
+      if (timeRange) {
+        logInfo(
+          `Time range search from ${new Date(timeRange.startTime).toISOString()} to ${new Date(timeRange.endTime).toISOString()}`
+        );
       }
-    }
-    const dedupedDocs = dedupedSources
-      .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
-      .filter(Boolean);
 
-    return { type: "local_search", documents: dedupedDocs };
-  },
-});
+      const formattedResults = documents.map((doc) => {
+        const scored = doc.metadata.rerank_score ?? doc.metadata.score ?? 0;
+        return {
+          title: doc.metadata.title || "Untitled",
+          content: doc.pageContent,
+          path: doc.metadata.path || "",
+          score: scored,
+          rerank_score: scored,
+          includeInContext: doc.metadata.includeInContext ?? true,
+          source: doc.metadata.source,
+          mtime: doc.metadata.mtime ?? null,
+          ctime: doc.metadata.ctime ?? null,
+          chunkId: (doc.metadata as Record<string, unknown>).chunkId ?? null,
+          isChunk: (doc.metadata as Record<string, unknown>).isChunk ?? false,
+          explanation: doc.metadata.explanation ?? null,
+        };
+      });
+      // Reuse the same dedupe logic used by Show Sources
+      const sourcesLike = formattedResults.map((d) => ({
+        title: d.title || d.path || "Untitled",
+        path: d.path || d.title || "",
+        score: d.rerank_score || d.score || 0,
+      }));
+      const dedupedSources = deduplicateSources(sourcesLike);
+
+      const bestByKey = new Map<string, { rerank_score?: number }>();
+      for (const d of formattedResults) {
+        const key = ((d.path as string) || (d.title as string)).toLowerCase();
+        const existing = bestByKey.get(key);
+        if (!existing || (d.rerank_score || 0) > (existing.rerank_score || 0)) {
+          bestByKey.set(key, d);
+        }
+      }
+      const dedupedDocs = dedupedSources
+        .map((s) => bestByKey.get((s.path || s.title).toLowerCase()))
+        .filter(Boolean);
+
+      return { type: "local_search", documents: dedupedDocs };
+    },
+  });
 
 /**
  * Validate and sanitize time range to prevent LLM hallucinations.
@@ -379,10 +388,12 @@ function validateTimeRange(timeRange?: {
  * Miyo replaces local lexical/semantic search entirely.
  */
 async function performMiyoSearch({
+  app,
   query,
   salientTerms,
   timeRange,
 }: {
+  app: App;
   query: string;
   salientTerms: string[];
   timeRange?: { startTime: number; endTime: number };
@@ -449,54 +460,58 @@ async function performMiyoSearch({
 }
 
 // Smart wrapper that uses RetrieverFactory for unified retriever selection
-const localSearchTool = createLangChainTool({
-  name: "localSearch",
-  description:
-    "Search for notes in the vault based on query, salient terms, and optional time range",
-  schema: localSearchSchema,
-  func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
-    // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
-    const timeRange = validateTimeRange(rawTimeRange);
+const createLocalSearchTool = (app: App) =>
+  createLangChainTool({
+    name: "localSearch",
+    description:
+      "Search for notes in the vault based on query, salient terms, and optional time range",
+    schema: localSearchSchema,
+    func: async ({ timeRange: rawTimeRange, query, salientTerms, _preExpandedQuery }) => {
+      // Validate time range to prevent LLM hallucinations (e.g., {startTime: 0, endTime: 0})
+      const timeRange = validateTimeRange(rawTimeRange);
 
-    // Miyo handles search server-side — use separate path (no local lexical search)
-    if (RetrieverFactory.isMiyoActive()) {
-      logInfo("localSearch: Using Miyo search path");
-      return await performMiyoSearch({
-        query,
-        salientTerms,
-        timeRange,
-      });
-    }
+      // Miyo handles search server-side — use separate path (no local lexical search)
+      if (RetrieverFactory.isMiyoActive()) {
+        logInfo("localSearch: Using Miyo search path");
+        return await performMiyoSearch({
+          app,
+          query,
+          salientTerms,
+          timeRange,
+        });
+      }
 
-    const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
-    const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;
+      const tagTerms = salientTerms.filter((term) => term.startsWith("#"));
+      const shouldForceLexical = timeRange !== undefined || tagTerms.length > 0;
 
-    // For time-range and tag queries, force lexical search for better filtering
-    // Otherwise, let RetrieverFactory handle the priority (Self-hosted > Semantic > Lexical)
-    if (shouldForceLexical) {
-      logInfo("localSearch: Forcing lexical search (time range or tags present)");
+      // For time-range and tag queries, force lexical search for better filtering
+      // Otherwise, let RetrieverFactory handle the priority (Self-hosted > Semantic > Lexical)
+      if (shouldForceLexical) {
+        logInfo("localSearch: Forcing lexical search (time range or tags present)");
+        return await performLexicalSearch({
+          app,
+          timeRange,
+          query,
+          salientTerms,
+          forceLexical: true,
+          preExpandedQuery: _preExpandedQuery,
+        });
+      }
+
+      // Use RetrieverFactory which handles priority: Self-hosted > Semantic > Lexical
+      const retrieverType = RetrieverFactory.getRetrieverType();
+      logInfo(`localSearch: Using ${retrieverType} retriever via factory`);
+
+      // Delegate to shared function which uses RetrieverFactory internally
       return await performLexicalSearch({
+        app,
         timeRange,
         query,
         salientTerms,
-        forceLexical: true,
         preExpandedQuery: _preExpandedQuery,
       });
-    }
-
-    // Use RetrieverFactory which handles priority: Self-hosted > Semantic > Lexical
-    const retrieverType = RetrieverFactory.getRetrieverType();
-    logInfo(`localSearch: Using ${retrieverType} retriever via factory`);
-
-    // Delegate to shared function which uses RetrieverFactory internally
-    return await performLexicalSearch({
-      timeRange,
-      query,
-      salientTerms,
-      preExpandedQuery: _preExpandedQuery,
-    });
-  },
-});
+    },
+  });
 
 // Note: indexTool behavior depends on which retriever is active
 const indexTool = createLangChainTool({
@@ -598,4 +613,10 @@ const webSearchTool = createLangChainTool({
   },
 });
 
-export { indexTool, lexicalSearchTool, localSearchTool, semanticSearchTool, webSearchTool };
+export {
+  indexTool,
+  createLexicalSearchTool,
+  createLocalSearchTool,
+  createSemanticSearchTool,
+  webSearchTool,
+};

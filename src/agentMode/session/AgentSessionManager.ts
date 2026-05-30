@@ -149,7 +149,7 @@ export class AgentSessionManager {
     if (!persistence) return [];
     const files = await persistence.getAgentChatHistoryFiles();
     const tracker = this.plugin.getChatHistoryLastAccessedAtManager();
-    return files.map((file) => fileToHistoryItem(file, tracker));
+    return files.map((file) => fileToHistoryItem(this.app, file, tracker));
   }
 
   /** Update the user-visible title (frontmatter `topic`) of a saved chat. */

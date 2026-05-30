@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { z } from "zod";
 import { logInfo, logWarn } from "@/logger";
 import { createLangChainTool } from "./createLangChainTool";
@@ -98,7 +98,7 @@ function pathHasExtension(value: string): boolean {
   return /\.[^/]+$/.test(value);
 }
 
-async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
+async function resolveNoteFile(app: App, notePath: string): Promise<ResolveNoteOutcome> {
   const tryResolve = (path: string) => {
     const maybeFile = app.vault.getAbstractFileByPath(path);
     return maybeFile instanceof TFile ? maybeFile : null;
@@ -215,7 +215,7 @@ async function resolveNoteFile(notePath: string): Promise<ResolveNoteOutcome> {
   return { type: "not_found" };
 }
 
-async function readNoteText(file: TFile): Promise<string> {
+async function readNoteText(app: App, file: TFile): Promise<string> {
   try {
     return await app.vault.read(file);
   } catch (error) {
@@ -224,7 +224,7 @@ async function readNoteText(file: TFile): Promise<string> {
   }
 }
 
-function buildBasenameIndex(): Map<string, TFile[]> {
+function buildBasenameIndex(app: App): Map<string, TFile[]> {
   const index = new Map<string, TFile[]>();
   const files = app.vault.getMarkdownFiles?.() ?? [];
 
@@ -240,6 +240,7 @@ function buildBasenameIndex(): Map<string, TFile[]> {
 }
 
 function resolveWikiLinkTargets(
+  app: App,
   rawTarget: string,
   sourcePath: string,
   basenameIndex: Map<string, TFile[]>
@@ -266,7 +267,11 @@ function resolveWikiLinkTargets(
   return Array.from(results.values());
 }
 
-function extractLinkedNoteMetadata(content: string, sourceFile: TFile): LinkedNoteMetadata[] {
+function extractLinkedNoteMetadata(
+  app: App,
+  content: string,
+  sourceFile: TFile
+): LinkedNoteMetadata[] {
   if (!content) {
     return [];
   }
@@ -299,10 +304,15 @@ function extractLinkedNoteMetadata(content: string, sourceFile: TFile): LinkedNo
     }
 
     if (!basenameIndex) {
-      basenameIndex = buildBasenameIndex();
+      basenameIndex = buildBasenameIndex(app);
     }
 
-    const candidateFiles = resolveWikiLinkTargets(normalizedTarget, sourceFile.path, basenameIndex);
+    const candidateFiles = resolveWikiLinkTargets(
+      app,
+      normalizedTarget,
+      sourceFile.path,
+      basenameIndex
+    );
 
     matches.set(key, {
       linkText: normalizedTarget,
@@ -380,91 +390,94 @@ const readNoteSchema = z.object({
     .describe("0-based chunk index to read. Omit to read the first chunk."),
 });
 
-const readNoteTool = createLangChainTool({
-  name: "readNote",
-  description:
-    "Read a single note in search v3 sized chunks. Use only when you already know the exact note path and need its contents.",
-  schema: readNoteSchema,
-  func: async ({ notePath, chunkIndex = 0 }) => {
-    const sanitizedPath = notePath.trim();
+const createReadNoteTool = (app: App) =>
+  createLangChainTool({
+    name: "readNote",
+    description:
+      "Read a single note in search v3 sized chunks. Use only when you already know the exact note path and need its contents.",
+    schema: readNoteSchema,
+    func: async ({ notePath, chunkIndex = 0 }) => {
+      const sanitizedPath = notePath.trim();
 
-    if (sanitizedPath.startsWith("/")) {
-      return {
-        notePath: sanitizedPath,
-        status: "invalid_path",
-        message: "Provide the note path relative to the vault root without a leading slash.",
-      };
-    }
+      if (sanitizedPath.startsWith("/")) {
+        return {
+          notePath: sanitizedPath,
+          status: "invalid_path",
+          message: "Provide the note path relative to the vault root without a leading slash.",
+        };
+      }
 
-    const resolution = await resolveNoteFile(sanitizedPath);
-    if (resolution.type === "not_found") {
-      logWarn(`readNote: note not found or not a file (${sanitizedPath})`);
-      return {
-        notePath: sanitizedPath,
-        status: "not_found",
-        message: `Note "${sanitizedPath}" was not found or is not a readable file.`,
-      };
-    }
+      const resolution = await resolveNoteFile(app, sanitizedPath);
+      if (resolution.type === "not_found") {
+        logWarn(`readNote: note not found or not a file (${sanitizedPath})`);
+        return {
+          notePath: sanitizedPath,
+          status: "not_found",
+          message: `Note "${sanitizedPath}" was not found or is not a readable file.`,
+        };
+      }
 
-    if (resolution.type === "not_unique") {
-      logWarn(
-        `readNote: ambiguous note path "${sanitizedPath}" matched multiple files`,
-        resolution.matches.map((file) => file.path)
+      if (resolution.type === "not_unique") {
+        logWarn(
+          `readNote: ambiguous note path "${sanitizedPath}" matched multiple files`,
+          resolution.matches.map((file) => file.path)
+        );
+        return {
+          notePath: sanitizedPath,
+          status: "not_unique",
+          message: `Multiple notes match "${sanitizedPath}". Provide a more specific path.`,
+          candidates: resolution.matches.map((file) => ({
+            path: file.path,
+            title: file.basename,
+          })),
+        };
+      }
+
+      const file = resolution.file;
+      const canonicalPath = file.path;
+      const text = await readNoteText(app, file);
+      const chunks = chunkContentByLines(file, text);
+      const totalChunks = chunks.length;
+
+      if (totalChunks === 0) {
+        return {
+          notePath: canonicalPath,
+          status: "empty",
+          message: `No readable content was found in "${canonicalPath}".`,
+        };
+      }
+
+      if (chunkIndex >= totalChunks) {
+        return {
+          notePath: canonicalPath,
+          status: "out_of_range",
+          message: `Chunk index ${chunkIndex} exceeds available chunks (last index ${totalChunks - 1}).`,
+          totalChunks,
+        };
+      }
+
+      const chunk = chunks[chunkIndex];
+      logInfo(
+        `readNote: returning chunk ${chunk.chunkIndex} of ${totalChunks} for ${canonicalPath}`
       );
-      return {
-        notePath: sanitizedPath,
-        status: "not_unique",
-        message: `Multiple notes match "${sanitizedPath}". Provide a more specific path.`,
-        candidates: resolution.matches.map((file) => ({
-          path: file.path,
-          title: file.basename,
-        })),
-      };
-    }
 
-    const file = resolution.file;
-    const canonicalPath = file.path;
-    const text = await readNoteText(file);
-    const chunks = chunkContentByLines(file, text);
-    const totalChunks = chunks.length;
+      const hasMore = chunk.chunkIndex < totalChunks - 1;
+      const linkedNotes = extractLinkedNoteMetadata(app, chunk.content, file);
 
-    if (totalChunks === 0) {
       return {
         notePath: canonicalPath,
-        status: "empty",
-        message: `No readable content was found in "${canonicalPath}".`,
-      };
-    }
-
-    if (chunkIndex >= totalChunks) {
-      return {
-        notePath: canonicalPath,
-        status: "out_of_range",
-        message: `Chunk index ${chunkIndex} exceeds available chunks (last index ${totalChunks - 1}).`,
+        noteTitle: file.basename,
+        heading: chunk.heading,
+        chunkId: chunk.id,
+        chunkIndex: chunk.chunkIndex,
         totalChunks,
+        hasMore,
+        nextChunkIndex: hasMore ? chunk.chunkIndex + 1 : null,
+        content: chunk.content,
+        mtime: file.stat.mtime,
+        linkedNotes: linkedNotes.length > 0 ? linkedNotes : undefined,
       };
-    }
+    },
+  });
 
-    const chunk = chunks[chunkIndex];
-    logInfo(`readNote: returning chunk ${chunk.chunkIndex} of ${totalChunks} for ${canonicalPath}`);
-
-    const hasMore = chunk.chunkIndex < totalChunks - 1;
-    const linkedNotes = extractLinkedNoteMetadata(chunk.content, file);
-
-    return {
-      notePath: canonicalPath,
-      noteTitle: file.basename,
-      heading: chunk.heading,
-      chunkId: chunk.id,
-      chunkIndex: chunk.chunkIndex,
-      totalChunks,
-      hasMore,
-      nextChunkIndex: hasMore ? chunk.chunkIndex + 1 : null,
-      content: chunk.content,
-      mtime: file.stat.mtime,
-      linkedNotes: linkedNotes.length > 0 ? linkedNotes : undefined,
-    };
-  },
-});
-
-export { readNoteTool };
+export { createReadNoteTool };

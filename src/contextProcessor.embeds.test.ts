@@ -19,8 +19,6 @@ describe("ContextProcessor - Embedded Notes", () => {
   let fileIndex: Map<string, TFile>;
 
   beforeEach(() => {
-    contextProcessor = ContextProcessor.getInstance();
-
     fileCaches = {};
     fileContents = {};
     fileIndex = new Map<string, TFile>();
@@ -36,6 +34,8 @@ describe("ContextProcessor - Embedded Notes", () => {
     (window as unknown as Record<string, unknown>).app = {
       metadataCache: metadataCacheMock,
     };
+
+    contextProcessor = ContextProcessor.getInstance(window.app);
 
     vault = {
       adapter: {

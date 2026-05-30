@@ -301,7 +301,7 @@ const AgentChatInternal: React.FC<AgentChatProps> = ({
     const expanded = await expandCustomCommandPrefix(
       text,
       getCachedCustomCommands(),
-      app.vault,
+      app,
       noteSelection?.content ?? "",
       activeFile
     );

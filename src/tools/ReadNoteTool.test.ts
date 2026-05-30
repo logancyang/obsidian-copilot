@@ -83,7 +83,8 @@ describe("readNoteTool", () => {
       },
     } as unknown as typeof window.app;
 
-    ({ readNoteTool } = await import("./NoteTools"));
+    const { createReadNoteTool } = await import("./NoteTools");
+    readNoteTool = createReadNoteTool(window.app);
   });
 
   afterEach(() => {

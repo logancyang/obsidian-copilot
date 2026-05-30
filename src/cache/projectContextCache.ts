@@ -4,7 +4,7 @@ import { logError, logInfo, logWarn } from "@/logger";
 import { getMatchingPatterns, shouldIndexFile } from "@/search/searchUtils";
 import { getCachedProjects } from "@/projects/state";
 import { md5 } from "@/utils/hash";
-import { TAbstractFile, TFile, Vault } from "obsidian";
+import { App, TAbstractFile, TFile, Vault } from "obsidian";
 import { debounce } from "@/utils/debounce";
 import { Mutex } from "async-mutex";
 
@@ -68,21 +68,33 @@ export class ProjectContextCache {
   private static instance: ProjectContextCache;
   private cacheDir: string = ".copilot/project-context-cache";
   private memoryCache: Map<string, ContextCache> = new Map();
+  private app: App;
   private vault: Vault;
   private fileCache: FileCache<string>;
   private static readonly DEBOUNCE_DELAY = 5000; // 5 seconds
   private projectMutexMap: Map<string, Mutex> = new Map();
   private mutexCreationMutex: Mutex = new Mutex(); // Global lock to protect project mutex creation
 
-  private constructor() {
+  private constructor(app: App) {
+    this.app = app;
     this.vault = app.vault;
     this.fileCache = FileCache.getInstance<string>();
     this.initializeEventListeners();
   }
 
-  static getInstance(): ProjectContextCache {
+  /**
+   * Returns the singleton. `app` is required on the first call (which creates
+   * the instance) and ignored afterward; the plugin seeds it once at load
+   * (see main.ts) so subsequent call sites can omit it.
+   */
+  static getInstance(app?: App): ProjectContextCache {
     if (!ProjectContextCache.instance) {
-      ProjectContextCache.instance = new ProjectContextCache();
+      if (!app) {
+        throw new Error(
+          "ProjectContextCache.getInstance() requires `app` on first call (seed it at plugin load)."
+        );
+      }
+      ProjectContextCache.instance = new ProjectContextCache(app);
     }
     return ProjectContextCache.instance;
   }
@@ -136,7 +148,7 @@ export class ProjectContextCache {
           isProject: true,
         });
 
-        if (shouldIndexFile(file, inclusions, exclusions, true)) {
+        if (shouldIndexFile(this.app, file, inclusions, exclusions, true)) {
           // Only invalidate markdown context, keep other contexts
           await this.invalidateMarkdownContext(project);
           logInfo(
@@ -350,7 +362,7 @@ export class ProjectContextCache {
 
       // Only remove the file cache entries that were referenced by projects
       for (const cacheKey of allFileKeysToRemove) {
-        await this.fileCache.remove(cacheKey);
+        await this.fileCache.remove(this.vault, cacheKey);
       }
 
       logInfo(
@@ -381,7 +393,7 @@ export class ProjectContextCache {
           for (const filePath in projectCache.fileContexts) {
             const fileEntry = projectCache.fileContexts[filePath];
             if (fileEntry && fileEntry.cacheKey) {
-              await this.fileCache.remove(fileEntry.cacheKey); // fileCache.remove logs its own success/failure per file
+              await this.fileCache.remove(this.vault, fileEntry.cacheKey); // fileCache.remove logs its own success/failure per file
               filesClearedCount++;
             } else {
               logWarn(
@@ -572,7 +584,7 @@ export class ProjectContextCache {
         return null; // This will prevent fileCache.get from being called with a non-string.
       }
 
-      return await this.fileCache.get(cacheKey); // fileCache.get already logs "Cache miss for file:"
+      return await this.fileCache.get(this.vault, cacheKey); // fileCache.get already logs "Cache miss for file:"
     } catch (error) {
       logError(`Error getting file context for ${filePath} in project ${project.name}:`, error);
       return null;
@@ -598,7 +610,7 @@ export class ProjectContextCache {
       const cacheKey = this.fileCache.getCacheKey(file, project.id);
 
       // Store the file content in FileCache
-      await this.fileCache.set(cacheKey, content);
+      await this.fileCache.set(this.vault, cacheKey, content);
 
       // Store just the metadata in the project context
       cache.fileContexts[filePath] = {
@@ -624,7 +636,7 @@ export class ProjectContextCache {
         delete cache.fileContexts[filePath];
 
         // Remove from file cache
-        await this.fileCache.remove(cacheKey);
+        await this.fileCache.remove(this.vault, cacheKey);
 
         logInfo(`Removed file context for ${filePath} in project ${project.name}`);
       }
@@ -661,7 +673,7 @@ export class ProjectContextCache {
           if (!cacheKey) continue;
 
           // Try to get content from this project's cache
-          const content = await this.fileCache.get(cacheKey);
+          const content = await this.fileCache.get(this.vault, cacheKey);
           if (content) {
             logInfo(`Found content for file ${filePath} in project ${project.name}`);
             return { content, cacheKey };
@@ -723,7 +735,10 @@ export class ProjectContextCache {
       const file = this.vault.getAbstractFileByPath(filePath);
 
       // If file no longer exists or doesn't match patterns, remove its reference
-      if (!(file instanceof TFile) || !shouldIndexFile(file, inclusions, exclusions, true)) {
+      if (
+        !(file instanceof TFile) ||
+        !shouldIndexFile(this.app, file, inclusions, exclusions, true)
+      ) {
         // Note: We don't remove from fileCache to preserve content for future use
         removedCount++;
       } else {
@@ -784,7 +799,7 @@ export class ProjectContextCache {
       let addedCount = 0;
 
       for (const file of allFiles) {
-        if (shouldIndexFile(file, inclusions, exclusions, true)) {
+        if (shouldIndexFile(this.app, file, inclusions, exclusions, true)) {
           if (contextCacheToUpdate.fileContexts[file.path]) {
             continue;
           }

@@ -5,7 +5,7 @@ import { logInfo } from "@/logger";
 import { turnOffPlus, turnOnPlus } from "@/plusUtils";
 import { getSettings } from "@/settings/model";
 import { arrayBufferToBase64 } from "@/utils/base64";
-import { requestUrl } from "obsidian";
+import { App, requestUrl } from "obsidian";
 
 /**
  * Build a multipart/form-data body buffer from a FormData instance.
@@ -253,6 +253,7 @@ export class BrevilabsClient {
    * unknown error.
    */
   async validateLicenseKey(
+    app?: App,
     context?: Record<string, unknown>
   ): Promise<{ isValid: boolean | undefined; plan?: string }> {
     // Build the request body with proper structure
@@ -289,7 +290,7 @@ export class BrevilabsClient {
 
     if (error) {
       if (error.message === "Invalid license key") {
-        turnOffPlus();
+        turnOffPlus(app);
         return { isValid: false };
       }
       // Do nothing if the error is not about the invalid license key

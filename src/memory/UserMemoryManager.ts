@@ -228,7 +228,7 @@ export class UserMemoryManager {
     const settings = getSettings();
     const memoryFolderPath = settings.memoryFolderName;
 
-    await ensureFolderExists(memoryFolderPath);
+    await ensureFolderExists(this.app.vault, memoryFolderPath);
   }
 
   private getRecentConversationFilePath(): string {

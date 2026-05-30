@@ -17,7 +17,7 @@ export class TagSearchModal extends FuzzySuggestModal<string> {
     // Loop through each file and extract tags.
     for (const file of files) {
       // Retrieve the metadata cache for the file.
-      const tags = getTagsFromNote(file);
+      const tags = getTagsFromNote(this.app, file);
       tags.forEach((tag) => tagSet.add(tag));
     }
 

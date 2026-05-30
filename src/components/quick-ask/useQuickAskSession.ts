@@ -16,6 +16,7 @@ import {
   appendIncludeNoteContextPlaceholders,
 } from "@/commands/quickCommandPrompts";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
+import { useApp } from "@/context";
 import { findCustomModel } from "@/utils";
 import { logError, logWarn } from "@/logger";
 import type { QuickAskMessage } from "./types";
@@ -40,6 +41,7 @@ interface QuickAskSessionApi {
  * Hook for managing Quick Ask session state and streaming.
  */
 export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSessionApi {
+  const app = useApp();
   const { selectedText, selectedModelKey, includeNoteContext, settings } = params;
 
   // Message history (completed messages only)
@@ -122,7 +124,12 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
         if (ctx.signal.aborted) return "";
 
         // Process prompt (follow-up messages skip appending selected text)
-        const prompt = await processCommandPrompt(processedInput, selectedText, !ctx.isFirstTurn);
+        const prompt = await processCommandPrompt(
+          app,
+          processedInput,
+          selectedText,
+          !ctx.isFirstTurn
+        );
 
         return prompt;
       });
@@ -159,7 +166,7 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
         });
       }
     },
-    [includeNoteContext, runTurn, selectedText]
+    [app, includeNoteContext, runTurn, selectedText]
   );
 
   const stop = useCallback(() => {

@@ -921,7 +921,7 @@ const ChatSingleMessage: React.FC<ChatSingleMessageProps> = ({
 
     const editor = leaf.view.editor;
     const hasSelection = editor.getSelection().length > 0;
-    void insertIntoEditor(message.message, hasSelection);
+    void insertIntoEditor(app, message.message, hasSelection);
   };
 
   const renderMessageContent = () => {

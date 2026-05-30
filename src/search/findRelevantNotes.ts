@@ -13,7 +13,7 @@ import type { SemanticIndexDocument } from "@/search/indexBackend/SemanticIndexB
 import VectorStoreManager from "@/search/vectorStoreManager";
 import { getSettings } from "@/settings/model";
 import { InternalTypedDocument, Orama, Result } from "@orama/orama";
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 
 const MAX_K = 20;
 const ORIGINAL_WEIGHT = 0.7;
@@ -124,10 +124,14 @@ async function calculateSimilarityScoreFromOrama({
 /**
  * Calculate similarity scores using Miyo's related-note endpoint.
  *
+ * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
  * @returns Map of note paths to max similarity score.
  */
-async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<string, number>> {
+async function calculateSimilarityScoreFromMiyo(
+  app: App,
+  filePath: string
+): Promise<Map<string, number>> {
   const settings = getSettings();
   const miyoClient = new MiyoClient();
   const folderName = getMiyoFolderName(app);
@@ -181,12 +185,13 @@ async function calculateSimilarityScoreFromMiyo(filePath: string): Promise<Map<s
 /**
  * Calculate similarity scores by selecting the best available backend strategy.
  *
+ * @param app - The Obsidian app instance.
  * @param filePath - Source note path.
  * @returns Map of note paths to max similarity score.
  */
-async function calculateSimilarityScore(filePath: string): Promise<Map<string, number>> {
+async function calculateSimilarityScore(app: App, filePath: string): Promise<Map<string, number>> {
   if (shouldUseMiyoForRelevantNotes()) {
-    return calculateSimilarityScoreFromMiyo(filePath);
+    return calculateSimilarityScoreFromMiyo(app, filePath);
   }
 
   const currentNoteDocs = await VectorStoreManager.getInstance().getDocumentsByPath(filePath);
@@ -216,24 +221,25 @@ async function calculateSimilarityScore(filePath: string): Promise<Map<string, n
     return new Map();
   }
 
-  return calculateSimilarityScoreFromMiyo(filePath);
+  return calculateSimilarityScoreFromMiyo(app, filePath);
 }
 
 /**
  * Build outgoing/backlink relationship flags for the source note.
  *
+ * @param app - The Obsidian app instance.
  * @param file - Source note file.
  * @returns Map keyed by note path with link metadata.
  */
-function getNoteLinks(file: TFile) {
+function getNoteLinks(app: App, file: TFile) {
   const resultMap = new Map<string, { links: boolean; backlinks: boolean }>();
-  const linkedNotes = getLinkedNotes(file);
+  const linkedNotes = getLinkedNotes(app, file);
   const linkedNotePaths = linkedNotes.map((note) => note.path);
   for (const notePath of linkedNotePaths) {
     resultMap.set(notePath, { links: true, backlinks: false });
   }
 
-  const backlinkedNotes = getBacklinkedNotes(file);
+  const backlinkedNotes = getBacklinkedNotes(app, file);
   const backlinkedNotePaths = backlinkedNotes.map((note) => note.path);
   for (const notePath of backlinkedNotePaths) {
     if (resultMap.has(notePath)) {
@@ -294,13 +300,16 @@ export type RelevantNoteEntry = {
 /**
  * Finds the relevant notes for the given file path.
  *
+ * @param app - The Obsidian app instance.
  * @param filePath - The file path to find relevant notes for.
  * @returns The relevant notes hits for the given file path. Empty array if no
  *   relevant notes are found or the index does not exist.
  */
 export async function findRelevantNotes({
+  app,
   filePath,
 }: {
+  app: App;
   filePath: string;
 }): Promise<RelevantNoteEntry[]> {
   const file = app.vault.getAbstractFileByPath(filePath);
@@ -308,8 +317,8 @@ export async function findRelevantNotes({
     return [];
   }
 
-  const similarityScoreMap = await calculateSimilarityScore(filePath);
-  const noteLinks = getNoteLinks(file);
+  const similarityScoreMap = await calculateSimilarityScore(app, filePath);
+  const noteLinks = getNoteLinks(app, file);
   const mergedScoreMap = mergeScoreMaps(similarityScoreMap, noteLinks);
   const sortedHits = Array.from(mergedScoreMap.entries()).sort((a, b) => {
     const aPath = a[0];

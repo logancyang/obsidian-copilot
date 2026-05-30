@@ -21,7 +21,7 @@ import { BaseChatModel } from "@langchain/core/language_models/chat_models";
 import { Document } from "@langchain/core/documents";
 import { MemoryVariables } from "@langchain/core/memory";
 import { DateTime } from "luxon";
-import { MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
+import { App, MarkdownView, Notice, TFile, Vault, normalizePath, requestUrl } from "obsidian";
 import { CustomModel } from "./aiParams";
 import { getApiKeyForProvider } from "@/utils/modelUtils";
 export { err2String } from "@/errorFormat";
@@ -193,11 +193,12 @@ export function stripFrontmatter(content: string, options: StripFrontmatterOptio
 }
 
 /**
+ * @param app - The Obsidian app instance.
  * @param file - The note file to get tags from.
  * @param frontmatterOnly - Whether to only get tags from frontmatter.
  * @returns An array of lowercase tags without the hash symbol.
  */
-export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
+export function getTagsFromNote(app: App, file: TFile, frontmatterOnly = true): string[] {
   const metadata = app.metadataCache.getFileCache(file);
   const frontmatterTags = metadata?.frontmatter?.tags;
   const allTags = new Set<string>();
@@ -227,23 +228,23 @@ export function getTagsFromNote(file: TFile, frontmatterOnly = true): string[] {
 
 /**
  * Get notes from tags.
- * @param vault - The vault to get notes from.
+ * @param app - The Obsidian app instance.
  * @param tags - The tags to get notes from. Tags should be with the hash symbol.
  * @param noteFiles - The notes to get notes from.
  * @returns An array of note files.
  */
-export function getNotesFromTags(vault: Vault, tags: string[], noteFiles?: TFile[]): TFile[] {
+export function getNotesFromTags(app: App, tags: string[], noteFiles?: TFile[]): TFile[] {
   if (tags.length === 0) {
     return [];
   }
 
   tags = tags.map((tag) => stripHash(tag));
 
-  const files = noteFiles && noteFiles.length > 0 ? noteFiles : getNotesFromPath(vault, "/");
+  const files = noteFiles && noteFiles.length > 0 ? noteFiles : getNotesFromPath(app.vault, "/");
   const filesWithTag = [];
 
   for (const file of files) {
-    const noteTags = getTagsFromNote(file);
+    const noteTags = getTagsFromNote(app, file);
     if (tags.some((tag) => noteTags.includes(tag))) {
       filesWithTag.push(file);
     }
@@ -281,7 +282,7 @@ export const formatDateTime = (
  *
  * Throws if any segment conflicts with an existing file.
  */
-export async function ensureFolderExists(folderPath: string): Promise<void> {
+export async function ensureFolderExists(vault: Vault, folderPath: string): Promise<void> {
   const path = normalizePath(folderPath).replace(/^\/+/, "").replace(/\/+$/, "");
   if (!path) return; // nothing to ensure
 
@@ -291,7 +292,7 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
   for (const part of parts) {
     current = current ? `${current}/${part}` : part;
 
-    const existing = app.vault.getAbstractFileByPath(current);
+    const existing = vault.getAbstractFileByPath(current);
     if (existing) {
       if (existing instanceof TFile) {
         throw new Error(`Path conflict: "${current}" exists as a file, expected folder.`);
@@ -301,7 +302,7 @@ export async function ensureFolderExists(folderPath: string): Promise<void> {
     }
 
     // Create this level; parents are guaranteed to exist from previous iterations
-    await app.vault.adapter.mkdir(current);
+    await vault.adapter.mkdir(current);
   }
 }
 
@@ -883,7 +884,7 @@ export function cleanMessageForCopy(message: string): string {
  * Uses a single CM6 transaction to avoid undo stack splitting.
  * Ensures the inserted/replaced range is selected after the operation.
  */
-export async function insertIntoEditor(message: string, replace: boolean = false) {
+export async function insertIntoEditor(app: App, message: string, replace: boolean = false) {
   let leaf = app.workspace.getMostRecentLeaf();
   if (!leaf) {
     new Notice("No active leaf found.");
@@ -1300,7 +1301,7 @@ export async function withTimeout<T>(
 /**
  * Check if the current Obsidian editor setting is in source mode
  */
-export function isSourceModeOn(): boolean {
+export function isSourceModeOn(app: App): boolean {
   const view = app.workspace.getActiveViewOfType(MarkdownView);
   if (!view) return true;
 
@@ -1396,10 +1397,15 @@ export function sanitizeFilePath(filePath: string): string {
 
 /**
  * Opens a file in the workspace, reusing an existing tab if the file is already open.
+ * @param app - The Obsidian app instance
  * @param file - The TFile to open
  * @param focusIfOpen - If true, focuses the existing leaf if the file is already open (default: true)
  */
-export async function openFileInWorkspace(file: TFile, focusIfOpen: boolean = true): Promise<void> {
+export async function openFileInWorkspace(
+  app: App,
+  file: TFile,
+  focusIfOpen: boolean = true
+): Promise<void> {
   // Check if the file is already open in any leaf
   let existingLeaf = null;
   app.workspace.iterateAllLeaves((leaf) => {

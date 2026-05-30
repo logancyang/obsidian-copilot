@@ -293,7 +293,7 @@ describe("FilterRetriever", () => {
         ctime: now - 2000,
       });
 
-      shouldIndexFile.mockImplementation((file: TFile) => !file.path.startsWith("copilot/"));
+      shouldIndexFile.mockImplementation((_app, file: TFile) => !file.path.startsWith("copilot/"));
       mockApp.vault.getMarkdownFiles.mockReturnValue([validFile, excludedFile]);
       mockApp.vault.cachedRead.mockResolvedValue("Content");
       mockApp.metadataCache.getFileCache.mockReturnValue({ tags: [] });

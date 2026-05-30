@@ -96,7 +96,7 @@ describe("searchUtils", () => {
   describe("shouldIndexFile", () => {
     it("should return true when no inclusions or exclusions are specified", () => {
       const file = createTestFile("test.md");
-      expect(shouldIndexFile(file, null, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, null, null)).toBe(true);
     });
 
     it("should return false when file matches exclusion pattern", () => {
@@ -104,7 +104,7 @@ describe("searchUtils", () => {
       const exclusions = {
         folderPatterns: ["private"],
       };
-      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
 
     it("should return false when file matches exclusion extension pattern", () => {
@@ -112,7 +112,7 @@ describe("searchUtils", () => {
       const exclusions = {
         extensionPatterns: ["*.excalidraw.md"],
       };
-      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
 
     it("should return true when file matches inclusion pattern", () => {
@@ -120,7 +120,7 @@ describe("searchUtils", () => {
       const inclusions = {
         folderPatterns: ["notes"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
     it("should return false when file doesn't match inclusion pattern", () => {
@@ -128,7 +128,7 @@ describe("searchUtils", () => {
       const inclusions = {
         folderPatterns: ["notes"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(false);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(false);
     });
 
     it("should prioritize exclusions over inclusions", () => {
@@ -139,7 +139,7 @@ describe("searchUtils", () => {
       const exclusions = {
         folderPatterns: ["notes/private"],
       };
-      expect(shouldIndexFile(file, inclusions, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, inclusions, exclusions)).toBe(false);
     });
 
     it("should handle multiple inclusion patterns", () => {
@@ -147,7 +147,7 @@ describe("searchUtils", () => {
       const inclusions = {
         folderPatterns: ["notes", "blog", "docs"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
     it("should handle inclusion patterns with folders with slashes and spaces", () => {
@@ -155,7 +155,7 @@ describe("searchUtils", () => {
       const inclusions = {
         folderPatterns: ["folder/with/100 spaces"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
     it("should handle multiple exclusion patterns", () => {
@@ -163,7 +163,7 @@ describe("searchUtils", () => {
       const exclusions = {
         folderPatterns: ["private", "temp", "archive"],
       };
-      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
 
     it("should handle tag-based inclusion patterns", () => {
@@ -174,7 +174,7 @@ describe("searchUtils", () => {
       const inclusions = {
         tagPatterns: ["#important"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
     it("should handle tag-based exclusion patterns", () => {
@@ -185,7 +185,7 @@ describe("searchUtils", () => {
       const exclusions = {
         tagPatterns: ["#private"],
       };
-      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
 
     it("should handle file extension patterns in inclusions", () => {
@@ -193,7 +193,7 @@ describe("searchUtils", () => {
       const inclusions = {
         extensionPatterns: ["*.pdf"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
     it("should handle file extension patterns in exclusions", () => {
@@ -201,17 +201,17 @@ describe("searchUtils", () => {
       const exclusions = {
         extensionPatterns: ["*.pdf"],
       };
-      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
 
-    it("should return false when tag check fails due to file not found", () => {
+    it("should return false when the note has no matching tags", () => {
       const file = createTestFile("notes/tagged.md");
-      mockGetAbstractFileByPath.mockReturnValue(null);
+      (utils.getTagsFromNote as jest.Mock).mockReturnValue([]);
 
       const inclusions = {
         tagPatterns: ["#important"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(false);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(false);
     });
 
     it("should handle note-based inclusion patterns", () => {
@@ -221,7 +221,7 @@ describe("searchUtils", () => {
       const inclusions = {
         notePatterns: ["[[referenced]]"],
       };
-      expect(shouldIndexFile(file, inclusions, null)).toBe(true);
+      expect(shouldIndexFile(window.app, file, inclusions, null)).toBe(true);
     });
 
     it("should handle note-based exclusion patterns", () => {
@@ -231,7 +231,7 @@ describe("searchUtils", () => {
       const exclusions = {
         notePatterns: ["[[draft]]"],
       };
-      expect(shouldIndexFile(file, null, exclusions)).toBe(false);
+      expect(shouldIndexFile(window.app, file, null, exclusions)).toBe(false);
     });
   });
 

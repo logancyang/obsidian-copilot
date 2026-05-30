@@ -4,6 +4,7 @@ import {
   Twitter4llmResponse,
   Url4llmResponse,
 } from "@/LLMProviders/brevilabsClient";
+import { Vault } from "obsidian";
 import { selfHostYoutube4llm } from "@/LLMProviders/selfHostServices";
 import { err2String, isTwitterUrl, isYoutubeUrl } from "@/utils";
 import { logError } from "@/logger";
@@ -89,7 +90,10 @@ export class Mention {
    * @param urls Array of URLs to process
    * @returns Processed URL context and any errors
    */
-  async processUrlList(urls: string[]): Promise<{
+  async processUrlList(
+    vault: Vault,
+    urls: string[]
+  ): Promise<{
     urlContext: string;
     imageUrls: string[];
     processedErrorUrls: Record<string, string>;
@@ -106,7 +110,7 @@ export class Mention {
     // Process all URLs concurrently
     const processPromises = urls.map(async (url) => {
       // Check if it's an image URL
-      if (await ImageProcessor.isImageUrl(url, app.vault)) {
+      if (await ImageProcessor.isImageUrl(url, vault)) {
         imageUrls.push(url);
         return { type: "image", url };
       }
@@ -195,13 +199,16 @@ export class Mention {
    * @param text The user's chat input text
    * @returns Processed URL context and any errors
    */
-  async processUrls(text: string): Promise<{
+  async processUrls(
+    vault: Vault,
+    text: string
+  ): Promise<{
     urlContext: string;
     imageUrls: string[];
     processedErrorUrls: Record<string, string>;
   }> {
     const urls = this.extractUrls(text);
-    return this.processUrlList(urls);
+    return this.processUrlList(vault, urls);
   }
 
   getMentions(): Map<string, MentionData> {

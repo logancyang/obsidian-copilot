@@ -1,4 +1,4 @@
-import { Notice, Plugin, Vault } from "obsidian";
+import { App, Notice, Plugin, Vault } from "obsidian";
 import { SystemPromptRegister } from "@/system-prompts/systemPromptRegister";
 import * as state from "@/system-prompts/state";
 import * as systemPromptUtils from "@/system-prompts/systemPromptUtils";
@@ -85,7 +85,7 @@ describe("SystemPromptRegister", () => {
       off: jest.fn(),
     } as unknown as Vault;
 
-    register = new SystemPromptRegister(mockPlugin, mockVault);
+    register = new SystemPromptRegister(mockPlugin, { vault: mockVault } as unknown as App);
   });
 
   afterEach(() => {

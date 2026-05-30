@@ -123,7 +123,7 @@ export async function filterChatHistoryFiles(
  * First checks frontmatter.topic, then extracts from filename by removing
  * project ID prefix, date/time patterns, and normalizing separators.
  */
-export function extractChatTitle(file: TFile): string {
+export function extractChatTitle(app: App, file: TFile): string {
   // Read the file's front matter
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
 
@@ -172,7 +172,7 @@ export function extractChatTitle(file: TFile): string {
  * Extract chat creation date from a file.
  * Uses frontmatter.epoch if available, falls back to file creation time.
  */
-export function extractChatDate(file: TFile): Date {
+export function extractChatDate(app: App, file: TFile): Date {
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
 
   if (frontmatter && frontmatter.epoch) {
@@ -188,7 +188,7 @@ export function extractChatDate(file: TFile): Date {
  * Extract chat last accessed time (epoch ms) from a file.
  * Uses frontmatter.lastAccessedAt if available, returns null otherwise.
  */
-export function extractChatLastAccessedAtMs(file: TFile): number | null {
+export function extractChatLastAccessedAtMs(app: App, file: TFile): number | null {
   const frontmatter = app.metadataCache.getFileCache(file)?.frontmatter;
   const rawValue = frontmatter?.lastAccessedAt;
 
@@ -215,8 +215,8 @@ export function extractChatLastAccessedAtMs(file: TFile): number | null {
  * Extract chat last accessed date from a file.
  * Uses extractChatLastAccessedAtMs and returns a Date when available, null otherwise.
  */
-export function extractChatLastAccessedAt(file: TFile): Date | null {
-  const lastAccessedAtMs = extractChatLastAccessedAtMs(file);
+export function extractChatLastAccessedAt(app: App, file: TFile): Date | null {
+  const lastAccessedAtMs = extractChatLastAccessedAtMs(app, file);
   return lastAccessedAtMs ? new Date(lastAccessedAtMs) : null;
 }
 
@@ -227,11 +227,12 @@ export function extractChatLastAccessedAt(file: TFile): Date | null {
  * chat-history flows so the two lists rank identically.
  */
 export function fileToHistoryItem(
+  app: App,
   file: TFile,
   lastAccessedAtManager: RecentUsageManager<string>
 ): ChatHistoryItem {
-  const createdAt = extractChatDate(file);
-  const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
+  const createdAt = extractChatDate(app, file);
+  const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(app, file);
   const effectiveLastAccessedAtMs = lastAccessedAtManager.getEffectiveLastUsedAt(
     file.path,
     persistedLastAccessedAtMs ?? createdAt.getTime()
@@ -241,7 +242,7 @@ export function fileToHistoryItem(
     typeof rawBackendId === "string" && rawBackendId.trim() ? rawBackendId.trim() : undefined;
   return {
     id: file.path,
-    title: extractChatTitle(file),
+    title: extractChatTitle(app, file),
     createdAt,
     lastAccessedAt: new Date(effectiveLastAccessedAtMs),
     backendId,
@@ -252,9 +253,9 @@ export function fileToHistoryItem(
  * Get formatted display text for a chat file (title + formatted date).
  * Used in chat history modals and similar UI components.
  */
-export function getChatDisplayText(file: TFile): string {
-  const title = extractChatTitle(file);
-  const date = extractChatDate(file);
+export function getChatDisplayText(app: App, file: TFile): string {
+  const title = extractChatTitle(app, file);
+  const date = extractChatDate(app, file);
   const formattedDateTime = formatDateTime(date);
   return `${title} - ${formattedDateTime.display}`;
 }

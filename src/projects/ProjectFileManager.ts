@@ -88,7 +88,7 @@ export class ProjectFileManager {
   public async initialize(): Promise<void> {
     logInfo("[Projects] Initializing ProjectFileManager");
     await ensureProjectsMigratedIfNeeded(this.app);
-    await loadAllProjects();
+    await loadAllProjects(this.app);
   }
 
   /**
@@ -111,14 +111,14 @@ export class ProjectFileManager {
    * Reload all projects from vault (full scan + cache replace).
    */
   public async reloadProjects(): Promise<ProjectFileRecord[]> {
-    return await loadAllProjects();
+    return await loadAllProjects(this.app);
   }
 
   /**
    * Fetch all projects from vault without updating cache.
    */
   public async fetchProjects(): Promise<ProjectFileRecord[]> {
-    return await fetchAllProjects();
+    return await fetchAllProjects(this.app);
   }
 
   /**
@@ -272,8 +272,8 @@ export class ProjectFileManager {
     try {
       addPendingFileWrite(filePath);
 
-      await ensureFolderExists(getProjectsFolder());
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(this.vault, getProjectsFolder());
+      await ensureFolderExists(this.vault, folderPath);
 
       // Reason: detect folder name collisions where a different project id sanitizes to the
       // same folder (e.g. "a/b" and "a\\b" both produce "a_b"). Check both cache and filesystem.
@@ -298,7 +298,10 @@ export class ProjectFileManager {
       const file = await this.vault.create(filePath, project.systemPrompt || "");
 
       try {
-        await writeProjectFrontmatter(file, project, folderName, { createdMs, lastUsedMs });
+        await writeProjectFrontmatter(this.app, file, project, folderName, {
+          createdMs,
+          lastUsedMs,
+        });
       } catch (fmError) {
         // Reason: rollback the created file to avoid leaving a "poisoned" file without frontmatter
         await this.rollbackCreatedFile(filePath, folderPath);
@@ -420,7 +423,7 @@ export class ProjectFileManager {
 
       // Reason: use resolveFileByPath to handle both vault-cached and hidden-folder files.
       // getAbstractFileByPath returns null for hidden folders even when the file exists on disk.
-      let file = await resolveFileByPath(app, filePath);
+      let file = await resolveFileByPath(this.app, filePath);
       let materialized = false;
 
       // Reason: if the file doesn't exist anywhere (e.g. legacy project merged into cache before
@@ -428,8 +431,8 @@ export class ProjectFileManager {
       if (!file) {
         logInfo(`[Projects] Materializing missing vault file for project: ${normalizedId}`);
         const folderPath = getProjectFolderPath(folderName);
-        await ensureFolderExists(getProjectsFolder());
-        await ensureFolderExists(folderPath);
+        await ensureFolderExists(this.vault, getProjectsFolder());
+        await ensureFolderExists(this.vault, folderPath);
         file = await this.vault.create(filePath, nextProject.systemPrompt || "");
         materialized = true;
       }
@@ -451,10 +454,10 @@ export class ProjectFileManager {
 
       // Reason: processFrontMatter (used by writeProjectFrontmatter) does not work reliably
       // on synthetic TFiles for hidden folders. Split into cached-file and adapter-based paths.
-      if (isInVaultCache(app, filePath)) {
+      if (isInVaultCache(this.app, filePath)) {
         // Vault-cached file: use processFrontMatter for safe field-level updates
         try {
-          await writeProjectFrontmatter(file, projectForWrite, folderName, {
+          await writeProjectFrontmatter(this.app, file, projectForWrite, folderName, {
             createdMs,
             lastUsedMs,
           });
@@ -590,7 +593,9 @@ export class ProjectFileManager {
 
       // Reason: rescan to re-admit any previously-ignored duplicate-id files.
       // The register won't fire (pending guard), so we trigger rescan here.
-      void loadAllProjects().catch((err) => logError("[Projects] Rescan after delete failed", err));
+      void loadAllProjects(this.app).catch((err) =>
+        logError("[Projects] Rescan after delete failed", err)
+      );
     } finally {
       removePendingFileWrite(existing.filePath);
     }
@@ -617,7 +622,7 @@ export class ProjectFileManager {
       if (timestampToPersist === null) return;
 
       const filePath = normalizePath(record.filePath);
-      const file = await resolveFileByPath(app, filePath);
+      const file = await resolveFileByPath(this.app, filePath);
       if (!file) return;
 
       // Reason: use alreadyPending pattern to avoid clearing another in-flight pending write
@@ -626,23 +631,26 @@ export class ProjectFileManager {
       try {
         if (!alreadyPending) addPendingFileWrite(filePath);
 
-        if (isInVaultCache(app, filePath)) {
+        if (isInVaultCache(this.app, filePath)) {
           // Vault-cached file: use processFrontMatter for safe field-level update
-          await app.fileManager.processFrontMatter(file, (frontmatter: Record<string, unknown>) => {
-            const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
-            const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
-            actualPersistedValue = Math.max(existingMs, timestampToPersist);
-            if (existingMs === actualPersistedValue) return;
-            frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
-          });
+          await this.app.fileManager.processFrontMatter(
+            file,
+            (frontmatter: Record<string, unknown>) => {
+              const existing = Number(frontmatter[COPILOT_PROJECT_LAST_USED]);
+              const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
+              actualPersistedValue = Math.max(existingMs, timestampToPersist);
+              if (existingMs === actualPersistedValue) return;
+              frontmatter[COPILOT_PROJECT_LAST_USED] = actualPersistedValue;
+            }
+          );
         } else {
           // Hidden-folder file: use adapter-based frontmatter patch
-          const adapterFm = await readFrontmatterViaAdapter(app, filePath);
+          const adapterFm = await readFrontmatterViaAdapter(this.app, filePath);
           const existing = Number(adapterFm?.[COPILOT_PROJECT_LAST_USED]);
           const existingMs = Number.isFinite(existing) && existing > 0 ? existing : 0;
           actualPersistedValue = Math.max(existingMs, timestampToPersist);
           if (existingMs !== actualPersistedValue) {
-            await patchFrontmatter(app, filePath, {
+            await patchFrontmatter(this.app, filePath, {
               [COPILOT_PROJECT_LAST_USED]: actualPersistedValue,
             });
           }

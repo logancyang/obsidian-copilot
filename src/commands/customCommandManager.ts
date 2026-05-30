@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import {
   getCommandFilePath,
   getCustomCommandsFolder,
@@ -25,10 +25,25 @@ import { trashFile } from "@/utils/vaultAdapterUtils";
 
 export class CustomCommandManager {
   private static instance: CustomCommandManager;
+  private app: App;
 
-  static getInstance(): CustomCommandManager {
+  private constructor(app: App) {
+    this.app = app;
+  }
+
+  /**
+   * Returns the singleton. `app` is required on the first call (which creates
+   * the instance) and ignored afterward; the plugin seeds it once at load
+   * (see main.ts) so subsequent call sites can omit it.
+   */
+  static getInstance(app?: App): CustomCommandManager {
     if (!CustomCommandManager.instance) {
-      CustomCommandManager.instance = new CustomCommandManager();
+      if (!app) {
+        throw new Error(
+          "CustomCommandManager.getInstance() requires `app` on first call (seed it at plugin load)."
+        );
+      }
+      CustomCommandManager.instance = new CustomCommandManager(app);
     }
     return CustomCommandManager.instance;
   }
@@ -55,18 +70,18 @@ export class CustomCommandManager {
 
       const folderPath = getCustomCommandsFolder();
       // Ensure nested folders are created cross-platform
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(this.app.vault, folderPath);
 
-      const existingFile = app.vault.getAbstractFileByPath(filePath);
+      const existingFile = this.app.vault.getAbstractFileByPath(filePath);
       let commandFile: TFile;
       if (existingFile instanceof TFile) {
-        await app.vault.modify(existingFile, command.content);
+        await this.app.vault.modify(existingFile, command.content);
         commandFile = existingFile;
       } else {
-        commandFile = await app.vault.create(filePath, command.content);
+        commandFile = await this.app.vault.create(filePath, command.content);
       }
 
-      await app.fileManager.processFrontMatter(
+      await this.app.fileManager.processFrontMatter(
         commandFile,
         (frontmatter: Record<string, unknown>) => {
           frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
@@ -102,20 +117,20 @@ export class CustomCommandManager {
         // Update the cached command first to make UI update immediately.
         updateCachedCommand(command, prevCommandTitle);
       }
-      let commandFile = app.vault.getAbstractFileByPath(filePath);
+      let commandFile = this.app.vault.getAbstractFileByPath(filePath);
       // Verify whether the title has changed to decide whether to rename the file
       if (isRename) {
-        const newFileExists = app.vault.getAbstractFileByPath(filePath);
+        const newFileExists = this.app.vault.getAbstractFileByPath(filePath);
         if (newFileExists) {
           throw new CustomError(
             "Error saving custom prompt. Please check if the title already exists."
           );
         }
-        const prevCommandFile = app.vault.getAbstractFileByPath(prevFilePath);
+        const prevCommandFile = this.app.vault.getAbstractFileByPath(prevFilePath);
         if (prevCommandFile instanceof TFile) {
-          await app.vault.rename(prevCommandFile, filePath);
+          await this.app.vault.rename(prevCommandFile, filePath);
           // Re-fetch the file object after renaming
-          commandFile = app.vault.getAbstractFileByPath(filePath);
+          commandFile = this.app.vault.getAbstractFileByPath(filePath);
         }
       }
 
@@ -124,12 +139,12 @@ export class CustomCommandManager {
         // When creating a new command, we want to auto-order it so it appears
         // at the bottom of the menu.
         await this.createCommand(command, { skipStoreUpdate, autoOrder: true });
-        commandFile = app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
+        commandFile = this.app.vault.getAbstractFileByPath(getCommandFilePath(command.title));
       }
 
       if (commandFile instanceof TFile) {
-        await app.vault.modify(commandFile, command.content);
-        await app.fileManager.processFrontMatter(
+        await this.app.vault.modify(commandFile, command.content);
+        await this.app.fileManager.processFrontMatter(
           commandFile,
           (frontmatter: Record<string, unknown>) => {
             frontmatter[COPILOT_COMMAND_CONTEXT_MENU_ENABLED] = command.showInContextMenu;
@@ -170,9 +185,9 @@ export class CustomCommandManager {
     try {
       addPendingFileWrite(filePath);
       deleteCachedCommand(command.title);
-      const file = app.vault.getAbstractFileByPath(filePath);
+      const file = this.app.vault.getAbstractFileByPath(filePath);
       if (file instanceof TFile) {
-        await trashFile(app, file);
+        await trashFile(this.app, file);
       }
     } finally {
       removePendingFileWrite(filePath);

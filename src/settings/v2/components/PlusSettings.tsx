@@ -56,7 +56,7 @@ export function PlusSettings() {
           onClick={async () => {
             updateSetting("plusLicenseKey", localLicenseKey);
             setIsChecking(true);
-            const result = await checkIsPlusUser();
+            const result = await checkIsPlusUser(app);
             setIsChecking(false);
             if (!result) {
               setError("Invalid license key");

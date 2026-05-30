@@ -144,11 +144,11 @@ export function registerCommands(plugin: CopilotPlugin) {
 
     if (checking) {
       // Return true only if we're not in source mode
-      return !!(!isSourceModeOn() && activeView && activeView.editor);
+      return !!(!isSourceModeOn(plugin.app) && activeView && activeView.editor);
     }
 
     // Need to check this again because it can still be triggered via shortcut.
-    if (isSourceModeOn()) {
+    if (isSourceModeOn(plugin.app)) {
       new Notice("Quick command is not available in source mode.");
       return false;
     }
@@ -338,7 +338,7 @@ export function registerCommands(plugin: CopilotPlugin) {
       // Categorize files
       for (const file of allMarkdownFiles) {
         // Check if file should be indexed based on settings
-        if (!shouldIndexFile(file, inclusions, exclusions)) {
+        if (!shouldIndexFile(plugin.app, file, inclusions, exclusions)) {
           excludedFiles.add(file.path);
           continue;
         }
@@ -394,7 +394,7 @@ export function registerCommands(plugin: CopilotPlugin) {
       const filePath = `${folderPath}/${fileName}`;
 
       // Ensure destination folder exists (supports mobile and nested)
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(plugin.app.vault, folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
       if (existingFile instanceof TFile) {
@@ -468,7 +468,7 @@ export function registerCommands(plugin: CopilotPlugin) {
       const folderPath = "copilot";
       const filePath = `${folderPath}/${fileName}`;
 
-      await ensureFolderExists(folderPath);
+      await ensureFolderExists(plugin.app.vault, folderPath);
 
       const existingFile = plugin.app.vault.getAbstractFileByPath(filePath);
       if (existingFile instanceof TFile) {
@@ -491,14 +491,14 @@ export function registerCommands(plugin: CopilotPlugin) {
   // Add clear Copilot cache command
   addCommand(plugin, COMMAND_IDS.CLEAR_COPILOT_CACHE, async () => {
     try {
-      await plugin.fileParserManager.clearPDFCache();
+      await plugin.fileParserManager.clearPDFCache(plugin.app.vault);
 
       // Clear project context cache
       await ProjectContextCache.getInstance().clearAllCache();
 
       // Clear file content cache (get FileCache instance and clear it)
       const fileCache = FileCache.getInstance<string>();
-      await fileCache.clear();
+      await fileCache.clear(plugin.app.vault);
 
       new Notice("All Copilot caches cleared successfully");
     } catch (error) {
@@ -643,7 +643,7 @@ export function registerCommands(plugin: CopilotPlugin) {
 
   // Add command to download YouTube script (Copilot Plus only)
   addCommand(plugin, COMMAND_IDS.DOWNLOAD_YOUTUBE_SCRIPT, async () => {
-    const isPlusUser = await checkIsPlusUser();
+    const isPlusUser = await checkIsPlusUser(plugin.app);
     if (!isPlusUser) {
       new Notice("Download YouTube Script (plus) is a Copilot Plus feature");
       return;
@@ -660,11 +660,11 @@ export function registerCommands(plugin: CopilotPlugin) {
 
     if (checking) {
       // Return true only if we're not in source mode and have an active editor
-      return !!(!isSourceModeOn() && activeView && activeView.editor);
+      return !!(!isSourceModeOn(plugin.app) && activeView && activeView.editor);
     }
 
     // Need to check this again because it can still be triggered via shortcut
-    if (isSourceModeOn()) {
+    if (isSourceModeOn(plugin.app)) {
       new Notice("Quick Ask is not available in source mode.");
       return false;
     }

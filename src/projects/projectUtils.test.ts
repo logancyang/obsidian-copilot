@@ -1,4 +1,4 @@
-import { TFile } from "obsidian";
+import { App, TFile } from "obsidian";
 import { parseProjectConfigFile, sanitizeVaultPathSegment } from "@/projects/projectUtils";
 import { mockTFile } from "@/__tests__/mockObsidian";
 
@@ -33,9 +33,9 @@ function makeMockFile(path: string): TFile {
   });
 }
 
-// Helper: set up the global `app` mock used by parseProjectConfigFile
-function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> | null) {
-  (window as unknown as Record<string, unknown>).app = {
+// Helper: build the `app` mock passed to parseProjectConfigFile
+function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> | null): App {
+  const app = {
     vault: {
       read: jest.fn().mockResolvedValue(rawContent),
       // Reason: parseProjectConfigFile uses `cachedFile instanceof TFile` to detect synthetic TFiles.
@@ -47,7 +47,8 @@ function setupAppMock(rawContent: string, frontmatter: Record<string, unknown> |
       // Reason: returning null forces the fallback YAML parse path in parseProjectConfigFile
       getFileCache: jest.fn().mockReturnValue(frontmatter ? { frontmatter } : null),
     },
-  };
+  } as unknown as App;
+  return app;
 }
 
 describe("parseProjectConfigFile", () => {
@@ -57,10 +58,10 @@ describe("parseProjectConfigFile", () => {
     // Malformed YAML: unbalanced braces cause a parse error
     const malformedContent = "---\nname: {bad: yaml: here\n---\nBody text";
     // Force the metadata-cache miss so the fallback YAML parser runs
-    setupAppMock(malformedContent, null);
+    const app = setupAppMock(malformedContent, null);
 
     const file = makeMockFile(VALID_PATH);
-    const result = await parseProjectConfigFile(file);
+    const result = await parseProjectConfigFile(app, file);
 
     expect(result).toBeNull();
   });
@@ -86,7 +87,7 @@ describe("parseProjectConfigFile", () => {
     ].join("\n");
 
     // Use metadata-cache path (non-null frontmatter) for the happy path
-    setupAppMock(rawContent, {
+    const app = setupAppMock(rawContent, {
       "copilot-project-id": "my-project",
       "copilot-project-name": "My Project",
       "copilot-project-description": "A test project",
@@ -102,7 +103,7 @@ describe("parseProjectConfigFile", () => {
     });
 
     const file = makeMockFile(VALID_PATH);
-    const result = await parseProjectConfigFile(file);
+    const result = await parseProjectConfigFile(app, file);
 
     expect(result).not.toBeNull();
     expect(result!.project.id).toBe("my-project");
@@ -123,12 +124,12 @@ describe("parseProjectConfigFile", () => {
   it("returns null when copilot-project-id is missing from frontmatter", async () => {
     const rawContent = ["---", "copilot-project-name: My Project", "---", "Body text"].join("\n");
 
-    setupAppMock(rawContent, {
+    const app = setupAppMock(rawContent, {
       "copilot-project-name": "My Project",
     });
 
     const file = makeMockFile(VALID_PATH);
-    const result = await parseProjectConfigFile(file);
+    const result = await parseProjectConfigFile(app, file);
 
     // Reason: files without copilot-project-id are treated as corrupted and skipped.
     // With name-based folders, folderName can no longer serve as id fallback.

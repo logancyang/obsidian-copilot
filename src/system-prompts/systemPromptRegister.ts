@@ -1,4 +1,4 @@
-import { Notice, Plugin, TAbstractFile, Vault } from "obsidian";
+import { App, Notice, Plugin, TAbstractFile, Vault } from "obsidian";
 import {
   isSystemPromptFile,
   getSystemPromptsFolder,
@@ -26,16 +26,18 @@ import { logError, logInfo } from "@/logger";
  */
 export class SystemPromptRegister {
   private plugin: Plugin;
+  private app: App;
   private vault: Vault;
   private manager: SystemPromptManager;
   private settingsUnsubscriber?: () => void;
   /** Monotonically increasing request ID for latest-wins semantics */
   private folderChangeRequestId = 0;
 
-  constructor(plugin: Plugin, vault: Vault) {
+  constructor(plugin: Plugin, app: App) {
     this.plugin = plugin;
-    this.vault = vault;
-    this.manager = SystemPromptManager.getInstance(vault);
+    this.app = app;
+    this.vault = app.vault;
+    this.manager = SystemPromptManager.getInstance(app);
     this.initializeEventListeners();
   }
 
@@ -124,10 +126,10 @@ export class SystemPromptRegister {
   ): Promise<void> {
     try {
       if (oldTitle) {
-        await updatePromptDefaultFlag(oldTitle, false, oldFolder);
+        await updatePromptDefaultFlag(this.app, oldTitle, false, oldFolder);
       }
       if (newTitle) {
-        await updatePromptDefaultFlag(newTitle, true);
+        await updatePromptDefaultFlag(this.app, newTitle, true);
       }
       logInfo(`Default system prompt changed: "${oldTitle}" -> "${newTitle}"`);
     } catch (error) {
@@ -217,7 +219,7 @@ export class SystemPromptRegister {
         return;
       }
       try {
-        const prompt = await parseSystemPromptFile(file);
+        const prompt = await parseSystemPromptFile(this.app, file);
         upsertCachedSystemPrompt(prompt);
       } catch (error) {
         logError(`Error processing system prompt modification: ${file.path}`, error);
@@ -238,11 +240,11 @@ export class SystemPromptRegister {
       return;
     }
     try {
-      const prompt = await parseSystemPromptFile(file);
+      const prompt = await parseSystemPromptFile(this.app, file);
       // Ensure frontmatter is properly set
-      await ensurePromptFrontmatter(file, prompt);
+      await ensurePromptFrontmatter(this.app, file, prompt);
       // Re-parse to get updated timestamps after frontmatter is written
-      const updatedPrompt = await parseSystemPromptFile(file);
+      const updatedPrompt = await parseSystemPromptFile(this.app, file);
       upsertCachedSystemPrompt(updatedPrompt);
     } catch (error) {
       logError(`Error processing system prompt creation: ${file.path}`, error);
@@ -339,10 +341,10 @@ export class SystemPromptRegister {
 
       // Add the new prompt to cache if it's still in the folder
       if (promptFile) {
-        const prompt = await parseSystemPromptFile(promptFile);
-        await ensurePromptFrontmatter(promptFile, prompt);
+        const prompt = await parseSystemPromptFile(this.app, promptFile);
+        await ensurePromptFrontmatter(this.app, promptFile, prompt);
         // Re-parse to get updated timestamps after frontmatter is written
-        const updatedPrompt = await parseSystemPromptFile(promptFile);
+        const updatedPrompt = await parseSystemPromptFile(this.app, promptFile);
         upsertCachedSystemPrompt(updatedPrompt);
       }
     } catch (error) {

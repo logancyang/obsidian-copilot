@@ -32,7 +32,9 @@ export class GrepScanner {
 
     // Filter files based on inclusion/exclusion patterns
     const allFiles = this.app.vault.getMarkdownFiles();
-    const files = allFiles.filter((file) => shouldIndexFile(file, inclusions, exclusions));
+    const files = allFiles.filter((file) =>
+      shouldIndexFile(this.app, file, inclusions, exclusions)
+    );
     const batchSize = GrepScanner.CONFIG.BATCH_SIZE;
 
     // Normalize queries for case-insensitive search, filtering out terms too short for meaningful grep

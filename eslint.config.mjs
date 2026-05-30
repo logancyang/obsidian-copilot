@@ -108,8 +108,17 @@ export default [
       // no-deprecated: defer — surface the warnings, but don't fail CI yet
       "@typescript-eslint/no-deprecated": "off",
 
-      // SDL / import / no-unsanitized / depend: defer — review separately
-      "no-restricted-globals": "off",
+      // Ban the Obsidian-injected global `app` (footgun in popouts; hides
+      // dependencies from tests). Thread `app` via useApp() in React or as a
+      // parameter in plain modules. See PLUGIN_DEV_GUIDE.md.
+      "no-restricted-globals": [
+        "error",
+        {
+          name: "app",
+          message:
+            "Don't use the global `app` (footgun in popouts). Thread `app` via useApp() or a parameter. See designdocs/agents/PLUGIN_DEV_GUIDE.md.",
+        },
+      ],
     },
   },
 
@@ -163,6 +172,11 @@ export default [
     },
     rules: {
       "import/no-nodejs-modules": "off",
+      // Tests intentionally consume the global `app` mock (window.app, set up in
+      // __mocks__/obsidian.js) to feed it into the parameterized production
+      // functions under test. The footgun the ban guards against (popout windows,
+      // hidden dependencies) is a production concern, so don't enforce it here.
+      "no-restricted-globals": "off",
       // Tests use intentional `any` mocks; disable type-safety rules that flood
       // the test suite without adding signal.
       "@typescript-eslint/no-unsafe-member-access": "off",

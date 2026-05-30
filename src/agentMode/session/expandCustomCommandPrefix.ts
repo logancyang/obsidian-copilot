@@ -1,6 +1,6 @@
 import { processPrompt } from "@/commands/customCommandUtils";
 import type { CustomCommand } from "@/commands/type";
-import type { TFile, Vault } from "obsidian";
+import type { App, TFile } from "obsidian";
 
 export interface ExpandCustomCommandResult {
   /** Final text to send to the backend. Equal to input when no command matched. */
@@ -26,7 +26,7 @@ export interface ExpandCustomCommandResult {
 export async function expandCustomCommandPrefix(
   input: string,
   commands: readonly CustomCommand[],
-  vault: Vault,
+  app: App,
   selectedText: string,
   activeNote: TFile | null
 ): Promise<ExpandCustomCommandResult> {
@@ -48,6 +48,6 @@ export async function expandCustomCommandPrefix(
   const args = afterSlash.slice(matched.title.length).trim();
   const body = args ? `${matched.content}\n\n${args}` : matched.content;
 
-  const result = await processPrompt(body, selectedText, vault, activeNote, false);
+  const result = await processPrompt(app, body, selectedText, app.vault, activeNote, false);
   return { text: result.processedPrompt, matched };
 }

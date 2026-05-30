@@ -1,6 +1,7 @@
 import { CustomModel, useModelKey } from "@/aiParams";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { MenuCommandModal, type ContentState } from "@/components/command-ui";
+import { useApp } from "@/context";
 import {
   MODAL_MIN_HEIGHT_COMPACT,
   MODAL_MIN_HEIGHT_EXPANDED,
@@ -110,6 +111,7 @@ function CustomCommandChatModalContent({
   anchorBottom,
   behaviorConfig,
 }: CustomCommandChatModalContentProps) {
+  const app = useApp();
   // Resolve behavior configuration
   const behavior = useMemo(
     () => resolveBehaviorConfig(command, behaviorConfig),
@@ -300,7 +302,7 @@ function CustomCommandChatModalContent({
       try {
         const result = await runTurn(async (ctx: StreamingChatTurnContext) => {
           if (ctx.signal.aborted) return "";
-          const prompt = await processCommandPrompt(command.content, originalText);
+          const prompt = await processCommandPrompt(app, command.content, originalText);
           lastInputPromptRef.current = prompt;
           return prompt;
         });
@@ -324,7 +326,7 @@ function CustomCommandChatModalContent({
       cancelled = true;
       stopStreaming(ABORT_REASON.UNMOUNT);
     };
-  }, [behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
+  }, [app, behavior.autoExecuteOnOpen, command.content, originalText, runTurn, stopStreaming]);
 
   const handleFollowUpSubmit = async () => {
     if (!followUpValue.trim()) return;
@@ -357,7 +359,7 @@ function CustomCommandChatModalContent({
         }
 
         // Process prompt (expand placeholders)
-        const prompt = await processCommandPrompt(rawInput, originalText, !isFirstTurn);
+        const prompt = await processCommandPrompt(app, rawInput, originalText, !isFirstTurn);
         lastInputPromptRef.current = prompt;
         return prompt;
       });
@@ -685,7 +687,7 @@ export class CustomCommandChatModal {
     const { anchorBottom, ...initialPosition } = this.getInitialPosition(activeView);
 
     const handleInsert = (message: string) => {
-      void insertIntoEditor(message);
+      void insertIntoEditor(this.app, message);
       this.close();
     };
 

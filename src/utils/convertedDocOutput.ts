@@ -29,7 +29,7 @@ export async function saveConvertedDocOutput(
   if (!content || content.startsWith("[Error:")) return;
 
   try {
-    await ensureFolderExists(trimmed);
+    await ensureFolderExists(vault, trimmed);
 
     let outputPath = `${trimmed}/${file.basename}.md`;
 

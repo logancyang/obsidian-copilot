@@ -67,7 +67,7 @@ export class ChatPersistenceManager {
       const firstMessageEpoch = messages[0].timestamp?.epoch || Date.now();
 
       // Ensure the save folder exists (supports nested paths) using utility helper.
-      await ensureFolderExists(settings.defaultSaveFolder);
+      await ensureFolderExists(this.app.vault, settings.defaultSaveFolder);
 
       // Check if a file with this epoch already exists
       const existingFile = await this.findFileByEpoch(firstMessageEpoch);

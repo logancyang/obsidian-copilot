@@ -289,7 +289,7 @@ This is the prompt content.`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result).toEqual({
       title: "Test Prompt",
@@ -306,7 +306,7 @@ This is the prompt content.`;
     (app.vault.read as jest.Mock).mockResolvedValue(rawContent);
     (app.metadataCache.getFileCache as jest.Mock).mockReturnValue({});
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result).toEqual({
       title: "Test Prompt",
@@ -330,7 +330,7 @@ Content here.`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result).toEqual({
       title: "Test Prompt",
@@ -355,7 +355,7 @@ Line 2`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result.content).toBe("Line 1\nLine 2");
     expect(result.content).not.toContain("---");
@@ -374,7 +374,7 @@ Content with --- separator in the middle.`;
       },
     });
 
-    const result = await parseSystemPromptFile(mockFile);
+    const result = await parseSystemPromptFile(app, mockFile);
 
     expect(result.content).toBe("Content with --- separator in the middle.");
   });

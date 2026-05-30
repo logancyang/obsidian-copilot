@@ -1,3 +1,4 @@
+import { App } from "obsidian";
 import { z } from "zod";
 import { createLangChainTool } from "./createLangChainTool";
 import { UserMemoryManager } from "@/memory/UserMemoryManager";
@@ -15,35 +16,36 @@ const memorySchema = z.object({
 /**
  * Memory tool for saving information that the user explicitly asks the assistant to remember
  */
-export const updateMemoryTool = createLangChainTool({
-  name: "updateMemory",
-  description: "Update the user memory when the user explicitly asks to update the memory",
-  schema: memorySchema,
-  func: async ({ statement }) => {
-    try {
-      const memoryManager = new UserMemoryManager(app);
-      const chatModel = ChatModelManager.getInstance().getChatModel();
-      const result = await memoryManager.updateSavedMemory(statement, chatModel);
+export const createUpdateMemoryTool = (app: App) =>
+  createLangChainTool({
+    name: "updateMemory",
+    description: "Update the user memory when the user explicitly asks to update the memory",
+    schema: memorySchema,
+    func: async ({ statement }) => {
+      try {
+        const memoryManager = new UserMemoryManager(app);
+        const chatModel = ChatModelManager.getInstance().getChatModel();
+        const result = await memoryManager.updateSavedMemory(statement, chatModel);
 
-      if (result.error) {
+        if (result.error) {
+          return {
+            success: false,
+            message: result.error,
+          };
+        }
+
+        const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
+        return {
+          success: true,
+          message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
+        };
+      } catch (error: unknown) {
+        logError("[updateMemoryTool] Error updating memory:", error);
+
         return {
           success: false,
-          message: result.error,
+          message: `Failed to save memory: ${error instanceof Error ? error.message : String(error)}`,
         };
       }
-
-      const memoryFilePath = memoryManager.getSavedMemoriesFilePath();
-      return {
-        success: true,
-        message: `Memory updated successfully into ${memoryFilePath}: ${result.content}`,
-      };
-    } catch (error: unknown) {
-      logError("[updateMemoryTool] Error updating memory:", error);
-
-      return {
-        success: false,
-        message: `Failed to save memory: ${error instanceof Error ? error.message : String(error)}`,
-      };
-    }
-  },
-});
+    },
+  });

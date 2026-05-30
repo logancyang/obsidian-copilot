@@ -72,15 +72,18 @@ export class MergedSemanticRetriever extends BaseRetriever {
 
     this.semanticRetriever =
       semanticRetriever ||
-      new HybridRetriever({
-        minSimilarityScore: options.minSimilarityScore ?? 0.1,
-        maxK: semanticMax,
-        salientTerms: options.salientTerms,
-        timeRange: options.timeRange,
-        textWeight: options.textWeight,
-        returnAll: this.returnAll,
-        useRerankerThreshold: options.useRerankerThreshold,
-      });
+      new HybridRetriever(
+        {
+          minSimilarityScore: options.minSimilarityScore ?? 0.1,
+          maxK: semanticMax,
+          salientTerms: options.salientTerms,
+          timeRange: options.timeRange,
+          textWeight: options.textWeight,
+          returnAll: this.returnAll,
+          useRerankerThreshold: options.useRerankerThreshold,
+        },
+        this.app.vault
+      );
   }
 
   /**

@@ -1,5 +1,3 @@
-import { FileSystemAdapter } from "obsidian";
-
 /**
  * Sidecar logger and payload formatter shared by every backend's debug tap.
  * The ACP runtime (`acp/debugTap.ts`) and the SDK adapter
@@ -59,6 +57,18 @@ export interface NodeRuntime {
 export interface FrameSinkOptions {
   vaultBasePath?: string | null;
   runtime?: NodeRuntime | null;
+}
+
+/**
+ * Vault base path seeded once at plugin load (see main.ts). The module-level
+ * `frameSink` singleton can't take `app` at construction, so this provides the
+ * base path it needs without reaching for the global `app`.
+ */
+let seededVaultBasePath: string | null = null;
+
+/** Seed the vault base path used by the module-level `frameSink` singleton. */
+export function setFrameSinkVaultBasePath(basePath: string | null): void {
+  seededVaultBasePath = basePath;
 }
 
 /**
@@ -174,7 +184,7 @@ export class FrameSink {
   private resolvePaths(): FrameLogPaths | null {
     const runtime = this.getRuntime();
     if (!runtime) return null;
-    const vaultBasePath = this.options.vaultBasePath ?? getVaultBasePath();
+    const vaultBasePath = this.options.vaultBasePath ?? seededVaultBasePath;
     if (!vaultBasePath) return null;
     return getFrameLogPaths(vaultBasePath, runtime);
   }
@@ -294,13 +304,6 @@ export function getFrameLogPaths(vaultBasePath: string, runtime: NodeRuntime): F
     logPath: runtime.join(dirPath, LOG_FILE_NAME),
     rotatedPath: runtime.join(dirPath, ROTATED_FILE_NAME),
   };
-}
-
-function getVaultBasePath(): string | null {
-  if (typeof app === "undefined") return null;
-  const adapter = app.vault?.adapter;
-  if (!(adapter instanceof FileSystemAdapter)) return null;
-  return adapter.getBasePath();
 }
 
 function getNodeRuntime(): NodeRuntime | null {

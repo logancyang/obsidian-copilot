@@ -175,7 +175,7 @@ describe("findRelevantNotes", () => {
     mockedGetBacklinkedNotes.mockReturnValue([createMarkdownFile("second.md")]);
     mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-    const result = await findRelevantNotes({ filePath: "source.md" });
+    const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
     expect(result.map((entry) => entry.note.path)).toEqual([
       "second.md",
@@ -222,7 +222,7 @@ describe("findRelevantNotes", () => {
       ],
     });
 
-    const result = await findRelevantNotes({ filePath: "source.md" });
+    const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
     expect(result.map((entry) => entry.note.path)).toEqual(["beta.md", "alpha.md"]);
     expect(result.find((entry) => entry.note.path === "alpha.md")?.metadata.similarityScore).toBe(
@@ -257,7 +257,7 @@ describe("findRelevantNotes", () => {
       ],
     });
 
-    const result = await findRelevantNotes({ filePath: "source.md" });
+    const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
     expect(result.map((e) => e.note.path)).toEqual(["alpha.md"]);
     expect(result[0].metadata.similarityScore).toBe(0.75);
@@ -286,7 +286,7 @@ describe("findRelevantNotes", () => {
     mockSearchRelated.mockRejectedValue(new Error("Miyo unavailable"));
     mockedGetLinkedNotes.mockReturnValue([createMarkdownFile("linked-only.md")]);
 
-    const result = await findRelevantNotes({ filePath: "source.md" });
+    const result = await findRelevantNotes({ app: window.app, filePath: "source.md" });
 
     expect(result).toHaveLength(1);
     expect(result[0].note.path).toBe("linked-only.md");

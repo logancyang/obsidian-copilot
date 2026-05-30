@@ -43,7 +43,7 @@ async function saveFailedProjectToUnsupported(
 ): Promise<boolean> {
   try {
     const unsupportedFolder = getProjectsUnsupportedFolder();
-    await ensureFolderExists(unsupportedFolder);
+    await ensureFolderExists(vault, unsupportedFolder);
 
     const safeId = sanitizeVaultPathSegment(project.id || "unknown") || "unknown";
     // Reason: use deterministic base name so repeated migration runs don't create duplicate
@@ -147,8 +147,8 @@ async function writeProjectToVaultFile(
 ): Promise<TFile> {
   const vault = app.vault;
   const projectsFolder = getProjectsFolder();
-  await ensureFolderExists(projectsFolder);
-  await ensureFolderExists(`${projectsFolder}/${folderName}`);
+  await ensureFolderExists(vault, projectsFolder);
+  await ensureFolderExists(vault, `${projectsFolder}/${folderName}`);
 
   const filePath = getProjectConfigFilePath(folderName);
 
@@ -168,7 +168,7 @@ async function writeProjectToVaultFile(
         : 0;
 
     try {
-      await writeProjectFrontmatter(file, project, folderName, { createdMs, lastUsedMs });
+      await writeProjectFrontmatter(app, file, project, folderName, { createdMs, lastUsedMs });
     } catch (fmError) {
       // Reason: rollback the created file to avoid leaving a "poisoned" file without frontmatter
       await rollbackCreatedFile(app, filePath, folderPath);
@@ -352,7 +352,7 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
           if (existingFile instanceof TFile) {
             try {
               const folderNameForRepair = getMigrationFolderName(id, project.name);
-              await ensureProjectFrontmatter(existingFile, {
+              await ensureProjectFrontmatter(app, existingFile, {
                 project,
                 filePath,
                 folderName: folderNameForRepair,
@@ -511,8 +511,9 @@ export async function migrateProjectsFromSettingsToVault(app: App): Promise<void
  * This is idempotent: projects already using name-based folders are skipped.
  * Collisions are handled gracefully (skip with warning).
  */
-async function migrateProjectFolderNames(vault: Vault): Promise<void> {
-  const { records } = await scanAllProjectConfigFiles();
+async function migrateProjectFolderNames(app: App): Promise<void> {
+  const vault = app.vault;
+  const { records } = await scanAllProjectConfigFiles(app);
   if (records.length === 0) return;
 
   let renamed = 0;
@@ -613,5 +614,5 @@ export async function ensureProjectsMigratedIfNeeded(app: App): Promise<void> {
   // Reason: run naming migration after data.json migration to rename id-based folders
   // to name-based folders. This also handles pre-existing projects from before the
   // naming convention change. Runs before loadAllProjects() in initialization flow.
-  await migrateProjectFolderNames(app.vault);
+  await migrateProjectFolderNames(app);
 }

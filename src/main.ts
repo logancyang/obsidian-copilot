@@ -10,6 +10,7 @@ import {
   isAgentModeEnabled,
   PlanPreviewView,
   PLAN_PREVIEW_VIEW_TYPE,
+  setFrameSinkVaultBasePath,
   SkillManager,
   type AgentSessionManager,
 } from "@/agentMode";
@@ -74,6 +75,9 @@ import {
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
+import { ProjectContextCache } from "@/cache/projectContextCache";
+import { ContextProcessor } from "@/contextProcessor";
+import { CustomCommandManager } from "@/commands/customCommandManager";
 import { ChatManagerChatUIState } from "@/state/ChatUIState";
 import { VaultDataManager } from "@/state/vaultDataAtoms";
 import { FileParserManager } from "@/tools/FileParserManager";
@@ -86,6 +90,7 @@ import {
 } from "@/editor";
 import {
   Editor,
+  FileSystemAdapter,
   MarkdownView,
   Menu,
   Notice,
@@ -208,13 +213,20 @@ export default class CopilotPlugin extends Plugin {
 
     // Core plugin initialization
 
-    // Initialize built-in tools with vault access
-    initializeBuiltinTools(this.app.vault);
+    // Initialize built-in tools with app access
+    initializeBuiltinTools(this.app);
+
+    // Seed the ProjectContextCache and ContextProcessor singletons with `app`
+    // before anything reaches for them via the no-arg getInstance().
+    ProjectContextCache.getInstance(this.app);
+    ContextProcessor.getInstance(this.app);
+    CustomCommandManager.getInstance(this.app);
+    logFileManager.setApp(this.app);
 
     // Initialize BrevilabsClient
     this.brevilabsClient = BrevilabsClient.getInstance();
     this.brevilabsClient.setPluginVersion(this.manifest.version);
-    void checkIsPlusUser();
+    void checkIsPlusUser(this.app);
     void refreshSelfHostModeValidation();
 
     // Initialize ProjectManager
@@ -222,6 +234,12 @@ export default class CopilotPlugin extends Plugin {
 
     // Initialize Agent Mode coordinator (desktop only — ACP needs subprocess support).
     if (!Platform.isMobile) {
+      // Seed the frame-log sink with the vault base path (desktop FileSystemAdapter only).
+      const adapter = this.app.vault.adapter;
+      setFrameSinkVaultBasePath(
+        adapter instanceof FileSystemAdapter ? adapter.getBasePath() : null
+      );
+
       this.agentSessionManager = createAgentSessionManager(this.app, this);
       // Enroll agent-reported models on probe settle, even when the settings
       // tab is closed. See `agentModelDiscovery.ts`.
@@ -232,12 +250,12 @@ export default class CopilotPlugin extends Plugin {
     }
 
     // Always construct VectorStoreManager; it internally no-ops when semantic search is disabled
-    this.vectorStoreManager = VectorStoreManager.getInstance();
+    this.vectorStoreManager = VectorStoreManager.getInstance(this.app);
 
     // Initialize VaultDataManager for centralized vault data (notes, folders, tags)
     // Note: VaultDataManager tracks ALL data; hooks filter based on parameters
     const vaultDataManager = VaultDataManager.getInstance();
-    vaultDataManager.initialize();
+    vaultDataManager.initialize(this.app);
 
     // Initialize FileParserManager early with other core services
     this.fileParserManager = new FileParserManager(this.brevilabsClient, this.app.vault);
@@ -324,8 +342,8 @@ export default class CopilotPlugin extends Plugin {
       })
     );
 
-    this.customCommandRegister = new CustomCommandRegister(this, this.app.vault);
-    this.systemPromptRegister = new SystemPromptRegister(this, this.app.vault);
+    this.customCommandRegister = new CustomCommandRegister(this, this.app);
+    this.systemPromptRegister = new SystemPromptRegister(this, this.app);
     this.projectRegister = new ProjectRegister(this.app);
 
     this.app.workspace.onLayoutReady(() => {
@@ -341,13 +359,13 @@ export default class CopilotPlugin extends Plugin {
       // Initialize custom commands
       void this.customCommandRegister
         .initialize()
-        .then(migrateCommands)
-        .then(suggestDefaultCommands);
+        .then(() => migrateCommands(this.app))
+        .then(() => suggestDefaultCommands(this.app));
 
       // Initialize system prompts (independent from custom commands)
       void this.systemPromptRegister
         .initialize()
-        .then(() => migrateSystemPromptsFromSettings(this.app.vault));
+        .then(() => migrateSystemPromptsFromSettings(this.app));
     });
 
     // Initialize automatic selection handler
@@ -853,7 +871,9 @@ export default class CopilotPlugin extends Plugin {
 
   async getChatHistoryItems(): Promise<ChatHistoryItem[]> {
     const files = await this.getChatHistoryFiles();
-    return files.map((file) => fileToHistoryItem(file, this.chatHistoryLastAccessedAtManager));
+    return files.map((file) =>
+      fileToHistoryItem(this.app, file, this.chatHistoryLastAccessedAtManager)
+    );
   }
 
   /**
@@ -868,7 +888,7 @@ export default class CopilotPlugin extends Plugin {
       this.chatHistoryLastAccessedAtManager.touch(file.path);
 
       // Check if we should persist to disk (throttled)
-      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(file);
+      const persistedLastAccessedAtMs = extractChatLastAccessedAtMs(this.app, file);
       const timestampToPersist = this.chatHistoryLastAccessedAtManager.shouldPersist(
         file.path,
         persistedLastAccessedAtMs

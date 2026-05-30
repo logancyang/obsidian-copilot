@@ -11,7 +11,7 @@ import {
 import { BrevilabsClient } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import { getSettings, setSettings, updateSetting, useSettingsValue } from "@/settings/model";
-import { Notice } from "obsidian";
+import { App, Notice } from "obsidian";
 import React from "react";
 
 export const DEFAULT_COPILOT_PLUS_CHAT_MODEL = ChatModels.COPILOT_PLUS_FLASH;
@@ -130,6 +130,7 @@ export function useIsPlusUser(): boolean | undefined {
  * When self-host mode is valid, this returns true to allow offline usage.
  */
 export async function checkIsPlusUser(
+  app?: App,
   context?: Record<string, unknown>
 ): Promise<boolean | undefined> {
   // Self-host mode with valid plan validation bypasses license check
@@ -138,11 +139,11 @@ export async function checkIsPlusUser(
   }
 
   if (!getSettings().plusLicenseKey) {
-    turnOffPlus();
+    turnOffPlus(app);
     return false;
   }
   const brevilabsClient = BrevilabsClient.getInstance();
-  const result = await brevilabsClient.validateLicenseKey(context);
+  const result = await brevilabsClient.validateLicenseKey(app, context);
   return result.isValid;
 }
 
@@ -389,10 +390,13 @@ export function turnOnPlus(): void {
  * DO NOT reset model settings here - it will cause free users to lose their model selections on every app restart.
  * Only update the isPlusUser flag.
  */
-export function turnOffPlus(): void {
+export function turnOffPlus(app?: App): void {
   const previousIsPlusUser = getSettings().isPlusUser;
   updateSetting("isPlusUser", false);
-  if (previousIsPlusUser) {
+  // The expiry modal needs `app`; interactive callers (load, settings, chat)
+  // pass it. Rare background paths (believer-model checks) flip the flag without
+  // a modal — they surface their own Notice instead.
+  if (previousIsPlusUser && app) {
     new CopilotPlusExpiredModal(app).open();
   }
 }

@@ -44,7 +44,7 @@ export async function getAllQAMarkdownContent(app: App): Promise<string> {
   const { inclusions, exclusions } = getMatchingPatterns();
 
   const filteredFiles = app.vault.getMarkdownFiles().filter((file) => {
-    return shouldIndexFile(file, inclusions, exclusions);
+    return shouldIndexFile(app, file, inclusions, exclusions);
   });
 
   await Promise.all(filteredFiles.map((file) => app.vault.cachedRead(file))).then((contents) =>
@@ -145,6 +145,7 @@ export function getMatchingPatterns(options?: {
  * @returns True if the file should be indexed, false otherwise.
  */
 export function shouldIndexFile(
+  app: App,
   file: TFile,
   inclusions: PatternCategory | null,
   exclusions: PatternCategory | null,
@@ -154,10 +155,10 @@ export function shouldIndexFile(
   if (isInternalExcludedFile(file)) {
     return false;
   }
-  if (exclusions && matchFilePathWithPatterns(file.path, exclusions)) {
+  if (exclusions && matchFilePathWithPatterns(app, file, exclusions)) {
     return false;
   }
-  if (inclusions && !matchFilePathWithPatterns(file.path, inclusions)) {
+  if (inclusions && !matchFilePathWithPatterns(app, file, inclusions)) {
     return false;
   }
 
@@ -239,21 +240,13 @@ export function createPatternSettingsValue({
  * @param tagPatterns - The tag patterns to match the file path with.
  * @returns True if the file path matches the tags, false otherwise.
  */
-function matchFilePathWithTags(filePath: string, tagPatterns: string[]): boolean {
+function matchFilePathWithTags(app: App, file: TFile, tagPatterns: string[]): boolean {
   if (tagPatterns.length === 0) return false;
 
-  const file = app.vault.getAbstractFileByPath(filePath);
-  if (file instanceof TFile) {
-    const tags = getTagsFromNote(file);
-    if (
-      tagPatterns.some((pattern) =>
-        tags.some((tag) => tag.toLowerCase() === stripHash(pattern).toLowerCase())
-      )
-    ) {
-      return true;
-    }
-  }
-  return false;
+  const tags = getTagsFromNote(app, file);
+  return tagPatterns.some((pattern) =>
+    tags.some((tag) => tag.toLowerCase() === stripHash(pattern).toLowerCase())
+  );
 }
 
 /**
@@ -308,16 +301,10 @@ function matchFilePathWithFolders(filePath: string, folderPatterns: string[]): b
  * @param notePatterns - The note patterns to match the file path with.
  * @returns True if the file path matches the note titles, false otherwise.
  */
-function matchFilePathWithNotes(filePath: string, noteTitles: string[]): boolean {
+function matchFilePathWithNotes(file: TFile, noteTitles: string[]): boolean {
   if (noteTitles.length === 0) return false;
 
-  const file = app.vault.getAbstractFileByPath(filePath);
-  if (file instanceof TFile) {
-    if (noteTitles.some((title) => title.slice(2, -2) === file.basename)) {
-      return true;
-    }
-  }
-  return false;
+  return noteTitles.some((title) => title.slice(2, -2) === file.basename);
 }
 
 /**
@@ -326,16 +313,16 @@ function matchFilePathWithNotes(filePath: string, noteTitles: string[]): boolean
  * @param patterns - The patterns to match the file path with.
  * @returns True if the file path matches the patterns, false otherwise.
  */
-function matchFilePathWithPatterns(filePath: string, patterns: PatternCategory): boolean {
+function matchFilePathWithPatterns(app: App, file: TFile, patterns: PatternCategory): boolean {
   if (!patterns) return false;
 
   const { tagPatterns, extensionPatterns, folderPatterns, notePatterns } = patterns;
 
   return (
-    matchFilePathWithTags(filePath, tagPatterns ?? []) ||
-    matchFilePathWithExtensions(filePath, extensionPatterns ?? []) ||
-    matchFilePathWithFolders(filePath, folderPatterns ?? []) ||
-    matchFilePathWithNotes(filePath, notePatterns ?? [])
+    matchFilePathWithTags(app, file, tagPatterns ?? []) ||
+    matchFilePathWithExtensions(file.path, extensionPatterns ?? []) ||
+    matchFilePathWithFolders(file.path, folderPatterns ?? []) ||
+    matchFilePathWithNotes(file, notePatterns ?? [])
   );
 }
 

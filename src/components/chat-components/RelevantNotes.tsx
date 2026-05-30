@@ -32,6 +32,7 @@ import { Notice, TFile } from "obsidian";
 import React, { memo, useCallback, useEffect, useState } from "react";
 
 function useRelevantNotes(refresher: number) {
+  const app = useApp();
   const [relevantNotes, setRelevantNotes] = useState<RelevantNoteEntry[]>([]);
   const [signalTick, setSignalTick] = useState(0);
   const activeFile = useActiveFile();
@@ -42,7 +43,7 @@ function useRelevantNotes(refresher: number) {
     async function fetchNotes() {
       if (!activeFile?.path) return;
       try {
-        const notes = await findRelevantNotes({ filePath: activeFile.path });
+        const notes = await findRelevantNotes({ app, filePath: activeFile.path });
         setRelevantNotes(notes);
       } catch (error) {
         logWarn("Failed to fetch relevant notes", error);
@@ -51,7 +52,7 @@ function useRelevantNotes(refresher: number) {
     }
 
     void fetchNotes();
-  }, [activeFile?.path, refresher, signalTick]);
+  }, [app, activeFile?.path, refresher, signalTick]);
 
   return relevantNotes;
 }

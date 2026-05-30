@@ -85,7 +85,7 @@ export class FilterRetriever {
 
     const dailyNoteQuery = dailyNoteTitles.join(", ");
     const dailyNoteFiles = extractNoteFiles(dailyNoteQuery, this.app.vault).filter((f) =>
-      shouldIndexFile(f, inclusions, exclusions)
+      shouldIndexFile(this.app, f, inclusions, exclusions)
     );
 
     const dailyNoteDocuments = await this.getTitleMatches(dailyNoteFiles);
@@ -97,7 +97,7 @@ export class FilterRetriever {
 
     const allFiles = this.app.vault
       .getMarkdownFiles()
-      .filter((f) => shouldIndexFile(f, inclusions, exclusions));
+      .filter((f) => shouldIndexFile(this.app, f, inclusions, exclusions));
     const timeFilteredDocuments: Document[] = [];
 
     const maxTimeFilteredDocs = this.options.returnAll
@@ -325,7 +325,10 @@ export class FilterRetriever {
     for (const file of allFiles) {
       if (documents.length >= limit) break;
 
-      if (!shouldIndexFile(file, inclusions, exclusions) || isInternalExcludedFile(file)) {
+      if (
+        !shouldIndexFile(this.app, file, inclusions, exclusions) ||
+        isInternalExcludedFile(file)
+      ) {
         continue;
       }
 

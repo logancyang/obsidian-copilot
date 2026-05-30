@@ -129,7 +129,7 @@ export class AgentChatPersistenceManager {
       const chatContent = this.formatChatContent(messages);
       const firstMessageEpoch = messages[0].timestamp?.epoch ?? Date.now();
 
-      await ensureFolderExists(settings.defaultSaveFolder);
+      await ensureFolderExists(this.app.vault, settings.defaultSaveFolder);
 
       const existingFile = options?.existingPath
         ? this.resolveExistingFile(options.existingPath)

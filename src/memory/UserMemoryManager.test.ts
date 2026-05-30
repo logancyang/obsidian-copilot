@@ -513,7 +513,7 @@ The conversation covered advanced features and included code examples.`,
       );
 
       // Verify folder creation was called
-      expect(ensureFolderExists).toHaveBeenCalledWith("copilot/memory");
+      expect(ensureFolderExists).toHaveBeenCalledWith(mockVault, "copilot/memory");
 
       // Verify file creation was called with proper content
       expect(mockVault.create).toHaveBeenCalledWith(

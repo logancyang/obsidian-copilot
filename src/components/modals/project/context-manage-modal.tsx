@@ -501,7 +501,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
       exclusionPatterns: PatternCategory | null
     ): GroupListItem => {
       const projectAllFiles = appFiles.filter((file) =>
-        shouldIndexFile(file, inclusionPatterns, exclusionPatterns, true)
+        shouldIndexFile(app, file, inclusionPatterns, exclusionPatterns, true)
       );
 
       const processPatternGroup = (
@@ -514,7 +514,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
           patterns.forEach((pattern) => {
             const singlePatternConfig = { [patternType]: [pattern] };
             if (
-              shouldIndexFile(file, singlePatternConfig, null, true) &&
+              shouldIndexFile(app, file, singlePatternConfig, null, true) &&
               !targetGroup[pattern].some((item) => item.id === file.path)
             ) {
               targetGroup[pattern].push({
@@ -561,7 +561,13 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         // note/file
         if (
           inclusionPatterns?.notePatterns &&
-          shouldIndexFile(file, { notePatterns: inclusionPatterns.notePatterns }, null, true) &&
+          shouldIndexFile(
+            app,
+            file,
+            { notePatterns: inclusionPatterns.notePatterns },
+            null,
+            true
+          ) &&
           !notes.some((item) => item.id === file.path)
         ) {
           notes.push({
@@ -578,7 +584,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         notes,
       };
     },
-    []
+    [app]
   );
 
   const [groupList, setGroupList] = useState<GroupListItem>(() => {
@@ -588,7 +594,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
   const [ignoreItems, setIgnoreItems] = useState<IgnoreItems>(() => {
     // init exclude files
     const excludeFiles = appAllFiles.filter(
-      (file) => exclusionPatterns && shouldIndexFile(file, exclusionPatterns, null, true)
+      (file) => exclusionPatterns && shouldIndexFile(app, file, exclusionPatterns, null, true)
     );
     return {
       files: new Set<TFile>(excludeFiles),
@@ -717,7 +723,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
             parsedQuery.tags.length > 0 &&
             isNote &&
             parsedQuery.tags.some((queryTag) => {
-              const fileTags = getTagsFromNote(fileObj);
+              const fileTags = getTagsFromNote(app, fileObj);
               return fileTags.some((tag) => {
                 const cleanTag = tag.startsWith("#") ? tag.substring(1) : tag;
                 return cleanTag.toLowerCase().includes(queryTag.toLowerCase());
@@ -840,12 +846,12 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
 
     return [];
   }, [
+    app,
     searchTerm,
     activeSection,
     activeItem,
     parseSearchQuery,
     allItems,
-    app.vault,
     groupList.tags,
     groupList.folders,
     groupList.notes,
@@ -878,7 +884,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
     ) => {
       const getMatchingFilesFromApp = (patterns: PatternCategory): GroupItem[] => {
         return appAllFiles
-          .filter((file) => shouldIndexFile(file, patterns, null, true))
+          .filter((file) => shouldIndexFile(app, file, patterns, null, true))
           .map((file) => ({
             id: file.path,
             name: file.basename,
@@ -900,7 +906,7 @@ function ContextManage({ initialProject, onSave, onCancel, app }: ContextManageP
         },
       }));
     },
-    [appAllFiles]
+    [app, appAllFiles]
   );
 
   const removeFileFromGroupList = useCallback(

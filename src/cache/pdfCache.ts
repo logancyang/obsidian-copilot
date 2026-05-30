@@ -1,7 +1,7 @@
 import { Pdf4llmResponse } from "@/LLMProviders/brevilabsClient";
 import { logError, logInfo } from "@/logger";
 import { md5 } from "@/utils/hash";
-import { TFile } from "obsidian";
+import { TFile, Vault } from "obsidian";
 
 export class PDFCache {
   private static instance: PDFCache;
@@ -16,10 +16,10 @@ export class PDFCache {
     return PDFCache.instance;
   }
 
-  private async ensureCacheDir() {
-    if (!(await app.vault.adapter.exists(this.cacheDir))) {
+  private async ensureCacheDir(vault: Vault) {
+    if (!(await vault.adapter.exists(this.cacheDir))) {
       logInfo("Creating PDF cache directory:", this.cacheDir);
-      await app.vault.adapter.mkdir(this.cacheDir);
+      await vault.adapter.mkdir(this.cacheDir);
     }
   }
 
@@ -35,14 +35,14 @@ export class PDFCache {
     return `${this.cacheDir}/${cacheKey}.json`;
   }
 
-  async get(file: TFile): Promise<Pdf4llmResponse | null> {
+  async get(vault: Vault, file: TFile): Promise<Pdf4llmResponse | null> {
     try {
       const cacheKey = this.getCacheKey(file);
       const cachePath = this.getCachePath(cacheKey);
 
-      if (await app.vault.adapter.exists(cachePath)) {
+      if (await vault.adapter.exists(cachePath)) {
         logInfo("Cache hit for PDF:", file.path);
-        const cacheContent = await app.vault.adapter.read(cachePath);
+        const cacheContent = await vault.adapter.read(cachePath);
         return JSON.parse(cacheContent) as Pdf4llmResponse;
       }
       logInfo("Cache miss for PDF:", file.path);
@@ -53,25 +53,25 @@ export class PDFCache {
     }
   }
 
-  async set(file: TFile, response: Pdf4llmResponse): Promise<void> {
+  async set(vault: Vault, file: TFile, response: Pdf4llmResponse): Promise<void> {
     try {
-      await this.ensureCacheDir();
+      await this.ensureCacheDir(vault);
       const cacheKey = this.getCacheKey(file);
       const cachePath = this.getCachePath(cacheKey);
       logInfo("Caching PDF response for:", file.path);
-      await app.vault.adapter.write(cachePath, JSON.stringify(response));
+      await vault.adapter.write(cachePath, JSON.stringify(response));
     } catch (error) {
       logError("Error writing to PDF cache:", error);
     }
   }
 
-  async clear(): Promise<void> {
+  async clear(vault: Vault): Promise<void> {
     try {
-      if (await app.vault.adapter.exists(this.cacheDir)) {
-        const files = await app.vault.adapter.list(this.cacheDir);
+      if (await vault.adapter.exists(this.cacheDir)) {
+        const files = await vault.adapter.list(this.cacheDir);
         logInfo("Clearing PDF cache, removing files:", files.files.length);
         for (const file of files.files) {
-          await app.vault.adapter.remove(file);
+          await vault.adapter.remove(file);
         }
       }
     } catch (error) {

@@ -133,7 +133,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
 
     // Initialize tools if not already done
     if (registry.getAllTools().length === 0) {
-      initializeBuiltinTools(this.chainManager.app?.vault);
+      initializeBuiltinTools(this.chainManager.app);
     }
 
     // Get enabled tool IDs from settings
@@ -386,7 +386,7 @@ export class AutonomousAgentChainRunner extends CopilotPlusChainRunner {
     this.llmFormattedMessages = [];
     this.lastDisplayedContent = "";
 
-    const isPlusUser = await checkIsPlusUser({
+    const isPlusUser = await checkIsPlusUser(this.chainManager.app, {
       isAutonomousAgent: true,
     });
 

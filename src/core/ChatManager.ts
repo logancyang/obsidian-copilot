@@ -129,7 +129,7 @@ export class ChatManager {
     try {
       // Reason: selectedText is empty because system prompts don't use selection context
       // skipEmptyBraces is true to treat {} as literal in system prompts
-      const result = await processPrompt(prompt, "", vault, activeNote, true);
+      const result = await processPrompt(this.plugin.app, prompt, "", vault, activeNote, true);
 
       // Only trim when the template engine actually ran to avoid mutating user-provided whitespace
       return {
@@ -474,6 +474,7 @@ export class ChatManager {
 
       // Process context to generate LLM content
       const { processedContent, contextEnvelope } = await this.contextManager.processMessageContext(
+        this.plugin.app,
         message,
         this.fileParserManager,
         this.plugin.app.vault,
@@ -528,6 +529,7 @@ export class ChatManager {
       const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
         await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
       await this.contextManager.reprocessMessageContext(
+        this.plugin.app,
         messageId,
         currentRepo,
         this.fileParserManager,
@@ -617,6 +619,7 @@ export class ChatManager {
         const { processedPrompt: systemPrompt, includedFiles: systemPromptIncludedFiles } =
           await this.getSystemPromptForMessage(chainType, this.plugin.app.vault, activeNote);
         await this.contextManager.reprocessMessageContext(
+          this.plugin.app,
           userMessage.id,
           currentRepo,
           this.fileParserManager,
