@@ -95,4 +95,24 @@ describe("COPILOT_PROMPT_BASE", () => {
   it("ports AGENT_LOOP_GUIDANCE behavior bullets", () => {
     expect(COPILOT_PROMPT_BASE).toMatch(/NEVER search for the same/);
   });
+
+  it("renders note titles as bare [[wikilinks]], never backticked (v3 rule 7)", () => {
+    expect(COPILOT_PROMPT_BASE).toMatch(
+      /note titles[^\n]*\[\[title\]\][^\n]*never wrap them in backticks/i
+    );
+  });
+
+  it("renders image links without wrapping them in backticks (v3 rules 8-9)", () => {
+    expect(COPILOT_PROMPT_BASE).toMatch(/!\[\[link\]\][^\n]*never wrap them in backticks/i);
+    expect(COPILOT_PROMPT_BASE).toMatch(/!\[alt\]\(url\)[^\n]*never wrap them in backticks/i);
+  });
+
+  it("ports the v3 GitHub-table heading convention (rule 10)", () => {
+    expect(COPILOT_PROMPT_BASE).toContain("immediately add ` |` after the table heading");
+  });
+
+  it("retains the LaTeX and bullet-list formatting rules", () => {
+    expect(COPILOT_PROMPT_BASE).toMatch(/\$\.\.\.\$/);
+    expect(COPILOT_PROMPT_BASE).toContain("Never use `*` for bullets");
+  });
 });
