@@ -241,9 +241,6 @@ export default [
       "src/utils/binaryPath.ts",
       "src/utils/nodeToolBinDirs.ts",
       "src/utils/rendererEventsShim.ts",
-      // Desktop-only fs probe for the device-profiles migration; dynamically
-      // imported under a `Platform.isDesktopApp` guard (GitHub #2539).
-      "src/settings/migrations/deviceProfilesPathCheck.ts",
     ],
     rules: {
       "import/no-nodejs-modules": "off",

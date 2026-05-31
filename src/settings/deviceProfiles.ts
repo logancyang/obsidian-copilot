@@ -12,9 +12,10 @@
  * (`agentMode.claudeCli.path`, `agentMode.backends.*.binaryPath`, …), and two
  * pure transforms bridge memory ↔ disk:
  *
- *   - {@link hydrateDeviceProfile} (on load): copy this device's segment into
- *     the flat fields. When the device has no segment yet, the flat fields are
- *     left untouched (legacy passthrough until the v6 migration + first save).
+ *   - {@link hydrateDeviceProfile} (on load): populate the flat fields from this
+ *     device's segment, stripping any flat copy already on disk first — that
+ *     copy is a stale value synced from another device, so the segment is the
+ *     sole source of truth (a device shows "not configured" until it has one).
  *   - {@link dehydrateDeviceProfile} (on save): move the flat fields into this
  *     device's segment and strip them from the top level. Other devices'
  *     segments are preserved.
@@ -25,7 +26,6 @@
  */
 
 import type { CopilotSettings, DeviceAgentProfile } from "@/settings/model";
-import { DEVICE_PROFILES_SETTINGS_VERSION } from "@/settings/migrations/version";
 
 type AgentMode = CopilotSettings["agentMode"];
 type Backends = AgentMode["backends"];
@@ -113,16 +113,13 @@ function stripDeviceFieldsFromBackends(backends: Backends | undefined): Backends
 
 /**
  * Move this device's flat agent fields into `deviceProfiles[deviceId]` and
- * strip them from the top level, for persistence. Pure: returns a new object
- * (or the original when below the device-profiles settings version, so legacy
- * vaults keep their flat fields on disk until the v6 migration runs).
+ * strip them from the top level, for persistence. Pure: returns a new object.
  */
 export function dehydrateDeviceProfile(
   settings: CopilotSettings,
   deviceId: string
 ): CopilotSettings {
-  if ((settings?.settingsVersion ?? 0) < DEVICE_PROFILES_SETTINGS_VERSION) return settings;
-  const agentMode = settings.agentMode;
+  const agentMode = settings?.agentMode;
   if (!agentMode) return settings;
 
   const profile = buildProfileFromFlat(agentMode);
@@ -141,30 +138,28 @@ export function dehydrateDeviceProfile(
 
 /**
  * Populate the flat agent fields from this device's `deviceProfiles[deviceId]`
- * segment, for runtime use. Pure. When the device has no segment, returns the
- * original settings untouched — so legacy flat fields (pre-migration) pass
- * through, and a synced vault from another device shows "not configured."
+ * segment, for runtime use. Pure. Any device-specific flat field already on disk
+ * is stripped first — it is a stale value synced from another device — so a
+ * device with no segment of its own shows "not configured."
  */
 export function hydrateDeviceProfile(settings: CopilotSettings, deviceId: string): CopilotSettings {
   const agentMode = settings.agentMode;
   if (!agentMode) return settings;
   const profile = agentMode.deviceProfiles?.[deviceId];
-  if (!profile) return settings;
 
-  const backends = agentMode.backends ?? {};
-  const nextBackends: Backends = { ...backends };
-
-  // Each profile slice holds exactly this backend's device-specific fields, so
-  // spreading it onto the synced slice restores those fields without clobbering
-  // a synced pref with `undefined` — the precise inverse of `buildProfileFromFlat`.
-  if (profile.codex) nextBackends.codex = { ...backends.codex, ...profile.codex };
-  if (profile.opencode) nextBackends.opencode = { ...backends.opencode, ...profile.opencode };
-  if (profile.claude) nextBackends.claude = { ...backends.claude, ...profile.claude };
+  // Strip stale flat device fields, keeping only synced prefs, then layer this
+  // device's segment on top. Each profile slice holds exactly its backend's
+  // device-specific fields, so the spread restores them without clobbering a
+  // synced pref with `undefined` — the precise inverse of `buildProfileFromFlat`.
+  const nextBackends = stripDeviceFieldsFromBackends(agentMode.backends);
+  if (profile?.codex) nextBackends.codex = { ...nextBackends.codex, ...profile.codex };
+  if (profile?.opencode) nextBackends.opencode = { ...nextBackends.opencode, ...profile.opencode };
+  if (profile?.claude) nextBackends.claude = { ...nextBackends.claude, ...profile.claude };
 
   const nextAgentMode: AgentMode = {
     ...agentMode,
     backends: nextBackends,
-    claudeCli: profile.claudeCliPath ? { path: profile.claudeCliPath } : undefined,
+    claudeCli: profile?.claudeCliPath ? { path: profile.claudeCliPath } : undefined,
   };
   return { ...settings, agentMode: nextAgentMode };
 }

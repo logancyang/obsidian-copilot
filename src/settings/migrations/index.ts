@@ -15,7 +15,6 @@ import type { ModelManagementApi } from "@/modelManagement";
 import { getSettings, setSettings } from "@/settings/model";
 
 import { executeByokMigration } from "./byokMigration";
-import { migrateLegacyAgentPathsToDeviceProfile } from "./deviceProfilesMigration";
 import { planRequiresApiKeyBackfill } from "./requiresApiKeyMigration";
 import { CURRENT_SETTINGS_VERSION } from "./version";
 
@@ -41,12 +40,6 @@ export async function runSettingsMigrations(api: ModelManagementApi): Promise<vo
   if (fromVersion < 5) {
     const backfilled = planRequiresApiKeyBackfill(getSettings().providers);
     if (backfilled) setSettings({ providers: backfilled });
-  }
-
-  // v6: drop legacy global agent binary paths that don't resolve on this
-  // device before they get adopted into this device's profile (GitHub #2539).
-  if (fromVersion < 6) {
-    await migrateLegacyAgentPathsToDeviceProfile();
   }
 
   // Bump unconditionally after the migrations so a per-provider failure can't

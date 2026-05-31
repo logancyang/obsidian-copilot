@@ -82,14 +82,6 @@ describe("dehydrateDeviceProfile", () => {
     expect(out.agentMode.deviceProfiles?.[DEVICE_A]?.claude?.envOverrides).toEqual({ BAR: "2" });
   });
 
-  it("is a no-op below the device-profiles settings version (legacy vaults)", () => {
-    const settings = makeSettings(makeAgentMode({ claudeCli: { path: "/a/claude" } }), 5);
-    const out = dehydrateDeviceProfile(settings, DEVICE_A);
-    expect(out).toBe(settings);
-    expect(out.agentMode.claudeCli?.path).toBe("/a/claude");
-    expect(out.agentMode.deviceProfiles).toBeUndefined();
-  });
-
   it("preserves other devices' segments and removes own when empty", () => {
     const settings = makeSettings(
       makeAgentMode({
@@ -126,13 +118,19 @@ describe("hydrateDeviceProfile", () => {
     expect(out.agentMode.backends.opencode?.binarySource).toBe("managed");
   });
 
-  it("returns settings unchanged (same reference) when this device has no segment", () => {
+  it("ignores stale global flat fields when this device has no segment", () => {
+    // A synced data.json may still carry another device's flat paths. With no
+    // segment of its own, this device must treat them as not configured.
     const settings = makeSettings(
-      makeAgentMode({ deviceProfiles: { [DEVICE_B]: { claudeCliPath: "/b/claude" } } })
+      makeAgentMode({
+        claudeCli: { path: "/stale/claude" },
+        backends: { codex: { binaryPath: "/stale/codex" } },
+        deviceProfiles: { [DEVICE_B]: { claudeCliPath: "/b/claude" } },
+      })
     );
     const out = hydrateDeviceProfile(settings, DEVICE_A);
-    expect(out).toBe(settings);
     expect(out.agentMode.claudeCli).toBeUndefined();
+    expect(out.agentMode.backends.codex?.binaryPath).toBeUndefined();
   });
 
   it("merges segment fields onto synced backend prefs without clobbering them", () => {
@@ -152,11 +150,10 @@ describe("hydrateDeviceProfile", () => {
     expect(out.agentMode.backends.codex?.binaryPath).toBe("/a/codex");
   });
 
-  it("never overwrites an existing flat backend field with undefined when the profile omits it", () => {
-    // Mixed/legacy state: a flat opencode field coexists with a partial profile
-    // that configures only binaryPath. Hydrate must restore binaryPath without
-    // wiping the pre-existing binaryVersion/binarySource (the undefined-clobber
-    // the field-by-field assignment used to cause).
+  it("drops stale device-specific flat fields, taking device fields only from the profile", () => {
+    // A synced data.json may carry another device's opencode binaryVersion/
+    // binarySource as flat values. Hydrate ignores them and takes device fields
+    // only from this device's segment, which configures binaryPath alone.
     const settings = makeSettings(
       makeAgentMode({
         backends: { opencode: { binaryVersion: "9.9", binarySource: "managed" } },
@@ -167,8 +164,8 @@ describe("hydrateDeviceProfile", () => {
     const out = hydrateDeviceProfile(settings, DEVICE_A);
 
     expect(out.agentMode.backends.opencode?.binaryPath).toBe("/a/oc");
-    expect(out.agentMode.backends.opencode?.binaryVersion).toBe("9.9");
-    expect(out.agentMode.backends.opencode?.binarySource).toBe("managed");
+    expect(out.agentMode.backends.opencode?.binaryVersion).toBeUndefined();
+    expect(out.agentMode.backends.opencode?.binarySource).toBeUndefined();
   });
 });
 
