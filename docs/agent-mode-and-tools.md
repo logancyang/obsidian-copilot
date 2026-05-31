@@ -26,8 +26,6 @@ When the autonomous agent is enabled, Copilot can:
 
 The agent activates automatically when you're in **Copilot Plus** mode. You don't need to do anything special — just ask your question.
 
-> **On Windows?** If you're using a coding agent backend like Claude Code, see [Windows Setup for Claude Code Agent Mode](agent-mode-windows-setup.md) to install it and connect it to Copilot.
-
 ### Max Iterations
 
 The agent works in iteration cycles (think → use a tool → think → use a tool → answer). You can control the maximum number of iterations before the agent stops:
