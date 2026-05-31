@@ -31,9 +31,22 @@ function seededVersion(skillMd: string): number {
   return m ? Number.parseInt(m[1], 10) : 0;
 }
 
+/**
+ * Create a directory and all missing ancestor segments. Mirrors the
+ * segment-by-segment approach of `ensureFolderExists` in `utils.ts` so that
+ * seeding into nested paths like `copilot/skills` works on a fresh vault.
+ */
 async function ensureDir(fs: BuiltinSeedFs, relPath: string): Promise<void> {
-  if (!(await fs.exists(relPath))) {
-    await fs.mkdir(relPath);
+  const segments = relPath
+    .replace(/^\/+|\/+$/g, "")
+    .split("/")
+    .filter(Boolean);
+  let current = "";
+  for (const segment of segments) {
+    current = current ? `${current}/${segment}` : segment;
+    if (!(await fs.exists(current))) {
+      await fs.mkdir(current);
+    }
   }
 }
 

@@ -160,7 +160,7 @@ const WEB_SEARCH = relaySkill({
 
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
-  version: 1,
+  version: 2,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: copilot-read-pdf
@@ -168,7 +168,7 @@ description: Extract the full text of a PDF as Markdown using Copilot Plus. Use 
 license: Copilot Plus
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "1"
+  copilot-builtin-version: "2"
 ---
 
 # Copilot read PDF
@@ -196,7 +196,6 @@ or renew — then continue without it.
       path: "read-pdf.mjs",
       content: `${scriptPreamble()}
 import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
 
 const file = process.argv[2];
 if (!file) die("Usage: node read-pdf.mjs <path-to-file.pdf>", 1);
@@ -208,23 +207,9 @@ try {
   die("Could not read file '" + file + "': " + (e && e.message ? e.message : String(e)), 1);
 }
 
-const form = new FormData();
-form.append("file", new Blob([bytes], { type: "application/pdf" }), basename(file));
-form.append("user_id", USER_ID);
-
-let res;
-try {
-  res = await fetch(BASE + "/pdf4llm", {
-    method: "POST",
-    headers: { Authorization: "Bearer " + KEY, "X-Client-Version": CLIENT_VERSION },
-    body: form,
-  });
-} catch (e) {
-  die("Could not reach the Copilot relay: " + (e && e.message ? e.message : String(e)), 1);
-}
-if (res.status === 401 || res.status === 403) die(UPGRADE);
-if (!res.ok) die("PDF extraction failed (HTTP " + res.status + "): " + (await res.text()), 1);
-emit(await res.json());
+// Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
+const pdf = Buffer.from(bytes).toString("base64");
+emit(await relay("/pdf4llm", { pdf }));
 `,
     },
   ],
