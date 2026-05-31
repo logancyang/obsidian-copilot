@@ -87,8 +87,8 @@ function emit(data) {
 /**
  * Build a skill that maps a single positional argument onto one relay
  * endpoint (the web/YouTube/X tools are identical apart from the endpoint,
- * argument name, and copy). PDF is hand-written below because it uploads a
- * file as multipart instead.
+ * argument name, and copy). PDF is hand-written below because it reads a
+ * local file and base64-encodes it before calling the relay.
  */
 function relaySkill(opts: {
   name: string;
@@ -121,12 +121,14 @@ ${opts.intro}
 
 ## How to run
 
+Find the absolute path to this SKILL.md file on disk, then run the script that
+sits next to it:
+
 \`\`\`bash
-node "$SKILL_DIR/${opts.scriptFile}" "${argPlaceholder}"
+node "/absolute/path/to/this/skill/directory/${opts.scriptFile}" "${argPlaceholder}"
 \`\`\`
 
-Replace \`$SKILL_DIR\` with this skill's directory. The script prints the result
-to stdout.
+The script prints the result to stdout.
 
 ## If it reports a license problem
 
@@ -178,12 +180,15 @@ summarize, or quote it.
 
 ## How to run
 
+Find the absolute path to this SKILL.md file on disk, then run the script that
+sits next to it:
+
 \`\`\`bash
-node "$SKILL_DIR/read-pdf.mjs" "<path-to-file.pdf>"
+node "/absolute/path/to/this/skill/directory/read-pdf.mjs" "<path-to-file.pdf>"
 \`\`\`
 
-Pass an absolute path, or a path relative to the vault root. The script prints
-the extracted Markdown to stdout.
+Pass an absolute path to the PDF file. The script prints the extracted Markdown
+to stdout.
 
 ## If it reports a license problem
 
