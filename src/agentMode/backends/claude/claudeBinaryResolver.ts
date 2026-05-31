@@ -81,12 +81,29 @@ function unixCandidates(input: ClaudeBinaryResolverInput): Array<string | null> 
 }
 
 function windowsCandidates(input: ClaudeBinaryResolverInput): Array<string | null> {
-  // Per-dir, prefer `claude.exe`, then `cli.js` under that dir's
-  // node_modules. Never pick `claude.cmd` — it requires `shell: true` and
-  // breaks SDK stdio streaming.
-  const out: Array<string | null> = [];
+  const { homeDir, env } = input;
+  const localAppData = env.LOCALAPPDATA ?? win.join(homeDir, "AppData", "Local");
+  const programFiles = env.ProgramFiles ?? "C:\\Program Files";
+  const programFilesX86 = env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)";
+
+  // Native-installer (`irm https://claude.ai/install.ps1 | iex`) destinations
+  // probed before the node-tool layout. Fixed list — no PATH walk. A PATH walk
+  // on Windows risks `WindowsApps\Claude.exe`, the desktop app's GUI launcher
+  // (opens a window instead of streaming stream-json).
+  const out: Array<string | null> = [
+    win.join(homeDir, ".local", "bin", "claude.exe"),
+    win.join(homeDir, ".claude", "local", "claude.exe"),
+    win.join(localAppData, "Claude", "claude.exe"),
+    win.join(programFiles, "Claude", "claude.exe"),
+    win.join(programFilesX86, "Claude", "claude.exe"),
+  ];
+  // Per-dir, prefer `claude.exe`, then `cli-wrapper.cjs` (newer Claude Code
+  // packaging), then `cli.js` (legacy) under that dir's node_modules. Never
+  // pick `claude.cmd` — it requires `shell: true` and breaks SDK stdio
+  // streaming.
   for (const dir of nodeToolBinDirCandidates(input)) {
     out.push(win.join(dir, "claude.exe"));
+    out.push(win.join(dir, "node_modules", "@anthropic-ai", "claude-code", "cli-wrapper.cjs"));
     out.push(win.join(dir, "node_modules", "@anthropic-ai", "claude-code", "cli.js"));
   }
   return out;

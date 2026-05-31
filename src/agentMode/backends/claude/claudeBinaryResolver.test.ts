@@ -185,4 +185,57 @@ describe("resolveClaudeBinary — Windows", () => {
     const fs = makeFs([override]);
     expect(resolveClaudeBinary(winInput(fs, { override }))).toBe(override);
   });
+
+  it("finds the native-installer claude.exe under ~/.local/bin", () => {
+    const p = "C:\\Users\\me\\.local\\bin\\claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([p])))).toBe(p);
+  });
+
+  it("finds the legacy local install at ~/.claude/local/claude.exe", () => {
+    const p = "C:\\Users\\me\\.claude\\local\\claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([p])))).toBe(p);
+  });
+
+  it("finds %LOCALAPPDATA%\\Claude\\claude.exe via the LOCALAPPDATA env var", () => {
+    const p = "D:\\AppData\\Local\\Claude\\claude.exe";
+    expect(
+      resolveClaudeBinary(winInput(makeFs([p]), { env: { LOCALAPPDATA: "D:\\AppData\\Local" } }))
+    ).toBe(p);
+  });
+
+  it("falls back to <homeDir>\\AppData\\Local\\Claude\\claude.exe when LOCALAPPDATA is unset", () => {
+    const p = "C:\\Users\\me\\AppData\\Local\\Claude\\claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([p])))).toBe(p);
+  });
+
+  it("finds %ProgramFiles%\\Claude\\claude.exe (default C:\\Program Files)", () => {
+    const p = "C:\\Program Files\\Claude\\claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([p])))).toBe(p);
+  });
+
+  it("finds %ProgramFiles(x86)%\\Claude\\claude.exe (default C:\\Program Files (x86))", () => {
+    const p = "C:\\Program Files (x86)\\Claude\\claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([p])))).toBe(p);
+  });
+
+  it("prefers the native ~/.local/bin install over an npm-global claude.exe", () => {
+    const native = "C:\\Users\\me\\.local\\bin\\claude.exe";
+    const npm = "C:\\Users\\me\\AppData\\Roaming\\npm\\claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([native, npm])))).toBe(native);
+  });
+
+  it("prefers cli-wrapper.cjs over cli.js when both exist", () => {
+    const base = "C:\\Users\\me\\AppData\\Roaming\\npm\\node_modules\\@anthropic-ai\\claude-code";
+    const wrapper = `${base}\\cli-wrapper.cjs`;
+    const cliJs = `${base}\\cli.js`;
+    expect(resolveClaudeBinary(winInput(makeFs([wrapper, cliJs])))).toBe(wrapper);
+  });
+
+  it("never picks the desktop app's WindowsApps GUI launcher", () => {
+    // `Claude.exe` registered by the desktop app under
+    // %LOCALAPPDATA%\Microsoft\WindowsApps opens a GUI window instead of
+    // running headless. Auto-detect must never select it.
+    const guiLauncher = "C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps\\Claude.exe";
+    expect(resolveClaudeBinary(winInput(makeFs([guiLauncher])))).toBeNull();
+  });
 });

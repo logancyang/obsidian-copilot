@@ -8,6 +8,7 @@ import {
   ProgressEvent,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
+import { detectOpencodeCliPath } from "@/agentMode/backends/opencode/descriptor";
 import type { InstallState } from "@/agentMode/session/types";
 import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
@@ -248,10 +249,11 @@ const OpencodeConfigBody: React.FC<{
           binaryName="opencode"
           placeholder="/absolute/path/to/opencode"
           initialPath={customPath}
-          notFoundHint="opencode not found on PATH. Install it or paste a custom path manually."
+          notFoundHint="opencode not found. Install it natively (`~/.opencode/bin/opencode[.exe]`), via bun/npm, or paste a custom path manually."
           onSave={onSaveCustomPath}
           onClear={clearCustomPath}
           persistOnAutoDetect
+          detect={detectOpencodeCliPath}
         />
       </ConfigSection>
     </ConfigDialogShell>
