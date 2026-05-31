@@ -1,4 +1,4 @@
-import { resetSettings } from "@/settings/model";
+import { resetSettings, updateSetting } from "@/settings/model";
 import {
   setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
@@ -6,7 +6,11 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
-import { buildAgentSystemPrompt, COPILOT_PROMPT_BASE } from "./agentSystemPrompt";
+import {
+  buildAgentSystemPrompt,
+  COPILOT_PLUS_TOOLS_STEERING,
+  COPILOT_PROMPT_BASE,
+} from "./agentSystemPrompt";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -76,6 +80,32 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
     expect(prompt).not.toContain("<user_custom_instructions>");
     expect(prompt).toContain("{folder_name}");
+  });
+
+  it("does not steer toward Copilot Plus skills for a non-Plus user", () => {
+    // Default settings → not a Plus user.
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(prompt).not.toContain("copilot-web-search");
+  });
+
+  it("steers toward the builtin Copilot Plus skills for a Plus user", () => {
+    updateSetting("isPlusUser", true);
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(prompt).toContain("copilot-web-search");
+    expect(prompt).toContain("copilot-read-pdf");
+    expect(prompt).toContain("copilot-youtube-transcript");
+    expect(prompt).toContain("copilot-fetch-x");
+    // Fallback clause so a missing/unlicensed skill never dead-ends.
+    expect(prompt).toMatch(/fall back to whatever equivalent capability/i);
+  });
+
+  it("suppresses the Plus steering when the builtin prompt is disabled", () => {
+    updateSetting("isPlusUser", true);
+    setDisableBuiltinSystemPrompt(true);
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 });
 
