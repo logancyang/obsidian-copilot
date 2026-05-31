@@ -101,10 +101,14 @@ export async function seedBuiltinSkills(
 
     try {
       await ensureDir(fs, dir);
-      await fs.write(skillMdPath, skill.skillMd);
+      // Write support files before SKILL.md so the version stamp in SKILL.md
+      // only appears once all scripts are on disk. A crash between writes then
+      // leaves no SKILL.md (or a stale-version one), so the next startup
+      // re-seeds the whole skill rather than skipping it as current.
       for (const file of skill.files) {
         await fs.write(joinPosix(dir, file.path), file.content);
       }
+      await fs.write(skillMdPath, skill.skillMd);
       seeded.push(skill.name);
     } catch (e) {
       logError(`[Skills] failed to seed builtin skill ${skill.name}`, e);
