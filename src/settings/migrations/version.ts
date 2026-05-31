@@ -13,5 +13,15 @@
  *
  *   ≤ 4 → legacy BYOK → model-management migration.
  *   5   → backfill `Provider.requiresApiKey` on flagless rows.
+ *   6   → segment device-specific agent settings (binary paths, env overrides)
+ *         under `agentMode.deviceProfiles[deviceId]` so a synced data.json no
+ *         longer shares one device's paths globally (GitHub #2539).
  */
-export const CURRENT_SETTINGS_VERSION = 5;
+export const CURRENT_SETTINGS_VERSION = 6;
+
+/**
+ * Settings version at which per-device agent profiles were introduced. The
+ * `dehydrateDeviceProfile` transform is a no-op below this version so legacy
+ * vaults keep their flat agent fields on disk until the v6 migration runs.
+ */
+export const DEVICE_PROFILES_SETTINGS_VERSION = 6;

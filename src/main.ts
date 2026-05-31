@@ -72,11 +72,14 @@ import VectorStoreManager from "@/search/vectorStoreManager";
 import { runSettingsMigrations } from "@/settings/migrations";
 import { CopilotSettingTab } from "@/settings/SettingsPage";
 import {
+  type CopilotSettings,
   getModelKeyFromModel,
   getSettings,
   setSettings,
   subscribeToSettingsChange,
 } from "@/settings/model";
+import { dehydrateDeviceProfile, hydrateDeviceProfile } from "@/settings/deviceProfiles";
+import { getDeviceId } from "@/utils/deviceId";
 import { ProjectContextCache } from "@/cache/projectContextCache";
 import { ContextProcessor } from "@/contextProcessor";
 import { CustomCommandManager } from "@/commands/customCommandManager";
@@ -845,8 +848,32 @@ export default class CopilotPlugin extends Plugin {
 
   async loadSettings() {
     const rawData = (await this.loadData()) as unknown;
-    const settings = await loadSettingsWithKeychain(rawData, (d) => this.saveData(d));
-    setSettings(settings);
+    // The keychain bootstrap may persist a sparse snapshot of the raw on-disk
+    // data (vaultId backfill) before settings are hydrated. That snapshot is
+    // already in dehydrated, on-disk shape, so it must bypass the
+    // `dehydrateDeviceProfile` override below via `super.saveData` — routing it
+    // through `this.saveData` would read the absent flat fields as "cleared"
+    // and delete this device's `deviceProfiles` segment (GitHub #2539).
+    const settings = await loadSettingsWithKeychain(rawData, (d) => super.saveData(d));
+    // Mirror this device's `agentMode.deviceProfiles` segment into the flat
+    // agent fields the rest of the code reads (GitHub #2539). `saveData` below
+    // performs the inverse on the way out.
+    setSettings(hydrateDeviceProfile(settings, getDeviceId()));
+  }
+
+  /**
+   * Move device-specific agent fields into `agentMode.deviceProfiles[deviceId]`
+   * and strip the global flat copies before writing, so a synced `data.json`
+   * never carries one device's binary paths as a global value (GitHub #2539).
+   *
+   * Overriding here is the single choke point for every persisted write of the
+   * hydrated in-memory settings — the settings subscriber and the keychain
+   * transactions all route through `this.saveData`. The one deliberate
+   * exception is the load-time keychain bootstrap, which persists a raw on-disk
+   * snapshot via `super.saveData` (see `loadSettings`) so it isn't dehydrated.
+   */
+  async saveData(data: unknown): Promise<void> {
+    return super.saveData(dehydrateDeviceProfile(data as CopilotSettings, getDeviceId()));
   }
 
   mergeActiveModels(

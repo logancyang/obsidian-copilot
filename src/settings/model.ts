@@ -247,6 +247,18 @@ export interface CopilotSettings {
       codex?: CodexBackendSettings;
     };
     /**
+     * Per-device agent config (binary paths, env overrides, …) keyed by a
+     * device-local id (see `getDeviceId`). A binary's location is
+     * device-specific, but `data.json` syncs across devices — storing paths as
+     * a single global value corrupts on sync (GitHub #2539). These live
+     * here instead and are mirrored into the flat `claudeCli`/`backends.*`
+     * fields in memory: `hydrateDeviceProfile` populates the flat fields from
+     * this device's segment on load; `dehydrateDeviceProfile` moves them back
+     * here and strips the flat fields on save. Other devices' segments are
+     * preserved untouched. See `src/settings/deviceProfiles.ts`.
+     */
+    deviceProfiles?: Record<string, DeviceAgentProfile>;
+    /**
      * Override path to the user-installed `claude` CLI used by the Claude
      * Agent SDK adapter. When unset, the resolver auto-detects across
      * Volta/asdf/NVM/Homebrew/npm-global. Surfaced in Advanced Settings
@@ -347,6 +359,33 @@ export interface OpencodeBackendSettings {
   probeSessionId?: string;
   /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `opencode` subprocess. */
   envOverrides?: Record<string, string>;
+}
+
+/**
+ * The device-specific subset of agent settings, stored per device under
+ * `agentMode.deviceProfiles[deviceId]`. Mirrors the flat
+ * `agentMode.claudeCli`/`backends.*` fields, but only the fields whose correct
+ * value differs per device — binary paths, env overrides, and the opencode
+ * probe session id. Synced, non-device fields (e.g. `defaultModel`,
+ * `enableThinking`) deliberately stay in the flat `backends.*` slices.
+ */
+export interface DeviceAgentProfile {
+  /** Mirror of `agentMode.claudeCli.path`. */
+  claudeCliPath?: string;
+  codex?: {
+    binaryPath?: string;
+    envOverrides?: Record<string, string>;
+  };
+  opencode?: {
+    binaryPath?: string;
+    binaryVersion?: string;
+    binarySource?: "managed" | "custom";
+    probeSessionId?: string;
+    envOverrides?: Record<string, string>;
+  };
+  claude?: {
+    envOverrides?: Record<string, string>;
+  };
 }
 
 export const settingsStore = createStore();
@@ -868,6 +907,8 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
   if (claudeSlice) backends.claude = claudeSlice;
   if (codexSlice) backends.codex = codexSlice;
 
+  const deviceProfiles = sanitizeDeviceProfiles(r.deviceProfiles);
+
   const debugFullFrames =
     typeof r.debugFullFrames === "boolean"
       ? r.debugFullFrames
@@ -907,6 +948,7 @@ function sanitizeAgentMode(raw: unknown): CopilotSettings["agentMode"] {
     debugFullFrames,
     skills,
     ...(claudeCli ? { claudeCli } : {}),
+    ...(deviceProfiles ? { deviceProfiles } : {}),
   };
 }
 
@@ -1069,6 +1111,67 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
     probeSessionId: nonEmptyString(r.probeSessionId),
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };
+}
+
+/** Sanitize one device's agent profile; returns undefined when nothing valid remains. */
+function sanitizeDeviceAgentProfile(raw: unknown): DeviceAgentProfile | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const r = raw as Record<string, unknown>;
+  const out: DeviceAgentProfile = {};
+
+  const claudeCliPath = nonEmptyString(r.claudeCliPath);
+  if (claudeCliPath) out.claudeCliPath = claudeCliPath;
+
+  const codexRaw =
+    r.codex && typeof r.codex === "object" ? (r.codex as Record<string, unknown>) : null;
+  if (codexRaw) {
+    const codex: NonNullable<DeviceAgentProfile["codex"]> = {};
+    const binaryPath = nonEmptyString(codexRaw.binaryPath);
+    if (binaryPath) codex.binaryPath = binaryPath;
+    const envOverrides = sanitizeEnvOverrides(codexRaw.envOverrides);
+    if (envOverrides) codex.envOverrides = envOverrides;
+    if (Object.keys(codex).length > 0) out.codex = codex;
+  }
+
+  const opencodeRaw =
+    r.opencode && typeof r.opencode === "object" ? (r.opencode as Record<string, unknown>) : null;
+  if (opencodeRaw) {
+    const opencode: NonNullable<DeviceAgentProfile["opencode"]> = {};
+    const binaryPath = nonEmptyString(opencodeRaw.binaryPath);
+    if (binaryPath) opencode.binaryPath = binaryPath;
+    const binaryVersion = nonEmptyString(opencodeRaw.binaryVersion);
+    if (binaryVersion) opencode.binaryVersion = binaryVersion;
+    if (binaryPath) {
+      const rawSource = opencodeRaw.binarySource;
+      opencode.binarySource = rawSource === "custom" ? "custom" : "managed";
+    }
+    const probeSessionId = nonEmptyString(opencodeRaw.probeSessionId);
+    if (probeSessionId) opencode.probeSessionId = probeSessionId;
+    const envOverrides = sanitizeEnvOverrides(opencodeRaw.envOverrides);
+    if (envOverrides) opencode.envOverrides = envOverrides;
+    if (Object.keys(opencode).length > 0) out.opencode = opencode;
+  }
+
+  const claudeRaw =
+    r.claude && typeof r.claude === "object" ? (r.claude as Record<string, unknown>) : null;
+  if (claudeRaw) {
+    const envOverrides = sanitizeEnvOverrides(claudeRaw.envOverrides);
+    if (envOverrides) out.claude = { envOverrides };
+  }
+
+  return Object.keys(out).length > 0 ? out : undefined;
+}
+
+/** Sanitize the per-device profile map; returns undefined when empty. */
+function sanitizeDeviceProfiles(raw: unknown): Record<string, DeviceAgentProfile> | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const out: Record<string, DeviceAgentProfile> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof key !== "string" || key.length === 0) continue;
+    const profile = sanitizeDeviceAgentProfile(value);
+    if (profile) out[key] = profile;
+  }
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 function mergeAllActiveModelsWithCoreModels(settings: CopilotSettings): CopilotSettings {
