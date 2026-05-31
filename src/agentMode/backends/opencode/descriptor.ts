@@ -119,7 +119,15 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
 
   subscribeInstallState(_plugin: CopilotPlugin, cb: () => void): () => void {
     return subscribeToSettingsChange((prev, next) => {
-      if (prev.agentMode?.backends?.opencode !== next.agentMode?.backends?.opencode) {
+      const p = prev.agentMode?.backends?.opencode;
+      const n = next.agentMode?.backends?.opencode;
+      // Only the binary/install fields affect install state; model selection
+      // and probe-session writes on the same object must not trigger a restart.
+      if (
+        p?.binaryPath !== n?.binaryPath ||
+        p?.binaryVersion !== n?.binaryVersion ||
+        p?.binarySource !== n?.binarySource
+      ) {
         cb();
       }
     });
