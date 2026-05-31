@@ -1,4 +1,4 @@
-import { resetSettings } from "@/settings/model";
+import { resetSettings, updateSetting } from "@/settings/model";
 import {
   setDefaultSystemPromptTitle,
   setDisableBuiltinSystemPrompt,
@@ -6,7 +6,11 @@ import {
   updateCachedSystemPrompts,
 } from "@/system-prompts/state";
 import type { UserSystemPrompt } from "@/system-prompts/type";
-import { buildAgentSystemPrompt, COPILOT_PROMPT_BASE } from "./agentSystemPrompt";
+import {
+  buildAgentSystemPrompt,
+  COPILOT_PLUS_TOOLS_STEERING,
+  COPILOT_PROMPT_BASE,
+} from "./agentSystemPrompt";
 
 jest.mock("@/logger", () => ({
   logInfo: jest.fn(),
@@ -76,6 +80,30 @@ describe("buildAgentSystemPrompt", () => {
     expect(prompt).not.toContain(COPILOT_PROMPT_BASE);
     expect(prompt).not.toContain("<user_custom_instructions>");
     expect(prompt).toContain("{folder_name}");
+  });
+
+  it("steers toward the builtin Copilot Plus skills regardless of Plus status", () => {
+    // Default settings → NOT a Plus user; steering must still be present so a
+    // self-host user (Plus-enabled but isPlusUser=false) gets it, and non-Plus
+    // users fall back to their own tools via the steering's fallback clause.
+    const nonPlus = buildAgentSystemPrompt();
+    expect(nonPlus).toContain(COPILOT_PLUS_TOOLS_STEERING);
+    expect(nonPlus).toContain("copilot-web-search");
+    expect(nonPlus).toContain("copilot-read-pdf");
+    expect(nonPlus).toContain("copilot-youtube-transcript");
+    expect(nonPlus).toContain("copilot-fetch-x");
+    // Fallback clause so a missing/unlicensed skill never dead-ends.
+    expect(nonPlus).toMatch(/fall back to whatever equivalent capability/i);
+
+    // A Plus user gets the same steering.
+    updateSetting("isPlusUser", true);
+    expect(buildAgentSystemPrompt()).toContain(COPILOT_PLUS_TOOLS_STEERING);
+  });
+
+  it("suppresses the steering when the builtin prompt is disabled", () => {
+    setDisableBuiltinSystemPrompt(true);
+    const prompt = buildAgentSystemPrompt();
+    expect(prompt).not.toContain(COPILOT_PLUS_TOOLS_STEERING);
   });
 });
 

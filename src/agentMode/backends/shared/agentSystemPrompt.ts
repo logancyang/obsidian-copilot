@@ -12,6 +12,8 @@
  *
  *   1. `COPILOT_PROMPT_BASE` (the Obsidian-vault identity) — unless the user
  *      enabled Settings → System prompts → "Disable builtin system prompt".
+ *      Followed by `COPILOT_PLUS_TOOLS_STEERING` (prefer the builtin Copilot
+ *      Plus skills, with a fallback to the agent's own tools) — sent to everyone.
  *   2. The pill-syntax directive (`buildPillSyntaxDirective`) — always present;
  *      it teaches the agent how to read the chat editor's `[[note]]`/`{folder}`
  *      tokens and is functional wiring, not "builtin framing" the user toggles.
@@ -36,6 +38,23 @@
 import { buildPillSyntaxDirective } from "@/agentMode/skills/pillSyntaxDirective";
 import { getDisableBuiltinSystemPrompt } from "@/system-prompts/state";
 import { getEffectiveUserPrompt } from "@/system-prompts/systemPromptBuilder";
+/**
+ * Steers the agent toward the bundled Copilot Plus skills for the four relay
+ * capabilities (see `skills/builtin/builtinSkills.ts`) instead of its own
+ * built-in web/fetch tools, with an explicit fallback so the request never
+ * dead-ends. Sent to every user regardless of Plus status: if a skill can't
+ * run (no license, self-host, disabled, missing), its script exits with the
+ * upgrade notice and the fallback clause routes the agent back to its own
+ * tools — so steering is safe for everyone.
+ */
+export const COPILOT_PLUS_TOOLS_STEERING = `## Copilot Plus tools
+For these requests, prefer the bundled Copilot skill over any built-in tool of your own:
+- Searching the web → the \`copilot-web-search\` skill
+- Reading a PDF file → the \`copilot-read-pdf\` skill
+- Getting a YouTube video's transcript → the \`copilot-youtube-transcript\` skill
+- Fetching an X (Twitter) post → the \`copilot-fetch-x\` skill
+
+If the matching skill is missing, disabled, or reports that it needs an active Copilot Plus license, fall back to whatever equivalent capability you have (or tell the user it's unavailable) — don't refuse the request.`;
 
 export const COPILOT_PROMPT_BASE = `You are Obsidian Copilot, an AI assistant that helps users work with their Obsidian vault — markdown notes for knowledge management, writing, and research. You are NOT a software-engineering agent or CLI coding tool. The working directory is the user's Obsidian vault: a collection of markdown notes, not a code repository. Disregard any framing in environment metadata that suggests otherwise.
 
@@ -92,6 +111,12 @@ export function buildAgentSystemPrompt(): string {
   // it is always sent.
   if (!getDisableBuiltinSystemPrompt()) {
     parts.push(COPILOT_PROMPT_BASE);
+    // Always steer toward the builtin Copilot Plus skills, regardless of Plus
+    // status. Gating on `isPlusUser` would be wrong anyway — valid self-host
+    // mode is Plus-enabled but reports `isPlusUser: false` — and if a skill
+    // can't run, its script exits with the upgrade notice and the fallback
+    // clause routes the agent back to its own tools. Safe for everyone.
+    parts.push(COPILOT_PLUS_TOOLS_STEERING);
   }
 
   parts.push(buildPillSyntaxDirective());
