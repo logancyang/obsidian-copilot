@@ -220,6 +220,20 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
       restartSystemPromptAffected();
     }
   });
+  // A backend's binary path (or a binary install/update) is resolved at spawn
+  // time, so a change must reach the running/warm process — otherwise it only
+  // updates the settings status line and the agent keeps the old binary until
+  // a plugin reload. Each descriptor's `subscribeInstallState` already fires
+  // only on its own path/install field, so this won't churn on unrelated saves.
+  for (const descriptor of listBackendDescriptors()) {
+    descriptor.subscribeInstallState(plugin, () => {
+      void manager
+        .onInstallStateChanged(descriptor.id)
+        .catch((error) =>
+          logError(`[AgentMode] install-state refresh failed: ${descriptor.id}`, error)
+        );
+    });
+  }
   void skillManager.refresh().catch((error) => {
     logError("[Skills] Initial discovery pass failed", error);
   });

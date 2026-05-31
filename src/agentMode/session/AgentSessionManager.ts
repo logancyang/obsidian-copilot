@@ -444,6 +444,44 @@ export class AgentSessionManager {
   }
 
   /**
+   * React to a backend's install state changing at runtime — a binary path
+   * applied/cleared, or a binary installed/updated from the Configure dialog.
+   * Without this, the change only re-renders the settings status line: the
+   * running or warm process keeps the old binary, and a backend installed
+   * after plugin load is never spawned, so the user has to reload the plugin.
+   *
+   * Three transitions, all reusing the existing restart/refresh coalescing so
+   * a burst of edits folds into one re-probe:
+   *   - now uninstalled → tear down any live proc and drop the warm probe so
+   *     the picker stops offering a backend that can no longer spawn;
+   *   - installed with a live/warm process → restart/refresh it against the
+   *     new binary;
+   *   - installed but never probed (freshly installed) → kick a first preload
+   *     (`restartBackend` returns `false` here, since nothing is warm yet).
+   *
+   * The fresh-preload case is unique to this signal: the load-time preload
+   * loop skips backends that aren't installed yet, so install-state is the
+   * only event that can flip a backend from "never preloaded" into "should
+   * preload". The provider/system-prompt restart subscriptions always act on
+   * an already-installed (already-preloaded) backend, so they only ever need
+   * `restartBackend`'s restart/refresh — never a first preload.
+   */
+  async onInstallStateChanged(backendId: BackendId): Promise<void> {
+    if (this.disposed) return;
+    if (!this.isBackendInstalled(backendId)) {
+      // Tears down a live proc (the install guard in `restartBackendNow` keeps
+      // it from respawning); `clearCached` then drops any warm probe.
+      await this.restartBackend(backendId, "binary no longer available");
+      this.preloader.clearCached(backendId);
+      return;
+    }
+    const refreshed = await this.restartBackend(backendId, "binary path changed");
+    if (!refreshed) {
+      this.registerPreload(backendId, this.preloader.preload(backendId));
+    }
+  }
+
+  /**
    * Refresh a preloader warm probe when the manager owns no process yet.
    * Spawn-time config (provider keys, enabled models, native skills, system
    * prompt) is baked into the warm probe when it spawns, so a config change
@@ -1211,8 +1249,15 @@ export class AgentSessionManager {
     logInfo(`[AgentMode] restarting ${backendId} backend: ${reason}`);
     try {
       const affected = Array.from(this.sessions.values()).filter((s) => s.backendId === backendId);
+      // Don't respawn a replacement for a backend that is no longer installed
+      // (e.g. its custom path was just cleared) — the spawn would fail. The
+      // affected sessions are still closed; the tab falls back to its
+      // needs-setup state. `restartBackendNow` is otherwise only reached for an
+      // installed backend, so this is a no-op for the normal restart path.
       const shouldCreateReplacement =
-        affected.length > 0 && affected.some((s) => s.internalId === this.activeSessionId);
+        this.isBackendInstalled(backendId) &&
+        affected.length > 0 &&
+        affected.some((s) => s.internalId === this.activeSessionId);
       for (const session of affected) {
         await this.closeSession(session.internalId);
       }
