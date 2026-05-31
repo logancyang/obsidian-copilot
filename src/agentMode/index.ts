@@ -1,6 +1,7 @@
 import { type App, Platform } from "obsidian";
 import type CopilotPlugin from "@/main";
 import { logError } from "@/logger";
+import { DEFAULT_SKILLS_FOLDER } from "@/constants";
 import { getSettings, subscribeToSettingsChange } from "@/settings/model";
 import { subscribeToSystemPromptChange } from "@/system-prompts/state";
 import { buildAgentSystemPrompt } from "./backends/shared/agentSystemPrompt";
@@ -10,6 +11,7 @@ import { AgentChatPersistenceManager } from "./session/AgentChatPersistenceManag
 import { AgentModelPreloader } from "./session/AgentModelPreloader";
 import { AgentSessionManager } from "./session/AgentSessionManager";
 import { SkillManager } from "./skills";
+import { seedBuiltinSkills } from "./skills/builtin/seedBuiltinSkills";
 import {
   createDefaultAskUserQuestionPrompter,
   createDefaultPermissionPrompter,
@@ -219,6 +221,19 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
     ) {
       restartSystemPromptAffected();
     }
+    // Copilot Plus sign-in/out (or license rotation) changes the managed env
+    // injected at spawn — the decrypted license the builtin Plus skill scripts
+    // read. Restart every backend so the next session sees the license appear
+    // or disappear without a plugin reload.
+    if (prev.isPlusUser !== next.isPlusUser || prev.plusLicenseKey !== next.plusLicenseKey) {
+      for (const descriptor of listBackendDescriptors()) {
+        void manager
+          .restartBackend(descriptor.id, "Copilot Plus license changed")
+          .catch((e) =>
+            logError(`[AgentMode] restart after plus change failed: ${descriptor.id}`, e)
+          );
+      }
+    }
   });
   // A backend's binary path (or a binary install/update) is resolved at spawn
   // time, so a change must reach the running/warm process — otherwise it only
@@ -234,7 +249,26 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
         );
     });
   }
-  void skillManager.refresh().catch((error) => {
+  // Seed plugin-shipped builtin skills (Copilot Plus relay tools) into the
+  // canonical folder, THEN run discovery so the first pass picks them up and
+  // fans them out to the agent dirs. Non-blocking for plugin load.
+  void (async () => {
+    try {
+      const adapter = app.vault.adapter;
+      await seedBuiltinSkills({
+        skillsFolderRelPath: getSettings().agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER,
+        fs: {
+          exists: (p) => adapter.exists(p),
+          read: (p) => adapter.read(p),
+          write: (p, c) => adapter.write(p, c),
+          mkdir: (p) => adapter.mkdir(p),
+        },
+      });
+    } catch (e) {
+      logError("[Skills] builtin skill seeding failed", e);
+    }
+    await skillManager.refresh();
+  })().catch((error) => {
     logError("[Skills] Initial discovery pass failed", error);
   });
   // Non-blocking — plugin load should not wait on disk reconcile.

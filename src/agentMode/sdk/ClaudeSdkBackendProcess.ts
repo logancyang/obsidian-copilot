@@ -133,6 +133,12 @@ export interface ClaudeSdkBackendProcessOptions {
    */
   getEnvOverrides?: () => Record<string, string> | undefined;
   /**
+   * Plugin-managed env merged onto `process.env` before user overrides (e.g.
+   * the decrypted Copilot Plus license for builtin skill scripts). Supplied by
+   * the descriptor so `sdk/` need not import `backends/`. Read per `prompt()`.
+   */
+  getManagedEnv?: () => Promise<Readonly<Record<string, string>>>;
+  /**
    * Resolve whether the `claude` CLI is signed in (OAuth login or env-based
    * credentials). Consulted once before the first prompt; an unauthenticated
    * result makes `prompt()` reject with `AuthRequiredError` instead of
@@ -325,10 +331,15 @@ export class ClaudeSdkBackendProcess implements BackendProcess {
       options.thinking = { type: "adaptive", display: "summarized" };
     }
     const envOverrides = this.opts.getEnvOverrides?.();
-    if (envOverrides && Object.keys(envOverrides).length > 0) {
+    // Builtin Copilot Plus skill scripts read the license from the env. The
+    // descriptor supplies it via `getManagedEnv` (sdk/ can't import backends/);
+    // merged before user overrides so a user can still shadow it.
+    const managedEnv = (await this.opts.getManagedEnv?.()) ?? {};
+    const extraEnv = { ...managedEnv, ...envOverrides };
+    if (Object.keys(extraEnv).length > 0) {
       // Options.env replaces (not merges with) the child env, so include
       // process.env to preserve PATH and friends.
-      options.env = { ...process.env, ...envOverrides };
+      options.env = { ...process.env, ...extraEnv };
     }
 
     logSdkOutbound(

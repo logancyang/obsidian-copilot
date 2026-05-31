@@ -2,6 +2,7 @@ import { getSettings } from "@/settings/model";
 import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import { buildSimpleSpawnDescriptor } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
 
 /**
  * Spawns the user-provided `codex-acp` binary
@@ -20,7 +21,9 @@ export class CodexBackend implements AcpBackend {
     const descriptor = buildSimpleSpawnDescriptor(
       getSettings().agentMode?.backends?.codex?.binaryPath,
       "Codex binary path not configured. Open Agent Mode settings and set the path to codex-acp.",
-      getSettings().agentMode?.backends?.codex?.envOverrides
+      getSettings().agentMode?.backends?.codex?.envOverrides,
+      // Builtin Copilot Plus skill scripts read the license from the env.
+      await buildCopilotPlusEnv()
     );
     // Forward the shared composed system prompt — the Copilot base framing
     // (unless the user disabled it), the pill-syntax directive, and the user's

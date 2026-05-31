@@ -8,6 +8,7 @@ import { AcpBackend, AcpSpawnDescriptor } from "@/agentMode/acp/types";
 import type { CopilotMode } from "@/agentMode/session/types";
 import { composeDenyList, getManagedSkills, SkillManager } from "@/agentMode/skills";
 import { buildAgentSystemPrompt } from "@/agentMode/backends/shared/agentSystemPrompt";
+import { buildCopilotPlusEnv } from "@/agentMode/backends/shared/copilotPlusEnv";
 import { OpencodeBackendDescriptor } from "./descriptor";
 import { mapProviderToOpencodeId } from "./opencodeModelResolve";
 
@@ -82,6 +83,8 @@ export class OpencodeBackend implements AcpBackend {
 
     const config = await buildOpencodeConfig(getSettings(), this.#deps);
     const envOverrides = getSettings().agentMode?.backends?.opencode?.envOverrides ?? {};
+    // Builtin Copilot Plus skill scripts read the license from the env.
+    const plusEnv = await buildCopilotPlusEnv();
 
     return {
       command: binaryPath,
@@ -89,6 +92,7 @@ export class OpencodeBackend implements AcpBackend {
       env: {
         ...process.env,
         OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
+        ...plusEnv,
         // User overrides last — they can replace OPENCODE_CONFIG_CONTENT
         // intentionally if they need to point opencode at a different config.
         ...envOverrides,
