@@ -103,4 +103,13 @@ describe("seedBuiltinSkills", () => {
 
     expect(fs.files.get(userMd)).toBe("user content");
   });
+
+  it("does not overwrite a user-authored skill whose name collides with a builtin", async () => {
+    // A user created copilot-web-search before it became a builtin — no version marker.
+    const userContent = "---\nname: copilot-web-search\ndescription: my custom search\n---\ncustom body";
+    const fs = memFs({ [MD]: userContent });
+    await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(1)] });
+
+    expect(fs.files.get(MD)).toBe(userContent);
+  });
 });

@@ -23,12 +23,17 @@ export interface SeedBuiltinSkillsOptions {
   skills?: readonly BuiltinSkill[];
 }
 
-/** Reads `metadata.copilot-builtin-version` from a seeded SKILL.md, or 0. */
+/**
+ * Matches `metadata.copilot-builtin-version` in a SKILL.md. Absence of this
+ * field means the file is user-authored — we must not overwrite it even if the
+ * folder name collides with a builtin skill name.
+ */
 const VERSION_RE = /copilot-builtin-version:\s*"?(\d+)"?/;
 
-function seededVersion(skillMd: string): number {
+/** Returns the seeded version number, or null if the file is not a builtin. */
+function seededVersion(skillMd: string): number | null {
   const m = skillMd.match(VERSION_RE);
-  return m ? Number.parseInt(m[1], 10) : 0;
+  return m ? Number.parseInt(m[1], 10) : null;
 }
 
 /**
@@ -75,7 +80,9 @@ export async function seedBuiltinSkills(
 
     if (await fs.exists(skillMdPath)) {
       try {
-        if (seededVersion(await fs.read(skillMdPath)) >= skill.version) {
+        const existing = seededVersion(await fs.read(skillMdPath));
+        // null = no copilot-builtin-version marker → user-authored file; skip.
+        if (existing === null || existing >= skill.version) {
           continue;
         }
       } catch (e) {
