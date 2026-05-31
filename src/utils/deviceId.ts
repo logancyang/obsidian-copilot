@@ -17,21 +17,18 @@
  * Caveat: because the id lives in app-local storage rather than hardware, it
  * resets if the user clears app data or reinstalls Obsidian. On reset the
  * device gets a new id and its previous profile segment is orphaned — harmless;
- * the user re-enters the path once.
+ * the user re-enters the path once. If storage is entirely unusable (disabled /
+ * restricted), the id falls back to the shared `"unknown"` sentinel.
  */
 
 const DEVICE_ID_STORAGE_KEY = "obsidian-copilot:device-id:v1";
 
+/** Stable id when `localStorage` can't be read or written, so a broken-storage
+ *  device keeps a single profile segment instead of a new random id each session. */
+const FALLBACK_DEVICE_ID = "unknown";
+
 /** Process-lifetime cache so every call returns the same id, even if storage is unavailable. */
 let cachedDeviceId: string | null = null;
-
-function getLocalStorageSafe(): Storage | null {
-  try {
-    return window.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
 
 /** Generate a random id, preferring `crypto.randomUUID`, with progressive fallbacks. */
 function generateDeviceId(): string {
@@ -57,21 +54,22 @@ function generateDeviceId(): string {
 export function getDeviceId(): string {
   if (cachedDeviceId) return cachedDeviceId;
 
-  const storage = getLocalStorageSafe();
-  const existing = storage?.getItem(DEVICE_ID_STORAGE_KEY);
-  if (existing && existing.length > 0) {
-    cachedDeviceId = existing;
-    return existing;
-  }
-
-  const id = generateDeviceId();
-  // Best-effort persist: if storage is unavailable the id stays session-stable
-  // via the cache, so a single session never splits its own profile.
   try {
-    storage?.setItem(DEVICE_ID_STORAGE_KEY, id);
+    const storage = window.localStorage;
+    const existing = storage.getItem(DEVICE_ID_STORAGE_KEY);
+    if (existing && existing.length > 0) {
+      cachedDeviceId = existing;
+      return existing;
+    }
+    const id = generateDeviceId();
+    storage.setItem(DEVICE_ID_STORAGE_KEY, id);
+    cachedDeviceId = id;
+    return id;
   } catch {
-    /* ignore — cached for the session */
+    // window.localStorage is missing or its operations throw (disabled /
+    // restricted storage). Fall back to a stable sentinel so this device keeps
+    // one profile segment instead of a new random id each session.
+    cachedDeviceId = FALLBACK_DEVICE_ID;
+    return FALLBACK_DEVICE_ID;
   }
-  cachedDeviceId = id;
-  return id;
 }

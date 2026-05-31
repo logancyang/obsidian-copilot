@@ -11,6 +11,10 @@ describe("getDeviceId", () => {
     window.localStorage.clear();
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("returns a stable, non-empty id across calls and persists it", async () => {
     const getDeviceId = await loadFreshGetDeviceId();
     const first = getDeviceId();
@@ -33,5 +37,23 @@ describe("getDeviceId", () => {
     const getDeviceIdB = await loadFreshGetDeviceId();
     const b = getDeviceIdB();
     expect(a).not.toBe(b);
+  });
+
+  it("falls back to a stable sentinel when storage reads throw", async () => {
+    jest.spyOn(window.localStorage, "getItem").mockImplementation(() => {
+      throw new Error("restricted");
+    });
+    const getDeviceId = await loadFreshGetDeviceId();
+    expect(getDeviceId()).toBe("unknown");
+    // Cached for the session: a second call stays stable without re-touching storage.
+    expect(getDeviceId()).toBe("unknown");
+  });
+
+  it("falls back to a stable sentinel when storage writes throw", async () => {
+    jest.spyOn(window.localStorage, "setItem").mockImplementation(() => {
+      throw new Error("restricted");
+    });
+    const getDeviceId = await loadFreshGetDeviceId();
+    expect(getDeviceId()).toBe("unknown");
   });
 });
