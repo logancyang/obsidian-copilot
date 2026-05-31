@@ -234,6 +234,23 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           );
       }
     }
+    // When the canonical skills folder changes, seed builtins into the new
+    // folder before discovery runs so the Plus tools appear immediately
+    // without a plugin reload.
+    const prevFolder = prev.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+    const nextFolder = next.agentMode?.skills?.folder ?? DEFAULT_SKILLS_FOLDER;
+    if (prevFolder !== nextFolder) {
+      const adapter = app.vault.adapter;
+      void seedBuiltinSkills({
+        skillsFolderRelPath: nextFolder,
+        fs: {
+          exists: (p) => adapter.exists(p),
+          read: (p) => adapter.read(p),
+          write: (p, c) => adapter.write(p, c),
+          mkdir: (p) => adapter.mkdir(p),
+        },
+      }).catch((e) => logError("[Skills] builtin skill seeding after folder change failed", e));
+    }
   });
   // A backend's binary path (or a binary install/update) is resolved at spawn
   // time, so a change must reach the running/warm process — otherwise it only
