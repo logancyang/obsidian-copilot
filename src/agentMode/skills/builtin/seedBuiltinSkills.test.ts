@@ -32,8 +32,8 @@ function skill(version: number): BuiltinSkill {
   return {
     name: "copilot-web-search",
     version,
-    enabledAgents: ["claude"],
-    skillMd: `---\nname: copilot-web-search\ndescription: d\nmetadata:\n  copilot-builtin-version: "${version}"\n---\nbody v${version}`,
+    enabledAgents: ["claude", "codex", "opencode"],
+    skillMd: `---\nname: copilot-web-search\ndescription: d\nmetadata:\n  copilot-enabled-agents: claude, codex, opencode\n  copilot-builtin-version: "${version}"\n---\nbody v${version}`,
     files: [{ path: "web-search.sh", content: `// script v${version}` }],
   };
 }
@@ -125,5 +125,22 @@ describe("seedBuiltinSkills", () => {
 
     expect(seeded).toEqual(["copilot-web-search"]);
     expect(fs.files.get(SCRIPT)).toBe("// script v1");
+  });
+
+  it("preserves user-modified copilot-enabled-agents when upgrading a builtin", async () => {
+    // User disabled codex and opencode via the toggle UI — SKILL.md was rewritten
+    // on disk to list only 'claude'. On the next version bump the seeder must not
+    // silently restore the full bundled agent list.
+    const disabledMd = skill(1).skillMd.replace(
+      "copilot-enabled-agents: claude, codex, opencode",
+      "copilot-enabled-agents: claude"
+    );
+    const fs = memFs({ [MD]: disabledMd, [SCRIPT]: "// script v1" });
+    await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(2)] });
+
+    const written = fs.files.get(MD) ?? "";
+    expect(written).toContain("copilot-enabled-agents: claude\n");
+    expect(written).not.toContain("copilot-enabled-agents: claude, codex, opencode");
+    expect(written).toContain("body v2"); // bundled body was updated
   });
 });

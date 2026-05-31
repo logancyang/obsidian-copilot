@@ -36,6 +36,21 @@ function seededVersion(skillMd: string): number | null {
   return m ? Number.parseInt(m[1], 10) : null;
 }
 
+const ENABLED_AGENTS_RE = /^([ \t]*copilot-enabled-agents:[ \t]*)(.*)$/m;
+
+/**
+ * Read the `copilot-enabled-agents` line from an existing SKILL.md and splice
+ * it into the bundled replacement, preserving any agent-disable choices the
+ * user made via the UI. Returns the patched content unchanged when the field
+ * is absent in either string.
+ */
+function preserveEnabledAgents(existingMd: string, bundledMd: string): string {
+  const existing = existingMd.match(ENABLED_AGENTS_RE);
+  if (!existing) return bundledMd;
+  // Replace the bundled copilot-enabled-agents value with the existing one.
+  return bundledMd.replace(ENABLED_AGENTS_RE, `$1${existing[2]}`);
+}
+
 /**
  * Create a directory and all missing ancestor segments. Mirrors the
  * segment-by-segment approach of `ensureFolderExists` in `utils.ts` so that
@@ -78,15 +93,18 @@ export async function seedBuiltinSkills(
     const dir = joinPosix(skillsFolderRelPath, skill.name);
     const skillMdPath = joinPosix(dir, "SKILL.md");
 
+    // existingContent is captured here so we can carry the user's
+    // copilot-enabled-agents choice forward when re-seeding an upgrade.
+    let existingContent: string | null = null;
     if (await fs.exists(skillMdPath)) {
       try {
-        const existing = seededVersion(await fs.read(skillMdPath));
+        existingContent = await fs.read(skillMdPath);
+        const existing = seededVersion(existingContent);
         // null = no copilot-builtin-version marker → user-authored file; skip.
         if (existing === null) continue;
         // Version is current — only skip if all support files are also present.
-        // A partial write (e.g. crash after SKILL.md but before .mjs) would
-        // leave the skill advertising a script that doesn't exist; re-seed to
-        // self-heal.
+        // A partial write (e.g. crash after SKILL.md but before the .sh file)
+        // would leave the skill advertising a stale script; re-seed to self-heal.
         if (existing >= skill.version) {
           const allFilesPresent = await Promise.all(
             skill.files.map((f) => fs.exists(joinPosix(dir, f.path)))
@@ -101,6 +119,13 @@ export async function seedBuiltinSkills(
 
     try {
       await ensureDir(fs, dir);
+      // Carry the user's agent-disable choices forward: if they toggled any
+      // agent off via the UI, copilot-enabled-agents was rewritten on disk.
+      // Preserve that value in the bundled replacement so the upgrade doesn't
+      // silently undo the user's preference.
+      const skillMd = existingContent
+        ? preserveEnabledAgents(existingContent, skill.skillMd)
+        : skill.skillMd;
       // Write support files before SKILL.md so the version stamp in SKILL.md
       // only appears once all scripts are on disk. A crash between writes then
       // leaves no SKILL.md (or a stale-version one), so the next startup
@@ -108,7 +133,7 @@ export async function seedBuiltinSkills(
       for (const file of skill.files) {
         await fs.write(joinPosix(dir, file.path), file.content);
       }
-      await fs.write(skillMdPath, skill.skillMd);
+      await fs.write(skillMdPath, skillMd);
       seeded.push(skill.name);
     } catch (e) {
       logError(`[Skills] failed to seed builtin skill ${skill.name}`, e);
