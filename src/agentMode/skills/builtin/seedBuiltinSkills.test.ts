@@ -34,13 +34,13 @@ function skill(version: number): BuiltinSkill {
     version,
     enabledAgents: ["claude"],
     skillMd: `---\nname: copilot-web-search\ndescription: d\nmetadata:\n  copilot-builtin-version: "${version}"\n---\nbody v${version}`,
-    files: [{ path: "web-search.mjs", content: `// script v${version}` }],
+    files: [{ path: "web-search.sh", content: `// script v${version}` }],
   };
 }
 
 const FOLDER = "copilot/skills";
 const MD = "copilot/skills/copilot-web-search/SKILL.md";
-const SCRIPT = "copilot/skills/copilot-web-search/web-search.mjs";
+const SCRIPT = "copilot/skills/copilot-web-search/web-search.sh";
 
 describe("seedBuiltinSkills", () => {
   it("writes SKILL.md and scripts when the skill is missing", async () => {
@@ -115,7 +115,7 @@ describe("seedBuiltinSkills", () => {
   });
 
   it("re-seeds when SKILL.md is current but a support file is missing (partial write recovery)", async () => {
-    // Simulate a crash after SKILL.md was written but before the .mjs script.
+    // Simulate a crash after SKILL.md was written but before the script.
     const fs = memFs({ [MD]: skill(1).skillMd }); // no SCRIPT
     const { seeded } = await seedBuiltinSkills({
       skillsFolderRelPath: FOLDER,

@@ -7,11 +7,18 @@ import type { BackendId } from "@/agentMode/session/types";
  * `seedBuiltinSkills`) and refreshed when `version` bumps.
  *
  * Each skill ships a `SKILL.md` (instructions the agent reads) plus one
- * Node `.mjs` script the agent runs. The script reads the Copilot Plus
- * license + relay base URL from env vars the plugin injects at spawn time
- * (see `buildCopilotPlusEnv`) and calls the Brevilabs relay directly — no
- * key is embedded in the skill files. A missing/invalid license makes the
- * script exit non-zero with an upgrade prompt the agent relays to the user.
+ * POSIX `sh` script the agent runs with `curl`. The script reads the Copilot
+ * Plus license + relay base URL from env vars the plugin injects at spawn time
+ * (see `buildCopilotPlusEnv`) and calls the Brevilabs relay directly — no key
+ * is embedded in the skill files. A missing/invalid license makes the script
+ * exit non-zero with an upgrade prompt the agent relays to the user.
+ *
+ * Why `sh` + `curl` rather than a Node script: the script runs in the *agent's*
+ * shell, where `node` is not reliably on PATH (Obsidian launches with a minimal
+ * PATH that usually excludes nvm/Volta/Homebrew node). `sh`, `curl`, `sed`, and
+ * `base64` live in `/usr/bin` (and git-bash on Windows), so they are reachable
+ * regardless of the user's node setup. Scripts are POSIX and invoked as
+ * `sh "<path>" <arg>`, so they need neither a node runtime nor an executable bit.
  */
 export interface BuiltinSkill {
   /** Folder name + SKILL.md `name`. Kebab-case, Copilot-branded. */
@@ -40,46 +47,61 @@ export const PLUS_ENV = {
 const UPGRADE_MESSAGE =
   "This is a Copilot Plus feature and needs an active license. Tell the user that web/PDF/YouTube/X tools require Copilot Plus, and to upgrade or renew at https://www.obsidiancopilot.com (then add their license key in Settings → Copilot Plus).";
 
+/** Wrap a string as a single-quoted shell literal (safe for embedding in `sh`). */
+function shSingleQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
+}
+
 /**
- * Shared preamble every script uses: resolves env, and exits with the
- * upgrade prompt when the license/relay config is absent. Kept inline in
- * each `.mjs` (scripts can't share an import once symlinked into agent dirs).
+ * Shared preamble every script uses: resolves env, defines the relay caller,
+ * and exits with the upgrade prompt when the license/relay config is absent.
+ * Kept inline in each `.sh` (scripts can't share an import once symlinked into
+ * agent dirs).
+ *
+ * `json_escape` covers single-line string values (backslash + double quote);
+ * queries, URLs, and file paths never contain raw newlines, so this is enough
+ * without depending on `jq`, which is not guaranteed to be installed. The
+ * request body is fed to curl over stdin (`--data-binary @-`) so a large
+ * base64 PDF never hits the command-line length limit.
  */
 function scriptPreamble(): string {
-  return `const BASE = process.env.${PLUS_ENV.baseUrl};
-const KEY = process.env.${PLUS_ENV.licenseKey};
-const USER_ID = process.env.${PLUS_ENV.userId} ?? "";
-const CLIENT_VERSION = process.env.${PLUS_ENV.clientVersion} ?? "";
-const UPGRADE = ${JSON.stringify(UPGRADE_MESSAGE)};
-function die(msg, code = 2) {
-  process.stderr.write(msg + "\\n");
-  process.exit(code);
-}
-if (!KEY || !BASE) die(UPGRADE);
+  return `#!/bin/sh
+# Calls the Brevilabs relay with curl and prints the JSON result to stdout.
+# Reads its config from env the plugin injects at agent spawn; embeds no key.
+BASE="\${${PLUS_ENV.baseUrl}:-}"
+KEY="\${${PLUS_ENV.licenseKey}:-}"
+USER_ID="\${${PLUS_ENV.userId}:-}"
+CLIENT_VERSION="\${${PLUS_ENV.clientVersion}:-}"
+UPGRADE=${shSingleQuote(UPGRADE_MESSAGE)}
 
-async function relay(endpoint, body) {
-  let res;
-  try {
-    res = await fetch(BASE + endpoint, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: "Bearer " + KEY,
-        "X-Client-Version": CLIENT_VERSION,
-      },
-      body: JSON.stringify({ ...body, user_id: USER_ID }),
-    });
-  } catch (e) {
-    die("Could not reach the Copilot relay: " + (e && e.message ? e.message : String(e)), 1);
-  }
-  if (res.status === 401 || res.status === 403) die(UPGRADE);
-  if (!res.ok) die("Request failed (HTTP " + res.status + "): " + (await res.text()), 1);
-  return res.json();
+die() {
+  printf '%s\\n' "$1" >&2
+  exit "\${2:-2}"
 }
 
-function emit(data) {
-  process.stdout.write(typeof data === "string" ? data : JSON.stringify(data, null, 2));
-  process.stdout.write("\\n");
+[ -n "$KEY" ] && [ -n "$BASE" ] || die "$UPGRADE"
+
+# JSON-escape a single-line string: backslash first, then double quote.
+json_escape() {
+  printf '%s' "$1" | sed -e 's/\\\\/\\\\\\\\/g' -e 's/"/\\\\"/g'
+}
+
+# relay ENDPOINT JSON_BODY -> prints the response body, mapping HTTP status.
+relay() {
+  resp=$(printf '%s' "$2" | curl -sS -w '\\n%{http_code}' \\
+    -X POST "$BASE$1" \\
+    -H 'Content-Type: application/json' \\
+    -H "Authorization: Bearer $KEY" \\
+    -H "X-Client-Version: $CLIENT_VERSION" \\
+    --data-binary @-)
+  [ $? -eq 0 ] || die "Could not reach the Copilot relay." 1
+  code=$(printf '%s' "$resp" | tail -n1)
+  out=$(printf '%s' "$resp" | sed '$d')
+  case "$code" in
+    401|403) die "$UPGRADE" ;;
+    2*) printf '%s\\n' "$out" ;;
+    *) die "Request failed (HTTP $code): $out" 1 ;;
+  esac
 }
 `;
 }
@@ -102,9 +124,10 @@ function relaySkill(opts: {
   scriptFile: string;
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
+  const version = 2;
   return {
     name: opts.name,
-    version: 1,
+    version,
     enabledAgents: ["claude", "codex", "opencode"],
     skillMd: `---
 name: ${opts.name}
@@ -112,7 +135,7 @@ description: ${opts.description}
 license: Copilot Plus
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "1"
+  copilot-builtin-version: "${version}"
 ---
 
 # ${opts.heading}
@@ -125,7 +148,7 @@ Find the absolute path to this SKILL.md file on disk, then run the script that
 sits next to it:
 
 \`\`\`bash
-node "/absolute/path/to/this/skill/directory/${opts.scriptFile}" "${argPlaceholder}"
+sh "/absolute/path/to/this/skill/directory/${opts.scriptFile}" "${argPlaceholder}"
 \`\`\`
 
 The script prints the result to stdout.
@@ -140,9 +163,9 @@ or renew — then continue without it.
       {
         path: opts.scriptFile,
         content: `${scriptPreamble()}
-const arg = process.argv.slice(2).join(" ").trim();
-if (!arg) die("Usage: node ${opts.scriptFile} <${argKey}>", 1);
-emit(await relay("${opts.endpoint}", { ${argKey}: arg }));
+ARG="$*"
+[ -n "$ARG" ] || die "Usage: sh ${opts.scriptFile} <${argKey}>" 1
+relay "${opts.endpoint}" "{\\"${argKey}\\":\\"$(json_escape "$ARG")\\",\\"user_id\\":\\"$(json_escape "$USER_ID")\\"}"
 `,
       },
     ],
@@ -157,12 +180,13 @@ const WEB_SEARCH = relaySkill({
   intro: "Search the web through Copilot Plus and return results for the user's query.",
   endpoint: "/websearch",
   arg: ["query", "<your search query>"],
-  scriptFile: "web-search.mjs",
+  scriptFile: "web-search.sh",
 });
 
+const READ_PDF_VERSION = 3;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
-  version: 2,
+  version: READ_PDF_VERSION,
   enabledAgents: ["claude", "codex", "opencode"],
   skillMd: `---
 name: copilot-read-pdf
@@ -170,7 +194,7 @@ description: Extract the full text of a PDF as Markdown using Copilot Plus. Use 
 license: Copilot Plus
 metadata:
   copilot-enabled-agents: claude, codex, opencode
-  copilot-builtin-version: "2"
+  copilot-builtin-version: "${READ_PDF_VERSION}"
 ---
 
 # Copilot read PDF
@@ -184,7 +208,7 @@ Find the absolute path to this SKILL.md file on disk, then run the script that
 sits next to it:
 
 \`\`\`bash
-node "/absolute/path/to/this/skill/directory/read-pdf.mjs" "<path-to-file.pdf>"
+sh "/absolute/path/to/this/skill/directory/read-pdf.sh" "<path-to-file.pdf>"
 \`\`\`
 
 Pass an absolute path to the PDF file. The script prints the extracted Markdown
@@ -198,23 +222,15 @@ or renew — then continue without it.
 `,
   files: [
     {
-      path: "read-pdf.mjs",
+      path: "read-pdf.sh",
       content: `${scriptPreamble()}
-import { readFile } from "node:fs/promises";
+FILE=\${1:-}
+[ -n "$FILE" ] || die "Usage: sh read-pdf.sh <path-to-file.pdf>" 1
+[ -f "$FILE" ] && [ -r "$FILE" ] || die "Could not read file: $FILE" 1
 
-const file = process.argv[2];
-if (!file) die("Usage: node read-pdf.mjs <path-to-file.pdf>", 1);
-
-let bytes;
-try {
-  bytes = await readFile(file);
-} catch (e) {
-  die("Could not read file '" + file + "': " + (e && e.message ? e.message : String(e)), 1);
-}
-
-// Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
-const pdf = Buffer.from(bytes).toString("base64");
-emit(await relay("/pdf4llm", { pdf }));
+# Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
+PDF=$(base64 < "$FILE" | tr -d '\\n')
+relay "/pdf4llm" "{\\"pdf\\":\\"$PDF\\",\\"user_id\\":\\"$(json_escape "$USER_ID")\\"}"
 `,
     },
   ],
@@ -228,7 +244,7 @@ const YOUTUBE_TRANSCRIPT = relaySkill({
   intro: "Fetch a YouTube video's transcript through Copilot Plus.",
   endpoint: "/youtube4llm",
   arg: ["url", "<youtube-url>"],
-  scriptFile: "youtube-transcript.mjs",
+  scriptFile: "youtube-transcript.sh",
 });
 
 const FETCH_X = relaySkill({
@@ -239,7 +255,7 @@ const FETCH_X = relaySkill({
   intro: "Fetch the content of an X (Twitter) post through Copilot Plus.",
   endpoint: "/twitter4llm",
   arg: ["url", "<x-or-twitter-url>"],
-  scriptFile: "fetch-x.mjs",
+  scriptFile: "fetch-x.sh",
 });
 
 /** All plugin-shipped builtin skills, in display order. */
