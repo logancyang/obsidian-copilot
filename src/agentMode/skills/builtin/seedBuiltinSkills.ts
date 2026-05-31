@@ -82,8 +82,16 @@ export async function seedBuiltinSkills(
       try {
         const existing = seededVersion(await fs.read(skillMdPath));
         // null = no copilot-builtin-version marker → user-authored file; skip.
-        if (existing === null || existing >= skill.version) {
-          continue;
+        if (existing === null) continue;
+        // Version is current — only skip if all support files are also present.
+        // A partial write (e.g. crash after SKILL.md but before .mjs) would
+        // leave the skill advertising a script that doesn't exist; re-seed to
+        // self-heal.
+        if (existing >= skill.version) {
+          const allFilesPresent = await Promise.all(
+            skill.files.map((f) => fs.exists(joinPosix(dir, f.path)))
+          ).then((results) => results.every(Boolean));
+          if (allFilesPresent) continue;
         }
       } catch (e) {
         // Unreadable existing copy — fall through and re-seed.

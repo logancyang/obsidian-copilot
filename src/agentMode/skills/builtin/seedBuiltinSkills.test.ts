@@ -106,10 +106,24 @@ describe("seedBuiltinSkills", () => {
 
   it("does not overwrite a user-authored skill whose name collides with a builtin", async () => {
     // A user created copilot-web-search before it became a builtin — no version marker.
-    const userContent = "---\nname: copilot-web-search\ndescription: my custom search\n---\ncustom body";
+    const userContent =
+      "---\nname: copilot-web-search\ndescription: my custom search\n---\ncustom body";
     const fs = memFs({ [MD]: userContent });
     await seedBuiltinSkills({ skillsFolderRelPath: FOLDER, fs, skills: [skill(1)] });
 
     expect(fs.files.get(MD)).toBe(userContent);
+  });
+
+  it("re-seeds when SKILL.md is current but a support file is missing (partial write recovery)", async () => {
+    // Simulate a crash after SKILL.md was written but before the .mjs script.
+    const fs = memFs({ [MD]: skill(1).skillMd }); // no SCRIPT
+    const { seeded } = await seedBuiltinSkills({
+      skillsFolderRelPath: FOLDER,
+      fs,
+      skills: [skill(1)],
+    });
+
+    expect(seeded).toEqual(["copilot-web-search"]);
+    expect(fs.files.get(SCRIPT)).toBe("// script v1");
   });
 });
