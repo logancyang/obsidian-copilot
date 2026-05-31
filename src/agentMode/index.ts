@@ -249,7 +249,9 @@ export function createAgentSessionManager(app: App, plugin: CopilotPlugin): Agen
           write: (p, c) => adapter.write(p, c),
           mkdir: (p) => adapter.mkdir(p),
         },
-      }).catch((e) => logError("[Skills] builtin skill seeding after folder change failed", e));
+      })
+        .then(() => skillManager.refresh())
+        .catch((e) => logError("[Skills] builtin skill seeding after folder change failed", e));
     }
   });
   // A backend's binary path (or a binary install/update) is resolved at spawn
