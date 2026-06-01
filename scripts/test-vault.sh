@@ -33,6 +33,33 @@ fi
 WORKTREE_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$WORKTREE_ROOT"
 
+# Guard: refuse to run if the worktree lives inside the target vault. Otherwise
+# the build artifacts and source tree become vault content, Obsidian indexes
+# the whole repo on the next reload, and the plugin dir may coincide with the
+# worktree (deploying onto itself).
+WORKTREE_REAL="$(cd "$WORKTREE_ROOT" && pwd -P)"
+VAULT_REAL="$(cd "$VAULT_PATH" && pwd -P)"
+case "$WORKTREE_REAL" in
+  "$VAULT_REAL"|"$VAULT_REAL"/*)
+    cat >&2 <<EOF
+error: the worktree is inside the test vault — refusing to deploy.
+  worktree: $WORKTREE_REAL
+  vault:    $VAULT_REAL
+Move the worktree outside the vault, or point \$COPILOT_TEST_VAULT_PATH
+at a different vault, then re-run.
+EOF
+    exit 1
+    ;;
+esac
+
+# Deployment mode: symlinks by default (macOS / native Linux). Switch to file
+# copy on WSL when the vault lives on a Windows-mounted filesystem — Obsidian
+# on Windows can't resolve WSL-flavored POSIX symlinks stored on DrvFs/9p.
+DEPLOY_MODE="link"
+if [[ "$(uname -r 2>/dev/null)" == *[Mm]icrosoft* ]] && [[ "$VAULT_REAL" == /mnt/* ]]; then
+  DEPLOY_MODE="copy"
+fi
+
 echo "==> Installing dependencies"
 npm install --prefer-offline --no-audit --no-fund
 
@@ -48,13 +75,18 @@ fi
 PLUGIN_DIR="$VAULT_PATH/.obsidian/plugins/$PLUGIN_ID"
 mkdir -p "$PLUGIN_DIR"
 
-echo "==> Linking artifacts into $PLUGIN_DIR"
+echo "==> Deploying artifacts into $PLUGIN_DIR (mode: $DEPLOY_MODE)"
 for f in main.js styles.css; do
   if [[ ! -f "$WORKTREE_ROOT/$f" ]]; then
     echo "error: expected build artifact missing: $WORKTREE_ROOT/$f" >&2
     exit 1
   fi
-  ln -sfn "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
+  rm -f "$PLUGIN_DIR/$f"
+  if [[ "$DEPLOY_MODE" == "copy" ]]; then
+    cp -f "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
+  else
+    ln -sfn "$WORKTREE_ROOT/$f" "$PLUGIN_DIR/$f"
+  fi
 done
 
 # Write a branch- and timestamp-tagged manifest.json (real file, not a symlink)
