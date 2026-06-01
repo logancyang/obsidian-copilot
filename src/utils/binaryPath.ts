@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 
+import { collapseHomeDir } from "@/utils/pathUtils";
 import { resolveNodeToolBinDirs } from "@/utils/nodeToolBinDirs";
 
 /**
@@ -84,4 +85,16 @@ export function detectionSearchDirs(): string[] {
  */
 export function augmentPathForDetection(inherited: string | undefined): string {
   return mergePath(detectionSearchDirs(), inherited);
+}
+
+/**
+ * Format an absolute binary path for display by collapsing the user's home
+ * directory to `~` (e.g. `/Users/alice/.local/bin/claude` →
+ * `~/.local/bin/claude`). Avoids leaking the OS username in the settings UI
+ * and in screenshots users share when reporting issues.
+ *
+ * Display-only — the stored/spawned path keeps its real absolute form.
+ */
+export function formatBinaryPathForDisplay(absolutePath: string): string {
+  return collapseHomeDir(absolutePath, os.homedir(), process.platform === "win32");
 }

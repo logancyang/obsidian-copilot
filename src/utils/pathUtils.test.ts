@@ -1,4 +1,4 @@
-import { basename, joinPosix, normalizeAbsPath, parentDir } from "./pathUtils";
+import { basename, collapseHomeDir, joinPosix, normalizeAbsPath, parentDir } from "./pathUtils";
 
 describe("normalizeAbsPath", () => {
   it("converts backslashes to forward slashes", () => {
@@ -89,5 +89,49 @@ describe("basename", () => {
 
   it("normalizes backslashes before extracting", () => {
     expect(basename("C:\\a\\b\\c.md")).toBe("c.md");
+  });
+});
+
+describe("collapseHomeDir", () => {
+  it("replaces a leading home prefix with ~", () => {
+    expect(collapseHomeDir("/Users/alice/.local/bin/claude", "/Users/alice")).toBe(
+      "~/.local/bin/claude"
+    );
+  });
+
+  it("collapses a path equal to the home directory to ~", () => {
+    expect(collapseHomeDir("/Users/alice", "/Users/alice")).toBe("~");
+  });
+
+  it("tolerates a trailing slash on the home directory", () => {
+    expect(collapseHomeDir("/Users/alice/bin", "/Users/alice/")).toBe("~/bin");
+  });
+
+  it("leaves paths outside the home directory unchanged", () => {
+    expect(collapseHomeDir("/opt/homebrew/bin/codex", "/Users/alice")).toBe(
+      "/opt/homebrew/bin/codex"
+    );
+  });
+
+  it("does not match a sibling dir that shares the home prefix", () => {
+    expect(collapseHomeDir("/Users/alice2/bin", "/Users/alice")).toBe("/Users/alice2/bin");
+  });
+
+  it("preserves Windows separators in the suffix", () => {
+    expect(collapseHomeDir("C:\\Users\\alice\\bin\\codex.exe", "C:\\Users\\alice")).toBe(
+      "~\\bin\\codex.exe"
+    );
+  });
+
+  it("matches case-insensitively when requested (Windows)", () => {
+    expect(collapseHomeDir("C:\\USERS\\Alice\\bin", "C:\\Users\\alice", true)).toBe("~\\bin");
+  });
+
+  it("matches case-sensitively by default", () => {
+    expect(collapseHomeDir("/USERS/alice/bin", "/Users/alice")).toBe("/USERS/alice/bin");
+  });
+
+  it("returns the input unchanged when home is empty", () => {
+    expect(collapseHomeDir("/Users/alice/bin", "")).toBe("/Users/alice/bin");
   });
 });

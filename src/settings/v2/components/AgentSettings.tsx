@@ -11,6 +11,7 @@ import { TruncatedText } from "@/components/TruncatedText";
 import { usePlugin } from "@/contexts/PluginContext";
 import { logError } from "@/logger";
 import { setSettings, useSettingsValue } from "@/settings/model";
+import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { Platform } from "obsidian";
 import React from "react";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
@@ -113,7 +114,7 @@ const BackendSection: React.FC<{
             </div>
             {resolvedPath && (
               <TruncatedText className="tw-max-w-[90%] tw-font-mono tw-text-xs tw-text-muted">
-                {resolvedPath}
+                {formatBinaryPathForDisplay(resolvedPath)}
               </TruncatedText>
             )}
           </div>

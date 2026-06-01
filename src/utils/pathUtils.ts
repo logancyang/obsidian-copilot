@@ -52,3 +52,40 @@ export function resolvesInto(targetAbs: string, rootAbs: string): boolean {
   const r = normalizeAbsPath(rootAbs);
   return t === r || t.startsWith(r + "/");
 }
+
+/**
+ * Collapse a leading home-directory prefix to `~` for privacy-preserving
+ * display, e.g. `/Users/alice/.local/bin/claude` → `~/.local/bin/claude`.
+ *
+ * Display-only: the original separator style is preserved in the suffix
+ * (so a Windows `C:\Users\alice\bin` renders as `~\bin`), and paths that are
+ * not inside the home directory are returned unchanged. Never reuse the result
+ * as a real path — it is not resolvable.
+ *
+ * @param absolutePath The path to format.
+ * @param homeDir The user's home directory (injected so this stays pure/testable).
+ * @param caseInsensitive Match the home prefix case-insensitively (for Windows).
+ * @returns The path with the home prefix replaced by `~`, or unchanged.
+ */
+export function collapseHomeDir(
+  absolutePath: string,
+  homeDir: string,
+  caseInsensitive = false
+): string {
+  if (!absolutePath || !homeDir) return absolutePath;
+  // Strip trailing separators so `/Users/alice/` still matches `/Users/alice`.
+  const normHome = homeDir.replace(/[/\\]+$/, "");
+  if (!normHome) return absolutePath;
+
+  const head = absolutePath.slice(0, normHome.length);
+  const matches = caseInsensitive
+    ? head.toLowerCase() === normHome.toLowerCase()
+    : head === normHome;
+  if (!matches) return absolutePath;
+
+  const rest = absolutePath.slice(normHome.length);
+  if (rest === "") return "~";
+  // Require a real path boundary so `/Users/alice2/...` doesn't match `/Users/alice`.
+  if (rest[0] === "/" || rest[0] === "\\") return "~" + rest;
+  return absolutePath;
+}
