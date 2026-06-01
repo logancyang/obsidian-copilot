@@ -61,6 +61,31 @@ function Find-CodexCommand {
     throw "codex.exe was not found. Checked: $($checked -join '; ')"
 }
 
+function Test-CodexLoggedIn {
+    param([string]$CodexCommand)
+
+    $status = & $CodexCommand login status 2>&1
+    return ($LASTEXITCODE -eq 0 -and (($status -join "`n") -match "Logged in"))
+}
+
+function Wait-CodexLogin {
+    param(
+        [string]$CodexCommand,
+        [int]$TimeoutSeconds = 600
+    )
+
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        if (Test-CodexLoggedIn -CodexCommand $CodexCommand) {
+            return
+        }
+
+        Start-Sleep -Seconds 2
+    }
+
+    throw "Codex login was not completed within $TimeoutSeconds seconds. Run this script again after signing in."
+}
+
 Write-Step "Installing Codex CLI"
 $previousNonInteractive = $env:CODEX_NON_INTERACTIVE
 $env:CODEX_NON_INTERACTIVE = "1"
@@ -80,8 +105,13 @@ $codex = $resolvedCodex.Path
 Add-PathEntryForThisSession -PathEntry $codexBin
 
 Write-Step "Signing in to Codex"
-Write-Host "Follow the Codex login prompts. This script will continue after login finishes."
-& $codex login
+if (Test-CodexLoggedIn -CodexCommand $codex) {
+    Write-Host "Codex is already signed in."
+} else {
+    Write-Host "Follow the Codex login prompts. This script will continue after login finishes."
+    & $codex login
+    Wait-CodexLogin -CodexCommand $codex
+}
 
 Write-Step "Installing codex-acp"
 $arch = if ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture -eq "Arm64") {
