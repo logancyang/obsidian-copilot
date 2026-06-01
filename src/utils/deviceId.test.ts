@@ -1,9 +1,25 @@
 const STORAGE_KEY = "obsidian-copilot:device-id:v1";
+const originalLocalStorage = window.localStorage;
 
 async function loadFreshGetDeviceId(): Promise<() => string> {
   jest.resetModules();
   const mod = await import("@/utils/deviceId");
   return mod.getDeviceId;
+}
+
+function replaceLocalStorage(partial: Partial<Storage>): void {
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: {
+      clear: jest.fn(),
+      getItem: jest.fn(),
+      key: jest.fn(),
+      length: 0,
+      removeItem: jest.fn(),
+      setItem: jest.fn(),
+      ...partial,
+    },
+  });
 }
 
 describe("getDeviceId", () => {
@@ -13,6 +29,10 @@ describe("getDeviceId", () => {
 
   afterEach(() => {
     jest.restoreAllMocks();
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      value: originalLocalStorage,
+    });
   });
 
   it("returns a stable, non-empty id across calls and persists it", async () => {
@@ -40,8 +60,10 @@ describe("getDeviceId", () => {
   });
 
   it("falls back to a stable sentinel when storage reads throw", async () => {
-    jest.spyOn(window.localStorage, "getItem").mockImplementation(() => {
-      throw new Error("restricted");
+    replaceLocalStorage({
+      getItem: () => {
+        throw new Error("restricted");
+      },
     });
     const getDeviceId = await loadFreshGetDeviceId();
     expect(getDeviceId()).toBe("unknown");
@@ -50,8 +72,11 @@ describe("getDeviceId", () => {
   });
 
   it("falls back to a stable sentinel when storage writes throw", async () => {
-    jest.spyOn(window.localStorage, "setItem").mockImplementation(() => {
-      throw new Error("restricted");
+    replaceLocalStorage({
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("restricted");
+      },
     });
     const getDeviceId = await loadFreshGetDeviceId();
     expect(getDeviceId()).toBe("unknown");
