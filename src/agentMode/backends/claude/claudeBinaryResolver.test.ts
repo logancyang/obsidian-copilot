@@ -1,4 +1,5 @@
 import {
+  claudeBinarySearchDirs,
   resolveClaudeBinary,
   type ClaudeBinaryResolverFs,
   type ClaudeBinaryResolverInput,
@@ -237,5 +238,10 @@ describe("resolveClaudeBinary — Windows", () => {
     // running headless. Auto-detect must never select it.
     const guiLauncher = "C:\\Users\\me\\AppData\\Local\\Microsoft\\WindowsApps\\Claude.exe";
     expect(resolveClaudeBinary(winInput(makeFs([guiLauncher])))).toBeNull();
+  });
+
+  it("reports Windows searched dirs with Windows path semantics", () => {
+    const dirs = claudeBinarySearchDirs(winInput(makeFs([])));
+    expect(dirs).toContain("C:\\Users\\me\\.local\\bin");
   });
 });

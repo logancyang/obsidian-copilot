@@ -44,6 +44,18 @@ export function resolveClaudeBinary(input: ClaudeBinaryResolverInput): string | 
   return null;
 }
 
+export function claudeBinarySearchDirs(input: ClaudeBinaryResolverInput): string[] {
+  const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
+  const pathImpl = input.platform === "win32" ? path.win32 : path.posix;
+  return Array.from(
+    new Set(
+      candidates
+        .filter((candidate): candidate is string => Boolean(candidate))
+        .map((candidate) => pathImpl.dirname(candidate))
+    )
+  );
+}
+
 const posix = path.posix;
 const win = path.win32;
 

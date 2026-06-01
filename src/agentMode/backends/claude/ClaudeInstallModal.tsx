@@ -8,7 +8,12 @@ import { setSettings, useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
-import { CLAUDE_INSTALL_COMMAND, detectClaudeCliPath, resolveClaudeCliPath } from "./descriptor";
+import {
+  CLAUDE_INSTALL_COMMAND,
+  claudeCliDetectionSearchDirs,
+  detectClaudeCliPath,
+  resolveClaudeCliPath,
+} from "./descriptor";
 
 /**
  * Configure dialog for the Claude (Agent SDK) backend. The SDK auto-detects the
@@ -52,21 +57,25 @@ const ClaudeConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </p>
         <BinaryPathSetting
           binaryName="claude"
-          placeholder="/absolute/path/to/claude"
+          placeholder={
+            process.platform === "win32"
+              ? "/absolute/path/to/claude.exe"
+              : "/absolute/path/to/claude"
+          }
           initialPath={overridePath}
-          notFoundHint={`claude not found on disk. Install with \`${CLAUDE_INSTALL_COMMAND}\` and try again, or paste a custom path manually.`}
+          notFoundHint="claude not found in known install locations. Run the install command above, then click Auto-detect again."
           onSave={onSaveCustomPath}
           onClear={clearCustomPath}
           persistOnAutoDetect
           detect={() => Promise.resolve(detectClaudeCliPath())}
+          searchedDirs={claudeCliDetectionSearchDirs}
         />
       </ConfigSection>
 
       <ConfigSection title="Authentication">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Credentials inherit from the <code>claude</code> CLI login state — run <code>claude</code>{" "}
-          once to sign in — or set <code>ANTHROPIC_API_KEY</code> (or Bedrock / Vertex env) in your
-          shell.
+          Claude inherits auth from your local <code>claude auth login --claudeai</code>{" "}
+          credentials.
         </p>
       </ConfigSection>
     </ConfigDialogShell>
