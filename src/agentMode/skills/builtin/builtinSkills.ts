@@ -6,19 +6,23 @@ import type { BackendId } from "@/agentMode/session/types";
  * these are seeded into the canonical skills folder by the plugin (see
  * `seedBuiltinSkills`) and refreshed when `version` bumps.
  *
- * Each skill ships a `SKILL.md` (instructions the agent reads) plus one
- * POSIX `sh` script the agent runs with `curl`. The script reads the Copilot
- * Plus license + relay base URL from env vars the plugin injects at spawn time
- * (see `buildCopilotPlusEnv`) and calls the Brevilabs relay directly — no key
- * is embedded in the skill files. A missing/invalid license makes the script
- * exit non-zero with an upgrade prompt the agent relays to the user.
+ * Each skill ships a `SKILL.md` (instructions the agent reads) plus two
+ * runnable scripts: a POSIX `sh` script (run with `curl`) and an equivalent
+ * Node `.mjs` script. Both read the Copilot Plus license + relay base URL from
+ * env vars the plugin injects at spawn time (see `buildCopilotPlusEnv`) and call
+ * the Brevilabs relay directly — no key is embedded in the skill files. A
+ * missing/invalid license makes the script exit non-zero with an upgrade prompt
+ * the agent relays to the user.
  *
- * Why `sh` + `curl` rather than a Node script: the script runs in the *agent's*
- * shell, where `node` is not reliably on PATH (Obsidian launches with a minimal
- * PATH that usually excludes nvm/Volta/Homebrew node). `sh`, `curl`, `sed`, and
- * `base64` live in `/usr/bin` (and git-bash on Windows), so they are reachable
- * regardless of the user's node setup. Scripts are POSIX and invoked as
- * `sh "<path>" <arg>`, so they need neither a node runtime nor an executable bit.
+ * Why ship both an `sh` and a Node script: `sh` + `curl` is preferred because
+ * the script runs in the *agent's* shell, where `sh`, `curl`, `sed`, and
+ * `base64` live in `/usr/bin` and are reachable regardless of the user's node
+ * setup (Obsidian launches with a minimal PATH that usually excludes nvm/Volta/
+ * Homebrew node). But Windows has no `sh` unless Git Bash is installed, so each
+ * skill also ships a Node fallback. SKILL.md tells the agent to try `sh` first,
+ * fall back to `node <script>.mjs`, and — if neither runtime exists — prompt the
+ * user to install Node.js. Scripts need neither extra imports nor an executable
+ * bit.
  */
 export interface BuiltinSkill {
   /** Folder name + SKILL.md `name`. Kebab-case, Copilot-branded. */
@@ -107,6 +111,103 @@ relay() {
 }
 
 /**
+ * Node equivalent of {@link scriptPreamble}, shipped alongside each `.sh` so
+ * Windows users (no `sh` unless Git Bash is installed) still have a runnable
+ * script. Uses Node's global `fetch` (Node 18+) and the built-in `node:` core
+ * modules only — no npm deps, so it runs from a bare vault folder. The `.mjs`
+ * extension forces ESM regardless of any ambient `package.json`, which lets the
+ * per-skill tail use top-level `await`.
+ *
+ * Behaviour mirrors the shell script exactly: same env vars, same relay call,
+ * same 401/403 → upgrade-prompt mapping, same non-zero exits. If the runtime is
+ * older than Node 18 (`fetch` undefined) it exits with a "update Node" message
+ * rather than failing obscurely.
+ */
+function nodeScriptPreamble(): string {
+  return `#!/usr/bin/env node
+// Node fallback for the matching .sh script — for platforms that can't run sh
+// (e.g. Windows without Git Bash). Calls the Brevilabs relay and prints the
+// JSON result to stdout. Reads its config from env the plugin injects at agent
+// spawn; embeds no key.
+const BASE = process.env.${PLUS_ENV.baseUrl} || "";
+const KEY = process.env.${PLUS_ENV.licenseKey} || "";
+const USER_ID = process.env.${PLUS_ENV.userId} || "";
+const CLIENT_VERSION = process.env.${PLUS_ENV.clientVersion} || "";
+const UPGRADE = ${JSON.stringify(UPGRADE_MESSAGE)};
+
+function die(message, code = 2) {
+  process.stderr.write(String(message) + "\\n");
+  process.exit(code);
+}
+
+if (!KEY || !BASE) die(UPGRADE);
+
+// relay(endpoint, body) -> prints the response body, mapping HTTP status.
+async function relay(endpoint, body) {
+  if (typeof fetch !== "function") {
+    die("This fallback needs Node 18 or newer (global fetch). Ask the user to update Node.js.", 1);
+  }
+  let resp;
+  try {
+    resp = await fetch(BASE + endpoint, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: "Bearer " + KEY,
+        "X-Client-Version": CLIENT_VERSION,
+      },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    die("Could not reach the Copilot relay.", 1);
+  }
+  const out = await resp.text();
+  if (resp.status === 401 || resp.status === 403) die(UPGRADE);
+  if (resp.status >= 200 && resp.status < 300) {
+    process.stdout.write(out + "\\n");
+  } else {
+    die("Request failed (HTTP " + resp.status + "): " + out, 1);
+  }
+}
+`;
+}
+
+/**
+ * The SKILL.md "How to run" section shared by every builtin skill. Documents
+ * the `sh` → `node` → install-Node fallback chain so the agent never dead-ends
+ * on a platform that lacks one runtime. `extraNote` appends a skill-specific
+ * sentence (e.g. PDF's "pass an absolute path") before the trailing line.
+ */
+function howToRunSection(opts: {
+  shFile: string;
+  nodeFile: string;
+  argPlaceholder: string;
+  extraNote?: string;
+}): string {
+  const dir = "/absolute/path/to/this/skill/directory";
+  return `## How to run
+
+Find the absolute path to this SKILL.md file on disk, then run the script that
+sits next to it. Prefer the POSIX shell version:
+
+\`\`\`bash
+sh "${dir}/${opts.shFile}" "${opts.argPlaceholder}"
+\`\`\`
+
+If your platform can't run \`sh\` (for example, Windows without Git Bash), run
+the Node version that sits in the same folder instead:
+
+\`\`\`bash
+node "${dir}/${opts.nodeFile}" "${opts.argPlaceholder}"
+\`\`\`
+
+If neither \`sh\` nor \`node\` is available, tell the user to install Node.js
+from https://nodejs.org and run the command again.${opts.extraNote ? ` ${opts.extraNote}` : ""}
+
+Both scripts print the result to stdout.`;
+}
+
+/**
  * Build a skill that maps a single positional argument onto one relay
  * endpoint (the web/YouTube/X tools are identical apart from the endpoint,
  * argument name, and copy). PDF is hand-written below because it reads a
@@ -124,7 +225,8 @@ function relaySkill(opts: {
   scriptFile: string;
 }): BuiltinSkill {
   const [argKey, argPlaceholder] = opts.arg;
-  const version = 2;
+  const nodeScriptFile = opts.scriptFile.replace(/\.sh$/, ".mjs");
+  const version = 3;
   return {
     name: opts.name,
     version,
@@ -142,16 +244,7 @@ metadata:
 
 ${opts.intro}
 
-## How to run
-
-Find the absolute path to this SKILL.md file on disk, then run the script that
-sits next to it:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/${opts.scriptFile}" "${argPlaceholder}"
-\`\`\`
-
-The script prints the result to stdout.
+${howToRunSection({ shFile: opts.scriptFile, nodeFile: nodeScriptFile, argPlaceholder })}
 
 ## If it reports a license problem
 
@@ -166,6 +259,14 @@ or renew — then continue without it.
 ARG="$*"
 [ -n "$ARG" ] || die "Usage: sh ${opts.scriptFile} <${argKey}>" 1
 relay "${opts.endpoint}" "{\\"${argKey}\\":\\"$(json_escape "$ARG")\\",\\"user_id\\":\\"$(json_escape "$USER_ID")\\"}"
+`,
+      },
+      {
+        path: nodeScriptFile,
+        content: `${nodeScriptPreamble()}
+const ARG = process.argv.slice(2).join(" ");
+if (!ARG) die("Usage: node ${nodeScriptFile} <${argKey}>", 1);
+await relay("${opts.endpoint}", { ${argKey}: ARG, user_id: USER_ID });
 `,
       },
     ],
@@ -183,7 +284,7 @@ const WEB_SEARCH = relaySkill({
   scriptFile: "web-search.sh",
 });
 
-const READ_PDF_VERSION = 3;
+const READ_PDF_VERSION = 4;
 const READ_PDF: BuiltinSkill = {
   name: "copilot-read-pdf",
   version: READ_PDF_VERSION,
@@ -202,17 +303,12 @@ metadata:
 Convert a PDF file to Markdown text through Copilot Plus so you can read,
 summarize, or quote it.
 
-## How to run
-
-Find the absolute path to this SKILL.md file on disk, then run the script that
-sits next to it:
-
-\`\`\`bash
-sh "/absolute/path/to/this/skill/directory/read-pdf.sh" "<path-to-file.pdf>"
-\`\`\`
-
-Pass an absolute path to the PDF file. The script prints the extracted Markdown
-to stdout.
+${howToRunSection({
+  shFile: "read-pdf.sh",
+  nodeFile: "read-pdf.mjs",
+  argPlaceholder: "<path-to-file.pdf>",
+  extraNote: "Pass an absolute path to the PDF file.",
+})}
 
 ## If it reports a license problem
 
@@ -231,6 +327,22 @@ FILE=\${1:-}
 # Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
 PDF=$(base64 < "$FILE" | tr -d '\\n')
 relay "/pdf4llm" "{\\"pdf\\":\\"$PDF\\",\\"user_id\\":\\"$(json_escape "$USER_ID")\\"}"
+`,
+    },
+    {
+      path: "read-pdf.mjs",
+      content: `${nodeScriptPreamble()}
+const FILE = process.argv[2] || "";
+if (!FILE) die("Usage: node read-pdf.mjs <path-to-file.pdf>", 1);
+let PDF;
+try {
+  // Mirror brevilabsClient.ts pdf4llm: JSON body with base64-encoded pdf field.
+  const { readFileSync } = await import("node:fs");
+  PDF = readFileSync(FILE).toString("base64");
+} catch {
+  die("Could not read file: " + FILE, 1);
+}
+await relay("/pdf4llm", { pdf: PDF, user_id: USER_ID });
 `,
     },
   ],
