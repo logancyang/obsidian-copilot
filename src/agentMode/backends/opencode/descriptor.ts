@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
 import type CopilotPlugin from "@/main";
@@ -14,7 +16,9 @@ import {
 import { computeInstallState, OpencodeBinaryManager } from "./OpencodeBinaryManager";
 import { opencodeEnabledModelEntries } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
+import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
 import { mapNodeArch, mapNodePlatform } from "./platformResolver";
+import { detectBinary } from "@/utils/detectBinary";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { simpleBinaryBackendProcess } from "@/agentMode/backends/shared/simpleBinaryBackend";
 import type {
@@ -85,6 +89,31 @@ const opencodeWire: ModelWireCodec = {
 export function getOpencodeBinaryManager(plugin: CopilotPlugin): OpencodeBinaryManager {
   if (!managerRef) managerRef = new OpencodeBinaryManager(plugin);
   return managerRef;
+}
+
+/**
+ * Run an auto-detect for an externally-installed `opencode`, ignoring any
+ * stale custom-path override (e.g. a POSIX path synced from a macOS profile
+ * onto Windows). Walks well-known native-install layouts (`~/.opencode/bin`,
+ * `~/.bun/bin`, `~/.local/bin`, `%LOCALAPPDATA%\opencode\bin`, ProgramFiles)
+ * plus the shared node-tool dirs, then falls back to a PATH walk via
+ * `detectBinary` so users with a non-standard install dir on PATH still match.
+ * Independent of the managed binary.
+ */
+export async function detectOpencodeCliPath(): Promise<string | null> {
+  const fromResolver = resolveOpencodeBinary({
+    override: undefined,
+    homeDir: os.homedir(),
+    platform: process.platform,
+    env: process.env,
+    fs: {
+      existsSync: (p) => fs.existsSync(p),
+      readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      readdirSync: (p) => fs.readdirSync(p),
+    },
+  });
+  if (fromResolver) return fromResolver;
+  return detectBinary("opencode");
 }
 
 /**

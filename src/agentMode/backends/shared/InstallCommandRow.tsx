@@ -6,7 +6,7 @@ import React from "react";
 interface Props {
   /** Shell command to display and copy. */
   command: string;
-  /** Label above the command block. Defaults to "Install command". */
+  /** Label above the command block. Defaults to the platform-aware install label. */
   label?: string;
 }
 
@@ -14,7 +14,10 @@ interface Props {
  * A copy-able shell command block (install instructions) with a Copy button.
  * Shared by the Claude and Codex Configure dialogs.
  */
-export const InstallCommandRow: React.FC<Props> = ({ command, label = "Install command" }) => {
+const DEFAULT_LABEL =
+  process.platform === "win32" ? "Install command (Windows PowerShell)" : "Install command";
+
+export const InstallCommandRow: React.FC<Props> = ({ command, label = DEFAULT_LABEL }) => {
   const copy = React.useCallback((): void => {
     navigator.clipboard.writeText(command).catch((e) => {
       logError("[AgentMode] copy install command failed", e);

@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as os from "node:os";
 import type CopilotPlugin from "@/main";
 import {
   subscribeToSettingsChange,
@@ -22,9 +24,14 @@ import type {
   ModelWireCodec,
 } from "@/agentMode/session/types";
 import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import { detectBinary } from "@/utils/detectBinary";
+import { codexAcpSearchDirs, resolveCodexAcpBinary } from "./codexBinaryResolver";
 
 export const CODEX_BINARY_NAME = "codex-acp";
-export const CODEX_INSTALL_COMMAND = "npm install -g @zed-industries/codex-acp";
+export const CODEX_INSTALL_COMMAND =
+  process.platform === "win32"
+    ? "irm https://gist.githubusercontent.com/logancyang/380ef4dbf9f98900771da76eca3d21e6/raw/install-codex-agent-mode-windows.ps1 | iex"
+    : "npm install -g @zed-industries/codex-acp";
 
 /**
  * Vocabulary mirrors codex-acp's advertised efforts. `minimal` is included
@@ -35,6 +42,29 @@ const KNOWN_CODEX_EFFORTS = new Set(["minimal", "low", "medium", "high", "xhigh"
 
 export function updateCodexFields(partial: Partial<CodexBackendSettings>): void {
   updateAgentModeBackendFields("codex", partial);
+}
+
+function codexAcpResolverEnv(): Parameters<typeof resolveCodexAcpBinary>[0] {
+  return {
+    homeDir: os.homedir(),
+    platform: process.platform,
+    env: process.env,
+    fs: {
+      existsSync: (p) => fs.existsSync(p),
+      readFileSync: (p, encoding) => fs.readFileSync(p, encoding),
+      readdirSync: (p) => fs.readdirSync(p),
+    },
+  };
+}
+
+export async function detectCodexAcpPath(): Promise<string | null> {
+  const fromResolver = resolveCodexAcpBinary(codexAcpResolverEnv());
+  if (fromResolver) return fromResolver;
+  return detectBinary(CODEX_BINARY_NAME);
+}
+
+export function codexAcpDetectionSearchDirs(): string[] {
+  return codexAcpSearchDirs(codexAcpResolverEnv());
 }
 
 /**

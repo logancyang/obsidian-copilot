@@ -12,7 +12,7 @@ import {
 } from "@/settings/model";
 import type { AgentSession } from "@/agentMode/session/AgentSession";
 import { MethodUnsupportedError } from "@/agentMode/session/errors";
-import { resolveClaudeBinary } from "./claudeBinaryResolver";
+import { claudeBinarySearchDirs, resolveClaudeBinary } from "./claudeBinaryResolver";
 import { getClaudeAuthStatus, signInToClaude } from "./claudeAuth";
 import { agentOriginEnabledModelEntries } from "@/agentMode/backends/shared/agentEnabledModels";
 import { ClaudeSdkBackendProcess } from "@/agentMode/sdk/ClaudeSdkBackendProcess";
@@ -31,7 +31,10 @@ import { ClaudeInstallModal } from "./ClaudeInstallModal";
 import ClaudeLogo from "./logo.svg";
 import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
 
-export const CLAUDE_INSTALL_COMMAND = "npm install -g @anthropic-ai/claude-code";
+export const CLAUDE_INSTALL_COMMAND =
+  process.platform === "win32"
+    ? "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex"
+    : "npm install -g @anthropic-ai/claude-code";
 
 export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {
   updateAgentModeBackendFields("claude", partial);
@@ -108,6 +111,10 @@ export function resolveClaudeCliPath(settings: CopilotSettings): string | null {
  */
 export function detectClaudeCliPath(): string | null {
   return resolveClaudeBinary({ override: undefined, ...claudeResolverEnv() });
+}
+
+export function claudeCliDetectionSearchDirs(): string[] {
+  return claudeBinarySearchDirs({ override: undefined, ...claudeResolverEnv() });
 }
 
 /**

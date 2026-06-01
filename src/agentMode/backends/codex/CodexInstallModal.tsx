@@ -8,13 +8,18 @@ import { useSettingsValue } from "@/settings/model";
 import { validateExecutableFile } from "@/utils/detectBinary";
 import { App, Notice } from "obsidian";
 import React from "react";
-import { CODEX_BINARY_NAME, CODEX_INSTALL_COMMAND, updateCodexFields } from "./descriptor";
+import {
+  CODEX_BINARY_NAME,
+  CODEX_INSTALL_COMMAND,
+  codexAcpDetectionSearchDirs,
+  detectCodexAcpPath,
+  updateCodexFields,
+} from "./descriptor";
 
 /**
- * Configure dialog for the Codex backend. Codex spawns the self-contained
- * `codex-acp` binary (it bundles the Codex engine as Rust crates — no separate
- * `codex` CLI is needed at runtime). The dialog configures the codex-acp path
- * and gives auth guidance; the `codex` CLI is only relevant for `codex login`.
+ * Configure dialog for the Codex backend. Copilot spawns the native
+ * `codex-acp` ACP adapter. The dialog configures the codex-acp path
+ * and gives auth guidance; `codex login` owns the user's auth state.
  */
 const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
   const settings = useSettingsValue();
@@ -48,9 +53,11 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
         </p>
         <BinaryPathSetting
           binaryName={CODEX_BINARY_NAME}
-          placeholder="/absolute/path/to/codex-acp"
+          placeholder="/absolute/path/to/codex-acp.exe"
           initialPath={binaryPath}
-          notFoundHint={`${CODEX_BINARY_NAME} not found on PATH. Run the install command above, then click Auto-detect again.`}
+          notFoundHint={`${CODEX_BINARY_NAME} not found in known install locations or PATH. Run the install command above, then click Auto-detect again.`}
+          detect={detectCodexAcpPath}
+          searchedDirs={codexAcpDetectionSearchDirs}
           onSave={onSavePath}
           onClear={clearCodexPath}
           persistOnAutoDetect
@@ -59,8 +66,7 @@ const CodexConfigBody: React.FC<{ onClose: () => void }> = ({ onClose }) => {
 
       <ConfigSection title="Authentication">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
-          Codex inherits auth from your local <code>codex login</code> credentials, or from{" "}
-          <code>OPENAI_API_KEY</code> / <code>CODEX_API_KEY</code> exported in your shell.
+          Codex inherits auth from your local <code>codex login</code> credentials.
         </p>
       </ConfigSection>
     </ConfigDialogShell>
