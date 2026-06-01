@@ -33,7 +33,7 @@ import { ClaudeSettingsPanel } from "./ClaudeSettingsPanel";
 
 export const CLAUDE_INSTALL_COMMAND =
   process.platform === "win32"
-    ? "irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/v4-preview/docs/install-claude-agent-mode-windows.ps1 | iex"
+    ? "irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex"
     : "npm install -g @anthropic-ai/claude-code";
 
 export function updateClaudeFields(partial: Partial<ClaudeBackendSettings>): void {

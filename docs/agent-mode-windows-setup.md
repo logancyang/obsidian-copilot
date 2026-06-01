@@ -7,7 +7,7 @@ Use this guide to connect Claude Code or Codex to Copilot Agent Mode on Windows.
 Run this in **PowerShell**:
 
 ```powershell
-irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/v4-preview/docs/install-claude-agent-mode-windows.ps1 | iex
+irm https://gist.githubusercontent.com/logancyang/7a87eb38d91015eac567521f8cc9c729/raw/install-claude-agent-mode-windows.ps1 | iex
 ```
 
 When Claude asks you to sign in, finish the browser login. The installer copies the `claude.exe` path to your clipboard.
@@ -23,7 +23,7 @@ Open a Copilot chat, switch to **Agent Mode**, pick **Claude**, and send a messa
 Run this in **PowerShell**:
 
 ```powershell
-irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/v4-preview/docs/install-codex-agent-mode-windows.ps1 | iex
+irm https://gist.githubusercontent.com/logancyang/380ef4dbf9f98900771da76eca3d21e6/raw/install-codex-agent-mode-windows.ps1 | iex
 ```
 
 When Codex asks you to sign in, finish the login. The installer copies the `codex-acp.exe` path to your clipboard.
