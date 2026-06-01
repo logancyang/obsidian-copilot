@@ -21,6 +21,46 @@ function Add-PathEntryForThisSession {
     $env:Path = "$PathEntry;$env:Path"
 }
 
+function Find-CodexCommand {
+    $candidateBins = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
+        $candidateBins += $env:CODEX_INSTALL_DIR
+    }
+
+    $pathCommand = Get-Command "codex" -ErrorAction SilentlyContinue
+    if ($null -ne $pathCommand -and -not [string]::IsNullOrWhiteSpace($pathCommand.Source)) {
+        $candidateBins += (Split-Path -Parent $pathCommand.Source)
+    }
+
+    $candidateBins += (Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin")
+    $candidateBins += (Join-Path $env:LOCALAPPDATA "OpenAI\Codex\bin")
+
+    $seen = @{}
+    $checked = @()
+    foreach ($bin in $candidateBins) {
+        if ([string]::IsNullOrWhiteSpace($bin)) {
+            continue
+        }
+
+        $key = $bin.TrimEnd("\").ToLowerInvariant()
+        if ($seen.ContainsKey($key)) {
+            continue
+        }
+        $seen[$key] = $true
+
+        $candidate = Join-Path $bin "codex.exe"
+        $checked += $candidate
+        if (Test-Path -LiteralPath $candidate -PathType Leaf) {
+            return [PSCustomObject]@{
+                Bin  = $bin
+                Path = $candidate
+            }
+        }
+    }
+
+    throw "codex.exe was not found. Checked: $($checked -join '; ')"
+}
+
 Write-Step "Installing Codex CLI"
 $previousNonInteractive = $env:CODEX_NON_INTERACTIVE
 $env:CODEX_NON_INTERACTIVE = "1"
@@ -34,15 +74,9 @@ try {
     }
 }
 
-$codexBin = if ([string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
-    Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin"
-} else {
-    $env:CODEX_INSTALL_DIR
-}
-$codex = Join-Path $codexBin "codex.exe"
-if (-not (Test-Path -LiteralPath $codex -PathType Leaf)) {
-    throw "codex.exe was not found at $codex"
-}
+$resolvedCodex = Find-CodexCommand
+$codexBin = $resolvedCodex.Bin
+$codex = $resolvedCodex.Path
 Add-PathEntryForThisSession -PathEntry $codexBin
 
 Write-Step "Signing in to Codex"
