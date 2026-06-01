@@ -39,6 +39,17 @@ interface ChatHistoryPopoverProps {
    * returns `undefined` (or is not supplied), the row falls back to
    * `MessageCircle`. */
   getIcon?: ChatHistoryIconResolver;
+  /**
+   * Preferred open direction, chosen by the trigger's geometry — not the
+   * platform. Defaults suit a trigger pinned to the bottom of the pane (the
+   * control-bar History button): open upward, right-aligned. The landing's
+   * full-width "View all" row passes `side="bottom" align="start"` so it opens
+   * downward like an accordion. Radix still flips/shifts to stay on-screen, so
+   * these are preferences, not hard positions (mobile and narrow sidebars are
+   * handled by that collision avoidance, not by branching on `Platform`).
+   */
+  side?: "top" | "right" | "bottom" | "left";
+  align?: "start" | "center" | "end";
 }
 
 export function ChatHistoryPopover({
@@ -49,6 +60,8 @@ export function ChatHistoryPopover({
   onLoadChat,
   onOpenSourceFile,
   getIcon,
+  side = "top",
+  align = "end",
 }: ChatHistoryPopoverProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -278,7 +291,16 @@ export function ChatHistoryPopover({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>{children}</PopoverTrigger>
-      <PopoverContent className="tw-w-80 tw-p-0" align="end" side="top">
+      {/* collisionPadding keeps the content off the screen bezel when Radix
+          flips/shifts it (default is 0 — it would otherwise hug the edge on
+          mobile / narrow sidebars); the max-w cap stops the 320px content from
+          overflowing a very small viewport. */}
+      <PopoverContent
+        className="tw-w-80 tw-max-w-[calc(100vw-2rem)] tw-p-0"
+        align={align}
+        side={side}
+        collisionPadding={16}
+      >
         <div className="tw-flex tw-max-h-[400px] tw-flex-col">
           <div className="tw-shrink-0 tw-border-b tw-p-1">
             <SearchBar value={searchQuery} onChange={setSearchQuery} />

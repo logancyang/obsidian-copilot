@@ -1,7 +1,6 @@
-import AgentChat from "@/agentMode/ui/AgentChat";
 import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
+import { AgentHome } from "@/agentMode/ui/AgentHome";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
-import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
 import {
   useActiveBackendDescriptor,
   useBackendInstallState,
@@ -84,23 +83,18 @@ export const AgentModeChat: React.FC<Props> = ({
   const activeSession = manager.getActiveSession();
   const backend = manager.getActiveChatUIState();
   if (activeSession && backend) {
+    // AgentHome owns the tab strip + chat surface and persists across tab
+    // switches: it keys input drafts by session id internally, so switching
+    // tabs swaps the active draft rather than remounting and discarding input.
     return (
-      <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
-        <AgentTabStrip manager={manager} />
-        {/* key by session id so React remounts AgentChat on tab switch —
-            this rebinds input/loading state and re-runs the backend
-            subscribe effect against the new session. */}
-        <div className="tw-min-h-0 tw-flex-1">
-          <AgentChat
-            key={activeSession.internalId}
-            backend={backend}
-            manager={manager}
-            plugin={plugin}
-            onSaveChat={onSaveChat}
-            updateUserMessageHistory={updateUserMessageHistory}
-          />
-        </div>
-      </div>
+      <AgentHome
+        backend={backend}
+        sessionId={activeSession.internalId}
+        manager={manager}
+        plugin={plugin}
+        onSaveChat={onSaveChat}
+        updateUserMessageHistory={updateUserMessageHistory}
+      />
     );
   }
 
