@@ -56,6 +56,7 @@ This is the future we believe in. If you share this vision, please support this 
 - [The What](#the-what)
 - [The Why](#the-why)
 - [Key Features](#key-features)
+- [Copilot v4: Agent Mode, Reimagined 🚀](#copilot-v4-agent-mode-reimagined-)
 - [Copilot V3 is a New Era 🔥](#copilot-v3-is-a-new-era-)
 - [Why People Love It ❤️](#why-people-love-it-️)
 - [Get Started](#get-started)
@@ -77,6 +78,12 @@ This is the future we believe in. If you share this vision, please support this 
 - [**🙏 Thank You**](#-thank-you)
 - [**Copilot Plus Disclosure**](#copilot-plus-disclosure)
 - [**Authors**](#authors)
+
+## Copilot v4: Agent Mode, Reimagined 🚀
+
+Our biggest leap yet. **Copilot v4** lets you run the most capable coding agents available — **opencode**, **Claude Code**, or **Codex** — natively inside your vault, tuned for knowledge work and entirely on your terms. Bring your own agent, keep every note on your device, and let it plan, search, and act across your Second Brain. No lock-in, no compromise.
+
+👉 **[Discover Copilot v4 →](https://www.obsidiancopilot.com/v4)**
 
 ## Copilot V3 is a New Era 🔥
 
