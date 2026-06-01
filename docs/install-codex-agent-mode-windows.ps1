@@ -22,50 +22,70 @@ function Add-PathEntryForThisSession {
 }
 
 function Find-CodexCommand {
-    $candidateBins = @()
+    $candidatePaths = @()
     if (-not [string]::IsNullOrWhiteSpace($env:CODEX_INSTALL_DIR)) {
-        $candidateBins += $env:CODEX_INSTALL_DIR
+        $candidatePaths += (Join-Path $env:CODEX_INSTALL_DIR "codex.exe")
+    }
+
+    $candidatePaths += (Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin\codex.exe")
+    $candidatePaths += (Join-Path $env:LOCALAPPDATA "OpenAI\Codex\bin\codex.exe")
+
+    $localOpenAIBin = Join-Path $env:LOCALAPPDATA "OpenAI\Codex\bin"
+    if (Test-Path -LiteralPath $localOpenAIBin -PathType Container) {
+        $candidatePaths += Get-ChildItem -LiteralPath $localOpenAIBin -Directory -ErrorAction SilentlyContinue |
+            ForEach-Object { Join-Path $_.FullName "codex.exe" }
     }
 
     $pathCommand = Get-Command "codex" -ErrorAction SilentlyContinue
     if ($null -ne $pathCommand -and -not [string]::IsNullOrWhiteSpace($pathCommand.Source)) {
-        $candidateBins += (Split-Path -Parent $pathCommand.Source)
+        $candidatePaths += $pathCommand.Source
     }
-
-    $candidateBins += (Join-Path $env:LOCALAPPDATA "Programs\OpenAI\Codex\bin")
-    $candidateBins += (Join-Path $env:LOCALAPPDATA "OpenAI\Codex\bin")
 
     $seen = @{}
     $checked = @()
-    foreach ($bin in $candidateBins) {
-        if ([string]::IsNullOrWhiteSpace($bin)) {
+    foreach ($candidate in $candidatePaths) {
+        if ([string]::IsNullOrWhiteSpace($candidate)) {
             continue
         }
 
-        $key = $bin.TrimEnd("\").ToLowerInvariant()
+        $key = $candidate.ToLowerInvariant()
         if ($seen.ContainsKey($key)) {
             continue
         }
         $seen[$key] = $true
 
-        $candidate = Join-Path $bin "codex.exe"
         $checked += $candidate
         if (Test-Path -LiteralPath $candidate -PathType Leaf) {
-            return [PSCustomObject]@{
-                Bin  = $bin
-                Path = $candidate
+            try {
+                & $candidate --version *> $null
+                if ($LASTEXITCODE -eq 0) {
+                    return [PSCustomObject]@{
+                        Bin  = Split-Path -Parent $candidate
+                        Path = $candidate
+                    }
+                }
+            } catch {
+                continue
             }
         }
     }
 
-    throw "codex.exe was not found. Checked: $($checked -join '; ')"
+    throw "A runnable codex.exe was not found. Checked: $($checked -join '; ')"
 }
 
 function Test-CodexLoggedIn {
     param([string]$CodexCommand)
 
-    $status = & $CodexCommand login status 2>&1
-    return ($LASTEXITCODE -eq 0 -and (($status -join "`n") -match "Logged in"))
+    $previousErrorActionPreference = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        $status = & $CodexCommand login status 2>&1
+        return ($LASTEXITCODE -eq 0 -and (($status -join "`n") -match "Logged in"))
+    } catch {
+        return $false
+    } finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
 }
 
 function Wait-CodexLogin {
