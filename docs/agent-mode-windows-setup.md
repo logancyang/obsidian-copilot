@@ -4,29 +4,19 @@ Use this guide to connect Claude Code or Codex to Copilot Agent Mode on Windows.
 
 ## Claude Code
 
-Run these in **PowerShell**, in order:
+Run this in **PowerShell**:
 
 ```powershell
-# 1. Install Claude Code (standalone, no Node.js needed)
-irm https://claude.ai/install.ps1 | iex
-
-# 2. Add it to PATH for this session and sign in
-$env:Path += ";$env:USERPROFILE\.local\bin"
-claude
+irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/v4-preview/docs/install-claude-agent-mode-windows.ps1 | iex
 ```
 
-Finish signing in when `claude` opens, then close it.
+When Claude asks you to sign in, finish the login, then close Claude. The installer copies the `claude.exe` path to your clipboard.
 
-```powershell
-# 3. Print the exact binary path to paste into Copilot
-(Resolve-Path "$env:USERPROFILE\.local\bin\claude.exe").Path
-```
-
-In Obsidian: **Settings -> Copilot -> Agent Mode -> Claude -> Configure -> Auto-detect**. If it doesn't find Claude, paste the path from step 3 into the binary path field.
+In Obsidian: **Settings -> Copilot -> Agent Mode -> Claude -> Configure -> Auto-detect**. If it doesn't find Claude, paste the copied path into the binary path field, then save.
 
 Open a Copilot chat, switch to **Agent Mode**, pick **Claude**, and send a message.
 
-> A "not in your PATH" warning after step 1 is normal and does not matter: Copilot finds Claude by file path, not PATH.
+> A "not in your PATH" warning is normal and does not matter: Copilot finds Claude by file path, not PATH.
 
 ## Codex
 
