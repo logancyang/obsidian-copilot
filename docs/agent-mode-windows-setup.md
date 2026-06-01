@@ -10,9 +10,9 @@ Run this in **PowerShell**:
 irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/v4-preview/docs/install-claude-agent-mode-windows.ps1 | iex
 ```
 
-When Claude asks you to sign in, finish the login, then close Claude. The installer copies the `claude.exe` path to your clipboard.
+When Claude asks you to sign in, finish the browser login. The installer copies the `claude.exe` path to your clipboard.
 
-In Obsidian: **Settings -> Copilot -> Agent Mode -> Claude -> Configure -> Auto-detect**. If it doesn't find Claude, paste the copied path into the binary path field, then save.
+In Obsidian: **Settings -> Copilot -> Agents -> Claude -> Configure -> Auto-detect**. If it doesn't find Claude, paste the copied path into the binary path field, then save.
 
 Open a Copilot chat, switch to **Agent Mode**, pick **Claude**, and send a message.
 
@@ -28,7 +28,7 @@ irm https://raw.githubusercontent.com/logancyang/obsidian-copilot/v4-preview/doc
 
 When Codex asks you to sign in, finish the login. The installer copies the `codex-acp.exe` path to your clipboard.
 
-In Obsidian: **Settings -> Copilot -> Agent Mode -> Codex -> Configure**. Paste the copied path into the binary path field, leave **Environment variables** empty, then save.
+In Obsidian: **Settings -> Copilot -> Agents -> Codex -> Configure**. Paste the copied path into the binary path field, leave **Environment variables** empty, then save.
 
 Open a Copilot chat, switch to **Agent Mode**, pick **Codex**, and send a message.
 

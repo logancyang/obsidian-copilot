@@ -31,7 +31,8 @@ export function resolveCodexAcpBinary(input: CodexAcpBinaryResolverInput): strin
 
 export function codexAcpSearchDirs(input: CodexAcpBinaryResolverInput): string[] {
   const candidates = input.platform === "win32" ? windowsCandidates(input) : unixCandidates(input);
-  return Array.from(new Set(candidates.map((candidate) => path.dirname(candidate))));
+  const pathImpl = input.platform === "win32" ? path.win32 : path.posix;
+  return Array.from(new Set(candidates.map((candidate) => pathImpl.dirname(candidate))));
 }
 
 const posix = path.posix;

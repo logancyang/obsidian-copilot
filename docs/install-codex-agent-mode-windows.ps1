@@ -171,5 +171,5 @@ Write-Host ""
 Write-Host "Done. $clipboardMessage"
 Write-Host $acp
 Write-Host ""
-Write-Host "Next: Obsidian -> Settings -> Copilot -> Agent Mode -> Codex -> Configure"
+Write-Host "Next: Obsidian -> Settings -> Copilot -> Agents -> Codex -> Configure"
 Write-Host "Paste this path into the binary path field, leave Environment variables empty, then save."
