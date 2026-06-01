@@ -15,7 +15,7 @@ interface Props {
  * Shared by the Claude and Codex Configure dialogs.
  */
 const DEFAULT_LABEL =
-  process.platform === "win32" ? "Install command (Windows)" : "Install command";
+  process.platform === "win32" ? "Install command (Windows PowerShell)" : "Install command";
 
 export const InstallCommandRow: React.FC<Props> = ({ command, label = DEFAULT_LABEL }) => {
   const copy = React.useCallback((): void => {
