@@ -134,4 +134,25 @@ describe("collapseHomeDir", () => {
   it("returns the input unchanged when home is empty", () => {
     expect(collapseHomeDir("/Users/alice/bin", "")).toBe("/Users/alice/bin");
   });
+
+  // Windows: path stored with forward slashes, os.homedir() returns backslashes.
+  it("matches when absolutePath uses forward slashes but homeDir uses backslashes", () => {
+    expect(collapseHomeDir("C:/Users/Alice/bin/codex.exe", "C:\\Users\\Alice", true)).toBe(
+      "~/bin/codex.exe"
+    );
+  });
+
+  // Windows: path stored with backslashes, os.homedir() returns forward slashes.
+  it("matches when absolutePath uses backslashes but homeDir uses forward slashes", () => {
+    expect(collapseHomeDir("C:\\Users\\Alice\\bin\\codex.exe", "C:/Users/Alice", true)).toBe(
+      "~\\bin\\codex.exe"
+    );
+  });
+
+  // Mixed separators in the suffix must be preserved as-is after the tilde.
+  it("preserves original suffix separators when separators are mixed", () => {
+    expect(collapseHomeDir("C:/Users/Alice\\bin/codex.exe", "C:\\Users\\Alice", true)).toBe(
+      "~\\bin/codex.exe"
+    );
+  });
 });
