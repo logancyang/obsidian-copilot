@@ -367,18 +367,22 @@ function chunkContentByLines(file: TFile, content: string): NoteChunk[] {
   return chunks;
 }
 
-// Models occasionally send numeric tool args as strings; coerce here rather than in the
-// schema. A schema-level transform/preprocess cannot be represented in JSON Schema, which
-// breaks bindTools() -> toJSONSchema() for the autonomous agent.
-const coerceChunkIndex = (value: number | string | undefined): number => {
-  if (typeof value === "number") {
-    return Number.isFinite(value) ? value : 0;
+// Models occasionally send numeric tool args as strings, so the schema accepts a string and
+// we coerce here rather than in the schema: a schema-level transform/preprocess cannot be
+// represented in JSON Schema, which breaks bindTools() -> toJSONSchema() for the autonomous
+// agent. Validation that the old `z.number().int().min(0)` schema performed now lives here:
+// an omitted value defaults to the first chunk (0); anything that is not a non-negative
+// integer returns null so the caller can surface a validation error instead of indexing the
+// chunk array out of bounds.
+const coerceChunkIndex = (value: number | string | undefined): number | null => {
+  if (value === undefined) {
+    return 0;
   }
-  if (typeof value === "string") {
-    const parsed = Number(value.trim());
-    return Number.isFinite(parsed) ? parsed : 0;
+  const parsed = typeof value === "string" ? Number(value.trim()) : value;
+  if (!Number.isInteger(parsed) || parsed < 0) {
+    return null;
   }
-  return 0;
+  return parsed;
 };
 
 const readNoteSchema = z.object({
@@ -409,6 +413,15 @@ const createReadNoteTool = (app: App) =>
           notePath: sanitizedPath,
           status: "invalid_path",
           message: "Provide the note path relative to the vault root without a leading slash.",
+        };
+      }
+
+      if (chunkIndex === null) {
+        return {
+          notePath: sanitizedPath,
+          status: "invalid_chunk_index",
+          message:
+            "chunkIndex must be a non-negative integer (0-based). Omit it to read the first chunk.",
         };
       }
 
