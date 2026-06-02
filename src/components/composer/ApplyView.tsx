@@ -1,14 +1,15 @@
 import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { getSettings, updateSetting } from "@/settings/model";
+import { ApplyViewResult } from "@/types";
+import { ensureFolderExists } from "@/utils";
+import { createPluginRoot } from "@/utils/react/createPluginRoot";
 import { Change } from "diff";
 import { App, ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import React, { useMemo, useState } from "react";
-import { createRoot } from "react-dom/client";
+import { Root } from "react-dom/client";
 import { Button } from "../ui/button";
 import { SettingSwitch } from "../ui/setting-switch";
-import { ApplyViewResult } from "@/types";
-import { ensureFolderExists } from "@/utils";
 import { PierreRenderer } from "./PierreRenderer";
 
 export const APPLY_VIEW_TYPE = "obsidian-copilot-apply-view";
@@ -26,7 +27,7 @@ export interface ApplyViewState {
  * accepted version back to disk.
  */
 export class ApplyView extends ItemView {
-  private root: ReturnType<typeof createRoot> | null = null;
+  private root: Root | null = null;
   private state: ApplyViewState | null = null;
   private result: ApplyViewResult | null = null;
 
@@ -68,10 +69,11 @@ export class ApplyView extends ItemView {
 
     // Force the React root to fill the leaf — without this it collapses to
     // content height and the floating Accept/Reject bar scrolls off.
-    const rootEl = contentEl.createDiv();
-    rootEl.style.cssText = "height:100%;display:flex;flex-direction:column;min-height:0;";
+    const rootEl = contentEl.createDiv({
+      cls: "tw-flex tw-h-full tw-min-h-0 tw-flex-col",
+    });
     if (!this.root) {
-      this.root = createRoot(rootEl);
+      this.root = createPluginRoot(rootEl, this.app);
     }
 
     this.root.render(
@@ -174,7 +176,8 @@ const ApplyViewRoot: React.FC<ApplyViewRootProps> = ({ app, state, close }) => {
       close(ok ? "accepted" : "failed");
     } catch (error) {
       logError("Error applying changes:", error);
-      new Notice(`Error applying changes: ${error.message}`);
+      const message = error instanceof Error ? error.message : String(error);
+      new Notice(`Error applying changes: ${message}`);
       close("failed");
     }
   };

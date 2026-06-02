@@ -95,10 +95,8 @@ export const LineAcceptRejectRenderer: React.FC<LineAcceptRejectRendererProps> =
     });
   };
 
-  const acceptAll = () =>
-    setDecisions(new Map(changes.map((c) => [keyOf(c), "accept" as Decision])));
-  const rejectAll = () =>
-    setDecisions(new Map(changes.map((c) => [keyOf(c), "reject" as Decision])));
+  const acceptAll = () => setDecisions(new Map(changes.map((c) => [keyOf(c), "accept"])));
+  const rejectAll = () => setDecisions(new Map(changes.map((c) => [keyOf(c), "reject"])));
 
   const applyDecisions = () => {
     const result = reconstructFromLineDecisions(oldText, parsed, decisions);

@@ -85,9 +85,7 @@ describe("reconstructFromHunkDecisions", () => {
 
   it("returns oldText when every hunk is rejected", () => {
     const { parsed } = analyzePatch("f.md", OLD, NEW);
-    const decisions = new Map<number, Decision>(
-      parsed.hunks.map((_, i) => [i, "reject" as Decision])
-    );
+    const decisions = new Map<number, Decision>(parsed.hunks.map((_, i) => [i, "reject"]));
     const result = reconstructFromHunkDecisions(OLD, parsed, decisions);
     expect(result).toBe(OLD);
   });
