@@ -125,17 +125,13 @@ const writeFileSchema = z.object({
               {"id": "e1-2", "fromNode": "1", "toNode": "2", "fromSide": "right", "toSide": "left", "color": "3", "label": "links to"}
             ]
           }`),
+  // Accept boolean or string (some models stringify) without a schema-level transform: a
+  // transform/preprocess cannot be represented in JSON Schema, which breaks bindTools() ->
+  // toJSONSchema() for the autonomous agent. The value is only a hint and is not read at
+  // runtime — preview is gated solely by settings.autoAcceptEdits below.
   confirmation: z
-    .preprocess((val) => {
-      if (typeof val === "string") {
-        const lc = val.trim().toLowerCase();
-        if (lc === "true") return true;
-        if (lc === "false") return false;
-      }
-      return val;
-    }, z.boolean())
+    .union([z.boolean(), z.string()])
     .optional()
-    .default(true)
     .describe(
       `(Optional) Hint for confirmation preference. Note: preview is always shown unless the user has enabled auto-accept in settings.`
     ),

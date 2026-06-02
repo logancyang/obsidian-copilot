@@ -367,6 +367,20 @@ function chunkContentByLines(file: TFile, content: string): NoteChunk[] {
   return chunks;
 }
 
+// Models occasionally send numeric tool args as strings; coerce here rather than in the
+// schema. A schema-level transform/preprocess cannot be represented in JSON Schema, which
+// breaks bindTools() -> toJSONSchema() for the autonomous agent.
+const coerceChunkIndex = (value: number | string | undefined): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.trim());
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+};
+
 const readNoteSchema = z.object({
   notePath: z
     .string()
@@ -375,17 +389,7 @@ const readNoteSchema = z.object({
       "Full path to the note (relative to the vault root) that needs to be read, such as 'Projects/plan.md'."
     ),
   chunkIndex: z
-    .preprocess((value) => {
-      if (typeof value === "string") {
-        const trimmed = value.trim();
-        if (trimmed.length === 0) {
-          return undefined;
-        }
-        const parsed = Number(trimmed);
-        return Number.isFinite(parsed) ? parsed : value;
-      }
-      return value;
-    }, z.number().int().min(0))
+    .union([z.number().int().min(0), z.string()])
     .optional()
     .describe("0-based chunk index to read. Omit to read the first chunk."),
 });
@@ -396,7 +400,8 @@ const createReadNoteTool = (app: App) =>
     description:
       "Read a single note in search v3 sized chunks. Use only when you already know the exact note path and need its contents.",
     schema: readNoteSchema,
-    func: async ({ notePath, chunkIndex = 0 }) => {
+    func: async ({ notePath, chunkIndex: rawChunkIndex }) => {
+      const chunkIndex = coerceChunkIndex(rawChunkIndex);
       const sanitizedPath = notePath.trim();
 
       if (sanitizedPath.startsWith("/")) {
