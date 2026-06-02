@@ -218,8 +218,13 @@ module.exports = {
         "ui-smaller": "var(--font-ui-smaller)", // 12px
         "ui-small": "var(--font-ui-small)", // 13px
         "ui-medium": "var(--font-ui-medium)", // 15px
-        "ui-larger": "var(--font-ui-large)", // 20px
-        "ui-title": "var(--font-ui-large)", // ~20px
+        // Obsidian's stock 20px UI token is `--font-ui-larger` (per the
+        // Typography docs), but some themes (e.g. Primary) ship `--font-ui-large`
+        // instead and omit the stock one. Chain both so the size resolves under
+        // either, falling back to a literal 20px if a theme defines neither
+        // (otherwise the font-size is invalid and the text drops to inherited).
+        "ui-larger": "var(--font-ui-large, var(--font-ui-larger, 20px))", // 20px
+        "ui-title": "var(--font-ui-large, var(--font-ui-larger, 20px))", // ~20px
       },
       strokeWidth: {
         icon: "var(--icon-stroke)", // 1.75px
