@@ -2,7 +2,7 @@ import { CustomModel, ProjectConfig } from "@/aiParams";
 import { atom, createStore, useAtomValue } from "jotai";
 import { v4 as uuidv4 } from "uuid";
 
-import type { ModelSelection } from "@/agentMode";
+import type { CopilotMode, ModelSelection } from "@/agentMode";
 import { type ChainType } from "@/chainType";
 import type { BackendConfig, BackendType, ConfiguredModel, Provider } from "@/modelManagement";
 import { type SortStrategy, isSortStrategy } from "@/utils/recentUsageManager";
@@ -309,6 +309,8 @@ export interface CopilotSettings {
 export interface ClaudeBackendSettings {
   /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
   defaultModel?: ModelSelection | null;
+  /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
+  defaultMode?: CopilotMode | null;
   /**
    * Opt-in: pass `thinking: { type: "enabled" }` to the SDK so the agent
    * surfaces reasoning chunks. Off by default (matches SDK default).
@@ -329,6 +331,8 @@ export interface CodexBackendSettings {
   binaryPath?: string;
   /** Sticky model preference — `{ baseModelId, effort }`. Unset = use the agent's default. */
   defaultModel?: ModelSelection | null;
+  /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
+  defaultMode?: CopilotMode | null;
   /** See `ClaudeBackendSettings.envOverrides`. Applied to the spawned `codex-acp` subprocess. */
   envOverrides?: Record<string, string>;
 }
@@ -349,6 +353,8 @@ export interface OpencodeBackendSettings {
    * `baseModelId` is the `<provider>/<model>` form (no effort suffix).
    */
   defaultModel?: ModelSelection | null;
+  /** Sticky permission-mode preference (default/plan/auto). Unset = the agent's natural starting mode. */
+  defaultMode?: CopilotMode | null;
   /**
    * ACP sessionId of the dedicated "probe session" used by AgentModelPreloader
    * to enumerate live models without disturbing user chats. Persisted across
@@ -1043,6 +1049,15 @@ function sanitizeDefaultModel(raw: unknown): ModelSelection | undefined {
   return { baseModelId, effort };
 }
 
+// Closed set mirroring the `CopilotMode` union; an unknown/legacy value is
+// dropped so a corrupt data.json can't seed a mode the picker can't render.
+const COPILOT_MODES: readonly CopilotMode[] = ["default", "plan", "auto"];
+function sanitizeDefaultMode(raw: unknown): CopilotMode | undefined {
+  return typeof raw === "string" && (COPILOT_MODES as readonly string[]).includes(raw)
+    ? (raw as CopilotMode)
+    : undefined;
+}
+
 /**
  * Strict env-var key check: POSIX-style identifier. Rejects empty strings,
  * leading digits, `=`, whitespace, dots, hyphens, and control chars. Shared
@@ -1076,6 +1091,7 @@ function sanitizeClaudeBackendSettings(raw: unknown): ClaudeBackendSettings {
   const r = raw as Record<string, unknown>;
   return {
     defaultModel: sanitizeDefaultModel(r.defaultModel),
+    defaultMode: sanitizeDefaultMode(r.defaultMode),
     enableThinking: typeof r.enableThinking === "boolean" ? r.enableThinking : undefined,
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };
@@ -1087,6 +1103,7 @@ function sanitizeCodexBackendSettings(raw: unknown): CodexBackendSettings {
   return {
     binaryPath: nonEmptyString(r.binaryPath),
     defaultModel: sanitizeDefaultModel(r.defaultModel),
+    defaultMode: sanitizeDefaultMode(r.defaultMode),
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };
 }
@@ -1108,6 +1125,7 @@ function sanitizeOpencodeBackendSettings(raw: unknown): OpencodeBackendSettings 
     binaryVersion,
     binarySource,
     defaultModel: sanitizeDefaultModel(r.defaultModel),
+    defaultMode: sanitizeDefaultMode(r.defaultMode),
     probeSessionId: nonEmptyString(r.probeSessionId),
     envOverrides: sanitizeEnvOverrides(r.envOverrides),
   };

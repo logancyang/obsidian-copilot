@@ -47,7 +47,7 @@ export function buildAgentModePicker(args: {
     onChange: (value) => {
       const spec = activeMode.apply[value];
       if (!spec) return;
-      manager.applyMode(activeBackendId, spec).catch((err) => {
+      manager.applyMode(activeBackendId, value, spec).catch((err) => {
         handlePickerSwitchError(err, "mode");
       });
     },

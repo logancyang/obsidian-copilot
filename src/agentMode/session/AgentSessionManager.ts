@@ -12,6 +12,7 @@ import type { AgentChatPersistenceManager } from "./AgentChatPersistenceManager"
 import type { AgentModelPreloader, WarmBackend } from "./AgentModelPreloader";
 import { MethodUnsupportedError } from "./errors";
 import { resolveMcpServers } from "./mcpResolver";
+import { replayPersistedMode } from "./replayPersistedMode";
 import type {
   AgentQuestionAnswers,
   AskUserQuestionPrompt,
@@ -19,6 +20,7 @@ import type {
   BackendId,
   BackendProcess,
   BackendState,
+  CopilotMode,
   ModeApplySpec,
   ModelSelection,
   PermissionDecision,
@@ -299,6 +301,11 @@ export class AgentSessionManager {
         logInfo(
           `[AgentMode] session ready (internal=${session.internalId} backend-id=${session.getBackendSessionId()} backend=${resolvedId}); pool size=${this.sessions.size}`
         );
+        // Seed the user's sticky mode preference so a new conversation reopens
+        // in the mode they last chose (e.g. `auto`). Generic across backends;
+        // `replayPersistedMode` swallows its own errors so it never blocks ready.
+        // Runs last so it can't perturb the lastError/ready ordering above.
+        await replayPersistedMode(session, this.getDefaultMode(resolvedId));
       })
       .catch((err) => {
         this.lastError = err2String(err);
@@ -396,10 +403,12 @@ export class AgentSessionManager {
 
   /**
    * Apply a canonical mode change against the active session. `spec` carries
-   * the native dispatch info (which ACP RPC + payload). The selection is not
-   * persisted — every fresh session starts in canonical `default`.
+   * the native dispatch info (which ACP RPC + payload); `mode` is the canonical
+   * id to persist. After a successful apply, `mode` becomes the backend's sticky
+   * default so the next new conversation reopens in it — symmetric with
+   * `applySelection`. If the apply throws, no persistence occurs.
    */
-  async applyMode(backendId: BackendId, spec: ModeApplySpec): Promise<void> {
+  async applyMode(backendId: BackendId, mode: CopilotMode, spec: ModeApplySpec): Promise<void> {
     const session = this.getActiveSession();
     if (!session || session.backendId !== backendId) return;
     if (spec.kind === "setMode") {
@@ -407,6 +416,33 @@ export class AgentSessionManager {
     } else {
       await session.setConfigOption(spec.configId, spec.value);
     }
+    await this.persistDefaultMode(backendId, mode);
+  }
+
+  /** Read the user's sticky mode preference for `backendId`, or `null` if none. */
+  getDefaultMode(backendId: BackendId): CopilotMode | null {
+    const backends = getSettings().agentMode?.backends as
+      | Record<string, { defaultMode?: CopilotMode | null } | undefined>
+      | undefined;
+    return backends?.[backendId]?.defaultMode ?? null;
+  }
+
+  /** Persist a sticky mode preference for `backendId`. Pass `null` to clear. */
+  async persistDefaultMode(backendId: BackendId, mode: CopilotMode | null): Promise<void> {
+    setSettings((cur) => {
+      const existing = (cur.agentMode.backends as Record<string, unknown> | undefined)?.[
+        backendId
+      ] as Record<string, unknown> | undefined;
+      return {
+        agentMode: {
+          ...cur.agentMode,
+          backends: {
+            ...cur.agentMode.backends,
+            [backendId]: { ...(existing ?? {}), defaultMode: mode },
+          },
+        },
+      };
+    });
   }
 
   getBackendProcess(backendId: BackendId): BackendProcess | null {

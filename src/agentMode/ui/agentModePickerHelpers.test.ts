@@ -105,7 +105,7 @@ describe("buildAgentModePicker", () => {
     ).toBe(false);
   });
 
-  it("onChange dispatches manager.applyMode with the per-option spec", () => {
+  it("onChange dispatches manager.applyMode with the canonical mode and per-option spec", () => {
     const applyMode = jest.fn().mockResolvedValue(undefined);
     const spec = { kind: "setMode" as const, nativeId: "plan" };
     const picker = buildAgentModePicker({
@@ -126,7 +126,7 @@ describe("buildAgentModePicker", () => {
       }),
     });
     picker?.onChange("plan");
-    expect(applyMode).toHaveBeenCalledWith("codex", spec);
+    expect(applyMode).toHaveBeenCalledWith("codex", "plan", spec);
   });
 
   it("onChange ignores selections without an apply spec", () => {
