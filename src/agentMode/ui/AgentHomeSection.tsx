@@ -19,7 +19,7 @@ import React, {
  * Shared building blocks for the Agent Home landing sections (Projects, Recent
  * Chats). Both render the same shape — a titled section, a few inline rows, and
  * a "View all" popover with search — so the structure lives here once and each
- * section supplies only its icon, data, and row click behavior.
+ * section supplies only its data and row click behavior.
  */
 
 /** Rows shown inline before the rest collapse behind the "View all" popover. */
@@ -47,7 +47,7 @@ interface AgentHomeSectionProps {
   className?: string;
 }
 
-/** Titled section header (icon + title + count + optional action) plus body. */
+/** Titled section header (title + count + optional action) plus body. */
 export const AgentHomeSection = memo(function AgentHomeSection({
   title,
   count,
@@ -138,16 +138,14 @@ interface AgentHomeListRowProps {
   timeMs: number;
   onClick: () => void;
   /**
-   * Indent the label to line up under the section title's text (past its icon).
-   * On for inline rows that sit below a titled section; off inside the View-all
-   * popover where there's no section icon to align against. Ignored when `icon`
-   * is set (the icon itself fills the leading slot).
+   * Indent the label by one leading-slot width so an icon-less row still lines
+   * up under sibling rows that carry a leading icon/tile. Ignored when `icon` or
+   * `leading` is set (that element already fills the leading slot).
    */
   indent?: boolean;
   /**
-   * Optional leading icon. Unlike the section's type icon (which would just
-   * repeat per row), this is informational — e.g. the backend brand a chat ran
-   * on. Projects don't pass one; the section header already conveys their type.
+   * Optional leading icon — informational, e.g. the backend brand a chat ran on.
+   * Rows that need a richer marker than a single glyph use `leading` instead.
    */
   icon?: React.ComponentType<{ className?: string }>;
   /**
@@ -159,11 +157,11 @@ interface AgentHomeListRowProps {
 }
 
 /**
- * Generic clickable list row: optional leading icon + truncated label + relative
- * time. Rows usually omit the icon — the section header carries the type icon,
- * so repeating it only adds noise. An icon is passed only when it's
- * informational (e.g. a chat's backend brand). Icon-less inline rows indent
- * (`tw-pl-6` ≈ icon width + gap) so their text still aligns under the title.
+ * Generic clickable list row: optional leading icon/element + truncated label +
+ * relative time. The leading slot is filled by `leading` (a rich marker like the
+ * project tile) or `icon` (a single glyph, e.g. a chat's backend brand). A row
+ * with neither can `indent` so its text still aligns under siblings that do
+ * (`tw-pl-6` ≈ icon width + gap).
  */
 export const AgentHomeListRow = memo(function AgentHomeListRow({
   label,

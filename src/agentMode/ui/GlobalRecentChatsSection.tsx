@@ -123,8 +123,10 @@ export const GlobalRecentChatsSection = memo(
                 side="bottom"
                 align="start"
               >
-                {/* Trigger mirrors the Projects "View all" row (div role=button,
-                    pl-6 to align under the inline rows). Radix merges its toggle
+                {/* Same "View all" trigger shape as the Projects section (div
+                    role=button); pl-6 aligns under these rows' single-glyph chat
+                    icons (the Projects list uses pl-8 to clear its wider tiles).
+                    Radix merges its toggle
                     onClick onto this child; Enter/Space dispatch a click so the
                     popover opens for keyboard users without this row owning the
                     popover's open state.
