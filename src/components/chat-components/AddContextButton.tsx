@@ -32,7 +32,7 @@ export const AddContextButton: React.FC<AddContextButtonProps> = ({
               <Button
                 variant="ghost2"
                 size="icon"
-                className="tw-border tw-border-solid tw-border-border tw-text-muted hover:tw-text-accent"
+                className="tw-text-muted hover:tw-text-accent"
                 aria-label="Add context"
               >
                 <Plus className="tw-size-4" />

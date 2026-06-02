@@ -33,8 +33,6 @@ export const INLINE_LIMIT = 3;
 const VIEW_ALL_PAGE_SIZE = 50;
 
 interface AgentHomeSectionProps {
-  /** Leading section icon (lucide element, sized by the caller). */
-  icon: React.ReactNode;
   title: string;
   count: number;
   /** Optional trailing header control (e.g. a create button). */
@@ -51,7 +49,6 @@ interface AgentHomeSectionProps {
 
 /** Titled section header (icon + title + count + optional action) plus body. */
 export const AgentHomeSection = memo(function AgentHomeSection({
-  icon,
   title,
   count,
   action,
@@ -63,12 +60,15 @@ export const AgentHomeSection = memo(function AgentHomeSection({
   // Ties the disclosure control to the body it shows/hides for assistive tech.
   const bodyId = useId();
 
-  // Icon + title + count + (when collapsible) chevron — the part that toggles.
+  // Uppercase title + count + (when collapsible) chevron — the part that
+  // toggles. No leading type icon: the rows below carry their own (project
+  // tiles / chat brand marks), so a section icon would only repeat them.
   const headerLabel = (
     <>
-      {icon}
-      <span className="tw-text-ui-small tw-font-semibold tw-text-normal">{title}</span>
-      <span className="tw-text-xs tw-font-normal tw-text-muted">({count})</span>
+      <span className="tw-text-xs tw-font-semibold tw-uppercase tw-tracking-wider tw-text-muted">
+        {title}
+      </span>
+      <span className="tw-text-xs tw-font-normal tw-text-faint">{count}</span>
       {collapsible && (
         <ChevronDown
           className={cn(
@@ -150,6 +150,12 @@ interface AgentHomeListRowProps {
    * on. Projects don't pass one; the section header already conveys their type.
    */
   icon?: React.ComponentType<{ className?: string }>;
+  /**
+   * Custom leading element, rendered in place of `icon` when set. Lets a row
+   * supply a richer marker than a single monochrome glyph — e.g. the project
+   * tile (tinted square + colored folder). Takes precedence over `icon`.
+   */
+  leading?: React.ReactNode;
 }
 
 /**
@@ -165,6 +171,7 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
   onClick,
   indent = false,
   icon: Icon,
+  leading,
 }: AgentHomeListRowProps): React.ReactElement {
   return (
     <div
@@ -182,11 +189,11 @@ export const AgentHomeListRow = memo(function AgentHomeListRow({
         }
       }}
     >
-      {Icon && <Icon className="tw-size-4 tw-shrink-0 tw-text-muted" />}
+      {leading ?? (Icon && <Icon className="tw-size-4 tw-shrink-0 tw-text-muted" />)}
       <span
         className={cn(
           "tw-min-w-0 tw-flex-1 tw-truncate tw-text-ui-small tw-text-normal",
-          indent && !Icon && "tw-pl-6"
+          indent && !Icon && !leading && "tw-pl-6"
         )}
         title={label}
       >
@@ -298,7 +305,7 @@ export function AgentHomeViewAll<TItem>({
           tabIndex={0}
           className={cn(
             "tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5",
-            "tw-text-xs tw-text-muted tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-normal"
+            "tw-text-xs tw-text-accent tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-accent-hover"
           )}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
@@ -307,8 +314,9 @@ export function AgentHomeViewAll<TItem>({
             }
           }}
         >
-          {/* pl-6 keeps the trigger text aligned with the inline rows above. */}
-          <span className="tw-pl-6">
+          {/* pl-8 aligns the trigger text under the inline rows' labels, which
+              sit past a size-6 leading tile + gap-2 (≈ 2rem). */}
+          <span className="tw-pl-8">
             View all {label} ({total})
           </span>
           <ChevronRight className="tw-size-3 tw-shrink-0" />

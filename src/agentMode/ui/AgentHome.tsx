@@ -14,7 +14,6 @@ import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
 import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
-import { getModeLabel } from "@/components/ui/ModePicker";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { EVENT_NAMES } from "@/constants";
@@ -219,16 +218,6 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   // surface flips from the centered landing to the conversation layout.
   const isGlobalLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
 
-  // Landing subtitle: backend display name, with the active mode when one is
-  // surfaced (e.g. "Claude · Safe"). Resolve the mode copy through the same
-  // `getModeLabel` source the ModePicker trigger uses, so the subtitle and the
-  // composer's mode dropdown never show different labels for the same mode.
-  const modeValue = modePickerOverride?.value;
-  const modeLabel = modeValue != null ? getModeLabel(modeValue) : undefined;
-  const sessionSubtitle = modeLabel
-    ? `${descriptor.displayName} · ${modeLabel}`
-    : descriptor.displayName;
-
   // Rotating landing greeting: re-rolled per session id (so each fresh chat /
   // landing open gets a new line) but stable across the stream re-renders within
   // a session, so it doesn't flicker as tokens arrive. sessionId is the
@@ -291,15 +280,12 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                         moves the composer. min-h-0 lets this collapse on very
                         short panes so the title/composer aren't pushed off-screen. */}
                     <div className="tw-min-h-0 tw-flex-[2]" />
-                    <div className="tw-shrink-0 tw-pb-6">
+                    <div className="tw-shrink-0 tw-pb-7">
                       <div className="tw-flex tw-items-center tw-justify-center tw-gap-3">
                         <CopilotBrandIcon className="tw-size-4 tw-text-normal" />
                         <span className="tw-text-ui-title tw-font-[330] tw-text-normal">
                           {greeting}
                         </span>
-                      </div>
-                      <div className="tw-mt-1.5 tw-text-center tw-text-ui-smaller tw-text-muted">
-                        {sessionSubtitle}
                       </div>
                     </div>
                   </>
@@ -350,7 +336,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                      overflow-y-auto only kicks in on genuinely short ones. No
                      extra horizontal padding so section edges line up with the
                      composer's border. */
-                  <div className="tw-flex tw-min-h-0 tw-flex-[3] tw-flex-col tw-gap-4 tw-overflow-y-auto tw-pt-4">
+                  <div className="tw-flex tw-min-h-0 tw-flex-[3] tw-flex-col tw-gap-3 tw-overflow-y-auto tw-pt-6">
                     <ProjectPickerList
                       projects={projects}
                       onSelect={handleProjectComingSoon}

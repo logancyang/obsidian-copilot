@@ -49,6 +49,16 @@ module.exports = {
         orange: "var(--color-orange)",
         purple: "var(--color-purple)",
       },
+      // Per-project accent hues (Agent Home project tiles). Theme-aware via
+      // Obsidian's named color vars; paired with the matching `bg.project` tints.
+      project: {
+        red: "var(--color-red)",
+        orange: "var(--color-orange)",
+        yellow: "var(--color-yellow)",
+        green: "var(--color-green)",
+        blue: "var(--color-blue)",
+        purple: "var(--color-purple)",
+      },
     },
     backgroundColor: {
       inherit: colors.inherit,
@@ -60,6 +70,16 @@ module.exports = {
       "secondary-alt": "var(--background-secondary-alt)",
       success: "rgba(var(--color-green-rgb),0.2)",
       error: "rgba(var(--color-red-rgb),0.2)",
+      // Soft tints behind Agent Home project tiles; deeper `text.project` hue
+      // sits on top. Same six hues, kept in sync with `textColor.project`.
+      project: {
+        red: "rgba(var(--color-red-rgb),0.16)",
+        orange: "rgba(var(--color-orange-rgb),0.16)",
+        yellow: "rgba(var(--color-yellow-rgb),0.16)",
+        green: "rgba(var(--color-green-rgb),0.16)",
+        blue: "rgba(var(--color-blue-rgb),0.16)",
+        purple: "rgba(var(--color-purple-rgb),0.16)",
+      },
       modifier: {
         hover: "var(--background-modifier-hover)",
         "active-hover": "var(--background-modifier-active-hover)",

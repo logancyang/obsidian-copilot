@@ -5,7 +5,7 @@ import {
   ChatHistoryPopover,
 } from "@/components/chat-components/ChatHistoryPopover";
 import { sortByStrategy } from "@/utils/recentUsageManager";
-import { ChevronRight, MessageCircle, MessageSquare } from "lucide-react";
+import { ChevronRight, MessageCircle } from "lucide-react";
 import React, { memo, useMemo } from "react";
 
 interface GlobalRecentChatsSectionProps {
@@ -100,13 +100,7 @@ export const GlobalRecentChatsSection = memo(
     const hasOverflow = total > INLINE_LIMIT;
 
     return (
-      <AgentHomeSection
-        className={className}
-        collapsible
-        icon={<MessageSquare className="tw-size-4 tw-text-muted" />}
-        title="Recent Chats"
-        count={total}
-      >
+      <AgentHomeSection className={className} collapsible title="Recent Chats" count={total}>
         {total === 0 ? (
           <div className="tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted">No recent chats</div>
         ) : (
@@ -150,7 +144,7 @@ export const GlobalRecentChatsSection = memo(
                 <div
                   role="button"
                   tabIndex={0}
-                  className="tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5 tw-text-xs tw-text-muted tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-normal"
+                  className="tw-flex tw-cursor-pointer tw-items-center tw-justify-between tw-rounded-md tw-px-2 tw-py-1.5 tw-text-xs tw-text-accent tw-transition-colors hover:tw-bg-modifier-hover hover:tw-text-accent-hover"
                   onClick={() => onLoadHistory?.()}
                   onKeyDown={(e) => {
                     if (e.key === "Enter" || e.key === " ") {
