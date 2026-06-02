@@ -102,6 +102,7 @@ export const GlobalRecentChatsSection = memo(
     return (
       <AgentHomeSection
         className={className}
+        collapsible
         icon={<MessageSquare className="tw-size-4 tw-text-muted" />}
         title="Recent Chats"
         count={total}

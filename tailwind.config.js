@@ -218,7 +218,8 @@ module.exports = {
         "ui-smaller": "var(--font-ui-smaller)", // 12px
         "ui-small": "var(--font-ui-small)", // 13px
         "ui-medium": "var(--font-ui-medium)", // 15px
-        "ui-larger": "var(--font-ui-larger)", // 20px
+        "ui-larger": "var(--font-ui-large)", // 20px
+        "ui-title": "var(--font-ui-large)", // ~20px
       },
       strokeWidth: {
         icon: "var(--icon-stroke)", // 1.75px

@@ -3,6 +3,7 @@ import { AgentChatControls } from "@/agentMode/ui/AgentChatControls";
 import { AgentChatInput } from "@/agentMode/ui/AgentChatInput";
 import { AgentModeStatus } from "@/agentMode/ui/AgentModeStatus";
 import { AgentTabStrip } from "@/agentMode/ui/AgentTabStrip";
+import { CopilotBrandIcon } from "@/agentMode/ui/CopilotBrandIcon";
 import { GlobalRecentChatsSection } from "@/agentMode/ui/GlobalRecentChatsSection";
 import { ProjectPickerList } from "@/agentMode/ui/ProjectPickerList";
 import { useAgentChatRuntimeState } from "@/agentMode/ui/hooks/useAgentChatRuntimeState";
@@ -12,6 +13,8 @@ import { useChatInputAutoFocus } from "@/agentMode/ui/hooks/useChatInputAutoFocu
 import { useAgentModelPicker } from "@/agentMode/ui/useAgentModelPicker";
 import { useAgentModePicker } from "@/agentMode/ui/useAgentModePicker";
 import { useSessionBackendDescriptor } from "@/agentMode/ui/useBackendDescriptor";
+import { pickRandomGreeting } from "@/agentMode/ui/landingGreetings";
+import { getModeLabel } from "@/components/ui/ModePicker";
 import type { AgentChatBackend } from "@/agentMode/session/AgentChatBackend";
 import type { AgentSessionManager } from "@/agentMode/session/AgentSessionManager";
 import { EVENT_NAMES } from "@/constants";
@@ -217,13 +220,22 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
   const isGlobalLanding = !manager.getActiveSession()?.hasUserVisibleMessages();
 
   // Landing subtitle: backend display name, with the active mode when one is
-  // surfaced (e.g. "Claude · Plan").
-  const modeLabel = modePickerOverride?.options.find(
-    (o) => o.value === modePickerOverride.value
-  )?.label;
+  // surfaced (e.g. "Claude · Safe"). Resolve the mode copy through the same
+  // `getModeLabel` source the ModePicker trigger uses, so the subtitle and the
+  // composer's mode dropdown never show different labels for the same mode.
+  const modeValue = modePickerOverride?.value;
+  const modeLabel = modeValue != null ? getModeLabel(modeValue) : undefined;
   const sessionSubtitle = modeLabel
     ? `${descriptor.displayName} · ${modeLabel}`
     : descriptor.displayName;
+
+  // Rotating landing greeting: re-rolled per session id (so each fresh chat /
+  // landing open gets a new line) but stable across the stream re-renders within
+  // a session, so it doesn't flicker as tokens arrive. sessionId is the
+  // intentional re-roll trigger — not read inside the factory, so exhaustive-deps
+  // flags it; the dep is deliberate (same as the liveSessionIds memo above).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const greeting = useMemo(() => pickRandomGreeting(), [sessionId]);
 
   // Populate the Recent Chats list whenever the landing is shown (the
   // conversation-state history popover loads on open via the same handler).
@@ -258,7 +270,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
               <div
                 className={
                   isGlobalLanding
-                    ? "tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2"
+                    ? "tw-flex tw-size-full tw-flex-col tw-overflow-hidden tw-px-2"
                     : "tw-flex tw-size-full tw-flex-col tw-overflow-hidden"
                 }
                 data-agent-landing={isGlobalLanding ? "global" : "conversation"}
@@ -266,18 +278,21 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
                 {isGlobalLanding ? (
                   <>
-                    {/* Top spacer biases the composer into the lower portion of
-                        the pane when there's free space (3:1 against the bottom
-                        spacer). No min-height on purpose: it must collapse to 0
-                        under overflow so the column packs to the top and scrolls
-                        only on genuine overflow — a min-height would wedge a
-                        permanent gap that coexists with a scrollbar. */}
-                    <div className="tw-flex-[3]" />
-                    <div className="tw-shrink-0 tw-pb-3">
-                      <div className="tw-text-center tw-text-ui-larger tw-font-semibold tw-text-normal">
-                        What can I help with?
+                    {/* Top spacer (grow 2) seats the composer ~40% down — fixed
+                        there regardless of what the sections below do. The lower
+                        sections region (grow 3) owns its slice of height, so
+                        expanding/collapsing happens entirely inside it and never
+                        moves the composer. min-h-0 lets this collapse on very
+                        short panes so the title/composer aren't pushed off-screen. */}
+                    <div className="tw-min-h-0 tw-flex-[2]" />
+                    <div className="tw-shrink-0 tw-pb-6">
+                      <div className="tw-flex tw-items-center tw-justify-center tw-gap-3">
+                        <CopilotBrandIcon className="tw-size-4 tw-text-normal" />
+                        <span className="tw-text-ui-title tw-font-[330] tw-text-normal">
+                          {greeting}
+                        </span>
                       </div>
-                      <div className="tw-mt-1 tw-text-center tw-text-ui-smaller tw-text-muted">
+                      <div className="tw-mt-1.5 tw-text-center tw-text-ui-smaller tw-text-muted">
                         {sessionSubtitle}
                       </div>
                     </div>
@@ -320,31 +335,30 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                   />
                 </div>
                 {isGlobalLanding ? (
-                  <>
-                    {/* Read-only landing below the composer. shrink-0 keeps the
-                        section titles at full height — they're never squeezed,
-                        the whole column scrolls instead. No extra horizontal
-                        padding so the section edges line up with the composer's
-                        border above. */}
-                    <div className="tw-flex tw-shrink-0 tw-flex-col tw-gap-4 tw-pt-4">
-                      <ProjectPickerList
-                        projects={projects}
-                        onSelect={handleProjectComingSoon}
-                        onCreate={handleProjectComingSoon}
-                      />
-                      <GlobalRecentChatsSection
-                        items={chatHistoryItems}
-                        onLoadChat={handleLoadChat}
-                        onUpdateTitle={handleUpdateChatTitle}
-                        onDeleteChat={handleDeleteChat}
-                        onOpenSourceFile={handleOpenSourceFile}
-                        onLoadHistory={handleLoadChatHistory}
-                      />
-                    </div>
-                    {/* Smaller bottom spacer balances the larger top one; also
-                        collapses to 0 under overflow (no min-height). */}
-                    <div className="tw-flex-1" />
-                  </>
+                  /* Lower region (grow 3 vs the top spacer's 2) holds the
+                     read-only sections right below the composer and owns ~60% of
+                     the height. Expanding/collapsing or a long list grows and (only
+                     if it outgrows this region) scrolls here — the composer above
+                     never moves. The generous share means the inline sections
+                     (a few rows each) fit without a scrollbar on normal panes;
+                     overflow-y-auto only kicks in on genuinely short ones. No
+                     extra horizontal padding so section edges line up with the
+                     composer's border. */
+                  <div className="tw-flex tw-min-h-0 tw-flex-[3] tw-flex-col tw-gap-4 tw-overflow-y-auto tw-pt-4">
+                    <ProjectPickerList
+                      projects={projects}
+                      onSelect={handleProjectComingSoon}
+                      onCreate={handleProjectComingSoon}
+                    />
+                    <GlobalRecentChatsSection
+                      items={chatHistoryItems}
+                      onLoadChat={handleLoadChat}
+                      onUpdateTitle={handleUpdateChatTitle}
+                      onDeleteChat={handleDeleteChat}
+                      onOpenSourceFile={handleOpenSourceFile}
+                      onLoadHistory={handleLoadChatHistory}
+                    />
+                  </div>
                 ) : null}
               </div>
             </div>

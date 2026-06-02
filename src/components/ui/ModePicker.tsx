@@ -40,9 +40,18 @@ const MODE_DISPLAY: Record<CopilotMode, { label: string; description: string }> 
   },
 };
 
+/**
+ * Canonical display label for a mode. Single source of truth so every surface
+ * (this picker's trigger, the landing subtitle) shows the same copy for a given
+ * `CopilotMode` — falls back to the raw value for any unmapped mode.
+ */
+export function getModeLabel(value: CopilotMode): string {
+  return MODE_DISPLAY[value]?.label ?? value;
+}
+
 export function ModePicker({ override, className }: ModePickerProps) {
   const { options, value, onChange, disabled } = override;
-  const triggerLabel = value ? (MODE_DISPLAY[value]?.label ?? value) : "Mode";
+  const triggerLabel = value ? getModeLabel(value) : "Mode";
 
   return (
     <DropdownMenu>

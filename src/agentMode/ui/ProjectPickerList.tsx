@@ -79,6 +79,7 @@ export const ProjectPickerList = memo(
     return (
       <AgentHomeSection
         className={className}
+        collapsible
         icon={<Folder className="tw-size-4 tw-text-muted" />}
         title="Projects"
         count={total}
