@@ -269,8 +269,14 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                   extra horizontal padding of their own. */}
               <div
                 className={
+                  // Landing: overflow-y-auto, not hidden. With room, the flex
+                  // spacers fill the column exactly so no scrollbar shows; on a
+                  // pane too short to fit the status/title/composer stack the
+                  // column scrolls instead of clipping them out of reach (small
+                  // Obsidian splits / popouts). Conversation: the transcript owns
+                  // its own scroll, so this stays hidden.
                   isGlobalLanding
-                    ? "tw-flex tw-size-full tw-flex-col tw-overflow-hidden tw-px-2"
+                    ? "tw-flex tw-size-full tw-flex-col tw-overflow-y-auto tw-px-2"
                     : "tw-flex tw-size-full tw-flex-col tw-overflow-hidden"
                 }
                 data-agent-landing={isGlobalLanding ? "global" : "conversation"}
