@@ -15,7 +15,21 @@ export const RELEVANT_NOTES_VIEWTYPE = "copilot-relevant-notes-view";
 // into Obsidian's 0 0 100 100 icon space; currentColor lets it track the theme
 // and the active/hover tab state instead of a fixed fill. Register via addIcon().
 export const COPILOT_AGENT_ICON_ID = "copilot-agent";
-export const COPILOT_AGENT_ICON_SVG = `<g transform="translate(0 8.2) scale(0.6579) translate(-4 -4)"><path fill="currentColor" d="M75.9 6.9c-6.8 1.4-12.5 6-35.5 29.3-33.5 33.8-33.5 33.9-34.2 62.2-0.3 12.4 0 20.2 0.7 22.7 2.4 7.8 10.8 11.2 17.6 7.1 1.7-1.1 14.9-14.1 29.5-29.1 14.5-14.9 26.7-27 27-26.9 0.3 0.2 12.4 12.4 27 27.3 14.6 14.8 27.6 27.8 29 28.7 5.1 3.6 13.6 1.4 16.5-4.2 1.2-2.3 1.5-6.9 1.5-22.3 0-22.9-1.2-28.6-8.3-37.9-7.6-10.2-50-52.3-54.9-54.6-5.1-2.4-10.9-3.2-15.9-2.3z"/></g>`;
+
+// The brand glyph as raw vector data — the single source of truth shared by the
+// native `addIcon` registration (string) and the `CopilotBrandIcon` React
+// component (JSX). Both derive from these primitives, so they cannot drift.
+// The 0 0 100 100 viewBox is intentionally NOT shared here: `addIcon` always
+// wraps its content in Obsidian's own `<svg viewBox="0 0 100 100">`, so that box
+// is fixed by the Obsidian API, not chosen by us — `CopilotBrandIcon` simply
+// matches it. If a future review flags the hardcoded viewBox, point them here.
+export const COPILOT_AGENT_ICON_TRANSFORM = "translate(0 8.2) scale(0.6579) translate(-4 -4)";
+export const COPILOT_AGENT_ICON_PATH =
+  "M75.9 6.9c-6.8 1.4-12.5 6-35.5 29.3-33.5 33.8-33.5 33.9-34.2 62.2-0.3 12.4 0 20.2 0.7 22.7 2.4 7.8 10.8 11.2 17.6 7.1 1.7-1.1 14.9-14.1 29.5-29.1 14.5-14.9 26.7-27 27-26.9 0.3 0.2 12.4 12.4 27 27.3 14.6 14.8 27.6 27.8 29 28.7 5.1 3.6 13.6 1.4 16.5-4.2 1.2-2.3 1.5-6.9 1.5-22.3 0-22.9-1.2-28.6-8.3-37.9-7.6-10.2-50-52.3-54.9-54.6-5.1-2.4-10.9-3.2-15.9-2.3z";
+
+// Inner SVG markup string consumed by Obsidian's `addIcon` (which wraps it in an
+// `<svg viewBox="0 0 100 100">`). Built from the shared primitives above.
+export const COPILOT_AGENT_ICON_SVG = `<g transform="${COPILOT_AGENT_ICON_TRANSFORM}"><path fill="currentColor" d="${COPILOT_AGENT_ICON_PATH}"/></g>`;
 
 export const USER_SENDER = "user";
 export const AI_SENDER = "ai";
