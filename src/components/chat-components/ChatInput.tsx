@@ -33,6 +33,7 @@ import React, {
 import { $getSelection, $isRangeSelection, LexicalEditor as LexicalEditorType } from "lexical";
 import { ContextControl } from "./ContextControl";
 import { AddContextButton } from "./AddContextButton";
+import { openImagePicker } from "./openImagePicker";
 import { shouldShowAtMentionTools } from "./hooks/useAtMentionCategories";
 import { ModelEffortPicker } from "@/components/ui/ModelEffortPicker";
 import { ModePicker } from "@/components/ui/ModePicker";
@@ -495,14 +496,12 @@ const ChatInput = React.forwardRef<ChatInputHandle, ChatInputProps>(function Cha
         // hosting this chat view (popout-safe), not whichever window is focused.
         const doc = containerRef.current?.doc;
         if (!doc) break;
-        const input = doc.createElement("input");
-        input.type = "file";
-        input.accept = "image/*";
-        input.multiple = true;
-        input.addEventListener("change", () => onAddImage(Array.from(input.files || [])), {
-          once: true,
+        openImagePicker(doc, {
+          onFiles: onAddImage,
+          // Restore focus to the composer so cancelling the dialog doesn't
+          // leave the pane unresponsive (#119).
+          onSettle: () => lexicalEditorRef.current?.focus(),
         });
-        input.click();
         break;
       }
     }
