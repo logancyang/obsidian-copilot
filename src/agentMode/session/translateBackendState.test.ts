@@ -64,12 +64,13 @@ function suffixDescriptor(extra: Partial<BackendDescriptor> = {}): BackendDescri
 function selectOption(
   id: string,
   values: { value: string; name?: string }[],
-  current?: string
+  current?: string,
+  category: string | null = null
 ): BackendConfigOption {
   return {
     id,
     type: "select",
-    category: null,
+    category,
     name: id,
     currentValue: current ?? values[0]?.value,
     options: values.map((v) => ({ value: v.value, name: v.name ?? v.value })),
@@ -83,6 +84,87 @@ describe("translateBackendState — model: null cases", () => {
       descriptor()
     );
     expect(state.model).toBeNull();
+  });
+});
+
+describe("translateBackendState — model catalog from config option (opencode ≥ 1.15.13)", () => {
+  it("builds the catalog from a category:'model' select when models is null", () => {
+    // opencode 1.15.13 drops the `models` state and reports the catalog as a
+    // generic select with category "model".
+    const modelOpt = selectOption(
+      "model",
+      [
+        { value: "omlx/gemma-4-e4b-it-8bit", name: "oMLX/gemma-4-e4b-it-8bit" },
+        { value: "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit", name: "oMLX/Qwen3.6-35B-A3B-UD-MLX-4bit" },
+      ],
+      "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit",
+      "model"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual([
+      "omlx/gemma-4-e4b-it-8bit",
+      "omlx/Qwen3.6-35B-A3B-UD-MLX-4bit",
+    ]);
+    // Friendly names come from the option, not the raw wire id.
+    expect(state.model?.availableModels[0]?.name).toBe("oMLX/gemma-4-e4b-it-8bit");
+    expect(state.model?.current.baseModelId).toBe("omlx/Qwen3.6-35B-A3B-UD-MLX-4bit");
+    expect(state.model?.apply).toEqual({ kind: "setConfigOption", configId: "model" });
+  });
+
+  it("prefers the dedicated models state when present (older opencode sends both)", () => {
+    const models: RawModelState = {
+      currentModelId: "omlx/gemma-4-e4b-it-8bit",
+      availableModels: [{ modelId: "omlx/gemma-4-e4b-it-8bit", name: "oMLX/gemma" }],
+    };
+    const modelOpt = selectOption(
+      "model",
+      [{ value: "omlx/other", name: "Other" }],
+      "omlx/other",
+      "model"
+    );
+    const state = translateBackendState(
+      { models, modes: null, configOptions: [modelOpt] },
+      suffixDescriptor()
+    );
+    // `models` wins → setModel channel, catalog from `models` not the option.
+    expect(state.model?.current.baseModelId).toBe("omlx/gemma-4-e4b-it-8bit");
+    expect(state.model?.apply).toEqual({ kind: "setModel" });
+  });
+
+  it("does not treat a category:'mode' select as the model catalog", () => {
+    const modeOpt = selectOption("mode", [{ value: "build", name: "Build" }], "build", "mode");
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modeOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model).toBeNull();
+  });
+
+  it("flattens grouped options under the model select", () => {
+    const grouped: BackendConfigOption = {
+      id: "model",
+      type: "select",
+      category: "model",
+      name: "model",
+      currentValue: "omlx/a",
+      options: [
+        {
+          name: "oMLX",
+          options: [
+            { value: "omlx/a", name: "A" },
+            { value: "omlx/b", name: "B" },
+          ],
+        },
+      ],
+    };
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [grouped] },
+      suffixDescriptor()
+    );
+    expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual(["omlx/a", "omlx/b"]);
   });
 });
 
@@ -675,6 +757,7 @@ describe("modelStateSignature", () => {
   it("is identical for equivalent model slices regardless of mode", () => {
     const sharedModel: BackendState["model"] = {
       current: { baseModelId: "x", effort: null },
+      apply: { kind: "setModel" },
       availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
     };
     const a: BackendState = { model: sharedModel, mode: null };
@@ -689,6 +772,7 @@ describe("modelStateSignature", () => {
     const a: BackendState = {
       model: {
         current: { baseModelId: "x", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           { baseModelId: "x", name: "X", provider: null, effortOptions: [] },
           { baseModelId: "y", name: "Y", provider: null, effortOptions: [] },
@@ -699,6 +783,20 @@ describe("modelStateSignature", () => {
     const b: BackendState = {
       ...a,
       model: { ...a.model!, current: { baseModelId: "y", effort: null } },
+    };
+    expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));
+  });
+
+  it("differs when the apply channel flips (setModel vs setConfigOption)", () => {
+    const base: NonNullable<BackendState["model"]> = {
+      current: { baseModelId: "x", effort: null },
+      availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
+      apply: { kind: "setModel" },
+    };
+    const a: BackendState = { model: base, mode: null };
+    const b: BackendState = {
+      model: { ...base, apply: { kind: "setConfigOption", configId: "model" } },
+      mode: null,
     };
     expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));
   });
@@ -720,6 +818,7 @@ describe("modeStateSignature", () => {
     const b: BackendState = {
       model: {
         current: { baseModelId: "x", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
       },
       mode: sharedMode,

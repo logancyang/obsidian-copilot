@@ -95,6 +95,22 @@ interface SessionWireState {
 }
 
 /**
+ * Return a copy of `options` with the `category:"model"` select's currentValue
+ * set to `modelId`, or the input unchanged when there's no such option. Lets an
+ * optimistic model switch be reflected for backends whose catalog lives in a
+ * config option (opencode ≥ 1.15.13) rather than a dedicated `models` state.
+ */
+function updateModelConfigOptionValue(
+  options: SessionConfigOption[] | null,
+  modelId: string
+): SessionConfigOption[] | null {
+  if (!options) return options;
+  return options.map((o) =>
+    o.type === "select" && o.category === "model" ? { ...o, currentValue: modelId } : o
+  );
+}
+
+/**
  * One-per-vault wrapper around an ACP-speaking subprocess. Owns the
  * `ClientSideConnection`, the `AcpProcessManager`, and the demultiplexer
  * that fans `session/update` notifications out to the right `AgentSession`.
@@ -300,10 +316,16 @@ export class AcpBackendProcess implements BackendProcess {
     );
     const wire = this.sessionWireState.get(params.sessionId);
     if (wire) {
-      const current = wire.models;
-      wire.models = current
-        ? { ...current, currentModelId: params.modelId }
-        : { availableModels: [], currentModelId: params.modelId };
+      if (wire.models) {
+        wire.models = { ...wire.models, currentModelId: params.modelId };
+      } else {
+        // No dedicated `models` state (opencode ≥ 1.15.13 exposes the catalog
+        // only as a `category:"model"` config option). Update that option's
+        // currentValue so `computeState` recomputes from the real catalog —
+        // never fabricate an empty `models` state (that strands the picker on
+        // a raw wire id with everything else "not offered by agent").
+        wire.configOptions = updateModelConfigOptionValue(wire.configOptions, params.modelId);
+      }
     }
     return this.computeState(params.sessionId);
   }

@@ -5,6 +5,7 @@ import {
   AbortError,
   computeInstallState,
   InstallOptions,
+  isOpencodeVersionOutdated,
   ProgressEvent,
 } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
 import type { OpencodeBinaryManager } from "@/agentMode/backends/opencode/OpencodeBinaryManager";
@@ -14,7 +15,8 @@ import { ReactModal } from "@/components/modals/ReactModal";
 import { ConfirmModal } from "@/components/modals/ConfirmModal";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { OPENCODE_PINNED_VERSION } from "@/constants";
+import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/constants";
+import { cn } from "@/lib/utils";
 import { logError } from "@/logger";
 import { useSettingsValue } from "@/settings/model";
 import { App, Notice } from "obsidian";
@@ -199,6 +201,27 @@ const OpencodeConfigBody: React.FC<{
     local.kind === "installed" ? { kind: "ready", source: local.source } : { kind: "absent" };
   const detail = local.kind === "installed" ? `opencode v${local.version}` : undefined;
 
+  const installedVersion = local.kind === "installed" ? local.version : null;
+  const outdated = !!installedVersion && isOpencodeVersionOutdated(installedVersion);
+  const [upgradeRun, setUpgradeRun] = React.useState<RunState>({ kind: "idle" });
+  const handleUpgrade = React.useCallback(() => {
+    setUpgradeRun({ kind: "running", progress: null });
+    const action = isCustom
+      ? manager.upgradeCustomBinary()
+      : manager.upgradeManaged({
+          onProgress: (e) => setUpgradeRun({ kind: "running", progress: e }),
+        });
+    action
+      .then(({ version }) => {
+        setUpgradeRun({ kind: "idle" });
+        new Notice(`opencode upgraded to v${version}.`);
+      })
+      .catch((err: unknown) => {
+        logError("[AgentMode] opencode upgrade failed", err);
+        setUpgradeRun({ kind: "error", message: err instanceof Error ? err.message : String(err) });
+      });
+  }, [manager, isCustom]);
+
   const onSaveCustomPath = React.useCallback(
     async (path: string): Promise<string | null> => {
       try {
@@ -222,6 +245,35 @@ const OpencodeConfigBody: React.FC<{
       status={<InstallStatusLine state={sessionState} detail={detail} />}
       onClose={onClose}
     >
+      {outdated && (
+        <div
+          className={cn(
+            "tw-flex tw-flex-col tw-gap-2 tw-rounded tw-bg-callout-warning/20 tw-p-3",
+            "tw-text-sm tw-text-warning"
+          )}
+          role="alert"
+        >
+          <span>
+            opencode v{installedVersion} is out of date. Update to v{OPENCODE_MIN_ACP_VERSION}+ —
+            older versions can&apos;t report their models to the picker.
+          </span>
+          {upgradeRun.kind === "running" ? (
+            <>
+              <p className="tw-my-0 tw-text-xs">{phaseLabel(upgradeRun.progress)}</p>
+              <Progress value={phaseProgress(upgradeRun.progress) ?? 0} />
+            </>
+          ) : (
+            <div className="tw-flex tw-items-center tw-justify-end tw-gap-2">
+              {upgradeRun.kind === "error" && (
+                <span className="tw-text-xs tw-text-error">{upgradeRun.message}</span>
+              )}
+              <Button variant="default" size="sm" onClick={handleUpgrade}>
+                {isCustom ? "Run opencode upgrade" : "Upgrade to latest"}
+              </Button>
+            </div>
+          )}
+        </div>
+      )}
       <ConfigSection title="Download managed binary">
         <p className="tw-my-0 tw-text-sm tw-text-muted">
           Let Copilot download and manage the official opencode binary from its GitHub repo.

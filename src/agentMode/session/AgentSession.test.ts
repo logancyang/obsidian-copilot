@@ -471,6 +471,7 @@ describe("AgentSession.create (via start)", () => {
     const stateWithModel: BackendState = {
       model: {
         current: { baseModelId: "anthropic/sonnet", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           {
             baseModelId: "anthropic/sonnet",
@@ -513,6 +514,7 @@ describe("AgentSession.create (via start)", () => {
     const stateWithSonnet: BackendState = {
       model: {
         current: { baseModelId: "anthropic/sonnet", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           {
             baseModelId: "anthropic/sonnet",
@@ -541,11 +543,64 @@ describe("AgentSession.create (via start)", () => {
     });
   });
 
+  it("applyModelWireId routes through set_config_option when the catalog is config-option-backed", async () => {
+    const mock = makeMockBackend();
+    const configBackedState: BackendState = {
+      model: {
+        current: { baseModelId: "omlx/a", effort: null },
+        apply: { kind: "setConfigOption", configId: "model" },
+        availableModels: [{ baseModelId: "omlx/a", name: "A", provider: null, effortOptions: [] }],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: configBackedState });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "opencode",
+    });
+    await session.ready;
+    await session.applyModelWireId("omlx/b");
+    expect(mock.setSessionConfigOption).toHaveBeenCalledWith({
+      sessionId: "acp-1",
+      configId: "model",
+      value: "omlx/b",
+    });
+    expect(mock.setSessionModel).not.toHaveBeenCalled();
+  });
+
+  it("applyModelWireId routes through set_model when the catalog is models-backed", async () => {
+    const mock = makeMockBackend();
+    const modelsBackedState: BackendState = {
+      model: {
+        current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
+        availableModels: [
+          { baseModelId: "gpt-5", name: "GPT-5", provider: null, effortOptions: [] },
+        ],
+      },
+      mode: null,
+    };
+    mock.newSession.mockResolvedValueOnce({ sessionId: "acp-1", state: modelsBackedState });
+    const session = AgentSession.start({
+      backend: mock.asBackend,
+      cwd: "/vault",
+      internalId: "internal-1",
+      backendId: "codex",
+    });
+    await session.ready;
+    await session.applyModelWireId("o3");
+    expect(mock.setSessionModel).toHaveBeenCalledWith({ sessionId: "acp-1", modelId: "o3" });
+    expect(mock.setSessionConfigOption).not.toHaveBeenCalled();
+  });
+
   it("seeds currentState with the persisted selection before notifying listeners", async () => {
     const mock = makeMockBackend();
     const stateWithSonnet: BackendState = {
       model: {
         current: { baseModelId: "anthropic/sonnet", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           {
             baseModelId: "anthropic/sonnet",
@@ -595,6 +650,7 @@ describe("AgentSession.create (via start)", () => {
     const cachedState: BackendState = {
       model: {
         current: { baseModelId: "kimi-2.6", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           { baseModelId: "kimi-2.6", name: "Kimi 2.6", provider: "moon", effortOptions: [] },
           {
@@ -643,6 +699,7 @@ describe("AgentSession.create (via start)", () => {
     const backendState: BackendState = {
       model: {
         current: { baseModelId: "anthropic/sonnet", effort: "low" },
+        apply: { kind: "setModel" },
         availableModels: [
           {
             baseModelId: "anthropic/sonnet",
@@ -680,6 +737,7 @@ describe("AgentSession.create (via start)", () => {
     const stateWithSonnet: BackendState = {
       model: {
         current: { baseModelId: "anthropic/sonnet", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           {
             baseModelId: "anthropic/sonnet",
@@ -729,6 +787,7 @@ describe("AgentSession warm-adoption ready gating", () => {
     const probeState: BackendState = {
       model: {
         current: { baseModelId: "anthropic/sonnet", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           {
             baseModelId: "anthropic/sonnet",
@@ -817,6 +876,7 @@ describe("AgentSession.setModel", () => {
     const newState: BackendState = {
       model: {
         current: { baseModelId: "x/y", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [{ baseModelId: "x/y", name: "X Y", provider: null, effortOptions: [] }],
       },
       mode: null,

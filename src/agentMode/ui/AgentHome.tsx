@@ -234,7 +234,7 @@ const AgentHomeInternal: React.FC<AgentHomeProps> = ({
                 }
                 data-agent-landing={isGlobalLanding ? "global" : "conversation"}
               >
-                <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
+                <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
                 {isGlobalLanding ? (
                   <>
                     {/* Top spacer biases the composer into the lower portion of

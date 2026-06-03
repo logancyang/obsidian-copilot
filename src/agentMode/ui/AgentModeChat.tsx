@@ -104,7 +104,7 @@ export const AgentModeChat: React.FC<Props> = ({
   return (
     <div className="tw-flex tw-size-full tw-flex-col tw-overflow-hidden">
       <div className="tw-flex-1" />
-      <AgentModeStatus manager={manager} onInstallClick={handleInstall} />
+      <AgentModeStatus manager={manager} plugin={plugin} onInstallClick={handleInstall} />
       <AgentChatControls />
     </div>
   );

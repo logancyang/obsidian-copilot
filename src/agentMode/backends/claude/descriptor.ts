@@ -211,7 +211,7 @@ export const ClaudeBackendDescriptor: BackendDescriptor = {
     // pointless `setSessionModel` on every slider drag.
     const currentBase = session.getState()?.model?.current.baseModelId;
     if (currentBase !== selection.baseModelId) {
-      await session.setModel(claudeWire.encode(selection));
+      await session.applyModelWireId(claudeWire.encode(selection));
     }
     if (selection.effort === null) return;
     const cfgOpt = claudeWire.effortConfigFor?.(selection.baseModelId);

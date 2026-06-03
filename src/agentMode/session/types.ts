@@ -6,6 +6,7 @@ export type {
   BackendAuthStatus,
   BackendDescriptor,
   BackendSignInHandlers,
+  BackendUpgradeInfo,
   InstallState,
 } from "./descriptor";
 export type { CurrentPlan, PlanDecisionAction, PlanProposalDecision } from "./plan";
@@ -160,6 +161,15 @@ export interface ModelSelection {
 export interface ModelState {
   current: ModelSelection;
   availableModels: ModelEntry[];
+  /**
+   * Which RPC a model switch should dispatch. `setModel` is the default ACP
+   * channel (`session/set_model`). `setConfigOption` is used when the backend
+   * advertises its catalog through a generic `category:"model"` select config
+   * option (opencode ≥ 1.15.13, where `session/set_model` is gone and the
+   * canonical switch is `session/set_config_option`). Set by the translator
+   * from which source produced the catalog.
+   */
+  apply: ModelApplySpec;
 }
 
 /**
@@ -204,6 +214,15 @@ export interface ModelWireCodec {
 export type ModeApplySpec =
   | { kind: "setMode"; nativeId: string }
   | { kind: "setConfigOption"; configId: string; value: string };
+
+/**
+ * Apply spec for a model change — the dispatch channel for `ModelState`.
+ * `setModel` issues ACP `session/set_model` (codex, claude, and opencode
+ * ≤ 1.15.12). `setConfigOption` issues `session/set_config_option` against the
+ * `category:"model"` select id (opencode ≥ 1.15.13). The encoded wire id is the
+ * same string in both channels; only the RPC differs.
+ */
+export type ModelApplySpec = { kind: "setModel" } | { kind: "setConfigOption"; configId: string };
 
 /**
  * Normalized, consumer-facing slice of session state. Produced by

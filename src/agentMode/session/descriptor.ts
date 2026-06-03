@@ -20,6 +20,18 @@ export type InstallState =
   | { kind: "ready"; source: "managed" | "custom" }
   | { kind: "error"; message: string };
 
+/**
+ * Reported by `getUpgradeInfo` when the installed binary is too old for the
+ * plugin to drive (e.g. opencode < 1.15.13 lacks the config-option model API).
+ * Generic UI renders an upgrade CTA from this; `source` selects the mechanism
+ * (`upgrade` reinstalls managed binaries, runs `<cli> upgrade` for custom ones).
+ */
+export interface BackendUpgradeInfo {
+  currentVersion: string;
+  minVersion: string;
+  source: "managed" | "custom";
+}
+
 /** Sign-in state for backends that authenticate via a CLI / external account. */
 export interface BackendAuthStatus {
   signedIn: boolean;
@@ -145,6 +157,22 @@ export interface BackendDescriptor {
 
   /** Open backend-specific install/setup modal. */
   openInstallUI(plugin: CopilotPlugin): void;
+
+  /**
+   * Optional: report that the installed binary is too old for the plugin, so
+   * generic UI can surface an upgrade CTA. Returns `null` when current,
+   * unknown, not installed, or not applicable (claude/codex don't implement it).
+   */
+  getUpgradeInfo?(settings: CopilotSettings): BackendUpgradeInfo | null;
+
+  /**
+   * Optional: upgrade the installed binary in place (managed reinstall, or the
+   * CLI's own `upgrade`). Resolves when done. Changing the persisted version
+   * restarts the backend via the `subscribeInstallState` subscription, so the
+   * next session boots on the new binary. Throws with a readable message on
+   * failure; callers surface progress/errors.
+   */
+  upgrade?(plugin: CopilotPlugin): Promise<void>;
 
   /**
    * Optional: sign-in capability for backends gated on an external account

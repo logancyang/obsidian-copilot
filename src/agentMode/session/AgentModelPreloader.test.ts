@@ -51,6 +51,7 @@ function makeMockProc(opts?: { newSessionState?: BackendState }): MockProcHandle
           effortOptions: [],
         },
       ],
+      apply: { kind: "setModel" },
     },
     mode: null,
   };

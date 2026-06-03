@@ -904,8 +904,15 @@ export const RESTRICTION_MESSAGES = {
     `${extension.toUpperCase()} files are not supported in the current mode.`,
 } as const;
 
-export const OPENCODE_PINNED_VERSION = "1.15.11";
+export const OPENCODE_PINNED_VERSION = "1.15.13";
 export const OPENCODE_RELEASE_TAG = `v${OPENCODE_PINNED_VERSION}`;
+/**
+ * Minimum opencode the plugin supports. v1.15.13 (PR sst/opencode#29929,
+ * "promote next ACP implementation") dropped the dedicated ACP `models` state
+ * and moved the model catalog to a `category:"model"` config option; older
+ * binaries report no models to our picker, so we force an upgrade.
+ */
+export const OPENCODE_MIN_ACP_VERSION = "1.15.13";
 export const OPENCODE_RELEASE_URL_TEMPLATE =
   "https://github.com/sst/opencode/releases/download/v{version}/{asset}";
 export const OPENCODE_RELEASE_API_URL_TEMPLATE =

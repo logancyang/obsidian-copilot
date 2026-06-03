@@ -403,6 +403,22 @@ export class AgentSession {
   }
 
   /**
+   * Apply an encoded model wire id through whichever channel the current model
+   * state declares. Backends whose catalog comes from a `category:"model"`
+   * config option (opencode ≥ 1.15.13) switch via `session/set_config_option`;
+   * everyone else via `session/set_model`. Falls back to `setModel` before any
+   * model state is known. The encoded wire id is identical for both channels.
+   */
+  async applyModelWireId(wireId: string): Promise<void> {
+    const apply = this.currentState?.model?.apply;
+    if (apply?.kind === "setConfigOption") {
+      await this.setConfigOption(apply.configId, wireId);
+      return;
+    }
+    await this.setModel(wireId);
+  }
+
+  /**
    * Apply the persisted user selection to the backend via `setModel`.
    * Runs whenever `defaultModelSelection` is supplied — `setModel` is
    * idempotent, and the wire-encoding short-circuit below makes it a
@@ -430,7 +446,7 @@ export class AgentSession {
       : null;
     if (encoded === originalEncoded) return;
     try {
-      await this.setModel(encoded);
+      await this.applyModelWireId(encoded);
     } catch (e) {
       logWarn(`[AgentMode] could not apply default model ${encoded}; reverting seed`, e);
       this.currentState = originalState;
@@ -476,22 +492,31 @@ export class AgentSession {
     this.clearCurrentPlanIfModeLeft();
   }
 
-  /** Whether the user can swap the active model on this session. */
+  /**
+   * Whether the user can swap the active model on this session. Config-option-
+   * backed catalogs (opencode ≥ 1.15.13) switch via `setConfigOption`; everyone
+   * else via `setModel`.
+   */
   canSwitchModel(): boolean | null {
     if (this.getStatus() === "starting") return false;
-    return this.backend.isSetSessionModelSupported();
+    return this.currentState?.model?.apply.kind === "setConfigOption"
+      ? this.backend.isSetSessionConfigOptionSupported()
+      : this.backend.isSetSessionModelSupported();
   }
 
   /**
-   * Whether the user can swap effort. Descriptor-style backends route
-   * effort via `setConfigOption`; suffix-style via `setModel`. The wire
-   * routing is encapsulated here — UI consumers ask intent only.
+   * Whether the user can swap effort. Descriptor-style backends (claude) and
+   * config-option-backed models (opencode ≥ 1.15.13) route effort via
+   * `setConfigOption`; suffix-style models that pack effort into the wire id
+   * (codex, older opencode) via `setModel`. The wire routing is encapsulated
+   * here — UI consumers ask intent only.
    */
   canSwitchEffort(): boolean | null {
     if (this.getStatus() === "starting") return false;
     const descriptor = this.getDescriptor?.();
     if (!descriptor) return null;
-    return descriptor.wire.effortConfigFor
+    if (descriptor.wire.effortConfigFor) return this.backend.isSetSessionConfigOptionSupported();
+    return this.currentState?.model?.apply.kind === "setConfigOption"
       ? this.backend.isSetSessionConfigOptionSupported()
       : this.backend.isSetSessionModelSupported();
   }

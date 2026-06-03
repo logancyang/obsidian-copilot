@@ -154,7 +154,7 @@ export const CodexBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
-    await session.setModel(codexWire.encode(selection));
+    await session.applyModelWireId(codexWire.encode(selection));
   },
 
   createBackendProcess(args): BackendProcess {

@@ -1,6 +1,7 @@
 import type {
   BackendConfigOption,
   BackendDescriptor,
+  BackendModelInfo,
   RawModelState,
   RawModeState,
   BackendState,
@@ -9,6 +10,7 @@ import type {
   ModeApplySpec,
   ModeMapping,
   ModeOption,
+  ModelApplySpec,
   ModelEntry,
   ModelSelection,
   ModelState,
@@ -66,8 +68,16 @@ function translateModel(
   inputs: BackendStateInputs,
   descriptor: BackendDescriptor
 ): ModelState | null {
-  const modelState = inputs.models;
+  // Prefer the dedicated `models` state (codex, claude, opencode ≤ 1.15.12).
+  // Newer opencode (≥ 1.15.13) dropped that field and advertises its catalog
+  // only through a generic `category:"model"` select config option, switched
+  // via `session/set_config_option` instead of `session/set_model`.
+  const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
+  const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
+  const apply: ModelApplySpec = fromConfig
+    ? { kind: "setConfigOption", configId: fromConfig.configId }
+    : { kind: "setModel" };
 
   // Group advertised wire ids by baseModelId, preserving first-seen order.
   type Group = {
@@ -152,7 +162,47 @@ function translateModel(
     ),
   };
 
-  return { current, availableModels };
+  return { current, availableModels, apply };
+}
+
+/**
+ * Fallback model source for backends that advertise their catalog only via a
+ * generic `category:"model"` select config option (opencode ≥ 1.15.13) instead
+ * of a dedicated `RawModelState`. Flattens grouped options like
+ * `optionsFromConfigOption`. Returns the synthesized `RawModelState` plus the
+ * option id (so the caller can route switches through `set_config_option`), or
+ * `null` when no populated model option exists — leaving `model` null for
+ * backends that report nothing.
+ */
+function modelStateFromConfigOption(
+  configOptions: BackendConfigOption[] | null
+): { state: RawModelState; configId: string } | null {
+  if (!configOptions) return null;
+  const opt = configOptions.find((o) => o.category === "model" && o.type === "select");
+  if (!opt || opt.type !== "select") return null;
+  const availableModels: BackendModelInfo[] = [];
+  for (const entry of opt.options) {
+    if ("options" in entry) {
+      for (const inner of entry.options) {
+        availableModels.push({
+          modelId: inner.value,
+          name: inner.name,
+          description: inner.description,
+        });
+      }
+    } else {
+      availableModels.push({
+        modelId: entry.value,
+        name: entry.name,
+        description: entry.description,
+      });
+    }
+  }
+  if (availableModels.length === 0) return null;
+  return {
+    state: { currentModelId: String(opt.currentValue), availableModels },
+    configId: opt.id,
+  };
 }
 
 function deriveEffortOptions(
@@ -322,9 +372,12 @@ function stripEffortSuffix(name: string, variants: { effort: string | null }[]):
 export function modelStateSignature(state: BackendState | null): string {
   const m = state?.model;
   if (!m) return "";
+  const apply =
+    m.apply.kind === "setConfigOption" ? `setConfigOption:${m.apply.configId}` : m.apply.kind;
   return [
     m.current.baseModelId,
     m.current.effort ?? "",
+    apply,
     m.availableModels
       .map(
         (e) =>

@@ -55,7 +55,11 @@ function makeState(modelId: string): BackendState {
     effortOptions: [],
   };
   return {
-    model: { current: { baseModelId: modelId, effort: null }, availableModels: [entry] },
+    model: {
+      current: { baseModelId: modelId, effort: null },
+      availableModels: [entry],
+      apply: { kind: "setModel" },
+    },
     mode: null,
   };
 }
@@ -118,6 +122,7 @@ function makeModelState(currentBaseId: string, available: ModelEntry[]): ModelSt
   return {
     current: { baseModelId: currentBaseId, effort: null },
     availableModels: available,
+    apply: { kind: "setModel" },
   };
 }
 

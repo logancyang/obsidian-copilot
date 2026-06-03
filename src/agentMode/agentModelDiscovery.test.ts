@@ -91,6 +91,7 @@ function stateWithModels(baseIds: string[], currentBaseId?: string): BackendStat
   return {
     model: {
       current: { baseModelId: currentBaseId ?? baseIds[0] ?? "", effort: null },
+      apply: { kind: "setModel" },
       availableModels: baseIds.map((baseModelId) => ({
         baseModelId,
         name: baseModelId,
@@ -230,6 +231,7 @@ describe("wireAgentModelDiscovery", () => {
     m.setState("codex", {
       model: {
         current: { baseModelId: "gpt-5", effort: null },
+        apply: { kind: "setModel" },
         availableModels: [
           { baseModelId: "gpt-5", name: "GPT-5", provider: null, effortOptions: [] },
           { baseModelId: "blank", name: "", provider: null, effortOptions: [] },

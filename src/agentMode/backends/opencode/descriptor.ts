@@ -3,7 +3,9 @@ import * as os from "node:os";
 import { OpencodeInstallModal } from "@/agentMode/backends/opencode/OpencodeInstallModal";
 import OpencodeLogo from "@/agentMode/backends/opencode/logo.svg";
 import type CopilotPlugin from "@/main";
+import { OPENCODE_MIN_ACP_VERSION } from "@/constants";
 import {
+  getSettings,
   subscribeToSettingsChange,
   updateAgentModeBackendFields,
   type CopilotSettings,
@@ -13,7 +15,11 @@ import {
   OpencodeBackend,
   OPENCODE_PROVIDER_MAP,
 } from "./OpencodeBackend";
-import { computeInstallState, OpencodeBinaryManager } from "./OpencodeBinaryManager";
+import {
+  computeInstallState,
+  isOpencodeVersionOutdated,
+  OpencodeBinaryManager,
+} from "./OpencodeBinaryManager";
 import { opencodeEnabledModelEntries } from "./opencodeModelResolve";
 import { OpencodeSettingsPanel } from "./OpencodeSettingsPanel";
 import { resolveOpencodeBinary } from "./opencodeBinaryResolver";
@@ -27,7 +33,12 @@ import type {
   ModelSelection,
   ModelWireCodec,
 } from "@/agentMode/session/types";
-import type { BackendDescriptor, BackendProcess, InstallState } from "@/agentMode/session/types";
+import type {
+  BackendDescriptor,
+  BackendProcess,
+  BackendUpgradeInfo,
+  InstallState,
+} from "@/agentMode/session/types";
 
 /** Config option id OpenCode uses to switch the active agent at runtime. */
 const OPENCODE_MODE_CONFIG_OPTION_ID = "mode";
@@ -169,8 +180,32 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
     }).open();
   },
 
+  getUpgradeInfo(settings: CopilotSettings): BackendUpgradeInfo | null {
+    const state = computeInstallState(settings.agentMode?.backends?.opencode);
+    if (state.kind !== "installed" || !isOpencodeVersionOutdated(state.version)) return null;
+    return {
+      currentVersion: state.version,
+      minVersion: OPENCODE_MIN_ACP_VERSION,
+      source: state.source,
+    };
+  },
+
+  async upgrade(plugin: CopilotPlugin): Promise<void> {
+    const manager = getOpencodeBinaryManager(plugin);
+    const state = computeInstallState(getSettings().agentMode?.backends?.opencode);
+    if (state.kind !== "installed") return;
+    if (state.source === "custom") {
+      await manager.upgradeCustomBinary();
+    } else {
+      await manager.upgradeManaged();
+    }
+  },
+
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
-    await session.setModel(opencodeWire.encode(selection));
+    // opencode ≥ 1.15.13 advertises models as a `category:"model"` config
+    // option; `applyModelWireId` routes through `set_config_option` when the
+    // state says so, falling back to `set_model` otherwise.
+    await session.applyModelWireId(opencodeWire.encode(selection));
   },
 
   createBackendProcess(args): BackendProcess {

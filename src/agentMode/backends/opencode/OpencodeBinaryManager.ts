@@ -1,4 +1,9 @@
-import { OPENCODE_PINNED_VERSION, OPENCODE_RELEASE_API_URL_TEMPLATE } from "@/constants";
+import {
+  OPENCODE_MIN_ACP_VERSION,
+  OPENCODE_PINNED_VERSION,
+  OPENCODE_RELEASE_API_URL_TEMPLATE,
+} from "@/constants";
+import { compareSemver } from "@/utils/semver";
 import { logError, logInfo, logWarn } from "@/logger";
 import type CopilotPlugin from "@/main";
 import { getSettings, setSettings, type OpencodeBackendSettings } from "@/settings/model";
@@ -18,6 +23,8 @@ const DOWNLOAD_INACTIVITY_TIMEOUT_MS = 30_000;
 // Generous: first-run on Windows (Defender real-time scan) and macOS
 // (Gatekeeper translocation) can add a few seconds before the binary responds.
 const VERIFY_BINARY_TIMEOUT_MS = 8_000;
+// `opencode upgrade` downloads and swaps a release binary — give it room.
+const UPGRADE_BINARY_TIMEOUT_MS = 180_000;
 
 export type ProgressEvent =
   | { phase: "resolve"; message: string }
@@ -102,6 +109,18 @@ export function computeInstallState(opencode: OpencodeBackendSettings | undefine
 /** Read the OpenCode-specific settings slice from current settings. */
 export function readOpencodeSettings(): OpencodeBackendSettings {
   return getSettings().agentMode?.backends?.opencode ?? {};
+}
+
+/**
+ * Whether an installed opencode version predates the minimum the plugin
+ * supports ({@link OPENCODE_MIN_ACP_VERSION}). Older binaries advertise models
+ * through the now-removed ACP `models` state, so the picker can't surface them.
+ * An unknown version isn't flagged — we can't prove it's old, and a missing
+ * install is handled by the install prompt instead.
+ */
+export function isOpencodeVersionOutdated(version: string | undefined): boolean {
+  if (!version) return false;
+  return compareSemver(version, OPENCODE_MIN_ACP_VERSION) < 0;
 }
 
 function updateOpencodeFields(partial: Partial<OpencodeBackendSettings>): void {
@@ -293,6 +312,58 @@ export class OpencodeBinaryManager {
     } finally {
       await removeDir(tmpDir).catch(() => {});
     }
+  }
+
+  /**
+   * Upgrade a managed install to the pinned version: install the pinned binary
+   * (atomic — the existing one keeps working until the new one is staged in),
+   * then remove the previously-active managed version dir when it differs.
+   */
+  async upgradeManaged(opts: InstallOptions = {}): Promise<{ version: string; path: string }> {
+    const prev = readOpencodeSettings();
+    const result = await this.install({ ...opts, version: OPENCODE_PINNED_VERSION });
+    if (
+      prev.binarySource === "managed" &&
+      prev.binaryVersion &&
+      prev.binaryVersion !== result.version
+    ) {
+      const oldDir = path.join(this.getDataDir(), prev.binaryVersion);
+      await removeDir(oldDir).catch((e) =>
+        logWarn(`[AgentMode] failed to remove old opencode ${oldDir}: ${e}`)
+      );
+    }
+    return result;
+  }
+
+  /**
+   * Upgrade a user-supplied opencode binary in place via its own
+   * `<binary> upgrade`, then re-verify and persist the new version. The binary
+   * stays where the user put it (`binarySource:"custom"`); managed version dirs
+   * are untouched. Throws with a readable message on failure.
+   */
+  async upgradeCustomBinary(): Promise<{ version: string; path: string }> {
+    const s = readOpencodeSettings();
+    if (s.binarySource !== "custom" || !s.binaryPath) {
+      throw new Error("No custom opencode binary is configured to upgrade.");
+    }
+    const binaryPath = s.binaryPath;
+    try {
+      await execFileAsync(binaryPath, ["upgrade"], {
+        timeout: UPGRADE_BINARY_TIMEOUT_MS,
+        windowsHide: true,
+      });
+    } catch (e) {
+      const err = e as NodeJS.ErrnoException;
+      throw new Error(`\`${binaryPath} upgrade\` failed: ${err.message ?? String(err)}`);
+    }
+    const { stdout } = await verifyOpencodeBinary(binaryPath);
+    const version = parseVersionFromStdout(stdout);
+    if (!version) {
+      throw new Error(`${binaryPath} --version didn't report a version after upgrade.`);
+    }
+    updateOpencodeFields({ binaryVersion: version, binaryPath, binarySource: "custom" });
+    logInfo(`[AgentMode] upgraded custom opencode to ${version}`);
+    return { version, path: binaryPath };
   }
 
   /**
