@@ -568,7 +568,7 @@ export function registerCommands(plugin: CopilotPlugin) {
     setSelectedTextContexts([selectedTextContext]);
 
     // Open chat window to show the context was added
-    await plugin.activateView();
+    await plugin.activateChatViewForContext();
   });
 
   // Add web selection to chat context command (manual)
@@ -613,7 +613,7 @@ export function registerCommands(plugin: CopilotPlugin) {
       setSelectedTextContexts([webSelectedTextContext]);
 
       // Open chat window to show the context was added
-      await plugin.activateView();
+      await plugin.activateChatViewForContext();
     } catch (error) {
       logError("Error adding web selection to context:", error);
       new Notice("Failed to get web selection");

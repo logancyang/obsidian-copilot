@@ -142,6 +142,10 @@ export default class CopilotPlugin extends Plugin {
   userMemoryManager: UserMemoryManager;
   quickAskController: QuickAskController;
   chatSelectionHighlightController: ChatSelectionHighlightController;
+  // Most-recently-focused chat view, used to route "add … to chat context"
+  // commands when both chat views are open. Defaults to legacy so a
+  // never-focused-a-chat state is harmless.
+  private lastActiveChatViewType: typeof CHAT_VIEWTYPE | typeof CHAT_AGENT_VIEWTYPE = CHAT_VIEWTYPE;
   private selectionDebounceTimer?: number;
   private selectionChangeHandler?: () => void;
   private selectionListenerDocument?: Document;
@@ -336,6 +340,11 @@ export default class CopilotPlugin extends Plugin {
       this.app.workspace.on("active-leaf-change", (leaf) => {
         // Delegate to chat selection highlight controller
         this.chatSelectionHighlightController.handleActiveLeafChange(leaf ?? null);
+
+        const activeViewType = leaf?.getViewState().type;
+        if (activeViewType === CHAT_VIEWTYPE || activeViewType === CHAT_AGENT_VIEWTYPE) {
+          this.lastActiveChatViewType = activeViewType;
+        }
 
         if (leaf && leaf.view instanceof MarkdownView) {
           const file = leaf.view.file;
@@ -778,6 +787,35 @@ export default class CopilotPlugin extends Plugin {
     window.setTimeout(() => {
       this.emitChatIsVisible();
     }, 50);
+  }
+
+  /**
+   * The "add … to chat context" commands write into a shared atom that both chat
+   * views render, so this only picks which chat to bring into focus:
+   *   - both chat views open → the one focused most recently
+   *   - exactly one open      → that one
+   *   - none open             → the agent chat when available, else the legacy chat
+   */
+  async activateChatViewForContext(): Promise<void> {
+    const agentUsable = this.canUseAgentView();
+    const agentOpen =
+      agentUsable && this.app.workspace.getLeavesOfType(CHAT_AGENT_VIEWTYPE).length > 0;
+    const legacyOpen = this.app.workspace.getLeavesOfType(CHAT_VIEWTYPE).length > 0;
+
+    let useAgent: boolean;
+    if (agentOpen && legacyOpen) {
+      useAgent = this.lastActiveChatViewType === CHAT_AGENT_VIEWTYPE;
+    } else if (agentOpen || legacyOpen) {
+      useAgent = agentOpen;
+    } else {
+      useAgent = agentUsable;
+    }
+
+    if (useAgent) {
+      await this.activateAgentView();
+    } else {
+      await this.activateView();
+    }
   }
 
   async deactivateView() {
