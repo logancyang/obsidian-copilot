@@ -85,10 +85,22 @@ export function pickMatchingAsset(release: GithubRelease, candidates: string[]):
   );
 }
 
-/** Derive the install state from the persisted `agentMode.backends.opencode` slice. */
-export function computeInstallState(opencode: OpencodeBackendSettings | undefined): InstallState {
+/**
+ * Derive the install state from the persisted `agentMode.backends.opencode`
+ * slice. A configured `binaryPath` whose file is missing on this device counts
+ * as `absent`, not `installed`: when a vault syncs to a second device the path
+ * can be present in settings while the binary was never installed locally
+ * (logancyang/obsidian-copilot-preview#123). Reporting `absent` surfaces the
+ * install prompt and skips the auto-spawn that otherwise fails with a cryptic
+ * error at load. `fileExists` is injected so the branch is unit-testable
+ * without touching disk.
+ */
+export function computeInstallState(
+  opencode: OpencodeBackendSettings | undefined,
+  fileExists: (path: string) => boolean = (p) => fs.existsSync(p)
+): InstallState {
   const s = opencode ?? {};
-  if (s.binaryPath && s.binaryVersion) {
+  if (s.binaryPath && s.binaryVersion && fileExists(s.binaryPath)) {
     return {
       kind: "installed",
       version: s.binaryVersion,
@@ -144,11 +156,14 @@ export class OpencodeBinaryManager {
    * users for transient filesystem hiccups (network mounts, etc.).
    */
   async refreshInstallState(): Promise<void> {
-    const state = this.getInstallState();
-    if (state.kind !== "installed") return;
-    if (state.source !== "managed") return;
-    if (await fileExists(state.path)) return;
-    logWarn(`[AgentMode] persisted opencode binary missing at ${state.path}; clearing settings.`);
+    // Read raw settings (not getInstallState) so we can still see a configured
+    // path whose file is gone — getInstallState now reports that as `absent`.
+    // Only auto-clear a *managed* install whose binary vanished; a custom path
+    // is the user's to manage and may point at a not-yet-mounted volume.
+    const s = readOpencodeSettings();
+    if (!s.binaryPath || (s.binarySource ?? "managed") !== "managed") return;
+    if (await fileExists(s.binaryPath)) return;
+    logWarn(`[AgentMode] persisted opencode binary missing at ${s.binaryPath}; clearing settings.`);
     clearOpencodeBinary();
   }
 

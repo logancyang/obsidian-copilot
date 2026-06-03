@@ -148,7 +148,7 @@ describe("computeInstallState", () => {
   });
 
   it("installed (managed) when source is missing — legacy data defaults to managed", () => {
-    expect(computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3" })).toEqual({
+    expect(computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3" }, () => true)).toEqual({
       kind: "installed",
       version: "1.2.3",
       path: "/p",
@@ -158,11 +158,25 @@ describe("computeInstallState", () => {
 
   it("installed with explicit source preserves the value", () => {
     expect(
-      computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3", binarySource: "custom" })
+      computeInstallState(
+        { binaryPath: "/p", binaryVersion: "1.2.3", binarySource: "custom" },
+        () => true
+      )
     ).toEqual({ kind: "installed", version: "1.2.3", path: "/p", source: "custom" });
     expect(
-      computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3", binarySource: "managed" })
+      computeInstallState(
+        { binaryPath: "/p", binaryVersion: "1.2.3", binarySource: "managed" },
+        () => true
+      )
     ).toEqual({ kind: "installed", version: "1.2.3", path: "/p", source: "managed" });
+  });
+
+  it("absent when the configured binary is missing on this device (synced vault)", () => {
+    // Fully-configured slice, but the file doesn't exist locally — e.g. the
+    // vault synced from another device where opencode was installed (#123).
+    expect(computeInstallState({ binaryPath: "/p", binaryVersion: "1.2.3" }, () => false)).toEqual({
+      kind: "absent",
+    });
   });
 });
 
