@@ -1,8 +1,7 @@
-import { AlertCircle, CheckCircle, CircleDashed, FileText, Loader2, X } from "lucide-react";
+import { AlertCircle, CheckCircle, CircleDashed, Loader2 } from "lucide-react";
 import { Platform, TFile, TFolder } from "obsidian";
 import React, { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   ContextNoteBadge,
   ContextActiveNoteBadge,
@@ -10,15 +9,15 @@ import {
   ContextWebTabBadge,
   ContextUrlBadge,
   ContextFolderBadge,
-  FaviconOrGlobe,
+  ContextSelectedTextBadge,
 } from "@/components/chat-components/ContextBadges";
-import { SelectedTextContext, WebTabContext, isWebSelectedTextContext } from "@/types/message";
+import { SelectedTextContext, WebTabContext } from "@/types/message";
 import { ChainType } from "@/chainType";
 import { Separator } from "@/components/ui/separator";
 import { useChainType, useIndexingProgress } from "@/aiParams";
 import { useApp } from "@/context";
 import { useProjectContextStatus } from "@/hooks/useProjectContextStatus";
-import { getDomainFromUrl, isPlusChain, openFileInWorkspace } from "@/utils";
+import { isPlusChain, openFileInWorkspace } from "@/utils";
 import { mergeWebTabContexts } from "@/utils/urlNormalization";
 import { AtMentionTypeahead } from "./AtMentionTypeahead";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -44,62 +43,6 @@ interface ChatContextMenuProps {
   ) => void;
   lexicalEditorRef?: React.RefObject<{ focus: () => void }>;
   hideAddContextButton?: boolean;
-}
-
-function ContextSelection({
-  selectedText,
-  onRemoveContext,
-}: {
-  selectedText: SelectedTextContext;
-  onRemoveContext: (category: string, data: string) => void;
-}) {
-  // Handle web selected text
-  if (isWebSelectedTextContext(selectedText)) {
-    const domain = getDomainFromUrl(selectedText.url);
-    return (
-      <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-        <div className="tw-flex tw-items-center tw-gap-1">
-          <FaviconOrGlobe faviconUrl={selectedText.faviconUrl} />
-          <span className="tw-max-w-40 tw-truncate">{selectedText.title || domain}</span>
-          <span className="tw-text-xs tw-text-faint">Selection</span>
-        </div>
-        <Button
-          variant="ghost2"
-          size="fit"
-          onClick={() => onRemoveContext("selectedText", selectedText.id)}
-          aria-label="Remove from context"
-          className="tw-text-muted"
-        >
-          <X className="tw-size-4" />
-        </Button>
-      </Badge>
-    );
-  }
-
-  // Handle note selected text (default)
-  const lineRange =
-    selectedText.startLine === selectedText.endLine
-      ? `L${selectedText.startLine}`
-      : `L${selectedText.startLine}-${selectedText.endLine}`;
-
-  return (
-    <Badge className="tw-items-center tw-py-0 tw-pl-2 tw-pr-0.5 tw-text-xs">
-      <div className="tw-flex tw-items-center tw-gap-1">
-        <FileText className="tw-size-3" />
-        <span className="tw-max-w-40 tw-truncate">{selectedText.noteTitle}</span>
-        <span className="tw-text-xs tw-text-faint">{lineRange}</span>
-      </div>
-      <Button
-        variant="ghost2"
-        size="fit"
-        onClick={() => onRemoveContext("selectedText", selectedText.id)}
-        aria-label="Remove from context"
-        className="tw-text-muted"
-      >
-        <X className="tw-size-4" />
-      </Button>
-    </Badge>
-  );
 }
 
 export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
@@ -264,10 +207,10 @@ export const ChatContextMenu: React.FC<ChatContextMenuProps> = ({
           />
         ))}
         {selectedTextContexts.map((selectedText) => (
-          <ContextSelection
+          <ContextSelectedTextBadge
             key={selectedText.id}
             selectedText={selectedText}
-            onRemoveContext={onRemoveContext}
+            onRemove={() => onRemoveContext("selectedText", selectedText.id)}
           />
         ))}
       </div>
