@@ -37,6 +37,12 @@ export { providerRequiresApiKey } from "./providers/providerRequiresApiKey";
 export { ConfiguredModelRegistry } from "./models/ConfiguredModelRegistry";
 export { BackendConfigRegistry } from "./backends/BackendConfigRegistry";
 export { ChatModelFactory } from "./chatModel/ChatModelFactory";
+export {
+  configuredModelToCustomModel,
+  mapProviderTypeToChatModelProvider,
+} from "./chatModel/configuredModelToCustomModel";
+export { resolveChatBackendModel } from "./chatModel/resolveChatBackendModel";
+export type { ChatBackendResolution } from "./chatModel/resolveChatBackendModel";
 
 // ---------------------------------------------------------------------------
 // Provider adapter contract

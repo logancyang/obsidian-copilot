@@ -62,6 +62,34 @@ export function partitionCandidates(
 }
 
 /**
+ * Partition for the non-agent "chat" backend (Quick Chat). Every BYOK /
+ * Copilot Plus configured chat model is a candidate, bucketed one-group-per-
+ * provider by `buildModelEnableGroups`. Agent-origin models are excluded — the
+ * chat backend instantiates via LangChain (`ChatModelManager`), which can't
+ * drive an agent CLI's models — and embedding models are excluded since they
+ * aren't chat models.
+ */
+export function partitionChatCandidates(
+  configuredModels: readonly ConfiguredModel[],
+  providers: Readonly<Record<string, Provider>>,
+  enabledIds: ReadonlySet<string>
+): CandidatePartition {
+  const byokPlusCandidates: Candidate[] = [];
+  for (const configuredModel of configuredModels) {
+    if (configuredModel.info.isEmbedding) continue;
+    const provider = providers[configuredModel.providerId];
+    if (!provider) continue;
+    if (provider.origin.kind === "agent") continue;
+    byokPlusCandidates.push({
+      configuredModel,
+      provider,
+      enabled: enabledIds.has(configuredModel.configuredModelId),
+    });
+  }
+  return { byokPlusCandidates, agentOriginCandidates: [] };
+}
+
+/**
  * The opencode-only sub-group label: the wire-id prefix (e.g.
  * `opencode/big-pickle` → `opencode`). All opencode-only models live under one
  * agent provider with full-prefixed ids, so sub-grouping comes from the prefix,

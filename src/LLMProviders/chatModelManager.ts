@@ -797,6 +797,20 @@ export default class ChatModelManager {
     }
   }
 
+  /**
+   * Set the active chat model from a chat-backend `CustomModel` produced by the
+   * bridge. Counterpart to `setChatModel` that goes through
+   * `createModelInstanceFromBridged` (no `activeModels` modelMap gate).
+   */
+  async setChatModelFromBridged(model: CustomModel): Promise<void> {
+    try {
+      ChatModelManager.chatModel = await this.createModelInstanceFromBridged(model);
+    } catch (error) {
+      logError(error);
+      throw error;
+    }
+  }
+
   async createModelInstance(model: CustomModel): Promise<BaseChatModel> {
     // Create and return the appropriate model
     const modelKey = getModelKeyFromModel(model);
@@ -814,6 +828,50 @@ export default class ChatModelManager {
       throw new MissingApiKeyError(errorMessage);
     }
 
+    return this.instantiateChatModel(
+      model,
+      selectedModel.vendor as ChatModelProviders,
+      selectedModel.AIConstructor
+    );
+  }
+
+  /**
+   * Build a chat model from a `CustomModel` produced by the model-management
+   * "chat" backend bridge (`configuredModelToCustomModel`). Unlike
+   * `createModelInstance`, this does NOT consult `modelMap` — that map is built
+   * from the legacy `settings.activeModels`, whereas chat-backend models live
+   * in the `Provider` / `ConfiguredModel` registries, so the `activeModels`
+   * gate would reject every bridged model. The bridge already resolved the
+   * provider + key, so credentials are validated directly off the model here.
+   */
+  async createModelInstanceFromBridged(model: CustomModel): Promise<BaseChatModel> {
+    if (!this.hasProviderCredentials(model)) {
+      if ((model.provider as ChatModelProviders) === ChatModelProviders.COPILOT_PLUS) {
+        throw new MissingPlusLicenseError(
+          "Copilot Plus license key is not configured. Please enter your license key in the Copilot Plus section at the top of Basic Settings."
+        );
+      }
+      throw new MissingApiKeyError(`API key is not provided for the model: ${model.name}.`);
+    }
+
+    return this.instantiateChatModel(
+      model,
+      model.provider as ChatModelProviders,
+      this.getProviderConstructor(model)
+    );
+  }
+
+  /**
+   * Shared construction path for both `createModelInstance` (legacy
+   * activeModels) and `createModelInstanceFromBridged` (chat backend). Builds
+   * the provider config, applies the GPT-5 / GitHub-Copilot Responses-API and
+   * LM Studio special cases, and constructs the LangChain client.
+   */
+  private async instantiateChatModel(
+    model: CustomModel,
+    vendor: ChatModelProviders,
+    AIConstructor: ChatConstructorType
+  ): Promise<BaseChatModel> {
     const modelConfig = await this.getModelConfig(model);
     const modelInfo = getModelInfo(model.name);
 
@@ -822,11 +880,10 @@ export default class ChatModelManager {
     const useCopilotResponses = shouldUseGitHubCopilotResponsesApi(model);
     if (
       modelInfo.isGPT5 &&
-      ((selectedModel.vendor as ChatModelProviders) === ChatModelProviders.OPENAI ||
-        (selectedModel.vendor as ChatModelProviders) === ChatModelProviders.OPENAI_FORMAT)
+      (vendor === ChatModelProviders.OPENAI || vendor === ChatModelProviders.OPENAI_FORMAT)
     ) {
       constructorConfig.useResponsesApi = true;
-      logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${selectedModel.vendor})`);
+      logInfo(`Enabling Responses API for GPT-5 model: ${model.name} (${vendor})`);
     }
 
     if (useCopilotResponses) {
@@ -849,9 +906,7 @@ export default class ChatModelManager {
       return new GitHubCopilotResponsesModel(constructorConfig);
     }
 
-    const newModelInstance = new selectedModel.AIConstructor(constructorConfig);
-
-    return newModelInstance;
+    return new AIConstructor(constructorConfig);
   }
 
   validateChatModel(chatModel: BaseChatModel): boolean {
@@ -882,8 +937,11 @@ export default class ChatModelManager {
     // Get the model configuration
     const selectedModel = ChatModelManager.modelMap[currentModelKey];
 
-    // If API key is missing or model doesn't exist in map
-    if (!selectedModel?.hasApiKey) {
+    // Only invalidate keys the legacy modelMap actually knows about. A chat-
+    // backend selection is a `configuredModelId` that never appears in the
+    // activeModels-derived map; its validity is owned by chainManager's
+    // resolver, so an absent entry here must NOT clear the bridged model.
+    if (selectedModel && !selectedModel.hasApiKey) {
       // Clear the current chat model
       ChatModelManager.chatModel = null;
       logInfo("Failed to reinitialize model due to missing API key");

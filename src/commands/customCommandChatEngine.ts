@@ -37,7 +37,11 @@ export async function createChatChain(
   systemPrompt: string,
   memory: BaseChatMemory
 ): Promise<RunnableSequence> {
-  const chatModel = await ChatModelManager.getInstance().createModelInstance(selectedModel);
+  // Bridged path: `selectedModel` comes from the model-management "chat"
+  // backend (resolveChatBackendModel / useResolvedChatBackendModel), not the
+  // legacy activeModels, so it must bypass the activeModels-derived modelMap gate.
+  const chatModel =
+    await ChatModelManager.getInstance().createModelInstanceFromBridged(selectedModel);
 
   const defaultSystemPrompt =
     "You are a helpful assistant. You'll help the user with their content editing needs.";

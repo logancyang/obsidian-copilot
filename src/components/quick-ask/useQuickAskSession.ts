@@ -17,16 +17,15 @@ import {
 } from "@/commands/quickCommandPrompts";
 import { processCommandPrompt } from "@/commands/customCommandUtils";
 import { useApp } from "@/context";
-import { findCustomModel } from "@/utils";
-import { logError, logWarn } from "@/logger";
+import { useResolvedChatBackendModel } from "@/hooks/useResolvedChatBackendModel";
+import { logError } from "@/logger";
 import type { QuickAskMessage } from "./types";
-import type { CopilotSettings } from "@/settings/model";
 
 interface UseQuickAskSessionParams {
   selectedText: string;
+  /** Selected model — a `configuredModelId` in the chat backend. */
   selectedModelKey: string;
   includeNoteContext: boolean;
-  settings: CopilotSettings;
 }
 
 interface QuickAskSessionApi {
@@ -42,7 +41,7 @@ interface QuickAskSessionApi {
  */
 export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSessionApi {
   const app = useApp();
-  const { selectedText, selectedModelKey, includeNoteContext, settings } = params;
+  const { selectedText, selectedModelKey, includeNoteContext } = params;
 
   // Message history (completed messages only)
   const [messages, setMessages] = useState<QuickAskMessage[]>([]);
@@ -59,22 +58,8 @@ export function useQuickAskSession(params: UseQuickAskSessionParams): QuickAskSe
     };
   }, []);
 
-  // Safely resolve the selected model with fallback to first enabled model
-  const resolvedModel = useMemo(() => {
-    try {
-      const model = findCustomModel(selectedModelKey, settings.activeModels);
-      if (!model.enabled) {
-        logWarn("Selected model is disabled; falling back to first enabled model.", {
-          selectedModelKey,
-        });
-        return settings.activeModels.find((m) => m.enabled) ?? null;
-      }
-      return model;
-    } catch {
-      logWarn("Selected model not found; falling back to first enabled model.");
-      return settings.activeModels.find((m) => m.enabled) ?? null;
-    }
-  }, [selectedModelKey, settings.activeModels]);
+  // Resolve the selected chat-backend model (preferred id → first enabled → null).
+  const resolvedModel = useResolvedChatBackendModel(app, selectedModelKey);
 
   // Use shared streaming hook
   const {

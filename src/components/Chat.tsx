@@ -19,6 +19,7 @@ import type { WebTabContext } from "@/types/message";
 import { ChatControls, reloadCurrentProject } from "@/components/chat-components/ChatControls";
 import ChatInput from "@/components/chat-components/ChatModeInput";
 import ChatMessages from "@/components/chat-components/ChatMessages";
+import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { NewVersionBanner } from "@/components/chat-components/NewVersionBanner";
 import { ProjectList } from "@/components/chat-components/ProjectList";
 import IndexingProgressCard from "@/components/IndexingProgressCard";
@@ -84,8 +85,13 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
   const eventTarget = useContext(EventTargetContext);
 
   const { messages: chatHistory, addMessage: rawAddMessage } = useChatManager(chatUIState);
-  const [currentModelKey] = useModelKey();
+  const [currentModelKey, setCurrentModelKey] = useModelKey();
   const [currentChain] = useChainType();
+  // Non-agent chat picker sourced from the model-management "chat" backend.
+  const chatModelPicker = useChatModelPicker({
+    value: currentModelKey,
+    onChange: setCurrentModelKey,
+  });
   const [currentAiMessage, setCurrentAiMessage] = useState("");
   const [inputMessage, setInputMessage] = useState("");
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -915,6 +921,7 @@ const ChatInternal: React.FC<ChatProps & { chatInput: ReturnType<typeof useChatI
               onAddImage={handleAddImage}
               setSelectedImages={setSelectedImages}
               disableModelSwitch={selectedChain === ChainType.PROJECT_CHAIN}
+              modelPickerOverride={chatModelPicker}
               selectedTextContexts={selectedTextContexts}
               onRemoveSelectedText={handleRemoveSelectedText}
               showProgressCard={() => {

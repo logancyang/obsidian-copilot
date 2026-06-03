@@ -46,7 +46,7 @@ export default class ProjectManager {
     this.app = app;
     this.plugin = plugin;
     this.currentProjectId = null;
-    this.chainMangerInstance = new ChainManager(app);
+    this.chainMangerInstance = new ChainManager(app, plugin.modelManagement);
     this.projectContextCache = ProjectContextCache.getInstance();
     this.fileParserManager = new FileParserManager(
       BrevilabsClient.getInstance(),

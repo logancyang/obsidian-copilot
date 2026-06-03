@@ -5,7 +5,7 @@ import { DraggableModal } from "./draggable-modal";
 import { CommandLabel } from "./command-label";
 import { ContentArea, type ContentState } from "./content-area";
 import { FollowUpInput } from "./follow-up-input";
-import { ModelSelector } from "@/components/ui/ModelSelector";
+import { ModelSelector, type ModelSelectorEntry } from "@/components/ui/ModelSelector";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { ActionButtons } from "./action-buttons";
@@ -30,6 +30,8 @@ interface MenuCommandModalProps {
   selectedModel: string;
   /** Callback when model changes */
   onSelectModel: (modelKey: string) => void;
+  /** Optional model list override (e.g. the chat-backend picker entries). */
+  models?: ModelSelectorEntry[];
   onStop?: () => void;
   onCopy?: () => void;
   onInsert?: () => void;
@@ -74,6 +76,7 @@ export function MenuCommandModal({
   onFollowUpSubmit,
   selectedModel,
   onSelectModel,
+  models,
   onStop,
   onCopy,
   onInsert,
@@ -185,6 +188,7 @@ export function MenuCommandModal({
               variant="ghost"
               value={selectedModel}
               onChange={onSelectModel}
+              models={models}
               disabled={isBusy}
             />
             {onIncludeNoteContextChange && (

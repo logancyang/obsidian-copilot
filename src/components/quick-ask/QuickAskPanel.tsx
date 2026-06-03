@@ -15,6 +15,7 @@ import type { ResizeDirection } from "@/hooks/use-resizable";
 import { useSettingsValue, updateSetting } from "@/settings/model";
 import { cleanMessageForCopy } from "@/utils";
 import { ModelSelector } from "@/components/ui/ModelSelector";
+import { useChatModelPicker } from "@/components/chat-components/useChatModelPicker";
 import { Checkbox } from "@/components/ui/checkbox";
 import { HelpTooltip } from "@/components/ui/help-tooltip";
 import { useQuickAskSession } from "./useQuickAskSession";
@@ -66,7 +67,6 @@ export function QuickAskPanel({
     selectedText,
     selectedModelKey,
     includeNoteContext,
-    settings,
   });
 
   // Derived state
@@ -240,9 +240,12 @@ export function QuickAskPanel({
     [messages, replaceGuard, onClose]
   );
 
-  const handleModelChange = useCallback((modelKey: string) => {
-    updateSetting("quickCommandModelKey", modelKey);
+  const handleModelChange = useCallback((configuredModelId: string) => {
+    updateSetting("quickCommandModelKey", configuredModelId);
   }, []);
+
+  // Chat-backend picker entries for the model selector.
+  const chatPicker = useChatModelPicker({ value: selectedModelKey, onChange: handleModelChange });
 
   const handleIncludeNoteContextChange = useCallback((checked: boolean) => {
     setIncludeNoteContext(checked);
@@ -337,8 +340,9 @@ export function QuickAskPanel({
           <ModelSelector
             size="sm"
             variant="ghost"
-            value={selectedModelKey}
-            onChange={handleModelChange}
+            value={chatPicker.value}
+            models={chatPicker.models}
+            onChange={chatPicker.onChange}
             disabled={isStreaming}
           />
 

@@ -14,6 +14,7 @@ import { setSettings, useSettingsValue } from "@/settings/model";
 import { formatBinaryPathForDisplay } from "@/utils/binaryPath";
 import { Platform } from "obsidian";
 import React from "react";
+import { ChatModelEnableList } from "./ChatModelEnableList";
 import { ConfiguredModelEnableList } from "./ConfiguredModelEnableList";
 
 /**
@@ -67,8 +68,30 @@ export const AgentSettings: React.FC = () => {
         {orderedDescriptors.map((descriptor) => (
           <BackendSection key={descriptor.id} descriptor={descriptor} plugin={plugin} />
         ))}
+
+        <QuickChatSection />
       </div>
     </section>
+  );
+};
+
+/**
+ * Quick Chat curation card: which models appear in the (non-agent) chat model
+ * picker. Lives under Agents per the model-management design (chat is a
+ * first-class curation backend alongside the agents). Models come from the
+ * BYOK / Plus registries — chat doesn't own providers.
+ */
+const QuickChatSection: React.FC = () => {
+  return (
+    <div className="tw-space-y-3 tw-rounded-md tw-border tw-border-solid tw-border-border tw-p-3">
+      <div className="tw-flex tw-min-w-0 tw-flex-col">
+        <span className="tw-text-base tw-font-semibold">Quick Chat models</span>
+        <span className="tw-text-xs tw-text-muted">
+          Models shown in the chat model picker. Add providers on the Models (BYOK) tab.
+        </span>
+      </div>
+      <ChatModelEnableList />
+    </div>
   );
 };
 
