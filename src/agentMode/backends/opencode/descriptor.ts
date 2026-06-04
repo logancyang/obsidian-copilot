@@ -202,9 +202,26 @@ export const OpencodeBackendDescriptor: BackendDescriptor = {
   },
 
   async applySelection(session: AgentSession, selection: ModelSelection): Promise<void> {
-    // opencode ≥ 1.15.13 advertises models as a `category:"model"` config
-    // option; `applyModelWireId` routes through `set_config_option` when the
-    // state says so, falling back to `set_model` otherwise.
+    const apply = session.getState()?.model?.apply;
+    if (apply?.kind === "setConfigOption" && apply.effortConfigId) {
+      // The effort option is model-specific, so activate the bare model first
+      // and use the option id from the refreshed state.
+      const currentBase = session.getState()?.model?.current.baseModelId;
+      if (currentBase !== selection.baseModelId) {
+        await session.applyModelWireId(
+          opencodeWire.encode({ baseModelId: selection.baseModelId, effort: null })
+        );
+      }
+      if (selection.effort !== null) {
+        const refreshedApply = session.getState()?.model?.apply;
+        const effortConfigId =
+          refreshedApply?.kind === "setConfigOption" ? refreshedApply.effortConfigId : undefined;
+        if (effortConfigId) {
+          await session.setConfigOption(effortConfigId, selection.effort);
+        }
+      }
+      return;
+    }
     await session.applyModelWireId(opencodeWire.encode(selection));
   },
 

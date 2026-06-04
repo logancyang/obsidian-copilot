@@ -75,8 +75,13 @@ function translateModel(
   const fromConfig = inputs.models ? null : modelStateFromConfigOption(inputs.configOptions);
   const modelState = inputs.models ?? fromConfig?.state ?? null;
   if (!modelState) return null;
+  const effortFromConfig = fromConfig ? effortConfigOption(inputs.configOptions) : null;
   const apply: ModelApplySpec = fromConfig
-    ? { kind: "setConfigOption", configId: fromConfig.configId }
+    ? {
+        kind: "setConfigOption",
+        configId: fromConfig.configId,
+        ...(effortFromConfig ? { effortConfigId: effortFromConfig.id } : {}),
+      }
     : { kind: "setModel" };
 
   // Group advertised wire ids by baseModelId, preserving first-seen order.
@@ -151,6 +156,11 @@ function translateModel(
     };
     availableModels.push(currentEntry);
   }
+  // A thought-level option describes only the currently selected model; other
+  // models may expose a different variant set after they become active.
+  if (effortFromConfig) {
+    currentEntry.effortOptions = optionsFromConfigOption(effortFromConfig);
+  }
 
   const current: ModelSelection = {
     baseModelId: currentEntry.baseModelId,
@@ -158,7 +168,8 @@ function translateModel(
       decodedCurrent.selection.effort,
       currentEntry,
       descriptor,
-      inputs.configOptions
+      inputs.configOptions,
+      effortFromConfig
     ),
   };
 
@@ -203,6 +214,12 @@ function modelStateFromConfigOption(
     state: { currentModelId: String(opt.currentValue), availableModels },
     configId: opt.id,
   };
+}
+
+function effortConfigOption(
+  configOptions: BackendConfigOption[] | null
+): BackendConfigOption | null {
+  return configOptions?.find((o) => o.category === "thought_level" && o.type === "select") ?? null;
 }
 
 function deriveEffortOptions(
@@ -255,9 +272,13 @@ function resolveCurrentEffort(
   decodedEffort: string | null,
   currentEntry: ModelEntry,
   descriptor: BackendDescriptor,
-  configOptions: BackendConfigOption[] | null
+  configOptions: BackendConfigOption[] | null,
+  effortFromConfig: BackendConfigOption | null = null
 ): string | null {
   let candidate: string | null = decodedEffort;
+  if (candidate === null && effortFromConfig?.type === "select") {
+    candidate = String(effortFromConfig.currentValue);
+  }
   if (candidate === null && descriptor.wire.effortConfigFor) {
     const spec = descriptor.wire.effortConfigFor(currentEntry.baseModelId);
     if (spec && spec.type === "select") {
@@ -373,7 +394,9 @@ export function modelStateSignature(state: BackendState | null): string {
   const m = state?.model;
   if (!m) return "";
   const apply =
-    m.apply.kind === "setConfigOption" ? `setConfigOption:${m.apply.configId}` : m.apply.kind;
+    m.apply.kind === "setConfigOption"
+      ? `setConfigOption:${m.apply.configId}:${m.apply.effortConfigId ?? ""}`
+      : m.apply.kind;
   return [
     m.current.baseModelId,
     m.current.effort ?? "",

@@ -166,6 +166,42 @@ describe("translateBackendState — model catalog from config option (opencode �
     );
     expect(state.model?.availableModels.map((m) => m.baseModelId)).toEqual(["omlx/a", "omlx/b"]);
   });
+
+  it("maps the current model's thought-level option into effort state", () => {
+    const modelOpt = selectOption(
+      "model",
+      [
+        { value: "omlx/a", name: "A" },
+        { value: "omlx/b", name: "B" },
+      ],
+      "omlx/a",
+      "model"
+    );
+    const effortOpt = selectOption(
+      "effort",
+      [
+        { value: "low", name: "Low" },
+        { value: "high", name: "High" },
+      ],
+      "high",
+      "thought_level"
+    );
+    const state = translateBackendState(
+      { models: null, modes: null, configOptions: [modelOpt, effortOpt] },
+      suffixDescriptor()
+    );
+    expect(state.model?.current).toEqual({ baseModelId: "omlx/a", effort: "high" });
+    expect(state.model?.availableModels[0]?.effortOptions).toEqual([
+      { value: "low", label: "low" },
+      { value: "high", label: "high" },
+    ]);
+    expect(state.model?.availableModels[1]?.effortOptions).toEqual([]);
+    expect(state.model?.apply).toEqual({
+      kind: "setConfigOption",
+      configId: "model",
+      effortConfigId: "effort",
+    });
+  });
 });
 
 describe("translateBackendState — name normalization + description", () => {
@@ -796,6 +832,23 @@ describe("modelStateSignature", () => {
     const a: BackendState = { model: base, mode: null };
     const b: BackendState = {
       model: { ...base, apply: { kind: "setConfigOption", configId: "model" } },
+      mode: null,
+    };
+    expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));
+  });
+
+  it("differs when a config-option-backed effort channel appears", () => {
+    const base: NonNullable<BackendState["model"]> = {
+      current: { baseModelId: "x", effort: null },
+      availableModels: [{ baseModelId: "x", name: "X", provider: null, effortOptions: [] }],
+      apply: { kind: "setConfigOption", configId: "model" },
+    };
+    const a: BackendState = { model: base, mode: null };
+    const b: BackendState = {
+      model: {
+        ...base,
+        apply: { kind: "setConfigOption", configId: "model", effortConfigId: "effort" },
+      },
       mode: null,
     };
     expect(modelStateSignature(a)).not.toBe(modelStateSignature(b));

@@ -220,9 +220,12 @@ export type ModeApplySpec =
  * `setModel` issues ACP `session/set_model` (codex, claude, and opencode
  * ≤ 1.15.12). `setConfigOption` issues `session/set_config_option` against the
  * `category:"model"` select id (opencode ≥ 1.15.13). The encoded wire id is the
- * same string in both channels; only the RPC differs.
+ * same string in both channels; only the RPC differs. `effortConfigId` records
+ * a separate `category:"thought_level"` selector when the backend exposes one.
  */
-export type ModelApplySpec = { kind: "setModel" } | { kind: "setConfigOption"; configId: string };
+export type ModelApplySpec =
+  | { kind: "setModel" }
+  | { kind: "setConfigOption"; configId: string; effortConfigId?: string };
 
 /**
  * Normalized, consumer-facing slice of session state. Produced by

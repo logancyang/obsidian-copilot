@@ -361,6 +361,12 @@ export class OpencodeBinaryManager {
     if (!version) {
       throw new Error(`${binaryPath} --version didn't report a version after upgrade.`);
     }
+    if (isOpencodeVersionOutdated(version)) {
+      throw new Error(
+        `opencode upgrade did not reach the required version ${OPENCODE_MIN_ACP_VERSION}+ ` +
+          `(still v${version}).`
+      );
+    }
     updateOpencodeFields({ binaryVersion: version, binaryPath, binarySource: "custom" });
     logInfo(`[AgentMode] upgraded custom opencode to ${version}`);
     return { version, path: binaryPath };

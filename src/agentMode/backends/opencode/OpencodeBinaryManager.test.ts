@@ -42,7 +42,7 @@ jest.mock("@/settings/model", () => {
   };
 });
 
-import { OPENCODE_PINNED_VERSION } from "@/constants";
+import { OPENCODE_MIN_ACP_VERSION, OPENCODE_PINNED_VERSION } from "@/constants";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -315,5 +315,49 @@ describe("OpencodeBinaryManager.setCustomBinaryPath", () => {
     expect(stored.binaryPath).toBe(process.execPath);
     expect(stored.binarySource).toBe("custom");
     expect(stored.binaryVersion).toMatch(/^\d+\.\d+\.\d+/);
+  });
+});
+
+describe("OpencodeBinaryManager.upgradeCustomBinary", () => {
+  let tmpDir: string;
+
+  beforeEach(async () => {
+    tmpDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "opencode-upgrade-"));
+  });
+
+  afterEach(async () => {
+    await fs.promises.rm(tmpDir, { recursive: true, force: true });
+  });
+
+  it("rejects when opencode upgrade exits successfully but leaves an outdated binary", async () => {
+    if (process.platform === "win32") return;
+    const file = path.join(tmpDir, "opencode");
+    await fs.promises.writeFile(
+      file,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then
+  echo "1.15.11"
+  exit 0
+fi
+if [ "$1" = "upgrade" ]; then
+  echo "Upgrade failed" >&2
+  exit 0
+fi
+`
+    );
+    await fs.promises.chmod(file, 0o755);
+    settingsMock.__reset({
+      binaryPath: file,
+      binaryVersion: "1.15.11",
+      binarySource: "custom",
+    });
+
+    const mgr = new OpencodeBinaryManager(fakePlugin);
+    await expect(mgr.upgradeCustomBinary()).rejects.toThrow(OPENCODE_MIN_ACP_VERSION);
+    expect(settingsMock.__get()).toEqual({
+      binaryPath: file,
+      binaryVersion: "1.15.11",
+      binarySource: "custom",
+    });
   });
 });
